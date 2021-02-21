@@ -24,24 +24,18 @@ import Control.Lens hiding ((.=))
 import Control.Monad.State.Strict
 import Data.Aeson
 import Data.Aeson.Types
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.HashMap.Strict as HM
 import Data.List
-import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
 import Data.Maybe
-import qualified Data.Set as S
 import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude
 
 import Pact.Parse
-import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (PublicKey)
 
@@ -123,38 +117,3 @@ sigDataToCommand (SigData h sigList (Just c)) = do
 sampleSigData :: SigData Text
 sampleSigData = SigData (either error id $ fromText' "b57_gSRIwDEo6SAYseppem57tykcEJkmbTFlCHDs0xc")
   [("acbe76b30ccaf57e269a0cd5eeeb7293e7e84c7d68e6244a64c4adf4d2df6ea1", Nothing)] Nothing
-
-combineSigDatas :: [SigData Text] -> Bool -> IO ByteString
-combineSigDatas [] _ = error "Nothing to combine"
-combineSigDatas sds outputLocal = do
-  let hashes = S.fromList $ map _sigDataHash sds
-      cmds = S.fromList $ catMaybes $ map _sigDataCmd sds
-  when (S.size hashes /= 1 || S.size cmds /= 1) $ do
-    error "SigData files must contain exactly one unique hash and command.  Aborting..."
-  let sigs = foldl1 f $ map _sigDataSigs sds
-  returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
-  where
-    f accum sigs
-      | length accum /= length sigs = error "Sig lists have different lengths"
-      | otherwise = zipWith g accum sigs
-    g (pAccum,sAccum) (p,s) =
-      if pAccum /= p
-        then error $ unlines [ "Sig mismatch:"
-                             , show pAccum
-                             , show p
-                             , "All signatures must be in the same order"
-                             ]
-        else (pAccum, sAccum <|> s)
-
-returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
-returnCommandIfDone outputLocal sd =
-    case sigDataToCommand sd of
-      Left _ -> return $ Y.encodeWith yamlOptions sd
-      Right c -> do
-        let res = verifyCommand $ fmap encodeUtf8 c
-            out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
-        return $ case res :: ProcessedCommand Value ParsedCode of
-          ProcSucc _ -> BSL.toStrict out
-          ProcFail _ -> Y.encodeWith yamlOptions sd
-  where
-    yamlOptions = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
