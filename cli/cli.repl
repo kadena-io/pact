@@ -90,7 +90,7 @@
 
   (defun testnet ()
     (network-id "testnet04")
-    (host "us1.testnet.chainweb.com")
+    (host "api.testnet.chainweb.com")
     (rehash))
 
   (defun devnet ()
@@ -134,6 +134,9 @@
 
   (defun creation-time (t:time)
     (update-state { 'creation-time: t } true))
+
+  (defun creation-ymd (s:string)
+    (creation-time (parse-time "%F" s)))
 
   (defun nonce (s:string)
     (update-state { 'nonce: s } true))
