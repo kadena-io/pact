@@ -123,8 +123,10 @@ instance ToJSON PactValue where
   toJSON (PObject o) = toJSON o
   toJSON (PList v) = toJSON v
   toJSON (PGuard x) = toJSON x
-  toJSON (PModRef m) = toJSON m
-
+  toJSON (PModRef (ModRef refName refSpec _)) = object
+    [ "refName" .= refName
+    , "refSpec" .= refSpec
+    ]
 
 instance FromJSON PactValue where
   parseJSON v =
@@ -132,7 +134,12 @@ instance FromJSON PactValue where
     (PList <$> parseJSON v) <|>
     (PGuard <$> parseJSON v) <|>
     (PObject <$> parseJSON v) <|>
-    (PModRef <$> parseJSON v)
+    (PModRef <$> (parseNoInfo v <|> parseJSON v))
+    where
+      parseNoInfo = withObject "ModRef" $ \o -> ModRef
+        <$> o .: "refName"
+        <*> o .: "refSpec"
+        <*> pure def
 
 instance Pretty PactValue where
   pretty (PLiteral l) = pretty l
