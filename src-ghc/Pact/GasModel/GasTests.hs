@@ -86,6 +86,7 @@ unitTestFromDef nativeName = tests
       "enforce"              -> Just $ enforceTests nativeName
       "enforce-one"          -> Just $ enforceOneTests nativeName
       "enforce-pact-version" -> Just $ enforcePactVersionTests nativeName
+      "enumerate"            -> Just $ enumerateTests nativeName
       "filter"               -> Just $ filterTests nativeName
       "fold"                 -> Just $ foldTests nativeName
       "format"               -> Just $ formatTests nativeName
@@ -1506,6 +1507,16 @@ makeListTests = defGasUnitTests allExprs
 
     allExprs = NEL.map (createPactExpr makeListExpr) sizesExpr
 
+enumerateTests :: NativeDefName -> GasUnitTests
+enumerateTests = defGasUnitTests allExprs
+  where
+    enumerateExpr (from', to', inc') =
+      [text| (enumerate $from' $to' $inc') |]
+    allExprs = NEL.map (defPactExpression . enumerateExpr) $ do
+      from' <- intToStr <$> NEL.fromList [1..3]
+      to' <- intToStr <$> NEL.fromList [10..12]
+      inc' <- intToStr <$> NEL.fromList [1..2]
+      return (from', to', inc')
 
 listModulesTests :: NativeDefName -> GasUnitTests
 listModulesTests = defGasUnitTests allExprs

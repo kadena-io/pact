@@ -22,6 +22,7 @@ module Pact.Native
     , moduleToMap
     , enforceDef
     , enforceOneDef
+    , enumerateDef
     , pactVersionDef
     , formatDef
     , strToIntDef
@@ -508,6 +509,11 @@ makeListDef = defGasRNative "make-list" makeList (funType (TyList a) [("length",
   ["(make-list 5 true)"]
   "Create list by repeating VALUE LENGTH times."
 
+enumerateDef :: NativeDef
+enumerateDef = defGasRNative "enumerate" enumerate (funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger),("inc", tTyInteger)])
+  ["(enumerate 0 10 1)"]
+  "Returns a sequence of numbers from FROM to TO (both inclusive) as a list. INC is the increment between numbers in the sequence."
+
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
   ["(reverse [1 2 3])"] "Reverse LIST."
@@ -609,6 +615,7 @@ langDefs =
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support."
 
     ,makeListDef
+    ,enumerateDef
     ,reverseDef
     ,filterDef
     ,sortDef
@@ -734,6 +741,12 @@ makeList g i [TLitInteger len,value] = case typeof value of
   Right ty -> computeGas' g i (GMakeList len) $ return $ toTList ty def $ replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
+
+-- TODO: Should be there limits on the bounds of the enumerated sequence?
+enumerate :: GasRNativeFun e
+enumerate g i [TLitInteger from', TLitInteger to', TLitInteger inc'] =
+  computeGas' g i (GMakeList $ succ ((to' - from') `div` inc')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + inc') to'
+enumerate _ i as = argsError i as
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l

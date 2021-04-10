@@ -198,6 +198,18 @@ true
 Top level only: this function will fail if used in module code.
 
 
+### enumerate {#enumerate}
+
+*from*&nbsp;`integer` *to*&nbsp;`integer` *inc*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
+
+
+Returns a sequence of numbers from FROM to TO (both inclusive) as a list. INC is the increment between numbers in the sequence.
+```lisp
+pact> (enumerate 0 10 1)
+[0 1 2 3 4 5 6 7 8 9 10]
+```
+
+
 ### filter {#filter}
 
 *app*&nbsp;`x:<a> -> bool` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
