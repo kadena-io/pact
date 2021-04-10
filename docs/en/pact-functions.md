@@ -582,6 +582,19 @@ pact> (typeof "hello")
 ```
 
 
+### unstable-distinct {#unstable-distinct}
+
+*values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+
+
+Returns from a homogeneous list of primitive VALUES, a list with duplicates removed.
+The original order of the values is not necessarily preserved.
+```lisp
+pact> (unstable-distinct [3 3 1 1 2 2])
+[1 2 3]
+```
+
+
 ### where {#where}
 
 *field*&nbsp;`string` *app*&nbsp;`x:<a> -> bool` *value*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`bool`

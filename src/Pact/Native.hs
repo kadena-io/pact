@@ -20,6 +20,7 @@ module Pact.Native
     ( natives
     , nativeDefs
     , moduleToMap
+    , unstableDistinctDef
     , enforceDef
     , enforceOneDef
     , pactVersionDef
@@ -518,6 +519,17 @@ filterDef = defNative "filter" filter'
   ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
   "Filter LIST by applying APP to each element. For each true result, the original value is kept."
 
+unstableDistinctDef :: NativeDef
+unstableDistinctDef = defGasRNative "unstable-distinct" unstableDistinct
+  (funType (TyList a) [("values", TyList a)])
+  -- (funType (TyList a) [("values", TyList a)] <>
+   -- funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields", TyList tTyString), ("values", TyList (tTyObject (mkSchemaVar "o")))])
+  ["(unstable-distinct [3 3 1 1 2 2])"]
+  -- ["(unstable-distinct [3 3 1 1 2 2])", "(unstable-distinct ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])"]
+  -- "Returns from a homogeneous list of primitive VALUES, or objects using supplied FIELDS list, a list with duplicates removed.\n\
+  "Returns from a homogeneous list of primitive VALUES, a list with duplicates removed.\n\
+  \The original order of the values is not necessarily preserved."
+
 sortDef :: NativeDef
 sortDef = defGasRNative "sort" sort'
   (funType (TyList a) [("values",TyList a)] <>
@@ -643,6 +655,7 @@ langDefs =
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements."
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      ["(typeof \"hello\")"] "Returns type of X as string."
+    ,unstableDistinctDef
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
     ,defGasRNative (specialForm YieldSF) yield
@@ -909,6 +922,28 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
   _ -> argsError' i as
 where' i as = argsError' i as
 
+unstableDistinct :: GasRNativeFun e
+unstableDistinct g _ [l@(TList v _ _ )] | V.null v = pure (g,l)
+unstableDistinct g i [TList{..}] =
+  let getLiteralAndInfo TLiteral{..} = Just (_tLiteral, _tInfo)
+      getLiteralAndInfo _ = Nothing
+      result  = V.mapMaybe getLiteralAndInfo _tList
+          & V.toList
+          & M.fromList
+          & M.toList
+          & V.fromList
+          & V.map (uncurry TLiteral)
+          & toTListV _tListType def
+  in computeGas' g i (GDistinct (V.length _tList)) $ pure result
+  -- TODO: Over objects with supplied field key
+-- unstableDistinct g0 fa [TList fields _ fi, l@(TList vs lty _)]
+--   | V.null fields = evalError fi "Empty fields list"
+--   | V.null vs = return (g0, l)
+--   | otherwise = do
+--       (g1,_) <- computeGas' g0 fa (GDistinct (V.length vs)) $ return ()
+--       fields' <- asKeyList fields
+--       computeGas' g1 fa (GDistinctFieldLookup (S.size fields')) $ undefined
+unstableDistinct _ i as = argsError i as
 
 sort' :: GasRNativeFun e
 sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
