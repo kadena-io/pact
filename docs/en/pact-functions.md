@@ -586,6 +586,8 @@ pact> (typeof "hello")
 
 *values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
+*fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
+
 
 Returns from a homogeneous list of primitive VALUES, a list with duplicates removed.
 The original order of the values is not necessarily preserved.
