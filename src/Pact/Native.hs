@@ -510,9 +510,15 @@ makeListDef = defGasRNative "make-list" makeList (funType (TyList a) [("length",
   "Create list by repeating VALUE LENGTH times."
 
 enumerateDef :: NativeDef
-enumerateDef = defGasRNative "enumerate" enumerate (funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger),("inc", tTyInteger)])
-  ["(enumerate 0 10 1)"]
-  "Returns a sequence of numbers from FROM to TO (both inclusive) as a list. INC is the increment between numbers in the sequence."
+enumerateDef = defGasRNative "enumerate" enumerate
+  (funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger),("inc", tTyInteger)]
+  <> funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger)])
+  ["(enumerate 0 10 2)",
+   "(enumerate 0 10)"]
+  $ T.intercalate "\n"
+  [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
+  , "INC is the increment between numbers in the sequence."
+  , "If INC is not given, it is assumed to be 1."]
 
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
@@ -742,10 +748,13 @@ makeList g i [TLitInteger len,value] = case typeof value of
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
 
--- TODO: Should be there limits on the bounds of the enumerated sequence?
 enumerate :: GasRNativeFun e
-enumerate g i [TLitInteger from', TLitInteger to', TLitInteger inc'] =
-  computeGas' g i (GMakeList $ succ ((to' - from') `div` inc')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + inc') to'
+enumerate g i as@[TLitInteger from', TLitInteger to', TLitInteger inc']
+  | inc' == 0 = argsError i as
+  | otherwise =
+    computeGas' g i (GMakeList $ succ ((to' - from') `div` inc')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + inc') to'
+enumerate g i [TLitInteger from', TLitInteger to'] =
+  computeGas' g i (GMakeList $ succ (to' - from')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + 1) to'
 enumerate _ i as = argsError i as
 
 reverse' :: RNativeFun e
