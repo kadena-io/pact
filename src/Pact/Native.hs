@@ -513,12 +513,15 @@ enumerateDef :: NativeDef
 enumerateDef = defGasRNative "enumerate" enumerate
   (funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger),("inc", tTyInteger)]
   <> funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger)])
-  ["(enumerate 0 10 2)",
-   "(enumerate 0 10)"]
-  $ T.intercalate "\n"
+  ["(enumerate 0 10 2)"
+   , "(enumerate 0 10)"
+   , "(enumerate 10 0)"]
+  $ T.intercalate " "
   [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
-  , "INC is the increment between numbers in the sequence."
-  , "If INC is not given, it is assumed to be 1."]
+  , " INC is the increment between numbers in the sequence."
+  , " If INC is not given, it is assumed to be 1."
+  , " Additionally, if INC is not given and FROM is greater than TO,"
+  , " assume a value for INC of -1."]
 
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
@@ -753,8 +756,9 @@ enumerate g i as@[TLitInteger from', TLitInteger to', TLitInteger inc']
   | inc' == 0 = argsError i as
   | otherwise =
     computeGas' g i (GMakeList $ succ ((to' - from') `div` inc')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + inc') to'
-enumerate g i [TLitInteger from', TLitInteger to'] =
-  computeGas' g i (GMakeList $ succ (to' - from')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + 1) to'
+enumerate g i [TLitInteger from', TLitInteger to']
+  | from' <= to' = computeGas' g i (GMakeList $ succ (to' - from')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + 1) to'
+  | otherwise = computeGas' g i (GMakeList $ succ (from' - to')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' - 1) to'
 enumerate _ i as = argsError i as
 
 reverse' :: RNativeFun e
