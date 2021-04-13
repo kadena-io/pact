@@ -20,7 +20,7 @@ module Pact.Native
     ( natives
     , nativeDefs
     , moduleToMap
-    , unstableDistinctDef
+    , distinctDef
     , enforceDef
     , enforceOneDef
     , pactVersionDef
@@ -65,6 +65,7 @@ import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import qualified Data.List as L (nubBy)
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
@@ -519,16 +520,14 @@ filterDef = defNative "filter" filter'
   ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
   "Filter LIST by applying APP to each element. For each true result, the original value is kept."
 
-unstableDistinctDef :: NativeDef
-unstableDistinctDef = defGasRNative "unstable-distinct" unstableDistinct
-  -- (funType (TyList a) [("values", TyList a)])
+distinctDef :: NativeDef
+distinctDef = defGasRNative "distinct" distinct
   (funType (TyList a) [("values", TyList a)] <>
    funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields", TyList tTyString), ("values", TyList (tTyObject (mkSchemaVar "o")))])
-  ["(unstable-distinct [3 3 1 1 2 2])"]
-  -- ["(unstable-distinct [3 3 1 1 2 2])", "(unstable-distinct ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])"]
-  -- "Returns from a homogeneous list of primitive VALUES, or objects using supplied FIELDS list, a list with duplicates removed.\n\
-  "Returns from a homogeneous list of primitive VALUES, a list with duplicates removed.\n\
-  \The original order of the values is not necessarily preserved."
+  ["(distinct [3 3 1 1 2 2])", "(distinct ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])"]
+  $ T.intercalate " "
+  [ "Returns from a homogeneous list of VALUES, or objects using supplied FIELDS list, a list with duplicates removed."
+  , "The original order of the values is preserved."]
 
 sortDef :: NativeDef
 sortDef = defGasRNative "sort" sort'
@@ -655,7 +654,7 @@ langDefs =
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements."
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      ["(typeof \"hello\")"] "Returns type of X as string."
-    ,unstableDistinctDef
+    ,distinctDef
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
     ,defGasRNative (specialForm YieldSF) yield
@@ -922,63 +921,35 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
   _ -> argsError' i as
 where' i as = argsError' i as
 
-  -- TODO Give this a much better name
-newtype FieldsAndObject n = FieldsAndObject { getFieldsAndObject :: (S.Set FieldKey, Object n) }
-
-instance (Eq n) => Eq (FieldsAndObject n) where
-  FieldsAndObject (fields1, object1) == FieldsAndObject (fields2, object2)
-    | fields1 /= fields2 = False
-    | otherwise = case (object1, object2) of
-        (Object (ObjectMap obj1) _ _ _, Object (ObjectMap obj2) _ _ _) ->
-          let go field =
-                case (M.lookup field obj1, M.lookup field obj2) of
-                  (Just (TLiteral lx _), Just (TLiteral ly _)) -> ((lx == ly) &&)
-                  _ -> (False &&)
-          in foldr go True fields1
-
-instance (Ord n) => Ord (FieldsAndObject n) where
-  FieldsAndObject (fields1, object1) `compare` FieldsAndObject (fields2, object2)
-    | fields1 /= fields2 = EQ
-    | otherwise = case (object1, object2) of
-        (Object (ObjectMap obj1) _ _ _, Object (ObjectMap obj2) _ _ _) ->
-          let go field =
-                case (M.lookup field obj1, M.lookup field obj2) of
-                  (Just (TLiteral lx _), Just (TLiteral ly _)) -> ((lx `compare` ly) <>)
-                  _ -> (EQ <>)
-          in foldr go EQ fields1
-
-unstableDistinct :: GasRNativeFun e
-unstableDistinct g _ [l@(TList v _ _ )] | V.null v = pure (g,l)
-unstableDistinct g i [TList{..}] =
-  let getLiteralAndInfo TLiteral{..} = Just (_tLiteral, _tInfo)
-      getLiteralAndInfo _ = Nothing
-      result  = V.mapMaybe getLiteralAndInfo _tList
+distinct :: GasRNativeFun e
+distinct g _ [l@(TList v _ _ )] | V.null v = pure (g,l)
+distinct g i [TList{..}] = do
+  let square x = x * x
+  let result = _tList
           & V.toList
-          & M.fromList
-          & M.toList
+          & L.nubBy termEq
           & V.fromList
-          & V.map (uncurry TLiteral)
           & toTListV _tListType def
-  in computeGas' g i (GDistinct (V.length _tList)) $ pure result
-  -- TODO: Over objects with supplied field key
-unstableDistinct g0 fa [TList fields _ fi, l@(TList vs lty _)]
+  computeGas' g i (GDistinct (square $ V.length _tList)) $ pure $ result
+distinct g0 fa [TList fields _ fi, l@(TList vs lty _)]
   | V.null fields = evalError fi "Empty fields list"
   | V.null vs = return (g0, l)
   | otherwise = do
-      (g1,_) <- computeGas' g0 fa (GDistinct (V.length vs)) $ return ()
+      let square x = x * x
+      (g1,_) <- computeGas' g0 fa (GDistinct $ square (V.length vs)) $ return ()
       fields' <- asKeyList fields
-      let getObjectAndInfo TObject{..} = Just (_tObject, _tInfo)
-          getObjectAndInfo _ = Nothing
-          toFieldsAndObject = fmap (first (FieldsAndObject . (fields',))) . getObjectAndInfo
-          result = V.mapMaybe toFieldsAndObject vs
+      let go (TObject (Object (ObjectMap obj1) _ _ _) _) (TObject (Object (ObjectMap obj2) _ _ _) _) field =
+            case (M.lookup field obj1, M.lookup field obj2) of
+              (Just t1, Just t2) -> termEq t1 t2
+              _ -> False
+          go _ _ _ = False
+          result = vs
             & V.toList
-            & M.fromList
-            & M.toList
+            & L.nubBy (\o1 o2 -> all (go o1 o2) fields')
             & V.fromList
-            & V.map (uncurry TObject . first (snd . getFieldsAndObject))
             & toTListV lty def
-      computeGas' g1 fa (GDistinctFieldLookup (S.size fields')) $ pure result
-unstableDistinct _ i as = argsError i as
+      computeGas' g1 fa (GDistinctFieldLookup (square (V.length vs) * S.size fields')) $ pure result
+distinct _ i as = argsError i as
 
 sort' :: GasRNativeFun e
 sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
