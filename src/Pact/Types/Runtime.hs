@@ -308,8 +308,7 @@ unlessExecutionFlagSet f onFalse =
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  advice <- view eeAdvice
-  (_gas,r) <- _advise advice (AdviceCall s) act
+  (_gas,r) <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
@@ -413,5 +412,5 @@ argsError i as = throwArgsError i as "Invalid arguments"
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
 
-eAdvise :: AdviceContext -> Eval e a -> Eval e a
-eAdvise m a = view eeAdvice >>= \adv -> _advise adv m a
+eAdvise :: Info -> AdviceContext -> Eval e a -> Eval e a
+eAdvise i m a = view eeAdvice >>= \adv -> advise i adv m a

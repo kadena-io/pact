@@ -237,7 +237,7 @@ perfEnv pt (PactDbEnv db mv) = PactDbEnv (advisePactDb pt db) mv
 
 perfInterpreter :: Advice -> Interpreter e -> Interpreter e
 perfInterpreter pt (Interpreter i) = Interpreter $ \runInput ->
-  advise pt (AdviceTx initialHash) $! i runInput
+  advise def pt (AdviceTx initialHash) $! i runInput
 
 
 mkFilePerf :: FilePath -> IO Advice
@@ -249,7 +249,7 @@ mkFilePerf fp = do
     (`mapM_` m) $ \s -> do
       hPutStrLn h s
       hFlush h
-  return $ Advice $ \msg a -> do
+  return $ Advice $ \_ msg a -> do
     s <- liftIO $ time
     r <- a
     liftIO $ do

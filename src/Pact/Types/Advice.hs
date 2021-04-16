@@ -22,8 +22,9 @@ import Control.Lens
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Text (Text)
-import Pact.Types.PactError
 import Pact.Types.Hash
+import Pact.Types.Info
+import Pact.Types.Term
 
 -- | Enum indicating which Db operation is running.
 data DbContext =
@@ -41,8 +42,10 @@ data DbContext =
 
 -- | Type of advised operation.
 data AdviceContext =
-    AdviceCall StackFrame
-    -- ^ Advise on some interpreter call.
+    AdviceUser (Def Ref,[Term Name])
+    -- ^ Advise on user function
+  | AdviceNative (NativeDefName)
+    -- ^ Advise on native
   | AdviceTx PactHash
     -- ^ Transaction execution wrapper
   | AdviceDb DbContext
@@ -55,7 +58,8 @@ data AdviceContext =
 -- | Bracket some Pact operation.
 newtype Advice = Advice {
   _advise :: forall m a . MonadIO m
-    => AdviceContext
+    => Info
+    -> AdviceContext
     -> m a
     -> m a
   }
@@ -64,15 +68,15 @@ instance Default Advice where def = Advice defAdvice
 instance Show Advice where show _ = "Advice"
 instance Semigroup Advice where
   Advice f <> Advice g =
-    Advice $ \ctx act -> f ctx $! g ctx act
+    Advice $ \i ctx act -> f i ctx $! g i ctx act
 instance Monoid Advice where
   mempty = def
 
-advise :: MonadIO m => Advice -> AdviceContext -> m a -> m a
-advise (Advice f) ctx act = f ctx act
+advise :: MonadIO m => Info -> Advice -> AdviceContext -> m a -> m a
+advise i (Advice f) ctx act = f i ctx act
 
-defAdvice :: AdviceContext -> m a -> m a
-defAdvice _ a = a
+defAdvice :: Info -> AdviceContext -> m a -> m a
+defAdvice _ _ a = a
 {-# INLINE defAdvice #-}
 
 makePrisms ''DbContext

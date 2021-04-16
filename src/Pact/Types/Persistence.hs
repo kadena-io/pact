@@ -40,7 +40,7 @@ import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
-import Data.Default (Default)
+import Data.Default
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
@@ -265,4 +265,4 @@ advisePactDb pt PactDb{..} = PactDb
   }
   where
     perf' :: DbContext -> IO a -> IO a
-    perf' t = advise pt $ (AdviceDb t)
+    perf' t = advise def pt $ (AdviceDb t)

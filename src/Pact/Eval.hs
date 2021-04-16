@@ -63,6 +63,7 @@ import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
+import Pact.Types.Advice
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -808,10 +809,12 @@ prepareUserAppArgs Def{..} args i = do
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e a) -> Eval e a
-evalUserAppBody Def{..} (as',ft') ai g run =
-  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
-      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
-  in appCall fa ai as' $ fmap (g,) $ run bod'
+evalUserAppBody d@Def{..} (as',ft') ai g run =
+    eAdvise ai (AdviceUser (d,as')) $ appCall fa ai as' $ fmap (g,) $ run bod'
+  where
+    bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+    fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -824,7 +827,9 @@ reduceDirect TNative {..} as ai =
             ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
-    appCall fa ai as $ _nativeFun _tNativeFun fa as
+    appCall fa ai as
+        $ eAdvise ai (AdviceNative _tNativeName)
+        $ _nativeFun _tNativeFun fa as
 
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
