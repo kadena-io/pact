@@ -744,13 +744,12 @@ enforcePactValue' = traverse enforcePactValue
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
+reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as ai
   evalUserAppBody d af ai g $ \bod' ->
     case _dDefType of
-      Defun ->
-        {- eperf (asString _dDefName <> ":body") $ -} reduceBody bod'
+      Defun -> reduceBody bod'
       Defpact -> do
         continuation <- PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
           <$> enforcePactValue' (fst af)
@@ -823,7 +822,7 @@ reduceDirect TNative {..} as ai =
           Nothing -> return ()
           Just m -> evalError ai $ "Top-level call used in module " <> pretty m <>
             ": " <> pretty _tNativeName
-  in {- eperf (asString _tNativeName) $ -} do
+  in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
     appCall fa ai as $ _nativeFun _tNativeFun fa as
 

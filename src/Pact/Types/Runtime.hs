@@ -24,7 +24,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eePerfTimer,
+   eeAdvice,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
@@ -46,7 +46,7 @@ module Pact.Types.Runtime
    module Pact.Types.ChainMeta,
    module Pact.Types.PactError,
    liftIO,
-   eperf
+   eAdvise
    ) where
 
 
@@ -75,7 +75,7 @@ import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactError
 import Pact.Types.PactValue
-import Pact.Types.Perf
+import Pact.Types.Advice
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
@@ -201,8 +201,8 @@ data EvalEnv e = EvalEnv {
     , _eePublicData :: PublicData
       -- | Execution configuration flags
     , _eeExecutionConfig :: ExecutionConfig
-      -- | Perf logger/bracketer
-    , _eePerfTimer :: PerfTimer
+      -- | Advice bracketer
+    , _eeAdvice :: Advice
     }
 makeLenses ''EvalEnv
 
@@ -308,7 +308,8 @@ unlessExecutionFlagSet f onFalse =
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act
+  advice <- view eeAdvice
+  (_gas,r) <- _advise advice (AdviceCall s) act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
@@ -412,5 +413,5 @@ argsError i as = throwArgsError i as "Invalid arguments"
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
 
-eperf :: Text -> Eval e a -> Eval e a
-eperf m a = view eePerfTimer >>= \pt -> perf pt m a
+eAdvise :: AdviceContext -> Eval e a -> Eval e a
+eAdvise m a = view eeAdvice >>= \adv -> _advise adv m a
