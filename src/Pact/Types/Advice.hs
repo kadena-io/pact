@@ -56,11 +56,8 @@ data AdviceContext =
 newtype Advice = Advice {
   _advise :: forall m a . MonadIO m
     => AdviceContext
-    -- ^ Context for advice.
     -> m a
-    -- ^ Bracketed action.
     -> m a
-    -- ^ Result of bracketed action.
   }
 
 instance Default Advice where def = Advice defAdvice
