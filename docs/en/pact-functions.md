@@ -140,6 +140,22 @@ Create a namespace called NAMESPACE where ownership and use of the namespace is 
 Top level only: this function will fail if used in module code.
 
 
+### distinct {#distinct}
+
+*values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+
+*fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
+
+
+Returns from a homogeneous list of VALUES, or objects using supplied FIELDS list, a list with duplicates removed. The original order of the values is preserved.
+```lisp
+pact> (distinct [3 3 1 1 2 2])
+[3 1 2]
+pact> (distinct ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
+[{"name": "Lin","age": 30} {"name": "Val","age": 25}]
+```
+
+
 ### drop {#drop}
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
@@ -579,21 +595,6 @@ Returns type of X as string.
 ```lisp
 pact> (typeof "hello")
 "string"
-```
-
-
-### unstable-distinct {#unstable-distinct}
-
-*values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
-
-*fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
-
-
-Returns from a homogeneous list of primitive VALUES, a list with duplicates removed.
-The original order of the values is not necessarily preserved.
-```lisp
-pact> (unstable-distinct [3 3 1 1 2 2])
-[1 2 3]
 ```
 
 

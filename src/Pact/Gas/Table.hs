@@ -147,7 +147,7 @@ defaultGasTable =
   ,("try", 1)
   ,("tx-hash", 1)
   ,("typeof", 2)
-  ,("unstable-distinct", 2)
+  ,("distinct", 2)
   ,("validate-keypair", 29)
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)

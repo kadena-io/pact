@@ -114,7 +114,7 @@ unitTestFromDef nativeName = tests
       "try"                  -> Just $ tryTests nativeName
       "tx-hash"              -> Just $ txHashTests nativeName
       "typeof"               -> Just $ typeOfTests nativeName
-      "unstable-distinct"    -> Just $ unstableDistinctTests nativeName
+      "distinct"             -> Just $ distinctTests nativeName
       "where"                -> Just $ whereTests nativeName
       "yield"                -> Just $ yieldTests nativeName
 
@@ -1206,8 +1206,8 @@ base64DecodeTests = defGasUnitTests exprs
     fmedium = f 100
     flong = f 1000
 
-unstableDistinctTests :: NativeDefName -> GasUnitTests
-unstableDistinctTests = defGasUnitTests allExprs
+distinctTests :: NativeDefName -> GasUnitTests
+distinctTests = defGasUnitTests allExprs
   where
     lists = [2 .. 5]
       <&> enumFromTo 1
@@ -1217,10 +1217,10 @@ unstableDistinctTests = defGasUnitTests allExprs
       <&> flip PactExpression Nothing
       where
         duplicate = foldr (\a b -> MockInt a : MockInt a : b) []
-    unstableDistinctExpr li =
-      [text| (unstable-distinct $li) |]
+    distinctExpr li =
+      [text| (distinct $li) |]
 
-    allExprs = NEL.map (createPactExpr unstableDistinctExpr) $ NEL.fromList lists
+    allExprs = NEL.map (createPactExpr distinctExpr) $ NEL.fromList lists
 
 sortTests :: NativeDefName -> GasUnitTests
 sortTests = defGasUnitTests allExprs
