@@ -1,0 +1,39 @@
+; make-list tests
+(expect
+ "make-list: Non-positive lengths return empty lists"
+ (fold
+  (and)
+  true
+  (map (= []) (list (make-list -1 true) (make-list 0 true) (make-list -100 true))))
+ true)
+
+(expect
+ "make-list: Simple sanity test"
+ (make-list 5 "hello")
+ ["hello" "hello" "hello" "hello" "hello"])
+
+; enumerate tests
+
+(expect
+ "enumerate: Enumerate numbers from 0 to 10."
+ (enumerate 0 10)
+ [0 1 2 3 4 5 6 7 8 9 10])
+
+(expect
+ "enumaerate: Increment greater than 1"
+ (enumerate 0 10 2)
+ [0 2 4 6 8 10])
+
+(expect
+ "enumaerate: Increment less than -1"
+ (enumerate 10 0 -2)
+ (reverse (enumerate 0 10 2)))
+
+(expect
+ "enumerate: When FROM is greater than TO and no icrement is given."
+ (enumerate 10 0)
+ (reverse (enumerate 0 10)))
+
+(expect-failure
+ "enumerate: Fail when given an INC of zero."
+ (enumerate 0 10 0))
