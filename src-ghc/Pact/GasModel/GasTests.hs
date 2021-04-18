@@ -1510,13 +1510,9 @@ makeListTests = defGasUnitTests allExprs
 enumerateTests :: NativeDefName -> GasUnitTests
 enumerateTests = defGasUnitTests allExprs
   where
-    enumerateExpr (from', to', inc') =
-      [text| (enumerate $from' $to' $inc') |]
-    allExprs = NEL.map (defPactExpression . enumerateExpr) $ do
-      from' <- intToStr <$> NEL.fromList [1..3]
-      to' <- intToStr <$> NEL.fromList [10..12]
-      inc' <- intToStr <$> NEL.fromList [1..2]
-      return (from', to', inc')
+    enumerateExpr arg =
+      [text| (enumerate 1 $arg) |]
+    allExprs = NEL.map (createPactExpr enumerateExpr) sizesExpr
 
 listModulesTests :: NativeDefName -> GasUnitTests
 listModulesTests = defGasUnitTests allExprs
