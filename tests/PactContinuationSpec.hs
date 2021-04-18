@@ -410,7 +410,14 @@ testPactYield mgr = before_ flushDb $ after_ flushDb $ do
   it "resets yielded values after each step" $
     testResetYield mgr
 
-  it "testCrossChainYield" $ testCrossChainYield mgr
+  it "testCrossChainYield:succeeds with same module" $
+      testCrossChainYield mgr "" True
+
+  it "testCrossChainYield:fails with different module" $
+      testCrossChainYield mgr ";;1" False
+
+  it "testCrossChainYield:succeeds with blessed module" $
+      testCrossChainYield mgr "(bless \"En5J3UULOBxWOP3daVlfystGjDsq37I3JHFGpOTKqIk\")" True
 
 
 testValidYield :: HTTP.Manager -> Expectation
@@ -541,8 +548,8 @@ pactWithSameNameYield moduleName =
                      res)))))|]
 
 
-testCrossChainYield :: HTTP.Manager -> Expectation
-testCrossChainYield mgr = step0
+testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Expectation
+testCrossChainYield mgr blessCode succeeds = step0
   where
 
     -- STEP 0: runs on server for "chain0results"
@@ -553,7 +560,8 @@ testCrossChainYield mgr = step0
       adminKeys <- genKeys
 
       let makeExecCmdWith = makeExecCmd adminKeys
-      moduleCmd        <- makeExecCmdWith pactCrossChainYield
+      moduleCmd        <- makeExecCmdWith (pactCrossChainYield "")
+      moduleCmd'       <- makeExecCmdWith (pactCrossChainYield blessCode)
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
 
       chain0Results <- runAll mgr [moduleCmd,executePactCmd]
@@ -571,7 +579,7 @@ testCrossChainYield mgr = step0
           Nothing -> expectationFailure $
             "No continuation in result: " ++ show rk
           Just pe -> do
-            step1 adminKeys executePactCmd moduleCmd pe
+            step1 adminKeys executePactCmd moduleCmd' pe
             -- step1fail adminKeys executePactCmd moduleCmd pe
 
     -- STEP 1: found the pact exec from step 0; return this
@@ -599,26 +607,34 @@ testCrossChainYield mgr = step0
       chain1Results <- runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
+          provenanceFailedMsg =
+            "enforceYield: yield provenance [ (chain = \"\" hash=\"mTm9ELBesJ1Vo0qskCQzJFOqp1aerYVIM9Te4_vkPKw\") ] " ++
+            "does not match (chain = \"\" hash=\"En5J3UULOBxWOP3daVlfystGjDsq37I3JHFGpOTKqIk\")"
 
       runResults chain1Results $ do
         moduleCmd `succeedsWith`  Nothing
-        chain1Cont `succeedsWith` textVal "emily->A->B"
-        chain1ContDupe `failsWith` Just completedPactMsg
+        if succeeds
+            then do
+          chain1Cont `succeedsWith` textVal "emily->A->B"
+          chain1ContDupe `failsWith` Just completedPactMsg
+            else do
+          chain1Cont `failsWith` Just provenanceFailedMsg
 
 
-pactCrossChainYield :: T.Text
-pactCrossChainYield =
+pactCrossChainYield :: T.Text -> T.Text
+pactCrossChainYield blessExpr =
   [text|
     (module cross-chain-tester GOV
       (defcap GOV () true)
       (defschema schema-a a-result:string)
+      $blessExpr
       (defpact cross-chain (name)
         (step
           (let*
             ((nameA (+ name "->A"))
              (r:object{schema-a} { "a-result": nameA }))
 
-            (yield r "") ;; "" is chain id in these tests
+            (yield r "")
             nameA))
 
         (step

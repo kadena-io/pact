@@ -88,6 +88,7 @@ defaultGasTable =
   ,("decrypt-cc20p1305", 33)
   ,("diff-time", 8)
   ,("drop", 3)
+  ,("emit-event",1)
   ,("enforce", 1)
   ,("enforce-guard", 8)
   ,("enforce-keyset", 8)

@@ -1453,6 +1453,17 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
 
 
+### emit-event {#emit-event}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
+
+
+Emit CAPABILITY as event without evaluating body of capability. Fails if CAPABILITY is not @managed or @event.
+```lisp
+(emit-event (TRANSFER "Bob" "Alice" 12.0))
+```
+
+
 ### enforce-guard {#enforce-guard}
 
 *guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
