@@ -147,6 +147,8 @@ data ExecutionFlag
   | FlagPreserveModuleIfacesBug
   -- | Preserve Show in reduce for Def, Native
   | FlagPreserveShowDefs
+  -- | Disable Pact 4.0 features
+  | FlagDisablePact40
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

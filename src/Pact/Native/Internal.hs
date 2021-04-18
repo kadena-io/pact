@@ -238,11 +238,15 @@ enforceYield fa y = case _yProvenance y of
   Just p -> do
     m <- getCallingModule fa
     cid <- view $ eePublicData . pdPublicMeta . pmChainId
-    let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
-
-    unless (p `elem` p') $
-      -- TODO this error might be on chain
-      evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p
+    ifExecutionFlagSet FlagDisablePact40
+      (do
+          let p' = Provenance cid (_mHash m)
+          unless (p == p') $
+              evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p)
+      (do
+          let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
+          unless (p `elem` p') $
+              evalError' fa $ "enforceYield: yield provenance " <> pretty p <> " does not match " <> pretty p')
 
     return y
 

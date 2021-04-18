@@ -880,11 +880,13 @@ yield g i as = case as of
         Just pe -> do
           o' <- enforcePactValue' o
           y <- case tid of
-            Nothing -> return $ Yield o' Nothing
+            Nothing -> return $ Yield o' Nothing Nothing
             Just t -> do
+              sourceChain <- ifExecutionFlagSet FlagDisablePact40 (return Nothing) $
+                fmap Just $ view $ eePublicData . pdPublicMeta . pmChainId
               if _peStepHasRollback pe
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
-                else fmap (Yield o') $ provenanceOf i t
+                else fmap (\p -> Yield o' p sourceChain) $ provenanceOf i t
           computeGas' g i (GPreWrite (WriteYield y)) $ do
             evalPactExec . _Just . peYield .= Just y
             return u

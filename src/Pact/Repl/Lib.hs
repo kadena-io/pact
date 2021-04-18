@@ -406,11 +406,11 @@ continuePact i as = case as of
       y <- case mobj of
         Nothing -> return $ _peYield ex
         Just o -> case _peYield ex of
-          Just (Yield _ p) -> toYield p o
+          Just (Yield _ p _) -> toYield p o
           Nothing -> toYield Nothing o
       return (pid, y)
 
-    toYield p = fmap (Just . flip Yield p) . enforcePactValue'
+    toYield p = fmap (Just . (\v -> Yield v p Nothing)) . enforcePactValue'
 
 setentity :: RNativeFun LibState
 setentity i as = case as of

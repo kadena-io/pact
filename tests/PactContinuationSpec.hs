@@ -13,6 +13,7 @@ import Data.Aeson
 import Data.Decimal
 import Data.Default (def)
 import qualified Data.HashMap.Strict as HM
+import Data.List (isInfixOf)
 import qualified Data.List.NonEmpty as NEL
 import Data.Text (Text, unpack)
 import qualified Data.Text as T
@@ -607,9 +608,7 @@ testCrossChainYield mgr blessCode succeeds = step0
       chain1Results <- runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
-          provenanceFailedMsg =
-            "enforceYield: yield provenance [ (chain = \"\" hash=\"KKg5ZGXM85AuAOYNabrYMuY82hBn166U-Ge6jvK-HfE\") ] " ++
-            "does not match (chain = \"\" hash=\"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")"
+          provenanceFailedMsg = "enforceYield: yield provenance"
 
       runResults chain1Results $ do
         moduleCmd `succeedsWith`  Nothing
@@ -979,7 +978,7 @@ resultShouldBe :: HasCallStack => ActualResult -> ExpectResult -> Expectation
 resultShouldBe (ActualResult actual) (ExpectResult expect) =
   case (expect,actual) of
     (Left (Just expErr),
-     Left err)             -> unless (expErr == err) (toExpectationFailure expErr err)
+     Left err)             -> unless (expErr `isInfixOf` err) (toExpectationFailure expErr err)
     (Right (Just expVal),
      Right val)            -> unless (expVal == val) (toExpectationFailure expVal val)
     (Left Nothing,

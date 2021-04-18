@@ -1369,7 +1369,7 @@ resumeTests nativeName = tests
         pactStep
           = Just $ PactStep 2 False (PactId "") (Just yieldVal)
         yieldVal
-          = Yield yieldData provenance
+          = Yield yieldData provenance Nothing
         provenance
           = bool Nothing (Just $ Provenance chainIdTest someModuleHash) isProv
         chainIdTest
