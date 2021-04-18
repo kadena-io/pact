@@ -417,7 +417,7 @@ testPactYield mgr = before_ flushDb $ after_ flushDb $ do
       testCrossChainYield mgr ";;1" False
 
   it "testCrossChainYield:succeeds with blessed module" $
-      testCrossChainYield mgr "(bless \"En5J3UULOBxWOP3daVlfystGjDsq37I3JHFGpOTKqIk\")" True
+      testCrossChainYield mgr "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True
 
 
 testValidYield :: HTTP.Manager -> Expectation
@@ -559,7 +559,7 @@ testCrossChainYield mgr blessCode succeeds = step0
     step0 = do
       adminKeys <- genKeys
 
-      let makeExecCmdWith = makeExecCmd adminKeys
+      let makeExecCmdWith = makeExecCmd' (Just "xchain") adminKeys
       moduleCmd        <- makeExecCmdWith (pactCrossChainYield "")
       moduleCmd'       <- makeExecCmdWith (pactCrossChainYield blessCode)
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
@@ -608,8 +608,8 @@ testCrossChainYield mgr blessCode succeeds = step0
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
           provenanceFailedMsg =
-            "enforceYield: yield provenance [ (chain = \"\" hash=\"mTm9ELBesJ1Vo0qskCQzJFOqp1aerYVIM9Te4_vkPKw\") ] " ++
-            "does not match (chain = \"\" hash=\"En5J3UULOBxWOP3daVlfystGjDsq37I3JHFGpOTKqIk\")"
+            "enforceYield: yield provenance [ (chain = \"\" hash=\"KKg5ZGXM85AuAOYNabrYMuY82hBn166U-Ge6jvK-HfE\") ] " ++
+            "does not match (chain = \"\" hash=\"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")"
 
       runResults chain1Results $ do
         moduleCmd `succeedsWith`  Nothing
@@ -857,9 +857,11 @@ runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs
 
 makeExecCmd :: SomeKeyPair -> Text -> IO (Command Text)
-makeExecCmd keyPairs code =
-  mkExec code
-  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing Nothing
+makeExecCmd keyPairs code = makeExecCmd' Nothing keyPairs code
+
+makeExecCmd' :: Maybe Text -> SomeKeyPair -> Text -> IO (Command Text)
+makeExecCmd' nonce keyPairs code = mkExec code
+  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing nonce
 
 
 formatPubKeyForCmd :: SomeKeyPair -> Value

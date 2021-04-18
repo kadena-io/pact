@@ -241,6 +241,7 @@ enforceYield fa y = case _yProvenance y of
     let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
 
     unless (p `elem` p') $
+      -- TODO this error might be on chain
       evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p
 
     return y
