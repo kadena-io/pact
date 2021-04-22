@@ -205,7 +205,7 @@ Top level only: this function will fail if used in module code.
 *from*&nbsp;`integer` *to*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
 
 
-Returns a sequence of numbers from FROM to TO (both inclusive) as a list.  INC is the increment between numbers in the sequence.  If INC is not given, it is assumed to be 1.  Additionally, if INC is not given and FROM is greater than TO,  assume a value for INC of -1.
+Returns a sequence of numbers from FROM to TO (both inclusive) as a list.  INC is the increment between numbers in the sequence.  If INC is not given, it is assumed to be 1.  Additionally, if INC is not given and FROM is greater than TO,  assume a value for INC of -1.  Lastly, this function will fail if INC is equal to zero.
 ```lisp
 pact> (enumerate 0 10 2)
 [0 2 4 6 8 10]
