@@ -20,12 +20,12 @@
  [0 1 2 3 4 5 6 7 8 9 10])
 
 (expect
- "enumaerate: Increment greater than 1"
+ "enumerate: Increment greater than 1"
  (enumerate 0 10 2)
  [0 2 4 6 8 10])
 
 (expect
- "enumaerate: Increment less than -1"
+ "enumerate: Increment less than -1"
  (enumerate 10 0 -2)
  (reverse (enumerate 0 10 2)))
 
@@ -34,6 +34,28 @@
  (enumerate 10 0)
  (reverse (enumerate 0 10)))
 
+(expect
+ "enumerate: Return empty list when given an INC of zero."
+ (enumerate 0 10 0)
+ [])
+
+(expect
+ "enumerate: Return FROM when FROM equals TO."
+ (enumerate 10 10)
+ [10])
+
 (expect-failure
- "enumerate: Fail when given an INC of zero."
- (enumerate 0 10 0))
+ "enumerate: Fail when given nonsensical INC. (example 1)"
+ (enumerate 0 10 -1))
+
+(expect-failure
+ "enumerate: Fail when given nonsensical INC. (example 2)"
+ (enumerate 10 0 1))
+
+(expect-failure
+ "enumerate: Fail when given nonsensical INC. (example 3)"
+ (enumerate 0 10 11))
+
+(expect-failure
+ "enumerate: Fail when given nonsensical INC. (example 4)"
+ (enumerate 10 0 -11))
