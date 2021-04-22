@@ -521,7 +521,8 @@ enumerateDef = defGasRNative "enumerate" enumerate
   , " INC is the increment between numbers in the sequence."
   , " If INC is not given, it is assumed to be 1."
   , " Additionally, if INC is not given and FROM is greater than TO,"
-  , " assume a value for INC of -1."]
+  , " assume a value for INC of -1."
+  , " Lastly, this function will fail if INC is equal to zero."]
 
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
@@ -752,14 +753,18 @@ makeList g i [TLitInteger len,value] = case typeof value of
 makeList _ i as = argsError i as
 
 enumerate :: GasRNativeFun e
-enumerate g i as@[TLitInteger from', TLitInteger to', TLitInteger inc']
-  | inc' == 0 = argsError i as
-  | otherwise =
-    computeGas' g i (GMakeList $ succ ((to' - from') `div` inc')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + inc') to'
-enumerate g i [TLitInteger from', TLitInteger to']
-  | from' <= to' = computeGas' g i (GMakeList $ succ (to' - from')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' + 1) to'
-  | otherwise = computeGas' g i (GMakeList $ succ (from' - to')) $ return $ toTList tTyInteger def $ toTerm <$> enumFromThenTo from' (from' - 1) to'
-enumerate _ i as = argsError i as
+enumerate g i = \case
+    as@[TLitInteger from', TLitInteger to', TLitInteger inc']
+      | inc' == 0 -> argsError i as
+      | otherwise -> makeEnumerate (succ $ (to' - from') `div` inc') from' (from' + inc') to'
+    [TLitInteger from', TLitInteger to']
+      | from' <= to' -> makeEnumerate (succ (to' - from')) from' (from' + 1) to'
+      | otherwise -> makeEnumerate (succ (from' - to')) from' (from' - 1) to'
+    as -> argsError i as
+  where
+    makeEnumerate gasCost f next t = computeGas' g i (GMakeList gasCost) $ do
+      let lstTerm = toTerm <$> enumFromThenTo f next t
+      return $ toTList tTyInteger def lstTerm
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
