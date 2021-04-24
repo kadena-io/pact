@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Pact.GasModel.Utils
   (
@@ -12,6 +13,7 @@ module Pact.GasModel.Utils
 
   , intLists
   , intListsExpr
+  , duplicateListsExpr
 
   , strLists
   , escapedStrListsExpr
@@ -126,6 +128,17 @@ intLists = NEL.map format sizes
   where
     format (desc, i) = (desc, (1 :| [2..i]))
 
+duplicateListsExpr :: NEL.NonEmpty PactExpression
+duplicateListsExpr = NEL.map format intLists
+  where
+    duplicate = NEL.fromList . foldr (\a b -> a : a : b) []
+
+    format (desc, duplicate -> li) = PactExpression
+      (makeExpr li)
+      (Just $ desc <> "DuplicateNumberList")
+
+    makeExpr li =
+      toText $ MockList $ map MockInt (NEL.toList li)
 
 -- example: [ "[1 2 3 4]" ]
 intListsExpr :: NEL.NonEmpty PactExpression

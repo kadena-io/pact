@@ -1209,18 +1209,10 @@ base64DecodeTests = defGasUnitTests exprs
 distinctTests :: NativeDefName -> GasUnitTests
 distinctTests = defGasUnitTests allExprs
   where
-    lists = [2 .. 5]
-      <&> enumFromTo 1
-      <&> duplicate
-      <&> MockList
-      <&> toText
-      <&> flip PactExpression Nothing
-      where
-        duplicate = foldr (\a b -> MockInt a : MockInt a : b) []
     distinctExpr li =
       [text| (distinct $li) |]
 
-    allExprs = NEL.map (createPactExpr distinctExpr) $ NEL.fromList lists
+    allExprs = NEL.map (createPactExpr distinctExpr) duplicateListsExpr
 
 sortTests :: NativeDefName -> GasUnitTests
 sortTests = defGasUnitTests allExprs

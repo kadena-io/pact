@@ -65,6 +65,7 @@ import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Maybe (fromMaybe)
 import qualified Data.List as L (nubBy)
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
@@ -922,34 +923,38 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
 where' i as = argsError' i as
 
 distinct :: GasRNativeFun e
-distinct g _ [l@(TList v _ _ )] | V.null v = pure (g,l)
-distinct g i [TList{..}] = do
-  let square x = x * x
-  let result = _tList
-          & V.toList
-          & L.nubBy termEq
-          & V.fromList
-          & toTListV _tListType def
-  computeGas' g i (GDistinct (square $ V.length _tList)) $ pure $ result
-distinct g0 fa [TList fields _ fi, l@(TList vs lty _)]
-  | V.null fields = evalError fi "Empty fields list"
-  | V.null vs = return (g0, l)
-  | otherwise = do
-      let square x = x * x
-      (g1,_) <- computeGas' g0 fa (GDistinct $ square (V.length vs)) $ return ()
-      fields' <- asKeyList fields
-      let go (TObject (Object (ObjectMap obj1) _ _ _) _) (TObject (Object (ObjectMap obj2) _ _ _) _) field =
-            case (M.lookup field obj1, M.lookup field obj2) of
-              (Just t1, Just t2) -> termEq t1 t2
-              _ -> False
-          go _ _ _ = False
-          result = vs
-            & V.toList
-            & L.nubBy (\o1 o2 -> all (go o1 o2) fields')
-            & V.fromList
-            & toTListV lty def
-      computeGas' g1 fa (GDistinctFieldLookup (square (V.length vs) * S.size fields')) $ pure result
-distinct _ i as = argsError i as
+distinct g0 i = \case
+    [l@(TList v _ _ )] | V.null v -> pure (g0,l)
+    [TList{..}] ->
+      mkDistinctList termEq g0 (GDistinct $ square $ V.length _tList) _tListType _tList
+    [TList fields _ fi, l@(TList vs lty _)]
+      | V.null vs -> return (g0, l)
+      | V.null fields -> evalError fi "distinct: FIELDS list must be nonempty."
+      -- | lty /= tTyObjectAny -> evalError' i "distinct: FIELDS list must homogenously contain objects."
+      | otherwise -> do
+          (g1,_) <- computeGas' g0 i (GDistinct $ square $ V.length vs) $ return ()
+          fields' <- asKeyList fields
+          mkDistinctList (fieldsMatcher fields') g1 (GDistinctFieldLookup $ S.size fields') lty vs
+    as -> argsError i as
+  where
+    square x = x * x
+
+    mkDistinctList f gas1 gas2 lty vs =
+        vs
+        & V.toList
+        & L.nubBy f
+        & V.fromList
+        & toTListV lty def
+        & pure
+        & computeGas' gas1 i gas2
+
+    fieldsMatcher fields o1 o2 = all (fieldMatcher o1 o2) fields
+      where
+        fieldMatcher t1 t2 field = fromMaybe False $ do
+          let fieldlens = tObject.oObject.(to _objectMap).(at field)
+          term1 <- preview fieldlens t1
+          term2 <- preview fieldlens t2
+          liftM2 termEq term1 term2
 
 sort' :: GasRNativeFun e
 sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
