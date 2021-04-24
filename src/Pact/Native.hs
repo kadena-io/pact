@@ -57,6 +57,7 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
+import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
@@ -518,12 +519,13 @@ enumerateDef = defGasRNative "enumerate" enumerate
    , "(enumerate 10 0)"]
   $ T.intercalate " "
   [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
-  , " INC is the increment between numbers in the sequence."
-  , " If INC is not given, it is assumed to be 1."
-  , " Additionally, if INC is not given and FROM is greater than TO,"
-  , " assume a value for INC of -1."
-  , " If INC is equal to zero, then this function will return the empty list."
-  , " Lastly, this function will also fail if INC is outside the range of [0,|FROM - TO|]."
+  , "INC is the increment between numbers in the sequence."
+  , "If INC is not given, it is assumed to be 1."
+  , "Additionally, if INC is not given and FROM is greater than TO assume a value for INC of -1."
+  , "If FROM equals TO, return the singleton list containing FROM, irrespective of INC's value."
+  , "If INC is equal to zero, this function will return the singleton list containing FROM."
+  , "If INC is such that FROM + INC > TO (when FROM < TO) or FROM + INC < TO (when FROM > TO) return the singleton list containing FROM."
+  , "Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or FROM + INC > TO (when FROM > TO), then this function fails."
   ]
 
 reverseDef :: NativeDef
@@ -755,26 +757,35 @@ makeList g i [TLitInteger len,value] = case typeof value of
 makeList _ i as = argsError i as
 
 enumerate :: GasRNativeFun e
-enumerate g i as = case as of
-    [TLitInteger from', TLitInteger to', TLitInteger inc'] ->
-      makeEnumerate (succ $ (abs (to' - from')) `div` inc') from' inc' to'
-    [TLitInteger from', TLitInteger to']
-      | from' <= to' -> makeEnumerate (succ (to' - from')) from' 1 to'
-      | otherwise -> makeEnumerate (succ (from' - to')) from' (negate 1) to'
-    _ -> argsError i as
+enumerate g i = \case
+    [TLitInteger from', TLitInteger to', TLitInteger inc] ->
+      createEnumerateList from' to' inc
+    [TLitInteger from', TLitInteger to'] ->
+      createEnumerateList from' to' $ bool 1 (-1) (from' > to')
+    as -> argsError i as
   where
-    makeEnumerate gasCost f inc t
-      | inc == 0 =
-        computeGas' g i (GMakeList 0) $ return $ toTList tTyInteger def (toTerm <$> ([] :: [Integer]))
-      | f == t =
-        computeGas' g i (GMakeList 1) $ return $ toTList tTyInteger def (toTerm <$> [f])
-      | f < t && (f + inc > t || inc < 0) =
-        argsError i as
-      | f > t && (f + inc < t || inc > 0) =
-        argsError i as
-      | otherwise = computeGas' g i (GMakeList gasCost) $ do
-        let lstTerm = toTerm <$> enumFromThenTo f (f + inc) t
-        return $ toTList tTyInteger def lstTerm
+
+    computeList :: Integer -> V.Vector Integer -> Eval e (Gas, Term Name)
+    computeList gas = computeGas' g i (GMakeList gas)
+      . pure
+      . toTListV tTyInteger def
+      . fmap toTerm
+
+    step to' inc acc
+      | acc > to', inc > 0 = Nothing
+      | acc < to', inc < 0 = Nothing
+      | otherwise = Just (acc, acc + inc)
+
+    createEnumerateList from' to' inc
+      | from' == to' = computeList 1 (V.singleton from')
+      | inc == 0 = computeList 1 mempty
+      | from' < to', from' + inc < from' =
+        evalError' i "enumerate: increment diverges below from interval bounds."
+      | from' > to', from' + inc > from' =
+        evalError' i "enumerate: increment diverges above from interval bounds."
+      | otherwise = do
+        let g' = succ $ (abs (from' - to')) `div` (abs inc)
+        computeList g' $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
