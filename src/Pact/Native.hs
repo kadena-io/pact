@@ -938,10 +938,8 @@ sort' g0 fa [TList fields _ fi,l@(TList vs lty _)]
           ne -> ne
 
     compareField t1 t2 field = fromMaybe EQ $ do
-      let fieldlens = tObject.oObject.(to _objectMap).(at field)
-      term1 <- previews fieldlens (fmap _tLiteral) t1
-      term2 <- previews fieldlens (fmap _tLiteral) t2
-      liftM2 compare term1 term2
+      let fieldlens = tObject.oObject.(to _objectMap).(at field)._Just.tLiteral
+      liftM2 compare (preview fieldlens t1) (preview fieldlens t2)
 sort' _ i as = argsError i as
 
 
