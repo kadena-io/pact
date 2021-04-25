@@ -951,10 +951,8 @@ distinct g0 i = \case
     fieldsMatcher fields o1 o2 = all (fieldMatcher o1 o2) fields
       where
         fieldMatcher t1 t2 field = fromMaybe False $ do
-          let fieldlens = tObject.oObject.(to _objectMap).(at field)
-          term1 <- preview fieldlens t1
-          term2 <- preview fieldlens t2
-          liftM2 termEq term1 term2
+          let fieldlens = tObject.oObject.(to _objectMap).(at field)._Just
+          liftM2 termEq (preview fieldlens t1) (preview fieldlens t2)
 
 sort' :: GasRNativeFun e
 sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
