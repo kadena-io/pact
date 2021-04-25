@@ -62,8 +62,10 @@ import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
 import Data.Foldable
+import Data.Function (on)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Maybe (fromMaybe)
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
@@ -913,28 +915,33 @@ where' i as = argsError' i as
 sort' :: GasRNativeFun e
 sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
 sort' g i [TList{..}] = computeGas' g i (GSort (V.length _tList)) $ liftIO $ do
-  m <- V.thaw _tList
-  (`V.sortBy` m) $ \x y -> case (x,y) of
-    (TLiteral xl _,TLiteral yl _) -> xl `compare` yl
-    _ -> EQ
-  toTListV _tListType def <$> V.freeze m
+    m <- V.thaw _tList
+    V.sortBy (\s t -> fromMaybe EQ $ compareLiterals s t) m
+    toTListV _tListType def <$> V.freeze m
+  where
+    compareLiterals = on (liftM2 compare) (preview tLiteral)
 sort' g0 fa [TList fields _ fi,l@(TList vs lty _)]
-  | V.null fields = evalError fi "Empty fields list"
-  | V.null vs = return (g0,l)
-  | otherwise = do
-      (g1,_) <- computeGas' g0 fa (GSort (V.length vs)) $ return ()
-      fields' <- asKeyList fields
-      computeGas' g1 fa (GSortFieldLookup (S.size fields')) $ liftIO $ do
-        m <- V.thaw vs
-        (`V.sortBy` m) $ \x y -> case (x,y) of
-          (TObject (Object (ObjectMap xo) _ _ _) _,TObject (Object (ObjectMap yo) _ _ _) _) ->
-            let go field EQ = case (M.lookup field xo, M.lookup field yo) of
-                  (Just (TLiteral lx _), Just (TLiteral ly _)) -> lx `compare` ly
-                  _ -> EQ
-                go _ ne = ne
-            in foldr go EQ fields'
-          _ -> EQ
-        toTListV lty def <$> V.freeze m
+    | V.null fields = evalError fi "Empty fields list"
+    | V.null vs = return (g0,l)
+    | otherwise = do
+        (g1,_) <- computeGas' g0 fa (GSort (V.length vs)) $ return ()
+        fields' <- asKeyList fields
+        computeGas' g1 fa (GSortFieldLookup (S.size fields')) $ liftIO $ do
+          m <- V.thaw vs
+          V.sortBy (compareFields fields') m
+          toTListV lty def <$> V.freeze m
+  where
+    compareFields fs t1 t2 = foldr go EQ fs
+      where
+        go field = \case
+          EQ -> compareField t1 t2 field
+          ne -> ne
+
+    compareField t1 t2 field = fromMaybe EQ $ do
+      let fieldlens = tObject.oObject.(to _objectMap).(at field)
+      term1 <- previews fieldlens (fmap _tLiteral) t1
+      term2 <- previews fieldlens (fmap _tLiteral) t2
+      liftM2 compare term1 term2
 sort' _ i as = argsError i as
 
 
