@@ -37,6 +37,7 @@ module Pact.Types.Runtime
    NamespacePolicy(..),
    permissiveNamespacePolicy,
    ExecutionConfig(..),ExecutionFlag(..),ecFlags,isExecutionFlagSet,flagRep,flagReps,
+   mkExecutionConfig,
    ifExecutionFlagSet,ifExecutionFlagSet',
    whenExecutionFlagSet, unlessExecutionFlagSet,
    module Pact.Types.Lang,
@@ -162,14 +163,23 @@ flagReps = M.fromList $ map go [minBound .. maxBound]
 
 instance Pretty ExecutionFlag where
   pretty = pretty . flagRep
+instance ToJSON ExecutionFlag where toJSON = String . flagRep
+instance FromJSON ExecutionFlag where
+  parseJSON = withText "ExecutionFlag" $ \t -> case M.lookup t flagReps of
+    Nothing -> fail "Invalid ExecutionFlag value"
+    Just f -> return f
 
 -- | Execution configuration flags, where empty is the "default".
 newtype ExecutionConfig = ExecutionConfig
   { _ecFlags :: S.Set ExecutionFlag }
+  deriving (Eq,Show,ToJSON,FromJSON)
 makeLenses ''ExecutionConfig
 instance Default ExecutionConfig where def = ExecutionConfig def
 instance Pretty ExecutionConfig where
   pretty = pretty . S.toList . _ecFlags
+
+mkExecutionConfig :: [ExecutionFlag] -> ExecutionConfig
+mkExecutionConfig = ExecutionConfig . S.fromList
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {

@@ -413,13 +413,16 @@ testPactYield mgr = before_ flushDb $ after_ flushDb $ do
     testResetYield mgr
 
   it "testCrossChainYield:succeeds with same module" $
-      testCrossChainYield mgr "" True
+      testCrossChainYield mgr "" True False
+
+  it "testCrossChainYield:succeeds with back compat" $
+      testCrossChainYield mgr "" True True
 
   it "testCrossChainYield:fails with different module" $
-      testCrossChainYield mgr ";;1" False
+      testCrossChainYield mgr ";;1" False False
 
   it "testCrossChainYield:succeeds with blessed module" $
-      testCrossChainYield mgr "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True
+      testCrossChainYield mgr "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True False
 
 
 testValidYield :: HTTP.Manager -> Expectation
@@ -550,8 +553,8 @@ pactWithSameNameYield moduleName =
                      res)))))|]
 
 
-testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Expectation
-testCrossChainYield mgr blessCode succeeds = step0
+testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Bool -> Expectation
+testCrossChainYield mgr blessCode succeeds backCompat = step0
   where
 
     -- STEP 0: runs on server for "chain0results"
@@ -566,7 +569,9 @@ testCrossChainYield mgr blessCode succeeds = step0
       moduleCmd'       <- makeExecCmdWith (pactCrossChainYield blessCode)
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
 
-      chain0Results <- runAll mgr [moduleCmd,executePactCmd]
+      chain0Results <-
+        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport $
+        if backCompat then backCompatConfig else testConfigFilePath
 
       runResults chain0Results $ do
         moduleCmd `succeedsWith`  Nothing
@@ -574,7 +579,7 @@ testCrossChainYield mgr blessCode succeeds = step0
         shouldMatch executePactCmd $ ExpectResult $ \cr ->
           preview (crContinuation . _Just . peYield . _Just . ySourceChain . _Just) cr
           `shouldBe`
-          Just (ChainId "")
+          (if backCompat then Nothing else Just (ChainId ""))
 
       let rk = cmdToRequestKey executePactCmd
 
@@ -610,7 +615,8 @@ testCrossChainYield mgr blessCode succeeds = step0
 
       flushDb
 
-      chain1Results <- runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv
+      chain1Results <-
+        runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv testConfigFilePath
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
           provenanceFailedMsg = "enforceYield: yield provenance"
@@ -829,6 +835,9 @@ testPriceNegDownBadCaps mgr = do
 testConfigFilePath :: FilePath
 testConfigFilePath = testDir ++ "test-config.yaml"
 
+backCompatConfig :: FilePath
+backCompatConfig = testDir ++ "test-config-disable40.yaml"
+
 
 shouldMatch
     :: HasCallStack
@@ -934,15 +943,16 @@ makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{} expect = CommandResultCheck (cmdToRequestKey c) expect
 
 runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll mgr cmds = runAll' mgr cmds noSPVSupport
+runAll mgr cmds = runAll' mgr cmds noSPVSupport testConfigFilePath
 
 runAll'
   :: Manager
   -> [Command T.Text]
   -> SPVSupport
+  -> FilePath
   -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll' mgr cmds spv = Exception.bracket
-              (startServer' testConfigFilePath spv)
+runAll' mgr cmds spv config = Exception.bracket
+              (startServer' config spv)
                stopServer
               (const (run mgr cmds))
 

@@ -47,6 +47,8 @@ spec = do
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
     ,("eventCR",eventCR)
+    ,("crossChainSendCR",crossChainSendCR False)
+    ,("crossChainSendCRBackCompat",crossChainSendCR True)
     ]
   describe "goldenAutoCap" $
     goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
@@ -86,10 +88,25 @@ eventCR tn s = doCRTest tn s $
     \    (with-capability (CAP name amount) 1))) \
     \ (events-test.f \"Alice\" 10.1)"
 
+crossChainSendCR :: Bool -> String -> ReplState -> Spec
+crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
+    "(module xchain G (defcap G () true) \
+    \ (defpact p (a:integer) \
+    \  (step (yield { 'a: a } \"1\")) \
+    \  (step (resume { 'a:=a } a)))) \
+    \(xchain.p 3)"
+  where
+    ec True = mkExecutionConfig [FlagDisablePact40]
+    ec False = def
+
+
 
 
 doCRTest :: String -> ReplState -> Text -> Spec
-doCRTest tn s code = do
+doCRTest tn s code = doCRTest' def tn s code
+
+doCRTest' :: ExecutionConfig -> String -> ReplState -> Text -> Spec
+doCRTest' ec tn s code = do
   let dbEnv = PactDbEnv (view (rEnv . eePactDb) s) (view (rEnv . eePactDbVar) s)
       cmd = Command payload [] initialHash
       payload = Payload exec "" pubMeta [] Nothing
@@ -97,7 +114,7 @@ doCRTest tn s code = do
       parsedCode = either error id $ parsePact code
       exec = Exec $ ExecMsg parsedCode Null
   r <- runIO $ applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 ""
-       noSPVSupport Local cmd (ProcSucc cmd)
+       noSPVSupport ec Local cmd (ProcSucc cmd)
   -- StackFrame and Info have pathological instances which impacts failure JSON
   -- out of CommandResult. Therefore this golden does not ensure equality of
   -- de-serialized CRs, but instead that
