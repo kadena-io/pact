@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module PactContinuationSpec (spec) where
 
@@ -570,6 +571,10 @@ testCrossChainYield mgr blessCode succeeds = step0
       runResults chain0Results $ do
         moduleCmd `succeedsWith`  Nothing
         executePactCmd `succeedsWith` textVal "emily->A"
+        shouldMatch executePactCmd $ ExpectResult $ \cr ->
+          preview (crContinuation . _Just . peYield . _Just . ySourceChain . _Just) cr
+          `shouldBe`
+          Just (ChainId "")
 
       let rk = cmdToRequestKey executePactCmd
 
@@ -825,15 +830,20 @@ testConfigFilePath :: FilePath
 testConfigFilePath = testDir ++ "test-config.yaml"
 
 
+shouldMatch
+    :: HasCallStack
+    => Command Text
+    -> ExpectResult
+    -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+shouldMatch cmd er = ask >>= liftIO . shouldMatch' (makeCheck cmd er)
+
 shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
-shouldMatch' crc@CommandResultCheck{..} results = checkResult _crcExpect apiRes
+shouldMatch' CommandResultCheck{..} results = checkResult _crcExpect apiRes
   where
     apiRes = HM.lookup _crcReqKey results
-    checkResult expect result = case result of
-      Nothing -> expectationFailure $ "Failed to find ApiResult for " ++ show crc
-      Just CommandResult{..} -> (toActualResult _crResult _crEvents) `resultShouldBe` expect
-    toActualResult (PactResult (Left (PactError _ _ _ d))) _ = ActualResult . Left $ show d
-    toActualResult (PactResult (Right pv)) es = ActualResult $ Right (pv,es)
+    checkResult (ExpectResult crTest) result = case result of
+      Nothing -> expectationFailure $ "Failed to find ApiResult for " ++ show _crcReqKey
+      Just cr -> crTest cr
 
 
 
@@ -844,13 +854,11 @@ succeedsWith cmd r = succeedsWith' cmd ((,[]) <$> r)
 
 succeedsWith' :: HasCallStack => Command Text -> Maybe (PactValue,[PactEvent]) ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith' cmd r = ask >>= liftIO . shouldMatch'
-                     (makeCheck cmd (ExpectResult . Right $ r))
+succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right $ r)
 
 failsWith :: HasCallStack => Command Text -> Maybe String ->
              ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-failsWith cmd r = ask >>= liftIO . shouldMatch'
-                  (makeCheck cmd (ExpectResult . Left $ r))
+failsWith cmd r = shouldMatch cmd (resultShouldBe $ Left $ r)
 
 runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs
@@ -913,15 +921,13 @@ stepMisMatchMsg isRollback attemptStep currStep = Just msg
         msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
               <> show attemptStep <> ", " <> show currStep <> ")"
 
-newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe (PactValue,[PactEvent])))
-  deriving (Eq, Show)
-newtype ActualResult = ActualResult (Either String (PactValue,[PactEvent]))
-  deriving (Eq, Show)
+newtype ExpectResult = ExpectResult (CommandResult Hash -> Expectation)
+    deriving (Semigroup)
 
 data CommandResultCheck = CommandResultCheck
   { _crcReqKey :: RequestKey
   , _crcExpect :: ExpectResult
-  } deriving (Show, Eq)
+  }
 
 
 makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
@@ -974,9 +980,12 @@ doPoll mgr req = do
   runClientM (pollClient req) (mkClientEnv mgr baseUrl)
 
 
-resultShouldBe :: HasCallStack => ActualResult -> ExpectResult -> Expectation
-resultShouldBe (ActualResult actual) (ExpectResult expect) =
-  case (expect,actual) of
+resultShouldBe
+    :: HasCallStack
+    => Either (Maybe String) (Maybe (PactValue,[PactEvent]))
+    -> ExpectResult
+resultShouldBe expect = ExpectResult $ \cr ->
+  case (expect,actual cr) of
     (Left (Just expErr),
      Left err)             -> unless (expErr `isInfixOf` err) (toExpectationFailure expErr err)
     (Right (Just expVal),
@@ -985,7 +994,11 @@ resultShouldBe (ActualResult actual) (ExpectResult expect) =
      Left _)               -> return ()
     (Right Nothing,
      Right _)              -> return ()
-    _                      -> toExpectationFailure expect actual
+    _                      -> toExpectationFailure expect cr
+  where
+    actual CommandResult{..}= case _pactResult _crResult of
+      Left e -> Left (show $ peDoc e)
+      Right pv -> Right (pv,_crEvents)
 
 
 
