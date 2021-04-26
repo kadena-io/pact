@@ -930,7 +930,7 @@ distinct g0 i = \case
     [TList fields _ fi, l@(TList vs lty _)]
       | V.null vs -> return (g0, l)
       | V.null fields -> evalError fi "distinct: FIELDS list must be nonempty."
-      -- | lty /= tTyObjectAny -> evalError' i "distinct: FIELDS list must homogenously contain objects."
+      | isObject lty -> evalError' i "distinct: LIST must homogenously contain objects."
       | otherwise -> do
           (g1,_) <- computeGas' g0 i (GDistinct $ square $ V.length vs) $ return ()
           fields' <- asKeyList fields
@@ -938,6 +938,10 @@ distinct g0 i = \case
     as -> argsError i as
   where
     square x = x * x
+
+    isObject = \case
+      TySchema o _ _ -> o == TyObject
+      _ -> False
 
     mkDistinctList f gas1 gas2 lty vs =
         vs
