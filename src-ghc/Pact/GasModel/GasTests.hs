@@ -199,6 +199,7 @@ unitTestFromDef nativeName = tests
       "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
       "require-capability"  -> Just $ requireCapabilityTests nativeName
       "with-capability"     -> Just $ withCapabilityTests nativeName
+      "emit-event"          -> Just $ emitEventTests nativeName
 
       -- Non-native concepts to benchmark
       "use"       -> Just $ useTests nativeName
@@ -240,7 +241,7 @@ moduleTests = defGasUnitTests allExprs
         true ))|]
     moduleExpr = defPactExpression moduleExprText
     moduleRotateDesc = [text|(module accounts GOV [...some module code ...]) update module|]
-    moduleRotateExpr = PactExpression (accountsModule acctModuleName) (Just moduleRotateDesc)
+    moduleRotateExpr = PactExpression (regressionModule acctModuleName) (Just moduleRotateDesc)
     allExprs = moduleExpr :| [moduleRotateExpr]
 
 
@@ -335,6 +336,11 @@ withCapabilityTests = defGasUnitTests allExprs
       defPactExpression [text| ($acctModuleNameText.test-with-cap-func) |]
     allExprs = withCapExpr :| []
 
+
+emitEventTests :: NativeDefName -> GasUnitTests
+emitEventTests = defGasUnitTests (expr :| [])
+  where
+    expr = defPactExpression [text| ($acctModuleNameText.test-emit-event-func) |]
 
 requireCapabilityTests :: NativeDefName -> GasUnitTests
 requireCapabilityTests = tests

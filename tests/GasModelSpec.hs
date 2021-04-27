@@ -56,18 +56,19 @@ untestedNativesCheck = do
      , "verify-spv"
      , "public-chain-data"
      , "list"
-     , "emit-event" -- TODO need better golden regression
      ])
 
 allGasTestsAndGoldenShouldPass :: Spec
-allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
+allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ allGasTestsAndGoldenShouldPass'
+
+-- | Calling directly is useful as it doesn't clean up, so you can use the actual
+-- as a new golden on expected changes.
+allGasTestsAndGoldenShouldPass' :: Spec
+allGasTestsAndGoldenShouldPass' = do
   res <- runIO gasTestResults
   -- fails if one of the gas tests throws a pact error
 
-  let gasCost = _evalGas . snd . _gasTestResultSqliteDb
-      -- only do golden test for sqlite results
-      toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
-      allActualOutputsGolden = map toGoldenOutput res
+  let allActualOutputsGolden = map toGoldenOutput res
 
 
   it "gas model tests should not return a PactError, but should pass golden" $ do
@@ -103,14 +104,24 @@ allNativesInGasTable = do
     (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
 
 gasTestResults :: IO [GasTestResult ([Term Name], EvalState)]
-gasTestResults = do
-  let runSingleNativeTests t = mapOverGasUnitTests t run run
-      run expr dbSetup = do
-        (res, st) <- bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
-        res' <- eitherDie (getDescription expr dbSetup) res
-        return (res', st)
-  concat <$> mapM (runSingleNativeTests . snd) (HM.toList unitTests)
+gasTestResults = concat <$> mapM (runTest . snd) (HM.toList unitTests)
 
+-- | Use this to run a single named test.
+_runNative :: NativeDefName -> IO (Maybe [(T.Text,Gas)])
+_runNative = traverse (fmap (map toGoldenOutput) . runTest) . unitTestFromDef
+
+runTest :: GasUnitTests -> IO [GasTestResult ([Term Name], EvalState)]
+runTest t = mapOverGasUnitTests t run run
+  where
+    run expr dbSetup = do
+      (res, st) <- bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
+      res' <- eitherDie (getDescription expr dbSetup) res
+      return (res', st)
+
+toGoldenOutput :: GasTestResult ([Term Name], EvalState) -> (T.Text, Gas)
+toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
+    where
+      gasCost = _evalGas . snd . _gasTestResultSqliteDb
 
 -- Utils
 --
