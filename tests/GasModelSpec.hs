@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module GasModelSpec (spec) where
 
@@ -8,6 +9,7 @@ import Test.Hspec.Golden as G
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Set as S
+import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 import qualified Data.Yaml as Y
@@ -206,3 +208,12 @@ genWithSeed i (MkGen g) = MkGen (\_ n -> g (mkQCGen i) n)
 -- | Random seed used to generate the pact values in the sizeOf golden tests
 seed :: Int
 seed = 10000000000
+
+
+_diffGoldens :: FilePath -> FilePath -> IO ()
+_diffGoldens g1 g2 = do
+  (y1 :: Map.Map T.Text [Int]) <- fmap pure . Map.fromList <$> Y.decodeFileThrow g1
+  (y2 :: Map.Map T.Text [Int]) <- fmap pure . Map.fromList <$> Y.decodeFileThrow g2
+  let merge [c1] [c2] = [c1,c2,c2-c1]
+      merge _ _ = []
+  Y.encodeFile "diff.yaml" $ Map.unionWith merge y1 y2
