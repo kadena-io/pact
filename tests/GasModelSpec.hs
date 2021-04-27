@@ -16,7 +16,7 @@ import Control.Exception (bracket, throwIO)
 import Control.Monad (when)
 import Data.Aeson
 import Data.Int (Int64)
-import Data.List (foldl',intercalate)
+import Data.List (foldl')
 import Test.QuickCheck
 import Test.QuickCheck.Gen (Gen(..))
 import Test.QuickCheck.Random (mkQCGen)
@@ -64,7 +64,6 @@ allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
 
   it "gas model tests should not return a PactError, but should pass golden" $ do
     (golden "gas-model" allActualOutputsGolden)
-      { encodePretty = intercalate "\n" . map show } -- effective, but a lot of output is shown
 
 golden :: (FromJSON a,ToJSON a) => String -> a -> Golden a
 golden name obj = Golden
