@@ -3,16 +3,18 @@
 module GasModelSpec (spec) where
 
 import Test.Hspec
-import Test.Hspec.Golden
+import Test.Hspec.Golden as G
 
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Set as S
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
+import qualified Data.Yaml as Y
 
 import Control.Exception (bracket, throwIO)
 import Control.Monad (when)
-import Data.Aeson (eitherDecode, encode)
+import Data.Aeson
 import Data.Int (Int64)
 import Data.List (foldl')
 import Test.QuickCheck
@@ -21,7 +23,7 @@ import Test.QuickCheck.Random (mkQCGen)
 import System.Directory
 
 
-import GoldenSpec (golden, cleanupActual)
+import GoldenSpec (cleanupActual)
 import Pact.Types.Exp
 import Pact.Types.SizeOf
 import Pact.Types.PactValue
@@ -65,9 +67,21 @@ allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
       toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
       allActualOutputsGolden = map toGoldenOutput res
 
+
   it "gas model tests should not return a PactError, but should pass golden" $ do
     (golden "gas-model" allActualOutputsGolden)
-      { encodePretty = show } -- effective, but a lot of output is shown
+
+golden :: (FromJSON a,ToJSON a) => String -> a -> Golden a
+golden name obj = Golden
+  { G.output = obj
+  , G.encodePretty = B.unpack . Y.encode
+  , G.writeToFile = Y.encodeFile
+  , G.readFromFile = Y.decodeFileThrow
+  , G.testName = name
+  , G.directory = "golden"
+  , G.failFirstTime = False
+  }
+
 
 goldenSizeOfPactValues :: Spec
 goldenSizeOfPactValues = do

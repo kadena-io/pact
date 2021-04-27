@@ -337,6 +337,7 @@ test-suite hspec
               , transformers
               , unordered-containers
               , vector
+              , yaml
   other-modules:
                 Blake2Spec
                 KeysetSpec
