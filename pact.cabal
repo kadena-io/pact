@@ -337,7 +337,6 @@ test-suite hspec
               , transformers
               , unordered-containers
               , vector
-              , yaml
   other-modules:
                 Blake2Spec
                 KeysetSpec
@@ -350,6 +349,7 @@ test-suite hspec
                 , cryptonite
                 , http-client
                 , servant-client
+                , yaml
     other-modules:
                   DocgenSpec
                 , PactTestsSpec
