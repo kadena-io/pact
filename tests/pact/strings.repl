@@ -1,0 +1,33 @@
+;; strings.repl : tests for ops on strings
+
+"===== at"
+(expect "at integer string" "h" (at 0 "hello"))
+(expect "at integer string" "o" (let*
+  ((str "hello")
+  (lastIdx (- (length str) 1)))
+  (at lastIdx str)))
+(expect-failure "at -integer string" (at -1 "hello"))
+(expect-failure "at decimal string" (at 1.0 "hello"))
+(expect-failure "at out-of-bounds-int string" (let ((str "hello")) (at (length str) str)))
+
+"===== map"
+(expect "map treats str as list of single char strings" ["k", "d", "a"]  (map (identity) "kda"))
+(expect "map works appropriately" [1, 2, 3]  (map (str-to-int) "123"))
+(expect "map on empty string" [] (map (str-to-int) ""))
+
+"===== fold"
+(let ((str "i love kadena!!!"))
+  (expect "fold on str with concat-op preserves str"  str (fold (+) "" str)))
+
+(expect "fold on empty str" ""  (fold (+) "" ""))
+
+"===== filter"
+(module stuff GOVERNANCE
+
+  (defcap GOVERNANCE ()
+    true)
+
+  (defun not-a (c)
+    (!= "a" c)))
+
+(expect "simple filter works as expected" ["b", "c", "b", "c"] (filter (not-a) "aaabcaaabc"))

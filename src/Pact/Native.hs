@@ -493,15 +493,21 @@ chainDataDef = defRNative "chain-data" chainData
 
 mapDef :: NativeDef
 mapDef = defNative "map" map'
-  (funType (TyList a) [("app",lam b a),("list",TyList b)])
-  ["(map (+ 1) [1 2 3])"]
-  "Apply APP to each element in LIST, returning a new list of results."
+  (  funType (TyList a) [("app",lam b a),("list",TyList b)]
+  <> funType (TyList a) [("app", lam tTyString a),("str", tTyString)]
+  )
+  ["(map (+ 1) [1 2 3])"
+  ,"(map (+ \" \") \"hello world\")"
+  ]
+  "Apply APP to each element in LIST (or STR), returning a new list of results."
 
 foldDef :: NativeDef
 foldDef = defNative "fold" fold'
-  (funType a [("app",lam2 a b a),("init",a),("list",TyList b)])
+  (  funType a [("app",lam2 a b a),("init",a),("list",TyList b)]
+  <> funType a [("app", lam2 a tTyString a), ("init",a), ("str", tTyString)]
+  )
   ["(fold (+) 0 [100 10 5])"]
-  "Iteratively reduce LIST by applying APP to last result and element, starting with INIT."
+  "Iteratively reduce LIST (or STR) by applying APP to last result and element, starting with INIT."
 
 makeListDef :: NativeDef
 makeListDef = defGasRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
@@ -553,10 +559,13 @@ dropDef = defRNative "drop" drop' takeDrop
   "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
 atDef :: NativeDef
-atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
-                      funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
-  ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
-  "Index LIST at IDX, or get value with key IDX from OBJECT."
+atDef = defRNative "at" at'
+  (  funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))]
+  <> funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))]
+  <> funType a [("idx",tTyInteger),("str",tTyString)]
+  )
+  ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })", "(at 1 \"kadena\")"]
+  "Index LIST at IDX, or index STR at IDX, or get value with key IDX from OBJECT."
 
 asciiConst :: NativeDef
 asciiConst = defConst "CHARSET_ASCII"
@@ -720,10 +729,18 @@ a = mkTyVar "a" []
 b = mkTyVar "b" []
 c = mkTyVar "c" []
 
+-- | Converts a string to a vector of single character strings
+-- Ex. "kda" -> [ "k", "d", "a"]
+stringToCharList :: Text -> V.Vector (Term a)
+stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
+
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
-           t -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
+           TList ls _ _ -> applyToList ls
+           TLiteral (LString s)  _ -> let ls = (stringToCharList s) in applyToList ls
+           t -> evalError' i $ "map: expecting list or string: " <> pretty (abbrev t)
+   where
+     applyToList ls = (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
 map' i as = argsError' i as
 
 list :: RNativeFun e
@@ -741,20 +758,27 @@ reverse' i as = argsError i as
 
 fold' :: NativeFun e
 fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
-           t -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
+           TList ls _ _ -> reduceVec ls
+           TLiteral (LString s)  _ -> let ls = stringToCharList s in reduceVec ls
+           t -> evalError' i $ "fold: expecting list or string: " <> pretty (abbrev t)
+   where
+     reduceVec ls = reduce initv >>= \initv' ->
+       foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
 fold' i as = argsError' i as
 
 
 filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
-                           t <- apply (_tApp app) [a']
-                           case t of
-                             (TLiteral (LBool bo) _) -> return bo
-                             _ -> return False -- hmm, too permissive here, select is stricter
-           t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+           TList ls lt _ -> fmap (toTListV lt def) $ filterVec ls
+           TLiteral (LString s)  _ -> fmap (toTListV (TyPrim TyString) def) $
+             let ls = (stringToCharList s) in filterVec ls
+           t -> evalError' i $ "filter: expecting list or string: " <> pretty (abbrev t)
+   where
+     filterVec ls = (`V.filterM` ls) $ \a' -> do
+       t <- apply (_tApp app) [a']
+       case t of
+         (TLiteral (LBool bo) _) -> return bo
+         _ -> return False -- hmm, too permissive here, select is stricter
 filter' i as = argsError' i as
 
 length' :: RNativeFun e
@@ -806,12 +830,20 @@ tordV = tord V.reverse
 tordL :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
 tordL = tord reverse
 
+indexError :: Integer -> Term Name -> Int -> Eval e (Term Name)
+indexError idx idxLit idxLen =
+  evalError (_tInfo idxLit) $ "at: bad index " <>
+    pretty idx <> ", length " <> pretty idxLen
+
 at' :: RNativeFun e
 at' _ [li@(TLitInteger idx),TList ls _ _] =
     case ls V.!? fromIntegral idx of
       Just t -> return t
-      Nothing -> evalError (_tInfo li) $ "at: bad index " <>
-        pretty idx <> ", length " <> pretty (length ls)
+      Nothing -> indexError idx li $ length ls
+at' _ [li@(TLitInteger idx),TLitString str] = let idx' = fromIntegral idx in
+    case idx' >= 0 && idx' < T.length str of
+      False -> indexError idx li $ T.length str
+      True -> return $ toTerm $ T.singleton $ T.index str idx'
 at' _ [idx,TObject (Object ls _ _ _) _] = lookupObj idx ls
 at' i as = argsError i as
 
