@@ -42,6 +42,7 @@ capDefs =
    , enforceGuardDef "enforce-guard"
    , requireCapability
    , composeCapability
+   , emitEventDef
    , createUserGuard
    , createPactGuard
    , createModuleGuard
@@ -301,3 +302,27 @@ createUserGuard =
         t -> evalError (_tInfo t) $ "User guard closure function must be def: " <> pretty _appFun
       return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard fun args)
     createUserGuard' i as = argsError' i as
+
+emitEventDef :: NativeDef
+emitEventDef =
+  defNative "emit-event" emitEvent'
+  (funType tTyBool [("capability",TyFun $ funType' tTyBool [])])
+  [LitExample "(emit-event (TRANSFER \"Bob\" \"Alice\" 12.0))"]
+  "Emit CAPABILITY as event without evaluating body of capability. \
+  \Fails if CAPABILITY is not @managed or @event."
+  where
+    emitEvent' :: NativeFun e
+    emitEvent' i [TApp a _] = gasUnreduced i [] $ do
+      (cap,d,_prep) <- appToCap a
+      enforceMeta i d
+      guardForModuleCall (getInfo i) (_dModule d) $ return ()
+      emitCapability i cap
+      return $ toTerm True
+    emitEvent' i as = argsError' i as
+
+    enforceMeta i Def{..} = case _dDefMeta of
+      (Just (DMDefcap dmeta)) -> case dmeta of
+        -- being total here in case we have another value later
+        DefcapManaged {} -> return ()
+        DefcapEvent -> return ()
+      _ -> evalError' i $ "emit-event: must be managed or event defcap"
