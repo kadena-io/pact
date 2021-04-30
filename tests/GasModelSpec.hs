@@ -1,18 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module GasModelSpec (spec) where
 
 import Test.Hspec
-import Test.Hspec.Golden
+import Test.Hspec.Golden as G
 
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Set as S
+import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
+import qualified Data.Yaml as Y
 
 import Control.Exception (bracket, throwIO)
 import Control.Monad (when)
-import Data.Aeson (eitherDecode, encode)
+import Data.Aeson
 import Data.Int (Int64)
 import Data.List (foldl')
 import Test.QuickCheck
@@ -21,7 +25,7 @@ import Test.QuickCheck.Random (mkQCGen)
 import System.Directory
 
 
-import GoldenSpec (golden, cleanupActual)
+import GoldenSpec (cleanupActual)
 import Pact.Types.Exp
 import Pact.Types.SizeOf
 import Pact.Types.PactValue
@@ -46,22 +50,41 @@ untestedNativesCheck = do
   it "only deprecated or constant natives should be missing gas model tests" $
     S.fromList (map asString untestedNatives)
     `shouldBe`
-    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1",
-                 "verify-spv", "public-chain-data", "list"])
+    (S.fromList
+     [ "CHARSET_ASCII"
+     , "CHARSET_LATIN1"
+     , "verify-spv"
+     , "public-chain-data"
+     , "list"
+     ])
 
 allGasTestsAndGoldenShouldPass :: Spec
-allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ do
+allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ allGasTestsAndGoldenShouldPass'
+
+-- | Calling directly is useful as it doesn't clean up, so you can use the actual
+-- as a new golden on expected changes.
+allGasTestsAndGoldenShouldPass' :: Spec
+allGasTestsAndGoldenShouldPass' = do
   res <- runIO gasTestResults
   -- fails if one of the gas tests throws a pact error
 
-  let gasCost = _evalGas . snd . _gasTestResultSqliteDb
-      -- only do golden test for sqlite results
-      toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
-      allActualOutputsGolden = map toGoldenOutput res
+  let allActualOutputsGolden = map toGoldenOutput res
+
 
   it "gas model tests should not return a PactError, but should pass golden" $ do
     (golden "gas-model" allActualOutputsGolden)
-      { encodePretty = show } -- effective, but a lot of output is shown
+
+golden :: (FromJSON a,ToJSON a) => String -> a -> Golden a
+golden name obj = Golden
+  { G.output = obj
+  , G.encodePretty = B.unpack . Y.encode
+  , G.writeToFile = Y.encodeFile
+  , G.readFromFile = Y.decodeFileThrow
+  , G.testName = name
+  , G.directory = "golden"
+  , G.failFirstTime = False
+  }
+
 
 goldenSizeOfPactValues :: Spec
 goldenSizeOfPactValues = do
@@ -81,14 +104,24 @@ allNativesInGasTable = do
     (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
 
 gasTestResults :: IO [GasTestResult ([Term Name], EvalState)]
-gasTestResults = do
-  let runSingleNativeTests t = mapOverGasUnitTests t run run
-      run expr dbSetup = do
-        (res, st) <- bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
-        res' <- eitherDie (getDescription expr dbSetup) res
-        return (res', st)
-  concat <$> mapM (runSingleNativeTests . snd) (HM.toList unitTests)
+gasTestResults = concat <$> mapM (runTest . snd) (HM.toList unitTests)
 
+-- | Use this to run a single named test.
+_runNative :: NativeDefName -> IO (Maybe [(T.Text,Gas)])
+_runNative = traverse (fmap (map toGoldenOutput) . runTest) . unitTestFromDef
+
+runTest :: GasUnitTests -> IO [GasTestResult ([Term Name], EvalState)]
+runTest t = mapOverGasUnitTests t run run
+  where
+    run expr dbSetup = do
+      (res, st) <- bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
+      res' <- eitherDie (getDescription expr dbSetup) res
+      return (res', st)
+
+toGoldenOutput :: GasTestResult ([Term Name], EvalState) -> (T.Text, Gas)
+toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
+    where
+      gasCost = _evalGas . snd . _gasTestResultSqliteDb
 
 -- Utils
 --
@@ -192,3 +225,12 @@ genWithSeed i (MkGen g) = MkGen (\_ n -> g (mkQCGen i) n)
 -- | Random seed used to generate the pact values in the sizeOf golden tests
 seed :: Int
 seed = 10000000000
+
+
+_diffGoldens :: FilePath -> FilePath -> IO ()
+_diffGoldens g1 g2 = do
+  (y1 :: Map.Map T.Text [Int]) <- fmap pure . Map.fromList <$> Y.decodeFileThrow g1
+  (y2 :: Map.Map T.Text [Int]) <- fmap pure . Map.fromList <$> Y.decodeFileThrow g2
+  let merge [c1] [c2] = [c1,c2,c2-c1]
+      merge _ _ = []
+  Y.encodeFile "diff.yaml" $ Map.unionWith merge y1 y2

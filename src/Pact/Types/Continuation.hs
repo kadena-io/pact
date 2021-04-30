@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -28,16 +29,16 @@ module Pact.Types.Continuation
   , peStep, peContinuation, peStepHasRollback
   , psStep, psRollback, psPactId, psResume
   , pcDef, pcArgs
-  , yData, yProvenance
+  , yData, yProvenance, ySourceChain
   , pTargetChainId, pModuleHash
   ) where
 
 import GHC.Generics (Generic)
 
 import Control.DeepSeq (NFData)
-import Control.Lens
+import Control.Lens hiding ((.=))
 
-import Data.Aeson (ToJSON(..), FromJSON(..))
+import Data.Aeson
 
 import Test.QuickCheck
 
@@ -80,19 +81,26 @@ data Yield = Yield
     -- ^ Yield data from the pact continuation
   , _yProvenance :: !(Maybe Provenance)
     -- ^ Provenance data
+  , _ySourceChain :: !(Maybe ChainId)
   } deriving (Eq, Show, Generic)
 
 instance Arbitrary Yield where
   arbitrary = Yield <$> (genPactValueObjectMap RecurseTwice) <*> frequency
     [ (1, pure Nothing)
-    , (4, Just <$> arbitrary) ]
+    , (4, Just <$> arbitrary) ] <*> pure Nothing
 
 instance NFData Yield
-instance ToJSON Yield where toJSON = lensyToJSON 2
-instance FromJSON Yield where parseJSON = lensyParseJSON 2
+instance ToJSON Yield where
+  toJSON Yield{..} = object $
+      [ "data" .= _yData
+      , "provenance" .= _yProvenance ] ++
+      maybe [] (\c -> [ "source" .= c ]) _ySourceChain
+instance FromJSON Yield where
+  parseJSON = withObject "Yield" $ \o ->
+    Yield <$> o .: "data" <*> o .: "provenance" <*> o .:? "source"
 
 instance SizeOf Yield where
-  sizeOf (Yield dataYield prov) =
+  sizeOf (Yield dataYield prov _) =
     (constructorCost 2) + (sizeOf dataYield) + (sizeOf prov)
 
 -- | Environment setup for pact execution, from ContMsg request.

@@ -203,7 +203,9 @@ defEvalState = do
   stateWithModule <- getLoadedState (accountsModule acctModuleName)
   let loaded = HM.singleton (Name $ BareName sampleLoadedKeysetName def)
                (Direct $ TGuard (GKeySet sampleKeyset) def)
-  return $ set (evalRefs . rsLoaded) loaded stateWithModule
+  return
+      $ set (evalRefs . rsLoaded) loaded
+      $ set evalGas 0 stateWithModule
 
 getLoadedState
   :: T.Text
