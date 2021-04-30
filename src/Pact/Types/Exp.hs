@@ -44,7 +44,7 @@ module Pact.Types.Exp
 
 
 import Control.Applicative
-import Control.Lens (makePrisms, (^.), from)
+import Control.Lens (makePrisms)
 import Data.List
 import Control.Monad
 import Prelude
@@ -77,7 +77,7 @@ genArbitraryUTCTime = toUTCTime <$> genDay <*> genDiffTime
     genDay = ModifiedJulianDay <$> choose (-313698, 88434)
     -- no leap second
     genDiffTime = secondsToDiffTime <$> choose (0, 86400)
-    toUTCTime day' diff' = (UTCTime day' diff') ^. from utcTime
+    toUTCTime day' diff' = UTCTime day' diff'
 
 genLiteralString :: Gen Literal
 genLiteralString = LString <$> resize 100 genBareText

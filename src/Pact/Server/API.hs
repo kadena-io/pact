@@ -62,7 +62,6 @@ import Pact.Types.API
 import Pact.Types.Capability
 import Pact.Types.ChainId
 import Pact.Types.ChainMeta
-import Pact.Types.Codec (timeCodec, encoder)
 import Pact.Types.Command
 import Pact.Types.Continuation
 import Pact.Types.Exp
@@ -75,7 +74,6 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame,PactEvent)
 import Pact.Types.Swagger
 import Pact.Types.Term
-import Pact.Types.Time (UTCTime,fromMicroseconds,fromGregorian,mkUTCTime)
 import Pact.Types.Util
 
 -- | Public Pact REST API.
@@ -305,23 +303,6 @@ instance ToSchema Literal where
   declareNamedSchema = genericDeclareNamedSchema $
     (optionsOf $ optionConstructor $ toNiceString 1)
       { Swagger.unwrapUnaryRecords = True }
-
-#ifdef USE_THYME
-newtype DummyTime = DummyTime UTCTime
-  deriving (Generic)
-
-instance ToJSON DummyTime where
-  toJSON (DummyTime t) = encoder timeCodec t
-
--- For the time package there already a ToSchema instance provided by the swagger2
--- package. However, that instance if probably wrong.
---
-instance ToSchema UTCTime where
-  declareNamedSchema _ = namedSchema "UTCTime" $ sketchSchema $
-    DummyTime $ mkUTCTime
-                (fromGregorian 1970 01 01)
-                (fromMicroseconds 0)
-#endif
 
 instance ToSchema Decimal where
   declareNamedSchema _ = return $

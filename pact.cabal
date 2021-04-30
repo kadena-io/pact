@@ -26,10 +26,6 @@ flag ghc-flags
   default:     False
   manual:      True
 
-Flag thyme
-  Description: Use the Kadena fork of the thyme library
-  Default: True
-
 library
   exposed-modules:     Crypto.Hash.Blake2Native
                      , Pact.Analyze.Remote.Types
@@ -88,6 +84,7 @@ library
                      , Pact.Types.SPV
                      , Pact.Types.Swagger
                      , Pact.Types.Term
+                     , Pact.Types.Time
                      , Pact.Types.Type
                      , Pact.Types.Util
                      , Pact.Types.Version
@@ -163,7 +160,6 @@ library
                     Pact.Types.ECDSA
                     Pact.Types.Server
                     Pact.Types.SQLite
-                  , Pact.Types.Time
                     Pact.GasModel.GasModel
                     Pact.GasModel.Types
                     Pact.GasModel.Utils
@@ -261,16 +257,6 @@ library
 
   if !impl(ghcjs) && flag(cryptonite-ed25519)
     cpp-options: -DCRYPTONITE_ED25519
-
-  if flag(thyme)
-    build-depends:
-      thyme >= 0.3.6.0
-    other-modules:
-      Pact.Types.TimeCompat.Thyme
-    cpp-options: -DUSE_THYME
-  else
-    other-modules:
-      Pact.Types.TimeCompat.Time
 
   hs-source-dirs:      src
   default-language:    Haskell2010

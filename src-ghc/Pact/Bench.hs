@@ -25,7 +25,7 @@ import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
 
 -- import GHC.Clock
-import Data.Thyme.Clock
+import Data.Time.Clock
 import Data.AffineSpace
 
 import System.IO

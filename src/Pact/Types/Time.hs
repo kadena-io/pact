@@ -1,5 +1,11 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module: Pact.Types.Time
@@ -7,86 +13,168 @@
 -- License:  BSD-style (see the file LICENSE)
 -- Maintainer:  Stuart Popejoy <stuart@kadena.io>
 --
--- Time functions for use with pact
---
--- This module is a compatibility layer between the time
--- functions used in the pact code base and supported
--- third-party time libraries.
---
--- The main reason for the existence of this module is
--- the lack of maintenance for the thyme library, the
--- uncertainty of its future, and the lack of good
--- alternatives. When this situation is resolved this
--- module and the associated modules under
--- @Pact.Types.TimeCompat@ should be removed.
---
--- For the time being the module shields the Pact code base
--- from the ongoing (unversioned) churn of the different
--- versions of thyme and guarantees stable behavior.
---
--- Currently the following libraries are supported:
---
--- [thyme ≥ 0.3.6.0]
---     A fork from the thyme master branch that is available
---     at https://github.com/kadena-io/thyme.
---
---     Directory supports all pact time functionality with an
---     efficient implementation.
---
---     No third party or community support.
---
--- [thyme master]
---    The master branch of the thyme library as of 2018-04-19.
---
---     Directoy supports all pact time functionality with an
---     efficient implementation.
---
---     Doesn't support compilation with GHCJS on MacOSX.
---
---     There isn't an official package on Hackage for this version
---     of the library. Therefore no stability is guaranteed.
---
---     It appears that the thyme library isn't actively supported
---     or developed any more. So there may never be a new
---     official version that would include the new features of this
---     branch.
---
--- [thyme ≥ 0.3.5]
---    The most recent released version of the thyme package on
---    hackage as of 2018-04-19.
---
---    Requires some lifting to achieve compatibility.
---
---    More efficient implementation than the time library.
---
---     It appears that the thyme library isn't actively supported
---     or developed any more. So this version may not receive
---     any updates or bug fixes.
---
--- [time ≥ 1.5]
---    The de facto standard time library for haskell.
---
---    Requires more heavy lifting to achieve compatibility than
---    more recent versions (≥ 1.9) of the time library.
---
--- [time ≥ 1.9]
---    The most recent version (as of 2018-04-19) of the defacto
---    standard time librar for haskell.
---
---    Requires some straight forward lifting to achieve
---    compatibility.
---
---    Less efficient implementation than the thyme library.
---
---    Most stable and best supported and maintained time library.
---
 module Pact.Types.Time
-( module Implementation
+( module Exported
+, getPOSIXTime
+, posixSecondsToUTCTime
+, utcTimeToPOSIXSeconds
+
+-- * Ported Implementations
+, parseTime
+, formatTime
+
+-- * Extensions
+, UTCTime(..)
+, Day(..)
+, _utctDay
+, _utctDayTime
+, utcTimeFromDaysAndDayTime
+, toSeconds
+, fromSeconds
+, toMicroseconds
+, fromMicroseconds
+, microseconds
+
+-- ** Abstractions over the UTCTime constructor
+, unUTCTime
+, mkUTCTime
 ) where
 
-#ifdef USE_THYME
-import Pact.Types.TimeCompat.Thyme as Implementation
-#else
-import Pact.Types.TimeCompat.Time as Implementation
-#endif
+-- -------------------------------------------------------------------------- --
+-- Imports
 
+import Control.Lens
+import Data.AdditiveGroup
+import Data.AffineSpace
+import Data.Decimal
+import Data.Fixed (Fixed(..), Pico)
+import Data.Serialize
+
+-- A symbol is exported from a module export only it it is in scope qualified
+-- /and/ unqualified.
+import Data.Time hiding (parseTime, formatTime)
+import qualified Data.Time as Exported
+
+import qualified Data.Time as Internal (formatTime)
+import Data.Time.Clock.POSIX (getPOSIXTime, posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
+
+import GHC.Generics hiding (from)
+import GHC.Int (Int64)
+
+-- -------------------------------------------------------------------------- --
+-- Orphans
+
+deriving instance Generic Pico
+deriving instance Generic Day
+deriving instance Generic UTCTime
+
+instance AdditiveGroup NominalDiffTime where
+    zeroV = 0
+    (^+^) = (+)
+    negateV v = -v
+    (^-^) = (-)
+    {-# INLINE zeroV #-}
+    {-# INLINE (^+^) #-}
+    {-# INLINE negateV #-}
+    {-# INLINE (^-^) #-}
+
+instance AffineSpace UTCTime where
+    type Diff UTCTime = NominalDiffTime
+    (.-.) = diffUTCTime
+    (.+^) = flip addUTCTime
+    {-# INLINE (.-.) #-}
+    {-# INLINE (.+^) #-}
+
+instance Serialize DiffTime where
+    put = put . diffTimeToPicoseconds
+    get = picosecondsToDiffTime <$> get
+    {-# INLINE put #-}
+    {-# INLINE get #-}
+
+instance Serialize NominalDiffTime where
+    put = put . (realToFrac :: NominalDiffTime -> Pico)
+    get = (realToFrac :: Pico -> NominalDiffTime) <$> get
+    {-# INLINE put #-}
+    {-# INLINE get #-}
+
+instance Serialize Pico
+instance Serialize Day
+instance Serialize UTCTime
+
+-- -------------------------------------------------------------------------- --
+-- Ported Implementations
+
+parseTime :: MonadFail m => TimeLocale -> String -> String -> m UTCTime
+parseTime locale formatStr = parseTimeM False locale (mapFormat formatStr)
+    where
+    mapFormat ('%':'%':t) = "%%" <> mapFormat t
+    mapFormat ('.':'%':'v':t) = "%Q" <> mapFormat t
+    mapFormat ('%':'N':t) = "%z" <> mapFormat t
+    mapFormat [] = []
+    mapFormat (h:t) = h : mapFormat t
+{-# INLINE parseTime #-}
+
+formatTime :: TimeLocale -> String -> UTCTime -> String
+
+formatTime locale formatStr = Internal.formatTime locale (mapFormat formatStr)
+  where
+    mapFormat ('%':'%':t) = "%%" <> mapFormat t
+    mapFormat ('%':'v':t) = "%6q" <> mapFormat t
+    mapFormat ('%':'N':t) = "%Ez" <> mapFormat t
+    mapFormat [] = []
+    mapFormat (h:t) = h : mapFormat t
+{-# INLINE formatTime #-}
+
+-- -------------------------------------------------------------------------- --
+-- Extensions (originally from thyme)
+
+class TimeDiff t where
+    microseconds :: Iso' t Int64
+
+toMicroseconds :: TimeDiff t => t -> Int64
+toMicroseconds = view microseconds
+{-# INLINE toMicroseconds #-}
+
+fromMicroseconds :: TimeDiff t => Int64 -> t
+fromMicroseconds = view (from microseconds)
+{-# INLINE fromMicroseconds #-}
+
+instance TimeDiff DiffTime where
+    microseconds = iso
+        (\dt -> round (realToFrac dt * 1000000 :: Pico))
+        (\ms -> realToFrac ((fromIntegral ms :: Pico) / 1000000))
+    {-# INLINE microseconds #-}
+
+instance TimeDiff NominalDiffTime where
+    microseconds = iso
+        (\dt -> round (realToFrac dt * 1000000 :: Pico))
+        (\ms -> realToFrac ((fromIntegral ms :: Pico) / 1000000))
+    {-# INLINE microseconds #-}
+
+toSeconds :: NominalDiffTime -> Decimal
+toSeconds = realToFrac
+{-# INLINE toSeconds #-}
+
+fromSeconds :: Decimal -> NominalDiffTime
+fromSeconds = realToFrac
+{-# INLINE fromSeconds #-}
+
+_utctDay :: Lens' UTCTime Day
+_utctDay = lens utctDay (\t d -> t { utctDay = d })
+{-# INLINE _utctDay #-}
+
+_utctDayTime :: Lens' UTCTime DiffTime
+_utctDayTime = lens utctDayTime (\t d -> t { utctDayTime = d })
+{-# INLINE _utctDayTime #-}
+
+utcTimeFromDaysAndDayTime :: Day -> DiffTime -> UTCTime
+utcTimeFromDaysAndDayTime = UTCTime
+{-# INLINE utcTimeFromDaysAndDayTime #-}
+
+unUTCTime :: UTCTime -> UTCTime
+unUTCTime = id
+{-# INLINE unUTCTime #-}
+
+mkUTCTime :: Day -> DiffTime -> UTCTime
+mkUTCTime = UTCTime
+{-# INLINE mkUTCTime #-}
