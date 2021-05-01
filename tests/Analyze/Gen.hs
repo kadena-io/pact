@@ -194,10 +194,10 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
        let size' = unaryArithSize op size
        Gen.subtermM (genCore (BoundedInt size')) $
          mkInt . Numerical . IntUnaryArithOp op . extract
-  , Gen.subtermM (genCore (BoundedDecimal size)) $ \x -> do
-    op <- genRoundingLikeOp
-    mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
-  , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
+  , do x <- genCore (BoundedDecimal size)
+       op <- genRoundingLikeOp
+       mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
+  , genCore strSize >>= mkInt . StrLength . extract
   , do op <- Gen.element [BitwiseAnd, BitwiseOr, Xor]
        Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt size)) $
          \x y -> mkInt $ Numerical $ BitwiseOp op [extract x, extract y]
@@ -220,14 +220,17 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
          mkDec . DecUnaryArithOp op . extract
   , do op <- genArithOp
        let (size1, size2) = arithSize op size
-       Gen.subtermM2 (genCore (BoundedDecimal size1)) (genCore (BoundedInt size2)) $
-         \x y -> mkDec $ DecIntArithOp op (extract x) (extract y)
+       Gen.subtermM (genCore (BoundedDecimal size1)) $ \x -> do
+         y <- genCore (BoundedInt size2)
+         mkDec $ DecIntArithOp op (extract x) (extract y)
   , do
        op <- genArithOp
        let (size1, size2) = arithSize op size
-       Gen.subtermM2 (genCore (BoundedInt size1)) (genCore (BoundedDecimal size2)) $
-         \x y -> mkDec $ IntDecArithOp op (extract x) (extract y)
-  , Gen.subtermM2 (genCore bounded) (genCore (BoundedInt (0 +/- 255))) $ \x y -> do
+       x <- genCore (BoundedInt size1)
+       Gen.subtermM (genCore (BoundedDecimal size2)) $ \y ->
+         mkDec $ IntDecArithOp op (extract x) (extract y)
+  , Gen.subtermM (genCore bounded) $ \x -> do
+      y <- genCore (BoundedInt (0 +/- 255))
       op <- genRoundingLikeOp
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
   ]
@@ -291,12 +294,14 @@ genCore BoundedBool = Gen.recursive Gen.choice [
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
     Some STime . Lit' <$> Gen.enumBounded -- Gen.int64
-  ] $ scale 4 <$> [
-    Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedInt 1e9)) $ \x y ->
-      pure $ Some STime $ Inj $ IntAddTime (extract x) (extract y)
-  , Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedDecimal 1e9)) $ \x y ->
-      pure $ Some STime $ Inj $ DecAddTime (extract x) (extract y)
-  ]
+  ] $ scale 4 <$>
+    [ Gen.subtermM (genCore BoundedTime) $ \x -> do
+        y <- genCore (BoundedInt 1e9)
+        pure $ Some STime $ Inj $ IntAddTime (extract x) (extract y)
+    , Gen.subtermM (genCore BoundedTime) $ \x -> do
+        y <- genCore (BoundedDecimal 1e9)
+        pure $ Some STime $ Inj $ DecAddTime (extract x) (extract y)
+    ]
 genCore BoundedKeySet = Some SGuard . Lit' . Guard
   <$> genInteger (0 ... 2)
 genCore bound@(BoundedList lenBound elemBound) = Gen.recursive Gen.choice
