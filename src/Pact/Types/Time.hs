@@ -55,7 +55,7 @@ import Data.Serialize
 import Data.Time hiding (parseTime, formatTime)
 import qualified Data.Time as Exported
 
-import qualified Data.Time as Internal (formatTime)
+import qualified Data.Time.Format as Internal (formatTime)
 import Data.Time.Clock.POSIX (getPOSIXTime, posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 
 import GHC.Generics hiding (from)
@@ -104,7 +104,11 @@ instance Serialize UTCTime
 -- -------------------------------------------------------------------------- --
 -- Ported Implementations
 
+#if MIN_VERSION_time(1,9,0)
 parseTime :: MonadFail m => TimeLocale -> String -> String -> m UTCTime
+#else
+parseTime :: TimeLocale -> String -> String -> Maybe UTCTime
+#endif
 parseTime locale formatStr = parseTimeM False locale (mapFormat formatStr)
     where
     mapFormat ('%':'%':t) = "%%" <> mapFormat t
@@ -115,7 +119,7 @@ parseTime locale formatStr = parseTimeM False locale (mapFormat formatStr)
 {-# INLINE parseTime #-}
 
 formatTime :: TimeLocale -> String -> UTCTime -> String
-
+#if MIN_VERSION_time(1,9,0)
 formatTime locale formatStr = Internal.formatTime locale (mapFormat formatStr)
   where
     mapFormat ('%':'%':t) = "%%" <> mapFormat t
@@ -123,6 +127,21 @@ formatTime locale formatStr = Internal.formatTime locale (mapFormat formatStr)
     mapFormat ('%':'N':t) = "%Ez" <> mapFormat t
     mapFormat [] = []
     mapFormat (h:t) = h : mapFormat t
+#else
+formatTime locale formatStr timeValue = concat . snd $ go0 formatStr
+  where
+    format f = Internal.formatTime locale f timeValue
+    n = let (h,m) = splitAt 3 $ format "%z" in h <> ":" <> m
+    v = format "%6q"
+
+    go0 s = let (a, b) = go1 s in ("", format a : b)
+
+    go1 ('%':'%':t) = let (a, b) = go1 t in ("", "%" : format a : b)
+    go1 ('%':'v':t) = let (a, b) = go1 t in ("", v : format a : b)
+    go1 ('%':'N':t) = let (a, b) = go1 t in ("", n : format a : b)
+    go1 (h:t) = let (a, b) = go1 t in (h:a, b)
+    go1 "" = ("", [])
+#endif
 {-# INLINE formatTime #-}
 
 -- -------------------------------------------------------------------------- --

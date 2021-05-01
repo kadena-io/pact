@@ -206,7 +206,7 @@ library
                      , semigroupoids >= 5.0
                      , stm >= 2.4.4.1 && < 2.6
                      , text >= 1.2.2.1 && < 1.3
-                     , time >= 1.9
+                     , time >= 1.8
                      -- kadena ghcjs compat fork
                      , transformers >= 0.5.2.0 && < 0.6
                      , trifecta >= 2.1
