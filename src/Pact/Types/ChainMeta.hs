@@ -49,7 +49,7 @@ import Data.Word (Word64)
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
-import Pact.Types.Time (getPOSIXTime, toMicroseconds)
+import Pact.Types.Time (getPOSIXTime, toTimestampMicros)
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.
@@ -71,7 +71,11 @@ newtype TxCreationTime = TxCreationTime ParsedInteger
 
 -- | Get current time as TxCreationTime
 getCurrentCreationTime :: IO TxCreationTime
-getCurrentCreationTime = TxCreationTime . fromIntegral . (`div` 1000000) . toMicroseconds <$> getPOSIXTime
+getCurrentCreationTime = TxCreationTime
+    . fromIntegral
+    . (`div` 1000000)
+    . toTimestampMicros
+    <$> getPOSIXTime
 
 -- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
 data Address = Address

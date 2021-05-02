@@ -136,4 +136,4 @@ instance SizeOf UTCTime where
   -- newtype is free
   -- Internally 'UTCTime' is just a 64-bit count of 'microseconds'
   sizeOf ti =
-    (constructorCost 1) + (sizeOf (view (_utctDayTime . microseconds) ti))
+    (constructorCost 1) + (sizeOf (view (dayTime . microseconds) ti))

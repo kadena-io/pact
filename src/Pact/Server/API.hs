@@ -48,6 +48,8 @@ import Data.Default
 import Data.Proxy
 import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
+import qualified Data.Time (fromGregorian)
+import Data.VectorSpace
 import GHC.Generics
 import Servant.API
 #if !defined(ghcjs_HOST_OS)
@@ -74,6 +76,7 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame,PactEvent)
 import Pact.Types.Swagger
 import Pact.Types.Term
+import Pact.Types.Time (UTCTime, fromDayAndDayTime)
 import Pact.Types.Util
 
 -- | Public Pact REST API.
@@ -298,6 +301,14 @@ instance ToSchema PactValue where
 instance ToSchema ModRef where
   declareNamedSchema = lensyDeclareNamedSchema 4
 
+instance ToSchema UTCTime where
+  declareNamedSchema _ = return $
+    NamedSchema (Just "UTCTime")
+      ( schemaOf
+      $ set type_ (Just SwaggerString)
+      . set format (Just "yyyy-mm-ddThh:MM:ssZ")
+      . set example (Just $ toJSON (fromDayAndDayTime (Data.Time.fromGregorian 2016 7 22) zeroV))
+      )
 
 instance ToSchema Literal where
   declareNamedSchema = genericDeclareNamedSchema $

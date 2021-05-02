@@ -88,7 +88,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Purity
 import Pact.Types.Runtime
-import Pact.Types.Time (fromMicroseconds,posixSecondsToUTCTime)
+import Pact.Types.Time
 import Pact.Types.Version
 
 -- | All production native modules.
@@ -478,7 +478,7 @@ chainDataDef = defRNative "chain-data" chainData
       PublicData{..} <- view eePublicData
 
       let PublicMeta{..} = _pdPublicMeta
-          toTime = toTerm . posixSecondsToUTCTime . fromMicroseconds
+          toTime = toTerm . fromPosix . fromTimestampMicros
 
       pure $ toTObject TyAny def
         [ (cdChainId, toTerm _pmChainId)

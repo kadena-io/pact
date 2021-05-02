@@ -18,6 +18,3 @@
       - depends:
         - hspec
         - stm
-    - message:
-      - name: Module not compiled
-      - module: Pact.Types.TimeCompat.Time

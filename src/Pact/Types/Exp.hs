@@ -11,6 +11,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  Pact.Types.Exp
@@ -71,13 +72,12 @@ import Pact.Types.Util (genBareText)
 -- | Custom generator of arbitrary UTCTime from
 -- years 1000-01-1 to 2100-12-31
 genArbitraryUTCTime :: Gen UTCTime
-genArbitraryUTCTime = toUTCTime <$> genDay <*> genDiffTime
+genArbitraryUTCTime = fromDayAndDayTime <$> genDay <*> genDayTime
   where
     -- years 1000-01-1 to 2100-12-31
     genDay = ModifiedJulianDay <$> choose (-313698, 88434)
     -- no leap second
-    genDiffTime = secondsToDiffTime <$> choose (0, 86400)
-    toUTCTime day' diff' = UTCTime day' diff'
+    genDayTime = fromSeconds . realToFrac @Double <$> choose (0, 86400)
 
 genLiteralString :: Gen Literal
 genLiteralString = LString <$> resize 100 genBareText
@@ -132,7 +132,7 @@ simpleISO8601 :: String
 simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
 
 formatLTime :: UTCTime -> Text
-formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
+formatLTime = pack . formatTime simpleISO8601
 {-# INLINE formatLTime #-}
 
 -- | Pretty is supposed to match 1-1 with Pact representation

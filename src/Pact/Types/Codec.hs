@@ -31,6 +31,7 @@ module Pact.Types.Codec
   , withThisText
   ) where
 
+import Control.Lens (view)
 
 import Control.Applicative
 import qualified Data.Aeson as A
@@ -112,24 +113,23 @@ timeCodec :: Codec UTCTime
 timeCodec = Codec enc dec
   where
     enc t
-      | 1 == denom s = object [ field .= formatTime loc pactISO8601Format t ]
-      | otherwise = object [ highprec .= formatTime loc highPrecFormat t ]
-      where (UTCTime (ModifiedJulianDay _d) s) = unUTCTime t
-            denom :: DiffTime -> Integer
-            denom = denominator . (% 1000) . fromIntegral . toMicroseconds
+      | 1 == denom t = object [ field .= formatTime pactISO8601Format t ]
+      | otherwise = object [ highprec .= formatTime highPrecFormat t ]
+      where
+            denom :: UTCTime -> Integer
+            denom = denominator . (% 1000) . fromIntegral . view (dayTime . microseconds)
     {-# INLINE enc #-}
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>
       (o .: highprec >>= mkTime highPrecFormat)
       where
         mkTime :: String -> String -> Parser UTCTime
-        mkTime fmt v = case parseTime loc fmt v of
+        mkTime fmt v = case parseTime fmt v of
               Just t -> return t
               Nothing -> fail $ "Invalid time value, expected " ++ fmt
     {-# INLINE dec #-}
     field = "time"
     highprec = "timep"
-    loc = defaultTimeLocale
 
 valueCodec :: Codec Value
 valueCodec = Codec enc dec

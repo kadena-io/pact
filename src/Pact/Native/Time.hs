@@ -63,7 +63,7 @@ defFormatTime = defRNative "format-time" formatTime'
 
     formatTime' :: RNativeFun e
     formatTime' _ [TLitString fmt,TLiteral (LTime t) _] =
-      return $ toTerm $ pack $ formatTime defaultTimeLocale (unpack fmt) t
+      return $ toTerm $ pack $ formatTime (unpack fmt) t
     formatTime' i as = argsError i as
 
 parseTimeDef :: NativeDef
@@ -75,7 +75,7 @@ parseTimeDef = defRNative "parse-time" parseTime'
 
     parseTime' :: RNativeFun e
     parseTime' i [TLitString fmt,TLitString s] =
-      case parseTime defaultTimeLocale (unpack fmt) (unpack s) of
+      case parseTime (unpack fmt) (unpack s) of
         Nothing -> evalError' i $ "Failed to parse time '" <> pretty s <> "' with format: " <> pretty fmt
         Just t -> return (tLit (LTime t))
     parseTime' i as = argsError i as
@@ -90,7 +90,7 @@ timeDef = defRNative "time" time
 
     time :: RNativeFun e
     time i [TLitString s] =
-      case parseTime defaultTimeLocale simpleISO8601 (unpack s) of
+      case parseTime simpleISO8601 (unpack s) of
         Nothing -> evalError' i $
           "Invalid time, expecting '" <> prettyString simpleISO8601 <> "': " <> pretty s
         Just t -> return (tLit (LTime t))

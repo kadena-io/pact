@@ -767,7 +767,7 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       | k == cdGasPrice = pure $ set (pdPublicMeta . pmGasPrice) (wrap (wrap l)) pd
 
     go _i pd (k, (TLiteral (LTime l) _))
-      | k == cdBlockTime = pure $ set pdBlockTime (toMicroseconds $ utcTimeToPOSIXSeconds l) pd
+      | k == cdBlockTime = pure $ set pdBlockTime (toTimestampMicros $ toPosix l) pd
 
     go _i pd (k, (TLiteral (LString l) _))
       | k == cdChainId = pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd

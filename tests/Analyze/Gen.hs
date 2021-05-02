@@ -648,6 +648,31 @@ genFormatTime = do
       pure (etm, gState)
     _ -> error "impossible (we only generated `STime`s)"
 
+genDecAddTime :: Gen (ETerm, GenState)
+genDecAddTime = do
+    ((someTm, someDec), gState) <- runStack $ (,)
+        <$> genTerm BoundedTime
+        <*> genTerm (BoundedDecimal 0)
+    case (someTm, someDec) of
+      (Some STime tm, Some SDecimal dm) -> do
+        let etm = Some STime $ CoreTerm $ DecAddTime tm dm
+        pure (etm, gState)
+      _ -> error "impossible (we only generated `STime`s)"
+
+genDecAddTimeRounding :: Gen (ETerm, GenState)
+genDecAddTimeRounding = pure (Some STime term, emptyGenState)
+  where
+    term = CoreTerm $ DecAddTime (CoreTerm $ DecAddTime t d) d
+    t = CoreTerm $ Lit 0
+    d = CoreTerm $ Lit 0.0000003
+
+genDecAddTimeRounding2 :: Gen (ETerm, GenState)
+genDecAddTimeRounding2 = pure (Some STime term, emptyGenState)
+  where
+    term = CoreTerm $ DecAddTime (CoreTerm $ DecAddTime t d) d
+    t = CoreTerm $ Lit 0
+    d = CoreTerm $ Lit 0.0000006
+
 genParseTime :: Gen (ETerm, GenState)
 genParseTime = do
   format  <- genFormat

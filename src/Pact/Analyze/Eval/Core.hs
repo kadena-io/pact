@@ -70,7 +70,7 @@ evalIntAddTime
 evalIntAddTime timeT secsT = do
   time <- eval timeT
   secs <- eval secsT
-  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- Convert seconds to microseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
   pure $ time + fromIntegralS (secs * 1000000)
 
@@ -83,7 +83,7 @@ evalDecAddTime timeT secsT = do
   time <- eval timeT
   secs <- eval secsT
   if isConcreteS secs
-  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- Convert seconds to microseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
   then pure $ time + fromIntegralS (banker'sMethodS (secs * fromInteger' 1000000))
   else throwErrorNoLoc $ PossibleRoundoff

@@ -55,7 +55,7 @@ import           Pact.Types.Lang
                  )
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
-import           Pact.Types.Time            (parseTime, defaultTimeLocale)
+import           Pact.Types.Time            (parseTime)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
@@ -1059,7 +1059,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
-      <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
+      <- parseTime Pact.simpleISO8601 (T.unpack timeLit)
     -> pure $ Some STime $ Lit' $ fromPact timeIso timeLit'
 
   AST_NFun_Basic SModulus [a, b] -> translateNode a >>= \case

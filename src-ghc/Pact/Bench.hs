@@ -24,10 +24,6 @@ import qualified Data.Map.Strict as M
 import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
 
--- import GHC.Clock
-import Data.Time.Clock
-import Data.AffineSpace
-
 import System.IO
 import System.Directory
 import Unsafe.Coerce
@@ -51,6 +47,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 import Pact.Types.SQLite
+import Pact.Types.Time
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
 import Pact.Types.Capability

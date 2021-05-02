@@ -54,7 +54,7 @@ import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
 import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
-import           Pact.Types.Time             (formatTime, parseTime, defaultTimeLocale)
+import           Pact.Types.Time             (formatTime, parseTime)
 import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors
@@ -694,7 +694,7 @@ evalTerm = \case
     time'      <- eval time
     case (unliteralS formatStr', unliteralS time') of
       (Just (Str formatStr''), Just time'') -> pure $ literalS $ Str $
-        formatTime defaultTimeLocale formatStr'' (toPact timeIso time'')
+        formatTime formatStr'' (toPact timeIso time'')
       _ -> throwErrorNoLoc "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
 
   ParseTime mFormatStr timeStr -> do
@@ -704,7 +704,7 @@ evalTerm = \case
     timeStr'   <- eval timeStr
     case (unliteralS formatStr', unliteralS timeStr') of
       (Just (Str formatStr''), Just (Str timeStr'')) ->
-        case parseTime defaultTimeLocale formatStr'' timeStr'' of
+        case parseTime formatStr'' timeStr'' of
           Nothing   -> succeeds .= sFalse >> pure 0
           Just time -> pure $ literalS $ fromPact timeIso time
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
