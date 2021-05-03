@@ -212,8 +212,9 @@ computeCurPath file = do
   return $ computePath curFileM (unpack file)
 
 readOffline :: RNativeFun LibState
-readOffline i [TLitString file] = do
-  SigData{..} <- eitherDie i =<< liftIO (Y.decodeFileEither @(SigData Text) (unpack file))
+readOffline i [TLitString f] = do
+  file <- computeCurPath f
+  SigData{..} <- eitherDie i =<< liftIO (Y.decodeFileEither @(SigData Text) file)
   cmd <- buildCurrentCode i
   when (_cmdHash cmd /= _sigDataHash) $ evalError' i $ "Sig data file hash mismatch: " <> pretty _sigDataHash
   rs <- forM _sigDataSigs $ \(PublicKeyHex k,sigM) -> forM sigM $ \(UserSig sig) ->

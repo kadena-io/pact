@@ -147,6 +147,7 @@ library
                     Pact.Persist.MockPersist
                     Pact.Persist.SQLite
                     Pact.PersistPactDb.Regression
+                    Pact.Repl.Cli
                     Pact.ReplTools
                     Pact.Server.ApiServer
                     Pact.Server.History.Persistence
@@ -179,6 +180,7 @@ library
                      , bytestring >=0.10.8.1 && < 0.11
                      , cassava >= 0.5
                      , cereal >=0.5.4.0 && < 0.6
+                     , connection >= 0.3.1
                      , containers >= 0.5.7 && < 0.7
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
