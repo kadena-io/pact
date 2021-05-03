@@ -2,14 +2,10 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
@@ -86,7 +82,6 @@ import Data.AdditiveGroup
 import Data.Aeson
 import Data.AffineSpace
 import Data.Decimal
-import Data.Fixed (Fixed(..), Pico, Micro)
 import Data.Serialize
 import qualified Data.Time as T
 import qualified Data.Time.Clock.POSIX as T
@@ -101,14 +96,6 @@ import Text.Read (readPrec)
 
 -- -------------------------------------------------------------------------- --
 -- Orphans
-
-deriving instance Generic Pico
-deriving instance Generic Micro
-deriving instance Generic T.Day
-
-instance Serialize Pico
-instance Serialize Micro
-instance Serialize T.Day
 
 deriving newtype instance Arbitrary T.Day
 
