@@ -153,4 +153,7 @@ sequentialChecks = checkSequential $ Group "checks"
   , ("prop_round_trip_term", withShrinks 10 prop_round_trip_term)
   , ("prop_evaluation",      withShrinks 25 prop_evaluation)
   , ("prop_evaluation_time", withShrinks 25 prop_evaluation_time)
+  , ("prop_decaddtime", withShrinks 25 prop_decaddtime)
+  , ("prop_decaddtime_rounding", withShrinks 25 prop_decaddtime_rounding)
+  , ("prop_decaddtime_rounding2", withShrinks 25 prop_decaddtime_rounding2)
   ]
