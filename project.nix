@@ -14,7 +14,7 @@ in {
         # dependency of ghcjs apps.
         pact = if self.ghc.isGhcjs or false
                  then super.pact
-                 else addBuildDepend super.pact pkgs.z3;
+                 else addBuildDepend (doBenchmark super.pact) pkgs.z3;
       };
       packages = {
         pact = kpkgs.gitignoreSource ./.;
