@@ -24,8 +24,10 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
+  , ccExecutionConfig
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger
   , cePublicData, ceGasEnv, ceSPVSupport, ceNetworkId
+  , ceExecutionConfig
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -76,6 +78,7 @@ data CommandConfig = CommandConfig {
     , _ccEntity :: Maybe EntityName
     , _ccGasLimit :: Maybe Int
     , _ccGasRate :: Maybe Int
+    , _ccExecutionConfig :: ExecutionConfig
     }
 $(makeLenses ''CommandConfig)
 
@@ -90,6 +93,7 @@ data CommandEnv p = CommandEnv {
     , _cePublicData :: PublicData
     , _ceSPVSupport :: SPVSupport
     , _ceNetworkId :: Maybe NetworkId
+    , _ceExecutionConfig :: ExecutionConfig
     }
 $(makeLenses ''CommandEnv)
 
