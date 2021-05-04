@@ -65,7 +65,6 @@ import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Data.Maybe (fromMaybe)
 import qualified Data.List as L (nubBy)
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
@@ -523,11 +522,10 @@ filterDef = defNative "filter" filter'
 
 distinctDef :: NativeDef
 distinctDef = defGasRNative "distinct" distinct
-  (funType (TyList a) [("values", TyList a)] <>
-   funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields", TyList tTyString), ("values", TyList (tTyObject (mkSchemaVar "o")))])
-  ["(distinct [3 3 1 1 2 2])", "(distinct ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])"]
+  (funType (TyList a) [("values", TyList a)])
+  ["(distinct [3 3 1 1 2 2])"]
   $ T.intercalate " "
-  [ "Returns from a homogeneous list of VALUES, or objects using supplied FIELDS list, a list with duplicates removed."
+  [ "Returns from a homogeneous list of VALUES a list with duplicates removed."
   , "The original order of the values is preserved."]
 
 sortDef :: NativeDef
@@ -925,42 +923,19 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
 where' i as = argsError' i as
 
 distinct :: GasRNativeFun e
-distinct g0 i = \case
-    [l@(TList v _ _ )] | V.null v -> pure (g0,l)
-    [TList{..}] ->
-      mkDistinctList termEq g0 (GDistinct $ square $ V.length _tList) _tListType _tList
-    [TList fields _ fi, l@(TList vs lty _)]
-      | V.null vs -> return (g0, l)
-      | V.null fields -> evalError fi "distinct: FIELDS list must be nonempty."
-      | isObject lty -> evalError' i "distinct: LIST must homogenously contain objects."
-      | otherwise -> do
-          (g1,_) <- computeGas' g0 i (GDistinct $ square $ V.length vs) $ return ()
-          fields' <- asKeyList fields
-          mkDistinctList (fieldsMatcher fields') g1 (GDistinctFieldLookup $ S.size fields') lty vs
+distinct g i = \case
+    [l@(TList v _ _ )] | V.null v -> pure (g,l)
+    [TList{..}] -> _tList
+        & V.toList
+        & L.nubBy termEq
+        & V.fromList
+        & toTListV _tListType def
+        & pure
+        & computeGas' g i (GDistinct $ square $ V.length _tList)
     as -> argsError i as
   where
-    square x = x * x
+    square = (^ (2 :: Int))
 
-    isObject = \case
-      TySchema o _ _ -> o == TyObject
-      _ -> False
-
-    mkDistinctList f gas1 gas2 lty vs =
-        vs
-        & V.toList
-        & L.nubBy f
-        & V.fromList
-        & toTListV lty def
-        & pure
-        & computeGas' gas1 i gas2
-
-    fieldsMatcher fields o1 o2 = all (fieldMatcher o1 o2) fields
-      where
-        fieldMatcher t1 t2 field = fromMaybe False $ do
-          let fieldlens = tObject.oObject.(to _objectMap).(at field)._Just
-          term1 <- t1 ^? fieldlens
-          term2 <- t2 ^? fieldlens
-          return $ termEq term1 term2
 
 sort' :: GasRNativeFun e
 sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)

@@ -144,15 +144,11 @@ Top level only: this function will fail if used in module code.
 
 *values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
-*fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
 
-
-Returns from a homogeneous list of VALUES, or objects using supplied FIELDS list, a list with duplicates removed. The original order of the values is preserved.
+Returns from a homogeneous list of VALUES a list with duplicates removed. The original order of the values is preserved.
 ```lisp
 pact> (distinct [3 3 1 1 2 2])
 [3 1 2]
-pact> (distinct ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
-[{"name": "Lin","age": 30} {"name": "Val","age": 25}]
 ```
 
 
