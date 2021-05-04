@@ -409,7 +409,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.7"
+"4.0.0.11"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1469,6 +1469,17 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
 
 
+### emit-event {#emit-event}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
+
+
+Emit CAPABILITY as event without evaluating body of capability. Fails if CAPABILITY is not @managed or @event.
+```lisp
+(emit-event (TRANSFER "Bob" "Alice" 12.0))
+```
+
+
 ### enforce-guard {#enforce-guard}
 
 *guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
@@ -1688,7 +1699,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePact40","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
