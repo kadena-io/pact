@@ -731,6 +731,12 @@
   - 31
 - - (module accounts GOV [...some module code ...]) update module
   - 138
+- - (distinct longDuplicateNumberList)
+  - 2166331
+- - (distinct medDuplicateNumberList)
+  - 4164
+- - (distinct smallDuplicateNumberList)
+  - 16
 - - (txids accounts.accounts 0)
   - 100000
 - - (ln longNumber)
