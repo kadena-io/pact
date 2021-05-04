@@ -25,7 +25,7 @@ pact-linux:
     - nix-build
     - nix-build project.nix -A proj.ghc.pact
     - nix-build project.nix -A proj.ghcjs.pact
-    - nix-shell --run "cabal build --enable-benchmarks && cabal bench"
+    - nix-shell --run "cabal new-build --enable-benchmarks && cabal new-bench"
 #    - ./collectArtifacts.sh linux
 #  artifacts:
 #    paths:
