@@ -1629,7 +1629,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     to' <- translateNode b
     case (from', to') of
       (Some SInteger _, Some SInteger _) -> do
-        addWarning node $ UnsupportedNonFatal "enumerate: substituting 0.0"
+        addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
         pure $ Some (SList SInteger) EmptyList
       _ -> failing $ "Pattern mtach failure"
   AST_NFun node "enumerate" [a, b, c] -> do

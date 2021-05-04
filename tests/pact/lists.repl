@@ -1,63 +1,65 @@
 ; make-list tests
 (expect
  "make-list: Non-positive lengths return empty lists"
+ true
  (fold
   (and)
   true
-  (map (= []) (list (make-list -1 true) (make-list 0 true) (make-list -100 true))))
- true)
+  (map (= []) (list (make-list -1 true) (make-list 0 true) (make-list -100 true)))))
 
 (expect
  "make-list: Simple sanity test"
- (make-list 5 "hello")
- ["hello" "hello" "hello" "hello" "hello"])
+ ["hello" "hello" "hello" "hello" "hello"]
+ (make-list 5 "hello"))
 
 ; enumerate tests
 
 (expect
  "enumerate: Enumerate numbers from 0 to 10."
- (enumerate 0 10)
- [0 1 2 3 4 5 6 7 8 9 10])
+ [0 1 2 3 4 5 6 7 8 9 10]
+ (enumerate 0 10))
 
 (expect
  "enumerate: Increment greater than 1"
- (enumerate 0 10 2)
- [0 2 4 6 8 10])
+ [0 2 4 6 8 10]
+ (enumerate 0 10 2))
 
 (expect
  "enumerate: Increment less than -1"
- (enumerate 10 0 -2)
- (reverse (enumerate 0 10 2)))
+ (reverse (enumerate 0 10 2))
+ (enumerate 10 0 -2))
 
 (expect
  "enumerate: When FROM is greater than TO and no icrement is given."
- (enumerate 10 0)
- (reverse (enumerate 0 10)))
+ (reverse (enumerate 0 10))
+ (enumerate 10 0))
 
 (expect
  "enumerate: Return empty list when given an INC of zero."
- (enumerate 0 10 0)
- [])
+ []
+ (enumerate 0 10 0))
 
 (expect
  "enumerate: Return FROM when FROM equals TO."
- (enumerate 10 10)
- [10])
+ [10]
+ (enumerate 10 10))
 
 (expect-failure
- "enumerate: Yields singleton when given nonsensical INC. (example 1)"
+ "enumerate: bad increment (-1)"
+ "enumerate: increment diverges below from interval bounds."
  (enumerate 0 10 -1))
 
 (expect-failure
- "enumerate: Yields empty list when given nonsensical INC. (example 2)"
+ "enumerate: bad decrement (1)"
+ "enumerate: increment diverges above from interval bounds."
  (enumerate 10 0 1))
 
 (expect
- "enumerate: Yields singleton when given too large INC. (example 3)"
+ "enumerate: bad increment (11)"
  [0]
  (enumerate 0 10 11))
 
 (expect
- "enumerate: Yields singleton when given too large INC. (example 4)"
+ "enumerate: bad increment (-11)"
  [10]
  (enumerate 10 0 -11))
