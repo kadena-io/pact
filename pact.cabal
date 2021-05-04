@@ -232,7 +232,9 @@ library
     exposed-modules: Pact.Types.Time.FormatWithTime
   else
     build-depends: clock >= 0.7.2
-    exposed-modules: Pact.Types.Time.Format
+    exposed-modules:
+        Pact.Types.Time.Format
+        Pact.Types.Time.Locale
 
   if impl(ghcjs)
     build-depends:

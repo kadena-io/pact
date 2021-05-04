@@ -11,9 +11,13 @@
 -- |
 -- Module: Pact.Types.Time.Format
 -- Copyright: Copyright © 2021 Kadena LLC.
+--                      © 2013−2014 Liyang HU Liyang HU
 -- License: MIT
 -- Maintainer: Lars Kuhtz <lars@kadena.io>
 -- Stability: experimental
+--
+-- The code in this module is derived from various modules of the thyme package,
+-- which is copyright (c) 2013 Liyang HU and distributed under a BSD3 license.
 --
 module Pact.Types.Time.Format
 ( formatTime
@@ -41,11 +45,10 @@ import qualified Data.Text.Encoding as Text
 import qualified Data.Vector.Unboxed as VU
 import Data.VectorSpace
 
-import System.Locale (TimeLocale(..), defaultTimeLocale)
-
 -- internal modules
 
 import Pact.Types.Time.Internal
+import Pact.Types.Time.Locale
 
 -- -------------------------------------------------------------------------- --
 -- Misc Utils
