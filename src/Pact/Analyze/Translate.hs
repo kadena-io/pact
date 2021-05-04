@@ -1623,7 +1623,20 @@ translateNode astNode = withAstContext astNode $ case astNode of
         addWarning node $ UnsupportedNonFatal "diff-time: substituting 0.0"
         pure $ Some SDecimal $ Lit' 0.0
       _ -> failing $ "Pattern match failure"
+  AST_NFun node "distinct" [xs] -> do
+     translateNode xs >>= \case
+       Some (SList ty) _ -> do
+         addWarning node $ UnsupportedNonFatal "distinct: substituting empty list"
+         pure $ Some (SList ty) EmptyList
+       _ -> throwError' $ UnexpectedNode astNode
+  AST_NFun node "distinct" [_fields,xs] -> do
+     translateNode xs >>= \case
+       Some (SList ty) _ -> do
+         addWarning node $ UnsupportedNonFatal "distinct: substituting empty list"
+         pure $ Some (SList ty) EmptyList
+       _ -> throwError' $ UnexpectedNode astNode
   _ -> throwError' $ UnexpectedNode astNode
+
 
 
 -- | Accumulate a non-fatal translation issue
