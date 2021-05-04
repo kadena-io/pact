@@ -26,6 +26,11 @@ flag ghc-flags
   default:     False
   manual:      True
 
+flag format-with-time
+  description: Use the time package for formatting time values
+  default:     False
+  manual:      True
+
 library
   exposed-modules:     Crypto.Hash.Blake2Native
                      , Pact.Analyze.Remote.Types
@@ -85,6 +90,7 @@ library
                      , Pact.Types.Swagger
                      , Pact.Types.Term
                      , Pact.Types.Time
+                     , Pact.Types.Time.Internal
                      , Pact.Types.Type
                      , Pact.Types.Util
                      , Pact.Types.Version
@@ -206,7 +212,6 @@ library
                      , semigroupoids >= 5.0
                      , stm >= 2.4.4.1 && < 2.6
                      , text >= 1.2.2.1 && < 1.3
-                     , time >= 1.8
                      -- kadena ghcjs compat fork
                      , transformers >= 0.5.2.0 && < 0.6
                      , trifecta >= 2.1
@@ -220,6 +225,14 @@ library
                      , servant
                      , servant-swagger
                      , swagger2 >= 2.3
+
+  if flag(format-with-time)
+    build-depends: time >= 1.8
+    cpp-options: -DFORMAT_WITH_TIME
+    exposed-modules: Pact.Types.Time.FormatWithTime
+  else
+    build-depends: clock >= 0.7.2
+    exposed-modules: Pact.Types.Time.Format
 
   if impl(ghcjs)
     build-depends:
