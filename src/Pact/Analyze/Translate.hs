@@ -1623,18 +1623,31 @@ translateNode astNode = withAstContext astNode $ case astNode of
         addWarning node $ UnsupportedNonFatal "diff-time: substituting 0.0"
         pure $ Some SDecimal $ Lit' 0.0
       _ -> failing $ "Pattern match failure"
+  -- TODO: add actual support for this later!
   AST_NFun node "distinct" [xs] -> do
      translateNode xs >>= \case
        Some (SList ty) _ -> do
          addWarning node $ UnsupportedNonFatal "distinct: substituting empty list"
          pure $ Some (SList ty) EmptyList
        _ -> throwError' $ UnexpectedNode astNode
-  AST_NFun node "distinct" [_fields,xs] -> do
-     translateNode xs >>= \case
-       Some (SList ty) _ -> do
-         addWarning node $ UnsupportedNonFatal "distinct: substituting empty list"
-         pure $ Some (SList ty) EmptyList
-       _ -> throwError' $ UnexpectedNode astNode
+  -- TODO: add actual support for this later!
+  AST_NFun node "enumerate" [a, b] -> do
+    from' <- translateNode a
+    to' <- translateNode b
+    case (from', to') of
+      (Some SInteger _, Some SInteger _) -> do
+        addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
+        pure $ Some (SList SInteger) EmptyList
+      _ -> failing $ "Pattern mtach failure"
+  AST_NFun node "enumerate" [a, b, c] -> do
+    from' <- translateNode a
+    to' <- translateNode b
+    inc' <- translateNode c
+    case (from', to', inc') of
+      (Some SInteger _, Some SInteger _, Some SInteger _) -> do
+        addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
+        pure $ Some (SList SInteger) EmptyList
+      _ -> failing $ "Pattern mtach failure"
   _ -> throwError' $ UnexpectedNode astNode
 
 

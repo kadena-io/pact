@@ -23,6 +23,7 @@ module Pact.Native
     , distinctDef
     , enforceDef
     , enforceOneDef
+    , enumerateDef
     , pactVersionDef
     , formatDef
     , strToIntDef
@@ -57,6 +58,7 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
+import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
@@ -510,6 +512,24 @@ makeListDef = defGasRNative "make-list" makeList (funType (TyList a) [("length",
   ["(make-list 5 true)"]
   "Create list by repeating VALUE LENGTH times."
 
+enumerateDef :: NativeDef
+enumerateDef = defGasRNative "enumerate" enumerate
+  (funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger),("inc", tTyInteger)]
+  <> funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger)])
+  ["(enumerate 0 10 2)"
+   , "(enumerate 0 10)"
+   , "(enumerate 10 0)"]
+  $ T.intercalate " "
+  [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
+  , "INC is the increment between numbers in the sequence."
+  , "If INC is not given, it is assumed to be 1."
+  , "Additionally, if INC is not given and FROM is greater than TO assume a value for INC of -1."
+  , "If FROM equals TO, return the singleton list containing FROM, irrespective of INC's value."
+  , "If INC is equal to zero, this function will return the singleton list containing FROM."
+  , "If INC is such that FROM + INC > TO (when FROM < TO) or FROM + INC < TO (when FROM > TO) return the singleton list containing FROM."
+  , "Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or FROM + INC > TO (when FROM > TO), then this function fails."
+  ]
+
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
   ["(reverse [1 2 3])"] "Reverse LIST."
@@ -619,6 +639,7 @@ langDefs =
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support."
 
     ,makeListDef
+    ,enumerateDef
     ,reverseDef
     ,filterDef
     ,sortDef
@@ -745,6 +766,37 @@ makeList g i [TLitInteger len,value] = case typeof value of
   Right ty -> computeGas' g i (GMakeList len) $ return $ toTList ty def $ replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
+
+enumerate :: GasRNativeFun e
+enumerate g i = \case
+    [TLitInteger from', TLitInteger to', TLitInteger inc] ->
+      createEnumerateList from' to' inc
+    [TLitInteger from', TLitInteger to'] ->
+      createEnumerateList from' to' $ bool 1 (-1) (from' > to')
+    as -> argsError i as
+  where
+
+    computeList :: Integer -> V.Vector Integer -> Eval e (Gas, Term Name)
+    computeList gas = computeGas' g i (GMakeList gas)
+      . pure
+      . toTListV tTyInteger def
+      . fmap toTerm
+
+    step to' inc acc
+      | acc > to', inc > 0 = Nothing
+      | acc < to', inc < 0 = Nothing
+      | otherwise = Just (acc, acc + inc)
+
+    createEnumerateList from' to' inc
+      | from' == to' = computeList 1 (V.singleton from')
+      | inc == 0 = computeList 1 mempty
+      | from' < to', from' + inc < from' =
+        evalError' i "enumerate: increment diverges below from interval bounds."
+      | from' > to', from' + inc > from' =
+        evalError' i "enumerate: increment diverges above from interval bounds."
+      | otherwise = do
+        let g' = succ $ (abs (from' - to')) `div` (abs inc)
+        computeList g' $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l

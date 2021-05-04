@@ -96,6 +96,7 @@ defaultGasTable =
   ,("enforce-keyset", 8)
   ,("enforce-one", 6)
   ,("enforce-pact-version", 1)
+  ,("enumerate", 1)
   ,("exp", 5)
   ,("filter", 3)
   ,("floor", 1)
