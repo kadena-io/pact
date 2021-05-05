@@ -77,7 +77,7 @@ import Pact.Types.Crypto
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.SPV
-import Pact.Types.Time
+import Data.Time
 
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {

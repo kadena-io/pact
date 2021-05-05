@@ -62,7 +62,7 @@ import Test.QuickCheck
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
-import Pact.Types.Time
+import Data.Time
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText)

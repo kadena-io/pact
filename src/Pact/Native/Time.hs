@@ -29,7 +29,7 @@ import Data.Text (Text, pack, unpack)
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Native.Internal
-import Pact.Types.Time
+import Data.Time
 
 
 timedoc :: Text

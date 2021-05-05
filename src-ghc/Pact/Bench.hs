@@ -47,7 +47,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 import Pact.Types.SQLite
-import Pact.Types.Time
+import Data.Time
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
 import Pact.Repl

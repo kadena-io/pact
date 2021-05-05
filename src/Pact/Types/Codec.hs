@@ -42,7 +42,7 @@ import Data.Decimal (Decimal,DecimalRaw(..))
 import Text.Read (readMaybe)
 import Data.Ratio ((%), denominator)
 
-import Pact.Types.Time
+import Data.Time
 
 
 -- | Min, max values that Javascript doesn't mess up.

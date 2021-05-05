@@ -17,5 +17,5 @@ extra-deps:
   - prettyprinter-1.6.0         # >= 1.6.1 breaks bin compat in Chainweb blocks
 
   # --- Custom Pins --- #
-  - git: https://github.com/kadena-io/thyme.git
-    commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
+  - git: https://github.com/kadena-io/pact-time.git
+    commit: 4fe4b898f1d41823a30946a7d9c870b518ea4dc1

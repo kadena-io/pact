@@ -88,7 +88,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
 import Pact.Types.Purity
 import Pact.Types.Runtime
-import Pact.Types.Time
+import Data.Time
 import Pact.Types.Version
 
 -- | All production native modules.

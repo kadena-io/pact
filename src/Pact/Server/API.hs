@@ -74,7 +74,7 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame,PactEvent)
 import Pact.Types.Swagger
 import Pact.Types.Term
-import Pact.Types.Time (UTCTime, julianEpochUtc)
+import Data.Time (UTCTime, julianEpochUtc)
 import Pact.Types.Util
 
 -- | Public Pact REST API.

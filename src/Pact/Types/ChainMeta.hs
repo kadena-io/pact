@@ -49,7 +49,7 @@ import Data.Word (Word64)
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
-import Pact.Types.Time (getPOSIXTime, toTimestampMicros)
+import Data.Time (getPOSIXTime, toTimestampMicros)
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.

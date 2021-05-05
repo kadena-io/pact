@@ -26,11 +26,6 @@ flag ghc-flags
   default:     False
   manual:      True
 
-flag format-with-time
-  description: Use the time package for formatting time values
-  default:     False
-  manual:      True
-
 library
   exposed-modules:     Crypto.Hash.Blake2Native
                      , Pact.Analyze.Remote.Types
@@ -89,8 +84,6 @@ library
                      , Pact.Types.SPV
                      , Pact.Types.Swagger
                      , Pact.Types.Term
-                     , Pact.Types.Time
-                     , Pact.Types.Time.Internal
                      , Pact.Types.Type
                      , Pact.Types.Util
                      , Pact.Types.Version
@@ -220,16 +213,7 @@ library
                      , servant
                      , servant-swagger
                      , swagger2 >= 2.3
-
-  if flag(format-with-time)
-    build-depends: time >= 1.8
-    cpp-options: -DFORMAT_WITH_TIME
-    exposed-modules: Pact.Types.Time.FormatWithTime
-  else
-    build-depends: clock >= 0.7.2
-    exposed-modules:
-        Pact.Types.Time.Format
-        Pact.Types.Time.Locale
+                     , pact-time >= 0.1
 
   if impl(ghcjs)
     build-depends:

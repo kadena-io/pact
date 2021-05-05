@@ -31,7 +31,7 @@ import Test.QuickCheck.Instances()
 
 import Pact.Types.Orphans()
 
-import Pact.Types.Time
+import Data.Time
 
 
 -- |  Estimate of number of bytes needed to represent data type

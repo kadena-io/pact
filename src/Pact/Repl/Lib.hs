@@ -73,7 +73,7 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
-import Pact.Types.Time
+import Data.Time
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState

@@ -134,7 +134,7 @@ import Pact.Types.Info
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
-import Pact.Types.Time (UTCTime)
+import Data.Time (UTCTime)
 import Pact.Types.Type
 import Pact.Types.Util
 
