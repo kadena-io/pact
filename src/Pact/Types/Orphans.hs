@@ -3,6 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -25,7 +26,7 @@ import qualified Data.Attoparsec.Text as AP
 import qualified Data.Attoparsec.Internal.Types as APT
 import Data.Text (Text)
 import Data.Text.Encoding
-import Data.Time.Internal
+import "pact-time" Data.Time.Internal (NominalDiffTime(..), UTCTime(..))
 import Data.Default
 import Data.Hashable
 import Data.Set (Set)

@@ -3,12 +3,14 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -18,7 +20,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DerivingStrategies #-}
 
 -- |
 -- Module      :  Pact.Types.Term
@@ -119,6 +120,7 @@ import Data.String
 import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
+import "pact-time" Data.Time (UTCTime)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word64, Word32)
@@ -134,7 +136,6 @@ import Pact.Types.Info
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
-import Data.Time (UTCTime)
 import Pact.Types.Type
 import Pact.Types.Util
 

@@ -18,4 +18,4 @@ extra-deps:
 
   # --- Custom Pins --- #
   - git: https://github.com/kadena-io/pact-time.git
-    commit: 4fe4b898f1d41823a30946a7d9c870b518ea4dc1
+    commit: e11f328d1b7fa76af46160a110f3a9ab1ee4f80e

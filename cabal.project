@@ -3,7 +3,7 @@ packages: .
 source-repository-package
     type: git
     location: https://github.com/kadena-io/pact-time.git
-    tag: 4fe4b898f1d41823a30946a7d9c870b518ea4dc1
+    tag: e11f328d1b7fa76af46160a110f3a9ab1ee4f80e
 
 -- required by pact
 -- these upper bounds are required in order to not break payload validation in chainweb

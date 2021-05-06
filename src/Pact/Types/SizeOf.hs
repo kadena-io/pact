@@ -1,5 +1,6 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 
 -- |
 -- Module      :  Pact.Types.SizeOf
@@ -13,7 +14,6 @@ module Pact.Types.SizeOf
   , constructorCost
   ) where
 
-import Control.Lens (view)
 import qualified Data.ByteString.UTF8 as BS
 import Data.Decimal
 import Data.Int (Int64)
@@ -23,6 +23,7 @@ import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
+import "pact-time" Data.Time
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word8)
@@ -30,9 +31,6 @@ import Test.QuickCheck hiding (mapSize)
 import Test.QuickCheck.Instances()
 
 import Pact.Types.Orphans()
-
-import Data.Time
-
 
 -- |  Estimate of number of bytes needed to represent data type
 --
@@ -136,4 +134,4 @@ instance SizeOf UTCTime where
   -- newtype is free
   -- Internally 'UTCTime' is just a 64-bit count of 'microseconds'
   sizeOf ti =
-    (constructorCost 1) + (sizeOf (view (dayTime . microseconds) ti))
+    (constructorCost 1) + (sizeOf (toPosixTimestampMicros ti))

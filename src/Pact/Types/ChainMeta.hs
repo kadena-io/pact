@@ -1,8 +1,9 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2019 Stuart Popejoy
@@ -42,6 +43,7 @@ import Data.Serialize (Serialize)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text
+import "pact-time" Data.Time (getCurrentTime, toPosixTimestampMicros)
 import Data.Word (Word64)
 
 -- internal pact modules
@@ -49,7 +51,6 @@ import Data.Word (Word64)
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
-import Data.Time (getPOSIXTime, toTimestampMicros)
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.
@@ -74,8 +75,8 @@ getCurrentCreationTime :: IO TxCreationTime
 getCurrentCreationTime = TxCreationTime
     . fromIntegral
     . (`div` 1000000)
-    . toTimestampMicros
-    <$> getPOSIXTime
+    . toPosixTimestampMicros
+    <$> getCurrentTime
 
 -- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
 data Address = Address

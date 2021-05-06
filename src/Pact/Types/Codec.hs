@@ -1,14 +1,15 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -31,18 +32,16 @@ module Pact.Types.Codec
   , withThisText
   ) where
 
-import Control.Lens (view)
-
 import Control.Applicative
 import qualified Data.Aeson as A
 import Data.Aeson hiding (Object)
 import Data.Aeson.Types (Parser,parse)
 import Data.Text (Text,unpack)
+import "pact-time" Data.Time
 import Data.Decimal (Decimal,DecimalRaw(..))
 import Text.Read (readMaybe)
 import Data.Ratio ((%), denominator)
 
-import Data.Time
 
 
 -- | Min, max values that Javascript doesn't mess up.
@@ -117,7 +116,7 @@ timeCodec = Codec enc dec
       | otherwise = object [ highprec .= formatTime highPrecFormat t ]
       where
             denom :: UTCTime -> Integer
-            denom = denominator . (% 1000) . fromIntegral . view (dayTime . microseconds)
+            denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
     {-# INLINE enc #-}
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>

@@ -10,6 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PackageImports             #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE Rank2Types                 #-}
@@ -30,8 +31,8 @@ module Pact.Analyze.Types.Shared where
 import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                Ixed (ix), Lens', Prism', both,
                                                from, iso, lens, makeLenses,
-                                               makePrisms, over, view, (%~),
-                                               (&), (<&>))
+                                               makePrisms, over, (%~), (&),
+                                               (<&>))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
@@ -62,6 +63,7 @@ import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
+import "pact-time" Data.Time                  (UTCTime, toMicroseconds, fromMicroseconds, mjdEpoch)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
@@ -69,7 +71,6 @@ import           Prelude                      hiding (Float)
 import           Pact.Types.Pretty            hiding (list)
 import qualified Pact.Types.Pretty            as Pretty
 import qualified Pact.Types.Lang              as Pact
-import           Data.Time              (UTCTime, microseconds, julianEpochUtc)
 import           Pact.Types.Util              (AsString)
 
 import           Pact.Analyze.LegacySFunArray (SFunArray)
@@ -238,14 +239,20 @@ type RowKey = Str
 
 type Time = Int64
 
+-- | Convert between 'UTCTime' and 'Time'.
+--
+-- The implementation is currently just the identity. However, we represented in
+-- this verbose way for better documentation and to abstract from the internal
+-- representation of UTC in the upstream package.
+--
 timeIso :: PactIso UTCTime Time
 timeIso = PactIso $ iso mkTime unMkTime
   where
     mkTime :: UTCTime -> Time
-    mkTime utct = view microseconds (utct .-. julianEpochUtc)
+    mkTime utct = toMicroseconds (utct .-. mjdEpoch)
 
     unMkTime :: Time -> UTCTime
-    unMkTime time = julianEpochUtc .+^ view (from microseconds) time
+    unMkTime time = mjdEpoch .+^ fromMicroseconds time
 
 isGuardTy :: Pact.Type v -> Bool
 isGuardTy (Pact.TyPrim (Pact.TyGuard _)) = True

@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -63,6 +64,7 @@ import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
+import "pact-time" Data.Time
 import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude
@@ -77,7 +79,6 @@ import Pact.Types.Crypto
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.SPV
-import Data.Time
 
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {

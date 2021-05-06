@@ -1,11 +1,12 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Repl.Lib
@@ -37,6 +38,7 @@ import qualified Data.Set as S
 import Data.Text (Text, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
+import "pact-time" Data.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 
@@ -73,7 +75,6 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
-import Data.Time
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -767,7 +768,7 @@ envChainDataDef = defZRNative "env-chain-data" envChainData
       | k == cdGasPrice = pure $ set (pdPublicMeta . pmGasPrice) (wrap (wrap l)) pd
 
     go _i pd (k, (TLiteral (LTime l) _))
-      | k == cdBlockTime = pure $ set pdBlockTime (toTimestampMicros $ toPosix l) pd
+      | k == cdBlockTime = pure $ set pdBlockTime (toPosixTimestampMicros l) pd
 
     go _i pd (k, (TLiteral (LString l) _))
       | k == cdChainId = pure $ set (pdPublicMeta . pmChainId) (ChainId l) pd

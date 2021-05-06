@@ -1,7 +1,8 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 -- |
 -- Module      :  Pact.Native.Time
@@ -25,11 +26,11 @@ import Prelude
 import Data.Decimal
 import Data.AffineSpace
 import Data.Text (Text, pack, unpack)
+import "pact-time" Data.Time
 
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Native.Internal
-import Data.Time
 
 
 timedoc :: Text

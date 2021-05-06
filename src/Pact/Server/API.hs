@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -48,6 +49,7 @@ import Data.Default
 import Data.Proxy
 import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
+import "pact-time" Data.Time (UTCTime, mjdEpoch)
 import GHC.Generics
 import Servant.API
 #if !defined(ghcjs_HOST_OS)
@@ -74,7 +76,6 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame,PactEvent)
 import Pact.Types.Swagger
 import Pact.Types.Term
-import Data.Time (UTCTime, julianEpochUtc)
 import Pact.Types.Util
 
 -- | Public Pact REST API.
@@ -305,7 +306,7 @@ instance ToSchema UTCTime where
       ( schemaOf
       $ set type_ (Just SwaggerString)
       . set format (Just "yyyy-mm-ddThh:MM:ssZ")
-      . set example (Just $ toJSON julianEpochUtc)
+      . set example (Just $ toJSON mjdEpoch)
       )
 
 instance ToSchema Literal where

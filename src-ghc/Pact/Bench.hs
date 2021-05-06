@@ -1,7 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Pact.Bench where
 
 import Control.Arrow
@@ -23,6 +24,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
+import "pact-time" Data.Time
 
 import System.IO
 import System.Directory
@@ -47,7 +49,6 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 import Pact.Types.SQLite
-import Data.Time
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
 import Pact.Repl

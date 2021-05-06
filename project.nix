@@ -19,8 +19,8 @@ in {
         pact-time = dontCheck (self.callCabal2nix "pact-time" (pkgs.fetchFromGitHub {
           owner = "kadena-io";
           repo = "pact-time";
-          rev = "4fe4b898f1d41823a30946a7d9c870b518ea4dc1";
-          sha256 = "1yy1v8b96lwfj1rhgwrlw9i5dx1jd1wna4hcdx1qismiwcwvb8xb";
+          rev = "e11f328d1b7fa76af46160a110f3a9ab1ee4f80e";
+          sha256 = "07n8ypdxsl7zj4fkynsxska1s1c0i57dk5r4gcnwzbjpz5h6m8dj";
         }) {});
 
       };

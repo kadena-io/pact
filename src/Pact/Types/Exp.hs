@@ -1,16 +1,17 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- |
@@ -62,7 +63,7 @@ import Test.QuickCheck
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
-import Data.Time
+import "pact-time" Data.Time (UTCTime, fromPosixTimestampMicros, formatTime)
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText)
@@ -72,12 +73,8 @@ import Pact.Types.Util (genBareText)
 -- | Custom generator of arbitrary UTCTime from
 -- years 1000-01-1 to 2100-12-31
 genArbitraryUTCTime :: Gen UTCTime
-genArbitraryUTCTime = fromDayAndDayTime <$> genDay <*> genDayTime
-  where
-    -- years 1000-01-1 to 2100-12-31
-    genDay = ModifiedJulianDay <$> choose (-313698, 88434)
-    -- no leap second
-    genDayTime = fromSeconds . realToFrac @Double <$> choose (0, 86400)
+genArbitraryUTCTime = fromPosixTimestampMicros
+    <$> choose (-30610224000000000, 4133894400000000)
 
 genLiteralString :: Gen Literal
 genLiteralString = LString <$> resize 100 genBareText
