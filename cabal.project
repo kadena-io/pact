@@ -3,4 +3,4 @@ packages: .
 source-repository-package
     type: git
     location: https://github.com/kadena-io/thyme.git
-    tag: 6ee9fcb026ebdb49b810802a981d166680d867c9
+    tag: 5314711cf0e92c531cd49addcf9d9ffe466c2075
