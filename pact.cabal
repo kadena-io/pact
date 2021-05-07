@@ -82,7 +82,6 @@ library
                      , Pact.Types.Orphans
                      , Pact.Types.SizeOf
                      , Pact.Types.SPV
-                     , Pact.Types.Swagger
                      , Pact.Types.Term
                      , Pact.Types.Type
                      , Pact.Types.Util
@@ -211,8 +210,6 @@ library
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
-                     , servant-swagger
-                     , swagger2 >= 2.3
                      , pact-time >= 0.1
 
   if impl(ghcjs)
