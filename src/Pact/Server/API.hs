@@ -82,13 +82,13 @@ type ApiVerify = "verify"
   :> Post '[JSON] Analyze.Response
 
 verifyClient :: Analyze.Request -> ClientM Analyze.Response
-verifyClient = client (Proxy @ ApiVerify)
+verifyClient = client (Proxy @ApiVerify)
 
 type ApiVersion = "version"
   :> Get '[PlainText] Text
 
 versionClient :: ClientM Text
-versionClient = client (Proxy @ ApiVersion)
+versionClient = client (Proxy @ApiVersion)
 
 -- | "pact -s" REST API.
 type PactServerAPI = ApiV1API :<|> ApiVerify :<|> ApiVersion
