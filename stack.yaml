@@ -12,10 +12,8 @@ extra-deps:
   - sbv-8.8
   - megaparsec-9.0.0
   - neat-interpolation-0.5.1.2
+  - pact-time-0.1.0.0
 
   # --- Forced Downgrades --- #
   - prettyprinter-1.6.0         # >= 1.6.1 breaks bin compat in Chainweb blocks
 
-  # --- Custom Pins --- #
-  - git: https://github.com/kadena-io/pact-time.git
-    commit: e11f328d1b7fa76af46160a110f3a9ab1ee4f80e

@@ -16,12 +16,11 @@ in {
                  then super.pact
                  else addBuildDepend super.pact pkgs.z3;
 
-        pact-time = dontCheck (self.callCabal2nix "pact-time" (pkgs.fetchFromGitHub {
-          owner = "kadena-io";
-          repo = "pact-time";
-          rev = "e11f328d1b7fa76af46160a110f3a9ab1ee4f80e";
-          sha256 = "07n8ypdxsl7zj4fkynsxska1s1c0i57dk5r4gcnwzbjpz5h6m8dj";
-        }) {});
+        pact-time = dontCheck (kpkgs.callHackageDirect {
+          pkg = "pact-time";
+          ver = "0.1.0.0";
+          sha256 = "1ksc9a0yfbhxah1zd5yda0fpb4gld1glfl6wv9pjv7c42giqmzwc";
+        } {});
 
       };
       packages = {
