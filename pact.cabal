@@ -210,7 +210,7 @@ library
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
-                     , pact-time >= 0.1
+                     , pact-time >= 0.2
 
   if impl(ghcjs)
     build-depends:

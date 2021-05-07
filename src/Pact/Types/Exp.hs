@@ -8,7 +8,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -63,7 +62,7 @@ import Test.QuickCheck
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
-import "pact-time" Data.Time (UTCTime, fromPosixTimestampMicros, formatTime)
+import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime)
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText)

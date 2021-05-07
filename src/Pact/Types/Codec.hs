@@ -5,7 +5,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -37,7 +36,7 @@ import qualified Data.Aeson as A
 import Data.Aeson hiding (Object)
 import Data.Aeson.Types (Parser,parse)
 import Data.Text (Text,unpack)
-import "pact-time" Data.Time
+import Pact.Time
 import Data.Decimal (Decimal,DecimalRaw(..))
 import Text.Read (readMaybe)
 import Data.Ratio ((%), denominator)

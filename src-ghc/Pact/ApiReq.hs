@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -64,7 +63,7 @@ import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import "pact-time" Data.Time
+import Pact.Time
 import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude

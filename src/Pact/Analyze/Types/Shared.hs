@@ -10,7 +10,6 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PackageImports             #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE Rank2Types                 #-}
@@ -63,7 +62,7 @@ import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
-import "pact-time" Data.Time                  (UTCTime, toMicroseconds, fromMicroseconds, mjdEpoch)
+import Pact.Time                              (UTCTime, toMicroseconds, fromMicroseconds, mjdEpoch)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)

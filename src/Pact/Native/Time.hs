@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -26,7 +25,7 @@ import Prelude
 import Data.Decimal
 import Data.AffineSpace
 import Data.Text (Text, pack, unpack)
-import "pact-time" Data.Time
+import Pact.Time
 
 import Pact.Types.Pretty
 import Pact.Types.Runtime

@@ -2,7 +2,6 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Runtime
@@ -43,7 +42,7 @@ import Data.Serialize (Serialize)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text
-import "pact-time" Data.Time (getCurrentTime, toPosixTimestampMicros)
+import Pact.Time (getCurrentTime, toPosixTimestampMicros)
 import Data.Word (Word64)
 
 -- internal pact modules

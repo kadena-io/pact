@@ -18,8 +18,8 @@ in {
 
         pact-time = dontCheck (self.callHackageDirect {
           pkg = "pact-time";
-          ver = "0.1.0.0";
-          sha256 = "1ksc9a0yfbhxah1zd5yda0fpb4gld1glfl6wv9pjv7c42giqmzwc";
+          ver = "0.2.0.0";
+          sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
       };

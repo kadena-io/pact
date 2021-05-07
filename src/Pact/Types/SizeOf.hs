@@ -1,6 +1,5 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 
 -- |
 -- Module      :  Pact.Types.SizeOf
@@ -23,7 +22,7 @@ import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
-import "pact-time" Data.Time
+import Pact.Time
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word8)

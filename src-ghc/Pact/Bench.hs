@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Pact.Bench where
 
@@ -24,7 +23,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
-import "pact-time" Data.Time
+import Pact.Time
 
 import System.IO
 import System.Directory

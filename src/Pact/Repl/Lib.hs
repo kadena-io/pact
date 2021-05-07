@@ -2,7 +2,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -38,7 +37,7 @@ import qualified Data.Set as S
 import Data.Text (Text, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
-import "pact-time" Data.Time
+import Pact.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 

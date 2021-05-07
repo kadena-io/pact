@@ -55,7 +55,7 @@ import           Pact.Types.Lang
                  )
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
-import           Data.Time            (parseTime)
+import           Pact.Time                  (parseTime)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact

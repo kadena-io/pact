@@ -10,7 +10,6 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -120,7 +119,7 @@ import Data.String
 import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import "pact-time" Data.Time (UTCTime)
+import Pact.Time (UTCTime)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word64, Word32)

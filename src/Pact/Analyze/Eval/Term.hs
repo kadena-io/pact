@@ -54,7 +54,7 @@ import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Pretty           (renderCompactString', pretty)
 import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
-import           Data.Time             (formatTime, parseTime)
+import           Pact.Time                   (formatTime, parseTime)
 import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors
