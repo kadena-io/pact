@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
 module Pact.Bench where
 
 import Control.Arrow
@@ -23,10 +23,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
-
--- import GHC.Clock
-import Data.Thyme.Clock
-import Data.AffineSpace
+import Pact.Time
 
 import System.IO
 import System.Directory

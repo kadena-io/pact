@@ -42,12 +42,10 @@ import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
-import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           GHC.TypeLits
-import           System.Locale              (defaultTimeLocale)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
@@ -57,6 +55,7 @@ import           Pact.Types.Lang
                  )
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
+import           Pact.Time                  (parseTime)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
@@ -1059,7 +1058,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
-      <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
+      <- parseTime Pact.simpleISO8601 (T.unpack timeLit)
     -> pure $ Some STime $ Lit' $ fromPact timeIso timeLit'
 
   AST_NFun_Basic SModulus [a, b] -> translateNode a >>= \case

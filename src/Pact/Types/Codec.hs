@@ -1,14 +1,14 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -31,17 +31,16 @@ module Pact.Types.Codec
   , withThisText
   ) where
 
-
 import Control.Applicative
 import qualified Data.Aeson as A
 import Data.Aeson hiding (Object)
 import Data.Aeson.Types (Parser,parse)
 import Data.Text (Text,unpack)
+import Pact.Time
 import Data.Decimal (Decimal,DecimalRaw(..))
-import Data.Thyme.Time.Core
 import Text.Read (readMaybe)
-import Data.Ratio (denominator)
-import System.Locale
+import Data.Ratio ((%), denominator)
+
 
 
 -- | Min, max values that Javascript doesn't mess up.
@@ -112,24 +111,23 @@ timeCodec :: Codec UTCTime
 timeCodec = Codec enc dec
   where
     enc t
-      | 1 == denom s = object [ field .= formatTime loc pactISO8601Format t ]
-      | otherwise = object [ highprec .= formatTime loc highPrecFormat t ]
-      where (UTCTime (ModifiedJulianDay _d) s) = unUTCTime t
-            denom :: DiffTime -> Integer
-            denom = denominator . toSeconds
+      | 1 == denom t = object [ field .= formatTime pactISO8601Format t ]
+      | otherwise = object [ highprec .= formatTime highPrecFormat t ]
+      where
+            denom :: UTCTime -> Integer
+            denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
     {-# INLINE enc #-}
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>
       (o .: highprec >>= mkTime highPrecFormat)
       where
         mkTime :: String -> String -> Parser UTCTime
-        mkTime fmt v = case parseTime loc fmt v of
+        mkTime fmt v = case parseTime fmt v of
               Just t -> return t
               Nothing -> fail $ "Invalid time value, expected " ++ fmt
     {-# INLINE dec #-}
     field = "time"
     highprec = "timep"
-    loc = defaultTimeLocale
 
 valueCodec :: Codec Value
 valueCodec = Codec enc dec

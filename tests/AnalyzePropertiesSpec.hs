@@ -91,6 +91,21 @@ prop_evaluation_time = property $ do
   (etm, gState) <- forAll $ Gen.choice [genFormatTime, genParseTime]
   testDualEvaluation etm gState
 
+prop_decaddtime :: Property
+prop_decaddtime = property $ do
+    (etm, gState) <- forAll genDecAddTime
+    testDualEvaluation etm gState
+
+prop_decaddtime_rounding :: Property
+prop_decaddtime_rounding = property $ do
+    (etm, gState) <- forAll genDecAddTimeRounding
+    testDualEvaluation etm gState
+
+prop_decaddtime_rounding2 :: Property
+prop_decaddtime_rounding2 = property $ do
+    (etm, gState) <- forAll genDecAddTimeRounding2
+    testDualEvaluation etm gState
+
 prop_round_trip_type :: Property
 prop_round_trip_type = property $ do
   ety <- forAll genType
@@ -138,4 +153,7 @@ sequentialChecks = checkSequential $ Group "checks"
   , ("prop_round_trip_term", withShrinks 10 prop_round_trip_term)
   , ("prop_evaluation",      withShrinks 25 prop_evaluation)
   , ("prop_evaluation_time", withShrinks 25 prop_evaluation_time)
+  , ("prop_decaddtime", withShrinks 25 prop_decaddtime)
+  , ("prop_decaddtime_rounding", withShrinks 25 prop_decaddtime_rounding)
+  , ("prop_decaddtime_rounding2", withShrinks 25 prop_decaddtime_rounding2)
   ]

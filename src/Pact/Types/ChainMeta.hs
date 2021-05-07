@@ -1,8 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2019 Stuart Popejoy
@@ -42,8 +42,7 @@ import Data.Serialize (Serialize)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text
-import Data.Thyme.Clock.POSIX (getPOSIXTime)
-import Data.Thyme.Time.Core (toMicroseconds)
+import Pact.Time (getCurrentTime, toPosixTimestampMicros)
 import Data.Word (Word64)
 
 -- internal pact modules
@@ -72,7 +71,11 @@ newtype TxCreationTime = TxCreationTime ParsedInteger
 
 -- | Get current time as TxCreationTime
 getCurrentCreationTime :: IO TxCreationTime
-getCurrentCreationTime = TxCreationTime . fromIntegral . (`div` 1000000) . toMicroseconds <$> getPOSIXTime
+getCurrentCreationTime = TxCreationTime
+    . fromIntegral
+    . (`div` 1000000)
+    . toPosixTimestampMicros
+    <$> getCurrentTime
 
 -- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
 data Address = Address
