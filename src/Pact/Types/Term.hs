@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -18,7 +19,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DerivingStrategies #-}
 
 -- |
 -- Module      :  Pact.Types.Term
@@ -119,7 +119,7 @@ import Data.String
 import Data.Text (Text,pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.Thyme (UTCTime)
+import Pact.Time (UTCTime)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word64, Word32)

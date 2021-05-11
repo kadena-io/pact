@@ -45,7 +45,6 @@ import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,pack,unpack,intercalate)
 import Data.Text.Encoding
-import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 import qualified Data.Yaml as Y
 import GHC.Generics
@@ -68,6 +67,7 @@ import Pact.Parse
 import Pact.Repl
 import Pact.Repl.Lib
 import Pact.Repl.Types
+import Pact.Time
 import Pact.Types.API
 import Pact.Types.Capability
 import Pact.Types.Command
@@ -427,7 +427,7 @@ buildCmd i includeSigners cmd = do
   gasLimit <- view (eeGasEnv . geGasLimit)
   gasPrice <- view (eeGasEnv . geGasPrice)
   md <- view eeMsgBody
-  let toCT = TxCreationTime . fromIntegral . (`div` 1000000) . toMicroseconds . utcTimeToPOSIXSeconds
+  let toCT = TxCreationTime . fromIntegral . (`div` 1000000) . toPosixTimestampMicros
   (signers,sigs) <- if includeSigners then getSigners i else return ([],Nothing)
   cmdu <- liftIO $ mkUnsignedExec
       cmd
@@ -583,15 +583,18 @@ _testCode code = _eval (fmap termToCode <$> (compilePact code >>= mapM enscope))
 
 sendTx :: HasInfo i => i -> ClientEnv -> SubmitBatch -> Eval e RequestKeys
 sendTx i env sb =
-  liftIO (runClientM (sendClient sb) env) >>= eitherDie i
+  liftIO (runClientM (sendClient sb) env) >>= eitherDieS i
 
 sendLocal :: HasInfo i => i -> ClientEnv -> Command Text -> Eval e (CommandResult Hash)
 sendLocal i env cmd =
-  liftIO (runClientM (localClient cmd) env) >>= eitherDie i
+  liftIO (runClientM (localClient cmd) env) >>= eitherDieS i
 
 sendPoll :: HasInfo i => i -> ClientEnv -> Poll -> Eval e (PollResponses)
 sendPoll i env p =
-  liftIO (runClientM (pollClient p) env) >>= eitherDie i
+  liftIO (runClientM (pollClient p) env) >>= eitherDieS i
+
+eitherDieS :: HasInfo i => Show a => i -> Either a b -> Eval e b
+eitherDieS i = either (evalError' i . pretty . show) return
 
 eitherDie :: HasInfo i => Pretty a => i -> Either a b -> Eval e b
 eitherDie i = either (evalError' i . pretty) return
