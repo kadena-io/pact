@@ -18,7 +18,7 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Client library
+-- Pact client terminal implementation.
 --
 
 module Pact.Repl.Cli
