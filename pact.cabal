@@ -26,6 +26,11 @@ flag ghc-flags
   default:     False
   manual:      True
 
+flag cli-repl
+  description: Include support for Pact Cli terminal.
+  default:     False
+  manual:      True
+
 library
   exposed-modules:     Crypto.Hash.Blake2Native
                      , Pact.Analyze.Remote.Types
@@ -90,6 +95,9 @@ library
                      , Pact.Types.Typecheck
                      , Pact.Typechecker
 
+  if flag(cli-repl)
+    exposed-modules: Pact.Repl.Cli
+
   if flag(ghc-flags)
     build-tool-depends: hsinspect:hsinspect
     ghc-options: -fplugin GhcFlags.Plugin
@@ -147,7 +155,6 @@ library
                     Pact.Persist.MockPersist
                     Pact.Persist.SQLite
                     Pact.PersistPactDb.Regression
-                    Pact.Repl.Cli
                     Pact.ReplTools
                     Pact.Server.ApiServer
                     Pact.Server.History.Persistence
@@ -180,7 +187,6 @@ library
                      , bytestring >=0.10.8.1 && < 0.11
                      , cassava >= 0.5
                      , cereal >=0.5.4.0 && < 0.6
-                     , connection >= 0.3.1
                      , containers >= 0.5.7 && < 0.7
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
@@ -230,7 +236,6 @@ library
   if !impl(ghcjs)
     build-depends:
                   async
-                , connection
                 , criterion >= 1.1.4 && < 1.6
                 , cryptonite
                 , direct-sqlite
@@ -249,6 +254,11 @@ library
                 , wai-cors
                 , warp
                 , yaml
+  if !impl(ghcjs) && flag(cli-repl)
+    build-depends:
+                connection >= 0.3.1
+    cpp-options: -DCLI_REPL
+
 
   if !impl(ghcjs) && !os(windows)
     build-depends: unix

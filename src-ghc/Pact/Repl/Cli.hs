@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -21,7 +22,8 @@
 --
 
 module Pact.Repl.Cli
-  ( loadCli
+  ( setupCli
+  , cliHelp
   ) where
 
 
@@ -46,12 +48,14 @@ import Data.Text.Encoding
 import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 import qualified Data.Yaml as Y
+import GHC.Generics
 import Network.Connection
 import Network.HTTP.Client.TLS
 import Servant.Client.Core
 import Servant.Client
 import System.IO
--- import System.FilePath
+import System.Directory
+import System.FilePath
 import Text.Trifecta as TF hiding (line,err,try,newline)
 
 import Pact.ApiReq
@@ -512,28 +516,60 @@ compilePact cmd = case TF.parseString exprsOnly mempty (unpack cmd) of
       Right t -> return t
       Left l -> evalError (peInfo l) (peDoc l)
 
+data CliConfig = CliConfig
+    { cliRepl :: FilePath
+    , preloads :: [FilePath]
+    }
+    deriving (Eq,Show,Generic)
+instance FromJSON CliConfig
+
+instance Default CliConfig where
+  def = CliConfig
+      { cliRepl = "cli/cli.repl"
+      , preloads = [] }
+
+cliHelp :: String
+cliHelp = "YAML file with properties 'cliRepl' (location of cli.repl file) and 'preloads' (list of repls to pre-load)"
+
 
 loadCli :: Maybe FilePath -> Repl ()
-loadCli _confm = do
-  rEnv . eeRefStore . rsNatives %= HM.union (moduleToMap cliDefs)
-  void $ loadFile def "cli/cli.repl"
+loadCli confm = case confm of
+  Nothing -> loadDotFile
+  Just c -> Y.decodeFileThrow c >>= go
+  where
+    go CliConfig{..} = do
 
+      rEnv . eeRefStore . rsNatives %= HM.union (moduleToMap cliDefs)
+      void $ loadFile def cliRepl
+      forM_ preloads (loadFile def)
+
+    loadDotFile = do
+      home <- liftIO getHomeDirectory
+      let dotFile = home </> ".pact-cli"
+      x <- liftIO $ doesFileExist dotFile
+      if x then do
+        liftIO $ setCurrentDirectory home
+        Y.decodeFileThrow dotFile >>= go
+      else
+        go def
+
+
+setupCli :: ReplMode -> Maybe FilePath -> IO ReplState
+setupCli m confm = do
+  s <- initReplState m Nothing
+  (`execStateT` s) $ do
+    useReplLib
+    loadCli confm
 
 _cli :: IO ()
 _cli = do
-  s <- initReplState Interactive Nothing
-  void $ (`evalStateT` s) $ do
-    useReplLib
-    loadCli Nothing
-    forever $ pipeLoop True stdin Nothing
+  s <- setupCli Interactive Nothing
+  void $ (`evalStateT` s) $ forever $ pipeLoop True stdin Nothing
 
 _eval :: Eval LibState a -> IO a
 _eval e = do
-  s <- initReplState Interactive Nothing
-  (r,_) <- (`evalStateT` s) $ do
-    useReplLib
-    loadCli Nothing
-    evalEval def e
+  s <- setupCli Interactive Nothing
+  (r,_) <- evalStateT (evalEval def e) s
   either (error . show) return r
 
 _run :: String -> IO ()
