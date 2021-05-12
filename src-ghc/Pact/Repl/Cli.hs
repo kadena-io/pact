@@ -155,11 +155,40 @@ cliDefs = ("Cli",
       (funType tTyString [])
       [LitExample "(show)"]
       "Show/print current command."
+      ,
+      defZRNative "resolve-keys" resolveGuard
+      (funType (TyList tTyString) [("guard",tTyGuard Nothing)])
+      [LitExample "(resolve-keys (local (at 'guard (coin.details 'abc))))"]
+      "Attempt to resolve keystore keys/aliases in a remote guard."
      ])
 
   where
        a = mkTyVar "a" []
 
+resolveGuard :: RNativeFun LibState
+resolveGuard i [TGuard g _] = case g of
+  GKeySet ks -> go ks
+  GKeySetRef ksn -> resKs ksn >>= go
+  _ -> evalError' i $ "resolve-guard: not a keyset/keysetref: " <> pretty g
+  where
+    resKs (KeySetName n) = do
+      r <- localExec i False ("(describe-keyset \"" <> n <> "\")")
+      case r of
+        PGuard (GKeySet ks) -> return ks
+        _ -> evalError' i $ "resolve-guard: unexpected result from server: " <> pretty r
+    go KeySet {..} = do
+      rs <- forM (S.toList _ksKeys) $ \k -> do
+        kr <- evalPact1 $ "(try {} (cli.get-key \"" <> renderCompactText k <> "\"))"
+        case kr of
+          (TObject (Object (ObjectMap m) _ _ _) _) -> case M.lookup "alias" m of
+            Nothing | m == mempty -> return Nothing
+                    | otherwise -> return $ Just $ toTerm $ renderCompactText k
+            Just a -> return $ Just a
+          _ -> evalError' i $ "resolve-guard: unexpected result from get-key: " <> pretty kr
+      return $ toTList tTyString def (catMaybes rs)
+
+
+resolveGuard i as = argsError i as
 
 addKeyset :: RNativeFun LibState
 addKeyset _ [TGuard (GKeySet KeySet {..}) _] = do
@@ -539,7 +568,9 @@ loadCli confm = case confm of
   where
     go CliConfig{..} = do
 
-      rEnv . eeRefStore . rsNatives %= HM.union (moduleToMap cliDefs)
+      -- add all lib and cli defs to natives
+      rEnv . eeRefStore . rsNatives %=
+        HM.union (moduleToMap ("",snd cliDefs <> snd replDefs))
       void $ loadFile def cliRepl
       forM_ preloads (loadFile def)
 
@@ -548,8 +579,10 @@ loadCli confm = case confm of
       let dotFile = home </> ".pact-cli"
       x <- liftIO $ doesFileExist dotFile
       if x then do
+        pwd <- liftIO getCurrentDirectory
         liftIO $ setCurrentDirectory home
         Y.decodeFileThrow dotFile >>= go
+        liftIO $ setCurrentDirectory pwd
       else
         go def
 
