@@ -23,6 +23,7 @@ import Control.Monad.IO.Class
 import Control.Exception
 
 import Data.Aeson
+import Data.Maybe
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
 
@@ -51,7 +52,8 @@ data Config = Config {
   _verbose :: Bool,
   _entity :: Maybe EntityName,
   _gasLimit :: Maybe Int,
-  _gasRate :: Maybe Int
+  _gasRate :: Maybe Int,
+  _execConfig :: Maybe ExecutionConfig
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
@@ -67,6 +69,7 @@ usage =
   \entity     - Entity name for simulating privacy, defaults to \"entity\" \n\
   \gasLimit   - Gas limit for each transaction, defaults to 0 \n\
   \gasRate    - Gas price per action, defaults to 0 \n\
+  \flags      - Pact runtime execution flags \n\
   \\n"
 
 serve :: FilePath -> SPVSupport -> IO ()
@@ -84,6 +87,7 @@ serve configFile spv = do
           _entity
           _gasLimit
           _gasRate
+          (fromMaybe def _execConfig)
 
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
 

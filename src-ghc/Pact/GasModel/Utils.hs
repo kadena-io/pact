@@ -35,6 +35,7 @@ module Pact.GasModel.Utils
   , acctModuleName
   , acctModuleNameText
   , accountsModule
+  , regressionModule
 
   , acctRow
 
@@ -278,8 +279,50 @@ acctModuleName = ModuleName "accounts" def
 acctModuleNameText :: T.Text
 acctModuleNameText = asString acctModuleName
 
+-- | This is the "default module" for putting various testing items in.
+-- Changing this must not result in any regression.
 accountsModule :: ModuleName -> T.Text
 accountsModule moduleName = [text|
+     (module $moduleNameText GOV
+
+       (defcap GOV ()
+         true)
+
+       (defcap MANAGEDCAP (s t)
+         @managed s managed-cap-fun
+         true)
+
+       (defun managed-cap-fun (s t)
+         s)
+
+       (defschema account
+         balance:decimal
+       )
+
+       (defun test-with-cap-func ()
+       @doc "Function to test the `with-capability` function"
+         (with-capability (GOV) "")
+       )
+
+       (defun enforce-true ()
+       @doc "Function to test the `create-user-guard` function"
+         (enforce true "")
+       )
+
+       (deftable accounts:{account})
+
+       (defcap EVENT () @event true)
+
+       (defun test-emit-event-func () (emit-event (EVENT)))
+
+       ; table for testing `create-table`
+       (deftable accounts-for-testing-table-creation:{account})
+     ) |]
+  where moduleNameText = asString moduleName
+
+-- | This is used in a gas test and should not be changed.
+regressionModule :: ModuleName -> T.Text
+regressionModule moduleName = [text|
      (module $moduleNameText GOV
 
        (defcap GOV ()

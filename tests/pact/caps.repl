@@ -723,6 +723,23 @@
   (defun go(msg:string)
     (with-capability (TOP msg)
       1))
+
+
+  (defcap EV () @event (enforce false "always fail"))
+
+  (defcap MGD (i:integer) @managed (enforce false "always fail"))
+
+  (defcap NON () true)
+
+  (defun emit-ev ()
+    (emit-event (EV)))
+
+  (defun emit-mgd ()
+    (emit-event (MGD 1)))
+
+  (defun emit-non-event ()
+    (emit-event (NON)))
+
 )
 
 (go "hi")
@@ -739,3 +756,25 @@
      , "params": ["hi"] }
    ]
  (env-events true))
+
+(expect-failure
+ "emit-event: must be in module"
+ "Unable to resolve current calling module"
+ (emit-event (EV)))
+
+(expect-failure
+ "emit-event: non-event"
+ "must be managed or event defcap"
+ (emit-non-event))
+
+(expect
+ "emit-event: event, does not evaluate"
+ [{ "module-hash": (at 'hash (describe-module 'events))
+  , "name": "events.EV", "params": [] }]
+ (let ((a (emit-ev))) (env-events true)))
+
+(expect
+ "emit-event: managed, does not evaluate"
+ [{ "module-hash": (at 'hash (describe-module 'events))
+  , "name": "events.MGD", "params": [1] }]
+ (let ((a (emit-mgd))) (env-events true)))

@@ -27,6 +27,7 @@ module Pact.Runtime.Capabilities
     ,ApplyMgrFun
     ,InstallMgd
     ,checkSigCaps
+    ,emitCapability
     ) where
 
 import Control.Monad
@@ -158,12 +159,15 @@ evalUserCapability i af scope cap cdef test = go scope
 
     push = pushSlot (CapSlot scope cap [])
 
-    emitCap = emitEvent i (_scName cap) (_scArgs cap)
+    emitCap = emitCapability i cap
 
     emitMaybe =
       when (_dDefMeta cdef == Just (DMDefcap DefcapEvent)) emitCap
 
     pushSlot s = evalCapabilities . capStack %= (s:)
+
+emitCapability :: HasInfo i => i -> UserCapability -> Eval e ()
+emitCapability i cap = emitEvent i (_scName cap) (_scArgs cap)
 
 defCapMetaParts :: UserCapability -> Text -> Def Ref
                 -> Either Doc (Int, SigCapability, PactValue)

@@ -88,11 +88,13 @@ defaultGasTable =
   ,("decrypt-cc20p1305", 33)
   ,("diff-time", 8)
   ,("drop", 3)
+  ,("emit-event",1)
   ,("enforce", 1)
   ,("enforce-guard", 8)
   ,("enforce-keyset", 8)
   ,("enforce-one", 6)
   ,("enforce-pact-version", 1)
+  ,("enumerate", 1)
   ,("exp", 5)
   ,("filter", 3)
   ,("floor", 1)
@@ -216,7 +218,7 @@ tableGasModel gasConfig =
           ReadInterface _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
           ReadNamespace _ns ->  _gasCostConfig_readColumnCost gasConfig
           ReadKeySet _ksName _ks ->  _gasCostConfig_readColumnCost gasConfig
-          ReadYield (Yield _obj _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
+          ReadYield (Yield _obj _ _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
         GPreWrite w -> case w of
           WriteData _type key obj ->
             (memoryCost key (_gasCostConfig_writeBytesCost gasConfig))

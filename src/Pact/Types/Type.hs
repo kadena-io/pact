@@ -83,7 +83,6 @@ import Data.Set (Set, isSubsetOf)
 import qualified Data.Set as Set
 import Data.String
 import Data.Text (Text,unpack)
-import Data.Thyme.Format.Aeson ()
 import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving

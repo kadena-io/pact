@@ -1,16 +1,17 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  Pact.Types.Exp
@@ -44,16 +45,13 @@ module Pact.Types.Exp
 
 
 import Control.Applicative
-import Control.Lens (makePrisms, (^.), from)
+import Control.Lens (makePrisms)
 import Data.List
 import Control.Monad
 import Prelude
 import Data.Text (Text,pack)
 import Data.Aeson
 import Data.Maybe (fromMaybe)
-import Data.Thyme
-import Data.Thyme.Time.Core (secondsToDiffTime)
-import System.Locale
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
@@ -64,6 +62,7 @@ import Test.QuickCheck
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
+import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime)
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText)
@@ -73,13 +72,8 @@ import Pact.Types.Util (genBareText)
 -- | Custom generator of arbitrary UTCTime from
 -- years 1000-01-1 to 2100-12-31
 genArbitraryUTCTime :: Gen UTCTime
-genArbitraryUTCTime = toUTCTime <$> genDay <*> genDiffTime
-  where
-    -- years 1000-01-1 to 2100-12-31
-    genDay = ModifiedJulianDay <$> choose (-313698, 88434)
-    -- no leap second
-    genDiffTime = secondsToDiffTime <$> choose (0, 86400)
-    toUTCTime day' diff' = (UTCTime day' diff') ^. from utcTime
+genArbitraryUTCTime = fromPosixTimestampMicros
+    <$> choose (-30610224000000000, 4133894400000000)
 
 genLiteralString :: Gen Literal
 genLiteralString = LString <$> resize 100 genBareText
@@ -134,7 +128,7 @@ simpleISO8601 :: String
 simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
 
 formatLTime :: UTCTime -> Text
-formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
+formatLTime = pack . formatTime simpleISO8601
 {-# INLINE formatLTime #-}
 
 -- | Pretty is supposed to match 1-1 with Pact representation

@@ -1,7 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      :  Pact.Types.Orphans
@@ -14,8 +17,6 @@
 module Pact.Types.Orphans where
 
 import Data.Serialize
-import Data.Thyme
-import Data.Thyme.Internal.Micro
 import Data.Decimal
 import qualified Data.Aeson as A
 import Text.Trifecta.Combinators (DeltaParsing(..))
@@ -24,6 +25,7 @@ import qualified Data.Attoparsec.Text as AP
 import qualified Data.Attoparsec.Internal.Types as APT
 import Data.Text (Text)
 import Data.Text.Encoding
+import Pact.Time.Internal (NominalDiffTime(..), UTCTime(..))
 import Data.Default
 import Data.Hashable
 import Data.Set (Set)
@@ -33,10 +35,6 @@ import Bound
 import Control.Applicative ((<|>))
 import Test.QuickCheck (Arbitrary(..))
 
-
-instance Serialize Micro
-instance Serialize NominalDiffTime
-instance Serialize UTCTime
 
 instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
   arbitrary = Decimal <$> arbitrary <*> arbitrary
@@ -101,3 +99,10 @@ instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value), A.FromJSON (f a))
 
 instance Hashable a => Hashable (Set a) where
   hashWithSalt n = hashWithSalt n . S.toList
+
+-- -------------------------------------------------------------------------- --
+-- Time Orphans
+
+deriving newtype instance Arbitrary NominalDiffTime
+deriving newtype instance Arbitrary UTCTime
+
