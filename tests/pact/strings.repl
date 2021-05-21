@@ -11,9 +11,10 @@
 (expect-failure "at out-of-bounds-int string" (let ((str "hello")) (at (length str) str)))
 
 "===== map"
-(expect "map treats str as list of single char strings" ["k", "d", "a"]  (map (identity) "kda"))
-(expect "map works appropriately" [1, 2, 3]  (map (str-to-int) "123"))
-(expect "map on empty string" [] (map (str-to-int) ""))
+(expect "map on str returns a str" "kda" (map (identity) "kda"))
+(expect-failure "map fails on function that map strings to non-strings" (map (str-to-int) "123"))
+(expect "map on empty string" "" (map (+ "hi") ""))
+(expect "map with polymorphic func" "123a123b123c" (map (+ "123") "abc"))
 
 "===== fold"
 (let ((str "i love kadena!!!"))
@@ -30,4 +31,4 @@
   (defun not-a (c)
     (!= "a" c)))
 
-(expect "simple filter works as expected" ["b", "c", "b", "c"] (filter (not-a) "aaabcaaabc"))
+(expect "simple filter works as expected" "bcbc" (filter (not-a) "aaabcaaabc"))

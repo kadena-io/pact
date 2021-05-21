@@ -496,7 +496,7 @@ chainDataDef = defRNative "chain-data" chainData
 mapDef :: NativeDef
 mapDef = defNative "map" map'
   (  funType (TyList a) [("app",lam b a),("list",TyList b)]
-  <> funType (TyList a) [("app", lam tTyString a),("str", tTyString)]
+  <> funType tTyString [("app", lam tTyString tTyString),("str", tTyString)]
   )
   ["(map (+ 1) [1 2 3])"
   ,"(map (+ \" \") \"hello world\")"
@@ -540,9 +540,13 @@ reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a
 
 filterDef :: NativeDef
 filterDef = defNative "filter" filter'
-  (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
-  ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
-  "Filter LIST by applying APP to each element. For each true result, the original value is kept."
+  (  funType (TyList a) [("app",lam a tTyBool),("list",TyList a)]
+  <> funType tTyString [("app", lam tTyString tTyBool),("str", tTyString)]
+  )
+  ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"
+  ,"(filter (constantly false) \"hello\")"
+  ]
+  "Filter LIST or STRING by applying APP to each element. For each true result, the original value is kept."
 
 sortDef :: NativeDef
 sortDef = defGasRNative "sort" sort'
@@ -756,13 +760,18 @@ stringToCharList :: Text -> V.Vector (Term a)
 stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
 
 map' :: NativeFun e
-map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> applyToList ls
-           TLiteral (LString s)  _ -> let ls = (stringToCharList s) in applyToList ls
-           t -> evalError' i $ "map: expecting list or string: " <> pretty (abbrev t)
-   where
-     applyToList ls = (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
-map' i as = argsError' i as
+map' i as = case as of
+  [app@TApp {},l] -> gasUnreduced i as $ reduce l >>= \l' -> case l' of
+    TList ls _ _ -> applyToList app ls
+    TLiteral (LString s)  _ -> applyToString app s
+    t -> evalError' i $ "map: expecting list or string: " <> pretty (abbrev t)
+  _ -> argsError' i as
+  where
+    applyToList app ls = (\b' -> TList b' TyAny def) <$> forM ls (apply (_tApp app) . pure)
+    applyToString app str = fmap (flip TLiteral def . LString . fold) $ forM (stringToCharList str) $ \el ->
+      apply (_tApp app) (pure el) >>= \case
+        TLiteral (LString t) _ -> return t
+        _ -> evalError' i $ "map: expected a monomorphic string mapping function when applied to string"
 
 list :: RNativeFun e
 list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set type here
@@ -820,18 +829,24 @@ fold' i as = argsError' i as
 
 
 filter' :: NativeFun e
-filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls lt _ -> fmap (toTListV lt def) $ filterVec ls
-           TLiteral (LString s)  _ -> fmap (toTListV (TyPrim TyString) def) $
-             let ls = (stringToCharList s) in filterVec ls
-           t -> evalError' i $ "filter: expecting list or string: " <> pretty (abbrev t)
-   where
-     filterVec ls = (`V.filterM` ls) $ \a' -> do
-       t <- apply (_tApp app) [a']
-       case t of
-         (TLiteral (LBool bo) _) -> return bo
-         _ -> return False -- hmm, too permissive here, select is stricter
-filter' i as = argsError' i as
+filter' i as = case as of
+  [app@TApp {},l] -> gasUnreduced i as $ reduce l >>= \l' -> case l' of
+     TList ls lt _ -> fmap (toTListV lt def) $ filterVec ls app
+     TLiteral (LString s)  _ -> filterString s app
+     t -> evalError' i $ "filter: expecting list or string: " <> pretty (abbrev t)
+  _ -> argsError' i as
+  where
+    filterVec ls app = (`V.filterM` ls) $ \a' -> do
+      t <- apply (_tApp app) [a']
+      case t of
+        (TLiteral (LBool bo) _) -> return bo
+        _ -> return False -- hmm, too permissive here, select is stricter
+
+    filterString str app = fmap (flip TLiteral def . LString . T.pack) $ flip filterM (T.unpack str) $ \c' -> do
+      t <- apply (_tApp app) (pure $ tLit . LString . T.singleton $ c')
+      case t of
+        (TLiteral (LBool bo) _) -> return bo
+        _ -> evalError' i $ "filter: expected function to return boolean"
 
 length' :: RNativeFun e
 length' _ [TList ls _ _] = return $ toTerm (length ls)
