@@ -82,7 +82,6 @@ library
                      , Pact.Types.Orphans
                      , Pact.Types.SizeOf
                      , Pact.Types.SPV
-                     , Pact.Types.Swagger
                      , Pact.Types.Term
                      , Pact.Types.Type
                      , Pact.Types.Util
@@ -159,6 +158,7 @@ library
                     Pact.Types.ECDSA
                     Pact.Types.Server
                     Pact.Types.SQLite
+                    Pact.Types.Swagger
                     Pact.GasModel.GasModel
                     Pact.GasModel.Types
                     Pact.GasModel.Utils
@@ -217,8 +217,6 @@ library
                      , mmorph >= 1.1 && < 1.2
                      , constraints
                      , servant
-                     , servant-swagger
-                     , swagger2 >= 2.3
 
   if impl(ghcjs)
     build-depends:
@@ -241,6 +239,8 @@ library
                 , servant-client
                 , servant-client-core
                 , servant-server
+                , servant-swagger
+                , swagger2 >= 2.3
                 , statistics >= 0.13.3 && < 0.16
                 , wai-cors
                 , warp

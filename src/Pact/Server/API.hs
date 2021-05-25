@@ -32,11 +32,12 @@ module Pact.Server.API
   , localClient
   , verifyClient
   , versionClient
-#endif
+  -- swagger v2 requires network which doesn't build on ghcjs
   -- | swagger
   , apiV1Swagger
   , pactServerSwagger
   , writeSwagger
+#endif
   ) where
 
 -- Swagger 2.2 compat
@@ -46,17 +47,18 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal (Decimal)
 import Data.Default
 import Data.Proxy
-import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
 import Data.Thyme.Clock (UTCTime)
 import Data.Thyme.Time.Core (fromMicroseconds,fromGregorian,mkUTCTime)
 import GHC.Generics
 import Servant.API
 #if !defined(ghcjs_HOST_OS)
+import Data.Swagger as Swagger hiding (Info,version)
+import Servant.Swagger
 import Servant.Client
 import Servant.Client.Core
+import Pact.Types.Swagger
 #endif
-import Servant.Swagger
 
 import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Parse
@@ -75,7 +77,6 @@ import Pact.Types.PactValue
 import Pact.Types.Persistence (TxId)
 import Pact.Types.Pretty
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame,PactEvent)
-import Pact.Types.Swagger
 import Pact.Types.Term
 import Pact.Types.Util
 
@@ -123,11 +124,11 @@ data ApiV1Client m = ApiV1Client
   }
 
 
+#if !defined(ghcjs_HOST_OS)
 -- | Public Pact REST API Swagger
 apiV1Swagger :: Swagger
 apiV1Swagger = toSwagger (Proxy :: Proxy ApiV1API)
 
-#if !defined(ghcjs_HOST_OS)
 sendClient :: SubmitBatch -> ClientM RequestKeys
 sendClient = v1Send apiV1Client
 
@@ -151,7 +152,6 @@ apiV1Client = ApiV1Client send poll listen local
   where
     (send :<|> poll :<|> listen :<|> local) :<|> _verify :<|> _version =
       clientIn pactServerAPI (Proxy :: Proxy m)
-#endif
 
 -- | Full `pact -s` REST API Swagger
 pactServerSwagger :: Swagger
@@ -406,3 +406,5 @@ instance ToSchema SigCapability where
   declareNamedSchema _ =
     swaggerDescription "a capability and any arguments it requires" $
       namedSchema "SigCapability" $ sketchSchema sigCapExample
+
+#endif
