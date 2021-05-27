@@ -86,6 +86,7 @@ unitTestFromDef nativeName = tests
       "enforce"              -> Just $ enforceTests nativeName
       "enforce-one"          -> Just $ enforceOneTests nativeName
       "enforce-pact-version" -> Just $ enforcePactVersionTests nativeName
+      "enumerate"            -> Just $ enumerateTests nativeName
       "filter"               -> Just $ filterTests nativeName
       "fold"                 -> Just $ foldTests nativeName
       "format"               -> Just $ formatTests nativeName
@@ -199,6 +200,7 @@ unitTestFromDef nativeName = tests
       "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
       "require-capability"  -> Just $ requireCapabilityTests nativeName
       "with-capability"     -> Just $ withCapabilityTests nativeName
+      "emit-event"          -> Just $ emitEventTests nativeName
 
       -- Non-native concepts to benchmark
       "use"       -> Just $ useTests nativeName
@@ -240,7 +242,7 @@ moduleTests = defGasUnitTests allExprs
         true ))|]
     moduleExpr = defPactExpression moduleExprText
     moduleRotateDesc = [text|(module accounts GOV [...some module code ...]) update module|]
-    moduleRotateExpr = PactExpression (accountsModule acctModuleName) (Just moduleRotateDesc)
+    moduleRotateExpr = PactExpression (regressionModule acctModuleName) (Just moduleRotateDesc)
     allExprs = moduleExpr :| [moduleRotateExpr]
 
 
@@ -335,6 +337,11 @@ withCapabilityTests = defGasUnitTests allExprs
       defPactExpression [text| ($acctModuleNameText.test-with-cap-func) |]
     allExprs = withCapExpr :| []
 
+
+emitEventTests :: NativeDefName -> GasUnitTests
+emitEventTests = defGasUnitTests (expr :| [])
+  where
+    expr = defPactExpression [text| ($acctModuleNameText.test-emit-event-func) |]
 
 requireCapabilityTests :: NativeDefName -> GasUnitTests
 requireCapabilityTests = tests
@@ -1369,7 +1376,7 @@ resumeTests nativeName = tests
         pactStep
           = Just $ PactStep 2 False (PactId "") (Just yieldVal)
         yieldVal
-          = Yield yieldData provenance
+          = Yield yieldData provenance Nothing
         provenance
           = bool Nothing (Just $ Provenance chainIdTest someModuleHash) isProv
         chainIdTest
@@ -1506,6 +1513,12 @@ makeListTests = defGasUnitTests allExprs
 
     allExprs = NEL.map (createPactExpr makeListExpr) sizesExpr
 
+enumerateTests :: NativeDefName -> GasUnitTests
+enumerateTests = defGasUnitTests allExprs
+  where
+    enumerateExpr arg =
+      [text| (enumerate 1 $arg) |]
+    allExprs = NEL.map (createPactExpr enumerateExpr) sizesExpr
 
 listModulesTests :: NativeDefName -> GasUnitTests
 listModulesTests = defGasUnitTests allExprs

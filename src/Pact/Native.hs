@@ -1,11 +1,11 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Native
@@ -22,6 +22,7 @@ module Pact.Native
     , moduleToMap
     , enforceDef
     , enforceOneDef
+    , enumerateDef
     , pactVersionDef
     , formatDef
     , strToIntDef
@@ -56,6 +57,7 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
+import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
@@ -68,7 +70,7 @@ import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Thyme.Time.Core (fromMicroseconds,posixSecondsToUTCTime)
+import Pact.Time
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Numeric
@@ -478,7 +480,7 @@ chainDataDef = defRNative "chain-data" chainData
       PublicData{..} <- view eePublicData
 
       let PublicMeta{..} = _pdPublicMeta
-          toTime = toTerm . posixSecondsToUTCTime . fromMicroseconds
+          toTime = toTerm . fromPosixTimestampMicros
 
       pure $ toTObject TyAny def
         [ (cdChainId, toTerm _pmChainId)
@@ -507,6 +509,24 @@ makeListDef :: NativeDef
 makeListDef = defGasRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
   ["(make-list 5 true)"]
   "Create list by repeating VALUE LENGTH times."
+
+enumerateDef :: NativeDef
+enumerateDef = defGasRNative "enumerate" enumerate
+  (funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger),("inc", tTyInteger)]
+  <> funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger)])
+  ["(enumerate 0 10 2)"
+   , "(enumerate 0 10)"
+   , "(enumerate 10 0)"]
+  $ T.intercalate " "
+  [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
+  , "INC is the increment between numbers in the sequence."
+  , "If INC is not given, it is assumed to be 1."
+  , "Additionally, if INC is not given and FROM is greater than TO assume a value for INC of -1."
+  , "If FROM equals TO, return the singleton list containing FROM, irrespective of INC's value."
+  , "If INC is equal to zero, this function will return the singleton list containing FROM."
+  , "If INC is such that FROM + INC > TO (when FROM < TO) or FROM + INC < TO (when FROM > TO) return the singleton list containing FROM."
+  , "Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or FROM + INC > TO (when FROM > TO), then this function fails."
+  ]
 
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
@@ -609,6 +629,7 @@ langDefs =
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support."
 
     ,makeListDef
+    ,enumerateDef
     ,reverseDef
     ,filterDef
     ,sortDef
@@ -734,6 +755,37 @@ makeList g i [TLitInteger len,value] = case typeof value of
   Right ty -> computeGas' g i (GMakeList len) $ return $ toTList ty def $ replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
+
+enumerate :: GasRNativeFun e
+enumerate g i = \case
+    [TLitInteger from', TLitInteger to', TLitInteger inc] ->
+      createEnumerateList from' to' inc
+    [TLitInteger from', TLitInteger to'] ->
+      createEnumerateList from' to' $ bool 1 (-1) (from' > to')
+    as -> argsError i as
+  where
+
+    computeList :: Integer -> V.Vector Integer -> Eval e (Gas, Term Name)
+    computeList gas = computeGas' g i (GMakeList gas)
+      . pure
+      . toTListV tTyInteger def
+      . fmap toTerm
+
+    step to' inc acc
+      | acc > to', inc > 0 = Nothing
+      | acc < to', inc < 0 = Nothing
+      | otherwise = Just (acc, acc + inc)
+
+    createEnumerateList from' to' inc
+      | from' == to' = computeList 1 (V.singleton from')
+      | inc == 0 = computeList 1 mempty
+      | from' < to', from' + inc < from' =
+        evalError' i "enumerate: increment diverges below from interval bounds."
+      | from' > to', from' + inc > from' =
+        evalError' i "enumerate: increment diverges above from interval bounds."
+      | otherwise = do
+        let g' = succ $ (abs (from' - to')) `div` (abs inc)
+        computeList g' $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
@@ -880,11 +932,13 @@ yield g i as = case as of
         Just pe -> do
           o' <- enforcePactValue' o
           y <- case tid of
-            Nothing -> return $ Yield o' Nothing
+            Nothing -> return $ Yield o' Nothing Nothing
             Just t -> do
+              sourceChain <- ifExecutionFlagSet FlagDisablePact40 (return Nothing) $
+                fmap Just $ view $ eePublicData . pdPublicMeta . pmChainId
               if _peStepHasRollback pe
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
-                else fmap (Yield o') $ provenanceOf i t
+                else fmap (\p -> Yield o' p sourceChain) $ provenanceOf i t
           computeGas' g i (GPreWrite (WriteYield y)) $ do
             evalPactExec . _Just . peYield .= Just y
             return u

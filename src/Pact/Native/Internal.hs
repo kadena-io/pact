@@ -44,6 +44,7 @@ import Control.Monad
 import Data.Aeson hiding (Object)
 import qualified Data.Aeson.Lens as A
 import Data.Default
+import Data.Foldable
 import qualified Data.Vector as V
 import Data.Text (Text)
 
@@ -237,10 +238,15 @@ enforceYield fa y = case _yProvenance y of
   Just p -> do
     m <- getCallingModule fa
     cid <- view $ eePublicData . pdPublicMeta . pmChainId
-    let p' = Provenance cid (_mHash m)
-
-    unless (p == p') $
-      evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p
+    ifExecutionFlagSet FlagDisablePact40
+      (do
+          let p' = Provenance cid (_mHash m)
+          unless (p == p') $
+              evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p)
+      (do
+          let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
+          unless (p `elem` p') $
+              evalError' fa $ "enforceYield: yield provenance " <> pretty p <> " does not match " <> pretty p')
 
     return y
 
