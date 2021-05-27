@@ -1,13 +1,8 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 
 -- |
 -- Module      :  Pact.ApiReq
@@ -30,10 +25,10 @@ module Pact.ApiReq
     ,mkKeyPairs
     ,AddSigsReq(..),addSigsReq
     ,combineSigs
+    ,combineSigDatas
     ,signCmd
     ,decodeYaml
     ,returnCommandIfDone
-    ,combineSigDatas
     ) where
 
 import Control.Applicative
@@ -47,12 +42,9 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
-import Data.Int
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe
 import qualified Data.Set as S
-import Data.String
 import Data.Text (Text, pack)
 import Data.Text.Encoding
 import Pact.Time
@@ -169,6 +161,28 @@ combineSigs fs outputLocal = do
     (ls, _) -> do
       error $ unlines $ "One or more files had errors:" : ls
 
+combineSigDatas :: [SigData Text] -> Bool -> IO ByteString
+combineSigDatas [] _ = error "Nothing to combine"
+combineSigDatas sds outputLocal = do
+  let hashes = S.fromList $ map _sigDataHash sds
+      cmds = S.fromList $ catMaybes $ map _sigDataCmd sds
+  when (S.size hashes /= 1 || S.size cmds /= 1) $ do
+    error "SigData files must contain exactly one unique hash and command.  Aborting..."
+  let sigs = foldl1 f $ map _sigDataSigs sds
+  returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
+  where
+    f accum sigs
+      | length accum /= length sigs = error "Sig lists have different lengths"
+      | otherwise = zipWith g accum sigs
+    g (pAccum,sAccum) (p,s) =
+      if pAccum /= p
+        then error $ unlines [ "Sig mismatch:"
+                             , show pAccum
+                             , show p
+                             , "All signatures must be in the same order"
+                             ]
+        else (pAccum, sAccum <|> s)
+
 loadSigData :: FilePath -> IO (Either String (SigData Text))
 loadSigData fp = do
   res <- Y.decodeFileEither fp
@@ -197,6 +211,17 @@ addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ByteString
 addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
   returnCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
+
+returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
+returnCommandIfDone outputLocal sd =
+  case sigDataToCommand sd of
+    Left _ -> return $ Y.encodeWith yamlOptions sd
+    Right c -> do
+      let res = verifyCommand $ fmap encodeUtf8 c
+          out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
+      return $ case res :: ProcessedCommand Value ParsedCode of
+        ProcSucc _ -> BSL.toStrict out
+        ProcFail _ -> Y.encodeWith yamlOptions sd
 
 addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
 addSigReq sd keyFile = do
@@ -268,39 +293,6 @@ mkApiReqCmd unsignedReq fp ar@ApiReq{..} =
 decodeYaml :: FromJSON b => FilePath -> IO b
 decodeYaml fp = either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
-
-returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
-returnCommandIfDone outputLocal sd =
-    case sigDataToCommand sd of
-      Left _ -> return $ Y.encodeWith yamlOptions sd
-      Right c -> do
-        let res = verifyCommand $ fmap encodeUtf8 c
-            out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
-        return $ case res :: ProcessedCommand Value ParsedCode of
-          ProcSucc _ -> BSL.toStrict out
-          ProcFail _ -> Y.encodeWith yamlOptions sd
-
-combineSigDatas :: [SigData Text] -> Bool -> IO ByteString
-combineSigDatas [] _ = error "Nothing to combine"
-combineSigDatas sds outputLocal = do
-  let hashes = S.fromList $ map _sigDataHash sds
-      cmds = S.fromList $ catMaybes $ map _sigDataCmd sds
-  when (S.size hashes /= 1 || S.size cmds /= 1) $ do
-    error "SigData files must contain exactly one unique hash and command.  Aborting..."
-  let sigs = foldl1 f $ map _sigDataSigs sds
-  returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
-  where
-    f accum sigs
-      | length accum /= length sigs = error "Sig lists have different lengths"
-      | otherwise = zipWith g accum sigs
-    g (pAccum,sAccum) (p,s) =
-      if pAccum /= p
-        then error $ unlines [ "Sig mismatch:"
-                             , show pAccum
-                             , show p
-                             , "All signatures must be in the same order"
-                             ]
-        else (pAccum, sAccum <|> s)
 
 putJSON :: ToJSON b => b -> IO ()
 putJSON = BSL.putStrLn . encode

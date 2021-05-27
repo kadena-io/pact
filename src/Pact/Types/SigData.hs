@@ -1,44 +1,37 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 
 -- |
--- Module      :  Pact.ApiReq
+-- Module      :  Pact.Types.SigData
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
 
-module Pact.Types.SigData where
+module Pact.Types.SigData
+  ( PublicKeyHex(..)
+  , SigData(..)
+  , commandToSigData
+  , sigDataToCommand
+  , sampleSigData
+  ) where
 
-import Control.Applicative
 import Control.Error
-import Control.Lens hiding ((.=))
 import Control.Monad.State.Strict
 import Data.Aeson
 import Data.Aeson.Types
 import qualified Data.HashMap.Strict as HM
-import Data.List
 import qualified Data.Map as M
-import Data.Maybe
 import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import GHC.Generics
-import Prelude
 
 import Pact.Parse
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (PublicKey)
-
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
   deriving (Eq,Ord,Show,Generic)
