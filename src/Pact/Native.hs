@@ -26,6 +26,8 @@ module Pact.Native
     , pactVersionDef
     , formatDef
     , strToIntDef
+    , strToListDef
+    , concatDef
     , intToStrDef
     , hashDef
     , ifDef
@@ -215,6 +217,22 @@ formatDef =
                   (head parts)
                   (zip (V.toList es) (tail parts))
     format i as = argsError i as
+
+strToListDef :: NativeDef
+strToListDef = defRNative "str-to-list" strToList
+  (funType (TyList tTyString) [("str", tTyString)] )
+  [ "(str-to-list \"hello\")"
+  , "(concat (map (+ \" \") (str-to-list \"abcde\")))"
+  ]
+  "Takes STR and returns a list of single character strings"
+
+concatDef :: NativeDef
+concatDef = defNative "concat" concat'
+  (funType tTyString [("str-list", TyList tTyString)] )
+  [ "(concat [\"k\" \"d\" \"a\"])"
+  , "(concat (map (+ \" \") (str-to-list \"abcde\")))"
+  ]
+  "Takes STR and returns a list of single character strings"
 
 strToIntDef :: NativeDef
 strToIntDef = defRNative "str-to-int" strToInt
@@ -572,9 +590,12 @@ dropDef = defRNative "drop" drop' takeDrop
   ]
   "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
+
 atDef :: NativeDef
-atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
-                      funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
+atDef = defRNative "at" at'
+  (  funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))]
+  <> funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))]
+  )
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
   "Index LIST at IDX, or get value with key IDX from OBJECT."
 
@@ -703,6 +724,8 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
     ,strToIntDef
+    ,strToListDef
+    ,concatDef
     ,intToStrDef
     ,hashDef
     ,defineNamespaceDef
@@ -858,12 +881,16 @@ tordV = tord V.reverse
 tordL :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
 tordL = tord reverse
 
+indexError :: Integer -> Term Name -> Int -> Eval e (Term Name)
+indexError idx idxLit idxLen =
+  evalError (_tInfo idxLit) $ "at: bad index " <>
+    pretty idx <> ", length " <> pretty idxLen
+
 at' :: RNativeFun e
 at' _ [li@(TLitInteger idx),TList ls _ _] =
     case ls V.!? fromIntegral idx of
       Just t -> return t
-      Nothing -> evalError (_tInfo li) $ "at: bad index " <>
-        pretty idx <> ", length " <> pretty (length ls)
+      Nothing -> indexError idx li $ length ls
 at' _ [idx,TObject (Object ls _ _ _) _] = lookupObj idx ls
 at' i as = argsError i as
 
@@ -1036,6 +1063,27 @@ constantly i as = argsError' i as
 identity :: RNativeFun e
 identity _ [a'] = return a'
 identity i as = argsError i as
+
+concat' :: NativeFun e
+concat' i [l] = gasUnreduced i [l] $ reduce l >>= \l' -> case l' of
+  TList ls _ _ -> 
+    let 
+      ls' = V.toList ls
+      concatTextList = flip TLiteral def . LString . T.concat
+     in fmap concatTextList $ forM ls' $ \case
+      TLitString s -> return s
+      t -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+  t -> evalError' i $ "concat: expecting list of strings: " <> pretty (abbrev t)
+concat' i as = argsError' i as
+
+-- | Converts a string to a vector of single character strings
+-- Ex. "kda" -> [ "k", "d", "a"]
+stringToCharList :: Text -> V.Vector (Term a)
+stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
+
+strToList :: RNativeFun e
+strToList _ [TLitString s] = return $ toTListV tTyString def $ stringToCharList s
+strToList i as = argsError i as
 
 strToInt :: RNativeFun e
 strToInt i as =
