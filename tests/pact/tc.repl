@@ -103,6 +103,9 @@
   (defun tc-map1 ()
     (map (mod 2) [1 2 3]))
 
+  (defun tc-str-to-list-concat-map ()
+    (concat (map (+ " ") (str-to-list "abcde"))))
+
   (defun plus-int (x:integer y) (+ x y))
 
   (defun tc-fold1 ()
