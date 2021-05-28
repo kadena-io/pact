@@ -63,7 +63,7 @@ import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.Thyme.Clock
+import Pact.Time
 import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude

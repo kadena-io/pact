@@ -46,9 +46,8 @@ listBound = 10
 
 -- Note [Time Representation]
 --
--- Pact uses the Thyme library (UTCTime) to represent times. Thyme internally
--- uses a 64-bit count of microseconds since the MJD epoch. So, our symbolic
--- representation is naturally a 64-bit integer.
+-- Pact internally represents time with microseconds precision. Our symbolic
+-- representation is a 64-bit integer.
 --
 -- The effect from a Pact-user's point of view is that we store 6 digits to
 -- the right of the decimal point in times (even though we don't print
@@ -71,7 +70,7 @@ evalIntAddTime
 evalIntAddTime timeT secsT = do
   time <- eval timeT
   secs <- eval secsT
-  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- Convert seconds to microseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
   pure $ time + fromIntegralS (secs * 1000000)
 
@@ -84,7 +83,7 @@ evalDecAddTime timeT secsT = do
   time <- eval timeT
   secs <- eval secsT
   if isConcreteS secs
-  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- Convert seconds to microseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
   then pure $ time + fromIntegralS (banker'sMethodS (secs * fromInteger' 1000000))
   else throwErrorNoLoc $ PossibleRoundoff

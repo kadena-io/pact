@@ -1,11 +1,11 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Native
@@ -72,7 +72,7 @@ import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Thyme.Time.Core (fromMicroseconds,posixSecondsToUTCTime)
+import Pact.Time
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Numeric
@@ -482,7 +482,7 @@ chainDataDef = defRNative "chain-data" chainData
       PublicData{..} <- view eePublicData
 
       let PublicMeta{..} = _pdPublicMeta
-          toTime = toTerm . posixSecondsToUTCTime . fromMicroseconds
+          toTime = toTerm . fromPosixTimestampMicros
 
       pure $ toTObject TyAny def
         [ (cdChainId, toTerm _pmChainId)
