@@ -21,6 +21,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- Required for GHC >= 9
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+
 -- |
 -- Module      :  Pact.Types.Term
 -- Copyright   :  (C) 2016 Stuart Popejoy
