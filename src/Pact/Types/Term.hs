@@ -18,6 +18,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- |
@@ -139,10 +140,6 @@ import Pact.Types.Type
 import Pact.Types.Util
 
 -- -------------------------------------------------------------------------- --
--- THE FOLLOWING TYPES HAVE NO DEPENDENCIES IN THIS MODULE
--- -------------------------------------------------------------------------- --
-
--- -------------------------------------------------------------------------- --
 -- Meta
 
 data Meta = Meta
@@ -251,13 +248,13 @@ instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 -- PactId
 
 newtype PactId = PactId Text
-    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,ToTerm,SizeOf)
+    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,SizeOf)
 
 instance Arbitrary PactId where
   arbitrary = PactId <$> hashToText <$> arbitrary
 
 -- -------------------------------------------------------------------------- --
--- User Guard
+-- UserGuard
 
 data UserGuard a = UserGuard
   { _ugFun :: !Name
@@ -329,7 +326,7 @@ data BindType n =
   -- | Normal "let" bind
   BindLet |
   -- | Schema-style binding, with string value for key
-  BindSchema { _bType :: n }
+  BindSchema { _bType :: !n }
   deriving (Eq,Functor,Foldable,Traversable,Ord,Show,Generic)
 
 instance (Pretty n) => Pretty (BindType n) where
@@ -351,8 +348,8 @@ instance NFData n => NFData (BindType n)
 -- BindPair
 
 data BindPair n = BindPair
-  { _bpArg :: Arg n
-  , _bpVal :: n }
+  { _bpArg :: !(Arg n)
+  , _bpVal :: !n }
   deriving (Eq,Show,Functor,Traversable,Foldable,Generic)
 
 toBindPairs :: BindPair n -> (Arg n,n)
@@ -419,12 +416,12 @@ instance Arbitrary ModuleHash where
   arbitrary = ModuleHash <$> resize 20000 arbitrary
 
 -- -------------------------------------------------------------------------- --
--- DefcapMeta n
+-- DefcapMeta
 
 -- | Metadata specific to Defcaps.
 data DefcapMeta n =
   DefcapManaged
-  { _dcManaged :: Maybe (Text,n)
+  { _dcManaged :: !(Maybe (Text,n))
     -- ^ "Auto" managed or user-managed by (param,function)
   } |
   DefcapEvent
@@ -472,7 +469,7 @@ instance (ToJSON n,FromJSON n) => FromJSON (DefMeta n) where
   parseJSON = fmap DMDefcap . parseJSON
 
 -- -------------------------------------------------------------------------- --
--- ConstVal n
+-- ConstVal
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -534,7 +531,7 @@ instance Arbitrary FieldKey where
   arbitrary = resize 50 (FieldKey <$> genBareText)
 
 -- -------------------------------------------------------------------------- --
--- Step n
+-- Step
 
 data Step n = Step
   { _sEntity :: !(Maybe n)
@@ -612,13 +609,6 @@ instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
--- THE FOLLOWING TYPES HAVE DEPENDENCIES IN THIS MODULE
--- -------------------------------------------------------------------------- --
-
--- -------------------------------------------------------------------------- --
--- Level 1
-
--- -------------------------------------------------------------------------- --
 -- PactGuard
 
 data PactGuard = PactGuard
@@ -645,7 +635,7 @@ instance ToJSON PactGuard where toJSON = lensyToJSON 3
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
--- ObjectMap v
+-- ObjectMap
 
 -- | Simple dictionary for object values.
 newtype ObjectMap v = ObjectMap { _objectMap :: (M.Map FieldKey v) }
@@ -695,7 +685,7 @@ instance Pretty Use where
     in parensSep $ "use" : args
 
 instance ToJSON Use where
-  toJSON Use{..} = object $
+  toJSON Use{..} = object
     [ "module" .= _uModuleName
     , "hash" .= _uModuleHash
     , "imports" .= _uImports
@@ -710,9 +700,6 @@ instance FromJSON Use where
         <*> o .: "i"
 
 instance NFData Use
-
--- -------------------------------------------------------------------------- --
--- Level 2
 
 -- -------------------------------------------------------------------------- --
 -- Guard
@@ -774,7 +761,7 @@ instance (FromJSON a,ToJSON a) => ToJSON (Guard a) where toJSON = encoder guardC
 instance (FromJSON a,ToJSON a) => FromJSON (Guard a) where parseJSON = decoder guardCodec
 
 -- -------------------------------------------------------------------------- --
--- Module g
+-- Module
 
 data Module g = Module
   { _mName :: !ModuleName
@@ -783,8 +770,8 @@ data Module g = Module
   , _mCode :: !Code
   , _mHash :: !ModuleHash
   , _mBlessed :: !(HS.HashSet ModuleHash)
-  , _mInterfaces :: [ModuleName]
-  , _mImports :: [Use]
+  , _mInterfaces :: ![ModuleName]
+  , _mImports :: ![Use]
   } deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
 
 instance NFData g => NFData (Module g)
@@ -803,7 +790,7 @@ data Interface = Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
-  , _interfaceImports :: [Use]
+  , _interfaceImports :: ![Use]
   } deriving (Eq,Show,Generic)
 instance Pretty Interface where
   pretty Interface{..} = parensSep [ "interface", pretty _interfaceName ]
@@ -814,15 +801,12 @@ instance FromJSON Interface where parseJSON = lensyParseJSON 10
 instance NFData Interface
 
 -- -------------------------------------------------------------------------- --
--- Level 3
-
--- -------------------------------------------------------------------------- --
--- Namespace a
+-- Namespace
 
 data Namespace a = Namespace
-  { _nsName :: NamespaceName
-  , _nsUser :: (Guard a)
-  , _nsAdmin :: (Guard a)
+  { _nsName :: !NamespaceName
+  , _nsUser :: !(Guard a)
+  , _nsAdmin :: !(Guard a)
   } deriving (Eq, Show, Generic)
 
 instance (Arbitrary a) => Arbitrary (Namespace a) where
@@ -841,7 +825,7 @@ instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lens
 instance (NFData a) => NFData (Namespace a)
 
 -- -------------------------------------------------------------------------- --
--- ModuleDef g
+-- ModuleDef
 
 data ModuleDef g
   = MDModule !(Module g)
@@ -876,8 +860,15 @@ moduleDefMeta (MDInterface m) = _interfaceMeta m
 
 
 -- -------------------------------------------------------------------------- --
--- THE FOLLOWING TYPES HAVE CYCLIC DEPENDENCIES
--- -------------------------------------------------------------------------- --
+-- The following types have cyclic dependencies. There must be no TH splice
+-- in between the definitions of these types.
+--
+-- * FunApp
+-- * Ref' d (and Ref)
+-- * NativeDFun
+-- * Def n
+-- * Object n
+-- * Term n
 
 -- -------------------------------------------------------------------------- --
 -- FunApp
@@ -892,6 +883,13 @@ data FunApp = FunApp {
     , _faDocs :: !(Maybe Text)
     } deriving (Generic)
 
+deriving instance (Show1 Term) => Show FunApp
+deriving instance (Eq1 Term) => Eq FunApp
+instance NFData FunApp
+instance ToJSON FunApp where toJSON = lensyToJSON 3
+instance FromJSON FunApp where parseJSON = lensyParseJSON 3
+instance HasInfo FunApp where getInfo = _faInfo
+
 -- -------------------------------------------------------------------------- --
 -- Ref'
 
@@ -900,21 +898,42 @@ type Ref = Ref' (Term Name)
 -- | Variable type for an evaluable 'Term'.
 data Ref' d =
   -- | "Reduced" (evaluated) or native (irreducible) term.
-  Direct d |
+  Direct !d |
   -- | Unevaulated/un-reduced term, never a native.
-  Ref (Term (Ref' d))
+  Ref !(Term (Ref' d))
   deriving (Functor,Foldable,Traversable,Generic)
+
+deriving instance (Eq1 Term, Eq d) => Eq (Ref' d)
+deriving instance (Show1 Term, Show d) => Show (Ref' d)
+
+instance NFData d => NFData (Ref' d)
+
+instance Pretty d => Pretty (Ref' d) where
+  pretty (Direct tm) = pretty tm
+  pretty (Ref tm)    = pretty tm
+
+instance HasInfo n => HasInfo (Ref' n) where
+  getInfo (Direct d) = getInfo d
+  getInfo (Ref r) = getInfo r
 
 -- -------------------------------------------------------------------------- --
 -- NativeDFun
 
 data NativeDFun = NativeDFun
-  { _nativeName :: NativeDefName
-  , _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
+  { _nativeName :: !NativeDefName
+  , _nativeFun :: !(forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name))
   }
 
+instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
+instance Show NativeDFun where
+  showsPrec p (NativeDFun name _) = showParen (p > 10) $
+    showString "NativeDFun " . showsPrec 11 name . showString " _"
+
+instance NFData NativeDFun where
+  rnf (NativeDFun n _f) = seq n ()
+
 -- -------------------------------------------------------------------------- --
--- Def n
+-- Def
 
 data Def n = Def
   { _dDefName :: !DefName
@@ -927,156 +946,42 @@ data Def n = Def
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
+deriving instance (Show1 Term, Show n) => Show (Def n)
+deriving instance (Eq1 Term, Eq n) => Eq (Def n)
+instance NFData (Term n) => NFData (Def n)
+instance (Eq1 Term, Eq n) => Ord (Def n) where
+  a `compare` b = nm a `compare` nm b
+    where nm d = (_dModule d, _dDefName d)
+
+instance HasInfo (Def n) where getInfo = _dInfo
+
+instance Pretty (Term n) => Pretty (Def n) where
+  pretty Def{..} = parensSep $
+    [ prettyString (defTypeRep _dDefType)
+    , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
+    , parensSep $ pretty <$> _ftArgs _dFunType
+    ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
+    ++ maybe [] (pure . pretty) _dDefMeta
+
+instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Def n) where toJSON = lensyToJSON 2
+instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
+
+derefDef :: Def Ref -> Name
+derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
+
 -- -------------------------------------------------------------------------- --
--- Object n
+-- Object
 
 -- | Full Term object.
 data Object n = Object
   { _oObject :: !(ObjectMap (Term n))
   , _oObjectType :: !(Type (Term n))
-  , _oKeyOrder :: Maybe [FieldKey]
+  , _oKeyOrder :: !(Maybe [FieldKey])
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
--- -------------------------------------------------------------------------- --
--- Term
-
--- | Pact evaluable term.
-data Term n =
-    TModule {
-      _tModuleDef :: ModuleDef (Term n)
-    , _tModuleBody :: !(Scope () Term n)
-    , _tInfo :: !Info
-    } |
-    TList {
-      _tList :: !(Vector (Term n))
-    , _tListType :: Type (Term n)
-    , _tInfo :: !Info
-    } |
-    TDef {
-      _tDef :: Def n
-    , _tInfo :: !Info
-    } |
-    TNative {
-      _tNativeName :: !NativeDefName
-    , _tNativeFun :: !NativeDFun
-    , _tFunTypes :: FunTypes (Term n)
-    , _tNativeExamples :: ![Example]
-    , _tNativeDocs :: Text
-    , _tNativeTopLevelOnly :: Bool
-    , _tInfo :: !Info
-    } |
-    TConst {
-      _tConstArg :: !(Arg (Term n))
-    , _tModule :: !(Maybe ModuleName)
-    , _tConstVal :: !(ConstVal (Term n))
-    , _tMeta :: !Meta
-    , _tInfo :: !Info
-    } |
-    TApp {
-      _tApp :: !(App (Term n))
-    , _tInfo :: !Info
-    } |
-    TVar {
-      _tVar :: !n
-    , _tInfo :: !Info
-    } |
-    TBinding {
-      _tBindPairs :: ![BindPair (Term n)]
-    , _tBindBody :: !(Scope Int Term n)
-    , _tBindType :: BindType (Type (Term n))
-    , _tInfo :: !Info
-    } |
-    TObject {
-      _tObject :: !(Object n)
-    , _tInfo :: !Info
-    } |
-    TSchema {
-      _tSchemaName :: !TypeName
-    , _tModule :: !(Maybe ModuleName)
-    , _tMeta :: !Meta
-    , _tFields :: ![Arg (Term n)]
-    , _tInfo :: !Info
-    } |
-    TLiteral {
-      _tLiteral :: !Literal
-    , _tInfo :: !Info
-    } |
-    TGuard {
-      _tGuard :: !(Guard (Term n))
-    , _tInfo :: !Info
-    } |
-    TUse {
-      _tUse :: Use
-    , _tInfo :: Info
-    } |
-    TStep {
-      _tStep :: Step (Term n)
-    , _tMeta :: !Meta
-    , _tInfo :: !Info
-    } |
-    TModRef {
-      _tModRef :: !ModRef
-    , _tInfo :: !Info
-    } |
-    TTable {
-      _tTableName :: !TableName
-    , _tModuleName :: ModuleName
-    , _tHash :: !ModuleHash
-    , _tTableType :: !(Type (Term n))
-    , _tMeta :: !Meta
-    , _tInfo :: !Info
-    } |
-    TDynamic {
-      _tDynModRef :: !(Term n)
-    , _tDynMember :: !(Term n)
-    , _tInfo :: !Info
-    }
-    deriving (Functor,Foldable,Traversable,Generic)
-
--- -------------------------------------------------------------------------- --
--- INSTANCES FOR CYCLIC TYPES
--- -------------------------------------------------------------------------- --
-
-tLit :: Literal -> Term n
-tLit = (`TLiteral` def)
-{-# INLINE tLit #-}
-
-class ToTerm a where
-    toTerm :: a -> Term m
-instance ToTerm Bool where toTerm = tLit . LBool
-instance ToTerm Integer where toTerm = tLit . LInteger
-instance ToTerm Int where toTerm = tLit . LInteger . fromIntegral
-instance ToTerm Decimal where toTerm = tLit . LDecimal
-instance ToTerm Text where toTerm = tLit . LString
-instance ToTerm KeySet where toTerm k = TGuard (GKeySet k) def
-instance ToTerm Literal where toTerm = tLit
-instance ToTerm UTCTime where toTerm = tLit . LTime
-instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
-instance ToTerm Word64 where toTerm = tLit . LInteger . fromIntegral
-instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral
-instance ToTerm TableName where toTerm = tLit . LString . asString
-
--- -------------------------------------------------------------------------- --
-
-return []
-
--- -------------------------------------------------------------------------- --
--- NativeDFun Instances
-
-instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
-instance Show NativeDFun where
-  showsPrec p (NativeDFun name _) = showParen (p > 10) $
-    showString "NativeDFun " . showsPrec 11 name . showString " _"
-
-instance NFData NativeDFun where
-  rnf (NativeDFun n _f) = seq n ()
-
--- -------------------------------------------------------------------------- --
--- Object Instances
-
-deriving instance Show n => Show (Object n)
-deriving instance Eq n => Eq (Object n)
+deriving instance (Show1 Term, Show n) => Show (Object n)
+deriving instance (Eq1 Term, Eq n) => Eq (Object n)
 
 instance HasInfo (Object n) where getInfo = _oInfo
 
@@ -1103,62 +1008,103 @@ instance (ToJSON n, FromJSON n) => FromJSON (Object n) where
     Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
 
 -- -------------------------------------------------------------------------- --
--- Ref Instances
+-- Term
 
-deriving instance Eq d => Eq (Ref' d)
-deriving instance Show d => Show (Ref' d)
+-- | Pact evaluable term.
+data Term n =
+    TModule {
+      _tModuleDef :: !(ModuleDef (Term n))
+    , _tModuleBody :: !(Scope () Term n)
+    , _tInfo :: !Info
+    } |
+    TList {
+      _tList :: !(Vector (Term n))
+    , _tListType :: !(Type (Term n))
+    , _tInfo :: !Info
+    } |
+    TDef {
+      _tDef :: Def n
+    , _tInfo :: !Info
+    } |
+    TNative {
+      _tNativeName :: !NativeDefName
+    , _tNativeFun :: !NativeDFun
+    , _tFunTypes :: !(FunTypes (Term n))
+    , _tNativeExamples :: ![Example]
+    , _tNativeDocs :: !Text
+    , _tNativeTopLevelOnly :: !Bool
+    , _tInfo :: !Info
+    } |
+    TConst {
+      _tConstArg :: !(Arg (Term n))
+    , _tModule :: !(Maybe ModuleName)
+    , _tConstVal :: !(ConstVal (Term n))
+    , _tMeta :: !Meta
+    , _tInfo :: !Info
+    } |
+    TApp {
+      _tApp :: !(App (Term n))
+    , _tInfo :: !Info
+    } |
+    TVar {
+      _tVar :: !n
+    , _tInfo :: !Info
+    } |
+    TBinding {
+      _tBindPairs :: ![BindPair (Term n)]
+    , _tBindBody :: !(Scope Int Term n)
+    , _tBindType :: !(BindType (Type (Term n)))
+    , _tInfo :: !Info
+    } |
+    TObject {
+      _tObject :: !(Object n)
+    , _tInfo :: !Info
+    } |
+    TSchema {
+      _tSchemaName :: !TypeName
+    , _tModule :: !(Maybe ModuleName)
+    , _tMeta :: !Meta
+    , _tFields :: ![Arg (Term n)]
+    , _tInfo :: !Info
+    } |
+    TLiteral {
+      _tLiteral :: !Literal
+    , _tInfo :: !Info
+    } |
+    TGuard {
+      _tGuard :: !(Guard (Term n))
+    , _tInfo :: !Info
+    } |
+    TUse {
+      _tUse :: !Use
+    , _tInfo :: !Info
+    } |
+    TStep {
+      _tStep :: !(Step (Term n))
+    , _tMeta :: !Meta
+    , _tInfo :: !Info
+    } |
+    TModRef {
+      _tModRef :: !ModRef
+    , _tInfo :: !Info
+    } |
+    TTable {
+      _tTableName :: !TableName
+    , _tModuleName :: !ModuleName
+    , _tHash :: !ModuleHash
+    , _tTableType :: !(Type (Term n))
+    , _tMeta :: !Meta
+    , _tInfo :: !Info
+    } |
+    TDynamic {
+      _tDynModRef :: !(Term n)
+    , _tDynMember :: !(Term n)
+    , _tInfo :: !Info
+    }
+    deriving (Functor,Foldable,Traversable,Generic)
 
-instance NFData d => NFData (Ref' d)
-
-instance Pretty d => Pretty (Ref' d) where
-  pretty (Direct tm) = pretty tm
-  pretty (Ref tm)    = pretty tm
-
-instance HasInfo n => HasInfo (Ref' n) where
-  getInfo (Direct d) = getInfo d
-  getInfo (Ref r) = getInfo r
-
--- -------------------------------------------------------------------------- --
--- FunApp Instances
-
-deriving instance Show FunApp
-deriving instance Eq FunApp
-instance NFData FunApp
-instance ToJSON FunApp where toJSON = lensyToJSON 3
-instance FromJSON FunApp where parseJSON = lensyParseJSON 3
-instance HasInfo FunApp where getInfo = _faInfo
-
--- -------------------------------------------------------------------------- --
--- Def Instances
-
-deriving instance Show n => Show (Def n)
-deriving instance Eq n => Eq (Def n)
-instance NFData n => NFData (Def n)
-instance Eq n => Ord (Def n) where
-  a `compare` b = nm a `compare` nm b
-    where nm d = (_dModule d, _dDefName d)
-
-instance HasInfo (Def n) where getInfo = _dInfo
-
-instance Pretty n => Pretty (Def n) where
-  pretty Def{..} = parensSep $
-    [ prettyString (defTypeRep _dDefType)
-    , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
-    , parensSep $ pretty <$> _ftArgs _dFunType
-    ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
-    ++ maybe [] (pure . pretty) _dDefMeta
-
-instance (ToJSON n, FromJSON n) => ToJSON (Def n) where toJSON = lensyToJSON 2
-instance (ToJSON n, FromJSON n) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
-
-derefDef :: Def Ref -> Name
-derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
-
--- -------------------------------------------------------------------------- --
--- Term Instances
-
-deriving instance Show n => Show (Term n)
-deriving instance Eq n => Eq (Term n)
+deriving instance (Show1 Term, Show n) => Show (Term n)
+deriving instance (Eq1 Term, Eq n) => Eq (Term n)
 instance NFData n => NFData (Term n)
 
 instance HasInfo (Term n) where
@@ -1373,82 +1319,40 @@ instance (ToJSON n, FromJSON n) => ToJSON (Term n) where
   toJSON = encoder termCodec
 
 -- -------------------------------------------------------------------------- --
--- Eq1 Instances
+-- ToTerm
 
-instance Eq1 Guard where
-  liftEq = $(makeLiftEq ''Guard)
-instance Eq1 UserGuard where
-  liftEq = $(makeLiftEq ''UserGuard)
-instance Eq1 BindPair where
-  liftEq = $(makeLiftEq ''BindPair)
-instance Eq1 App where
-  liftEq = $(makeLiftEq ''App)
-instance Eq1 BindType where
-  liftEq = $(makeLiftEq ''BindType)
-instance Eq1 ConstVal where
-  liftEq = $(makeLiftEq ''ConstVal)
-instance Eq1 DefcapMeta where
-  liftEq = $(makeLiftEq ''DefcapMeta)
-instance Eq1 DefMeta where
-  liftEq = $(makeLiftEq ''DefMeta)
-instance Eq1 Def where
-  liftEq = $(makeLiftEq ''Def)
-instance Eq1 ModuleDef where
-  liftEq = $(makeLiftEq ''ModuleDef)
-instance Eq1 Module where
-  liftEq = $(makeLiftEq ''Module)
-instance Eq1 Governance where
-  liftEq = $(makeLiftEq ''Governance)
-instance Eq1 ObjectMap where
-  liftEq = $(makeLiftEq ''ObjectMap)
-instance Eq1 Object where
-  liftEq = $(makeLiftEq ''Object)
-instance Eq1 Step where
-  liftEq = $(makeLiftEq ''Step)
-instance Eq1 Term where
-  liftEq = $(makeLiftEq ''Term)
+class ToTerm a where
+    toTerm :: a -> Term m
+instance ToTerm Bool where toTerm = tLit . LBool
+instance ToTerm Integer where toTerm = tLit . LInteger
+instance ToTerm Int where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm Decimal where toTerm = tLit . LDecimal
+instance ToTerm Text where toTerm = tLit . LString
+instance ToTerm KeySet where toTerm k = TGuard (GKeySet k) def
+instance ToTerm Literal where toTerm = tLit
+instance ToTerm UTCTime where toTerm = tLit . LTime
+instance ToTerm Word32 where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm Word64 where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm Int64 where toTerm = tLit . LInteger . fromIntegral
+instance ToTerm TableName where toTerm = tLit . LString . asString
+instance ToTerm PactId where toTerm (PactId t) = toTerm t
 
--- -------------------------------------------------------------------------- --
--- Show1 Instances
+toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
+toTermList ty l = TList (V.map toTerm (V.fromList (toList l))) ty def
 
-instance Show1 Guard where
-  liftShowsPrec = $(makeLiftShowsPrec ''Guard)
-instance Show1 UserGuard where
-  liftShowsPrec = $(makeLiftShowsPrec ''UserGuard)
-instance Show1 BindPair where
-  liftShowsPrec = $(makeLiftShowsPrec ''BindPair)
-instance Show1 App where
-  liftShowsPrec = $(makeLiftShowsPrec ''App)
-instance Show1 ObjectMap where
-  liftShowsPrec = $(makeLiftShowsPrec ''ObjectMap)
-instance Show1 Object where
-  liftShowsPrec = $(makeLiftShowsPrec ''Object)
-instance Show1 BindType where
-  liftShowsPrec = $(makeLiftShowsPrec ''BindType)
-instance Show1 ConstVal where
-  liftShowsPrec = $(makeLiftShowsPrec ''ConstVal)
-instance Show1 DefcapMeta where
-  liftShowsPrec = $(makeLiftShowsPrec ''DefcapMeta)
-instance Show1 DefMeta where
-  liftShowsPrec = $(makeLiftShowsPrec ''DefMeta)
-instance Show1 Def where
-  liftShowsPrec = $(makeLiftShowsPrec ''Def)
-instance Show1 ModuleDef where
-  liftShowsPrec = $(makeLiftShowsPrec ''ModuleDef)
-instance Show1 Module where
-  liftShowsPrec = $(makeLiftShowsPrec ''Module)
-instance Show1 Governance where
-  liftShowsPrec = $(makeLiftShowsPrec ''Governance)
-instance Show1 Step where
-  liftShowsPrec = $(makeLiftShowsPrec ''Step)
-instance Show1 Term where
-  liftShowsPrec = $(makeLiftShowsPrec ''Term)
+-- | Convenience for OverloadedStrings annoyances
+tStr :: Text -> Term n
+tStr = toTerm
 
 -- -------------------------------------------------------------------------- --
 -- Miscelaneous Functions
 
+tLit :: Literal -> Term n
+tLit = (`TLiteral` def)
+{-# INLINE tLit #-}
+
 -- Support 'termEq' in Ref'
-refEq :: Eq n => Ref' (Term n) -> Ref' (Term n) -> Bool
+refEq :: Eq1 Guard => Eq n => Ref' (Term n) -> Ref' (Term n) -> Bool
 refEq a b = case (a,b) of
   (Direct x,Direct y) -> termEq x y
   (Ref x,Ref y) -> termEq1 refEq x y
@@ -1465,9 +1369,6 @@ toTList ty i = toTListV ty i . V.fromList
 
 toTListV :: Type (Term n) -> Info -> V.Vector (Term n) -> Term n
 toTListV ty i vs = TList vs ty i
-
-toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
-toTermList ty l = TList (V.map toTerm (V.fromList (toList l))) ty def
 
 guardTypeOf :: Guard a -> GuardType
 guardTypeOf g = case g of
@@ -1518,10 +1419,6 @@ pattern TLitBool :: Bool -> Term t
 pattern TLitBool b <- TLiteral (LBool b) _
 
 
--- | Convenience for OverloadedStrings annoyances
-tStr :: Text -> Term n
-tStr = toTerm
-
 -- | Equality dictionary for term-level equality
 --
 canEq :: Term n -> Term n -> Bool
@@ -1535,16 +1432,16 @@ canEq _ _ = False
 
 -- | Support pact `=` for value-level terms
 -- and TVar for types.
-termEq :: Eq n => Term n -> Term n -> Bool
+termEq :: Eq1 Guard => Eq n => Term n -> Term n -> Bool
 termEq a b = termEq1 (==) a b
 
 -- | Support 'termEq' for 'Term Ref'
-termRefEq :: Term Ref -> Term Ref -> Bool
+termRefEq :: Eq1 Guard => Term Ref -> Term Ref -> Bool
 termRefEq = termEq1 refEq
 
 -- | Lifted version; support pact `=` for value-level terms
 -- and TVar for types.
-termEq1 :: (n -> n -> Bool) -> Term n -> Term n -> Bool
+termEq1 :: Eq1 Guard => (n -> n -> Bool) -> Term n -> Term n -> Bool
 termEq1 eq (TList a _ _) (TList b _ _) = length a == length b && and (V.zipWith (termEq1 eq) a b)
 termEq1 eq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap b) _ _ _) _) =
   -- O(3n), 2x M.toList + short circuiting walk
@@ -1565,27 +1462,108 @@ termEq1 _ _ _ = False
 -- | Workhorse runtime typechecker on `Type (Term n)` to specialize
 -- 'unifiesWith' on Term/'termEq'.
 -- First argument is spec, second is value.
-canUnifyWith :: Eq n => Type (Term n) -> Type (Term n) -> Bool
+canUnifyWith :: Eq1 Guard => Eq n => Type (Term n) -> Type (Term n) -> Bool
 canUnifyWith = unifiesWith termEq
 
 -- -------------------------------------------------------------------------- --
 -- Lenses
 
-makeLenses ''Term
 makeLenses ''Namespace
-makeLenses ''FunApp
-makePrisms ''Ref'
 makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''Interface
 makePrisms ''ModuleDef
 makeLenses ''App
-makeLenses ''Def
 makePrisms ''DefType
-makeLenses ''Object
 makeLenses ''BindPair
 makeLenses ''Step
 makeLenses ''ModuleHash
 makeLenses ''ModRef
 makePrisms ''Guard
+
+makeLenses ''FunApp
+makePrisms ''Ref'
+makeLenses ''Def
+makeLenses ''Object
+makeLenses ''Term
+
+-- This noop TH splice is required to ensure that all types that are defined
+-- above in this module are available in the type environment of the following
+-- TH splices.
+--
+return []
+
+-- -------------------------------------------------------------------------- --
+-- Eq1 Instances
+
+instance Eq1 Guard where
+  liftEq = $(makeLiftEq ''Guard)
+instance Eq1 UserGuard where
+  liftEq = $(makeLiftEq ''UserGuard)
+instance Eq1 BindPair where
+  liftEq = $(makeLiftEq ''BindPair)
+instance Eq1 App where
+  liftEq = $(makeLiftEq ''App)
+instance Eq1 BindType where
+  liftEq = $(makeLiftEq ''BindType)
+instance Eq1 ConstVal where
+  liftEq = $(makeLiftEq ''ConstVal)
+instance Eq1 DefcapMeta where
+  liftEq = $(makeLiftEq ''DefcapMeta)
+instance Eq1 DefMeta where
+  liftEq = $(makeLiftEq ''DefMeta)
+instance Eq1 ModuleDef where
+  liftEq = $(makeLiftEq ''ModuleDef)
+instance Eq1 Module where
+  liftEq = $(makeLiftEq ''Module)
+instance Eq1 Governance where
+  liftEq = $(makeLiftEq ''Governance)
+instance Eq1 ObjectMap where
+  liftEq = $(makeLiftEq ''ObjectMap)
+instance Eq1 Step where
+  liftEq = $(makeLiftEq ''Step)
+
+instance Eq1 Def where
+  liftEq = $(makeLiftEq ''Def)
+instance Eq1 Object where
+  liftEq = $(makeLiftEq ''Object)
+instance Eq1 Term where
+  liftEq = $(makeLiftEq ''Term)
+
+-- -------------------------------------------------------------------------- --
+-- Show1 Instances
+
+instance Show1 Guard where
+  liftShowsPrec = $(makeLiftShowsPrec ''Guard)
+instance Show1 UserGuard where
+  liftShowsPrec = $(makeLiftShowsPrec ''UserGuard)
+instance Show1 BindPair where
+  liftShowsPrec = $(makeLiftShowsPrec ''BindPair)
+instance Show1 App where
+  liftShowsPrec = $(makeLiftShowsPrec ''App)
+instance Show1 ObjectMap where
+  liftShowsPrec = $(makeLiftShowsPrec ''ObjectMap)
+instance Show1 BindType where
+  liftShowsPrec = $(makeLiftShowsPrec ''BindType)
+instance Show1 ConstVal where
+  liftShowsPrec = $(makeLiftShowsPrec ''ConstVal)
+instance Show1 DefcapMeta where
+  liftShowsPrec = $(makeLiftShowsPrec ''DefcapMeta)
+instance Show1 DefMeta where
+  liftShowsPrec = $(makeLiftShowsPrec ''DefMeta)
+instance Show1 ModuleDef where
+  liftShowsPrec = $(makeLiftShowsPrec ''ModuleDef)
+instance Show1 Module where
+  liftShowsPrec = $(makeLiftShowsPrec ''Module)
+instance Show1 Governance where
+  liftShowsPrec = $(makeLiftShowsPrec ''Governance)
+instance Show1 Step where
+  liftShowsPrec = $(makeLiftShowsPrec ''Step)
+
+instance Show1 Def where
+  liftShowsPrec = $(makeLiftShowsPrec ''Def)
+instance Show1 Object where
+  liftShowsPrec = $(makeLiftShowsPrec ''Object)
+instance Show1 Term where
+  liftShowsPrec = $(makeLiftShowsPrec ''Term)
 
