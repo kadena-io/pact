@@ -1740,10 +1740,10 @@ mkOpNamePrism table =
   in prism' lookupReverse lookupForward
 
 toOp :: Prism' Text op -> Text -> Maybe op
-toOp = preview
+toOp p = preview p
 
 toText :: Prism' Text op -> op -> Text
-toText = review
+toText p = review p
 
 toDoc :: Prism' Text op -> op -> Pretty.Doc
 toDoc p op = pretty $ toText p op

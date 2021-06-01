@@ -465,7 +465,7 @@ instance (Eq (SingTy a), Eq (tm a)) => Eq (Column tm a) where
 instance (Ord (SingTy a), Ord (tm a)) => Ord (Column tm a) where
   Column _ a `compare` Column _ b = a `compare` b
 
-data Object (tm :: Ty -> *) (m :: [(Symbol, Ty)])
+data Object (tm :: Ty -> Type) (m :: [(Symbol, Ty)])
   = Object (HList (Column tm) m)
 
 pattern ObjectNil :: () => schema ~ '[] => Object tm schema
@@ -918,8 +918,9 @@ withPretty a = withDict $ singMkPretty a
         -> withPretty ty' $
            withDict (singMkPretty (SObjectUnsafe (SingList tys))) Dict
 
+-- withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
-withTypeable a = withDict $ singMkTypeable a
+withTypeable a b = withDict (singMkTypeable a) b
   where
 
     singMkTypeable :: SingTy a -> Dict (Typeable a, Typeable (Concrete a))

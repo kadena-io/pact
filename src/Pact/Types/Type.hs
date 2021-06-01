@@ -1,10 +1,12 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |
 -- Module      :  Pact.Types.Type
@@ -382,7 +384,7 @@ isVarTy _ = False
 -- 'a unifiesWith b' means 'a' "can represent/contains" 'b'.
 -- In use, 'a' is the spec, and 'b' is the value type being unified with 'a'.
 -- First argument is 'Eq1' predicate.
-unifiesWith :: (n -> n -> Bool) -> Type n -> Type n -> Bool
+unifiesWith :: Eq1 Type => (n -> n -> Bool) -> Type n -> Type n -> Bool
 unifiesWith f a b | liftEq f a b = True
 unifiesWith _ TyAny _ = True
 unifiesWith _ _ TyAny = False
@@ -418,18 +420,27 @@ elem1 f = elem' (liftEq f)
 elem' :: Foldable t => (a -> a -> Bool) -> a -> t a -> Bool
 elem' f = any . f
 
-
 makeLenses ''Type
 makeLenses ''FunType
 makeLenses ''Arg
 makeLenses ''TypeVar
 makeLenses ''TypeVarName
 
-deriveShow1 ''TypeVar
-deriveShow1 ''Arg
-deriveShow1 ''FunType
-deriveShow1 ''Type
-deriveEq1 ''TypeVar
-deriveEq1 ''Arg
-deriveEq1 ''FunType
-deriveEq1 ''Type
+instance Show1 Type where
+  liftShowsPrec = $(makeLiftShowsPrec ''Type)
+instance Show1 TypeVar where
+  liftShowsPrec = $(makeLiftShowsPrec ''TypeVar)
+instance Show1 FunType where
+  liftShowsPrec = $(makeLiftShowsPrec ''FunType)
+instance Show1 Arg where
+  liftShowsPrec = $(makeLiftShowsPrec ''Arg)
+
+instance Eq1 Type where
+    liftEq = $(makeLiftEq ''Type)
+instance Eq1 TypeVar where
+    liftEq = $(makeLiftEq ''TypeVar)
+instance Eq1 FunType where
+    liftEq = $(makeLiftEq ''FunType)
+instance Eq1 Arg where
+    liftEq = $(makeLiftEq ''Arg)
+
