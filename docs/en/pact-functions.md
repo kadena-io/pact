@@ -154,6 +154,18 @@ Create a namespace called NAMESPACE where ownership and use of the namespace is 
 Top level only: this function will fail if used in module code.
 
 
+### distinct {#distinct}
+
+*values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+
+
+Returns from a homogeneous list of VALUES a list with duplicates removed. The original order of the values is preserved.
+```lisp
+pact> (distinct [3 3 1 1 2 2])
+[3 1 2]
+```
+
+
 ### drop {#drop}
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`

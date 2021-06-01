@@ -22,6 +22,7 @@ module Pact.Analyze.Types.Numerical where
 import           Control.Lens                 (Iso', Prism', from, iso, view)
 import           Data.Coerce                  (Coercible)
 import qualified Data.Decimal                 as Decimal
+import qualified Data.Kind                    as K (Type)
 import           Data.SBV                     (HasKind (kindOf), SDivisible (..),
                                                SymVal (..), oneIf, sNot, (.&&),
                                                (.==), (.>), (.^), (.||))
@@ -41,10 +42,10 @@ import           Pact.Types.Pretty            (Pretty(..), parensSep, viaShow)
 newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
 
 fromPact :: PactIso a b -> a -> b
-fromPact = view . unPactIso
+fromPact p = view $ unPactIso p
 
 toPact :: PactIso a b -> b -> a
-toPact = view . from . unPactIso
+toPact p = view $ from (unPactIso p)
 
 -- We model decimals as integers. The value of a decimal is the value of the
 -- integer, shifted right 255 decimal places.
@@ -90,7 +91,7 @@ instance Fractional Decimal where
   fromRational = forceConcrete . fromRational
 
 class SymbolicDecimal d where
-  type IntegerOf d :: *
+  type IntegerOf d :: K.Type
   fromInteger' :: IntegerOf d      -> d
   lShiftD      :: Int         -> d -> d
   lShiftD'     :: IntegerOf d -> d -> d

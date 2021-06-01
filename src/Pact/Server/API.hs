@@ -106,10 +106,10 @@ localClient :: Command Text -> ClientM (CommandResult Hash)
 localClient = v1Local apiV1Client
 
 verifyClient :: Analyze.Request -> ClientM Analyze.Response
-verifyClient = client (Proxy @ ApiVerify)
+verifyClient = client (Proxy @ApiVerify)
 
 versionClient :: ClientM Text
-versionClient = client (Proxy @ ApiVersion)
+versionClient = client (Proxy @ApiVersion)
 
 apiV1Client :: forall m. RunClient m => ApiV1Client m
 apiV1Client = ApiV1Client send poll listen local

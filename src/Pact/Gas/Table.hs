@@ -26,6 +26,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost :: Gas -- up-front cost per column in a select operation
   , _gasCostConfig_readColumnCost :: Gas -- cost per column to read a row
   , _gasCostConfig_sortFactor :: Gas
+  , _gasCostConfig_distinctFactor :: Gas
   , _gasCostConfig_concatenationFactor :: Gas
   , _gasCostConfig_moduleCost :: Gas
   , _gasCostConfig_moduleMemberCost :: Gas
@@ -42,6 +43,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost = 1
   , _gasCostConfig_readColumnCost = 1
   , _gasCostConfig_sortFactor = 1
+  , _gasCostConfig_distinctFactor = 1
   , _gasCostConfig_concatenationFactor = 1  -- TODO benchmark
   , _gasCostConfig_moduleCost = 1        -- TODO benchmark
   , _gasCostConfig_moduleMemberCost = 1
@@ -149,6 +151,7 @@ defaultGasTable =
   ,("try", 1)
   ,("tx-hash", 1)
   ,("typeof", 2)
+  ,("distinct", 2)
   ,("validate-keypair", 29)
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)
@@ -204,6 +207,7 @@ tableGasModel gasConfig =
           _ -> _gasCostConfig_functionApplicationCost gasConfig
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
+        GDistinct len -> expLengthPenalty len
         GSelect mColumns -> case mColumns of
           Nothing -> 1
           Just [] -> 1
