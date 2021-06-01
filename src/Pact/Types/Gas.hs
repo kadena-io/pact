@@ -113,8 +113,6 @@ data GasArgs
   -- ^ Cost of selecting columns from a user table
   | GDistinct !Int
   -- ^ Cost of deduping any list
-  | GDistinctFieldLookup !Int
-  -- ^ Cost of deduping any list by lookup fields
   | GSort !Int
   -- ^ Cost of performing sort on any list
   | GSortFieldLookup !Int
@@ -143,7 +141,6 @@ data GasArgs
 instance Pretty GasArgs where
   pretty g = case g of
     GSelect {} -> "GSelect"
-    GDistinctFieldLookup i -> "GDistinctFieldLookup:" <> pretty i
     GSortFieldLookup i -> "GSortFieldLookup:" <> pretty i
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
     GUnreduced {} -> "GUnreduced"

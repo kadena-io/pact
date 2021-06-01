@@ -983,10 +983,8 @@ distinct g i = \case
         & V.fromList
         & toTListV _tListType def
         & pure
-        & computeGas' g i (GDistinct $ square $ V.length _tList)
+        & computeGas' g i (GDistinct $ V.length _tList)
     as -> argsError i as
-  where
-    square = (^ (2 :: Int))
 
 
 sort' :: GasRNativeFun e

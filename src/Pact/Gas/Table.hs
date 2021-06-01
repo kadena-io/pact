@@ -212,8 +212,6 @@ tableGasModel gasConfig =
           Just cs -> _gasCostConfig_selectColumnCost gasConfig * (fromIntegral (length cs))
         GSortFieldLookup n ->
           fromIntegral n * _gasCostConfig_sortFactor gasConfig
-        GDistinctFieldLookup n ->
-          fromIntegral n * _gasCostConfig_distinctFactor gasConfig
         GConcatenation i j ->
           fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
         GPostRead r -> case r of
