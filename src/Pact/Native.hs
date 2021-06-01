@@ -20,6 +20,7 @@ module Pact.Native
     ( natives
     , nativeDefs
     , moduleToMap
+    , distinctDef
     , enforceDef
     , enforceOneDef
     , enumerateDef
@@ -66,6 +67,7 @@ import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import qualified Data.List as L (nubBy)
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
@@ -538,6 +540,14 @@ filterDef = defNative "filter" filter'
   ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
   "Filter LIST by applying APP to each element. For each true result, the original value is kept."
 
+distinctDef :: NativeDef
+distinctDef = defGasRNative "distinct" distinct
+  (funType (TyList a) [("values", TyList a)])
+  ["(distinct [3 3 1 1 2 2])"]
+  $ T.intercalate " "
+  [ "Returns from a homogeneous list of VALUES a list with duplicates removed."
+  , "The original order of the values is preserved."]
+
 sortDef :: NativeDef
 sortDef = defGasRNative "sort" sort'
   (funType (TyList a) [("values",TyList a)] <>
@@ -664,6 +674,7 @@ langDefs =
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements."
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      ["(typeof \"hello\")"] "Returns type of X as string."
+    ,distinctDef
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
     ,defGasRNative (specialForm YieldSF) yield
@@ -962,6 +973,18 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
   (k,r@TObject {}) -> lookupObj k (_oObject $ _tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as
+
+distinct :: GasRNativeFun e
+distinct g i = \case
+    [l@(TList v _ _ )] | V.null v -> pure (g,l)
+    [TList{..}] -> _tList
+        & V.toList
+        & L.nubBy termEq
+        & V.fromList
+        & toTListV _tListType def
+        & pure
+        & computeGas' g i (GDistinct $ V.length _tList)
+    as -> argsError i as
 
 
 sort' :: GasRNativeFun e

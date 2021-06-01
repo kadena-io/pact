@@ -115,6 +115,7 @@ unitTestFromDef nativeName = tests
       "try"                  -> Just $ tryTests nativeName
       "tx-hash"              -> Just $ txHashTests nativeName
       "typeof"               -> Just $ typeOfTests nativeName
+      "distinct"             -> Just $ distinctTests nativeName
       "where"                -> Just $ whereTests nativeName
       "yield"                -> Just $ yieldTests nativeName
 
@@ -1212,6 +1213,13 @@ base64DecodeTests = defGasUnitTests exprs
     fmedium = f 100
     flong = f 1000
 
+distinctTests :: NativeDefName -> GasUnitTests
+distinctTests = defGasUnitTests allExprs
+  where
+    distinctExpr li =
+      [text| (distinct $li) |]
+
+    allExprs = NEL.map (createPactExpr distinctExpr) duplicateListsExpr
 
 sortTests :: NativeDefName -> GasUnitTests
 sortTests = defGasUnitTests allExprs

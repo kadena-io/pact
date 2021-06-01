@@ -111,6 +111,8 @@ instance Pretty WriteValue where
 data GasArgs
   = GSelect !(Maybe [(Info,FieldKey)])
   -- ^ Cost of selecting columns from a user table
+  | GDistinct !Int
+  -- ^ Cost of deduping any list
   | GSort !Int
   -- ^ Cost of performing sort on any list
   | GSortFieldLookup !Int
@@ -151,6 +153,7 @@ instance Pretty GasArgs where
     GUserApp {} -> "GUserApp"
     GMakeList i -> "GMakeList:" <> pretty i
     GSort i -> "GSort:" <> pretty i
+    GDistinct i -> "GDistinct:" <> pretty i
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
