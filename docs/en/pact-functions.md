@@ -91,6 +91,20 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ```
 
 
+### concat {#concat}
+
+*str-list*&nbsp;`[string]` *&rarr;*&nbsp;`string`
+
+
+Takes STR and returns a list of single character strings
+```lisp
+pact> (concat ["k" "d" "a"])
+"kda"
+pact> (concat (map (+ " ") (str-to-list "abcde")))
+" a b c d e"
+```
+
+
 ### constantly {#constantly}
 
 *value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *&rarr;*&nbsp;`<a>`
@@ -542,6 +556,20 @@ pact> (str-to-int "123456")
 123456
 pact> (str-to-int 64 "q80")
 43981
+```
+
+
+### str-to-list {#str-to-list}
+
+*str*&nbsp;`string` *&rarr;*&nbsp;`[string]`
+
+
+Takes STR and returns a list of single character strings
+```lisp
+pact> (str-to-list "hello")
+["h" "e" "l" "l" "o"]
+pact> (concat (map (+ " ") (str-to-list "abcde")))
+" a b c d e"
 ```
 
 

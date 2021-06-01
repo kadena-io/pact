@@ -219,7 +219,7 @@ formatDef =
     format i as = argsError i as
 
 strToListDef :: NativeDef
-strToListDef = defRNative "str-to-list" strToList
+strToListDef = defGasRNative "str-to-list" strToList
   (funType (TyList tTyString) [("str", tTyString)] )
   [ "(str-to-list \"hello\")"
   , "(concat (map (+ \" \") (str-to-list \"abcde\")))"
@@ -227,7 +227,7 @@ strToListDef = defRNative "str-to-list" strToList
   "Takes STR and returns a list of single character strings"
 
 concatDef :: NativeDef
-concatDef = defNative "concat" concat'
+concatDef = defGasRNative "concat" concat'
   (funType tTyString [("str-list", TyList tTyString)] )
   [ "(concat [\"k\" \"d\" \"a\"])"
   , "(concat (map (+ \" \") (str-to-list \"abcde\")))"
@@ -1064,26 +1064,25 @@ identity :: RNativeFun e
 identity _ [a'] = return a'
 identity i as = argsError i as
 
-concat' :: NativeFun e
-concat' i [l] = gasUnreduced i [l] $ reduce l >>= \l' -> case l' of
-  TList ls _ _ -> 
-    let 
-      ls' = V.toList ls
-      concatTextList = flip TLiteral def . LString . T.concat
-     in fmap concatTextList $ forM ls' $ \case
-      TLitString s -> return s
-      t -> evalError' i $ "concat: expecting list of strings: " <> pretty t
-  t -> evalError' i $ "concat: expecting list of strings: " <> pretty (abbrev t)
-concat' i as = argsError' i as
+concat' :: GasRNativeFun e
+concat' g i [TList ls _ _] = computeGas' g i (GMakeList $ fromIntegral $ V.length ls) $ let
+  -- Use GMakeList because T.concat is O(n) on the number of strings in the list
+  ls' = V.toList ls
+  concatTextList = flip TLiteral def . LString . T.concat
+  in fmap concatTextList $ forM ls' $ \case
+    TLitString s -> return s
+    t -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+concat' _ i as = argsError i as
 
 -- | Converts a string to a vector of single character strings
 -- Ex. "kda" -> [ "k", "d", "a"]
 stringToCharList :: Text -> V.Vector (Term a)
 stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
 
-strToList :: RNativeFun e
-strToList _ [TLitString s] = return $ toTListV tTyString def $ stringToCharList s
-strToList i as = argsError i as
+strToList :: GasRNativeFun e
+strToList g i [TLitString s] = computeGas' g i (GMakeList $ fromIntegral $ T.length s) $
+  return $ toTListV tTyString def $ stringToCharList s
+strToList _ i as = argsError i as
 
 strToInt :: RNativeFun e
 strToInt i as =
