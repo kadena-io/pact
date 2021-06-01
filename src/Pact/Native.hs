@@ -234,7 +234,7 @@ concatDef = defGasRNative "concat" concat'
   [ "(concat [\"k\" \"d\" \"a\"])"
   , "(concat (map (+ \" \") (str-to-list \"abcde\")))"
   ]
-  "Takes STR and returns a list of single character strings"
+  "Takes STR-LIST and concats each of the strings in the list, returning the resulting string"
 
 strToIntDef :: NativeDef
 strToIntDef = defRNative "str-to-int" strToInt
@@ -892,16 +892,12 @@ tordV = tord V.reverse
 tordL :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
 tordL = tord reverse
 
-indexError :: Integer -> Term Name -> Int -> Eval e (Term Name)
-indexError idx idxLit idxLen =
-  evalError (_tInfo idxLit) $ "at: bad index " <>
-    pretty idx <> ", length " <> pretty idxLen
-
 at' :: RNativeFun e
 at' _ [li@(TLitInteger idx),TList ls _ _] =
     case ls V.!? fromIntegral idx of
       Just t -> return t
-      Nothing -> indexError idx li $ length ls
+      Nothing -> evalError (_tInfo li) $ "at: bad index " <>
+        pretty idx <> ", length " <> pretty (length ls)
 at' _ [idx,TObject (Object ls _ _ _) _] = lookupObj idx ls
 at' i as = argsError i as
 

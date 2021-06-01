@@ -96,7 +96,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 *str-list*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-Takes STR and returns a list of single character strings
+Takes STR-LIST and concats each of the strings in the list, returning the resulting string
 ```lisp
 pact> (concat ["k" "d" "a"])
 "kda"
