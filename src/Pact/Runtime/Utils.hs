@@ -18,12 +18,14 @@ module Pact.Runtime.Utils
   , findCallingModule
   , getCallingModule
   , emitEvent
+  , emitReservedEvent
   ) where
 
 import Control.Lens
 import Control.Monad
 import Data.Default
 import qualified Data.HashMap.Strict as HM
+import Data.Text (Text)
 
 import Pact.Gas
 import Pact.Types.Runtime
@@ -98,11 +100,20 @@ getCallingModule i = maybe resolveErr ((=<<) isModule . getModule i) =<< findCal
         $ "Internal error: getCallingModule: called from interface"
         <> pretty (_interfaceName n)
 
-
+-- | Emit event for calling module.
 emitEvent :: HasInfo i => i -> QualifiedName -> [PactValue] -> Eval e ()
 emitEvent i qn@QualifiedName{..} params = unlessExecutionFlagSet FlagDisablePactEvents $ do
   callMod <- getCallingModule i
   unless (_mName callMod == _qnQual) $ evalError' i $
     "emitEvent: event '" <> pretty qn <>
     "' does not match emitting module: " <> pretty (_mName callMod)
-  evalEvents %= (++ [PactEvent _qnName params _qnQual (_mHash callMod)])
+  emitEventUnsafe qn params (_mHash callMod)
+
+-- | Emits an event in the root "pact" namespace using supplied module hash.
+emitReservedEvent :: Text -> [PactValue] -> ModuleHash -> Eval e ()
+emitReservedEvent name params mhash = unlessExecutionFlagSet FlagDisablePactEvents $
+  emitEventUnsafe (QualifiedName "pact" name def) params mhash
+
+emitEventUnsafe :: QualifiedName -> [PactValue] -> ModuleHash -> Eval e ()
+emitEventUnsafe QualifiedName{..} params mh = do
+  evalEvents %= (++ [PactEvent _qnName params _qnQual mh])
