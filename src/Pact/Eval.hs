@@ -906,11 +906,12 @@ emitXChainEvents i mResume PactExec {..} = do
     _ -> return ()
   where
     emitXEvent eName cid mh = emitEvent i
-      (QualifiedName "pact" eName def) $
+      (QualifiedName "pact" eName def)
       [ toPString cid
       , toPString mh
-      , toPString (_pcDef _peContinuation) ]
-      ++ _pcArgs _peContinuation
+      , toPString (_pcDef _peContinuation)
+      , PList (V.fromList (_pcArgs _peContinuation)) ]
+
 
     toPString :: AsString s => s -> PactValue
     toPString = PLiteral . LString . asString
