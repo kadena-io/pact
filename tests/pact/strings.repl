@@ -3,13 +3,13 @@
 "===== str-to-list"
 (expect "str-to-list on str returns a list of single char strings" 
   ["a" "b" "c"] (str-to-list "abc"))
-(expect-failure "str-to-list fails on list" (str-to-list []))
 (expect "str-to-list on empty string" [] (str-to-list ""))
+(expect-failure "str-to-list fails on list" "Invalid arguments" (str-to-list []))
 
 "===== concat"
 (expect "concat works on empty list" "" (concat []))
 (expect "concat works on list of str" "abc" (concat ["a" "b" "c"]))
-(expect "concat works on list of multi char strings" "abc" (concat ["a" "b" "c"]))
+(expect "concat works on list of multi char strings" "aabbcc" (concat ["aa" "bb" "cc"]))
 (expect "concat works singleton list" "abc" (concat ["abc"]))
-(expect-failure "concat fails when not all elems are strings" (concat ["a" "b" 2]))
-(expect-failure "concat fails on non list" (concat "hello"))
+(expect-failure "concat fails when not all elems are strings" "concat: expecting list of strings" (concat ["a" "b" 2]))
+(expect-failure "concat fails on non list" "Invalid arguments" (concat "hello"))
