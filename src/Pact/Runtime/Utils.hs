@@ -114,6 +114,7 @@ emitReservedEvent :: Text -> [PactValue] -> ModuleHash -> Eval e ()
 emitReservedEvent name params mhash = unlessExecutionFlagSet FlagDisablePactEvents $
   emitEventUnsafe (QualifiedName "pact" name def) params mhash
 
+-- | Internal function. Crappy list append is OK as transaction events are usually single digit.
 emitEventUnsafe :: QualifiedName -> [PactValue] -> ModuleHash -> Eval e ()
 emitEventUnsafe QualifiedName{..} params mh = do
   evalEvents %= (++ [PactEvent _qnName params _qnQual mh])

@@ -893,8 +893,14 @@ applyPact i app (TList steps _ _) PactStep {..} = do
 applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
 
 
--- | Synthesize events for cross chain.
-emitXChainEvents :: Maybe Yield -> PactExec -> Eval e ()
+-- | Synthesize events for cross chain. Usually only submits yield OR resume,
+-- but in the middle of a 3+ step cross-chain could be two.
+emitXChainEvents
+    :: Maybe Yield
+       -- ^ from '_psResume', indicating a cross-chain resume.
+    -> PactExec
+       -- ^ tested for yield provenance to indicate a cross-chain yield.
+    -> Eval e ()
 emitXChainEvents mResume PactExec {..} = do
   forM_ mResume $ \r -> case r of
     (Yield _ (Just (Provenance _ mh)) (Just sc)) ->
