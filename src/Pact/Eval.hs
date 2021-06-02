@@ -886,9 +886,34 @@ applyPact i app (TList steps _ _) PactStep {..} = do
 
   writeRow i Write Pacts _psPactId $ if done then Nothing else Just resultState
 
+  unlessExecutionFlagSet FlagDisablePact40 $ emitXChainEvents i _psResume resultState
+
   return result
 
 applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
+
+
+-- | Synthesize events for cross chain.
+emitXChainEvents :: HasInfo i => i -> Maybe Yield -> PactExec -> Eval e ()
+emitXChainEvents i mResume PactExec {..} = do
+  forM_ mResume $ \r -> case r of
+    (Yield _ (Just (Provenance _ mh)) (Just sc)) ->
+      emitXEvent "X_RESUME" sc mh
+    _ -> return ()
+  forM_ _peYield $ \y -> case y of
+    (Yield _ (Just (Provenance tc mh)) _) ->
+      emitXEvent "X_YIELD" tc mh
+    _ -> return ()
+  where
+    emitXEvent eName cid mh = emitEvent i
+      (QualifiedName "pact" eName def) $
+      [ toPString cid
+      , toPString mh
+      , toPString (_pcDef _peContinuation) ]
+      ++ _pcArgs _peContinuation
+
+    toPString :: AsString s => s -> PactValue
+    toPString = PLiteral . LString . asString
 
 
 
