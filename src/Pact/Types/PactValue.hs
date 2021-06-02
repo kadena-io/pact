@@ -21,7 +21,9 @@
 module Pact.Types.PactValue
   ( PactValue(..)
   , toPactValue
+  , toPactValueElideModref
   , toPactValueLenient
+  , toPactValueLenientElideModref
   , fromPactValue
   , _PLiteral
   , _PList
@@ -41,10 +43,11 @@ module Pact.Types.PactValue
 
 import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
-import Control.Lens (makePrisms)
+import Control.Lens (makePrisms,set)
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
 import qualified Data.Map.Strict as M
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -123,10 +126,11 @@ instance ToJSON PactValue where
   toJSON (PObject o) = toJSON o
   toJSON (PList v) = toJSON v
   toJSON (PGuard x) = toJSON x
-  toJSON (PModRef (ModRef refName refSpec _)) = object
+  toJSON (PModRef (ModRef refName refSpec refInfo)) = object $
     [ "refName" .= refName
     , "refSpec" .= refSpec
-    ]
+    ] ++
+    [ "refInfo" .= refInfo | refInfo /= def ]
 
 instance FromJSON PactValue where
   parseJSON v =
@@ -139,7 +143,7 @@ instance FromJSON PactValue where
       parseNoInfo = withObject "ModRef" $ \o -> ModRef
         <$> o .: "refName"
         <*> o .: "refSpec"
-        <*> pure def
+        <*> (fromMaybe def <$> o .:? "refInfo")
 
 instance Pretty PactValue where
   pretty (PLiteral l) = pretty l
@@ -165,6 +169,14 @@ toPactValue (TGuard x _) = PGuard <$> traverse toPactValue x
 toPactValue (TModRef m _) = pure $ PModRef m
 toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
 
+-- | Strict conversion eliding modref info.
+toPactValueElideModref :: Term Name -> Either Text PactValue
+toPactValueElideModref t@TModRef {} = toPactValue $ elideMRInfo t
+toPactValueElideModref t = toPactValue t
+
+elideMRInfo :: Term n -> Term n
+elideMRInfo = set (tModRef . modRefInfo) def
+
 fromPactValue :: PactValue -> Term Name
 fromPactValue (PLiteral l) = TLiteral l def
 fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny def def) def
@@ -176,10 +188,17 @@ fromPactValue (PModRef r) = TModRef r def
 -- Integers are coerced to Decimal for simple representation.
 -- Non-value types are turned into their String representation.
 toPactValueLenient :: Term Name -> PactValue
-toPactValueLenient t = case toPactValue t of
+toPactValueLenient t = toLenient toPactValue t
+
+-- | Lenient conversion eliding modref info.
+toPactValueLenientElideModref :: Term Name -> PactValue
+toPactValueLenientElideModref t@TModRef {} = toLenient toPactValueElideModref t
+toPactValueLenientElideModref t = toLenient toPactValue t
+
+toLenient :: (Term Name -> Either Text PactValue) -> Term Name -> PactValue
+toLenient conv t = case conv t of
   Right (PLiteral (LInteger l)) -> PLiteral (LDecimal (fromIntegral l))
   Right v -> v
   Left _ -> PLiteral $ LString $ renderCompactText t
-
 
 makePrisms ''PactValue

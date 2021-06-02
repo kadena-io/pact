@@ -263,7 +263,7 @@ requireDefApp dt App{..} = case _appFun of
         <> pretty (_dDefType d)
 
 argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
-argsToParams i = mapM $ \arg -> case toPactValue arg of
+argsToParams i = mapM $ \arg -> case toPactValue arg of -- ELIDE FORKED
   Right pv -> return pv
   Left e -> evalError i $ "Invalid capability argument: " <> pretty e
 
