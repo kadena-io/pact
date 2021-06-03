@@ -79,6 +79,7 @@ unitTestFromDef nativeName = tests
       "bind"                 -> Just $ bindTests nativeName
       "chain-data"           -> Just $ chainDataTests nativeName
       "compose"              -> Just $ composeTests nativeName
+      "concat"               -> Just $ concatTests nativeName
       "constantly"           -> Just $ constantlyTests nativeName
       "contains"             -> Just $ containsTests nativeName
       "define-namespace"     -> Just $ defineNamespaceTests nativeName
@@ -111,6 +112,7 @@ unitTestFromDef nativeName = tests
       "reverse"              -> Just $ reverseTests nativeName
       "sort"                 -> Just $ sortTests nativeName
       "str-to-int"           -> Just $ strToIntTests nativeName
+      "str-to-list"          -> Just $ strToListTests nativeName
       "take"                 -> Just $ takeTests nativeName
       "try"                  -> Just $ tryTests nativeName
       "tx-hash"              -> Just $ txHashTests nativeName
@@ -1403,6 +1405,19 @@ pactVersionTests = defGasUnitTests allExprs
 
     allExprs = versionExpr :| []
 
+concatTests :: NativeDefName -> GasUnitTests
+concatTests = defGasUnitTests allExprs
+  where
+    concatExpr arg =
+      [text| (concat $arg) |]
+    allExprs = NEL.map (createPactExpr concatExpr) escapedStrListsExpr
+
+strToListTests :: NativeDefName -> GasUnitTests
+strToListTests = defGasUnitTests allExprs
+  where
+    strToListExpr arg =
+      [text| (str-to-list $arg) |]
+    allExprs = NEL.map (createPactExpr strToListExpr) escapedStringsExpr
 
 readStringTests :: NativeDefName -> GasUnitTests
 readStringTests nativeName = tests
