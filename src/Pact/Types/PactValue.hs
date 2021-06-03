@@ -21,10 +21,9 @@
 module Pact.Types.PactValue
   ( PactValue(..)
   , toPactValue
-  , toPactValueElideModref
   , toPactValueLenient
-  , toPactValueLenientElideModref
   , fromPactValue
+  , elideModRefInfo
   , _PLiteral
   , _PList
   , _PGuard
@@ -169,14 +168,6 @@ toPactValue (TGuard x _) = PGuard <$> traverse toPactValue x
 toPactValue (TModRef m _) = pure $ PModRef m
 toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
 
--- | Strict conversion eliding modref info.
-toPactValueElideModref :: Term Name -> Either Text PactValue
-toPactValueElideModref t@TModRef {} = toPactValue $ elideMRInfo t
-toPactValueElideModref t = toPactValue t
-
-elideMRInfo :: Term n -> Term n
-elideMRInfo = set (tModRef . modRefInfo) def
-
 fromPactValue :: PactValue -> Term Name
 fromPactValue (PLiteral l) = TLiteral l def
 fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny def def) def
@@ -184,19 +175,15 @@ fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny def
 fromPactValue (PGuard x) = TGuard (fmap fromPactValue x) def
 fromPactValue (PModRef r) = TModRef r def
 
+elideModRefInfo :: PactValue -> PactValue
+elideModRefInfo (PModRef m) = PModRef (set modRefInfo def m)
+elideModRefInfo p = p
+
 -- | Lenient conversion, implying that conversion back won't necc. succeed.
 -- Integers are coerced to Decimal for simple representation.
 -- Non-value types are turned into their String representation.
 toPactValueLenient :: Term Name -> PactValue
-toPactValueLenient t = toLenient toPactValue t
-
--- | Lenient conversion eliding modref info.
-toPactValueLenientElideModref :: Term Name -> PactValue
-toPactValueLenientElideModref t@TModRef {} = toLenient toPactValueElideModref t
-toPactValueLenientElideModref t = toLenient toPactValue t
-
-toLenient :: (Term Name -> Either Text PactValue) -> Term Name -> PactValue
-toLenient conv t = case conv t of
+toPactValueLenient t = case toPactValue t of
   Right (PLiteral (LInteger l)) -> PLiteral (LDecimal (fromIntegral l))
   Right v -> v
   Left _ -> PLiteral $ LString $ renderCompactText t

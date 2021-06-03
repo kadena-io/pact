@@ -752,8 +752,10 @@ reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
       Defun ->
         {- eperf (asString _dDefName <> ":body") $ -} reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
-          <$> enforcePactValue' (fst af) -- ELIDE
+        continuation <-
+          PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
+          . map elideModRefInfo
+          <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"

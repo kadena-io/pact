@@ -223,7 +223,9 @@ interpret runner evalEnv terms = do
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult terms (map toPactValueLenient rs) -- ELIDE
+  return $! EvalResult
+    terms
+    (map (elideModRefInfo . toPactValueLenient) rs)
     logs pactExec gas modules txid gasLogs (_evalEvents state)
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
