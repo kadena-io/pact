@@ -1,11 +1,11 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Native
@@ -20,11 +20,15 @@ module Pact.Native
     ( natives
     , nativeDefs
     , moduleToMap
+    , distinctDef
     , enforceDef
     , enforceOneDef
+    , enumerateDef
     , pactVersionDef
     , formatDef
     , strToIntDef
+    , strToListDef
+    , concatDef
     , intToStrDef
     , hashDef
     , ifDef
@@ -56,6 +60,7 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
+import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
@@ -64,11 +69,12 @@ import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import qualified Data.List as L (nubBy)
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Data.Thyme.Time.Core (fromMicroseconds,posixSecondsToUTCTime)
+import Pact.Time
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Numeric
@@ -213,6 +219,22 @@ formatDef =
                   (head parts)
                   (zip (V.toList es) (tail parts))
     format i as = argsError i as
+
+strToListDef :: NativeDef
+strToListDef = defGasRNative "str-to-list" strToList
+  (funType (TyList tTyString) [("str", tTyString)] )
+  [ "(str-to-list \"hello\")"
+  , "(concat (map (+ \" \") (str-to-list \"abcde\")))"
+  ]
+  "Takes STR and returns a list of single character strings"
+
+concatDef :: NativeDef
+concatDef = defGasRNative "concat" concat'
+  (funType tTyString [("str-list", TyList tTyString)] )
+  [ "(concat [\"k\" \"d\" \"a\"])"
+  , "(concat (map (+ \" \") (str-to-list \"abcde\")))"
+  ]
+  "Takes STR-LIST and concats each of the strings in the list, returning the resulting string"
 
 strToIntDef :: NativeDef
 strToIntDef = defRNative "str-to-int" strToInt
@@ -478,7 +500,7 @@ chainDataDef = defRNative "chain-data" chainData
       PublicData{..} <- view eePublicData
 
       let PublicMeta{..} = _pdPublicMeta
-          toTime = toTerm . posixSecondsToUTCTime . fromMicroseconds
+          toTime = toTerm . fromPosixTimestampMicros
 
       pure $ toTObject TyAny def
         [ (cdChainId, toTerm _pmChainId)
@@ -508,6 +530,24 @@ makeListDef = defGasRNative "make-list" makeList (funType (TyList a) [("length",
   ["(make-list 5 true)"]
   "Create list by repeating VALUE LENGTH times."
 
+enumerateDef :: NativeDef
+enumerateDef = defGasRNative "enumerate" enumerate
+  (funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger),("inc", tTyInteger)]
+  <> funType (TyList tTyInteger) [("from", tTyInteger), ("to", tTyInteger)])
+  ["(enumerate 0 10 2)"
+   , "(enumerate 0 10)"
+   , "(enumerate 10 0)"]
+  $ T.intercalate " "
+  [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
+  , "INC is the increment between numbers in the sequence."
+  , "If INC is not given, it is assumed to be 1."
+  , "Additionally, if INC is not given and FROM is greater than TO assume a value for INC of -1."
+  , "If FROM equals TO, return the singleton list containing FROM, irrespective of INC's value."
+  , "If INC is equal to zero, this function will return the singleton list containing FROM."
+  , "If INC is such that FROM + INC > TO (when FROM < TO) or FROM + INC < TO (when FROM > TO) return the singleton list containing FROM."
+  , "Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or FROM + INC > TO (when FROM > TO), then this function fails."
+  ]
+
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
   ["(reverse [1 2 3])"] "Reverse LIST."
@@ -517,6 +557,14 @@ filterDef = defNative "filter" filter'
   (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
   ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
   "Filter LIST by applying APP to each element. For each true result, the original value is kept."
+
+distinctDef :: NativeDef
+distinctDef = defGasRNative "distinct" distinct
+  (funType (TyList a) [("values", TyList a)])
+  ["(distinct [3 3 1 1 2 2])"]
+  $ T.intercalate " "
+  [ "Returns from a homogeneous list of VALUES a list with duplicates removed."
+  , "The original order of the values is preserved."]
 
 sortDef :: NativeDef
 sortDef = defGasRNative "sort" sort'
@@ -552,9 +600,12 @@ dropDef = defRNative "drop" drop' takeDrop
   ]
   "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
+
 atDef :: NativeDef
-atDef = defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
-                      funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
+atDef = defRNative "at" at'
+  (  funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))]
+  <> funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))]
+  )
   ["(at 1 [1 2 3])", "(at \"bar\" { \"foo\": 1, \"bar\": 2 })"]
   "Index LIST at IDX, or get value with key IDX from OBJECT."
 
@@ -609,6 +660,7 @@ langDefs =
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support."
 
     ,makeListDef
+    ,enumerateDef
     ,reverseDef
     ,filterDef
     ,sortDef
@@ -643,6 +695,7 @@ langDefs =
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements."
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      ["(typeof \"hello\")"] "Returns type of X as string."
+    ,distinctDef
     ,setTopLevelOnly $ defRNative "list-modules" listModules
      (funType (TyList tTyString) []) [] "List modules available for loading."
     ,defGasRNative (specialForm YieldSF) yield
@@ -682,6 +735,8 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
     ,strToIntDef
+    ,strToListDef
+    ,concatDef
     ,intToStrDef
     ,hashDef
     ,defineNamespaceDef
@@ -734,6 +789,37 @@ makeList g i [TLitInteger len,value] = case typeof value of
   Right ty -> computeGas' g i (GMakeList len) $ return $ toTList ty def $ replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
+
+enumerate :: GasRNativeFun e
+enumerate g i = \case
+    [TLitInteger from', TLitInteger to', TLitInteger inc] ->
+      createEnumerateList from' to' inc
+    [TLitInteger from', TLitInteger to'] ->
+      createEnumerateList from' to' $ bool 1 (-1) (from' > to')
+    as -> argsError i as
+  where
+
+    computeList :: Integer -> V.Vector Integer -> Eval e (Gas, Term Name)
+    computeList gas = computeGas' g i (GMakeList gas)
+      . pure
+      . toTListV tTyInteger def
+      . fmap toTerm
+
+    step to' inc acc
+      | acc > to', inc > 0 = Nothing
+      | acc < to', inc < 0 = Nothing
+      | otherwise = Just (acc, acc + inc)
+
+    createEnumerateList from' to' inc
+      | from' == to' = computeList 1 (V.singleton from')
+      | inc == 0 = computeList 1 mempty
+      | from' < to', from' + inc < from' =
+        evalError' i "enumerate: increment diverges below from interval bounds."
+      | from' > to', from' + inc > from' =
+        evalError' i "enumerate: increment diverges above from interval bounds."
+      | otherwise = do
+        let g' = succ $ (abs (from' - to')) `div` (abs inc)
+        computeList g' $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
@@ -880,11 +966,13 @@ yield g i as = case as of
         Just pe -> do
           o' <- fmap elideModRefInfo <$> enforcePactValue' o
           y <- case tid of
-            Nothing -> return $ Yield o' Nothing
+            Nothing -> return $ Yield o' Nothing Nothing
             Just t -> do
+              sourceChain <- ifExecutionFlagSet FlagDisablePact40 (return Nothing) $
+                fmap Just $ view $ eePublicData . pdPublicMeta . pmChainId
               if _peStepHasRollback pe
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
-                else fmap (Yield o') $ provenanceOf i t
+                else fmap (\p -> Yield o' p sourceChain) $ provenanceOf i t
           computeGas' g i (GPreWrite (WriteYield y)) $ do
             evalPactExec . _Just . peYield .= Just y
             return u
@@ -908,6 +996,18 @@ where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> redu
   (k,r@TObject {}) -> lookupObj k (_oObject $ _tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as
+
+distinct :: GasRNativeFun e
+distinct g i = \case
+    [l@(TList v _ _ )] | V.null v -> pure (g,l)
+    [TList{..}] -> _tList
+        & V.toList
+        & L.nubBy termEq
+        & V.fromList
+        & toTListV _tListType def
+        & pure
+        & computeGas' g i (GDistinct $ V.length _tList)
+    as -> argsError i as
 
 
 sort' :: GasRNativeFun e
@@ -982,6 +1082,26 @@ constantly i as = argsError' i as
 identity :: RNativeFun e
 identity _ [a'] = return a'
 identity i as = argsError i as
+
+concat' :: GasRNativeFun e
+concat' g i [TList ls _ _] = computeGas' g i (GMakeList $ fromIntegral $ V.length ls) $ let
+  -- Use GMakeList because T.concat is O(n) on the number of strings in the list
+  ls' = V.toList ls
+  concatTextList = flip TLiteral def . LString . T.concat
+  in fmap concatTextList $ forM ls' $ \case
+    TLitString s -> return s
+    t -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+concat' _ i as = argsError i as
+
+-- | Converts a string to a vector of single character strings
+-- Ex. "kda" -> [ "k", "d", "a"]
+stringToCharList :: Text -> V.Vector (Term a)
+stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
+
+strToList :: GasRNativeFun e
+strToList g i [TLitString s] = computeGas' g i (GMakeList $ fromIntegral $ T.length s) $
+  return $ toTListV tTyString def $ stringToCharList s
+strToList _ i as = argsError i as
 
 strToInt :: RNativeFun e
 strToInt i as =

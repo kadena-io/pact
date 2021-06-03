@@ -79,6 +79,7 @@ unitTestFromDef nativeName = tests
       "bind"                 -> Just $ bindTests nativeName
       "chain-data"           -> Just $ chainDataTests nativeName
       "compose"              -> Just $ composeTests nativeName
+      "concat"               -> Just $ concatTests nativeName
       "constantly"           -> Just $ constantlyTests nativeName
       "contains"             -> Just $ containsTests nativeName
       "define-namespace"     -> Just $ defineNamespaceTests nativeName
@@ -86,6 +87,7 @@ unitTestFromDef nativeName = tests
       "enforce"              -> Just $ enforceTests nativeName
       "enforce-one"          -> Just $ enforceOneTests nativeName
       "enforce-pact-version" -> Just $ enforcePactVersionTests nativeName
+      "enumerate"            -> Just $ enumerateTests nativeName
       "filter"               -> Just $ filterTests nativeName
       "fold"                 -> Just $ foldTests nativeName
       "format"               -> Just $ formatTests nativeName
@@ -110,10 +112,12 @@ unitTestFromDef nativeName = tests
       "reverse"              -> Just $ reverseTests nativeName
       "sort"                 -> Just $ sortTests nativeName
       "str-to-int"           -> Just $ strToIntTests nativeName
+      "str-to-list"          -> Just $ strToListTests nativeName
       "take"                 -> Just $ takeTests nativeName
       "try"                  -> Just $ tryTests nativeName
       "tx-hash"              -> Just $ txHashTests nativeName
       "typeof"               -> Just $ typeOfTests nativeName
+      "distinct"             -> Just $ distinctTests nativeName
       "where"                -> Just $ whereTests nativeName
       "yield"                -> Just $ yieldTests nativeName
 
@@ -199,6 +203,7 @@ unitTestFromDef nativeName = tests
       "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
       "require-capability"  -> Just $ requireCapabilityTests nativeName
       "with-capability"     -> Just $ withCapabilityTests nativeName
+      "emit-event"          -> Just $ emitEventTests nativeName
 
       -- Non-native concepts to benchmark
       "use"       -> Just $ useTests nativeName
@@ -240,7 +245,7 @@ moduleTests = defGasUnitTests allExprs
         true ))|]
     moduleExpr = defPactExpression moduleExprText
     moduleRotateDesc = [text|(module accounts GOV [...some module code ...]) update module|]
-    moduleRotateExpr = PactExpression (accountsModule acctModuleName) (Just moduleRotateDesc)
+    moduleRotateExpr = PactExpression (regressionModule acctModuleName) (Just moduleRotateDesc)
     allExprs = moduleExpr :| [moduleRotateExpr]
 
 
@@ -335,6 +340,11 @@ withCapabilityTests = defGasUnitTests allExprs
       defPactExpression [text| ($acctModuleNameText.test-with-cap-func) |]
     allExprs = withCapExpr :| []
 
+
+emitEventTests :: NativeDefName -> GasUnitTests
+emitEventTests = defGasUnitTests (expr :| [])
+  where
+    expr = defPactExpression [text| ($acctModuleNameText.test-emit-event-func) |]
 
 requireCapabilityTests :: NativeDefName -> GasUnitTests
 requireCapabilityTests = tests
@@ -1205,6 +1215,13 @@ base64DecodeTests = defGasUnitTests exprs
     fmedium = f 100
     flong = f 1000
 
+distinctTests :: NativeDefName -> GasUnitTests
+distinctTests = defGasUnitTests allExprs
+  where
+    distinctExpr li =
+      [text| (distinct $li) |]
+
+    allExprs = NEL.map (createPactExpr distinctExpr) duplicateListsExpr
 
 sortTests :: NativeDefName -> GasUnitTests
 sortTests = defGasUnitTests allExprs
@@ -1369,7 +1386,7 @@ resumeTests nativeName = tests
         pactStep
           = Just $ PactStep 2 False (PactId "") (Just yieldVal)
         yieldVal
-          = Yield yieldData provenance
+          = Yield yieldData provenance Nothing
         provenance
           = bool Nothing (Just $ Provenance chainIdTest someModuleHash) isProv
         chainIdTest
@@ -1388,6 +1405,19 @@ pactVersionTests = defGasUnitTests allExprs
 
     allExprs = versionExpr :| []
 
+concatTests :: NativeDefName -> GasUnitTests
+concatTests = defGasUnitTests allExprs
+  where
+    concatExpr arg =
+      [text| (concat $arg) |]
+    allExprs = NEL.map (createPactExpr concatExpr) escapedStrListsExpr
+
+strToListTests :: NativeDefName -> GasUnitTests
+strToListTests = defGasUnitTests allExprs
+  where
+    strToListExpr arg =
+      [text| (str-to-list $arg) |]
+    allExprs = NEL.map (createPactExpr strToListExpr) escapedStringsExpr
 
 readStringTests :: NativeDefName -> GasUnitTests
 readStringTests nativeName = tests
@@ -1506,6 +1536,12 @@ makeListTests = defGasUnitTests allExprs
 
     allExprs = NEL.map (createPactExpr makeListExpr) sizesExpr
 
+enumerateTests :: NativeDefName -> GasUnitTests
+enumerateTests = defGasUnitTests allExprs
+  where
+    enumerateExpr arg =
+      [text| (enumerate 1 $arg) |]
+    allExprs = NEL.map (createPactExpr enumerateExpr) sizesExpr
 
 listModulesTests :: NativeDefName -> GasUnitTests
 listModulesTests = defGasUnitTests allExprs

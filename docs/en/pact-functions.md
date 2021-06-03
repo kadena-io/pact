@@ -91,6 +91,20 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ```
 
 
+### concat {#concat}
+
+*str-list*&nbsp;`[string]` *&rarr;*&nbsp;`string`
+
+
+Takes STR-LIST and concats each of the strings in the list, returning the resulting string
+```lisp
+pact> (concat ["k" "d" "a"])
+"kda"
+pact> (concat (map (+ " ") (str-to-list "abcde")))
+" a b c d e"
+```
+
+
 ### constantly {#constantly}
 
 *value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *&rarr;*&nbsp;`<a>`
@@ -138,6 +152,18 @@ Create a namespace called NAMESPACE where ownership and use of the namespace is 
 ```
 
 Top level only: this function will fail if used in module code.
+
+
+### distinct {#distinct}
+
+*values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+
+
+Returns from a homogeneous list of VALUES a list with duplicates removed. The original order of the values is preserved.
+```lisp
+pact> (distinct [3 3 1 1 2 2])
+[3 1 2]
+```
 
 
 ### drop {#drop}
@@ -196,6 +222,24 @@ true
 ```
 
 Top level only: this function will fail if used in module code.
+
+
+### enumerate {#enumerate}
+
+*from*&nbsp;`integer` *to*&nbsp;`integer` *inc*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
+
+*from*&nbsp;`integer` *to*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
+
+
+Returns a sequence of numbers from FROM to TO (both inclusive) as a list. INC is the increment between numbers in the sequence. If INC is not given, it is assumed to be 1. Additionally, if INC is not given and FROM is greater than TO assume a value for INC of -1. If FROM equals TO, return the singleton list containing FROM, irrespective of INC's value. If INC is equal to zero, this function will return the singleton list containing FROM. If INC is such that FROM + INC > TO (when FROM < TO) or FROM + INC < TO (when FROM > TO) return the singleton list containing FROM. Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or FROM + INC > TO (when FROM > TO), then this function fails.
+```lisp
+pact> (enumerate 0 10 2)
+[0 2 4 6 8 10]
+pact> (enumerate 0 10)
+[0 1 2 3 4 5 6 7 8 9 10]
+pact> (enumerate 10 0)
+[10 9 8 7 6 5 4 3 2 1 0]
+```
 
 
 ### filter {#filter}
@@ -393,7 +437,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"3.7"
+"4.0.0.11"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -524,6 +568,20 @@ pact> (str-to-int "123456")
 123456
 pact> (str-to-int 64 "q80")
 43981
+```
+
+
+### str-to-list {#str-to-list}
+
+*str*&nbsp;`string` *&rarr;*&nbsp;`[string]`
+
+
+Takes STR and returns a list of single character strings
+```lisp
+pact> (str-to-list "hello")
+["h" "e" "l" "l" "o"]
+pact> (concat (map (+ " ") (str-to-list "abcde")))
+" a b c d e"
 ```
 
 
@@ -1453,6 +1511,17 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
 
 
+### emit-event {#emit-event}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
+
+
+Emit CAPABILITY as event without evaluating body of capability. Fails if CAPABILITY is not @managed or @event.
+```lisp
+(emit-event (TRANSFER "Bob" "Alice" 12.0))
+```
+
+
 ### enforce-guard {#enforce-guard}
 
 *guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
@@ -1672,7 +1741,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePact40","DisablePactEvents","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

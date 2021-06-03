@@ -42,12 +42,10 @@ import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
-import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           GHC.TypeLits
-import           System.Locale              (defaultTimeLocale)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
@@ -57,6 +55,7 @@ import           Pact.Types.Lang
                  )
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
+import           Pact.Time                  (parseTime)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
@@ -1060,7 +1059,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
-      <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
+      <- parseTime Pact.simpleISO8601 (T.unpack timeLit)
     -> pure $ Some STime $ Lit' $ fromPact timeIso timeLit'
 
   AST_NFun_Basic SModulus [a, b] -> translateNode a >>= \case
@@ -1623,6 +1622,42 @@ translateNode astNode = withAstContext astNode $ case astNode of
         addWarning node $ UnsupportedNonFatal "diff-time: substituting 0.0"
         pure $ Some SDecimal $ Lit' 0.0
       _ -> failing $ "Pattern match failure"
+  -- TODO: add actual support for this later!
+  AST_NFun node "distinct" [xs] -> do
+     translateNode xs >>= \case
+       Some (SList ty) _ -> do
+         addWarning node $ UnsupportedNonFatal "distinct: substituting empty list"
+         pure $ Some (SList ty) EmptyList
+       _ -> throwError' $ UnexpectedNode astNode
+  -- TODO: add actual support for this later!
+  AST_NFun node "enumerate" [a, b] -> do
+    from' <- translateNode a
+    to' <- translateNode b
+    case (from', to') of
+      (Some SInteger _, Some SInteger _) -> do
+        addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
+        pure $ Some (SList SInteger) EmptyList
+      _ -> failing $ "Pattern match failure"
+  AST_NFun node "enumerate" [a, b, c] -> do
+    from' <- translateNode a
+    to' <- translateNode b
+    inc' <- translateNode c
+    case (from', to', inc') of
+      (Some SInteger _, Some SInteger _, Some SInteger _) -> do
+        addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
+        pure $ Some (SList SInteger) EmptyList
+      _ -> failing $ "Pattern match failure"
+  -- TODO: add actual support for this later!
+  AST_NFun node "concat" [a] -> translateNode a >>= \case
+    Some (SList SStr) _ -> do
+      addWarning node $ UnsupportedNonFatal "concat: substituting empty string"
+      pure $ Some SStr $ CoreTerm (Lit "")
+    _ -> failing $ "Pattern match failure"
+  AST_NFun node "str-to-list" [a] -> translateNode a >>= \case
+    Some SStr _ -> do
+      addWarning node $ UnsupportedNonFatal "str-to-list: substituting empty list"
+      pure $ Some (SList SStr) $ EmptyList
+    _ -> failing $ "Pattern match failure"
   _ -> throwError' $ UnexpectedNode astNode
 
 

@@ -26,6 +26,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost :: Gas -- up-front cost per column in a select operation
   , _gasCostConfig_readColumnCost :: Gas -- cost per column to read a row
   , _gasCostConfig_sortFactor :: Gas
+  , _gasCostConfig_distinctFactor :: Gas
   , _gasCostConfig_concatenationFactor :: Gas
   , _gasCostConfig_moduleCost :: Gas
   , _gasCostConfig_moduleMemberCost :: Gas
@@ -42,6 +43,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_selectColumnCost = 1
   , _gasCostConfig_readColumnCost = 1
   , _gasCostConfig_sortFactor = 1
+  , _gasCostConfig_distinctFactor = 1
   , _gasCostConfig_concatenationFactor = 1  -- TODO benchmark
   , _gasCostConfig_moduleCost = 1        -- TODO benchmark
   , _gasCostConfig_moduleMemberCost = 1
@@ -79,6 +81,7 @@ defaultGasTable =
   ,("chain-data", 1)
   ,("compose", 1)
   ,("compose-capability", 2)
+  ,("concat", 1)
   ,("constantly", 1)
   ,("contains", 2)
   ,("create-module-guard", 1)
@@ -88,11 +91,13 @@ defaultGasTable =
   ,("decrypt-cc20p1305", 33)
   ,("diff-time", 8)
   ,("drop", 3)
+  ,("emit-event",1)
   ,("enforce", 1)
   ,("enforce-guard", 8)
   ,("enforce-keyset", 8)
   ,("enforce-one", 6)
   ,("enforce-pact-version", 1)
+  ,("enumerate", 1)
   ,("exp", 5)
   ,("filter", 3)
   ,("floor", 1)
@@ -140,11 +145,13 @@ defaultGasTable =
   ,("sort", 2)
   ,("sqrt", 6)
   ,("str-to-int", 1)
+  ,("str-to-list", 1)
   ,("take", 3)
   ,("time", 2)
   ,("try", 1)
   ,("tx-hash", 1)
   ,("typeof", 2)
+  ,("distinct", 2)
   ,("validate-keypair", 29)
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)
@@ -200,6 +207,7 @@ tableGasModel gasConfig =
           _ -> _gasCostConfig_functionApplicationCost gasConfig
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
+        GDistinct len -> expLengthPenalty len
         GSelect mColumns -> case mColumns of
           Nothing -> 1
           Just [] -> 1
@@ -216,7 +224,7 @@ tableGasModel gasConfig =
           ReadInterface _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
           ReadNamespace _ns ->  _gasCostConfig_readColumnCost gasConfig
           ReadKeySet _ksName _ks ->  _gasCostConfig_readColumnCost gasConfig
-          ReadYield (Yield _obj _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
+          ReadYield (Yield _obj _ _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
         GPreWrite w -> case w of
           WriteData _type key obj ->
             (memoryCost key (_gasCostConfig_writeBytesCost gasConfig))
