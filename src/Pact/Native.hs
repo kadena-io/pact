@@ -336,7 +336,7 @@ readStringDef = defRNative "read-string" readString
 toGuardPactValue :: Guard (Term Name) -> Either Text (Guard PactValue)
 toGuardPactValue g = case g of
   (GUser (UserGuard n ts)) -> do
-    pvs <- traverse toPactValue ts
+    pvs <- map elideModRefInfo <$> traverse toPactValue ts
     return (GUser (UserGuard n pvs))
   (GKeySet k) -> Right (GKeySet k)
   (GKeySetRef k) -> Right (GKeySetRef k)
@@ -964,7 +964,7 @@ yield g i as = case as of
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
         Just pe -> do
-          o' <- enforcePactValue' o
+          o' <- fmap elideModRefInfo <$> enforcePactValue' o
           y <- case tid of
             Nothing -> return $ Yield o' Nothing Nothing
             Just t -> do

@@ -269,9 +269,11 @@ requireDefApp dt App{..} = case _appFun of
         <> pretty (_dDefType d)
 
 argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
-argsToParams i = mapM $ \arg -> case toPactValue arg of
-  Right pv -> return pv
-  Left e -> evalError i $ "Invalid capability argument: " <> pretty e
+argsToParams i args = do
+  elideFun <- ifExecutionFlagSet' FlagDisablePact40 id elideModRefInfo
+  forM args $ \arg -> case toPactValue arg of
+    Right pv -> return $ elideFun pv
+    Left e -> evalError i $ "Invalid capability argument: " <> pretty e
 
 -- | Workhorse to convert App to Capability by capturing Def,
 -- reducing args and converting to pact value, and returning

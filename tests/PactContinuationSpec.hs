@@ -11,6 +11,7 @@ import qualified Control.Exception as Exception
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Data.Aeson
+import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal
 import Data.Default (def)
 import qualified Data.HashMap.Strict as HM
@@ -55,11 +56,54 @@ spec = describe "pacts in dev server" $ do
   describe "testTwoPartyEscrow" $ testTwoPartyEscrow mgr
   describe "testNestedPacts" $ testNestedPacts mgr
   describe "testManagedCaps" $ testManagedCaps mgr
+  describe "testElideModRefEvents" $ testElideModRefEvents mgr
 
 _runOne :: (HTTP.Manager -> Spec) -> Spec
 _runOne test = do
   mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
   test mgr
+
+testElideModRefEvents :: HTTP.Manager -> Spec
+testElideModRefEvents mgr = before_ flushDb $ after_ flushDb $ do
+  it "elides modref infos" $ do
+    cmd <- mkExec code Null def [] Nothing Nothing
+    results <- runAll' mgr [cmd] noSPVSupport testConfigFilePath
+    runResults results $ do
+      shouldMatch cmd $ ExpectResult $ \cr ->
+        encode (_crEvents cr) `shouldSatisfy`
+          (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
+
+  it "doesn't elide on backcompat" $ do
+    cmd <- mkExec code Null def [] Nothing Nothing
+    results <- runAll' mgr [cmd] noSPVSupport backCompatConfig
+    runResults results $ do
+      shouldMatch cmd $ ExpectResult $ \cr ->
+        encode (_crEvents cr) `shouldSatisfy`
+          (("refInfo" `isInfixOf`) . BSL8.unpack)
+  where
+    code =
+      [text|
+
+           (interface iface
+             (defun f:bool ()))
+
+           (module evmodule G
+
+             (defcap G () true)
+
+             (implements iface)
+
+             (defun f:bool () true)
+
+             (defcap EVENT (mod:module{iface})
+               @event true)
+
+             (defun emit(mod:module{iface})
+               (emit-event (EVENT mod))))
+
+           (evmodule.emit evmodule)
+           |]
+
 
 mkModuleHash :: Text -> IO ModuleHash
 mkModuleHash =
