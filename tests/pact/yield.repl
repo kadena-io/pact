@@ -105,6 +105,13 @@
 ;; expect successful output which primes the yiel
 (expect "step 0 executes" "emily->A" (cross-chain "emily"))
 
+;; check events
+(expect "step 0 events"
+ [{"module-hash": "W8fkhmdNHyXDdKKUnp4pgNsG1QWosPELoH7p28I9XPY"
+   ,"name": "pact.X_YIELD"
+   ,"params": ["1" "yieldtest.cross-chain" ["emily"]]}]
+ (env-events true))
+
 ;; Expect failure since we are on chain "0", endorsement is set for "1"
 (expect-failure "resume fails on wrong chain id" (continue-pact 1))
 
@@ -112,14 +119,26 @@
 (env-chain-data { "chain-id" : "1" })
 (expect "resume succeeds on correct chain id" "emily->A->B" (continue-pact 1))
 
+;; check events
+(expect "step 1 events"
+ [{"module-hash": "W8fkhmdNHyXDdKKUnp4pgNsG1QWosPELoH7p28I9XPY"
+    ,"name": "pact.X_RESUME"
+    ,"params": ["0" "yieldtest.cross-chain" ["emily"]]}]
+ (env-events true))
+
 (pact-state true)
 
 ;; set chain id to something sane
 (env-chain-data { "chain-id": "0" })
 (env-hash (hash "emily-pact-id"))
+;; disable pact events
+(env-exec-config ["DisablePact40"])
 
 ;; expect successful output which primes the yield
 (expect "step 0 executes" "emily->A" (cross-chain "emily"))
+(expect "pact events disabled"
+ []
+ (env-events true))
 
 ;; overwrite yield by supplying new object fails on wrong chain
 (expect-failure "step 1 fails to execute on wrong chain with new yield value"
