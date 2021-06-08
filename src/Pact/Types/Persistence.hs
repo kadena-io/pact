@@ -265,4 +265,4 @@ advisePactDb pt PactDb{..} = PactDb
   }
   where
     perf' :: DbContext -> IO a -> IO a
-    perf' t = advise def pt $ (AdviceDb t)
+    perf' t = advise def pt (AdviceDb t)
