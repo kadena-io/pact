@@ -49,7 +49,7 @@ import qualified Pact.Types.Runtime           as Pact
 import qualified Pact.Types.Typecheck         as Pact
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
+import           Pact.Analyze.LegacySFunArray (PactSFunArray, mkPactSFunArray)
 import           Pact.Analyze.Translate       (maybeTranslateType,
                                                maybeTranslateUserType')
 import           Pact.Analyze.Types           hiding (tableName)
@@ -152,7 +152,7 @@ mkPactMetadata = PactMetadata
 -- a namespace.
 newtype Registry
   = Registry
-    { _registryMap :: SFunArray RegistryName Guard }
+    { _registryMap :: PactSFunArray RegistryName Guard }
   deriving Show
 
 mkRegistry :: Registry
@@ -164,10 +164,10 @@ resolveGuardFromReg reg sRn = withProv (fromRegistry sRn) $
 
 data TxMetadata
   = TxMetadata
-    { _tmKeySets  :: SFunArray Str Guard
-    , _tmDecimals :: SFunArray Str Decimal
-    , _tmIntegers :: SFunArray Str Integer
-    , _tmStrings  :: SFunArray Str Str
+    { _tmKeySets  :: PactSFunArray Str Guard
+    , _tmDecimals :: PactSFunArray Str Decimal
+    , _tmIntegers :: PactSFunArray Str Integer
+    , _tmStrings  :: PactSFunArray Str Str
     }
   deriving Show
 
@@ -259,8 +259,8 @@ mkAnalyzeEnv modName pactMetadata gov registry tables caps args stepChoices tags
     invariants' tableSchemas columnIds' tags info (sansProv trivialGuard)
     modGuard emptyGrants activeGrants tables mempty
 
-mkFreeArray :: (SymVal a, HasKind b) => Text -> SFunArray a b
-mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
+mkFreeArray :: (SymVal a, HasKind b) => Text -> PactSFunArray a b
+mkFreeArray = mkPactSFunArray . uninterpret . T.unpack . sbvIdentifier
 
 sbvIdentifier :: Text -> Text
 sbvIdentifier = T.replace "-" "_"
@@ -288,7 +288,7 @@ instance Mergeable SymbolicCells where
 data CellValues
   = CellValues
     { _cvTableCells :: TableMap SymbolicCells
-    , _cvRowExists  :: TableMap (SFunArray RowKey Bool)
+    , _cvRowExists  :: TableMap (PactSFunArray RowKey Bool)
     }
   deriving (Generic, Show)
 
@@ -305,23 +305,23 @@ data LatticeAnalyzeState a
     --       invariant is being maintained
     --
     , _lasMaintainsInvariants :: TableMap (ZipList (Located (SBV Bool)))
-    , _lasGuardPasses         :: SFunArray Guard Bool
-    , _lasTablesRead          :: SFunArray TableName Bool
-    , _lasTablesWritten       :: SFunArray TableName Bool
+    , _lasGuardPasses         :: PactSFunArray Guard Bool
+    , _lasTablesRead          :: PactSFunArray TableName Bool
+    , _lasTablesWritten       :: PactSFunArray TableName Bool
     , _lasColumnsRead         :: TableMap (ColumnMap (SBV Bool))
     , _lasColumnsWritten      :: TableMap (ColumnMap (SBV Bool))
-    , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
-    , _lasDecCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Decimal))
+    , _lasIntCellDeltas       :: TableMap (ColumnMap (PactSFunArray RowKey Integer))
+    , _lasDecCellDeltas       :: TableMap (ColumnMap (PactSFunArray RowKey Decimal))
     , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
     , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
-    , _lasRowsRead            :: TableMap (SFunArray RowKey Integer)
-    , _lasRowsWritten         :: TableMap (SFunArray RowKey Integer)
-    , _lasCellsEnforced       :: TableMap (ColumnMap (SFunArray RowKey Bool))
+    , _lasRowsRead            :: TableMap (PactSFunArray RowKey Integer)
+    , _lasRowsWritten         :: TableMap (PactSFunArray RowKey Integer)
+    , _lasCellsEnforced       :: TableMap (ColumnMap (PactSFunArray RowKey Bool))
     -- We currently maintain cellsWritten only for deciding whether a cell has
     -- been "invalidated" for the purposes of keyset enforcement. If a keyset
     -- has been overwritten and *then* enforced, that does not constitute valid
     -- enforcement of the keyset.
-    , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
+    , _lasCellsWritten        :: TableMap (ColumnMap (PactSFunArray RowKey Bool))
     , _lasConstraints         :: S Bool
     , _lasPendingGrants       :: TokenGrants
     , _lasYieldedInPrevious   :: Maybe EPossibleVal
@@ -398,8 +398,8 @@ mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
         , _lasPurelyReachable     = sTrue
         , _lasMaintainsInvariants = mkMaintainsInvariants
         , _lasGuardPasses         = writeArray (mkFreeArray "guardPasses") trivialGuard sTrue
-        , _lasTablesRead          = mkSFunArray $ const sFalse
-        , _lasTablesWritten       = mkSFunArray $ const sFalse
+        , _lasTablesRead          = mkPactSFunArray $ const sFalse
+        , _lasTablesWritten       = mkPactSFunArray $ const sFalse
         , _lasColumnsRead         = mkTableColumnMap tables (const True) sFalse
         , _lasColumnsWritten      = mkTableColumnMap tables (const True) sFalse
         , _lasIntCellDeltas       = intCellDeltas
@@ -430,17 +430,17 @@ mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
-    intCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyInteger) (mkSFunArray (const 0))
-    decCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
+    intCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyInteger) (mkPactSFunArray (const 0))
+    decCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (mkPactSFunArray (const (fromInteger 0)))
     intColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyInteger) 0
     decColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (fromInteger 0)
-    cellsEnforced   = mkTableColumnMap tables isGuardTy (mkSFunArray (const sFalse))
-    cellsWritten    = mkTableColumnMap tables (const True) (mkSFunArray (const sFalse))
+    cellsEnforced   = mkTableColumnMap tables isGuardTy (mkPactSFunArray (const sFalse))
+    cellsWritten    = mkTableColumnMap tables (const True) (mkPactSFunArray (const sFalse))
 
-    mkPerTableSFunArray :: SBV v -> TableMap (SFunArray k v)
+    mkPerTableSFunArray :: SBV v -> TableMap (PactSFunArray k v)
     mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
       tableNames
-      (repeat $ mkSFunArray $ const defaultV)
+      (repeat $ mkPactSFunArray $ const defaultV)
 
     mkMaintainsInvariants = TableMap $ Map.fromList $
       tables <&> \Table { _tableName, _tableInvariants } ->
@@ -512,16 +512,16 @@ class HasAnalyzeEnv a where
   registry :: Lens' a Registry
   registry = analyzeEnv.aeRegistry
 
-  txKeySets :: Lens' a (SFunArray Str Guard)
+  txKeySets :: Lens' a (PactSFunArray Str Guard)
   txKeySets = analyzeEnv.aeTxMetadata.tmKeySets
 
-  txDecimals :: Lens' a (SFunArray Str Decimal)
+  txDecimals :: Lens' a (PactSFunArray Str Decimal)
   txDecimals = analyzeEnv.aeTxMetadata.tmDecimals
 
-  txIntegers :: Lens' a (SFunArray Str Integer)
+  txIntegers :: Lens' a (PactSFunArray Str Integer)
   txIntegers = analyzeEnv.aeTxMetadata.tmIntegers
 
-  txStrings :: Lens' a (SFunArray Str Str)
+  txStrings :: Lens' a (PactSFunArray Str Str)
   txStrings = analyzeEnv.aeTxMetadata.tmStrings
 
   inPact :: Lens' a (S Bool)
