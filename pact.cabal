@@ -114,7 +114,7 @@ library
                     Pact.Analyze.Check
                     Pact.Analyze.Errors
                     Pact.Analyze.Feature
-                    Pact.Analyze.LegacySFunArray
+                    Pact.Analyze.PactSFunArray
                     Pact.Analyze.Model
                     Pact.Analyze.Model.Dot
                     Pact.Analyze.Model.Graph

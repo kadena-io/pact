@@ -15,7 +15,7 @@ import           Data.Type.Equality           ((:~:) (Refl))
 
 import           Pact.Types.Pretty
 
-import           Pact.Analyze.LegacySFunArray (eitherArray, mkPactSFunArray)
+import           Pact.Analyze.PactSFunArray (eitherArray, mkPactSFunArray)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 

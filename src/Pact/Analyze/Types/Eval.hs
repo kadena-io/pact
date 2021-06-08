@@ -49,7 +49,7 @@ import qualified Pact.Types.Runtime           as Pact
 import qualified Pact.Types.Typecheck         as Pact
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.LegacySFunArray (PactSFunArray, mkPactSFunArray)
+import           Pact.Analyze.PactSFunArray (PactSFunArray, mkPactSFunArray)
 import           Pact.Analyze.Translate       (maybeTranslateType,
                                                maybeTranslateUserType')
 import           Pact.Analyze.Types           hiding (tableName)

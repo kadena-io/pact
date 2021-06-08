@@ -4,7 +4,7 @@
 -- | This is the old 'SFunArray' which has since been removed from SBV (see
 -- https://github.com/LeventErkok/sbv/commit/77858f34f98bb233b86ed3a9f79f75a3707c9400),
 -- until we have time to move to the new implementation:
-module Pact.Analyze.LegacySFunArray
+module Pact.Analyze.PactSFunArray
   ( PactSFunArray
   , mkPactSFunArray
   , eitherArray
@@ -58,8 +58,8 @@ instance SymArray PactSFunArray where
   readArray     (PactSFunArray f)                 = f
   writeArray    (PactSFunArray f) a b             = PactSFunArray (\a' -> ite (a .== a') b (f a'))
   mergeArrays t (PactSFunArray g)   (PactSFunArray h) = PactSFunArray (\x -> ite t (g x) (h x))
-  newArrayInState                             = error "LegacySFunArray: newArrayInState is not implemented"
-  sListArray                                  = error "LegacySFunArray: sListArray is not implemented"
+  newArrayInState                             = error "PactSFunArray: newArrayInState is not implemented"
+  sListArray                                  = error "PactSFunArray: sListArray is not implemented"
 
 instance SymVal b => Mergeable (PactSFunArray a b) where
   symbolicMerge _ = mergeArrays

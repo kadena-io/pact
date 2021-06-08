@@ -72,7 +72,7 @@ import qualified Pact.Types.Pretty            as Pretty
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString)
 
-import           Pact.Analyze.LegacySFunArray (PactSFunArray)
+import           Pact.Analyze.PactSFunArray (PactSFunArray)
 import           Pact.Analyze.Feature         hiding (Constraint, Doc, Type,
                                                dec, ks, obj, str, time)
 import           Pact.Analyze.Types.Numerical
