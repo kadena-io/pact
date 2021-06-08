@@ -1,5 +1,7 @@
 packages: .
 
+constraints: sbv >=8.15
+
 -- required by pact
 -- these upper bounds are required in order to not break payload validation in chainweb
 constraints: base16-bytestring <1
