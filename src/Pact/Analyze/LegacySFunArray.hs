@@ -11,7 +11,7 @@ module Pact.Analyze.LegacySFunArray
   ) where
 
 import           Control.Monad.IO.Class (liftIO)
-import           Data.SBV               hiding (SFunArray)
+import           Data.SBV
 import           Data.SBV.Internals     (SymArray (..), registerKind)
 
 -- | Declare a new functional symbolic array. Note that a read from an

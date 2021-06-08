@@ -21,7 +21,6 @@ in {
           ver = "0.2.0.0";
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
-
       };
       packages = {
         pact = kpkgs.gitignoreSource ./.;

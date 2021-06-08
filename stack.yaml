@@ -9,7 +9,8 @@ extra-deps:
   - ed25519-donna-0.1.1
   - hspec-golden-0.1.0.2
   - direct-sqlite-2.3.26
-  - sbv-8.8
+  - sbv-8.15
+  - libBF-0.6.2
   - megaparsec-9.0.0
   - neat-interpolation-0.5.1.2
   - pact-time-0.2.0.0
