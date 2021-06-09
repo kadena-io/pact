@@ -30,8 +30,8 @@ module Pact.Analyze.Types.Shared where
 import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                Ixed (ix), Lens', Prism', both,
                                                from, iso, lens, makeLenses,
-                                               makePrisms, over, view, (%~),
-                                               (&), (<&>))
+                                               makePrisms, over, (%~), (&),
+                                               (<&>))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
@@ -62,7 +62,7 @@ import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
-import           Data.Thyme                   (UTCTime, microseconds)
+import Pact.Time                              (UTCTime, toMicroseconds, fromMicroseconds, mjdEpoch)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
@@ -238,14 +238,20 @@ type RowKey = Str
 
 type Time = Int64
 
+-- | Convert between 'UTCTime' and 'Time'.
+--
+-- The implementation is currently just the identity. However, we represented in
+-- this verbose way for better documentation and to abstract from the internal
+-- representation of UTC in the upstream package.
+--
 timeIso :: PactIso UTCTime Time
 timeIso = PactIso $ iso mkTime unMkTime
   where
     mkTime :: UTCTime -> Time
-    mkTime utct = view microseconds (utct .-. toEnum 0)
+    mkTime utct = toMicroseconds (utct .-. mjdEpoch)
 
     unMkTime :: Time -> UTCTime
-    unMkTime time = toEnum 0 .+^ view (from microseconds) time
+    unMkTime time = mjdEpoch .+^ fromMicroseconds time
 
 isGuardTy :: Pact.Type v -> Bool
 isGuardTy (Pact.TyPrim (Pact.TyGuard _)) = True
@@ -459,7 +465,7 @@ instance (Eq (SingTy a), Eq (tm a)) => Eq (Column tm a) where
 instance (Ord (SingTy a), Ord (tm a)) => Ord (Column tm a) where
   Column _ a `compare` Column _ b = a `compare` b
 
-data Object (tm :: Ty -> *) (m :: [(Symbol, Ty)])
+data Object (tm :: Ty -> Type) (m :: [(Symbol, Ty)])
   = Object (HList (Column tm) m)
 
 pattern ObjectNil :: () => schema ~ '[] => Object tm schema
@@ -912,8 +918,9 @@ withPretty a = withDict $ singMkPretty a
         -> withPretty ty' $
            withDict (singMkPretty (SObjectUnsafe (SingList tys))) Dict
 
+-- withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
 withTypeable :: SingTy a -> ((Typeable a, Typeable (Concrete a)) => b) -> b
-withTypeable a = withDict $ singMkTypeable a
+withTypeable a b = withDict (singMkTypeable a) b
   where
 
     singMkTypeable :: SingTy a -> Dict (Typeable a, Typeable (Concrete a))

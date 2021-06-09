@@ -37,7 +37,7 @@ import Servant.API (ToHttpApiData(..))
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term (ToTerm(..))
-import Pact.Types.Util (genBareText)
+import Pact.Types.Util (genBareText,AsString(..))
 
 -- | Expresses unique platform-specific chain identifier.
 --
@@ -47,7 +47,7 @@ newtype ChainId = ChainId { _chainId :: Text }
     ( Show, Pretty, IsString
     , ToJSON, FromJSON
     , Serialize, ToTerm, NFData
-    , SizeOf
+    , SizeOf, AsString
     )
 
 instance Arbitrary ChainId where

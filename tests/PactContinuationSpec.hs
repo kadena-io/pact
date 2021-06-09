@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module PactContinuationSpec (spec) where
 
@@ -10,9 +11,11 @@ import qualified Control.Exception as Exception
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Data.Aeson
+import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Decimal
 import Data.Default (def)
 import qualified Data.HashMap.Strict as HM
+import Data.List (isInfixOf)
 import qualified Data.List.NonEmpty as NEL
 import Data.Text (Text, unpack)
 import qualified Data.Text as T
@@ -23,6 +26,7 @@ import Prelude hiding (concat)
 import Servant.Client
 import System.Environment (withArgs)
 import System.Timeout
+import qualified Data.Vector as V
 
 import Test.Hspec
 
@@ -52,11 +56,58 @@ spec = describe "pacts in dev server" $ do
   describe "testTwoPartyEscrow" $ testTwoPartyEscrow mgr
   describe "testNestedPacts" $ testNestedPacts mgr
   describe "testManagedCaps" $ testManagedCaps mgr
+  describe "testElideModRefEvents" $ testElideModRefEvents mgr
 
 _runOne :: (HTTP.Manager -> Spec) -> Spec
 _runOne test = do
   mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
   test mgr
+
+testElideModRefEvents :: HTTP.Manager -> Spec
+testElideModRefEvents mgr = before_ flushDb $ after_ flushDb $ do
+  it "elides modref infos" $ do
+    cmd <- mkExec code Null def [] Nothing Nothing
+    results <- runAll' mgr [cmd] noSPVSupport testConfigFilePath
+    runResults results $ do
+      shouldMatch cmd $ ExpectResult $ \cr ->
+        encode (_crEvents cr) `shouldSatisfy`
+          (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
+
+  it "doesn't elide on backcompat" $ do
+    cmd <- mkExec code Null def [] Nothing Nothing
+    results <- runAll' mgr [cmd] noSPVSupport backCompatConfig
+    runResults results $ do
+      shouldMatch cmd $ ExpectResult $ \cr ->
+        encode (_crEvents cr) `shouldSatisfy`
+          (("refInfo" `isInfixOf`) . BSL8.unpack)
+  where
+    code =
+      [text|
+
+           (interface iface
+             (defun f:bool ()))
+
+           (module evmodule G
+
+             (defcap G () true)
+
+             (implements iface)
+
+             (defun f:bool () true)
+
+             (defcap EVENT (mod:module{iface})
+               @event true)
+
+             (defun emit(mod:module{iface})
+               (emit-event (EVENT mod))))
+
+           (evmodule.emit evmodule)
+           |]
+
+
+mkModuleHash :: Text -> IO ModuleHash
+mkModuleHash =
+  either (fail . show) (return . ModuleHash . Hash) . parseB64UrlUnpaddedText'
 
 testManagedCaps :: HTTP.Manager -> Spec
 testManagedCaps mgr = before_ flushDb $ after_ flushDb $
@@ -72,8 +123,7 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
     let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
     allResults <- runAll mgr allCmds
 
-    mhash <- either (fail . show) (return . ModuleHash . Hash) $
-      parseB64UrlUnpaddedText' "HniQBJ-NUJan20k4t6MiqpzhqkSsKmIzN5ef76pcLCU"
+    mhash <- mkModuleHash "HniQBJ-NUJan20k4t6MiqpzhqkSsKmIzN5ef76pcLCU"
 
     runResults allResults $ do
       sysModuleCmd `succeedsWith` textVal "system module loaded"
@@ -410,7 +460,17 @@ testPactYield mgr = before_ flushDb $ after_ flushDb $ do
   it "resets yielded values after each step" $
     testResetYield mgr
 
-  it "testCrossChainYield" $ testCrossChainYield mgr
+  it "testCrossChainYield:succeeds with same module" $
+      testCrossChainYield mgr "" True False
+
+  it "testCrossChainYield:succeeds with back compat" $
+      testCrossChainYield mgr "" True True
+
+  it "testCrossChainYield:fails with different module" $
+      testCrossChainYield mgr ";;1" False False
+
+  it "testCrossChainYield:succeeds with blessed module" $
+      testCrossChainYield mgr "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True False
 
 
 testValidYield :: HTTP.Manager -> Expectation
@@ -541,8 +601,8 @@ pactWithSameNameYield moduleName =
                      res)))))|]
 
 
-testCrossChainYield :: HTTP.Manager -> Expectation
-testCrossChainYield mgr = step0
+testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Bool -> Expectation
+testCrossChainYield mgr blessCode succeeds backCompat = step0
   where
 
     -- STEP 0: runs on server for "chain0results"
@@ -552,15 +612,33 @@ testCrossChainYield mgr = step0
     step0 = do
       adminKeys <- genKeys
 
-      let makeExecCmdWith = makeExecCmd adminKeys
-      moduleCmd        <- makeExecCmdWith pactCrossChainYield
+      let makeExecCmdWith = makeExecCmd' (Just "xchain") adminKeys
+      moduleCmd        <- makeExecCmdWith (pactCrossChainYield "")
+      moduleCmd'       <- makeExecCmdWith (pactCrossChainYield blessCode)
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
 
-      chain0Results <- runAll mgr [moduleCmd,executePactCmd]
+      chain0Results <-
+        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport $
+        if backCompat then backCompatConfig else testConfigFilePath
+
+      mhash <- mkModuleHash "_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc"
 
       runResults chain0Results $ do
         moduleCmd `succeedsWith`  Nothing
-        executePactCmd `succeedsWith` textVal "emily->A"
+        executePactCmd `succeedsWith'`
+            Just (textVal' "emily->A",
+                  if backCompat then [] else
+                    [PactEvent
+                     "X_YIELD"
+                     [ textVal' ""
+                     , textVal' "cross-chain-tester.cross-chain"
+                     , PList $ V.fromList [ textVal' "emily" ]]
+                     "pact"
+                     mhash])
+        shouldMatch executePactCmd $ ExpectResult $ \cr ->
+          preview (crContinuation . _Just . peYield . _Just . ySourceChain . _Just) cr
+          `shouldBe`
+          (if backCompat then Nothing else Just (ChainId ""))
 
       let rk = cmdToRequestKey executePactCmd
 
@@ -571,13 +649,13 @@ testCrossChainYield mgr = step0
           Nothing -> expectationFailure $
             "No continuation in result: " ++ show rk
           Just pe -> do
-            step1 adminKeys executePactCmd moduleCmd pe
+            step1 adminKeys executePactCmd moduleCmd' pe mhash
             -- step1fail adminKeys executePactCmd moduleCmd pe
 
     -- STEP 1: found the pact exec from step 0; return this
     -- from the SPV operation. Run a fresh server, reload
     -- the module, and run the step.
-    step1 adminKeys executePactCmd moduleCmd pe = do
+    step1 adminKeys executePactCmd moduleCmd pe mhash = do
 
       let proof = (ContProof "hi there")
           makeContCmdWith = makeContCmd' (Just proof) adminKeys False Null executePactCmd
@@ -596,29 +674,46 @@ testCrossChainYield mgr = step0
 
       flushDb
 
-      chain1Results <- runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv
+      chain1Results <-
+        runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv testConfigFilePath
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
+          provenanceFailedMsg = "enforceYield: yield provenance"
 
       runResults chain1Results $ do
         moduleCmd `succeedsWith`  Nothing
-        chain1Cont `succeedsWith` textVal "emily->A->B"
-        chain1ContDupe `failsWith` Just completedPactMsg
+        if succeeds
+            then do
+          -- chain1Cont `succeedsWith` textVal "emily->A->B"
+          chain1Cont `succeedsWith'`
+            Just (textVal' "emily->A->B",
+                  if backCompat then [] else
+                    [PactEvent
+                     "X_RESUME"
+                     [ textVal' ""
+                     , textVal' "cross-chain-tester.cross-chain"
+                     , PList $ V.fromList [ textVal' "emily" ]]
+                     "pact"
+                     mhash])
+          chain1ContDupe `failsWith` Just completedPactMsg
+            else do
+          chain1Cont `failsWith` Just provenanceFailedMsg
 
 
-pactCrossChainYield :: T.Text
-pactCrossChainYield =
+pactCrossChainYield :: T.Text -> T.Text
+pactCrossChainYield blessExpr =
   [text|
     (module cross-chain-tester GOV
       (defcap GOV () true)
       (defschema schema-a a-result:string)
+      $blessExpr
       (defpact cross-chain (name)
         (step
           (let*
             ((nameA (+ name "->A"))
              (r:object{schema-a} { "a-result": nameA }))
 
-            (yield r "") ;; "" is chain id in these tests
+            (yield r "")
             nameA))
 
         (step
@@ -809,16 +904,24 @@ testPriceNegDownBadCaps mgr = do
 testConfigFilePath :: FilePath
 testConfigFilePath = testDir ++ "test-config.yaml"
 
+backCompatConfig :: FilePath
+backCompatConfig = testDir ++ "test-config-disable40.yaml"
+
+
+shouldMatch
+    :: HasCallStack
+    => Command Text
+    -> ExpectResult
+    -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+shouldMatch cmd er = ask >>= liftIO . shouldMatch' (makeCheck cmd er)
 
 shouldMatch' :: HasCallStack => CommandResultCheck -> HM.HashMap RequestKey (CommandResult Hash) -> Expectation
-shouldMatch' crc@CommandResultCheck{..} results = checkResult _crcExpect apiRes
+shouldMatch' CommandResultCheck{..} results = checkResult _crcExpect apiRes
   where
     apiRes = HM.lookup _crcReqKey results
-    checkResult expect result = case result of
-      Nothing -> expectationFailure $ "Failed to find ApiResult for " ++ show crc
-      Just CommandResult{..} -> (toActualResult _crResult _crEvents) `resultShouldBe` expect
-    toActualResult (PactResult (Left (PactError _ _ _ d))) _ = ActualResult . Left $ show d
-    toActualResult (PactResult (Right pv)) es = ActualResult $ Right (pv,es)
+    checkResult (ExpectResult crTest) result = case result of
+      Nothing -> expectationFailure $ "Failed to find ApiResult for " ++ show _crcReqKey
+      Just cr -> crTest cr
 
 
 
@@ -829,21 +932,21 @@ succeedsWith cmd r = succeedsWith' cmd ((,[]) <$> r)
 
 succeedsWith' :: HasCallStack => Command Text -> Maybe (PactValue,[PactEvent]) ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith' cmd r = ask >>= liftIO . shouldMatch'
-                     (makeCheck cmd (ExpectResult . Right $ r))
+succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right $ r)
 
 failsWith :: HasCallStack => Command Text -> Maybe String ->
              ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-failsWith cmd r = ask >>= liftIO . shouldMatch'
-                  (makeCheck cmd (ExpectResult . Left $ r))
+failsWith cmd r = shouldMatch cmd (resultShouldBe $ Left $ r)
 
 runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs
 
 makeExecCmd :: SomeKeyPair -> Text -> IO (Command Text)
-makeExecCmd keyPairs code =
-  mkExec code
-  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing Nothing
+makeExecCmd keyPairs code = makeExecCmd' Nothing keyPairs code
+
+makeExecCmd' :: Maybe Text -> SomeKeyPair -> Text -> IO (Command Text)
+makeExecCmd' nonce keyPairs code = mkExec code
+  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing nonce
 
 
 formatPubKeyForCmd :: SomeKeyPair -> Value
@@ -896,30 +999,29 @@ stepMisMatchMsg isRollback attemptStep currStep = Just msg
         msg = "resumePactExec: " <> typeOfStep <> " step mismatch with context: ("
               <> show attemptStep <> ", " <> show currStep <> ")"
 
-newtype ExpectResult = ExpectResult (Either (Maybe String) (Maybe (PactValue,[PactEvent])))
-  deriving (Eq, Show)
-newtype ActualResult = ActualResult (Either String (PactValue,[PactEvent]))
-  deriving (Eq, Show)
+newtype ExpectResult = ExpectResult (CommandResult Hash -> Expectation)
+    deriving (Semigroup)
 
 data CommandResultCheck = CommandResultCheck
   { _crcReqKey :: RequestKey
   , _crcExpect :: ExpectResult
-  } deriving (Show, Eq)
+  }
 
 
 makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{} expect = CommandResultCheck (cmdToRequestKey c) expect
 
 runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll mgr cmds = runAll' mgr cmds noSPVSupport
+runAll mgr cmds = runAll' mgr cmds noSPVSupport testConfigFilePath
 
 runAll'
   :: Manager
   -> [Command T.Text]
   -> SPVSupport
+  -> FilePath
   -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll' mgr cmds spv = Exception.bracket
-              (startServer' testConfigFilePath spv)
+runAll' mgr cmds spv config = Exception.bracket
+              (startServer' config spv)
                stopServer
               (const (run mgr cmds))
 
@@ -957,18 +1059,25 @@ doPoll mgr req = do
   runClientM (pollClient req) (mkClientEnv mgr baseUrl)
 
 
-resultShouldBe :: HasCallStack => ActualResult -> ExpectResult -> Expectation
-resultShouldBe (ActualResult actual) (ExpectResult expect) =
-  case (expect,actual) of
+resultShouldBe
+    :: HasCallStack
+    => Either (Maybe String) (Maybe (PactValue,[PactEvent]))
+    -> ExpectResult
+resultShouldBe expect = ExpectResult $ \cr ->
+  case (expect,actual cr) of
     (Left (Just expErr),
-     Left err)             -> unless (expErr == err) (toExpectationFailure expErr err)
+     Left err)             -> unless (expErr `isInfixOf` err) (toExpectationFailure expErr err)
     (Right (Just expVal),
      Right val)            -> unless (expVal == val) (toExpectationFailure expVal val)
     (Left Nothing,
      Left _)               -> return ()
     (Right Nothing,
      Right _)              -> return ()
-    _                      -> toExpectationFailure expect actual
+    _                      -> toExpectationFailure expect cr
+  where
+    actual CommandResult{..}= case _pactResult _crResult of
+      Left e -> Left (show $ peDoc e)
+      Right pv -> Right (pv,_crEvents)
 
 
 

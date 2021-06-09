@@ -44,6 +44,7 @@ import Control.Monad
 import Data.Aeson hiding (Object)
 import qualified Data.Aeson.Lens as A
 import Data.Default
+import Data.Foldable
 import qualified Data.Vector as V
 import Data.Text (Text)
 
@@ -237,10 +238,15 @@ enforceYield fa y = case _yProvenance y of
   Just p -> do
     m <- getCallingModule fa
     cid <- view $ eePublicData . pdPublicMeta . pmChainId
-    let p' = Provenance cid (_mHash m)
-
-    unless (p == p') $
-      evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p
+    ifExecutionFlagSet FlagDisablePact40
+      (do
+          let p' = Provenance cid (_mHash m)
+          unless (p == p') $
+              evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p)
+      (do
+          let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
+          unless (p `elem` p') $
+              evalError' fa $ "enforceYield: yield provenance " <> pretty p <> " does not match " <> pretty p')
 
     return y
 
@@ -263,9 +269,11 @@ requireDefApp dt App{..} = case _appFun of
         <> pretty (_dDefType d)
 
 argsToParams :: Info -> [Term Name] -> Eval e [PactValue]
-argsToParams i = mapM $ \arg -> case toPactValue arg of
-  Right pv -> return pv
-  Left e -> evalError i $ "Invalid capability argument: " <> pretty e
+argsToParams i args = do
+  elideFun <- ifExecutionFlagSet' FlagDisablePact40 id elideModRefInfo
+  forM args $ \arg -> case toPactValue arg of
+    Right pv -> return $ elideFun pv
+    Left e -> evalError i $ "Invalid capability argument: " <> pretty e
 
 -- | Workhorse to convert App to Capability by capturing Def,
 -- reducing args and converting to pact value, and returning

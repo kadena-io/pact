@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
 module Pact.Bench where
 
 import Control.Arrow
@@ -23,10 +23,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
-
--- import GHC.Clock
-import Data.Thyme.Clock
-import Data.AffineSpace
+import Pact.Time
 
 import System.IO
 import System.Directory
@@ -53,6 +50,8 @@ import Pact.Types.SPV
 import Pact.Types.SQLite
 import Pact.Persist.SQLite
 import Pact.PersistPactDb hiding (db)
+import Pact.Repl
+import Pact.Repl.Types
 import Pact.Types.Capability
 import Pact.Runtime.Utils
 
@@ -103,6 +102,7 @@ pureExps = map (unpack &&& id)
   , "(let ((a 1) (b 2)) (+ a b))"
   , "(let* ((a 1) (b a)) (+ a b))"
   , "(bind { 'a: 1 } { 'a := a } a)"
+  , "(time \"1970-01-01T00:00:00Z\")"
   ]
 
 benchParse :: Benchmark
@@ -159,6 +159,12 @@ loadBenchModule db = do
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
   p <- either (die "loadBenchModule" . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
   return (benchMod,p)
+
+loadCompile :: FilePath -> IO [Term Name]
+loadCompile f = do
+  m <- decodeUtf8 <$> BS.readFile f
+  compileExp m
+
 
 prodGasEnv :: GasEnv
 prodGasEnv = GasEnv 100000 0.01 $ tableGasModel defaultGasConfig
@@ -307,7 +313,10 @@ main = do
   !round0 <- parseCode "(round 123.456789)"
   !round4 <- parseCode "(round 123.456789 4)"
   !pures <- force <$> mapM (mapM compileExp) pureExps
-
+  !timeTest <- loadCompile "tests/pact/time.repl"
+  replS <- setReplLib <$> initReplState Quiet Nothing
+  let tt = evalReplEval def replS (mapM eval timeTest)
+  void $! eitherDie "timeTest failed" . fmapL show =<< tt
 
 
   let cleanupSqlite = do
@@ -365,4 +374,5 @@ main = do
       [ benchNFIO "round0" $ runPactExec def "round0" [] Null Nothing pureDb round0
       , benchNFIO "round4" $ runPactExec def "round4" [] Null Nothing pureDb round4
       ]
+    , benchNFIO "time" $ fmap (fmap fst) $ evalReplEval def replS (mapM eval timeTest)
     ]

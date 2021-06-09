@@ -752,7 +752,9 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
     case _dDefType of
       Defun -> reduceBody bod'
       Defpact -> do
-        continuation <- PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
+        continuation <-
+          PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
+          . map elideModRefInfo
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
       Defcap ->
@@ -890,9 +892,39 @@ applyPact i app (TList steps _ _) PactStep {..} = do
 
   writeRow i Write Pacts _psPactId $ if done then Nothing else Just resultState
 
+  unlessExecutionFlagSet FlagDisablePact40 $ emitXChainEvents _psResume resultState
+
   return result
 
 applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
+
+
+-- | Synthesize events for cross chain. Usually only submits yield OR resume,
+-- but in the middle of a 3+ step cross-chain could be two.
+emitXChainEvents
+    :: Maybe Yield
+       -- ^ from '_psResume', indicating a cross-chain resume.
+    -> PactExec
+       -- ^ tested for yield provenance to indicate a cross-chain yield.
+    -> Eval e ()
+emitXChainEvents mResume PactExec {..} = do
+  forM_ mResume $ \r -> case r of
+    (Yield _ (Just (Provenance _ mh)) (Just sc)) ->
+      emitXEvent "X_RESUME" sc mh
+    _ -> return ()
+  forM_ _peYield $ \y -> case y of
+    (Yield _ (Just (Provenance tc mh)) _) ->
+      emitXEvent "X_YIELD" tc mh
+    _ -> return ()
+  where
+    emitXEvent eName cid mh = emitReservedEvent eName
+      [ toPString cid
+      , toPString (_pcDef _peContinuation)
+      , PList (V.fromList (_pcArgs _peContinuation)) ]
+      mh
+
+    toPString :: AsString s => s -> PactValue
+    toPString = PLiteral . LString . asString
 
 
 
