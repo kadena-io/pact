@@ -17,14 +17,16 @@ module Pact.Coverage
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 import Control.Lens
-import qualified Data.Default as Default
+import Data.Default
 import Data.IORef
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import Data.Text.Encoding
 import Text.Trifecta.Delta
 
 import Pact.Coverage.Report
+import Pact.Eval
 import Pact.Types.Advice
 import Pact.Types.Info
 import Pact.Types.Pretty
@@ -39,22 +41,38 @@ mkCoverageAdvice = newIORef mempty >>= \r -> return (r,Advice $ cover r)
 
 cover :: MonadIO m => IORef LcovReport -> Info -> AdviceContext -> m a -> m a
 cover ref i ctx f = case _iInfo i of
-    Just {} -> go (parseInf i) >> f
+    Just {} -> mkLineReport (parseInf i) >> f
     _ -> f
   where
-    go (fn,l) = liftIO $ modifyIORef ref (<> newRep)
+
+    mkLineReport (fn,l) = liftIO $ modifyIORef ref (<> newRep)
       where
         newRep = case ctx of
-          AdviceUser (def,_) -> fr <> mkFunRep def
+          AdviceUser (fdef,_) -> fr <> mkFunReport fdef
+          AdviceModule m -> fr <> mkModuleReport m
           _ -> fr
-        fr = LcovReport $ HM.singleton fn (FileReport fn mempty mempty ln)
-        ln = HM.singleton l (LineReport l 1)
-    mkFunRep def = LcovReport $ HM.singleton fn (FileReport fn (mkFun def l) mempty mempty)
+        fr = LcovReport $ HM.singleton fn (FileReport fn mempty mempty $ lnReport l)
+
+    lnReport l = HM.singleton l (LineReport l 1)
+
+    mkFunReport fdef = LcovReport $ HM.singleton fn (FileReport fn (mkFun fdef 1 l) mempty $ lnReport l)
       where
-        (fn,l) = parseInf (_dInfo def)
-    mkFun def fl = HM.singleton dn $ FunctionReport fl dn 1
+        (fn,l) = parseInf (_dInfo fdef)
+
+    mkFun fdef count fl = HM.singleton dn $ FunctionReport fl dn count
       where
-        dn = renderCompactText $ derefDef def
+        dn = renderCompactText $ derefDef fdef
+
+    mkModuleReport md = LcovReport $ HM.singleton fn (FileReport fn (mkModFuns md) mempty $ lnReport l)
+      where
+        (fn,l) = parseInf i
+        mkModFuns (MDInterface {},_) = mempty -- no need to track interface funs
+        mkModFuns (MDModule {},bod) = case instantiate' bod of
+          TList ds _ _ -> HM.unions $ (`map` V.toList ds) $ \t -> case t of
+            TDef d di -> mkFun d 0 $ snd $ parseInf di
+            _ -> mempty
+          _ -> mempty
+
     parseInf (Info m) = case m of
       Just (_,Parsed (Directed fn l _ _ _) _) -> (T.unpack $ decodeUtf8 fn,succ $ fromIntegral l)
       Just (_,Parsed (Lines l _ _ _) _) -> nofile $ succ $ fromIntegral l
@@ -66,5 +84,5 @@ _cover :: FilePath -> IO ()
 _cover fn = do
   (ref,adv) <- mkCoverageAdvice
   s <- set (rEnv . eeAdvice) adv <$> initReplState (Script False fn) Nothing
-  void $! runStateT (useReplLib >> loadFile Default.def fn) s
+  void $! runStateT (useReplLib >> loadFile def fn) s
   readIORef ref >>= writeReport "cov.lcov"

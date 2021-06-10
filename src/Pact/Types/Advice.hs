@@ -18,10 +18,12 @@ module Pact.Types.Advice
   , DbContext(..)
   ) where
 
+import Bound
 import Control.Lens
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Text (Text)
+
 import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Term
@@ -50,6 +52,8 @@ data AdviceContext =
     -- ^ Transaction execution wrapper
   | AdviceDb DbContext
     -- ^ Db operation
+  | AdviceModule (ModuleDef (Term Name),Scope () Term Name)
+    -- ^ Module or interface install/upgrade.
   | AdviceOther Text
     -- ^ Arbitrary advice.
   deriving (Eq,Show)

@@ -40,6 +40,7 @@ module Pact.Eval
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
     ,reduceDynamic
+    ,instantiate'
     ) where
 
 import Bound
@@ -219,7 +220,7 @@ evalNamespace info setter m = do
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
-eval (TModule (MDModule m) bod i) =
+eval (TModule tm@(MDModule m) bod i) = eAdvise i (AdviceModule (tm,bod)) $
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
     checkAllowModule i
     -- prepend namespace def to module name
@@ -253,7 +254,7 @@ eval (TModule (MDModule m) bod i) =
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
-eval (TModule (MDInterface m) bod i) =
+eval (TModule tm@(MDInterface m) bod i) = eAdvise i (AdviceModule (tm,bod)) $
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
     checkAllowModule i
      -- prepend namespace def to module name
@@ -812,7 +813,7 @@ prepareUserAppArgs Def{..} args i = do
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e a) -> Eval e a
 evalUserAppBody d@Def{..} (as',ft') ai g run =
-    eAdvise ai (AdviceUser (d,as')) $ appCall fa ai as' $ fmap (g,) $ run bod'
+    appCall fa ai as' $ eAdvise ai (AdviceUser (d,as')) $ fmap (g,) $ run bod'
   where
     bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
     fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
