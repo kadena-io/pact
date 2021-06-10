@@ -141,6 +141,8 @@ library
                     Pact.Analyze.Remote.Server
                     Pact.ApiReq
                     Pact.Bench
+                    Pact.Coverage
+                    Pact.Coverage.Report
                     Pact.Docgen
                     Pact.Interpreter
                     Pact.Main

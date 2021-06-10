@@ -32,6 +32,7 @@ module Pact.Repl
   , initPureEvalEnv
   , initReplState
   , isPactFile
+  , loadFile
   , parsedCompileEval
   , rSuccess
   , repl
@@ -42,6 +43,7 @@ module Pact.Repl
   , evalReplEval
   , replGetModules
   , replLookupModule
+  , useReplLib
   ) where
 
 import Prelude hiding (exp)

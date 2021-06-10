@@ -4,7 +4,7 @@
 
 -- |
 -- Module      :  Pact.Types.Advice
--- Copyright   :  (C) 2020 Stuart Popejoy
+-- Copyright   :  (C) 2021 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
