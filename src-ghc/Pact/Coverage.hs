@@ -41,36 +41,54 @@ mkCoverageAdvice = newIORef mempty >>= \r -> return (r,Advice $ cover r)
 
 cover :: MonadIO m => IORef LcovReport -> Info -> AdviceContext -> m a -> m a
 cover ref i ctx f = case _iInfo i of
-    Just {} -> mkLineReport (parseInf i) >> f
+    Just {} -> report (parseInf i) >> f
     _ -> f
   where
 
-    mkLineReport (fn,l) = liftIO $ modifyIORef ref (<> newRep)
+    report (fn,l) = liftIO $ modifyIORef ref (<> newRep)
       where
         newRep = case ctx of
-          AdviceUser (fdef,_) -> fr <> mkFunReport fdef
-          AdviceModule m -> fr <> mkModuleReport m
+          AdviceUser (fdef,_) -> fr <> mkFunLcov fdef
+          AdviceModule m -> fr <> mkModuleLcov m
           _ -> fr
-        fr = LcovReport $ HM.singleton fn (FileReport fn mempty mempty $ lnReport l)
+        fr = mkFileLcov fn mempty mempty $ lnReport l
 
-    lnReport l = HM.singleton l (LineReport l 1)
+    mkFileLcov fileName funReps brReps lnReps = LcovReport $ HM.singleton fileName
+        (FileReport fileName funReps brReps lnReps)
 
-    mkFunReport fdef = LcovReport $ HM.singleton fn (FileReport fn (mkFun fdef 1 l) mempty $ lnReport l)
+    lnReport l = lnReport' l 1
+
+    lnReport' l count = HM.singleton l (LineReport l count)
+
+    lnReport'' hi count = lnReport' l count where (_,l) = parseInf (getInfo hi)
+
+    mkFunLcov fdef = mkFileLcov fn (mkFunReport fdef 1 l) mempty $ lnReport l
       where
         (fn,l) = parseInf (_dInfo fdef)
 
-    mkFun fdef count fl = HM.singleton dn $ FunctionReport fl dn count
+    mkFunReport fdef count fl = HM.singleton dn $ FunctionReport fl dn count
       where
         dn = renderCompactText $ derefDef fdef
 
-    mkModuleReport md = LcovReport $ HM.singleton fn (FileReport fn (mkModFuns md) mempty $ lnReport l)
+    mkModuleLcov md = mkFileLcov fn modFuns mempty $ (HM.union (lnReport l) modLines)
       where
         (fn,l) = parseInf i
+        (modFuns,modLines) = mkModFuns md
         mkModFuns (MDInterface {},_) = mempty -- no need to track interface funs
         mkModFuns (MDModule {},bod) = case instantiate' bod of
+          TList ds _ _ ->
+            let modBody (fs,ls) (TDef d di) = (HM.union fs fm, HM.union ls lm)
+                  where
+                    fm = mkFunReport d 0 (snd (parseInf di))
+                    lm = mkFunLines d di
+                modBody r _ = r
+            in V.foldl' modBody (mempty,mempty) ds
+          _ -> (mempty,mempty)
+
+    mkFunLines d di = HM.union (lnReport'' di 0) $ case instantiate' (_dDefBody d) of
           TList ds _ _ -> HM.unions $ (`map` V.toList ds) $ \t -> case t of
-            TDef d di -> mkFun d 0 $ snd $ parseInf di
-            _ -> mempty
+              TApp {} -> lnReport'' t 0
+              _ -> mempty
           _ -> mempty
 
     parseInf (Info m) = case m of
