@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -243,7 +244,7 @@ perfEnv pt (PactDbEnv db mv) = PactDbEnv (advisePactDb pt db) mv
 
 perfInterpreter :: Advice -> Interpreter e -> Interpreter e
 perfInterpreter pt (Interpreter i) = Interpreter $ \runInput ->
-  advise def pt (AdviceTx initialHash) $! i runInput
+  advise def pt (AdviceTx initialHash) $! (((),) <$> i runInput)
 
 
 mkFilePerf :: FilePath -> IO Advice
@@ -257,7 +258,7 @@ mkFilePerf fp = do
       hFlush h
   return $ Advice $ \_ msg a -> do
     s <- liftIO $ time
-    r <- a
+    (_,r) <- a
     liftIO $ do
       e <- time
       writeChan c $! unpack $ (tShow msg) <> ": " <> pack (show (e .-. s))

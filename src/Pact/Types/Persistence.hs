@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
@@ -31,8 +32,7 @@ module Pact.Types.Persistence
    PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap,
    PersistModuleData,
-   ExecutionMode(..),
-   advisePactDb
+   ExecutionMode(..)
    ) where
 
 import Control.Applicative ((<|>))
@@ -52,7 +52,6 @@ import GHC.Generics (Generic)
 import Pact.Types.Continuation
 import Pact.Types.Exp
 import Pact.Types.PactValue
-import Pact.Types.Advice
 import Pact.Types.Pretty
 import Pact.Types.Term
 import Pact.Types.Type
@@ -247,22 +246,3 @@ data PactDb e = PactDb {
   , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
                  Domain k v -> TxId -> Method e [TxLog v]
 }
-
-
--- | Instrument some 'PactDb' with advice.
-advisePactDb :: Advice -> PactDb a -> PactDb a
-advisePactDb pt PactDb{..} = PactDb
-  { _readRow = \d k e -> perf' DbRead $ _readRow d k e
-  , _writeRow = \w d k v e -> perf' DbWrite $ _writeRow w d k v e
-  , _keys = \d e -> perf' DbKeys $ _keys d e
-  , _txids = \t i e -> perf' DbTxIds $ _txids t i e
-  , _createUserTable = \t m e -> perf' DbCreateUserTable $ _createUserTable t m e
-  , _getUserTableInfo = \t e -> perf' DbGetUserTableInfo $ _getUserTableInfo t e
-  , _beginTx = \m e -> perf' DbBeginTx $ _beginTx m e
-  , _commitTx = \e -> perf' DbCommitTx $ _commitTx e
-  , _rollbackTx = \e -> perf' DbRollbackTx $ _rollbackTx e
-  , _getTxLog = \d i e -> perf' DbGetTxLog $ _getTxLog d i e
-  }
-  where
-    perf' :: DbContext -> IO a -> IO a
-    perf' t = advise def pt (AdviceDb t)

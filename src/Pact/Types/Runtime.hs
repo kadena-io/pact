@@ -424,5 +424,5 @@ argsError i as = throwArgsError i as "Invalid arguments"
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
 
-eAdvise :: Info -> AdviceContext -> Eval e a -> Eval e a
+eAdvise :: Info -> AdviceContext r -> Eval e (r,a) -> Eval e a
 eAdvise i m a = view eeAdvice >>= \adv -> advise i adv m a
