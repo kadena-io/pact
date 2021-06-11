@@ -221,7 +221,8 @@ eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval (TModule tm@(MDModule m) bod i) =
-  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> eAdvise i (AdviceModule (tm,bod)) $ do
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 ->
+  eAdvise i (AdviceModule tm) $ do
     checkAllowModule i
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
@@ -255,7 +256,8 @@ eval (TModule tm@(MDModule m) bod i) =
     return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
 
 eval (TModule tm@(MDInterface m) bod i) =
-  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> eAdvise i (AdviceModule (tm,bod)) $ do
+  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas ->
+  eAdvise i (AdviceModule tm) $ do
     checkAllowModule i
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m

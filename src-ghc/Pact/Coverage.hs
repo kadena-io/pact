@@ -13,9 +13,10 @@
 
 module Pact.Coverage
   ( mkCoverageAdvice
+  , writeCovReport
+  , writeCovReport'
   ) where
 
-import Bound
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 import Control.Lens (set)
@@ -26,6 +27,8 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Text.Trifecta.Delta
+import System.Directory
+import System.FilePath
 
 import Pact.Coverage.Report
 import Pact.Typechecker
@@ -54,12 +57,11 @@ cover ref i ctx f = case _iInfo i of
 
     report (fn,l) = liftIO $ modifyIORef ref (<> newRep) >> return post
       where
-        newRep = case ctx of
-          AdviceUser (fdef,_) -> fr <> mkFunLcov fdef
-          -- AdviceModule m -> fr <> mkModuleLcov m
-          _ -> fr
+        newRep = fr <> case ctx of
+          AdviceUser (fdef,_) -> mkFunLcov fdef
+          _ -> mempty
         post = case ctx of
-          AdviceModule m -> postModule m
+          AdviceModule _m -> postModule
           _ -> const $ return ()
         fr = mkFileLcov fn mempty mempty $ lnReport l
 
@@ -80,14 +82,14 @@ cover ref i ctx f = case _iInfo i of
       where
         dn = renderCompactText $ derefDef fdef
 
-    postModule :: MonadIO m => (ModuleDef (Term Name),Scope () Term Name) -> ModuleData Ref -> m ()
-    postModule _ (ModuleData (MDModule _m) modDefs) = do
+    postModule :: MonadIO m => ModuleData Ref -> m ()
+    postModule (ModuleData (MDModule _m) modDefs) = do
       ((modFuns,modLines),_) <- liftIO $ runTC 0 False $
         foldM walkDefs (mempty,mempty) (HM.elems modDefs)
       let (fn,_l) = parseInf i
           newRep = mkFileLcov fn modFuns mempty modLines
       liftIO $ modifyIORef ref (<> newRep)
-    postModule _ _ = return ()
+    postModule _ = return ()
 
     walkDefs acc@(fs,ls) mem = case mem of
         Ref r -> do
@@ -120,10 +122,18 @@ parseInf inf = case getInfo inf of
   _ -> nofile 0
   where nofile l = ("<interactive>",l)
 
+writeCovReport :: IORef LcovReport -> IO ()
+writeCovReport = writeCovReport' True "coverage/lcov.info"
+
+writeCovReport' :: Bool -> FilePath -> IORef LcovReport -> IO ()
+writeCovReport' mkParentDir reportFile ref = do
+  when mkParentDir $ createDirectoryIfMissing True $ takeDirectory reportFile
+  readIORef ref >>= writeReport reportFile
+
 -- _cover "examples/accounts/accounts.repl"
 _cover :: FilePath -> IO ()
 _cover fn = do
   (ref,adv) <- mkCoverageAdvice
   s <- set (rEnv . eeAdvice) adv <$> initReplState (Script False fn) Nothing
   void $! runStateT (useReplLib >> loadFile def fn) s
-  readIORef ref >>= writeReport "cov.lcov"
+  writeCovReport ref

@@ -22,7 +22,6 @@ module Pact.Types.Advice
   , advisePactDb
   ) where
 
-import Bound
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Text (Text)
@@ -46,18 +45,19 @@ data DbContext =
   | DbGetTxLog
   deriving (Eq,Show,Enum,Bounded)
 
--- | Type of advised operation.
+-- | Type of advised operation. GADT indicates return type of
+-- the bracketed operation.
 data AdviceContext r where
     AdviceUser :: (Def Ref,[Term Name]) -> AdviceContext (Term Name)
-    -- ^ Advise on user function
+    -- ^ Advise on user function, return result
     AdviceNative :: NativeDefName -> AdviceContext (Term Name)
-    -- ^ Advise on native
+    -- ^ Advise on native, return result
     AdviceTx :: PactHash -> AdviceContext ()
     -- ^ Transaction execution wrapper
     AdviceDb :: DbContext -> AdviceContext ()
     -- ^ Db operation
-    AdviceModule :: (ModuleDef (Term Name),Scope () Term Name) -> AdviceContext (ModuleData Ref)
-    -- ^ Module or interface install/upgrade.
+    AdviceModule :: (ModuleDef (Term Name)) -> AdviceContext (ModuleData Ref)
+    -- ^ Module or interface install/upgrade, returns loaded module data.
     AdviceOther :: Text -> AdviceContext Text
     -- ^ Arbitrary advice.
 
@@ -76,6 +76,7 @@ newtype Advice = Advice {
     => Info
     -> AdviceContext r
     -> m (r, a)
+       -- ^ return GADT-directed value.
     -> m a
   }
 

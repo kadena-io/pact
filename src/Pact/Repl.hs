@@ -23,6 +23,8 @@ module Pact.Repl
   ( errToUnit
   , execScript
   , execScript'
+  , execScriptF
+  , execScriptF'
   , evalPact
   , evalRepl
   , evalRepl'
@@ -333,8 +335,12 @@ rSuccess = return $ Right $ toTerm True
 
 -- | Workhorse to load script; also checks/reports test failures
 execScript :: Bool -> FilePath -> IO (Either () (Term Name))
-execScript dolog f = do
-  (r,ReplState{..}) <- execScript' (Script dolog f) f
+execScript dolog f = execScriptF dolog f id
+
+execScriptF :: Bool -> FilePath -> (ReplState -> ReplState)
+            -> IO (Either () (Term Name))
+execScriptF dolog f stateMod = do
+  (r,ReplState{..}) <- execScriptF' (Script dolog f) f stateMod
   let outFailures = do
         LibState{..} <- readMVar $ _eePactDbVar _rEnv
         fmap sequence $ forM _rlsTests $ \TestResult{..} -> case trFailure of
@@ -348,12 +354,18 @@ execScript dolog f = do
       fs <- outFailures
       maybe (return $ Left ()) (const (return (Right t))) fs
 
-
+-- | Version with state result
 execScript' :: ReplMode -> FilePath -> IO (Either String (Term Name),ReplState)
-execScript' m fp = do
-  s <- initReplState m Nothing
-  runStateT (useReplLib >> loadFile def fp) s
+execScript' m fp = execScriptF' m fp id
 
+execScriptF' :: ReplMode -> FilePath -> (ReplState -> ReplState)
+            -> IO (Either String (Term Name),ReplState)
+execScriptF' m fp stateMod = do
+  s <- initReplState m Nothing
+  runStateT (useReplLib >> modify stateMod >> loadFile def fp) s
+
+
+-- | Run an 'Eval' in repl.
 evalReplEval :: Info -> ReplState -> Eval LibState a -> IO (Either PactError (a, ReplState))
 evalReplEval i rs e = do
   ((r,es),rs') <- runStateT (evalEval i e) rs
