@@ -48,18 +48,18 @@ data DbContext =
 -- | Type of advised operation. GADT indicates return type of
 -- the bracketed operation.
 data AdviceContext r where
+    -- | Advise on user function, return result
     AdviceUser :: (Def Ref,[Term Name]) -> AdviceContext (Term Name)
-    -- ^ Advise on user function, return result
+    -- | Advise on native, return result
     AdviceNative :: NativeDefName -> AdviceContext (Term Name)
-    -- ^ Advise on native, return result
+    -- | Transaction execution wrapper
     AdviceTx :: PactHash -> AdviceContext ()
-    -- ^ Transaction execution wrapper
+    -- | Db operation
     AdviceDb :: DbContext -> AdviceContext ()
-    -- ^ Db operation
+    -- | Module or interface install/upgrade, returns loaded module data.
     AdviceModule :: (ModuleDef (Term Name)) -> AdviceContext (ModuleData Ref)
-    -- ^ Module or interface install/upgrade, returns loaded module data.
+    -- | Arbitrary advice.
     AdviceOther :: Text -> AdviceContext Text
-    -- ^ Arbitrary advice.
 
 instance Show (AdviceContext r) where
   show AdviceUser {} = "AdviceUser"
