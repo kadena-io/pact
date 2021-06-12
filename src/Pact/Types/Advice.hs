@@ -45,7 +45,7 @@ data DbContext =
   | DbGetTxLog
   deriving (Eq,Show,Enum,Bounded)
 
--- | Type of advised operation. GADT indicates return type of
+-- | Type of advised operation. GADT indicates the "intermediate return value" type of
 -- the bracketed operation.
 data AdviceContext r where
     -- | Advise on user function, return result
@@ -72,11 +72,15 @@ instance Show (AdviceContext r) where
 
 -- | Bracket some Pact operation.
 newtype Advice = Advice {
+  -- | Callback for advising a pact operation. '_advise i ctx op'
+  -- gives source info in 'i', advice context in 'ctx', and 'op'
+  -- as the bracketed action. The implementation is expected to
+  -- execute 'op' whose return value '(r,a)' contains the ultimate
+  -- return value in 'a', with 'r' available for inspection.
   _advise :: forall m r a . MonadIO m
     => Info
     -> AdviceContext r
     -> m (r, a)
-       -- ^ return GADT-directed value.
     -> m a
   }
 
