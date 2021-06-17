@@ -106,6 +106,21 @@ X.
    pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
    ["dog" "has" "fleas"]
 
+concat
+~~~~~~
+
+*str-list* ``[string]`` *→* ``string``
+
+Takes STR-LIST and concats each of the strings in the list, returning
+the resulting string
+
+.. code:: lisp
+
+   pact> (concat ["k" "d" "a"])
+   "kda"
+   pact> (concat (map (+ " ") (str-to-list "abcde")))
+   " a b c d e"
+
 constantly
 ~~~~~~~~~~
 
@@ -160,6 +175,19 @@ will be rotated in its place.
 
 Top level only: this function will fail if used in module code.
 
+distinct
+~~~~~~~~
+
+*values* ``[<a>]`` *→* ``[<a>]``
+
+Returns from a homogeneous list of VALUES a list with duplicates
+removed. The original order of the values is preserved.
+
+.. code:: lisp
+
+   pact> (distinct [3 3 1 1 2 2])
+   [3 1 2]
+
 drop
 ~~~~
 
@@ -170,7 +198,7 @@ drop
 
 Drop COUNT values from LIST (or string), or entries having keys in KEYS
 from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the
-interval (-2:sup:`63,2`\ 63), it is truncated to that range.
+interval (-2\ :sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -225,6 +253,33 @@ from the left, such that ‘2’, ‘2.2’, and ‘2.2.3’ would all allow
    true
 
 Top level only: this function will fail if used in module code.
+
+enumerate
+~~~~~~~~~
+
+*from* ``integer`` *to* ``integer`` *inc* ``integer`` *→* ``[integer]``
+
+*from* ``integer`` *to* ``integer`` *→* ``[integer]``
+
+Returns a sequence of numbers from FROM to TO (both inclusive) as a
+list. INC is the increment between numbers in the sequence. If INC is
+not given, it is assumed to be 1. Additionally, if INC is not given and
+FROM is greater than TO assume a value for INC of -1. If FROM equals TO,
+return the singleton list containing FROM, irrespective of INC’s value.
+If INC is equal to zero, this function will return the singleton list
+containing FROM. If INC is such that FROM + INC > TO (when FROM < TO) or
+FROM + INC < TO (when FROM > TO) return the singleton list containing
+FROM. Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or
+FROM + INC > TO (when FROM > TO), then this function fails.
+
+.. code:: lisp
+
+   pact> (enumerate 0 10 2)
+   [0 2 4 6 8 10]
+   pact> (enumerate 0 10)
+   [0 1 2 3 4 5 6 7 8 9 10]
+   pact> (enumerate 10 0)
+   [10 9 8 7 6 5 4 3 2 1 0]
 
 filter
 ~~~~~~
@@ -437,7 +492,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "3.7"
+   "4.0.0.11"
 
 Top level only: this function will fail if used in module code.
 
@@ -575,6 +630,20 @@ digit must be in the correct range for the base.
    pact> (str-to-int 64 "q80")
    43981
 
+str-to-list
+~~~~~~~~~~~
+
+*str* ``string`` *→* ``[string]``
+
+Takes STR and returns a list of single character strings
+
+.. code:: lisp
+
+   pact> (str-to-list "hello")
+   ["h" "e" "l" "l" "o"]
+   pact> (concat (map (+ " ") (str-to-list "abcde")))
+   " a b c d e"
+
 take
 ~~~~
 
@@ -585,7 +654,7 @@ take
 
 Take COUNT values from LIST (or string), or entries having keys in KEYS
 from OBJECT. If COUNT is negative, take from end. If COUNT exceeds the
-interval (-2:sup:`63,2`\ 63), it is truncated to that range.
+interval (-2\ :sup:`63,2`\ 63), it is truncated to that range.
 
 .. code:: lisp
 
@@ -1622,6 +1691,18 @@ Defines a custom guard CLOSURE whose arguments are strictly evaluated at
 definition time, to be supplied to indicated function at enforcement
 time.
 
+emit-event
+~~~~~~~~~~
+
+*capability* ``-> bool`` *→* ``bool``
+
+Emit CAPABILITY as event without evaluating body of capability. Fails if
+CAPABILITY is not @managed or @event.
+
+.. code:: lisp
+
+   (emit-event (TRANSFER "Bob" "Alice" 12.0))
+
 enforce-guard
 ~~~~~~~~~~~~~
 
@@ -1935,7 +2016,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“DisablePactEvents”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“DisablePact40”,“DisablePactEvents”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
 
 .. code:: lisp
 
