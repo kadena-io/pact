@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -43,7 +44,7 @@ import Pact.Types.Crypto
 import Pact.Types.Lang
 import Pact.Types.Logger
 import Pact.Types.PactValue
-import Pact.Types.Perf
+import Pact.Types.Advice
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
@@ -175,29 +176,29 @@ parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)
 benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
-runPactExec :: PerfTimer -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
+runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
-      e = (\ee -> ee { _eePerfTimer = pt }) $ setupEvalEnv dbEnv entity Transactional md
+      e = (\ee -> ee { _eeAdvice = pt }) $ setupEvalEnv dbEnv entity Transactional md
           initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def def
-      s = perfInterpreter (pack msg) pt $ defaultInterpreterState $
+      s = perfInterpreter pt $ defaultInterpreterState $
         maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
   r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
   return $!! _erOutput r'
 
-execPure :: PerfTimer -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
+execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
   let md = MsgData Null Nothing pactInitialHash []
-      env = (\ee -> ee { _eePerfTimer = pt }) $ setupEvalEnv dbEnv entity Local md
+      env = (\ee -> ee { _eeAdvice = pt }) $ setupEvalEnv dbEnv entity Local md
             initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def def
   o <- try $ runEval def env $ mapM eval ts
   case o of
     Left (e :: SomeException) -> die "execPure" (n ++ ": " ++ show e)
     Right rs -> return $!! fst rs
 
-benchPures :: PerfTimer -> PactDbEnv e -> [(String,[Term Name])] -> Benchmark
+benchPures :: Advice -> PactDbEnv e -> [(String,[Term Name])] -> Benchmark
 benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
   \p -> benchNFIO (fst p) $ execPure pt dbEnv p
 
@@ -238,15 +239,15 @@ mkBenchCmd kps (str, t) = do
 pk :: Text
 pk = "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
 
-perfEnv :: Text -> PerfTimer -> PactDbEnv p -> PactDbEnv p
-perfEnv n pt (PactDbEnv db mv) = PactDbEnv (perfPactDb n pt db) mv
+perfEnv :: Advice -> PactDbEnv p -> PactDbEnv p
+perfEnv pt (PactDbEnv db mv) = PactDbEnv (advisePactDb pt db) mv
 
-perfInterpreter :: Text -> PerfTimer -> Interpreter e -> Interpreter e
-perfInterpreter msg pt (Interpreter i) = Interpreter $ \runInput ->
-  perf pt (msg <> ":" <> "interp") $! i runInput
+perfInterpreter :: Advice -> Interpreter e -> Interpreter e
+perfInterpreter pt (Interpreter i) = Interpreter $ \runInput ->
+  advise def pt (AdviceTx initialHash) $! (((),) <$> i runInput)
 
 
-mkFilePerf :: FilePath -> IO PerfTimer
+mkFilePerf :: FilePath -> IO Advice
 mkFilePerf fp = do
   h <- openFile fp WriteMode
   c <- newChan
@@ -255,12 +256,12 @@ mkFilePerf fp = do
     (`mapM_` m) $ \s -> do
       hPutStrLn h s
       hFlush h
-  return $ PerfTimer $ \msg a -> do
+  return $ Advice $ \_ msg a -> do
     s <- liftIO $ time
-    r <- a
+    (_,r) <- a
     liftIO $ do
       e <- time
-      writeChan c $! unpack $ msg <> ": " <> pack (show (e .-. s))
+      writeChan c $! unpack $ (tShow msg) <> ": " <> pack (show (e .-. s))
       -- uncomment below to time the chan write itself
       -- f <- time
       -- writeChan c $! "chan: " <> (show (f .-. e))
@@ -282,7 +283,7 @@ main = do
   !keyPair <- eitherDie "keyPair" $
     importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie "parseExps" . parseExprs)) exps
-  !pureDb <- perfEnv "puredb" dbPerf <$> mkPureEnv neverLog
+  !pureDb <- perfEnv dbPerf <$> mkPureEnv neverLog
   initSchema pureDb
   (benchMod',benchMod) <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
@@ -303,7 +304,7 @@ main = do
   void $ runPactExec def "initMockPersistDb" signer Null Nothing mockPersistDb benchCmd
   !cmds <- force <$> traverse (mkBenchCmd [(keyPair,[])]) exps
   let sqliteFile = "log/bench.sqlite"
-  sqliteDb <- perfEnv "sqlite" dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
+  sqliteDb <- perfEnv dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
   void $ runPactExec def "initSqliteDb" signer Null Nothing sqliteDb benchCmd

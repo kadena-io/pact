@@ -1,6 +1,7 @@
 cabal-version:       2.2
 name:                pact
 version:             4.0.0.11
+-- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -73,7 +74,7 @@ library
                      , Pact.Types.PactError
                      , Pact.Types.PactValue
                      , Pact.Types.Parser
-                     , Pact.Types.Perf
+                     , Pact.Types.Advice
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty
                      , Pact.Types.Purity
@@ -140,6 +141,8 @@ library
                     Pact.Analyze.Remote.Server
                     Pact.ApiReq
                     Pact.Bench
+                    Pact.Coverage
+                    Pact.Coverage.Report
                     Pact.Docgen
                     Pact.Interpreter
                     Pact.Main

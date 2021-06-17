@@ -44,6 +44,7 @@ import Data.Text.Encoding
 
 import Text.Trifecta as TF hiding (err)
 
+import Pact.Coverage
 import Pact.Repl
 import Pact.Parse
 import Pact.Types.Runtime hiding (PublicKey)
@@ -60,7 +61,7 @@ data Option =
   OVersion
   | OBuiltins
   | OGenKey
-  | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
+  | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oCoverage :: Bool, _oFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
   | OUnsignedReq { _oReqYaml :: FilePath }
@@ -89,6 +90,8 @@ replOpts =
           O.help "For .pact files, attempts to locate a .repl file to execute.")
      <*> O.flag False True
          (O.short 't' <> O.long "trace" <> O.help "Show trace output")
+     <*> O.flag False True
+         (O.short 'c' <> O.long "coverage" <> O.help "Generate coverage report coverage/lcov.info")
      <*> O.argument O.str
         (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")
     ) <|>
@@ -148,29 +151,54 @@ _testArgs = O.execParserPure O.defaultPrefs argParser . words
 
 
 main :: IO ()
-main = do
-  as <- O.execParser argParser
-  let exitEither _ Left {} = die "Load failed"
-      exitEither m (Right t) = m t >> exitSuccess
-      exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
-  case as of
+main = O.execParser argParser >>= \as -> case as of
+
     OServer conf -> serve conf noSPVSupport
+
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
+
     OBuiltins -> echoBuiltins
-    OLoad findScript dolog fp
+
+    OLoad findScript dolog coverage fp
         | isPactFile fp -> do
             script <- if findScript then locatePactReplScript fp else return Nothing
             case script of
-              Just s -> execScript dolog s >>= exitLoad
+              Just s -> runScript dolog s coverage
               Nothing -> compileOnly fp >>= exitLoad
-        | otherwise -> execScript dolog fp >>= exitLoad
+        | otherwise -> runScript dolog fp coverage
+
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
+
     OGenKey -> genKeys
+
     OApiReq cf l -> apiReq cf l
+
     OUnsignedReq cf -> uapiReq cf
+
     OAddSigsReq kf l -> BS8.putStrLn =<< addSigsReq kf l =<< BS.getContents
+
     OCombineSigs sigs l -> BS8.putStrLn =<< combineSigs sigs l
+
     OSignCmd kfs -> BS8.putStrLn =<< signCmd kfs =<< fmap (encodeUtf8 . T.strip) T.getContents
+
+  where
+
+    exitEither _ Left {} = die "Load failed"
+    exitEither m (Right t) = m t >> exitSuccess
+
+    exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
+
+    runScript dolog fp coverage = do
+      (ref,coverF) <- handleCov coverage
+      r <- execScriptF dolog fp coverF
+      void $ traverse writeCovReport ref
+      exitLoad r
+        where
+          handleCov False = return (Nothing,id)
+          handleCov True = do
+            (ref,adv) <- mkCoverageAdvice
+            return (Just ref, set (rEnv . eeAdvice) adv)
+
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS
