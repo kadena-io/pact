@@ -40,7 +40,7 @@ import Data.String
 import Data.Default
 import GHC.Generics (Generic)
 import Control.DeepSeq
-#if !defined(ghcjs_HOST_OS)
+#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
 import Data.SBV (Mergeable (symbolicMerge))
 #endif
 import qualified Data.Vector as V
@@ -109,7 +109,7 @@ mkInfo t = Info $ Just (Code t,Parsed delt len)
   where len = T.length t
         delt = Directed (encodeUtf8 t) 0 0 (fromIntegral len) (fromIntegral len)
 
-#if !defined(ghcjs_HOST_OS)
+#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
 instance Mergeable Info where
   -- Because Info values have no effect on execution we just take the max
   -- (which could possibly have more info)

@@ -7,14 +7,14 @@
 
 module Main where
 
-#if !defined(ghcjs_HOST_OS)
+#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
 import qualified Pact.Main as Repl
 #endif
 
 main :: IO ()
 main =
-#if defined(ghcjs_HOST_OS)
-    error "Error: command line REPL does not exist in GHCJS mode"
-#else
+#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
     Repl.main
+#else
+    error "Error: command line REPL does not exist in GHCJS mode"
 #endif

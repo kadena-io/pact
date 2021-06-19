@@ -22,7 +22,9 @@ module Pact.Server.API
   , ApiPoll
   , ApiListen
   , ApiLocal
+#ifdef BUILD_TOOL
   , ApiVerify
+#endif
   , ApiVersion
 #if !defined(ghcjs_HOST_OS)
   -- | client
@@ -30,8 +32,10 @@ module Pact.Server.API
   , pollClient
   , listenClient
   , localClient
-  , verifyClient
   , versionClient
+#endif
+#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
+  , verifyClient
 #endif
   ) where
 
@@ -43,7 +47,9 @@ import Servant.Client
 import Servant.Client.Core
 #endif
 
+#ifdef BUILD_TOOL
 import qualified Pact.Analyze.Remote.Types as Analyze
+#endif
 import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Hash
@@ -70,15 +76,21 @@ type ApiLocal = "local"
   :> ReqBody '[JSON] (Command Text)
   :> Post '[JSON] (CommandResult Hash)
 
+#ifdef BUILD_TOOL
 type ApiVerify = "verify"
   :> ReqBody '[JSON] Analyze.Request
   :> Post '[JSON] Analyze.Response
+#endif
 
 type ApiVersion = "version"
   :> Get '[PlainText] Text
 
 -- | "pact -s" REST API.
+#ifdef BUILD_TOOL
 type PactServerAPI = ApiV1API :<|> ApiVerify :<|> ApiVersion
+#else
+type PactServerAPI = ApiV1API :<|> ApiVersion
+#endif
 
 pactServerAPI :: Proxy PactServerAPI
 pactServerAPI = Proxy
@@ -104,16 +116,27 @@ listenClient = v1Listen apiV1Client
 
 localClient :: Command Text -> ClientM (CommandResult Hash)
 localClient = v1Local apiV1Client
+#endif
 
+#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
 verifyClient :: Analyze.Request -> ClientM Analyze.Response
 verifyClient = client (Proxy @ApiVerify)
+#endif
 
+#if !defined(ghcjs_HOST_OS)
 versionClient :: ClientM Text
 versionClient = client (Proxy @ApiVersion)
 
 apiV1Client :: forall m. RunClient m => ApiV1Client m
 apiV1Client = ApiV1Client send poll listen local
   where
+#endif
+#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
     (send :<|> poll :<|> listen :<|> local) :<|> _verify :<|> _version =
+#endif
+#if !defined(ghcjs_HOST_OS) && !defined(BUILD_TOOL)
+    (send :<|> poll :<|> listen :<|> local) :<|> _version =
+#endif
+#if !defined(ghcjs_HOST_OS)
       clientIn pactServerAPI (Proxy :: Proxy m)
 #endif

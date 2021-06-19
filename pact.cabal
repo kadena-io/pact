@@ -27,6 +27,11 @@ flag ghc-flags
   default:     False
   manual:      True
 
+flag build-tool
+  description: Include modules and deps for tests + executable
+  default:     True
+  manual:      False
+
 library
   exposed-modules:     Crypto.Hash.Blake2Native
                      , Pact.Analyze.Remote.Types
@@ -101,9 +106,10 @@ library
     exposed-modules:
       Pact.Analyze.Remote.Client
 
-  if !impl(ghcjs)
-    hs-source-dirs: src-ghc
+  if !impl(ghcjs) && flag(build-tool)
+    hs-source-dirs: src-tool
     exposed-modules:
+                    Pact.Docgen
                     Pact.Analyze
                     Pact.Analyze.Alloc
                     Pact.Analyze.Eval
@@ -139,37 +145,57 @@ library
                     Pact.Analyze.Types.Types
                     Pact.Analyze.Util
                     Pact.Analyze.Remote.Server
-                    Pact.ApiReq
                     Pact.Bench
-                    Pact.Coverage
-                    Pact.Coverage.Report
-                    Pact.Docgen
-                    Pact.Interpreter
                     Pact.Main
-                    Pact.MockDb
-                    Pact.Persist.MockPersist
-                    Pact.Persist.SQLite
-                    Pact.PersistPactDb.Regression
                     Pact.ReplTools
                     Pact.Server.ApiServer
                     Pact.Server.History.Persistence
                     Pact.Server.History.Service
                     Pact.Server.History.Types
-                    Pact.Server.PactService
                     Pact.Server.Server
                     Pact.Server.Test
-                    Pact.Types.Crypto
-                    Pact.Types.ECDSA
-                    Pact.Types.Server
-                    Pact.Types.SQLite
                     Pact.GasModel.GasModel
                     Pact.GasModel.Types
                     Pact.GasModel.Utils
                     Pact.GasModel.GasTests
 
-  build-depends:       Decimal >= 0.4.2 && < 0.6
-                     , aeson >= 0.11.3.0 && < 1.5
-                     , algebraic-graphs >= 0.2 && < 0.6
+    build-depends:
+                  algebraic-graphs >= 0.2 && < 0.6
+                , cassava >= 0.5
+                , constraints
+                , fast-logger
+                , haskeline >= 0.7.3 && < 0.8
+                , mmorph >= 1.1 && < 1.2
+                , neat-interpolation >= 0.4
+                , optparse-applicative >= 0.12.1.0 && < 0.16
+                , sbv >= 8.8
+                , wai-cors
+                , warp
+
+
+    cpp-options: -DBUILD_TOOL
+
+
+  if !impl(ghcjs)
+    hs-source-dirs: src-ghc
+    exposed-modules:
+                    Pact.ApiReq
+                    Pact.Coverage
+                    Pact.Coverage.Report
+                    Pact.Interpreter
+                    Pact.MockDb
+                    Pact.Persist.MockPersist
+                    Pact.Persist.SQLite
+                    Pact.PersistPactDb.Regression
+                    Pact.Server.PactService
+                    Pact.Types.Crypto
+                    Pact.Types.ECDSA
+                    Pact.Types.Server
+                    Pact.Types.SQLite
+
+  build-depends:
+                       aeson >= 0.11.3.0 && < 1.5
+                     , async
                      , prettyprinter >= 1.2 && < 1.6.1
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
                      , attoparsec >= 0.13.0.2 && < 0.14
@@ -180,22 +206,27 @@ library
                      , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
-                     , cassava >= 0.5
                      , cereal >=0.5.4.0 && < 0.6
                      , containers >= 0.5.7 && < 0.7
+                     , criterion >= 1.1.4 && < 1.6
+                     , cryptonite
                      , data-default >= 0.7.1.1 && < 0.8
+                     , Decimal >= 0.4.2 && < 0.6
                      , deepseq >= 1.4.2.0 && < 1.5
                      , deriving-compat >= 0.5.1
+                     , direct-sqlite
                      , directory >= 1.2.6.2 && < 1.4
                      , errors >= 2.3
                      , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
                      , hashable >= 1.2.4.0 && < 1.4
+                     , http-client
                      , lens >= 4.14 && < 4.19
                      , lens-aeson >= 1.0.0.5 && < 1.2
                      , megaparsec >= 9
+                     , memory
                      , mtl >= 2.2.1 && < 2.3
-                     , optparse-applicative >= 0.12.1.0 && < 0.16
+                     , pact-time >= 0.2
                      , parsers >= 0.12.4 && < 0.13
                      , QuickCheck >= 2.12.6.1
                      , quickcheck-instances >= 0.3
@@ -211,36 +242,20 @@ library
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-algorithms >= 0.7
                      , vector-space >= 0.10.4 && < 0.17
-                     , mmorph >= 1.1 && < 1.2
-                     , constraints
+                     , safe-exceptions >= 0.1.5.0 && < 0.2
                      , servant
-                     , pact-time >= 0.2
+                     , servant-client
+                     , servant-client-core
+                     , servant-server
+                     , statistics >= 0.13.3 && < 0.16
+                     , yaml
+
 
   if impl(ghcjs)
     build-depends:
                   ghcjs-base,
                   ghcjs-prim
 
-  if !impl(ghcjs)
-    build-depends:
-                  async
-                , criterion >= 1.1.4 && < 1.6
-                , cryptonite
-                , direct-sqlite
-                , fast-logger
-                , haskeline >= 0.7.3 && < 0.8
-                , http-client
-                , memory
-                , neat-interpolation >= 0.4
-                , safe-exceptions >= 0.1.5.0 && < 0.2
-                , sbv >= 8.8
-                , servant-client
-                , servant-client-core
-                , servant-server
-                , statistics >= 0.13.3 && < 0.16
-                , wai-cors
-                , warp
-                , yaml
 
   if !impl(ghcjs) && !os(windows)
     build-depends: unix
@@ -292,7 +307,7 @@ executable gasmodel
   default-language:    Haskell2010
 
 test-suite hspec
-  if !impl(ghcjs)
+  if !impl(ghcjs) && flag(build-tool)
     main-is:          hspec.hs
     type:             exitcode-stdio-1.0
   else
@@ -334,7 +349,7 @@ test-suite hspec
                 Blake2Spec
                 KeysetSpec
                 TypesSpec
-  if !impl(ghcjs)
+  if !impl(ghcjs) && flag(build-tool)
     build-depends:
                   neat-interpolation
                 , sbv
