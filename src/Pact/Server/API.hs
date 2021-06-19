@@ -33,9 +33,9 @@ module Pact.Server.API
   , listenClient
   , localClient
   , versionClient
-#endif
-#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
+# ifdef BUILD_TOOL
   , verifyClient
+# endif
 #endif
   ) where
 
@@ -116,27 +116,22 @@ listenClient = v1Listen apiV1Client
 
 localClient :: Command Text -> ClientM (CommandResult Hash)
 localClient = v1Local apiV1Client
-#endif
 
-#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
+# ifdef BUILD_TOOL
 verifyClient :: Analyze.Request -> ClientM Analyze.Response
 verifyClient = client (Proxy @ApiVerify)
-#endif
+# endif
 
-#if !defined(ghcjs_HOST_OS)
 versionClient :: ClientM Text
 versionClient = client (Proxy @ApiVersion)
 
 apiV1Client :: forall m. RunClient m => ApiV1Client m
 apiV1Client = ApiV1Client send poll listen local
   where
-#endif
-#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
-    (send :<|> poll :<|> listen :<|> local) :<|> _verify :<|> _version =
-#endif
-#if !defined(ghcjs_HOST_OS) && !defined(BUILD_TOOL)
-    (send :<|> poll :<|> listen :<|> local) :<|> _version =
-#endif
-#if !defined(ghcjs_HOST_OS)
-      clientIn pactServerAPI (Proxy :: Proxy m)
+    (send :<|> poll :<|> listen :<|> local)
+# ifdef BUILD_TOOL
+      :<|> _verify
+# endif
+      :<|> _version =
+        clientIn pactServerAPI (Proxy :: Proxy m)
 #endif

@@ -51,10 +51,10 @@ import Criterion.Types
 
 import Statistics.Types (Estimate(..))
 
-import qualified Pact.Types.Crypto as Crypto
-#endif
-#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
+# ifdef BUILD_TOOL
 import qualified Pact.Analyze.Check as Check
+# endif
+import qualified Pact.Types.Crypto as Crypto
 #endif
 
 import Pact.Typechecker
@@ -619,15 +619,13 @@ verify i as = case as of
     -- reading all modules from db here, but should be fine in repl
     modules <- getAllModules i
     let failureMessage = tStr $ "Verification of " <> modName <> " failed"
-#endif
-#if defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
+# if defined(ghcjs_HOST_OS)
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
     setop $ TcErrors $ unpack <$> renderedLines
     return failureMessage
-#endif
-#if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
+# else
     modResult <- liftIO $ Check.verifyModule modules md
     let renderedLines = Check.renderVerifiedModule modResult
     case modResult of
@@ -637,8 +635,7 @@ verify i as = case as of
       _ -> do
         setop $ TcErrors $ unpack <$> renderedLines
         return failureMessage
-#endif
-#ifdef BUILD_TOOL
+# endif
   _ -> argsError i as
 #endif
 
