@@ -17,7 +17,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev
 
-      # currently broken because of https://github.blog/changelog/2020-10-01-github-actions-deprecating-set-env-and-add-path-commands/
+      # If you get 404, check https://github.com/Z3Prover/z3/releases for valid combinations of
+      # the parameters.
       - name: Setup Z3
         uses: pavpanchekha/setup-z3@0.2.0
         with:
