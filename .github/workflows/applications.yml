@@ -1,6 +1,7 @@
 name: Build and publish application binaries
 
 on:
+  workflow_dispatch:
   push:
     branches:
     - master
@@ -14,9 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.6.5', '8.8.4', '8.10.2']
-        cabal: ['3.2']
-        os: ['ubuntu-16.04', 'ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ] # windows-latest is temporarily disabled
+        ghc: ['8.6.5', '8.8.4', '8.10.5']
+        cabal: ['3.4']
+        os: ['ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ] # windows-latest is temporarily disabled
         cabalcache: ['true']
         exclude:
         - os: 'windows-latest'
@@ -29,7 +30,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
       AWS_DEFAULT_REGION: us-east-1
-      
+
       # Aritfacts
       ARTIFACT_BUCKET: kadena-cabal-cache
       BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.${{ github.sha }}.tar.gz
@@ -80,32 +81,20 @@ jobs:
         ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg-${{ matrix.ghc }}
 
     # Project Setup
-    - name: Append cabal.project
+    - name: Create cabal.project.local
       shell: bash
       run: |
-        cat >> cabal.project <<EOF
+        cat > cabal.project.local <<EOF
         documentation: False
-        package thyme
-          tests: False
-        constraints:
-          base16-bytestring <1
         EOF
-    - name: Append cabal.project (only ghc-8.10)
-      if: startsWith(matrix.ghc, '8.10')
-      shell: bash
-      run: |
-        cat >> cabal.project <<EOF
-        allow-newer: *
-        package cassava
-          flags: -bytestring--lt-0_10_4
-        EOF
-    - uses: actions/cache@v1
+    - uses: actions/cache@v2
       name: Cache dist-newstyle
       with:
-        path: dist-newstyle
-        key: ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-${{ github.sha }}
-        restore-keys: |
-          ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ matrix.os }}-${{ matrix.ghc }}-4-cabal
 
     # Build
     - name: Update package database
@@ -126,10 +115,16 @@ jobs:
         aws_secret_access_key: "${{ secrets.kadena_cabal_cache_aws_secret_access_key }}"
     - name: Install build dependencies
       shell: bash
-      run: cabal v2-build exe:pact --only-dependencies
+      run: cabal build pact --only-dependencies
     - name: Build
       shell: bash
-      run: cabal v2-build exe:pact
+      run: cabal build
+    - name: Test
+      shell: bash
+      run: cabal test
+    - name: Benchmark
+      shell: bash
+      run: cabal bench
 
     # Publish Artifacts
     - name: Prepare artifacts
