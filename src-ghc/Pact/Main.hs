@@ -191,7 +191,7 @@ main = O.execParser argParser >>= \as -> case as of
     runScript dolog fp coverage = do
       (ref,coverF) <- handleCov coverage
       r <- execScriptF dolog fp coverF
-      withCurrentDirectory (takeDirectory fp) $ void $ traverse writeCovReport ref
+      withCurrentDirectory (takeDirectory fp) $ mapM_ writeCovReport ref
       exitLoad r
         where
           handleCov False = return (Nothing,id)
