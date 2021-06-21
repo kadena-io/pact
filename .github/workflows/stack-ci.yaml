@@ -1,5 +1,6 @@
 name: Stack Build
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -9,7 +10,7 @@ on:
 jobs:
   build:
     name: CI
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - name: Install non-Haskell dependencies
         run: |
@@ -18,11 +19,12 @@ jobs:
 
       # currently broken because of https://github.blog/changelog/2020-10-01-github-actions-deprecating-set-env-and-add-path-commands/
       - name: Setup Z3
-        uses: pavpanchekha/setup-z3@1.2.1
+        uses: pavpanchekha/setup-z3@0.2.0
         with:
-          version: "4.8.7"
+          version: "4.8.10"
           architecture: "x64"
-      
+          distribution: "ubuntu-18.04"
+
       - name: Setup GHC
         uses: actions/setup-haskell@v1
         with:
