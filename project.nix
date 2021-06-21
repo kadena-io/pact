@@ -22,6 +22,7 @@ in {
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
+        pact-do-benchmark = doBenchmark super.pact;
       };
       packages = {
         pact = kpkgs.gitignoreSource ./.;
