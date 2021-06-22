@@ -1,6 +1,7 @@
 cabal-version:       2.2
 name:                pact
-version:             4.0.0.11
+version:             4.0.1
+-- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -73,7 +74,7 @@ library
                      , Pact.Types.PactError
                      , Pact.Types.PactValue
                      , Pact.Types.Parser
-                     , Pact.Types.Perf
+                     , Pact.Types.Advice
                      , Pact.Types.Persistence
                      , Pact.Types.Pretty
                      , Pact.Types.Purity
@@ -140,6 +141,8 @@ library
                     Pact.Analyze.Remote.Server
                     Pact.ApiReq
                     Pact.Bench
+                    Pact.Coverage
+                    Pact.Coverage.Report
                     Pact.Docgen
                     Pact.Interpreter
                     Pact.Main
@@ -165,18 +168,18 @@ library
                     Pact.GasModel.GasTests
 
   build-depends:       Decimal >= 0.4.2 && < 0.6
-                     , aeson >= 0.11.3.0 && < 1.5
+                     , aeson >= 0.11.3.0 && < 1.6
                      , algebraic-graphs >= 0.2 && < 0.6
                      , prettyprinter >= 1.2 && < 1.6.1
                      , prettyprinter-ansi-terminal >= 1.1 && < 1.2
-                     , attoparsec >= 0.13.0.2 && < 0.14
-                     , base >=4.9.0.0 && < 4.14
+                     , attoparsec >= 0.13.0.2 && < 0.15
+                     , base >=4.9.0.0 && < 4.16
                      , base16-bytestring >=0.1.1.6 && < 0.2
                      -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which
                      -- can cause pact failures (e.g. (env-hash "aa"))
                      , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
                      , bound >= 2 && < 2.1
-                     , bytestring >=0.10.8.1 && < 0.11
+                     , bytestring >=0.10.8.1 && < 0.12
                      , cassava >= 0.5
                      , cereal >=0.5.4.0 && < 0.6
                      , containers >= 0.5.7 && < 0.7
@@ -188,11 +191,11 @@ library
                      , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
                      , hashable >= 1.2.4.0 && < 1.4
-                     , lens >= 4.14 && < 4.19
+                     , lens >= 4.14 && < 5.1
                      , lens-aeson >= 1.0.0.5 && < 1.2
                      , megaparsec >= 9
                      , mtl >= 2.2.1 && < 2.3
-                     , optparse-applicative >= 0.12.1.0 && < 0.16
+                     , optparse-applicative >= 0.12.1.0 && < 0.17
                      , parsers >= 0.12.4 && < 0.13
                      , QuickCheck >= 2.12.6.1
                      , quickcheck-instances >= 0.3
@@ -225,7 +228,7 @@ library
                 , cryptonite
                 , direct-sqlite
                 , fast-logger
-                , haskeline >= 0.7.3 && < 0.8
+                , haskeline >= 0.7.3 && < 0.9
                 , http-client
                 , memory
                 , neat-interpolation >= 0.4
@@ -298,6 +301,7 @@ test-suite hspec
   hs-source-dirs:   tests
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  build-tool-depends: hspec-discover:hspec-discover >=2.7
   build-depends:
                 base
               , Decimal

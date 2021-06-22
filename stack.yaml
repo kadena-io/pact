@@ -1,6 +1,6 @@
 # stack yaml for ghc builds
 
-resolver: lts-16.0
+resolver: lts-16.31
 
 ghc-options: {"$locals": -funclutter-valid-hole-fits -fmax-relevant-binds=0}
 

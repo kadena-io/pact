@@ -969,7 +969,7 @@ instance Pretty (Term n) => Pretty (Def n) where
 instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Def n) where toJSON = lensyToJSON 2
 instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
 
-derefDef :: Def Ref -> Name
+derefDef :: Def n -> Name
 derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 -- -------------------------------------------------------------------------- --
@@ -1569,4 +1569,3 @@ instance Show1 Object where
   liftShowsPrec = $(makeLiftShowsPrec ''Object)
 instance Show1 Term where
   liftShowsPrec = $(makeLiftShowsPrec ''Term)
-

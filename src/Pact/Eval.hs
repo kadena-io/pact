@@ -40,6 +40,7 @@ module Pact.Eval
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
     ,reduceDynamic
+    ,instantiate'
     ) where
 
 import Bound
@@ -63,6 +64,7 @@ import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
+import Pact.Types.Advice
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -218,8 +220,9 @@ evalNamespace info setter m = do
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
-eval (TModule (MDModule m) bod i) =
-  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
+eval (TModule tm@(MDModule m) bod i) =
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 ->
+  eAdvise i (AdviceModule tm) $ do
     checkAllowModule i
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
@@ -250,10 +253,11 @@ eval (TModule (MDModule m) bod i) =
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
-    return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
+    return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
 
-eval (TModule (MDInterface m) bod i) =
-  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
+eval (TModule tm@(MDInterface m) bod i) =
+  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas ->
+  eAdvise i (AdviceModule tm) $ do
     checkAllowModule i
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m
@@ -263,8 +267,11 @@ eval (TModule (MDInterface m) bod i) =
     (g,govI) <- loadInterface mangledI bod i gas
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
-    return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
+    return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
 eval t = enscope t >>= reduce
+
+dup :: Monad m => m a -> m (a,a)
+dup a = a >>= \r -> return (r,r)
 
 checkAllowModule :: Info -> Eval e ()
 checkAllowModule i = do
@@ -744,13 +751,12 @@ enforcePactValue' = traverse enforcePactValue
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App (TDef d@Def{..} _) as ai) = {- eperf (asString _dDefName) $ -} do
+reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
   af <- prepareUserAppArgs d as ai
   evalUserAppBody d af ai g $ \bod' ->
     case _dDefType of
-      Defun ->
-        {- eperf (asString _dDefName <> ":body") $ -} reduceBody bod'
+      Defun -> reduceBody bod'
       Defpact -> do
         continuation <-
           PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
@@ -810,11 +816,13 @@ prepareUserAppArgs Def{..} args i = do
 
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
-                -> (Term Ref -> Eval e a) -> Eval e a
-evalUserAppBody Def{..} (as',ft') ai g run =
-  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
-      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
-  in appCall fa ai as' $ fmap (g,) $ run bod'
+                -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
+evalUserAppBody d@Def{..} (as',ft') ai g run =
+    eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+  where
+    bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+    fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -825,9 +833,11 @@ reduceDirect TNative {..} as ai =
           Nothing -> return ()
           Just m -> evalError ai $ "Top-level call used in module " <> pretty m <>
             ": " <> pretty _tNativeName
-  in {- eperf (asString _tNativeName) $ -} do
+  in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
-    appCall fa ai as $ _nativeFun _tNativeFun fa as
+    eAdvise ai (AdviceNative _tNativeName) $ dup
+        $ appCall fa ai as
+        $ _nativeFun _tNativeFun fa as
 
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
