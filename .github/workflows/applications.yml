@@ -86,6 +86,12 @@ jobs:
           benchmarks: True
           documentation: False
           optimization: 1
+        EOF
+    - name: Add check for unused packages
+      if: "! startsWith(matrix.ghc, '8.6') && ! startsWith(matrix.ghc, 8.8)"
+      run: |
+        cat > cabal.project.local <<EOF
+        package pact
           ghc-options: -Wunused-packages
         EOF
     - uses: actions/cache@v2
@@ -101,6 +107,8 @@ jobs:
     - name: Update package database
       shell: bash
       run: cabal update
+    - name: Display outdated packages
+      run: cabal outdated
     - name: Configure build
       run: |
         cabal build --dry-run
