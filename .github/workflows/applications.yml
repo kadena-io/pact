@@ -3,10 +3,6 @@ name: Build and publish application binaries
 on:
   workflow_dispatch:
   push:
-    branches:
-    - master
-    - github-ci
-    - ci/*
 
 jobs:
   build:

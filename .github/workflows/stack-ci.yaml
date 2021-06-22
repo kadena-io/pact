@@ -2,9 +2,6 @@ name: Fast Stack Build
 on:
   workflow_dispatch:
   push:
-    branches:
-      - master
-      - ci/*
 
 jobs:
   build:
