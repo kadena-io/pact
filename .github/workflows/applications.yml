@@ -17,6 +17,13 @@ jobs:
         exclude:
         - os: 'windows-latest'
           ghc: '8.6.5'
+        - os: 'macOS-latest'
+          ghc: '8.10.5'
+        include:
+        - os: 'macOS-latest'
+          ghc: '8.10.4'
+          cabal: '3.4'
+          cabalcache: 'true'
         # include:
         # - os: 'windows-latest'
         #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
