@@ -81,6 +81,11 @@ jobs:
       run: |
         cat > cabal.project.local <<EOF
         documentation: False
+        package pact
+          tests: True
+          benchmarks: True
+          documentation: False
+          optimization: 1
         EOF
     - uses: actions/cache@v2
       name: Cache dist-newstyle
@@ -94,11 +99,11 @@ jobs:
     # Build
     - name: Update package database
       shell: bash
-      run: cabal v2-update
+      run: cabal update
     - name: Configure build
       run: |
-        cabal v2-build exe:pact --dry-run
-        cabal v2-freeze
+        cabal build --dry-run
+        cabal freeze
     - name: Sync from cabal cache
       if: matrix.cabalcache == 'true'
       uses: larskuhtz/cabal-cache-action@ecc751af6d31b3ed5a3b4aefdefd0ed6ef4cb414
