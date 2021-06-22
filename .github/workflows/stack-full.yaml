@@ -1,4 +1,4 @@
-name: Fast Stack Build
+name: Full Stack Build
 on:
   workflow_dispatch:
   push:
@@ -41,4 +41,8 @@ jobs:
             ${{ runner.os }}-stack884-
 
       - name: Build
-        run: "stack test --fast --no-terminal --system-ghc"
+        run: stack build
+      - name: Test
+        run: stack test
+      - name: Benchmark
+        run: stack bench
