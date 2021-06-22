@@ -86,6 +86,7 @@ jobs:
           benchmarks: True
           documentation: False
           optimization: 1
+          ghc-options: -Wunused-packages
         EOF
     - uses: actions/cache@v2
       name: Cache dist-newstyle
