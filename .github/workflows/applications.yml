@@ -113,9 +113,9 @@ jobs:
         folder: "${{ matrix.os }}"
         aws_access_key_id: "${{ secrets.kadena_cabal_cache_aws_access_key_id }}"
         aws_secret_access_key: "${{ secrets.kadena_cabal_cache_aws_secret_access_key }}"
-    - name: Install build dependencies
+    - name: Build dependencies
       shell: bash
-      run: cabal build pact --only-dependencies
+      run: cabal build --only-dependencies
     - name: Build
       shell: bash
       run: cabal build
