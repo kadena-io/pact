@@ -33,255 +33,235 @@ flag build-tool
   manual:      False
 
 library
-  exposed-modules:     Crypto.Hash.Blake2Native
-                     , Pact.Analyze.Remote.Types
-                     , Pact.Compile
-                     , Pact.Eval
-                     , Pact.Gas
-                     , Pact.Gas.Table
-                     , Pact.Native
-                     , Pact.Native.Capabilities
-                     , Pact.Native.Db
-                     , Pact.Native.Internal
-                     , Pact.Native.SPV
-                     , Pact.Native.Time
-                     , Pact.Native.Ops
-                     , Pact.Native.Keysets
-                     , Pact.Native.Decrypt
-                     , Pact.Parse
-                     , Pact.PersistPactDb
-                     , Pact.Persist
-                     , Pact.Persist.Pure
-                     , Pact.Repl
-                     , Pact.Repl.Lib
-                     , Pact.Repl.Types
-                     , Pact.Runtime.Capabilities
-                     , Pact.Runtime.Typecheck
-                     , Pact.Runtime.Utils
-                     , Pact.Server.API
-                     , Pact.Types.API
-                     , Pact.Types.Capability
-                     , Pact.Types.ChainId
-                     , Pact.Types.ChainMeta
-                     , Pact.Types.Codec
-                     , Pact.Types.Command
-                     , Pact.Types.Continuation
-                     , Pact.Types.Scheme
-                     , Pact.Types.Exp
-                     , Pact.Types.ExpParser
-                     , Pact.Types.Gas
-                     , Pact.Types.Hash
-                     , Pact.Types.Info
-                     , Pact.Types.Lang
-                     , Pact.Types.Logger
-                     , Pact.Types.Names
-                     , Pact.Types.Native
-                     , Pact.Types.PactError
-                     , Pact.Types.PactValue
-                     , Pact.Types.Parser
-                     , Pact.Types.Advice
-                     , Pact.Types.Persistence
-                     , Pact.Types.Pretty
-                     , Pact.Types.Purity
-                     , Pact.Types.RPC
-                     , Pact.Types.Runtime
-                     , Pact.Types.Orphans
-                     , Pact.Types.SigData
-                     , Pact.Types.SizeOf
-                     , Pact.Types.SPV
-                     , Pact.Types.Term
-                     , Pact.Types.Type
-                     , Pact.Types.Util
-                     , Pact.Types.Version
-                     , Pact.Types.Typecheck
-                     , Pact.Typechecker
 
+  -- common to all configurations:
+  hs-source-dirs: src
+  default-language: Haskell2010
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  exposed-modules:
+    Crypto.Hash.Blake2Native
+    Pact.Analyze.Remote.Types
+    Pact.Compile
+    Pact.Eval
+    Pact.Gas
+    Pact.Gas.Table
+    Pact.Native
+    Pact.Native.Capabilities
+    Pact.Native.Db
+    Pact.Native.Internal
+    Pact.Native.SPV
+    Pact.Native.Time
+    Pact.Native.Ops
+    Pact.Native.Keysets
+    Pact.Native.Decrypt
+    Pact.Parse
+    Pact.PersistPactDb
+    Pact.Persist
+    Pact.Persist.Pure
+    Pact.Repl
+    Pact.Repl.Lib
+    Pact.Repl.Types
+    Pact.Runtime.Capabilities
+    Pact.Runtime.Typecheck
+    Pact.Runtime.Utils
+    Pact.Server.API
+    Pact.Types.API
+    Pact.Types.Capability
+    Pact.Types.ChainId
+    Pact.Types.ChainMeta
+    Pact.Types.Codec
+    Pact.Types.Command
+    Pact.Types.Continuation
+    Pact.Types.Scheme
+    Pact.Types.Exp
+    Pact.Types.ExpParser
+    Pact.Types.Gas
+    Pact.Types.Hash
+    Pact.Types.Info
+    Pact.Types.Lang
+    Pact.Types.Logger
+    Pact.Types.Names
+    Pact.Types.Native
+    Pact.Types.PactError
+    Pact.Types.PactValue
+    Pact.Types.Parser
+    Pact.Types.Advice
+    Pact.Types.Persistence
+    Pact.Types.Pretty
+    Pact.Types.Purity
+    Pact.Types.RPC
+    Pact.Types.Runtime
+    Pact.Types.Orphans
+    Pact.Types.SigData
+    Pact.Types.SizeOf
+    Pact.Types.SPV
+    Pact.Types.Term
+    Pact.Types.Type
+    Pact.Types.Util
+    Pact.Types.Version
+    Pact.Types.Typecheck
+    Pact.Typechecker
+  build-depends:
+    , Decimal >= 0.4.2 && < 0.6
+    , QuickCheck >= 2.12.6.1
+    , aeson >= 0.11.3.0 && < 1.6
+    , attoparsec >= 0.13.0.2 && < 0.15
+    , base >=4.9.0.0 && < 4.16
+    , base16-bytestring >=0.1.1.6 && < 0.2
+    , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
+        -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
+    , bound >= 2 && < 2.1
+    , bytestring >=0.10.8.1 && < 0.12
+    , cereal >=0.5.4.0 && < 0.6
+    , containers >= 0.5.7 && < 0.7
+    , data-default >= 0.7.1.1 && < 0.8
+    , deepseq >= 1.4.2.0 && < 1.5
+    , deriving-compat >= 0.5.1
+    , directory >= 1.2.6.2 && < 1.4
+    , errors >= 2.3
+    , exceptions >= 0.8.3 && < 0.11
+    , filepath >= 1.4.1.0 && < 1.5
+    , hashable >= 1.2.4.0 && < 1.4
+    , lens >= 4.14 && < 5.1
+    , lens-aeson >= 1.0.0.5 && < 1.2
+    , megaparsec >= 9
+    , mtl >= 2.2.1 && < 2.3
+    , pact-time >= 0.2
+    , parsers >= 0.12.4 && < 0.13
+    , prettyprinter >= 1.2 && < 1.6.1
+    , prettyprinter-ansi-terminal >= 1.1 && < 1.2
+    , quickcheck-instances >= 0.3
+    , reflection
+    , safe >= 0.3.11 && < 0.4
+    , semigroupoids >= 5.0
+    , servant
+    , text >= 1.2.2.1 && < 1.3
+    , transformers >= 0.5.2.0 && < 0.6
+    , trifecta >= 2.1
+    , unordered-containers >= 0.2.7.2 && < 0.3
+    , utf8-string >= 1.0.1.1 && < 1.1
+    , vector >= 0.11.0.0 && < 0.13
+    , vector-algorithms >= 0.7
+    , vector-space >= 0.10.4 && < 0.17
   if flag(ghc-flags)
     build-tool-depends: hsinspect:hsinspect
     ghc-options: -fplugin GhcFlags.Plugin
     build-depends: ghcflags
 
+  -- GHCJS
   if impl(ghcjs)
-    build-depends: ghcjs-dom
     exposed-modules:
       Pact.Analyze.Remote.Client
-
-  if !impl(ghcjs) && flag(build-tool)
-    hs-source-dirs: src-tool
-    exposed-modules:
-                    Pact.Docgen
-                    Pact.Analyze
-                    Pact.Analyze.Alloc
-                    Pact.Analyze.Eval
-                    Pact.Analyze.Eval.Invariant
-                    Pact.Analyze.Eval.Numerical
-                    Pact.Analyze.Eval.Prop
-                    Pact.Analyze.Eval.Core
-                    Pact.Analyze.Eval.Term
-                    Pact.Analyze.Check
-                    Pact.Analyze.Errors
-                    Pact.Analyze.Feature
-                    Pact.Analyze.LegacySFunArray
-                    Pact.Analyze.Model
-                    Pact.Analyze.Model.Dot
-                    Pact.Analyze.Model.Graph
-                    Pact.Analyze.Model.Tags
-                    Pact.Analyze.Model.Text
-                    Pact.Analyze.Parse
-                    Pact.Analyze.Parse.Invariant
-                    Pact.Analyze.Parse.Prop
-                    Pact.Analyze.Parse.Types
-                    Pact.Analyze.Patterns
-                    Pact.Analyze.PrenexNormalize
-                    Pact.Analyze.Translate
-                    Pact.Analyze.Types
-                    Pact.Analyze.Types.Capability
-                    Pact.Analyze.Types.Eval
-                    Pact.Analyze.Types.Languages
-                    Pact.Analyze.Types.Model
-                    Pact.Analyze.Types.Numerical
-                    Pact.Analyze.Types.ObjUtil
-                    Pact.Analyze.Types.Shared
-                    Pact.Analyze.Types.Types
-                    Pact.Analyze.Util
-                    Pact.Analyze.Remote.Server
-                    Pact.Bench
-                    Pact.Main
-                    Pact.ReplTools
-                    Pact.Server.ApiServer
-                    Pact.Server.History.Persistence
-                    Pact.Server.History.Service
-                    Pact.Server.History.Types
-                    Pact.Server.Server
-                    Pact.Server.Test
-                    Pact.GasModel.GasModel
-                    Pact.GasModel.Types
-                    Pact.GasModel.Utils
-                    Pact.GasModel.GasTests
-
     build-depends:
-                  algebraic-graphs >= 0.2 && < 0.6
-                , cassava >= 0.5
-                , constraints
-                , fast-logger
-                , haskeline >= 0.7.3 && < 0.9
-                , mmorph >= 1.1 && < 1.2
-                , neat-interpolation >= 0.4
-                , optparse-applicative >= 0.12.1.0 && < 0.16
-                , sbv >= 8.8
-                , wai-cors
-                , warp
+      , ghcjs-base
+      , ghcjs-dom
+      , ghcjs-prim
+      , optparse-applicative >= 0.12.1.0 && < 0.16
 
-
-    cpp-options: -DBUILD_TOOL
-
-
-  if !impl(ghcjs)
+  -- Normal GHC
+  else
     hs-source-dirs: src-ghc
+    ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
     exposed-modules:
-                    Pact.ApiReq
-                    Pact.Coverage
-                    Pact.Coverage.Report
-                    Pact.Interpreter
-                    Pact.MockDb
-                    Pact.Persist.MockPersist
-                    Pact.Persist.SQLite
-                    Pact.PersistPactDb.Regression
-                    Pact.Server.PactService
-                    Pact.Types.Crypto
-                    Pact.Types.ECDSA
-                    Pact.Types.Server
-                    Pact.Types.SQLite
-
-  build-depends:       Decimal >= 0.4.2 && < 0.6
-                     , aeson >= 0.11.3.0 && < 1.6
-                     , prettyprinter >= 1.2 && < 1.6.1
-                     , prettyprinter-ansi-terminal >= 1.1 && < 1.2
-                     , attoparsec >= 0.13.0.2 && < 0.15
-                     , base >=4.9.0.0 && < 4.16
-                     , base16-bytestring >=0.1.1.6 && < 0.2
-                     -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which
-                     -- can cause pact failures (e.g. (env-hash "aa"))
-                     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
-                     , bound >= 2 && < 2.1
-                     , bytestring >=0.10.8.1 && < 0.12
-                     , cereal >=0.5.4.0 && < 0.6
-                     , containers >= 0.5.7 && < 0.7
-                     , data-default >= 0.7.1.1 && < 0.8
-                     , deepseq >= 1.4.2.0 && < 1.5
-                     , deriving-compat >= 0.5.1
-                     , directory >= 1.2.6.2 && < 1.4
-                     , errors >= 2.3
-                     , exceptions >= 0.8.3 && < 0.11
-                     , filepath >= 1.4.1.0 && < 1.5
-                     , hashable >= 1.2.4.0 && < 1.4
-                     , lens >= 4.14 && < 5.1
-                     , lens-aeson >= 1.0.0.5 && < 1.2
-                     , megaparsec >= 9
-                     , mtl >= 2.2.1 && < 2.3
-                     , optparse-applicative >= 0.12.1.0 && < 0.17
-                     , pact-time >= 0.2
-                     , parsers >= 0.12.4 && < 0.13
-                     , QuickCheck >= 2.12.6.1
-                     , quickcheck-instances >= 0.3
-                     , reflection
-                     , safe >= 0.3.11 && < 0.4
-                     , semigroupoids >= 5.0
-                     , text >= 1.2.2.1 && < 1.3
-                     -- kadena ghcjs compat fork
-                     , transformers >= 0.5.2.0 && < 0.6
-                     , trifecta >= 2.1
-                     , unordered-containers >= 0.2.7.2 && < 0.3
-                     , utf8-string >= 1.0.1.1 && < 1.1
-                     , vector >= 0.11.0.0 && < 0.13
-                     , vector-algorithms >= 0.7
-                     , vector-space >= 0.10.4 && < 0.17
-                     , servant
-
-  if impl(ghcjs)
+      Pact.ApiReq
+      Pact.Coverage
+      Pact.Coverage.Report
+      Pact.Interpreter
+      Pact.MockDb
+      Pact.Persist.MockPersist
+      Pact.Persist.SQLite
+      Pact.PersistPactDb.Regression
+      Pact.Server.PactService
+      Pact.Types.Crypto
+      Pact.Types.ECDSA
+      Pact.Types.Server
+      Pact.Types.SQLite
     build-depends:
-                  ghcjs-base,
-                  ghcjs-prim
-
-  if !impl(ghcjs)
-    build-depends:
-                  async
-                , criterion >= 1.1.4 && < 1.6
-                , cryptonite
-                , direct-sqlite
-                , http-client
-                , memory
-                , safe-exceptions >= 0.1.5.0 && < 0.2
-                , sbv >= 8.8
-                , servant-client
-                , servant-client-core
-                , servant-server
-                , statistics >= 0.13.3 && < 0.16
-                , yaml
-
-
-  if impl(ghcjs)
-    build-depends:
-                  ghcjs-base,
-                  ghcjs-prim
-
-
-  if !impl(ghcjs) && !os(windows)
-    build-depends: unix
-
-  if !impl(ghcjs) && !flag(cryptonite-ed25519)
-    build-depends:
-        crypto-api
-      , ed25519-donna
-
-  if !impl(ghcjs) && flag(cryptonite-ed25519)
-    cpp-options: -DCRYPTONITE_ED25519
-
-  hs-source-dirs:      src
-  default-language:    Haskell2010
-  if !impl(ghcjs)
-    ghc-options:         -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+      , criterion >= 1.1.4 && < 1.6
+      , cryptonite
+      , direct-sqlite
+      , http-client
+      , memory
+      , safe-exceptions >= 0.1.5.0 && < 0.2
+      , servant-client
+      , servant-client-core
+      , statistics >= 0.13.3 && < 0.16
+      , yaml
+    if flag(build-tool)
+      hs-source-dirs: src-tool
+      cpp-options: -DBUILD_TOOL
+      exposed-modules:
+        Pact.Docgen
+        Pact.Analyze
+        Pact.Analyze.Alloc
+        Pact.Analyze.Eval
+        Pact.Analyze.Eval.Invariant
+        Pact.Analyze.Eval.Numerical
+        Pact.Analyze.Eval.Prop
+        Pact.Analyze.Eval.Core
+        Pact.Analyze.Eval.Term
+        Pact.Analyze.Check
+        Pact.Analyze.Errors
+        Pact.Analyze.Feature
+        Pact.Analyze.LegacySFunArray
+        Pact.Analyze.Model
+        Pact.Analyze.Model.Dot
+        Pact.Analyze.Model.Graph
+        Pact.Analyze.Model.Tags
+        Pact.Analyze.Model.Text
+        Pact.Analyze.Parse
+        Pact.Analyze.Parse.Invariant
+        Pact.Analyze.Parse.Prop
+        Pact.Analyze.Parse.Types
+        Pact.Analyze.Patterns
+        Pact.Analyze.PrenexNormalize
+        Pact.Analyze.Translate
+        Pact.Analyze.Types
+        Pact.Analyze.Types.Capability
+        Pact.Analyze.Types.Eval
+        Pact.Analyze.Types.Languages
+        Pact.Analyze.Types.Model
+        Pact.Analyze.Types.Numerical
+        Pact.Analyze.Types.ObjUtil
+        Pact.Analyze.Types.Shared
+        Pact.Analyze.Types.Types
+        Pact.Analyze.Util
+        Pact.Analyze.Remote.Server
+        Pact.Bench
+        Pact.Main
+        Pact.ReplTools
+        Pact.Server.ApiServer
+        Pact.Server.History.Persistence
+        Pact.Server.History.Service
+        Pact.Server.History.Types
+        Pact.Server.Server
+        Pact.Server.Test
+        Pact.GasModel.GasModel
+        Pact.GasModel.Types
+        Pact.GasModel.Utils
+        Pact.GasModel.GasTests
+      build-depends:
+        , algebraic-graphs >= 0.2 && < 0.6
+        , async
+        , cassava >= 0.5
+        , constraints
+        , fast-logger
+        , haskeline >= 0.7.3 && < 0.9
+        , mmorph >= 1.1 && < 1.2
+        , neat-interpolation >= 0.4
+        , optparse-applicative >= 0.12.1.0 && < 0.16
+        , sbv >= 8.8
+        , servant-server
+        , wai-cors
+        , warp
+    if flag(cryptonite-ed25519)
+      cpp-options: -DCRYPTONITE_ED25519
+    else
+      build-depends:
+        , crypto-api
+        , ed25519-donna
+    if !os(windows)
+      build-depends: unix
 
 executable pact
   main-is:             Repl.hs
