@@ -155,9 +155,11 @@ jobs:
       run: cabal build
     - name: Test
       shell: bash
+      if: "! contains(matrix.flags, '-build-tool')"
       run: cabal test
     - name: Benchmark
       shell: bash
+      if: "! contains(matrix.flags, '-build-tool')"
       run: cabal bench
 
     # Publish Artifacts
