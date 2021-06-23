@@ -1,0 +1,22 @@
+name: Nix Build
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    name: CI
+    runs-on: self-hosted
+    steps:
+      - name: Clone project
+        uses: actions/checkout@v2
+
+      - name: Build
+        run: nix-build
+      - name: GHC Build
+        run: nix-build project.nix -A proj.ghc.pact
+      - name: GHC Haddock Build
+        run: nix-build project.nix -A proj.ghc.pact.doc
+      - name: Build
+        run: nix-build project.nix -A proj.ghcjs.pact
+
