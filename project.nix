@@ -28,8 +28,8 @@ in {
             mkdir -p log  # needed or else bench can't create a sqlitedb at log/sqlite.db
             ./Setup bench
           '';
-          doCheck = false; # As this build is only for CI, we can check pact with the regular drv
           doHaddock = false;
+          doCheck = true;
         });
       };
       packages = {
