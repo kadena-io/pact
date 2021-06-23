@@ -210,12 +210,9 @@ replDefs = ("Repl",
       ["(env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)"]
       ("Queries, or with arguments, sets execution config flags. Valid flags: " <>
        tShow (M.keys flagReps))
-#ifdef BUILD_TOOL
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
        "Verify MODULE, checking that all properties hold."
-#endif
-
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
        "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
@@ -611,21 +608,19 @@ tc i as = case as of
             setop $ TcErrors $ map (\(TC.Failure ti s) -> renderInfo (TC._tiInfo ti) ++ ":Warning: " ++ s) fails
             return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
-#ifdef BUILD_TOOL
 verify :: RNativeFun LibState
-verify i as = case as of
-  [TLitString modName] -> do
-    md <- getModule i (ModuleName modName Nothing)
-    -- reading all modules from db here, but should be fine in repl
-    modules <- getAllModules i
-    let failureMessage = tStr $ "Verification of " <> modName <> " failed"
-# if defined(ghcjs_HOST_OS)
+verify i _as@[TLitString modName] = do
+#if defined(ghcjs_HOST_OS)
+    -- ghcjs: use remote server
+    (md,modules) <- _loadModules
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
     setop $ TcErrors $ unpack <$> renderedLines
-    return failureMessage
-# else
+    return _failureMessage
+#elif defined(BUILD_TOOL)
+    -- ghc + build-tool: run verify
+    (md,modules) <- _loadModules
     modResult <- liftIO $ Check.verifyModule modules md
     let renderedLines = Check.renderVerifiedModule modResult
     case modResult of
@@ -634,10 +629,18 @@ verify i as = case as of
         -> return $ tStr $ mconcat renderedLines
       _ -> do
         setop $ TcErrors $ unpack <$> renderedLines
-        return failureMessage
-# endif
-  _ -> argsError i as
+        return _failureMessage
+#else
+    -- ghc - build-tool: typecheck only
+    tc i _as
 #endif
+  where
+    _failureMessage = tStr $ "Verification of " <> modName <> " failed"
+    _loadModules = (,)
+        <$> getModule i (ModuleName modName Nothing)
+        <*> getAllModules i
+verify i as = argsError i as
+
 
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss ->
