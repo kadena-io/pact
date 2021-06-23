@@ -60,7 +60,7 @@ import           Pact.Types.Version          (pactVersion)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Invariant
-import           Pact.Analyze.LegacySFunArray
+import           Pact.Analyze.PactSFunArray
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util

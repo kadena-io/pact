@@ -15,7 +15,7 @@ import           Data.Type.Equality           ((:~:) (Refl))
 
 import           Pact.Types.Pretty
 
-import           Pact.Analyze.LegacySFunArray (eitherArray, mkSFunArray)
+import           Pact.Analyze.PactSFunArray (eitherArray, mkPactSFunArray)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 
@@ -49,7 +49,7 @@ mkTokenGrants :: [Capability] -> TokenGrants
 mkTokenGrants caps = TokenGrants $ Map.fromList $
   caps <&> \(Capability schema name) ->
     ( name
-    , EKeySFunArray (SObjectUnsafe schema) (mkSFunArray $ const sFalse)
+    , EKeySFunArray (SObjectUnsafe schema) (mkPactSFunArray $ const sFalse)
     )
 
 extendGrants :: TokenGrants -> TokenGrants -> TokenGrants
