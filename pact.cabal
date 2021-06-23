@@ -30,7 +30,7 @@ flag ghc-flags
 flag build-tool
   description: Include modules and deps for tests + executable
   default:     True
-  manual:      False
+  manual:      True
 
 library
 
