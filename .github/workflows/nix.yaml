@@ -5,12 +5,11 @@ on:
 
 jobs:
   build:
-    name: CI
+    name: Nix CI
     runs-on: self-hosted
     steps:
       - name: Clone project
         uses: actions/checkout@v2
-
       - name: Build
         run: nix-build
       - name: GHC Build
