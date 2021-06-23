@@ -264,9 +264,7 @@ library
       build-depends: unix
 
 executable pact
-  if !impl(ghcjs) && flag(build-tool)
-    buildable: True
-  else
+  if impl(ghcjs) || !flag(build-tool)
     buildable: False
   main-is:             Repl.hs
   build-depends:       base
@@ -280,9 +278,7 @@ executable pact
     ghc-options: -optP-Wno-nonportable-include-path
 
 benchmark bench
-  if !impl(ghcjs) && flag(build-tool)
-    buildable: True
-  else
+  if impl(ghcjs) || !flag(build-tool)
     buildable: False
   type:                exitcode-stdio-1.0
   main-is:             Bench.hs
@@ -294,9 +290,7 @@ benchmark bench
   default-language:    Haskell2010
 
 executable gasmodel
-  if !impl(ghcjs) && flag(build-tool)
-    buildable: True
-  else
+  if impl(ghcjs) || !flag(build-tool)
     buildable: False
   main-is:             GasModel.hs
   build-depends:       base
