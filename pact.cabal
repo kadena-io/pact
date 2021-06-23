@@ -264,6 +264,10 @@ library
       build-depends: unix
 
 executable pact
+  if flag(build-tool)
+    buildable: True
+  else
+    buildable: False
   main-is:             Repl.hs
 
   build-depends:       base
@@ -277,6 +281,10 @@ executable pact
     ghc-options: -optP-Wno-nonportable-include-path
 
 benchmark bench
+  if flag(build-tool)
+    buildable: True
+  else
+    buildable: False
   type:                exitcode-stdio-1.0
   main-is:             Bench.hs
   build-depends:       base
@@ -287,6 +295,10 @@ benchmark bench
   default-language:    Haskell2010
 
 executable gasmodel
+  if flag(build-tool)
+    buildable: True
+  else
+    buildable: False
   main-is:             GasModel.hs
   build-depends:       base
                      , pact
@@ -296,11 +308,15 @@ executable gasmodel
   default-language:    Haskell2010
 
 test-suite hspec
-  if !impl(ghcjs) && flag(build-tool)
-    main-is:          hspec.hs
+  if flag(build-tool)
+    buildable: True
+  else
+    buildable: False
+  if impl(ghcjs)
+    main-is:          hspec-ghcjs.hs
     type:             exitcode-stdio-1.0
   else
-    main-is:          hspec-ghcjs.hs
+    main-is:          hspec.hs
     type:             exitcode-stdio-1.0
   hs-source-dirs:   tests
   default-language: Haskell2010
@@ -339,7 +355,7 @@ test-suite hspec
                 Blake2Spec
                 KeysetSpec
                 TypesSpec
-  if !impl(ghcjs) && flag(build-tool)
+  if !impl(ghcjs)
     build-depends:
                   neat-interpolation
                 , sbv
