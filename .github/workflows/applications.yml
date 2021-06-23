@@ -14,6 +14,7 @@ jobs:
         cabal: ['3.4']
         os: ['ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ] # windows-latest is temporarily disabled
         cabalcache: ['true']
+        build-tool: ['true']
         exclude:
         - os: 'windows-latest'
           ghc: '8.6.5'
@@ -24,6 +25,12 @@ jobs:
           ghc: '8.10.4'
           cabal: '3.4'
           cabalcache: 'true'
+          build-tool: 'True'
+        - os: 'ubuntu-20.04'
+          ghc: '8.10.5'
+          cabal: '3.4'
+          cabalcache: 'true'
+          build-tool: 'false'
         # include:
         # - os: 'windows-latest'
         #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
@@ -101,9 +108,16 @@ jobs:
           optimization: 1
         EOF
     - name: Add check for unused packages
+      if: matrix.build-tool
+      run: |
+        cat >> cabal.project.local <<EOF
+        package pact
+          flags: +build-tool
+        EOF
+    - name: Add check for unused packages
       if: "! startsWith(matrix.ghc, '8.6') && ! startsWith(matrix.ghc, 8.8)"
       run: |
-        cat > cabal.project.local <<EOF
+        cat >> cabal.project.local <<EOF
         package pact
           ghc-options: -Wunused-packages
         EOF
