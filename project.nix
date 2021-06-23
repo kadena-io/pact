@@ -22,6 +22,15 @@ in {
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
+        pact-do-benchmark = overrideCabal (doBenchmark super.pact) (oldDrv: {
+          benchmarkSystemDepends = [ pkgs.z3 ];
+          postBuild = ''
+            mkdir -p log  # needed or else bench can't create a sqlitedb at log/sqlite.db
+            ./Setup bench
+          '';
+          doCheck = false; # As this build is only for CI, we can check pact with the regular drv
+          doHaddock = false;
+        });
       };
       packages = {
         pact = kpkgs.gitignoreSource ./.;
