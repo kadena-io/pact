@@ -24,6 +24,11 @@ in {
 
         pact-do-benchmark = overrideCabal (doBenchmark super.pact) (oldDrv: {
           benchmarkSystemDepends = [ pkgs.z3 ];
+          postBuild = ''
+            ./Setup bench
+          '';
+          doCheck = false; # As this build is only for CI, we can check pact with the regular drv
+          doHaddock = false;
         });
       };
       packages = {
