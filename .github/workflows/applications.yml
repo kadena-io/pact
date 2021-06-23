@@ -10,13 +10,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.6.5', '8.8.4', '8.10.5']
+        ghc: ['8.8.4', '8.10.5']
         cabal: ['3.4']
-        os: ['ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ] # windows-latest is temporarily disabled
+        os: ['ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ]
         cabalcache: ['true']
         exclude:
-        - os: 'windows-latest'
-          ghc: '8.6.5'
         - os: 'macOS-latest'
           ghc: '8.10.5'
         include:
@@ -36,7 +34,6 @@ jobs:
       # Aritfacts
       ARTIFACT_BUCKET: kadena-cabal-cache
       BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.${{ github.sha }}.tar.gz
-      LATEST_BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.master.tar.gz"
 
     steps:
     - name: Checkout repository
@@ -173,9 +170,3 @@ jobs:
         echo "uploaded tar file to S3"
         aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$BINFILE --acl public-read
         echo "set public read permission"
-    - name: Link latest-build application in S3
-      if: "!contains(matrix.os, 'windows') && contains(github.ref, 'master')"
-      shell: bash
-      run: |
-        aws s3 cp s3://$ARTIFACT_BUCKET/pact/$BINFILE s3://$ARTIFACT_BUCKET/pact/$LATEST_BINFILE
-        aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$LATEST_BINFILE --acl public-read
