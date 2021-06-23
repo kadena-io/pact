@@ -28,7 +28,7 @@ in {
             mkdir -p log  # needed or else bench can't create a sqlitedb at log/sqlite.db
             ./Setup bench
           '';
-          doHaddock = true;
+          doHaddock = false;
           doCheck = true;
         });
       };
