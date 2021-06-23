@@ -35,7 +35,6 @@ import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.Text (Text, unpack)
-import qualified Data.Text as Text
 import Data.Text.Encoding
 import Pact.Time
 import qualified Data.Vector as V
@@ -52,7 +51,9 @@ import Criterion.Types
 
 import Statistics.Types (Estimate(..))
 
+# ifdef BUILD_TOOL
 import qualified Pact.Analyze.Check as Check
+# endif
 import qualified Pact.Types.Crypto as Crypto
 #endif
 
@@ -209,9 +210,11 @@ replDefs = ("Repl",
       ["(env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)"]
       ("Queries, or with arguments, sets execution config flags. Valid flags: " <>
        tShow (M.keys flagReps))
+#ifdef BUILD_TOOL
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
        "Verify MODULE, checking that all properties hold."
+#endif
 
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
@@ -608,6 +611,7 @@ tc i as = case as of
             setop $ TcErrors $ map (\(TC.Failure ti s) -> renderInfo (TC._tiInfo ti) ++ ":Warning: " ++ s) fails
             return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
+#ifdef BUILD_TOOL
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
@@ -615,13 +619,13 @@ verify i as = case as of
     -- reading all modules from db here, but should be fine in repl
     modules <- getAllModules i
     let failureMessage = tStr $ "Verification of " <> modName <> " failed"
-#if defined(ghcjs_HOST_OS)
+# if defined(ghcjs_HOST_OS)
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
-    setop $ TcErrors $ Text.unpack <$> renderedLines
+    setop $ TcErrors $ unpack <$> renderedLines
     return failureMessage
-#else
+# else
     modResult <- liftIO $ Check.verifyModule modules md
     let renderedLines = Check.renderVerifiedModule modResult
     case modResult of
@@ -629,11 +633,11 @@ verify i as = case as of
         | not (Check.hasVerificationError modResult')
         -> return $ tStr $ mconcat renderedLines
       _ -> do
-        setop $ TcErrors $ Text.unpack <$> renderedLines
+        setop $ TcErrors $ unpack <$> renderedLines
         return failureMessage
-#endif
-
+# endif
   _ -> argsError i as
+#endif
 
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss ->

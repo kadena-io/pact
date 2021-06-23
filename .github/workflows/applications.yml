@@ -14,6 +14,7 @@ jobs:
         cabal: ['3.4']
         os: ['ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ]
         cabalcache: ['true']
+        flags: ['+build-tool']
         exclude:
         - os: 'macOS-latest'
           ghc: '8.10.5'
@@ -22,6 +23,12 @@ jobs:
           ghc: '8.10.4'
           cabal: '3.4'
           cabalcache: 'true'
+          flags: '+build-tool'
+        - os: 'ubuntu-20.04'
+          ghc: '8.10.5'
+          cabal: '3.4'
+          cabalcache: 'true'
+          flags: '-build-tool'
         # include:
         # - os: 'windows-latest'
         #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
@@ -96,14 +103,19 @@ jobs:
           benchmarks: True
           documentation: False
           optimization: 1
+          flags: ${{ matrix.flags }}
         EOF
     - name: Add check for unused packages
+      shell: bash
       if: "! startsWith(matrix.ghc, '8.6') && ! startsWith(matrix.ghc, 8.8)"
       run: |
-        cat > cabal.project.local <<EOF
+        cat >> cabal.project.local <<EOF
         package pact
           ghc-options: -Wunused-packages
         EOF
+    - name: Print cabal.project.local
+      shell: bash
+      run: cat cabal.project.local
     - uses: actions/cache@v2
       name: Cache dist-newstyle
       with:
@@ -143,6 +155,7 @@ jobs:
       run: cabal test
     - name: Benchmark
       shell: bash
+      if: "! contains(matrix.flags, '-build-tool')"
       run: cabal bench
 
     # Publish Artifacts
