@@ -266,10 +266,10 @@ library
 executable pact
   if flag(build-tool)
     buildable: True
+    cpp-options: -DBUILD_TOOL
   else
     buildable: False
   main-is:             Repl.hs
-
   build-depends:       base
                      , pact
   hs-source-dirs:      executables
@@ -283,6 +283,7 @@ executable pact
 benchmark bench
   if flag(build-tool)
     buildable: True
+    cpp-options: -DBUILD_TOOL
   else
     buildable: False
   type:                exitcode-stdio-1.0
@@ -297,6 +298,7 @@ benchmark bench
 executable gasmodel
   if flag(build-tool)
     buildable: True
+    cpp-options: -DBUILD_TOOL
   else
     buildable: False
   main-is:             GasModel.hs
@@ -310,6 +312,7 @@ executable gasmodel
 test-suite hspec
   if flag(build-tool)
     buildable: True
+    cpp-options: -DBUILD_TOOL
   else
     buildable: False
   if impl(ghcjs)
