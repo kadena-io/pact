@@ -311,63 +311,67 @@ test-suite hspec
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-tool-depends: hspec-discover:hspec-discover >=2.7
+
   build-depends:
-                base
-              , Decimal
-              , aeson
-              , base16-bytestring >=0.1.1.6 && < 0.2
-              , bound
-              , bytestring
-              , containers
-              , data-default
-              , deepseq
-              , directory
-              , errors >= 2.3
-              , exceptions
-              , filepath
-              , hedgehog >= 1.0.1 && < 1.1
-              , hspec
-              , hspec-golden >= 0.1.0.2
-              , hw-hspec-hedgehog == 0.1.*
-              , intervals
-              , lens
-              , mmorph
-              , mtl
-              , pact
-              , prettyprinter
-              , QuickCheck
-              , text
-              , transformers
-              , unordered-containers
-              , vector
+    , aeson
+    , base
+    , bound
+    , bytestring
+    , containers
+    , data-default
+    , hspec
+    , pact
+    , unordered-containers
   other-modules:
-                Blake2Spec
-                KeysetSpec
-                TypesSpec
+    Blake2Spec
+    KeysetSpec
+    TypesSpec
+
   if !impl(ghcjs) && flag(build-tool)
     build-depends:
-                  neat-interpolation
-                , sbv
-                , http-client
-                , servant-client
-                , yaml
+      , Decimal
+      , QuickCheck
+      , base16-bytestring >=0.1.1.6 && < 0.2
+      , deepseq
+      , directory
+      , errors >= 2.3
+      , exceptions
+      , filepath
+      , hedgehog >= 1.0.1 && < 1.1
+      , hspec-golden >= 0.1.0.2
+      , http-client
+      , hw-hspec-hedgehog == 0.1.*
+      , intervals
+      , lens
+      , mmorph
+      , mtl
+      , neat-interpolation
+      , prettyprinter
+      , sbv
+      , servant-client
+      , text
+      , transformers
+      , vector
+      , yaml
+
     other-modules:
-                  DocgenSpec
-                , PactTestsSpec
-                , ParserSpec
-                , PersistSpec
-                , RemoteVerifySpec
-                , SignatureSpec
-                , TypecheckSpec
-                , PactContinuationSpec
-                , AnalyzePropertiesSpec
-                , AnalyzeSpec
-                , Analyze.Eval
-                , Analyze.Gen
-                , Analyze.TimeGen
-                , Analyze.Translate
-                , ClientSpec
-                , SchemeSpec
-                , HistoryServiceSpec
-                , GasModelSpec
-                , GoldenSpec
+      DocgenSpec
+      PactTestsSpec
+      ParserSpec
+      PersistSpec
+      RemoteVerifySpec
+      SignatureSpec
+      TypecheckSpec
+      PactContinuationSpec
+      AnalyzePropertiesSpec
+      AnalyzeSpec
+      Analyze.Eval
+      Analyze.Gen
+      Analyze.TimeGen
+      Analyze.Translate
+      ClientSpec
+      SchemeSpec
+      HistoryServiceSpec
+      GasModelSpec
+      GoldenSpec
+
