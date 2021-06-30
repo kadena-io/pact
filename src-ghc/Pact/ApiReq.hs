@@ -23,11 +23,13 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
+    ,mkUnsignedExec
     ,AddSigsReq(..),addSigsReq
     ,combineSigs
     ,combineSigDatas
     ,signCmd
     ,decodeYaml
+    ,importKeyFile
     ,returnCommandIfDone
     ) where
 
