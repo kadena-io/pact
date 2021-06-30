@@ -26,12 +26,11 @@ module Pact.Repl.Cli
   , cliHelp
   ) where
 
-
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Data.Aeson as Aeson hiding (Object)
+import Data.Aeson as Aeson hiding (Object,(.=))
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Decimal
@@ -41,6 +40,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.HashMap.Strict as HM
 import Data.List (sortBy,elemIndex)
+import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,pack,unpack,intercalate)
@@ -74,6 +74,7 @@ import Pact.Types.Command
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 import Pact.Types.Pretty
+import Pact.Types.SigData
 import Pact.Server.API
 
 data KeyPairFile = KeyPairFile Text Text
@@ -215,13 +216,18 @@ import' i as = do
   rs <- case mds of
     PList vs -> forM vs $ \md ->
       case (preview (_PAt "code" . _PString) md, preview (_PAt "name". _PString) md) of
-        (Just code,Just mname) -> case fromString (unpack mname) of
-          (ModuleName _ (Just (NamespaceName ns))) ->
-            evalPact' ("(namespace \"" <> ns <> "\") " <> code)
-          _ -> evalPact' code
+        (Just code,Just mname) -> do
+          (evalRefs . rsNamespace) .=
+              (case fromString (unpack mname) of
+                 (ModuleName _ (Just ns)) ->
+                   Just $ Namespace ns dummyKeyset dummyKeyset
+                 _ -> Nothing)
+          evalPact' code
         (_,_) -> evalError' i "Expected code, module name"
     _ -> evalError' i "Expected list"
   return $ toTList TyAny def (concat rs)
+  where
+    dummyKeyset = GKeySet $ mkKeySet [] "keys-all"
 
 now :: RNativeFun LibState
 now _ _ = toTerm <$> liftIO getCurrentTime
@@ -446,7 +452,7 @@ _PAt :: FieldKey -> Fold PactValue PactValue
 _PAt k = _PObjectMap . ix k
 
 buildCmd :: HasInfo i => i -> Bool -> Text -> Eval LibState (Command Text)
-buildCmd i includeSigners cmd = do
+buildCmd i includeSigners cmd = withAppliedEnv $ do
   ttl <- cliState i "ttl" _PInteger
   nw <- NetworkId <$> cliState i "network-id" _PString
   ctime <- cliState i "creation-time" _PTime
@@ -470,6 +476,13 @@ buildCmd i includeSigners cmd = do
   return $ case sigs of
     Nothing -> cmdu
     Just ss -> set cmdSigs ss cmdu
+
+withAppliedEnv :: Eval LibState a -> Eval LibState a
+withAppliedEnv a = do
+  f <- viewLibState $ \s -> case _rlsOp s of
+    UpdateEnv e -> e
+    _ -> mempty
+  local (appEndo f) a
 
 getSigners :: HasInfo i => i -> Eval LibState ([Signer],Maybe [UserSig])
 getSigners i = do

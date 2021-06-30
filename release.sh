@@ -35,17 +35,61 @@
 
 set -e
 
-version="$1"
+usage='release.sh [-h] -v VERSION -b BREW_DIR [-t TRAVIS_BUILD] [-l LINUX_BUILD -m MAC_BUILD]
+  VERSION: version to release, e.g. "4.0.1"
+  BREW_DIR: dir containing git@github.com:kadena-io/homebrew-pact.git
+  TRAVIS_BUILD: travis build number. If not supplying this, must supply -l and -m
+  LINUX_BUILD: path to linux binary
+  MAC_BUILD: path to mac binary'
 
-if [ -z "$version" ]; then echo "Missing version"; exit 1; fi
+while [ -n "$1" ]; do
+    case "$1" in
+        -v)
+            version="$2"
+            shift
+            ;;
+        -b)
+            brewdir="$2"
+            shift
+            ;;
+        -t)
+            build="$2"
+            shift
+            ;;
+        -l)
+            linux_build_path="$2"
+            shift
+            ;;
+        -m)
+            mac_build_path="$2"
+            shift
+            ;;
+        -h)
+            echo "$usage"
+            exit 0
+            ;;
+        *)
+            echo "Unrecognized argument"
+            echo "$usage"
+            exit 1
+            ;;
+    esac
+    shift
+done
 
-build="$2"
+if [ -z "$version" ]; then echo "Missing version"; echo "$usage"; exit 1; fi
 
-if [ -z "$build" ]; then echo "Missing travis build number"; exit 1; fi
+if [ ! -d "$brewdir" ]; then echo "Missing homebrew-pact dir"; echo $usage; exit 1; fi
 
-brewdir="$3"
+if [ -z "$build" ]; then
+    if [ ! -f "$linux_build_path" -o ! -f "$mac_build_path" ]; then
+        echo "Missing travis, or valid mac+linux build path"
+        echo "$usage"
+        exit 1
+    fi
+fi
 
-if [ ! -d "$brewdir" ]; then echo "Missing homebrew-pact dir"; exit 1; fi
+
 
 home="/tmp/pact-builds"
 vdir="$home/$version"
@@ -76,11 +120,15 @@ murl="$s3url.$osxid/.stack-work/dist/x86_64-osx/Cabal-3.0.1.0/build/pact/pact"
 
 # linux
 
-echo "Downloading linux s3 artifact"
 
 cd $ldir
 
-aws s3 cp $lurl .
+if [ -z "$build" ]; then
+    cp $linux_build_path .
+else
+    echo "Downloading linux s3 artifact"
+    aws s3 cp $lurl .
+fi
 
 md5 pact > pact.md5
 
@@ -90,15 +138,15 @@ rm pact pact.md5
 
 # osx
 
-echo "Downloading osx s3 artifact"
 
 cd $mdir
 rm -r $ldir
 
-if [ -z "$macbuild" ]; then
-    aws s3 cp $murl .
+if [ -z "$build" ]; then
+    cp $mac_build_path .
 else
-    cp $macbuild .
+    echo "Downloading osx s3 artifact"
+    aws s3 cp $murl .
 fi
 md5 pact > pact.md5
 

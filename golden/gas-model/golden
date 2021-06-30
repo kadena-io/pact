@@ -666,6 +666,12 @@
   - 4
 - - (keys accounts.accounts)
   - 201
+- - (concat longEscapedStrList)                                                                                                                                                                                             
+  - 1026                                                                                                                                                                                                                    
+- - (concat medEscapedStrList)                                                                                                                                                                                              
+  - 3                                                                                                                                                                                                                       
+- - (concat smallEscapedStrList)                                                                                                                                                                                            
+  - 2                                                                                                                                                                                                                       
 - - (!= longNumber longNumber)
   - 2
 - - (!= medNumber medNumber)
@@ -695,6 +701,12 @@
 - - (!= medOjectMap medOjectMap)
   - 2
 - - (!= smallOjectMap smallOjectMap)
+  - 2
+- - (str-to-list longString)
+  - 1026
+- - (str-to-list medString)
+  - 3
+- - (str-to-list smallString)
   - 2
 - - (map (identity) longNumberList)
   - 20004
@@ -737,6 +749,12 @@
   - 31
 - - (module accounts GOV [...some module code ...]) update module
   - 138
+- - (distinct longDuplicateNumberList)
+  - 2118
+- - (distinct medDuplicateNumberList)
+  - 7
+- - (distinct smallDuplicateNumberList)
+  - 3
 - - (txids accounts.accounts 0)
   - 100000
 - - (ln longNumber)

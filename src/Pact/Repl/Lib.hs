@@ -35,7 +35,6 @@ import qualified Data.Map.Strict as M
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.Text (Text, unpack)
-import qualified Data.Text as Text
 import Data.Text.Encoding
 import Pact.Time
 import qualified Data.Vector as V
@@ -52,7 +51,9 @@ import Criterion.Types
 
 import Statistics.Types (Estimate(..))
 
+# ifdef BUILD_TOOL
 import qualified Pact.Analyze.Check as Check
+# endif
 import qualified Pact.Types.Crypto as Crypto
 #endif
 
@@ -212,7 +213,6 @@ replDefs = ("Repl",
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
        []
        "Verify MODULE, checking that all properties hold."
-
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
        "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
@@ -609,19 +609,18 @@ tc i as = case as of
             return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 verify :: RNativeFun LibState
-verify i as = case as of
-  [TLitString modName] -> do
-    md <- getModule i (ModuleName modName Nothing)
-    -- reading all modules from db here, but should be fine in repl
-    modules <- getAllModules i
-    let failureMessage = tStr $ "Verification of " <> modName <> " failed"
+verify i _as@[TLitString modName] = do
 #if defined(ghcjs_HOST_OS)
+    -- ghcjs: use remote server
+    (md,modules) <- _loadModules
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
-    setop $ TcErrors $ Text.unpack <$> renderedLines
-    return failureMessage
-#else
+    setop $ TcErrors $ unpack <$> renderedLines
+    return _failureMessage
+#elif defined(BUILD_TOOL)
+    -- ghc + build-tool: run verify
+    (md,modules) <- _loadModules
     modResult <- liftIO $ Check.verifyModule modules md
     let renderedLines = Check.renderVerifiedModule modResult
     case modResult of
@@ -629,11 +628,19 @@ verify i as = case as of
         | not (Check.hasVerificationError modResult')
         -> return $ tStr $ mconcat renderedLines
       _ -> do
-        setop $ TcErrors $ Text.unpack <$> renderedLines
-        return failureMessage
+        setop $ TcErrors $ unpack <$> renderedLines
+        return _failureMessage
+#else
+    -- ghc - build-tool: typecheck only
+    tc i _as
 #endif
+  where
+    _failureMessage = tStr $ "Verification of " <> modName <> " failed"
+    _loadModules = (,)
+        <$> getModule i (ModuleName modName Nothing)
+        <*> getAllModules i
+verify i as = argsError i as
 
-  _ -> argsError i as
 
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss ->

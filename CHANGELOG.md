@@ -1,3 +1,36 @@
+4.0.1
+---
+
+* Add "advice" plus LCOV code coverage (#861)
+  * General advice mechanism for e.g. instrumenting performance bracketing
+  * `-c` in pact tool outputs coverage to `coverage/lcov.info` relative to loaded file
+* Emit synthetic cross-chain events (#875)
+  * Emits `X_YIELD` on cross-chain initiation and `X_RESUME` on cross chain resumption
+    for any defpact:
+    - `(pact.X_YIELD targetChain:string continuationName:string continuationArgs:[*])`
+    - `(pact.X_RESUME sourceChain:string continuationName:string continuationArgs:[*])`
+  * Thus a cross-chain transfer send from 0 to 1 would be `(pact.X_YIELD "1" "coin.transfer-crosschain" ["Bob" "Alice" 10.0])`
+    on chain 0 then `(pact.X_RESUME "0" "coin.transfer-crosschain" ["Bob" "Alice" 10.0])` on chain 1.
+* Support blessed modules and add source chain in crosschain (#862)
+  * Blessed modules are now supported for resuming cross-chains initiated pre-upgrade.
+  * Initiation of cross-chain captures/transmits source chain in output in field `.continuation.yield.sourceChain`
+* New natives (#859,#874,#860,#862)
+  * `enumerate` to build sequenced lists
+  * `str-to-list` and `concat` to transform strings to arrays and back
+  * `distinct` to de-dupe lists
+  * `emit-event` to not fire event defcaps when emitting, and allowing arbitrary parameter values
+* Miscellaneous
+  * Elide info from Modref JSON (#856)
+  * Move SigData and related types into library (#852)
+  * More robust TH and avoid deprecated use of star (#870)
+  * Enable benchmarks in nix ghc build (#869)
+  * Remove thyme dependency (#867)
+  * Remove swagger support (#866)
+  * Add time benchmarks (#868)
+  * Remove setup from gas results (#865)
+  * Improve gas golden output (#864)
+  * Conditional z3 and servant (#850)
+
 3.7
 ---
 * Module References (#817,#839)

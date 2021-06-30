@@ -1,26 +1,34 @@
 name: Build and publish application binaries
 
 on:
+  workflow_dispatch:
   push:
-    branches:
-    - master
-    - github-ci
-    - ci/*
 
 jobs:
   build:
-    name: Build master with ${{ matrix.ghc }} / ${{ matrix.cabal }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.6.5', '8.8.4', '8.10.2']
-        cabal: ['3.2']
-        os: ['ubuntu-16.04', 'ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ] # windows-latest is temporarily disabled
+        ghc: ['8.8.4', '8.10.5']
+        cabal: ['3.4']
+        os: ['ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ]
         cabalcache: ['true']
+        flags: ['+build-tool']
         exclude:
-        - os: 'windows-latest'
-          ghc: '8.6.5'
+        - os: 'macOS-latest'
+          ghc: '8.10.5'
+        include:
+        - os: 'macOS-latest'
+          ghc: '8.10.4'
+          cabal: '3.4'
+          cabalcache: 'true'
+          flags: '+build-tool'
+        - os: 'ubuntu-20.04'
+          ghc: '8.10.5'
+          cabal: '3.4'
+          cabalcache: 'true'
+          flags: '-build-tool'
         # include:
         # - os: 'windows-latest'
         #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
@@ -29,33 +37,38 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
       AWS_DEFAULT_REGION: us-east-1
-      
+
       # Aritfacts
       ARTIFACT_BUCKET: kadena-cabal-cache
       BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.${{ github.sha }}.tar.gz
-      LATEST_BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.master.tar.gz"
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
 
     # Non Haskell dependencies
-    - name: Install non-Haskell dependencies (ubuntu)
-      if: contains(matrix.os, 'ubuntu')
+    - name: Install z3 (ubuntu-20.04)
+      if: contains(matrix.os, 'ubuntu-20.04')
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zlib1g-dev libtinfo-dev libsqlite3-dev libz3-dev z3
-    - name: Install non-Haskell dependencies (macOS)
+        sudo apt-get install -y z3
+    - name: Install z3 (ubuntu-18.04)
+      if: contains(matrix.os, 'ubuntu-18.04')
+      uses: pavpanchekha/setup-z3@0.2.0
+      with:
+        version: "4.8.10"
+        architecture: "x64"
+        distribution: "ubuntu-18.04"
+    - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
-      run: |
-        echo 'skip'
+      run: brew install z3
     - name: Install non-Haskell dependencies (windows)
       if: contains(matrix.os, 'windows')
       run: choco install -y -r awscli
 
     # Haskell Setup
     - name: Install GHC and Cabal
-      uses: actions/setup-haskell@v1
+      uses: haskell/actions/setup@v1.2.3
       with:
          ghc-version: ${{ matrix.ghc }}
          cabal-version: ${{ matrix.cabal }}
@@ -80,41 +93,48 @@ jobs:
         ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg-${{ matrix.ghc }}
 
     # Project Setup
-    - name: Append cabal.project
+    - name: Create cabal.project.local
       shell: bash
       run: |
-        cat >> cabal.project <<EOF
+        cat > cabal.project.local <<EOF
         documentation: False
-        package thyme
-          tests: False
-        constraints:
-          base16-bytestring <1
+        package pact
+          tests: True
+          benchmarks: True
+          documentation: False
+          optimization: 1
+          flags: ${{ matrix.flags }}
         EOF
-    - name: Append cabal.project (only ghc-8.10)
-      if: startsWith(matrix.ghc, '8.10')
+    - name: Add check for unused packages
       shell: bash
+      if: "! startsWith(matrix.ghc, '8.6') && ! startsWith(matrix.ghc, 8.8)"
       run: |
-        cat >> cabal.project <<EOF
-        allow-newer: *
-        package cassava
-          flags: -bytestring--lt-0_10_4
+        cat >> cabal.project.local <<EOF
+        package pact
+          ghc-options: -Wunused-packages
         EOF
-    - uses: actions/cache@v1
+    - name: Print cabal.project.local
+      shell: bash
+      run: cat cabal.project.local
+    - uses: actions/cache@v2
       name: Cache dist-newstyle
       with:
-        path: dist-newstyle
-        key: ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-${{ github.sha }}
-        restore-keys: |
-          ${{ matrix.os }}-${{ matrix.ghc }}-dist-newstyle-
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ matrix.os }}-${{ matrix.ghc }}-4-cabal
 
     # Build
     - name: Update package database
       shell: bash
-      run: cabal v2-update
+      run: cabal update
+    - name: Display outdated packages
+      run: cabal outdated
     - name: Configure build
       run: |
-        cabal v2-build exe:pact --dry-run
-        cabal v2-freeze
+        cabal build --dry-run
+        cabal freeze
     - name: Sync from cabal cache
       if: matrix.cabalcache == 'true'
       uses: larskuhtz/cabal-cache-action@ecc751af6d31b3ed5a3b4aefdefd0ed6ef4cb414
@@ -124,12 +144,19 @@ jobs:
         folder: "${{ matrix.os }}"
         aws_access_key_id: "${{ secrets.kadena_cabal_cache_aws_access_key_id }}"
         aws_secret_access_key: "${{ secrets.kadena_cabal_cache_aws_secret_access_key }}"
-    - name: Install build dependencies
+    - name: Build dependencies
       shell: bash
-      run: cabal v2-build exe:pact --only-dependencies
+      run: cabal build --only-dependencies
     - name: Build
       shell: bash
-      run: cabal v2-build exe:pact
+      run: cabal build
+    - name: Test
+      shell: bash
+      run: cabal test
+    - name: Benchmark
+      shell: bash
+      if: "! contains(matrix.flags, '-build-tool')"
+      run: cabal bench
 
     # Publish Artifacts
     - name: Prepare artifacts
@@ -156,9 +183,3 @@ jobs:
         echo "uploaded tar file to S3"
         aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$BINFILE --acl public-read
         echo "set public read permission"
-    - name: Link latest-build application in S3
-      if: "!contains(matrix.os, 'windows') && contains(github.ref, 'master')"
-      shell: bash
-      run: |
-        aws s3 cp s3://$ARTIFACT_BUCKET/pact/$BINFILE s3://$ARTIFACT_BUCKET/pact/$LATEST_BINFILE
-        aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$LATEST_BINFILE --acl public-read

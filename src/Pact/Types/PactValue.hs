@@ -23,6 +23,7 @@ module Pact.Types.PactValue
   , toPactValue
   , toPactValueLenient
   , fromPactValue
+  , elideModRefInfo
   , _PLiteral
   , _PList
   , _PGuard
@@ -41,10 +42,11 @@ module Pact.Types.PactValue
 
 import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
-import Control.Lens (makePrisms)
+import Control.Lens (makePrisms,set)
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
 import qualified Data.Map.Strict as M
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -123,8 +125,11 @@ instance ToJSON PactValue where
   toJSON (PObject o) = toJSON o
   toJSON (PList v) = toJSON v
   toJSON (PGuard x) = toJSON x
-  toJSON (PModRef m) = toJSON m
-
+  toJSON (PModRef (ModRef refName refSpec refInfo)) = object $
+    [ "refName" .= refName
+    , "refSpec" .= refSpec
+    ] ++
+    [ "refInfo" .= refInfo | refInfo /= def ]
 
 instance FromJSON PactValue where
   parseJSON v =
@@ -132,7 +137,12 @@ instance FromJSON PactValue where
     (PList <$> parseJSON v) <|>
     (PGuard <$> parseJSON v) <|>
     (PObject <$> parseJSON v) <|>
-    (PModRef <$> parseJSON v)
+    (PModRef <$> (parseNoInfo v <|> parseJSON v))
+    where
+      parseNoInfo = withObject "ModRef" $ \o -> ModRef
+        <$> o .: "refName"
+        <*> o .: "refSpec"
+        <*> (fromMaybe def <$> o .:? "refInfo")
 
 instance Pretty PactValue where
   pretty (PLiteral l) = pretty l
@@ -165,6 +175,10 @@ fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny def
 fromPactValue (PGuard x) = TGuard (fmap fromPactValue x) def
 fromPactValue (PModRef r) = TModRef r def
 
+elideModRefInfo :: PactValue -> PactValue
+elideModRefInfo (PModRef m) = PModRef (set modRefInfo def m)
+elideModRefInfo p = p
+
 -- | Lenient conversion, implying that conversion back won't necc. succeed.
 -- Integers are coerced to Decimal for simple representation.
 -- Non-value types are turned into their String representation.
@@ -173,6 +187,5 @@ toPactValueLenient t = case toPactValue t of
   Right (PLiteral (LInteger l)) -> PLiteral (LDecimal (fromIntegral l))
   Right v -> v
   Left _ -> PLiteral $ LString $ renderCompactText t
-
 
 makePrisms ''PactValue

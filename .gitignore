@@ -27,3 +27,4 @@ public
 docs/ko/_build/
 docs/ja/_build/
 *.hie
+coverage
