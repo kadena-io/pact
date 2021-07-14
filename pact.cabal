@@ -274,6 +274,9 @@ library
       build-depends:
         , connection >= 0.3.1
         , http-client-tls >= 0.3.5.3
+        , qrcode-core
+        , qrcode-juicypixels
+        , JuicyPixels
       cpp-options: -DCLI_REPL
 
 

@@ -26,6 +26,9 @@ module Pact.Repl.Cli
   , cliHelp
   ) where
 
+import qualified Codec.Picture as JP
+import qualified Codec.QRCode as QR
+import qualified Codec.QRCode.JuicyPixels as QR
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
@@ -143,9 +146,9 @@ cliDefs = ("Cli",
       "Poll for result on server."
       ,
       defZRNative "prep-offline" prepOffline
-      (funType tTyString [("file",tTyString)])
+      (funType tTyString [("file-root",tTyString)])
       [LitExample "(prep-offline \"offline-unsigned.yaml\")"]
-      "Make offline 'unsigned' yaml FILE."
+      "Generate FILE-ROOT.yaml and FILE-ROOT.png for offline signing."
       ,
       defZRNative "read-offline" readOffline
       (funType tTyString [("file",tTyString)])
@@ -238,9 +241,14 @@ prepOffline i [TLitString file] = do
   cmd <- buildCurrentCode i
   sgs <- getSigners i
   f <- computeCurPath file
-  liftIO $ Y.encodeFile @(SigData Text) f $
-      SigData (_cmdHash cmd) (map toSigs (fst sgs)) Nothing
-  return $ tStr $ "Wrote " <> (pack f)
+  let (sd :: SigData Text) =
+        SigData (_cmdHash cmd) (map toSigs (fst sgs)) Nothing
+  liftIO $ Y.encodeFile (f ++ ".yaml") sd
+  qri <- maybeDie i "QR encode failed" $
+         QR.encodeText (QR.defaultQRCodeOptions QR.L) QR.Iso8859_1OrUtf8WithECI {- QR.Iso8859_1 -} $
+         decodeUtf8 $ Y.encode sd
+  liftIO $ JP.savePngImage (f ++ ".png") $ JP.ImageY8 $ QR.toImage 4 3 qri
+  return $ tStr $ pack $ "Wrote " ++ f ++ ".yaml, " ++ f ++ ".png"
   where
     toSigs (Signer _ s _ _) = (PublicKeyHex s,Nothing)
 prepOffline i as = argsError i as
@@ -644,3 +652,6 @@ eitherDieS i = either (evalError' i . pretty . show) return
 
 eitherDie :: HasInfo i => Pretty a => i -> Either a b -> Eval e b
 eitherDie i = either (evalError' i . pretty) return
+
+maybeDie :: HasInfo i => i -> Text -> Maybe b -> Eval e b
+maybeDie i msg = maybe (evalError' i $ pretty msg) return
