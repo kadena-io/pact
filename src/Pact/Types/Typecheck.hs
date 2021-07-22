@@ -28,8 +28,9 @@ module Pact.Types.Typecheck
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,
     TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,
-    tcVarToTypes,tcYieldResume,
-    TC (..), runTC,
+    tcVarToTypes,tcYieldResume,tcDynEnv,
+    DynEnv,
+    TC (..), runTC, runTCState, mkTcState,
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
@@ -56,6 +57,7 @@ import Data.Foldable
 import Data.Text (Text, unpack)
 
 import Pact.Types.Lang hiding (App,Object,Step,ModRef)
+import Pact.Types.Runtime (ModuleData(..))
 import Pact.Types.Pretty
 import Pact.Types.Native
 
@@ -139,6 +141,9 @@ data YieldResume n = YieldResume
   deriving (Eq,Show,Functor,Foldable,Traversable)
 instance Default (YieldResume n) where def = YieldResume def def False
 
+-- | Environment for specializing interface dynamic references.
+type DynEnv = M.Map ModuleName (ModuleData Ref)
+
 -- | Typechecker state.
 data TcState = TcState {
   _tcDebug :: Bool,
@@ -152,11 +157,12 @@ data TcState = TcState {
   -- | Maps type vars to types.
   _tcVarToTypes :: M.Map (TypeVar UserType) (Type UserType),
   -- | Used in AST walk to track step yields and resumes.
-  _tcYieldResume :: Maybe (YieldResume Node)
+  _tcYieldResume :: Maybe (YieldResume Node),
+  _tcDynEnv :: DynEnv
   } deriving (Eq,Show)
 
-mkTcState :: Int -> Bool -> TcState
-mkTcState sup dbg = TcState dbg sup def def def def def def
+mkTcState :: Int -> Bool -> DynEnv -> TcState
+mkTcState sup dbg dynEnv = TcState dbg sup def def def def def def dynEnv
 
 instance Pretty TcState where
   pretty TcState {..} = vsep
@@ -426,7 +432,11 @@ makeLenses ''Overload
 
 -- | Run monad providing supply seed and debug.
 runTC :: Int -> Bool -> TC a -> IO (a, TcState)
-runTC sup dbg a = runStateT (unTC a) (mkTcState sup dbg)
+runTC sup dbg a = runTCState (mkTcState sup dbg def) a
+
+-- | Run monad providing supply seed and debug.
+runTCState :: TcState -> TC a -> IO (a, TcState)
+runTCState s a = runStateT (unTC a) s
 
 -- | Pre-visit or post-visit specification.
 data Visit = Pre | Post deriving (Eq,Show)

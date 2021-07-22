@@ -140,7 +140,7 @@ runVerification code = do
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
+      results <- verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
         Right (ModuleChecks propResults stepResults invariantResults _) ->
@@ -166,7 +166,7 @@ runCheck' checkType code check = do
   case eModuleData of
     Left tf -> pure $ Left tf
     Right moduleData -> do
-      result <- runExceptT $ verifyCheck moduleData "test" check checkType
+      result <- runExceptT $ verifyCheck mempty moduleData "test" check checkType
       pure $ case result of
         Left failure    -> Left $ VerificationFailure failure
         Right (Left cf:_) -> Left $ TestCheckFailure cf
@@ -178,7 +178,7 @@ checkInterface code = do
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      result <- verifyModule HM.empty moduleData
+      result <- verifyModule mempty HM.empty moduleData
       pure $ case result of
         Left failure -> Just $ VerificationFailure failure
         Right _      -> Nothing
@@ -1905,7 +1905,7 @@ spec = describe "analyze" $ do
       Left err -> it "failed to compile" $ expectationFailure (show err)
       Right moduleData -> do
         results <- runIO $
-          verifyModule (HM.fromList [("test", moduleData)]) moduleData
+          verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure

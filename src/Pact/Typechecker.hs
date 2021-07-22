@@ -793,24 +793,35 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
   return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
-toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
-  let mn = _dModule _tDef
-      fn = asString $ _dDefName _tDef
-  args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
-    an <- freshId ai $ pfx fn n
-    t' <- mangleType an <$> traverse toUserType t
-    Named n <$> trackNode t' an <*> pure an
-  tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) (_dDefBody _tDef)
-  funType <- traverse toUserType (_dFunType _tDef)
-  funId <- freshId _tInfo fn
-  void $ trackNode (_ftReturn funType) funId
-  unless (null tcs) $ assocAST funId (last tcs)
-  return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs funId
+toFun (TDef td i) = resolveDyn td
+  where
+    resolveDyn d@Def{..} = use tcDynEnv >>= \de -> case M.lookup _dModule de of
+      Nothing -> do
+        -- liftIO $ print (de == mempty)
+        go i d
+      Just ModuleData{..} -> case HM.lookup (asString _dDefName) _mdRefMap of
+        Just r -> do
+          liftIO $ print ("toFun: lookup success"::String,_dDefName,r)
+          toFun (fmap Left $ TVar r i)
+        Nothing -> die i $ "Dynamic substitution failed, module does not have member: " ++
+          show (moduleDefName _mdModule) ++ "::" ++ show _dDefName
+    go _tInfo _tDef = do
+      let mn = _dModule _tDef
+          fn = asString $ _dDefName _tDef
+      args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
+        an <- freshId ai $ pfx fn n
+        t' <- mangleType an <$> traverse toUserType t
+        Named n <$> trackNode t' an <*> pure an
+      tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) (_dDefBody _tDef)
+      funType <- traverse toUserType (_dFunType _tDef)
+      funId <- freshId _tInfo fn
+      void $ trackNode (_ftReturn funType) funId
+      unless (null tcs) $ assocAST funId (last tcs)
+      return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs funId
 toFun (TDynamic ref mem i) = case (ref, mem) of
   (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
   _ -> die i "Malformed mod ref"
 toFun t = die (_tInfo t) "Non-var in fun position"
-
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
 assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
@@ -1042,7 +1053,7 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
   assocAST si ex
   yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
-toAST TDynamic {..} = do
+toAST TDynamic {..} = do -- only comes up for consts, functions are in 'toFun'
   r <- toAST _tDynModRef
   m <- toFun _tDynMember
   n <- trackIdNode =<< freshId _tInfo (renderCompactText r)
@@ -1215,11 +1226,11 @@ typecheckTopLevel (Ref r) = do
 typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrevStr d
 
 -- | Typecheck all productions in a module.
-typecheckModule :: Bool -> ModuleData Ref -> IO ([TopLevel Node],[Failure])
-typecheckModule dbg (ModuleData (MDModule m) rm) = do
+typecheckModule :: Bool -> DynEnv -> ModuleData Ref -> IO ([TopLevel Node],[Failure])
+typecheckModule dbg dynEnv (ModuleData (MDModule m) rm) = do
   debug' dbg $ "Typechecking module " ++ show (_mName m)
   let tc ((tls,fails),sup) r = do
-        (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
+        (tl,TcState {..}) <- runTCState (mkTcState sup dbg dynEnv) (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
   fst <$> foldM tc (([],[]),0) (HM.elems rm)
-typecheckModule _ (ModuleData MDInterface{} _) = return mempty
+typecheckModule _ _ (ModuleData MDInterface{} _) = return mempty

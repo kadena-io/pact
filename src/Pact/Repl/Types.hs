@@ -6,7 +6,7 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV
+  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsDynEnv
   , Tx(..)
   , SPVMockKey(..)
   , getAllModules
@@ -28,6 +28,7 @@ import Pact.Persist.Pure (PureDb)
 import Pact.Runtime.Utils
 import Pact.Types.Runtime
 import Pact.Types.Pretty (Pretty, pretty, renderCompactText)
+import Pact.Types.Typecheck
 
 data ReplMode =
     Interactive |
@@ -98,6 +99,7 @@ data LibState = LibState
   , _rlsTests :: [TestResult]
   , _rlsVerifyUri :: Maybe String
   , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
+  , _rlsDynEnv :: DynEnv
   }
 
 

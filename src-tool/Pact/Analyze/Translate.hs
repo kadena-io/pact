@@ -486,7 +486,7 @@ maybeTranslateType' restrictKeys = \case
 
   TyFun _             -> empty
 
-  TyModule _ -> empty -- TODO support mod refs
+  TyModule _ -> pure $ EType SAny -- TODO support mod refs
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
