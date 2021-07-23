@@ -26,7 +26,7 @@ import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, toListOf, use, view, zoom,
                                              (%=), (%~), (+~), (.=), (.~),
                                              (<>~), (?=), (^.), (<&>), _1, (^..))
-import           Control.Monad              (join, replicateM, (>=>),)
+import           Control.Monad              hiding (guard)
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
@@ -117,8 +117,8 @@ describeTranslateFailureNoLoc = \case
   NotConvertibleToSchema ty -> "Expected a schema, but found " <> tShow ty
   TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
   -- Uncomment for debugging
-  -- UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
-  UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
+  UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
+  -- UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
   UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
@@ -1295,14 +1295,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> failing "Pattern match failure"
 
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
-    let capName = CapName $ T.unpack funName
+    let capName = mkCapName modName funName
     appET <- translateCapabilityApp modName capName bindings appBodyA
     Some ty withBodyT <- trackCapScope capName $
       translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
-  AST_RequireCapability node (AST_InlinedApp _ funName bindings _) -> do
-    let capName = CapName $ T.unpack funName
+  AST_RequireCapability node (AST_InlinedApp modName funName bindings _) -> do
+    let capName = mkCapName modName funName
     cap <- lookupCapability capName
     withTranslatedBindings bindings $ \bindingTs -> do
       let vars = (\b -> (_mungedName . _bmName $ b, _bVid b)) . _located <$>
@@ -1325,8 +1325,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
         pure $ Some SBool $ Lit' True
 
   AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) -> do
-    let capName = CapName $ T.unpack funName
-    app <- translateCapabilityApp modName (CapName $ T.unpack funName) bindings appBodyA
+    let capName = mkCapName modName funName
+    app <- translateCapabilityApp modName (mkCapName modName funName) bindings appBodyA
     tsStaticCapsInScope %= Set.insert capName
     return app
 
@@ -1596,7 +1596,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> failing "Pattern match failure"
     _ -> failing "Pattern match failure"
 
-  AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
+  AST_NFun node "keys" [_a] -> do
+    -- don't translate table arg, bad things happen
+    addWarning node $ UnsupportedNonFatal "keys: substituting empty string list"
+    pure $ Some (SList SStr) EmptyList
 
   AST_NFun _node (toOp bitwiseOpP -> Just op) args -> do
     args' <- for args $ \arg -> translateNode arg >>= \case
@@ -1604,6 +1607,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> failing "Pattern match failure"
     pure $ Some SInteger $ inject @(Numerical Term) $
       BitwiseOp op args'
+
+  AST_NFun _ "install-capability" [_] -> do
+    -- current system does not grok managed caps yet, so
+    -- not translating argument
+    return $ Some SBool $ Lit' True
+
+  AST_NFun _ "emit-event" [_] -> do
+    -- pure side effect, and not translating arg intentionally
+    return $ Some SBool $ Lit' True
 
   AST_NFun node "is-charset" [ a, b ] -> do
     cset <- translateNode a
@@ -1647,12 +1659,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
         addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
         pure $ Some (SList SInteger) EmptyList
       _ -> failing $ "Pattern match failure"
-  -- TODO: add actual support for this later!
   AST_NFun node "concat" [a] -> translateNode a >>= \case
     Some (SList SStr) _ -> do
       addWarning node $ UnsupportedNonFatal "concat: substituting empty string"
       pure $ Some SStr $ CoreTerm (Lit "")
     _ -> failing $ "Pattern match failure"
+  AST_NFun node "tx-hash" [] -> do
+    addWarning node $ UnsupportedNonFatal "tx-hash: substituting empty string"
+    pure $ Some SStr $ CoreTerm (Lit "")
   AST_NFun node "str-to-list" [a] -> translateNode a >>= \case
     Some SStr _ -> do
       addWarning node $ UnsupportedNonFatal "str-to-list: substituting empty list"

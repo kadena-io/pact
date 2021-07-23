@@ -801,7 +801,7 @@ toFun (TDef td i) = resolveDyn td
         go i d
       Just ModuleData{..} -> case HM.lookup (asString _dDefName) _mdRefMap of
         Just r -> do
-          liftIO $ print ("toFun: lookup success"::String,_dDefName,r)
+          liftIO $ print ("toFun: lookup success"::String,_dDefName,_dModule)
           toFun (fmap Left $ TVar r i)
         Nothing -> die i $ "Dynamic substitution failed, module does not have member: " ++
           show (moduleDefName _mdModule) ++ "::" ++ show _dDefName

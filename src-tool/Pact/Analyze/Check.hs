@@ -46,7 +46,7 @@ import           Control.Lens               (at, each, filtered, ifoldl,
                                              view, (%~), (&), (.~), (<&>), (?~),
                                              (^.), (^..), (^?), (^?!), (^@..),
                                              _2, _Left)
-import           Control.Monad              (void, (<=<))
+import           Control.Monad
 import           Control.Monad.Except       (Except, ExceptT (ExceptT),
                                              catchError, liftEither,
                                              runExceptT, throwError,
@@ -619,15 +619,14 @@ moduleTables modules modRefs consts = do
 -- | Get the set of capabilities in this module. This is done by typechecking
 -- every capability ref and converting to a 'Capability'.
 moduleCapabilities
-  :: DynEnv -> ModuleData Ref -> ExceptT VerificationFailure IO [Capability]
-moduleCapabilities de md = do
+  :: DynEnv -> [ModuleData Ref] -> ExceptT VerificationFailure IO [Capability]
+moduleCapabilities de mds = fmap concat $ forM mds $ \md -> do
     toplevels <- withExceptT ModuleCheckFailure $
-                   traverse (ExceptT . typecheck de) defcapRefs
+                   traverse (ExceptT . typecheck de) (defcapRefs md)
     hoist generalize $ traverse mkCap toplevels
 
   where
-    defcapRefs :: [Ref]
-    defcapRefs = toListOf
+    defcapRefs md = toListOf
       (mdRefMap.traverse.filtered
         (\ref -> ref ^? _Ref.tDef.dDefType == Just Defcap))
       md
@@ -640,10 +639,11 @@ moduleCapabilities de md = do
 
       where
         (capName, pactArgs) = case toplevel of
-          TopFun FDefun{_fName,_fType} _ ->
-            (CapName $ T.unpack _fName, _ftArgs _fType)
+          TopFun FDefun{_fName,_fType,_fModule} _ ->
+            (mkCapName _fModule _fName, _ftArgs _fType)
           _ ->
             error "invariant violation: defcap toplevel must be a defun"
+
 
 translateArgTy
   :: Text
@@ -1162,8 +1162,8 @@ moduleGovernance moduleData = case _mdModule moduleData of
     case _gGovernance _mGovernance of
       Left (Pact.KeySetName rn) ->
         pure $ KsGovernance $ RegistryName rn
-      Right (Def {_dDefName=Pact.DefName dn}) ->
-        pure $ CapGovernance $ CapName $ T.unpack dn
+      Right (Def {_dDefName=Pact.DefName dn,_dModule}) ->
+        pure $ CapGovernance $ mkCapName _dModule dn
   Pact.MDInterface _ ->
     throwError ExpectedConcreteModule
 
@@ -1226,7 +1226,7 @@ verifyModule de modules moduleData@(ModuleData modDef allRefs) = runExceptT $ do
       let defunRefs, defpactRefs :: HM.HashMap Text Ref
           ModuleRefs defunRefs defpactRefs _ _ = modRefs
 
-      caps   <- moduleCapabilities de moduleData
+      caps   <- moduleCapabilities de allModules
       gov    <- moduleGovernance moduleData
 
       let checkEnv = CheckEnv tables consts propDefs moduleData caps gov de
@@ -1288,7 +1288,7 @@ verifyCheck de moduleData funName check checkType = do
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
       modRefs    = moduleRefs moduleData
 
-  caps   <- moduleCapabilities de moduleData
+  caps   <- moduleCapabilities de [moduleData]
   consts <- getConsts de $ modRefs ^. defconsts
   tables <- moduleTables modules modRefs consts
   gov    <- moduleGovernance moduleData
