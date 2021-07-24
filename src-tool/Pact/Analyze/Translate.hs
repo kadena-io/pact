@@ -742,16 +742,16 @@ translatePact nodes = do
 
 translateStep
   :: Bool -> AST Node -> TranslateM (PactStep, Vertex, Maybe (AST Node))
-translateStep firstStep = \case
+translateStep firstStep ast = case ast of
   AST_Step _node entity exec rollback _yr -> withNewStep StepScope [] $ do
     p <- if firstStep then use tsCurrentPath else startNewSubpath
     mEntity <- for entity $ \tm -> translateNode tm >>= \case
       Some SStr entity' -> pure entity'
-      _ -> failing "Pattern match failure"
+      _ -> throwError' $ UnexpectedPactNode ast
     Some ty exec' <- translateNode exec
     postVertex    <- extendPath
     pure (Step (exec' , ty) p mEntity Nothing Nothing, postVertex, rollback)
-  astNode -> throwError' $ UnexpectedPactNode astNode
+  _ -> throwError' $ UnexpectedPactNode ast
 
 lookupCapability :: CapName -> TranslateM Capability
 lookupCapability capName = do
@@ -836,14 +836,14 @@ translateNamedGuard strA = translateNode strA >>= \case
   Some SStr strT -> do
     tid <- tagGuard $ strA ^. aNode
     return $ Some SBool $ Enforce Nothing $ GuardPasses tid $ MkKsRefGuard strT
-  _ -> failing "Pattern match failure"
+  _ -> unexpectedNode strA
 
 translateGuard :: AST Node -> TranslateM ETerm
 translateGuard guardA = translateNode guardA >>= \case
   Some SGuard guardT -> do
     tid <- tagGuard $ guardA ^. aNode
     return $ Some SBool $ Enforce Nothing $ GuardPasses tid guardT
-  _ -> failing "Pattern match failure"
+  _ -> unexpectedNode guardA
 
 translateCapabilityApp
   :: Pact.ModuleName
@@ -914,29 +914,29 @@ translateNode astNode = withAstContext astNode $ case astNode of
           SDecimal -> pure $ Some SDecimal $ inject $ DecUnaryArithOp Negate $
             CoreTerm $ Var vid name
           _        -> throwError' $ BadNegationType astNode
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_Format formatStr vars -> translateNode formatStr >>= \case
     Some SStr formatStr' -> do
       vars' <- for vars translateNode
       pure $ Some SStr $ Format formatStr' vars'
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_FormatTime formatStr time -> translateNode formatStr >>= \case
     Some SStr formatStr' -> translateNode time >>= \case
       Some STime time' -> pure $ Some SStr $ FormatTime formatStr' time'
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_ParseTime formatStr timeStr -> translateNode formatStr >>= \case
     Some SStr formatStr' -> translateNode timeStr >>= \case
       Some SStr timeStr' -> pure $ Some STime $ ParseTime (Just formatStr') timeStr'
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_Time timeStr -> translateNode timeStr >>= \case
     Some SStr timeStr' -> pure $ Some STime $ ParseTime Nothing timeStr'
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_Hash val -> do
     val' <- translateNode val
@@ -944,19 +944,19 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_ReadKeyset nameA -> translateNode nameA >>= \case
     Some SStr nameT -> return $ Some SGuard $ ReadKeySet nameT
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_ReadDecimal nameA -> translateNode nameA >>= \case
     Some SStr nameT -> return $ Some SDecimal $ ReadDecimal nameT
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_ReadInteger nameA -> translateNode nameA >>= \case
     Some SStr nameT -> return $ Some SInteger $ ReadInteger nameT
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_ReadString nameA -> translateNode nameA >>= \case
     Some SStr nameT -> return $ Some SStr $ ReadString nameT
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
@@ -964,15 +964,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_ChainData node -> translateType node >>= \case
     EType objTy@(SObject _schema) -> pure $ Some objTy $ ChainData objTy
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_KeysetRefGuard strA -> translateNode strA >>= \case
     Some SStr strT -> pure $ Some SGuard $ MkKsRefGuard strT
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_CreatePactGuard strA -> translateNode strA >>= \case
     Some SStr strT -> pure $ Some SGuard $ MkPactGuard strT
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_CreateUserGuard (AST_InlinedApp modName funName bindings appBodyA) -> do
     guard <- genGuard
@@ -983,13 +983,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_CreateModuleGuard strA -> translateNode strA >>= \case
     Some SStr strT -> pure $ Some SGuard $ MkModuleGuard strT
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_Enforce _ cond -> translateNode cond >>= \case
     Some SBool condTerm -> do
       tid <- tagAssert $ cond ^. aNode
       pure $ Some SBool $ Enforce (Just tid) condTerm
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_EnforceGuard_Str strA -> translateNamedGuard strA
 
@@ -1029,7 +1029,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
           Some SBool caseT -> do
             postVertex <- extendPath
             pure (caseT, postVertex)
-          _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
 
     joinPaths $ zip vertices successPaths
     tsCurrentPath .= preEnforcePath
@@ -1064,8 +1064,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun_Basic SModulus [a, b] -> translateNode a >>= \case
     Some SInteger a' -> translateNode b >>= \case
       Some SInteger b' -> pure (Some SInteger (inject $ ModOp a' b'))
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_NFun_Basic fn@(toOp comparisonOpP -> Just op) args@[a, b] -> do
     aT <- translateNode a
@@ -1100,7 +1100,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun_Basic SLogicalNegation [a] -> translateNode a >>= \case
     Some SBool a' -> pure $ Some SBool $ inject $ Logical NotOp [a']
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_NFun_Basic fn args@[a, b]
     | fn == SLogicalConjunction || fn == SLogicalDisjunction -> do
@@ -1213,8 +1213,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
         tid                              <- tagWrite writeType tname node (ESchema schema)
         pure $ Some SStr $
           Write objTy writeType tid tname row' obj'
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_If _ cond tBranch fBranch -> translateNode cond >>= \case
     Some SBool cond' -> do
@@ -1235,17 +1235,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
       tsCurrentPath .= preBranchPath -- reset to before conditional
       Refl <- singEq ta tb ?? BranchesDifferentTypes (EType ta) (EType tb)
       pure $ Some ta $ IfThenElse ta cond' (truePath, a) (falsePath, b)
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_NFun _node SStringToInteger [s] -> translateNode s >>= \case
     Some SStr s' -> pure $ Some SInteger $ CoreTerm $ StrToInt s'
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_NFun _node SStringToInteger [b, s] -> translateNode b >>= \case
     Some SInteger b' -> translateNode s >>= \case
       Some SStr s' -> pure $ Some SInteger $ CoreTerm $ StrToIntBase b' s'
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
@@ -1259,9 +1259,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
           withNodeContext node $
             translateObjBinding bindings partialReadTy body readT
-        _ -> failing "Pattern match failure"
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+        _ -> unexpectedNode astNode
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> translateType schemaNode >>= \case
     EType rowTy@SObject{} -> translateNode key >>= \case
@@ -1279,10 +1279,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
                 let readT = Some subsetTy $
                       Read rowTy subsetTy (Just def) tid (TableName (T.unpack table)) key'
                 withNodeContext node $ translateObjBinding bindings defTy body readT
-          _ -> failing "Pattern match failure"
-        _ -> failing "Pattern match failure"
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
+        _ -> unexpectedNode astNode
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_Bind node objectA bindings schemaNode body -> translateType schemaNode >>= \case
     EType objTy@SObject{} -> typeOfPartialBind objTy bindings >>= \case
@@ -1290,8 +1290,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
         objectT <- translateNode objectA
         withNodeContext node $
           translateObjBinding bindings partialReadTy body objectT
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
     let capName = mkCapName modName funName
@@ -1342,7 +1342,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
               pure $ Some STime $ CoreTerm $ DecAddTime time' seconds'
             _ -> failing $
               "Unexpected type for seconds in add-time " ++ show ty
-        _ -> failing "Pattern match failure"
+        _ -> unexpectedNode astNode
 
   AST_Read node table key -> translateNode key >>= \case
     Some SStr key' -> translateType node >>= \case
@@ -1350,8 +1350,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
         let tname = TableName (T.unpack table)
         tid <- tagRead tname node (ESchema schema)
         pure $ Some objTy $ Read objTy objTy Nothing tid tname key'
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> translateNode key >>= \case
@@ -1384,8 +1384,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
               CoreTerm $ ObjTake tableObjTy
                 (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
                 (Read tableObjTy tableObjTy Nothing tid tname key')
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_At node index obj -> do
     obj' <- translateNode obj
@@ -1393,10 +1393,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EType ty -> case obj' of
         Some objTy@SObjectUnsafe{} obj'' -> translateNode index >>= \case
           Some SStr colName -> pure $ Some ty $ CoreTerm $ ObjAt objTy colName obj''
-          _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
         Some (SList listOfTy) list -> translateNode index >>= \case
           Some SInteger index' -> pure $ Some listOfTy $ CoreTerm $ ListAt listOfTy index' list
-          _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
         _ -> throwError' $ TypeError node
 
   AST_Obj _node (Pact.ObjectMap kvs) -> do
@@ -1405,7 +1405,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       pure (k, v')
     mkLiteralObject (fmap throwError' . SortLiteralObjError) kvs' >>= \case
       Some objTy'@SObject{} litObj -> pure $ Some objTy' $ CoreTerm litObj
-      _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
 
@@ -1431,11 +1431,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_Reverse _node list -> translateNode list >>= \case
     Some ty'@(SList elemTy) list' -> pure $ Some ty' $ CoreTerm $ ListReverse elemTy list'
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_Sort _node list -> translateNode list >>= \case
     Some ty'@(SList elemTy) list' -> pure $ Some ty' $ CoreTerm $ ListSort elemTy list'
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_Drop node numOrKeys list -> do
     elist       <- translateNode list
@@ -1443,11 +1443,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EType retTy -> case elist of
         Some ty'@(SList elemTy) list' -> translateNode numOrKeys >>= \case
           Some SInteger num -> pure $ Some ty' $ CoreTerm $ ListDrop elemTy num list'
-          _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
         Some objTy@SObject{} obj -> case retTy of
           SObject{} -> translateNode numOrKeys >>= \case
             Some (SList SStr) keys -> pure $ Some retTy $ CoreTerm $ ObjDrop objTy keys obj
-            _ -> failing "Pattern match failure"
+            _ -> unexpectedNode astNode
           _ -> throwError' $ TypeError node
         _ -> throwError' $ TypeError node
 
@@ -1457,11 +1457,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EType retTy -> case elist of
         Some ty'@(SList elemTy) list' -> translateNode numOrKeys >>= \case
           Some SInteger num -> pure $ Some ty' $ CoreTerm $ ListTake elemTy num list'
-          _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
         Some objTy@SObject{} obj -> case retTy of
           SObject{} -> translateNode numOrKeys >>= \case
             Some (SList SStr) keys -> pure $ Some retTy $ CoreTerm $ ObjTake objTy keys obj
-            _ -> failing "Pattern match failure"
+            _ -> unexpectedNode astNode
           _ -> throwError' $ TypeError node
         _ -> throwError' $ TypeError node
 
@@ -1469,7 +1469,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SInteger num' -> do
       Some ty       a'   <- translateNode a
       pure $ Some (SList ty) $ CoreTerm $ MakeList ty num' a'
-    _ -> failing "Pattern match failure"
+    _ -> unexpectedNode astNode
 
   AST_NFun _node SIdentity [a] -> do
     Some tya a' <- translateNode a
@@ -1507,7 +1507,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
           Refl <- singEq listTy aType ?? TypeError node
           pure $ Some (SList bTy) $ CoreTerm $
             ListMap aType bTy (Open vid varName fun') l'
-        _ -> failing "Pattern match failure"
+        _ -> unexpectedNode astNode
 
   AST_NFun node SFilter [ fun, l ] -> do
     expectNoFreeVars
@@ -1518,8 +1518,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
             Refl <- singEq listTy aType ?? TypeError node
             pure $ Some (SList aType) $ CoreTerm $
               ListFilter aType (Open vid varName fun') l'
-          _ -> failing "Pattern match failure"
-      _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
+      _ -> unexpectedNode astNode
 
   AST_NFun node SFold [ fun, a, l ] -> do
     expectNoFreeVars
@@ -1543,8 +1543,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
             Refl <- singEq listTy tyb ?? TypeError node
             pure $ Some tya $ CoreTerm $
               ListFold tya tyb (Open vida varNamea (Open vidb varNameb fun')) a' l'
-          _ -> failing "Pattern match failure"
-      _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
+      _ -> unexpectedNode astNode
 
   AST_NFun _ name [ f, g, a ]
     | name == SAndQ || name == SOrQ -> do
@@ -1558,8 +1558,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
             Some aTy' a' <- translateNode a
             pure $ Some SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
               aTy' (Open fvid fvarName f') (Open gvid gvarName g') a'
-          _ -> failing "Pattern match failure"
-      _ -> failing "Pattern match failure"
+          _ -> unexpectedNode astNode
+      _ -> unexpectedNode astNode
 
   AST_NFun _ SWhere [ field, fun, obj ] -> translateNode field >>= \case
     Some SStr field' -> do
@@ -1569,9 +1569,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
           (vid, varName, EType freeTy) -> translateNode obj >>= \case
             Some objTy@SObject{} obj' -> pure $ Some SBool $ CoreTerm $
               Where objTy freeTy field' (Open vid varName fun') obj'
-            _ -> failing "Pattern match failure"
-        _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+            _ -> unexpectedNode astNode
+        _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_NFun _ STypeof [tm] -> do
     Some ty tm' <- translateNode tm
@@ -1598,98 +1598,84 @@ translateNode astNode = withAstContext astNode $ case astNode of
         tid <- tagResume ety
         withNodeContext node $ translateObjBinding bindings partialReadTy body $
           Some partialReadTy $ Resume tid
-      _ -> failing "Pattern match failure"
-    _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
-  AST_NFun node "keys" [_a] -> do
+  AST_NFun node fn@"keys" [_a] -> do
     -- don't translate table arg, bad things happen
-    addWarning node $ UnsupportedNonFatal "keys: substituting empty string list"
-    pure $ Some (SList SStr) EmptyList
+    shimNative astNode node fn []
 
   AST_NFun _node (toOp bitwiseOpP -> Just op) args -> do
     args' <- for args $ \arg -> translateNode arg >>= \case
       Some SInteger arg' -> pure arg'
-      _ -> failing "Pattern match failure"
+      _ -> unexpectedNode astNode
     pure $ Some SInteger $ inject @(Numerical Term) $
       BitwiseOp op args'
 
-  AST_NFun _ "install-capability" [_] -> do
+  AST_NFun node fn@"install-capability" [_] -> do
     -- current system does not grok managed caps yet, so
     -- not translating argument
-    return $ Some SBool $ Lit' True
+    shimNative astNode node fn []
 
-  AST_NFun _ "emit-event" [_] -> do
-    -- pure side effect, and not translating arg intentionally
-    return $ Some SBool $ Lit' True
+  AST_NFun node fn@"emit-event" [_] ->
+    -- elide translation of event capability
+    shimNative astNode node fn []
 
-  AST_NFun node "is-charset" [ a, b ] -> do
-    cset <- translateNode a
-    inp <- translateNode b
-    case (cset,inp) of
-      (Some SInteger _cset',Some SStr _inp') -> do
-        addWarning node $ UnsupportedNonFatal "is-charset: substituting true expression"
-        pure $ Some SBool $ Lit' True
-      _ -> failing $ "Pattern match failure"
+  AST_NFun node fn@"distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
+    Some (SList _) _ ->
+      shimNative' node fn [] "original list" xs'
+    _ -> unexpectedNode astNode
 
-  AST_NFun node "diff-time" [a,b] -> do
-    t0 <- translateNode a
-    t1 <- translateNode b
-    case (t0, t1) of
-      (Some STime _, Some STime _) -> do
-        addWarning node $ UnsupportedNonFatal "diff-time: substituting 0.0"
-        pure $ Some SDecimal $ Lit' 0.0
-      _ -> failing $ "Pattern match failure"
-  AST_NFun node "distinct" [xs] -> do
-     translateNode xs >>= \case
-       Some (SList ty) _ -> do
-         addWarning node $ UnsupportedNonFatal "distinct: substituting empty list"
-         pure $ Some (SList ty) EmptyList
-       _ -> failing $ "Pattern match failure"
-  AST_NFun node "enumerate" [a, b] -> do
-    from' <- translateNode a
-    to' <- translateNode b
-    case (from', to') of
-      (Some SInteger _, Some SInteger _) -> do
-        addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
-        pure $ Some (SList SInteger) EmptyList
-      _ -> failing $ "Pattern match failure"
-  AST_NFun node "int-to-str" [a,b] -> do
-    base <- translateNode a
-    val <- translateNode b
-    case (base,val) of
-      (Some SInteger _, Some SInteger _) -> do
-        addWarning node $ UnsupportedNonFatal "int-to-str: substituting empty string"
-        pure $ Some SStr $ CoreTerm (Lit "")
-      _ -> failing $ "Pattern match failure"
-  AST_NFun node "enumerate" [a, b, c] -> do
-    from' <- translateNode a
-    to' <- translateNode b
-    inc' <- translateNode c
-    case (from', to', inc') of
-      (Some SInteger _, Some SInteger _, Some SInteger _) -> do
-        addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
-        pure $ Some (SList SInteger) EmptyList
-      _ -> failing $ "Pattern match failure"
-  -- the following catches format without a literal list
-  AST_NFun node "format" [a, _b] -> translateNode a >>= \a' -> case a' of
-    Some SStr _ -> do
-      addWarning node $ UnsupportedNonFatal "format: dynamic params, substituting format string"
-      pure a'
-    _ -> failing $ "Pattern match failure [format]"
-  AST_NFun node "concat" [a] -> translateNode a >>= \case
-    Some (SList SStr) _ -> do
-      addWarning node $ UnsupportedNonFatal "concat: substituting empty string"
-      pure $ Some SStr $ CoreTerm (Lit "")
-    _ -> failing $ "Pattern match failure"
-  AST_NFun node "tx-hash" [] -> do
-    addWarning node $ UnsupportedNonFatal "tx-hash: substituting empty string"
-    pure $ Some SStr $ CoreTerm (Lit "")
-  AST_NFun node "str-to-list" [a] -> translateNode a >>= \case
-    Some SStr _ -> do
-      addWarning node $ UnsupportedNonFatal "str-to-list: substituting empty list"
-      pure $ Some (SList SStr) $ EmptyList
-    _ -> failing $ "Pattern match failure"
-  _ -> throwError' $ UnexpectedNode astNode
+  AST_NFun node fn@"enumerate" args ->
+    shimNative' node fn args "[0]" (Some (SList SInteger) (Lit' [0]))
+
+  AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
+    -- uncaught case is dynamic list, sub format string
+    Some SStr _ -> shimNative' node fn [b] "format string" a'
+    _ -> unexpectedNode astNode
+
+
+  AST_NFun node fn as -> shimNative astNode node fn as
+
+  _ -> unexpectedNode astNode
+
+
+unexpectedNode :: AST Node -> TranslateM a
+unexpectedNode astNode =
+  throwError' $ UnexpectedNode astNode
+
+shimNative :: AST Node -> Node -> Text -> [AST Node] -> TranslateM ETerm
+shimNative ast node fn args = do
+  (r,m) <- case _aTy node of
+    Pact.TyPrim p -> case p of
+      Pact.TyInteger -> pure (Some SInteger $ Lit' 0, "0")
+      Pact.TyDecimal -> pure (Some SDecimal $ Lit' 0.0, "0.0")
+      Pact.TyBool -> pure (Some SBool $ Lit' True, "True")
+      Pact.TyString -> pure (Some SStr $ Lit' "", "empty string")
+      Pact.TyTime -> pure (Some STime $ Lit' 0, "epoch time")
+      Pact.TyGuard {} -> unexpectedNode ast
+    Pact.TyList lty -> pure $ (`fmap` slist lty) $ \case
+      Nothing -> "empty list"
+      Just t -> "empty " <> t <> " list"
+    _ -> unexpectedNode ast
+  shimNative' node fn args m r
+  where
+    slist lty = case lty of
+      Pact.TyPrim p -> case p of
+        Pact.TyInteger -> (Some (SList SInteger) EmptyList,Just "integer")
+        Pact.TyDecimal -> (Some (SList SDecimal) EmptyList,Just "decimal")
+        Pact.TyBool -> (Some (SList SBool) EmptyList,Just "bool")
+        Pact.TyString -> (Some (SList SStr) EmptyList,Just "string")
+        Pact.TyTime -> (Some (SList STime) EmptyList,Just "time")
+        Pact.TyGuard {} -> (Some (SList SGuard) EmptyList,Just "guard")
+      _ -> (Some (SList SAny) EmptyList,Nothing)
+
+shimNative' :: Node -> Text -> [AST Node] -> Text -> ETerm -> TranslateM ETerm
+shimNative' node fn args m r = do
+  mapM_ translateNode args
+  addWarning node $ UnsupportedNonFatal $
+    (fn <> ": substituting " <> m)
+  pure r
 
 
 -- | Accumulate a non-fatal translation issue
