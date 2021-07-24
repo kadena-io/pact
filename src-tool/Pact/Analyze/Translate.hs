@@ -59,13 +59,14 @@ import           Pact.Time                  (parseTime)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
-import           Pact.Types.Util            (tShow)
+import           Pact.Types.Util            (tShow,AsString(..))
 
 import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
                                              list, obj, str, time)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
+import Pact.Types.Pretty (renderCompactText)
 
 -- * Translation types
 
@@ -116,9 +117,7 @@ describeTranslateFailureNoLoc = \case
   MalformedComparison op args -> "Unsupported comparison op " <> op <> " with args " <> tShow args
   NotConvertibleToSchema ty -> "Expected a schema, but found " <> tShow ty
   TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
-  -- Uncomment for debugging
-  UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
-  -- UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
+  UnexpectedNode ast -> "Analysis doesn't support this construct yet: " <> renderCompactText ast
   UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
@@ -486,7 +485,7 @@ maybeTranslateType' restrictKeys = \case
 
   TyFun _             -> empty
 
-  TyModule _ -> pure $ EType SAny -- TODO support mod refs
+  TyModule _ -> pure $ EType SStr -- modrefs are coerced to strings
 
 throwError'
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -1578,6 +1577,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some ty tm' <- translateNode tm
     pure $ Some SStr $ CoreTerm $ Typeof ty tm'
 
+  AST_ModRef _ refName refSpec ->
+    -- modrefs are coerced to strings
+    pure $ Some SStr $ CoreTerm $ Lit $ Str $ T.unpack
+      (asString refName <>
+       maybe "" (\ss -> "{" <> T.intercalate "," (map asString ss) <> "}") refSpec)
+
   -- NOTE: we ignore the optional target chain during analysis, for now at
   -- least.
   AST_NFun node "yield" (obj : _optionalTargetChain) -> do
@@ -1639,7 +1644,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
        Some (SList ty) _ -> do
          addWarning node $ UnsupportedNonFatal "distinct: substituting empty list"
          pure $ Some (SList ty) EmptyList
-       _ -> throwError' $ UnexpectedNode astNode
+       _ -> failing $ "Pattern match failure"
   AST_NFun node "enumerate" [a, b] -> do
     from' <- translateNode a
     to' <- translateNode b
@@ -1665,6 +1670,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
         addWarning node $ UnsupportedNonFatal "enumerate: substituting empty list"
         pure $ Some (SList SInteger) EmptyList
       _ -> failing $ "Pattern match failure"
+  -- the following catches format without a literal list
+  AST_NFun node "format" [a, _b] -> translateNode a >>= \a' -> case a' of
+    Some SStr _ -> do
+      addWarning node $ UnsupportedNonFatal "format: dynamic params, substituting format string"
+      pure a'
+    _ -> failing $ "Pattern match failure [format]"
   AST_NFun node "concat" [a] -> translateNode a >>= \case
     Some (SList SStr) _ -> do
       addWarning node $ UnsupportedNonFatal "concat: substituting empty string"

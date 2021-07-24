@@ -377,19 +377,13 @@ data AST n =
 
 instance Pretty t => Pretty (AST t) where
   pretty a = case a of
-     Prim {..} -> sep [ pn, equals, pretty _aPrimValue ]
-     Var {} -> pn
-     Object {..} -> sep
-       [ pn
-       , pretty _aObject
-       ]
-     List {..} -> sep
-       [ pn
-       , bracketsSep [ indent 2 $ vsep $ map pretty _aList ]
-       ]
-     Binding {..} -> sep
-       [ pn
-       , parensSep
+     Prim {..} -> go "Prim" [ equals, pretty _aPrimValue ]
+     Var {} -> go "Var" []
+     Object {..} -> go "Object" [ pretty _aObject ]
+     List {..} -> go "List"
+       [ bracketsSep [ indent 2 $ vsep $ map pretty _aList ] ]
+     Binding {..} -> go "Binding"
+       [ parensSep
          [ pretty _aBindType
          , indent 2 $ vsep $ _aBindings <&> \(k,v) -> parensSep
            [ indent 2 $ pretty k <+> sep [ colon, indent 2 (pretty v) ]
@@ -397,25 +391,22 @@ instance Pretty t => Pretty (AST t) where
          , indent 2 $ vsep $ map pretty _aBody
          ]
        ]
-     App {..} -> sep
-       [ pn
-       , indent 2 $ parensSep [ indent 2 $ vsep $ map pretty _aAppArgs ]
+     App {..} -> go "App"
+       [ indent 2 $ parensSep [ indent 2 $ vsep $ map pretty _aAppArgs ]
        , indent 2 $ pretty _aAppFun
        ]
-     Table {} -> pn
-     Step {..} ->
-       let rb x = case _aRollback of
-                  Nothing -> x
-                  Just r -> sep [ x, "Rollback:", indent 2 (pretty r) ]
-       in rb $ sep
-            [ pn
-            , indent 2 $ "Entity" <> colon <+> pretty _aEntity
-            , indent 2 $ pretty _aExec
-            ]
-     Dynamic{..} -> sep [pn, pretty _aDynModRef, pretty _aDynMember]
-     ModRef{..} -> sep [pn, pretty _aModRefName, pretty _aModRefSpec]
-   where pn = pretty (_aNode a)
-
+     Table {} -> go "Table" []
+     Step {..} -> go "Step" $
+      may _aEntity (\e -> ["Entity" <> colon <> pretty e]) ++
+      [ indent 2 $ pretty _aExec ] ++
+      may _aRollback (\r -> ["Rollback:", indent 2 (pretty r)])
+     Dynamic{..} -> go "Dynamic" [pretty _aDynModRef, pretty _aDynMember]
+     ModRef{..} -> go "ModRef" [pretty _aModRefName, pretty _aModRefSpec]
+   where
+     go :: Text -> [Doc] -> Doc
+     go n is = sep (pretty n:pretty (_aNode a):is)
+     may Nothing _ = []
+     may (Just v) f = f v
 
 
 makeLenses ''AST
