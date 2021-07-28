@@ -255,11 +255,13 @@ describeSmtFailure = \case
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeUnknownFailure :: SBV.SMTReasonUnknown -> Text
-describeUnknownFailure reason = "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one (actually, please report this as an issue: https://github.com/kadena-io/pact/issues).\n\nGood luck...\n" <> tShow reason
+describeUnknownFailure r = case show r of
+  "timeout" -> "SMT solver timeout"
+  _ ->  "Unexpected failure from SMT solver: " <> tShow r
 
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
-  Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
+  Invalid model  -> "Invalid model failure:\n" <> showModel model
   Unknown reason -> describeUnknownFailure reason
   err@SortMismatch{} -> "(QueryFailure): " <> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
@@ -375,6 +377,11 @@ inNewAssertionStack act = do
 analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
+-- | Solver timeout. Usually timeout is a bad sign
+-- but can always try larger values here.
+timeout :: Integer
+timeout = 1000
+
 -- | Check that all invariants hold for a function (this is actually used for
 -- defun, defpact, and step)
 verifyFunctionInvariants
@@ -404,7 +411,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
       [] -> pure $ invsMap & traverse .~ []
 
       _ -> ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-        lift $ SBV.setTimeOut 1000 -- one second
+        lift $ SBV.setTimeOut timeout
         modelArgs'   <- lift $ runAlloc $ allocArgs args
         stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
         tags         <- lift $ runAlloc $ allocModelTags modelArgs'
@@ -470,7 +477,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
 
     -- Set up the model and our query
     let setupSmtProblem = do
-          lift $ SBV.setTimeOut 1000 -- one second
+          lift $ SBV.setTimeOut timeout
           modelArgs'   <- lift $ runAlloc $ allocArgs args
           stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
           tags         <- lift $ runAlloc $ allocModelTags modelArgs'
