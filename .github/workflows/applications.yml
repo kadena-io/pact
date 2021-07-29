@@ -66,7 +66,11 @@ jobs:
         distribution: "ubuntu-18.04"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
-      run: brew install z3
+      uses: pavpanchekha/setup-z3@0.2.0
+      with:
+        version: "4.8.10"
+        architecture: "x64"
+        distribution: "osx-10.15.7"
     - name: Install non-Haskell dependencies (windows)
       if: contains(matrix.os, 'windows')
       run: choco install -y -r awscli
