@@ -29,6 +29,11 @@ jobs:
           cabal: '3.4'
           cabalcache: 'true'
           flags: '-build-tool'
+        - os: 'ubuntu-20.04'
+          ghc: '9.0.1'
+          cabal: '3.4'
+          cabalcache: 'true'
+          flags: '+build-tool'
         # include:
         # - os: 'windows-latest'
         #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
@@ -61,7 +66,11 @@ jobs:
         distribution: "ubuntu-18.04"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
-      run: brew install z3
+      uses: pavpanchekha/setup-z3@0.2.0
+      with:
+        version: "4.8.10"
+        architecture: "x64"
+        distribution: "osx-10.15.7"
     - name: Install non-Haskell dependencies (windows)
       if: contains(matrix.os, 'windows')
       run: choco install -y -r awscli
@@ -104,6 +113,15 @@ jobs:
           documentation: False
           optimization: 1
           flags: ${{ matrix.flags }}
+        EOF
+    - name: Extend cabal.project.local for GHC-9.0.1
+      if: "startsWith(matrix.ghc, '9')"
+      shell: bash
+      run: |
+        cat >> cabal.project.local <<EOF
+        allow-newer: hashable:*
+        package pact
+          ghc-options: -Wwarn -Wunused-packages
         EOF
     - name: Add check for unused packages
       shell: bash
@@ -155,17 +173,19 @@ jobs:
       run: cabal test
     - name: Benchmark
       shell: bash
-      if: "! contains(matrix.flags, '-build-tool')"
+      if: "!contains(matrix.flags, '-build-tool')"
       run: cabal bench
 
     # Publish Artifacts
     - name: Prepare artifacts
+      if: "!contains(matrix.flags, '-build-tool')"
       shell: bash
       run: |
         export VER=$(grep '^version' pact.cabal | sed -e 's/.*: *//')
         mkdir -p dist-newstyle/artifacts/applications
         cp dist-newstyle/build/*/ghc-${{ matrix.ghc }}/pact-${VER}/x/pact/build/pact/pact dist-newstyle/artifacts/applications
     - name: Publish applications
+      if: "!contains(matrix.flags, '-build-tool')"
       uses: actions/upload-artifact@v1
       with:
         name: pact-applications.${{ matrix.ghc }}.${{ matrix.os }}
@@ -173,7 +193,7 @@ jobs:
 
     # Publish to S3
     - name: Publish applications to S3
-      if: "!contains(matrix.os, 'windows')"
+      if: "!contains(matrix.flags, '-build-tool') && !contains(matrix.os, 'windows')"
       shell: bash
       run: |
         tar -C ./dist-newstyle/artifacts/applications/ -czf $BINFILE '.'
