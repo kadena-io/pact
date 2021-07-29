@@ -76,6 +76,7 @@ module Pact.Analyze.Types.Languages
   , propToInvariant
   ) where
 
+import qualified Data.Kind                     as K (Type)
 import           Control.Lens                  (Prism', review, preview, prism')
 import           Control.Monad                 ((>=>))
 import           Data.Maybe                    (fromMaybe)
@@ -96,8 +97,7 @@ import           Pact.Types.Pretty             (commaBraces, commaBrackets,
                                                 RenderColor(RPlain))
 import           Pact.Types.Persistence        (WriteType)
 
-import           Pact.Analyze.Feature          hiding (Doc, Sym, Var, col, str,
-                                                obj, dec, ks)
+import           Pact.Analyze.Feature          hiding (Sym, Var)
 import           Pact.Analyze.Types.Capability
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
@@ -110,7 +110,7 @@ import           Pact.Analyze.Util
 --
 -- This can be read as "subtype", where we can always 'inject' the subtype into
 -- its supertype and sometimes 'project' the supertype down.
-class (sub :: Ty -> *) :<: (sup :: Ty -> *) where
+class (sub :: Ty -> K.Type) :<: (sup :: Ty -> K.Type) where
   subP :: Prism' (sup a) (sub a)
 
 -- | Inject a subtype into a supertype via 'subP'
@@ -134,7 +134,7 @@ pattern Inj a <- (project -> Just a) where
 -- the type on the left is indexed by a *concrete* type. For example, @S
 -- Integer@ is injectable into @Term TyInteger@ because @Integer ~ Concrete
 -- TyInteger@.
-class (sub :: * -> *) :*<: (sup :: Ty -> *) where
+class (sub :: K.Type -> K.Type) :*<: (sup :: Ty -> K.Type) where
   subP' :: Prism' (sup a) (sub (Concrete a))
 
 -- | Inject a subtype into a supertype via 'subP''
@@ -146,7 +146,7 @@ project' :: sub :*<: sup => sup a -> Maybe (sub (Concrete a))
 project' = preview subP'
 
 -- | An open term (@: b@) with a free variable (@: a@).
-data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
+data Open (a :: Ty) (tm :: Ty -> K.Type) (b :: Ty) = Open !VarId !Text !(tm b)
   deriving (Eq, Show)
 
 -- | Core terms.
@@ -168,7 +168,7 @@ data Open (a :: Ty) (tm :: Ty -> *) (b :: Ty) = Open !VarId !Text !(tm b)
 -- * @add-time@
 -- * @at@
 -- * lit operations
-data Core (t :: Ty -> *) (a :: Ty) where
+data Core (t :: Ty -> K.Type) (a :: Ty) where
   Lit :: Concrete a -> Core t a
   -- | Injects a symbolic value into the language
   Sym :: S (Concrete a) -> Core t a

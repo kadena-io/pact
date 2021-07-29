@@ -73,8 +73,7 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString)
 
 import           Pact.Analyze.PactSFunArray (PactSFunArray)
-import           Pact.Analyze.Feature         hiding (Constraint, Doc, Type,
-                                               dec, ks, obj, str, time)
+import           Pact.Analyze.Feature         hiding (Constraint, Type)
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Types

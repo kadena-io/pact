@@ -34,7 +34,7 @@ import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import           GHC.Real                     ((%))
 
-import           Pact.Analyze.Feature         hiding (Constraint, dec)
+import           Pact.Analyze.Feature         hiding (Constraint)
 import           Pact.Analyze.Types.Types
 import           Pact.Types.Pretty            (Pretty(..), parensSep, viaShow)
 
