@@ -42,6 +42,8 @@
     true)
 )
 
+(env-dynref tctest-iface tc-test-impl)
+(typecheck 'tc-test-impl)
 
 (module tctest 'keyset
 

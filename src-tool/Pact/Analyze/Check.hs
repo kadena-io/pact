@@ -46,7 +46,7 @@ import           Control.Lens               (at, each, filtered, ifoldl,
                                              view, (%~), (&), (.~), (<&>), (?~),
                                              (^.), (^..), (^?), (^?!), (^@..),
                                              _2, _Left)
-import           Control.Monad              (void, (<=<))
+import           Control.Monad
 import           Control.Monad.Except       (Except, ExceptT (ExceptT),
                                              catchError, liftEither,
                                              runExceptT, throwError,
@@ -96,7 +96,7 @@ import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _
                                              Named, Node, TcId (_tiInfo),
                                              TopLevel (TopConst, TopFun, TopTable),
                                              UserType (..), Schema (_schFields, _schName),
-                                             runTC, tcFailures, toplevelInfo)
+                                             runTC, tcFailures, toplevelInfo, DynEnv, mkTcState)
 import qualified Pact.Types.Typecheck       as TC
 
 import           Pact.Analyze.Alloc         (runAlloc)
@@ -197,6 +197,7 @@ data CheckEnv = CheckEnv
   , _moduleData :: ModuleData Ref
   , _caps       :: [Capability]
   , _moduleGov  :: Governance
+  , _dynEnv     :: DynEnv
   }
 
 -- | Essential data used to check a function (where function could actually be
@@ -254,11 +255,14 @@ describeSmtFailure = \case
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeUnknownFailure :: SBV.SMTReasonUnknown -> Text
-describeUnknownFailure reason = "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one (actually, please report this as an issue: https://github.com/kadena-io/pact/issues).\n\nGood luck...\n" <> tShow reason
+describeUnknownFailure = \case
+  SBV.UnknownMemOut -> "SMT solver out of memory"
+  SBV.UnknownTimeOut -> "SMT solver timeout"
+  r -> "SMT solver error: " <> tShow r
 
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
-  Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
+  Invalid model  -> "Invalid model failure:\n" <> showModel model
   Unknown reason -> describeUnknownFailure reason
   err@SortMismatch{} -> "(QueryFailure): " <> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
@@ -374,6 +378,11 @@ inNewAssertionStack act = do
 analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
+-- | Solver timeout in millis. Usually timeout is a bad sign
+-- but can always try larger values here.
+timeout :: Integer
+timeout = 1000 -- one second
+
 -- | Check that all invariants hold for a function (this is actually used for
 -- defun, defpact, and step)
 verifyFunctionInvariants
@@ -382,7 +391,7 @@ verifyFunctionInvariants
   -> Text
   -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
+verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de)
   (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
     let modName = moduleDefName $ _mdModule moduleData
 
@@ -403,7 +412,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov)
       [] -> pure $ invsMap & traverse .~ []
 
       _ -> ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-        lift $ SBV.setTimeOut 1000 -- one second
+        lift $ SBV.setTimeOut timeout
         modelArgs'   <- lift $ runAlloc $ allocArgs args
         stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
         tags         <- lift $ runAlloc $ allocModelTags modelArgs'
@@ -459,7 +468,7 @@ verifyFunctionProperty
   -> CheckableType
   -> Located Check
   -> IO [Either CheckFailure CheckSuccess]
-verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
+verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _de)
   (FunData funInfo pactArgs body) funName checkType
   (Located propInfo check) = fmap sequence' $ runExceptT $ do
     let modName = moduleDefName (_mdModule moduleData)
@@ -469,7 +478,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov)
 
     -- Set up the model and our query
     let setupSmtProblem = do
-          lift $ SBV.setTimeOut 1000 -- one second
+          lift $ SBV.setTimeOut timeout
           modelArgs'   <- lift $ runAlloc $ allocArgs args
           stepChoices' <- lift $ runAlloc $ allocStepChoices stepChoices
           tags         <- lift $ runAlloc $ allocModelTags modelArgs'
@@ -618,15 +627,14 @@ moduleTables modules modRefs consts = do
 -- | Get the set of capabilities in this module. This is done by typechecking
 -- every capability ref and converting to a 'Capability'.
 moduleCapabilities
-  :: ModuleData Ref -> ExceptT VerificationFailure IO [Capability]
-moduleCapabilities md = do
+  :: DynEnv -> [ModuleData Ref] -> ExceptT VerificationFailure IO [Capability]
+moduleCapabilities de mds = fmap concat $ forM mds $ \md -> do
     toplevels <- withExceptT ModuleCheckFailure $
-                   traverse (ExceptT . typecheck) defcapRefs
+                   traverse (ExceptT . typecheck de) (defcapRefs md)
     hoist generalize $ traverse mkCap toplevels
 
   where
-    defcapRefs :: [Ref]
-    defcapRefs = toListOf
+    defcapRefs md = toListOf
       (mdRefMap.traverse.filtered
         (\ref -> ref ^? _Ref.tDef.dDefType == Just Defcap))
       md
@@ -639,10 +647,11 @@ moduleCapabilities md = do
 
       where
         (capName, pactArgs) = case toplevel of
-          TopFun FDefun{_fName,_fType} _ ->
-            (CapName $ T.unpack _fName, _ftArgs _fType)
+          TopFun FDefun{_fName,_fType,_fModule} _ ->
+            (mkCapName _fModule _fName, _ftArgs _fType)
           _ ->
             error "invariant violation: defcap toplevel must be a defun"
+
 
 translateArgTy
   :: Text
@@ -965,9 +974,9 @@ collectInvariants multiExp = for multiExp $ \case
 
 -- | Typecheck a 'Ref'. This is used to extract an @'AST' 'Node'@, which is
 -- translated to either a term or property.
-typecheck :: Ref -> IO (Either CheckFailure (TopLevel Node))
-typecheck ref = do
-  (toplevel, tcState) <- runTC 0 False $ typecheckTopLevel ref
+typecheck :: DynEnv -> Ref -> IO (Either CheckFailure (TopLevel Node))
+typecheck de ref = do
+  (toplevel, tcState) <- TC.runTCState (mkTcState 0 False de) $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
       info = toplevelInfo toplevel
   pure $ if Set.null failures
@@ -976,13 +985,14 @@ typecheck ref = do
 
 -- | Extract constants by typechecking and translating to properties.
 getConsts
-  :: HM.HashMap Text Ref
+  :: DynEnv
+  -> HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO (HM.HashMap Text EProp)
-getConsts defconstRefs = do
+getConsts de defconstRefs = do
 
   (consts :: HM.HashMap Text (AST Node)) <- ifoldrM
     (\name ref accum -> do
-      maybeConst <- lift $ typecheck ref
+      maybeConst <- lift $ typecheck de ref
       case maybeConst of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
         Right (TopConst _info _qualifiedName _type val _doc)
@@ -1011,13 +1021,13 @@ getStepChecks
   :: CheckEnv
   -> HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult])
-getStepChecks env@(CheckEnv tables consts propDefs _ _ _) defpactRefs = do
+getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de) defpactRefs = do
 
   (steps :: HM.HashMap (Text, Int)
     ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
     <- ifoldrM
     (\name ref accum -> do
-      maybeDef <- lift $ typecheck ref
+      maybeDef <- lift $ typecheck de ref
       case maybeDef of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
         Right (TopFun (FDefun info _ _ Defpact funType args steps _) _meta)
@@ -1059,7 +1069,7 @@ getFunChecks
     ( HM.HashMap Text [CheckResult]
     , HM.HashMap Text (TableMap [CheckResult])
     )
-getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
+getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de) refs = do
   ModelDecl _ checkExps <-
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
@@ -1068,7 +1078,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g) refs = do
     (Ref, TopLevel Node, Pact.FunType TC.UserType, CheckableType))
     <- ifoldrM
       (\name ref accum -> do
-        maybeFun <- lift $ typecheck ref
+        maybeFun <- lift $ typecheck de ref
         case maybeFun of
           Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
           Right topfun@(TopFun (FDefun _ _ _ defType funType _ _ _) _)
@@ -1160,21 +1170,22 @@ moduleGovernance moduleData = case _mdModule moduleData of
     case _gGovernance _mGovernance of
       Left (Pact.KeySetName rn) ->
         pure $ KsGovernance $ RegistryName rn
-      Right (Def {_dDefName=Pact.DefName dn}) ->
-        pure $ CapGovernance $ CapName $ T.unpack dn
+      Right (Def {_dDefName=Pact.DefName dn,_dModule}) ->
+        pure $ CapGovernance $ mkCapName _dModule dn
   Pact.MDInterface _ ->
     throwError ExpectedConcreteModule
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
-  :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
+  :: DynEnv
+  -> HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
-verifyModule modules moduleData@(ModuleData modDef allRefs) = runExceptT $ do
+verifyModule de modules moduleData@(ModuleData modDef allRefs) = runExceptT $ do
   let modRefs = moduleRefs moduleData
 
-  consts <- getConsts $ modRefs ^. defconsts
+  consts <- getConsts de $ modRefs ^. defconsts
   tables <- moduleTables modules modRefs consts
 
   let -- HM.unions is biased towards the start of the list. This module should
@@ -1223,10 +1234,10 @@ verifyModule modules moduleData@(ModuleData modDef allRefs) = runExceptT $ do
       let defunRefs, defpactRefs :: HM.HashMap Text Ref
           ModuleRefs defunRefs defpactRefs _ _ = modRefs
 
-      caps   <- moduleCapabilities moduleData
+      caps   <- moduleCapabilities de allModules
       gov    <- moduleGovernance moduleData
 
-      let checkEnv = CheckEnv tables consts propDefs moduleData caps gov
+      let checkEnv = CheckEnv tables consts propDefs moduleData caps gov de
 
       -- Note that invariants are only checked at the defpact level, not in
       -- individual steps.
@@ -1271,12 +1282,13 @@ renderVerifiedModule = \case
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
-  :: ModuleData Ref -- ^ the module we're verifying
+  :: DynEnv
+  -> ModuleData Ref -- ^ the module we're verifying
   -> Text           -- ^ the name of the function
   -> Check          -- ^ the check we're running
   -> CheckableType
   -> ExceptT VerificationFailure IO [CheckResult]
-verifyCheck moduleData funName check checkType = do
+verifyCheck de moduleData funName check checkType = do
   let info       = dummyInfo
       moduleName = moduleDefName $ moduleData ^. mdModule
       modules    = HM.fromList [(moduleName, moduleData)]
@@ -1284,16 +1296,16 @@ verifyCheck moduleData funName check checkType = do
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
       modRefs    = moduleRefs moduleData
 
-  caps   <- moduleCapabilities moduleData
-  consts <- getConsts $ modRefs ^. defconsts
+  caps   <- moduleCapabilities de [moduleData]
+  consts <- getConsts de $ modRefs ^. defconsts
   tables <- moduleTables modules modRefs consts
   gov    <- moduleGovernance moduleData
 
-  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov
+  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov de
 
   case moduleFun moduleData funName of
     Just funRef -> do
-      toplevel <- lift $ typecheck funRef
+      toplevel <- lift $ typecheck de funRef
       case toplevel of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
         Right (TopFun fun _) -> ExceptT $ fmap Right $

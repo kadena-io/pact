@@ -28,8 +28,9 @@ module Pact.Types.Typecheck
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,
     TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,
-    tcVarToTypes,tcYieldResume,
-    TC (..), runTC,
+    tcVarToTypes,tcYieldResume,tcDynEnv,
+    DynEnv,
+    TC (..), runTC, runTCState, mkTcState,
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
@@ -56,6 +57,7 @@ import Data.Foldable
 import Data.Text (Text, unpack)
 
 import Pact.Types.Lang hiding (App,Object,Step,ModRef)
+import Pact.Types.Runtime (ModuleData(..))
 import Pact.Types.Pretty
 import Pact.Types.Native
 
@@ -139,6 +141,9 @@ data YieldResume n = YieldResume
   deriving (Eq,Show,Functor,Foldable,Traversable)
 instance Default (YieldResume n) where def = YieldResume def def False
 
+-- | Environment for specializing interface dynamic references.
+type DynEnv = M.Map ModuleName (ModuleData Ref)
+
 -- | Typechecker state.
 data TcState = TcState {
   _tcDebug :: Bool,
@@ -152,11 +157,12 @@ data TcState = TcState {
   -- | Maps type vars to types.
   _tcVarToTypes :: M.Map (TypeVar UserType) (Type UserType),
   -- | Used in AST walk to track step yields and resumes.
-  _tcYieldResume :: Maybe (YieldResume Node)
+  _tcYieldResume :: Maybe (YieldResume Node),
+  _tcDynEnv :: DynEnv
   } deriving (Eq,Show)
 
-mkTcState :: Int -> Bool -> TcState
-mkTcState sup dbg = TcState dbg sup def def def def def def
+mkTcState :: Int -> Bool -> DynEnv -> TcState
+mkTcState sup dbg dynEnv = TcState dbg sup def def def def def def dynEnv
 
 instance Pretty TcState where
   pretty TcState {..} = vsep
@@ -371,19 +377,13 @@ data AST n =
 
 instance Pretty t => Pretty (AST t) where
   pretty a = case a of
-     Prim {..} -> sep [ pn, equals, pretty _aPrimValue ]
-     Var {} -> pn
-     Object {..} -> sep
-       [ pn
-       , pretty _aObject
-       ]
-     List {..} -> sep
-       [ pn
-       , bracketsSep [ indent 2 $ vsep $ map pretty _aList ]
-       ]
-     Binding {..} -> sep
-       [ pn
-       , parensSep
+     Prim {..} -> go "Prim" [ equals, pretty _aPrimValue ]
+     Var {} -> go "Var" []
+     Object {..} -> go "Object" [ pretty _aObject ]
+     List {..} -> go "List"
+       [ bracketsSep [ indent 2 $ vsep $ map pretty _aList ] ]
+     Binding {..} -> go "Binding"
+       [ parensSep
          [ pretty _aBindType
          , indent 2 $ vsep $ _aBindings <&> \(k,v) -> parensSep
            [ indent 2 $ pretty k <+> sep [ colon, indent 2 (pretty v) ]
@@ -391,25 +391,22 @@ instance Pretty t => Pretty (AST t) where
          , indent 2 $ vsep $ map pretty _aBody
          ]
        ]
-     App {..} -> sep
-       [ pn
-       , indent 2 $ parensSep [ indent 2 $ vsep $ map pretty _aAppArgs ]
+     App {..} -> go "App"
+       [ indent 2 $ parensSep [ indent 2 $ vsep $ map pretty _aAppArgs ]
        , indent 2 $ pretty _aAppFun
        ]
-     Table {} -> pn
-     Step {..} ->
-       let rb x = case _aRollback of
-                  Nothing -> x
-                  Just r -> sep [ x, "Rollback:", indent 2 (pretty r) ]
-       in rb $ sep
-            [ pn
-            , indent 2 $ "Entity" <> colon <+> pretty _aEntity
-            , indent 2 $ pretty _aExec
-            ]
-     Dynamic{..} -> sep [pn, pretty _aDynModRef, pretty _aDynMember]
-     ModRef{..} -> sep [pn, pretty _aModRefName, pretty _aModRefSpec]
-   where pn = pretty (_aNode a)
-
+     Table {} -> go "Table" []
+     Step {..} -> go "Step" $
+      may _aEntity (\e -> ["Entity" <> colon <> pretty e]) ++
+      [ indent 2 $ pretty _aExec ] ++
+      may _aRollback (\r -> ["Rollback:", indent 2 (pretty r)])
+     Dynamic{..} -> go "Dynamic" [pretty _aDynModRef, pretty _aDynMember]
+     ModRef{..} -> go "ModRef" [pretty _aModRefName, pretty _aModRefSpec]
+   where
+     go :: Text -> [Doc] -> Doc
+     go n is = sep (pretty n:pretty (_aNode a):is)
+     may Nothing _ = []
+     may (Just v) f = f v
 
 
 makeLenses ''AST
@@ -426,7 +423,11 @@ makeLenses ''Overload
 
 -- | Run monad providing supply seed and debug.
 runTC :: Int -> Bool -> TC a -> IO (a, TcState)
-runTC sup dbg a = runStateT (unTC a) (mkTcState sup dbg)
+runTC sup dbg a = runTCState (mkTcState sup dbg def) a
+
+-- | Run monad providing supply seed and debug.
+runTCState :: TcState -> TC a -> IO (a, TcState)
+runTCState s a = runStateT (unTC a) s
 
 -- | Pre-visit or post-visit specification.
 data Visit = Pre | Post deriving (Eq,Show)
