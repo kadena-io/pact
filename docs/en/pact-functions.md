@@ -437,7 +437,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.0.1"
+"4.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1694,6 +1694,19 @@ Set transaction JSON data, either as encoded string, or as pact types coerced to
 ```lisp
 pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
 "Setting transaction data"
+```
+
+
+### env-dynref {#env-dynref}
+
+*iface*&nbsp;`module` *impl*&nbsp;`module{}` *&rarr;*&nbsp;`string`
+
+ *&rarr;*&nbsp;`string`
+
+
+Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. With no arguments, remove all substitutions.
+```lisp
+(env-dynref fungible-v2 coin)
 ```
 
 
