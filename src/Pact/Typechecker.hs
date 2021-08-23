@@ -796,9 +796,7 @@ toFun (TVar Right {} i) = die i "Value in fun position"
 toFun (TDef td i) = resolveDyn td
   where
     resolveDyn d@Def{..} = use tcDynEnv >>= \de -> case M.lookup _dModule de of
-      Nothing -> do
-        -- liftIO $ print (de == mempty)
-        go i d
+      Nothing -> go i d
       Just ModuleData{..} -> case HM.lookup (asString _dDefName) _mdRefMap of
         Just r -> toFun (fmap Left $ TVar r i)
         Nothing -> die i $ "Dynamic substitution failed, module does not have member: " ++

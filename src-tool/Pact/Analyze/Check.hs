@@ -255,9 +255,10 @@ describeSmtFailure = \case
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeUnknownFailure :: SBV.SMTReasonUnknown -> Text
-describeUnknownFailure r = case show r of
-  "timeout" -> "SMT solver timeout"
-  _ ->  "Unexpected failure from SMT solver: " <> tShow r
+describeUnknownFailure = \case
+  SBV.UnknownMemOut -> "SMT solver out of memory"
+  SBV.UnknownTimeOut -> "SMT solver timeout"
+  r -> "SMT solver error: " <> tShow r
 
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
@@ -377,10 +378,10 @@ inNewAssertionStack act = do
 analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
--- | Solver timeout. Usually timeout is a bad sign
+-- | Solver timeout in millis. Usually timeout is a bad sign
 -- but can always try larger values here.
 timeout :: Integer
-timeout = 1000
+timeout = 1000 -- one second
 
 -- | Check that all invariants hold for a function (this is actually used for
 -- defun, defpact, and step)
