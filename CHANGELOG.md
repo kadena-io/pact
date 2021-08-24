@@ -1,15 +1,13 @@
 4.1
 ---
-* Support dynamic refs in TC/analyze (#894)
+* [Typechecking/FV] Support dynamic refs in TC/analyze (#894)
   * adds 'env-dynref' REPL builtin for mocking interfaces
   * improved/automatic shimming of natives in TC
-* Write `coverage/lcov.info` relative to loaded file (#883)
-* Tooling
-  * Add build-tool flag to omit tool and FV deps+modules from library build (#882,#892,#891,#889)
+* [Code Coverage] Write `coverage/lcov.info` relative to loaded file (#883)
+* [Build Tooling]
+  * Add build-tool flag to shrink library build (#882,#892,#891,#889)
   * Build-related (#895,#885,#877)
-  * remove ghc-8.6.5 from build matrix (#885)
   * CI-related (#880,#890,#881,#884)
-  * Make use of SFunArray compatible with old and new versions of SBV (#877)
 
 
 4.0.1
