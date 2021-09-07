@@ -579,9 +579,7 @@ evalStrToIntBase bT sT = do
     -- Concrete base and symbolic string: only support base 10
     (Just conBase, Nothing)
       | conBase == 10 -> evalStrToInt $ inject' $ coerceS @String @Str s
-      | otherwise     -> throwErrorNoLoc $ FailureMessage $ T.pack $
-        "Unable to statically determine the string for conversion to integer \
-        \from base " ++ show conBase
+      | otherwise     -> pure $ literalS conBase -- return base. TODO: warning please
 
     -- Concrete base and string: use pact native impl
     (Just conBase, Just conStr) ->

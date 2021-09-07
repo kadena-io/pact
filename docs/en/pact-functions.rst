@@ -492,7 +492,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "4.0.1"
+   "4.1"
 
 Top level only: this function will fail if used in module code.
 
@@ -1967,6 +1967,20 @@ coerced to JSON.
 
    pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
    "Setting transaction data"
+
+env-dynref
+~~~~~~~~~~
+
+*iface* ``module`` *impl* ``module{}`` *→* ``string``
+
+*→* ``string``
+
+Substitute module IMPL in any dynamic usages of IFACE in typechecking
+and analysis. With no arguments, remove all substitutions.
+
+.. code:: lisp
+
+   (env-dynref fungible-v2 coin)
 
 env-enable-repl-natives
 ~~~~~~~~~~~~~~~~~~~~~~~

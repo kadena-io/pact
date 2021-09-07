@@ -1,3 +1,15 @@
+4.1
+---
+* [Typechecking/FV] Support dynamic refs in TC/analyze (#894)
+  * adds 'env-dynref' REPL builtin for mocking interfaces
+  * improved/automatic shimming of natives in TC
+* [Code Coverage] Write `coverage/lcov.info` relative to loaded file (#883)
+* [Build Tooling]
+  * Add build-tool flag to shrink library build (#882,#892,#891,#889)
+  * Build-related (#895,#885,#877)
+  * CI-related (#880,#890,#881,#884)
+
+
 4.0.1
 ---
 

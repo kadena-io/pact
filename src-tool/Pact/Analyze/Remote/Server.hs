@@ -150,4 +150,4 @@ loadModules mods0 = do
 
 runVerification :: ValidRequest -> IO Response
 runVerification (ValidRequest modsMap mod') =
-  Response . Check.renderVerifiedModule <$> Check.verifyModule modsMap mod'
+  Response . Check.renderVerifiedModule <$> Check.verifyModule mempty modsMap mod'

@@ -70,7 +70,7 @@ import           Prelude                      hiding (Float)
 import           Pact.Types.Pretty            hiding (list)
 import qualified Pact.Types.Pretty            as Pretty
 import qualified Pact.Types.Lang              as Pact
-import           Pact.Types.Util              (AsString)
+import           Pact.Types.Util              (AsString(..))
 
 import           Pact.Analyze.PactSFunArray (PactSFunArray)
 import           Pact.Analyze.Feature         hiding (Constraint, Doc, Type,
@@ -219,6 +219,9 @@ newtype CapName
 
 instance IsString CapName where
   fromString = CapName
+
+mkCapName :: Pact.ModuleName -> Text -> CapName
+mkCapName modName defName = CapName $ T.unpack (asString modName <> "." <> defName)
 
 newtype Str = Str { unStr :: String }
   deriving (Eq, Ord, Show, HasKind, Typeable, IsString)

@@ -255,6 +255,12 @@ replDefs = ("Repl",
       ("Evaluate EXEC with any pending environment changes applied. " <>
        "Normally, environment changes must execute at top-level for the change to take effect. " <>
        "This allows scoped application of non-toplevel environment changes.")
+     ,defZRNative "env-dynref" envDynRef
+      (funType tTyString [("iface",TyModule Nothing),("impl",TyModule (Just []))] <>
+       funType tTyString [])
+      [LitExample "(env-dynref fungible-v2 coin)"]
+      ("Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. " <>
+       "With no arguments, remove all substitutions.")
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -301,6 +307,18 @@ setop v = setLibState $ over rlsOp (<> v)
 
 setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
+
+envDynRef :: RNativeFun LibState
+envDynRef i [TModRef iface _,TModRef impl _] =
+  lookupModule i (_modRefName impl) >>= \r -> case r of
+    Nothing -> evalError' i "Unable to resolve impl module"
+    Just md -> do
+      setLibState $ over rlsDynEnv $ M.insert (_modRefName iface) md
+      return $ tStr "Added dynamic ref to environment."
+envDynRef _i [] = do
+  setLibState $ set rlsDynEnv def
+  return $ tStr "Cleared dynamic ref environment."
+envDynRef i as = argsError i as
 
 mockSPV :: RNativeFun LibState
 mockSPV i as = case as of
@@ -598,8 +616,9 @@ tc i as = case as of
   where
     go modname dbg = do
       md <- getModule i (ModuleName modname Nothing)
+      de <- viewLibState _rlsDynEnv
       r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
-        try $ liftIO $ typecheckModule dbg md
+        try $ liftIO $ typecheckModule dbg de md
       case r of
         Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> prettyString e)
         Right (_,fails) -> case fails of
@@ -621,7 +640,8 @@ verify i _as@[TLitString modName] = do
 #elif defined(BUILD_TOOL)
     -- ghc + build-tool: run verify
     (md,modules) <- _loadModules
-    modResult <- liftIO $ Check.verifyModule modules md
+    de <- viewLibState _rlsDynEnv
+    modResult <- liftIO $ Check.verifyModule de modules md
     let renderedLines = Check.renderVerifiedModule modResult
     case modResult of
       Right modResult'

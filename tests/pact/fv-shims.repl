@@ -1,0 +1,58 @@
+(define-namespace 'test (sig-keyset) (sig-keyset))
+(namespace 'test)
+
+(interface iface
+  (defun op:integer ()))
+
+(module impl g
+  (implements iface)
+  (defcap g () true)
+  (defun op:integer () 1))
+
+(module testmod g
+
+  @model
+  [
+   ;; need at least some property to kick off fv
+   (property (= 1 1))
+  ]
+
+  (defcap g () true)
+
+  (defschema sch
+    i:integer
+    ;; exercise modref type coercion in schemas
+    m:module{iface})
+
+  (deftable tbl:{sch})
+
+  (defcap CAP () @event true)
+
+  (defun alist:[integer] () [ 1 2 ])
+
+  (defun fun (m:module{iface})
+    @doc "Exercise FV shims and coercions. Modref arg coerced to string."
+    ;; dynamic ref
+    (m::op)
+    ;; unsupported natives
+    (keys tbl)
+    (is-charset CHARSET_ASCII "abc")
+    (install-capability (CAP))
+    (emit-event (CAP))
+    (concat ["a" "b"])
+    (format "dynamic list {}" (alist))
+    (enumerate 1 10)
+    (enumerate 1 10 2)
+    (tx-hash)
+    (str-to-list "abc")
+    (int-to-str 16 65535)
+    (distinct [1 2 2 3])
+    (diff-time
+     (time "2021-01-01T00:00:00Z")
+     (time "2021-01-01T00:00:00Z"))
+  )
+
+)
+
+(env-dynref iface impl)
+(verify "test.testmod")

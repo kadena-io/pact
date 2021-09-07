@@ -83,7 +83,7 @@ verifyModule fp mn = describe (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
     mModules <- replGetModules replState
     checkResult <- case mModules of
       Left err           -> die def (show err)
-      Right (modules, _) -> Check.verifyModule modules modul
+      Right (modules, _) -> Check.verifyModule def modules modul
     pure $ case checkResult of
       Right checkResult'
         | not (Check.hasVerificationError checkResult')
@@ -150,7 +150,7 @@ inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLeve
 inferModule :: Bool -> FilePath -> ModuleName -> IO ([TopLevel Node],[Failure])
 inferModule debug fp mn = do
   md <- loadModule fp mn
-  typecheckModule debug md
+  typecheckModule debug def md
 
 
 

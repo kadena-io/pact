@@ -140,7 +140,7 @@ runVerification code = do
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
+      results <- verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
         Right (ModuleChecks propResults stepResults invariantResults _) ->
@@ -166,7 +166,7 @@ runCheck' checkType code check = do
   case eModuleData of
     Left tf -> pure $ Left tf
     Right moduleData -> do
-      result <- runExceptT $ verifyCheck moduleData "test" check checkType
+      result <- runExceptT $ verifyCheck mempty moduleData "test" check checkType
       pure $ case result of
         Left failure    -> Left $ VerificationFailure failure
         Right (Left cf:_) -> Left $ TestCheckFailure cf
@@ -178,7 +178,7 @@ checkInterface code = do
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      result <- verifyModule HM.empty moduleData
+      result <- verifyModule mempty HM.empty moduleData
       pure $ case result of
         Left failure -> Just $ VerificationFailure failure
         Right _      -> Nothing
@@ -1070,7 +1070,7 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (require-capability (CAP 100)))
           |]
-    expectPassWithWarning code "Direct execution restricted by capability CAP" $ Valid Success'
+    expectPassWithWarning code "Direct execution restricted by capability test.CAP" $ Valid Success'
 
   describe "requesting token that was granted" $ do
     let code =
@@ -1100,7 +1100,7 @@ spec = describe "analyze" $ do
               (with-capability (FOO 2)
                 (require-capability (BAR false))))
           |]
-    expectPassWithWarning code "Direct execution restricted by capability BAR" $ Valid Success'
+    expectPassWithWarning code "Direct execution restricted by capability test.BAR" $ Valid Success'
 
   describe "requesting token that was not granted for the same args" $ do
     let code =
@@ -1905,7 +1905,7 @@ spec = describe "analyze" $ do
       Left err -> it "failed to compile" $ expectationFailure (show err)
       Right moduleData -> do
         results <- runIO $
-          verifyModule (HM.fromList [("test", moduleData)]) moduleData
+          verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure
@@ -2293,7 +2293,9 @@ spec = describe "analyze" $ do
         describe "only base 10 is supported" $ do
           expectPass [text| (defun test:integer (s:string) (str-to-int 10 s)) |] $
             Satisfiable Success'
-          expectFail [text| (defun test:integer (s:string) (str-to-int 8 s)) |] $
+          -- TODO this is now shimmed, but in the model, so no warning emitted.
+          -- TODO emit warning somehow
+          expectPass [text| (defun test:integer (s:string) (str-to-int 8 s)) |] $
             Satisfiable Success'
 
       describe "concrete string and symbolic base" $ do

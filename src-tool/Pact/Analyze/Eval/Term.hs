@@ -695,8 +695,11 @@ evalTerm = \case
     case (unliteralS formatStr', unliteralS time') of
       (Just (Str formatStr''), Just time'') -> pure $ literalS $ Str $
         formatTime formatStr'' (toPact timeIso time'')
-      _ -> throwErrorNoLoc "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
-
+      (Just (Str formatStr''), Nothing) ->
+        -- substituting format string for result when 2nd arg is not a literal
+        -- would be nice to be able to warn from within Analyze
+        pure $ literalS $ Str formatStr''
+      _ -> throwErrorNoLoc "format-time: bad arguments"
   ParseTime mFormatStr timeStr -> do
     formatStr' <- case mFormatStr of
       Just formatStr -> eval formatStr

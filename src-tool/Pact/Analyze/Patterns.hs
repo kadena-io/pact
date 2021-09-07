@@ -13,7 +13,7 @@ import           Data.Text            (Text)
 
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (Literal (LString))
-import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
+import           Pact.Types.Typecheck (AST (..),
                                        AstBindType (..), Fun (FDefun, FNative),
                                        Named, Node, PrimValue (PrimLit),
                                        Special (SBinding), aNode, aTy, YieldResume)
@@ -289,3 +289,6 @@ pattern AST_List node elems <- List node elems
 
 pattern AST_Step :: a -> Maybe (AST a) -> AST a -> Maybe (AST a) -> Maybe (YieldResume a) -> AST a
 pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr _model
+
+pattern AST_ModRef :: a -> Lang.ModuleName -> Maybe [Lang.ModuleName] -> AST a
+pattern AST_ModRef node refName refSpec <- ModRef node refName refSpec
