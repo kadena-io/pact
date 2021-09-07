@@ -243,12 +243,16 @@ prepOffline i [TLitString file] = do
   f <- computeCurPath file
   let (sd :: SigData Text) =
         SigData (_cmdHash cmd) (map toSigs (fst sgs)) Nothing
-  liftIO $ Y.encodeFile (f ++ ".yaml") sd
+      shortFile = f ++ ".yaml"
+      qrFile = f ++ ".png"
+      longFile = f ++ "-full.yaml"
+  liftIO $ Y.encodeFile shortFile sd
+  liftIO $ Y.encodeFile longFile (sd { _sigDataCmd = Just $ _cmdPayload cmd })
   qri <- maybeDie i "QR encode failed" $
          QR.encodeText (QR.defaultQRCodeOptions QR.L) QR.Iso8859_1OrUtf8WithECI {- QR.Iso8859_1 -} $
          decodeUtf8 $ Y.encode sd
-  liftIO $ JP.savePngImage (f ++ ".png") $ JP.ImageY8 $ QR.toImage 4 3 qri
-  return $ tStr $ pack $ "Wrote " ++ f ++ ".yaml, " ++ f ++ ".png"
+  liftIO $ JP.savePngImage qrFile $ JP.ImageY8 $ QR.toImage 4 3 qri
+  return $ tStr $ pack $ "Wrote " ++ shortFile ++ ", " ++ longFile ++ ", " ++ qrFile
   where
     toSigs (Signer _ s _ _) = (PublicKeyHex s,Nothing)
 prepOffline i as = argsError i as
