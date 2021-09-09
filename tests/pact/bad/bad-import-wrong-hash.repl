@@ -1,0 +1,18 @@
+;; Bad import - empty import lists should fail if no module hash
+;; is supplied.
+(begin-tx)
+(module m G
+  (defcap G () true)
+  (defun f () true)
+)
+(commit-tx)
+(begin-tx)
+(module n H
+  ;; only last letter changed
+  ;; actual hash: S_uhfqHsatDTMeUQhDNwXOHMpio2hX2Jcd-S5YDiNNk
+  (use m "S_uhfqHsatDTMeUQhDNwXOHMpio2hX2Jcd-S5YDiNNg"
+    [])
+
+  (defcap H () true)
+  (defun g () true)
+)

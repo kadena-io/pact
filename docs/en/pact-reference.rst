@@ -1,4 +1,4 @@
-|image1|
+.. image:: img/kadena-logo-210px.png
 
 Pact Smart Contract Language Reference
 ======================================
@@ -3771,7 +3771,9 @@ those names will be made available for use in the module body. If no
 list is supplied, then every name in the imported module will be brought
 into scope. When two modules are defined in the same transaction, all
 names will be in scope for all modules, and import behavior will be
-defaulted to the entire module.
+defaulted to the entire module. IMPORTS may only be empty when a module
+hash is also supplied. If a module hash is not supplied, IMPORTS are
+required to be either a non-empty list, or left undeclared.
 
 .. code:: lisp
 
@@ -4295,5 +4297,3 @@ The update format is a JSON object:
 
 Note that the JSON row value uses the same encoding as found in the user
 data table.
-
-.. |image1| image:: img/kadena-logo-210px.png
