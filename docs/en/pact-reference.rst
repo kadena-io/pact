@@ -1,4 +1,4 @@
-.. image:: img/kadena-logo-210px.png
+|image1|
 
 Pact Smart Contract Language Reference
 ======================================
@@ -4297,3 +4297,5 @@ The update format is a JSON object:
 
 Note that the JSON row value uses the same encoding as found in the user
 data table.
+
+.. |image1| image:: img/kadena-logo-210px.png

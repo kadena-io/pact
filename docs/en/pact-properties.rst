@@ -1,4 +1,4 @@
-.. image:: img/kadena-logo-210px.png
+|image1|
 
 The Pact Property Checking System
 =================================
@@ -570,3 +570,5 @@ the following are true:
 -  the sender must be authorized to transfer money,
 -  it’s not possible for a balance to drop below zero, and
 -  it’s not possible for money to be created or destroyed.
+
+.. |image1| image:: img/kadena-logo-210px.png

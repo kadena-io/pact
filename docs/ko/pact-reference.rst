@@ -1,4 +1,4 @@
-.. image:: img/kadena-logo-210px.png
+|image1|
 
 Pact 스마트 컨트랙트 언어 레퍼런스
 ==================================
@@ -3640,7 +3640,7 @@ verify
 
 MODULE 을 검증하여 모든 속성들이 유지되는지 검사합니다.
 
-.. image:: img/kadena-logo-210px.png
+|image2|
 
 Pact 속성 검사 시스템
 =====================
@@ -5149,3 +5149,6 @@ row-enforced
 지정된 행의 키셋이 함수에서 enforce 되는지의 여부.
 
 속성에서만 지원됩니다.
+
+.. |image1| image:: img/kadena-logo-210px.png
+.. |image2| image:: img/kadena-logo-210px.png
