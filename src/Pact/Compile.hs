@@ -606,10 +606,11 @@ useForm = do
   (mn,_) <- qualifiedModuleName
   i <- contextInfo
   h <- optional hash'
-  l <- optional $ withList' Brackets (some userAtom <* eof)
+  l <- optional $ withList' Brackets (many userAtom <* eof)
 
   let v = fmap (V.fromList . fmap _atomAtom) l
       u = Use mn h v i
+
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= (u:)
   return $ TUse u i

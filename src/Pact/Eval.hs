@@ -286,32 +286,40 @@ toPersistDirect' t = case toPersistDirect t of
 
 
 evalUse :: Use -> Eval e ()
-evalUse (Use mn h mis i) = do
+evalUse (Use mn mh mis i) = do
   mm <- resolveModule i mn
   case mm of
     Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
     Just md -> do
       case _mdModule md of
         MDModule Module{..} ->
-          case h of
+          case mh of
             Nothing -> return ()
-            Just mh | mh == _mHash -> return ()
-                    | otherwise -> evalError i $ "Module " <>
-                        pretty mn <> " does not match specified hash: " <>
-                        pretty mh <> ", " <> pretty _mHash
+            Just h | h == _mHash -> return ()
+                   | otherwise -> evalError i $ "Module " <>
+                       pretty mn <> " does not match specified hash: " <>
+                       pretty mh <> ", " <> pretty _mHash
         MDInterface i' ->
-          case h of
+          case mh of
             Nothing -> return ()
             Just _ -> evalError i
               $ "Interfaces should not have associated hashes: "
               <> pretty (_interfaceName i')
 
-      validateImports i (_mdRefMap md) mis
+      validateImports i (_mdRefMap md) mh mis
       installModule False md mis
 
-validateImports :: Info -> HM.HashMap Text Ref -> Maybe (V.Vector Text) -> Eval e ()
-validateImports _ _ Nothing = return ()
-validateImports i rs (Just is) = traverse_ go is
+validateImports
+  :: Info
+  -> HM.HashMap Text Ref
+  -> Maybe ModuleHash
+  -> Maybe (V.Vector Text)
+  -> Eval e ()
+validateImports _ _ _ Nothing = return ()
+validateImports i rs mh (Just is)
+  | Nothing <- mh, V.null is = evalError' i
+    "empty imports are only allowed if a module hash is referenced"
+  | otherwise = traverse_ go is
   where
     go imp = case HM.lookup imp rs of
       Nothing -> evalError i $ "imported name not found: " <> pretty imp
