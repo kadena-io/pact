@@ -348,9 +348,7 @@ deftable :: Compile (Term Name)
 deftable = do
   ModuleState{..} <- moduleState
   AtomExp{..} <- userAtom
-  ty <- optional (typed >>= \t -> case t of
-                     TyUser {} -> return t
-                     _ -> expected "user type")
+  ty <- optional (delimType parseUserSchemaType)
   m <- meta ModelNotAllowed
   TTable (TableName _atomAtom) _msName _msHash
     (fromMaybe TyAny ty) m <$> contextInfo
@@ -632,12 +630,14 @@ arg2Name Arg{..} = Name $ BareName _aName _aInfo
 
 
 typed :: Compile (Type (Term Name))
-typed = sep Colon *> parseType
+typed = delimType parseType
+
+delimType :: Compile (Type (Term Name)) -> Compile (Type (Term Name))
+delimType = (sep Colon *>)
 
 parseType :: Compile (Type (Term Name))
 parseType = msum
   [ parseListType
-  , parseUserSchemaType
   , parseSchemaType tyObject TyObject
   , parseSchemaType tyTable TyTable
   , parseModuleRefType
