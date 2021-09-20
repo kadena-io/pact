@@ -33,6 +33,7 @@ import           Pact.Analyze.Remote.Types (Request(..), Response(..),
                                             ClientError(..))
 import           Pact.Repl                 (initReplState, evalRepl', replGetModules)
 import           Pact.Repl.Types
+import Pact.Types.Pretty
 import           Pact.Types.Runtime
 
 type VerifyAPI = "verify" :> ReqBody '[JSON] Request :> Post '[JSON] Response
@@ -150,4 +151,4 @@ loadModules mods0 = do
 
 runVerification :: ValidRequest -> IO Response
 runVerification (ValidRequest modsMap mod') =
-  Response . Check.renderVerifiedModule <$> Check.verifyModule mempty modsMap mod'
+  Response . (map renderCompactText . Check.renderVerifiedModule) <$> Check.verifyModule mempty modsMap mod'

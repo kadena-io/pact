@@ -66,8 +66,8 @@ data LibOp
       -- ^ load a filepath script
     | Print (Term Name)
       -- ^ print to terminal
-    | TcErrors [String]
-      -- ^ special output for typechecker
+    | Output [RenderedOutput]
+      -- ^ special output for typechecker/FV
 instance Default LibOp where def = Noop
 
 -- | Semi-pathological instance that either overwrites

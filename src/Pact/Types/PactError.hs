@@ -20,6 +20,15 @@ module Pact.Types.PactError
   ( StackFrame(..), sfName, sfLoc, sfApp
   , PactError(..)
   , PactErrorType(..)
+
+
+  , RenderedOutput(..)
+  , roText
+  , roInfo
+  , roFatal
+  , renderWarn
+  , renderFatal
+
   ) where
 
 
@@ -136,3 +145,24 @@ instance Show PactError where
               DbError -> Just "Database exception"
               SyntaxError -> Just "Syntax error"
               GasError -> Just "Gas Error"
+
+
+
+-- | Tool warning/error output.
+data RenderedOutput = RenderedOutput
+  { _roText :: Text
+  , _roInfo :: Info
+  , _roFatal :: Bool }
+
+instance Pretty RenderedOutput where
+  pretty (RenderedOutput t i f) = pretty (renderInfo i) <> ":" <> level f <> ": " <> pretty t
+    where
+      level True = "Failure"
+      level False = "Warning"
+
+renderWarn, renderFatal :: Text -> RenderedOutput
+renderWarn t = RenderedOutput t def False
+renderFatal t = RenderedOutput t def True
+
+
+makeLenses ''RenderedOutput

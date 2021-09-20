@@ -624,7 +624,7 @@ tc i as = case as of
         Right (_,fails) -> case fails of
           [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
           _ -> do
-            setop $ TcErrors $ map (\(TC.Failure ti s) -> renderInfo (TC._tiInfo ti) ++ ":Warning: " ++ s) fails
+            setop $ Output $ map TC.renderTcFailure fails
             return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 verify :: RNativeFun LibState
@@ -643,13 +643,10 @@ verify i _as@[TLitString modName] = do
     de <- viewLibState _rlsDynEnv
     modResult <- liftIO $ Check.verifyModule de modules md
     let renderedLines = Check.renderVerifiedModule modResult
-    case modResult of
-      Right modResult'
-        | not (Check.hasVerificationError modResult')
-        -> return $ tStr $ mconcat renderedLines
-      _ -> do
-        setop $ TcErrors $ unpack <$> renderedLines
-        return _failureMessage
+    setop $ Output renderedLines
+    if any _roFatal renderedLines
+      then return _failureMessage
+      else return $ tStr $ "Verification of " <> modName <> " succeeded"
 #else
     -- ghc - build-tool: typecheck only
     tc i _as

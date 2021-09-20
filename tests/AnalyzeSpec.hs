@@ -34,7 +34,7 @@ import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
 import           Pact.Repl.Types              (ReplMode (StringEval))
 import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref, ModuleName)
-import           Pact.Types.Pretty            (Pretty, renderCompactString)
+import           Pact.Types.Pretty
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Check
@@ -108,11 +108,11 @@ renderTestFailure = \case
         Model.renderDot fp m
         pure $ "\n\nrendered execution graph to DOT: " ++ fp
 
-    pure $ T.unpack (describeCheckFailure cf) ++ svgInfo
+    pure $ renderCompactString (describeCheckFailure cf) ++ svgInfo
   NoTestModule -> pure "example is missing a module named 'test'"
   ReplError err -> pure $ "ReplError: " ++ err
   VerificationFailure vf ->
-    pure $ T.unpack $ T.unlines $ renderVerifiedModule $ Left vf
+    pure $ T.unpack $ T.unlines $ map renderCompactText $ renderVerifiedModule $ Left vf
   ScopeError' err -> pure $ "ScopeError: " ++ show err
 
 --
@@ -224,8 +224,11 @@ expectFalsifiedMessage code needleMsg =
   it "passes in-code checks" $ \res ->
     res `shouldSatisfy` \case
       Just (TestCheckFailure cf) ->
-        needleMsg `T.isInfixOf` (describeCheckFailure cf)
+        needleMsg `isInCheckFailure` cf
       _ -> False
+
+isInCheckFailure :: Text -> CheckFailure -> Bool
+isInCheckFailure needle cf = needle `T.isInfixOf` renderCompactText (describeCheckFailure cf)
 
 expectFalsified' :: HasCallStack => Text -> Text -> Spec
 expectFalsified' model code =
@@ -238,11 +241,11 @@ expectPassWithWarning code wgText check =
   it "expectPassWithWarning" $ \r -> case r of
     Left e -> expectationFailure =<< renderTestFailure e
     Right rs -> case filter findWg rs of
-      [] -> expectationFailure $ "no warning found for " ++ show wgText ++ ": [" ++
-        T.unpack (T.intercalate "," (catMaybes $ map describeCheckResult rs)) ++ "]"
+      [] -> expectationFailure $ "no warning found for " ++ show wgText ++ ": " ++
+            renderCompactString (concatMap describeCheckResult rs)
       _ -> return ()
   where
-    findWg (Left w) = wgText `T.isInfixOf` describeCheckFailure w
+    findWg (Left w) = wgText `isInCheckFailure` w
     findWg _ = False
 
 
@@ -270,7 +273,7 @@ expectFailureMessage code needleMsg = expectTest
           , testPred =
               \res -> res `shouldSatisfy` \case
                         Just (TestCheckFailure cf) ->
-                          needleMsg `T.isInfixOf` (describeCheckFailure cf)
+                          needleMsg `isInCheckFailure` cf
                         _ ->
                           False
           , testName = "expectFailureMessage"
