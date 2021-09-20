@@ -97,7 +97,7 @@ testSingleModule = do
 
   it "verifies over the network" $
     fmap (view Remote.responseLines) resp `shouldBe`
-    (Right [""])
+    (Right [])
 
 testUnsortedModules :: Spec
 testUnsortedModules = do
@@ -114,7 +114,7 @@ testUnsortedModules = do
 
   it "verifies over the network" $
     fmap (view Remote.responseLines) resp `shouldBe`
-    (Right [""])
+    (Right [])
   where
     code = [text|
       (env-keys ["admin"])
