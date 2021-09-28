@@ -3771,7 +3771,9 @@ those names will be made available for use in the module body. If no
 list is supplied, then every name in the imported module will be brought
 into scope. When two modules are defined in the same transaction, all
 names will be in scope for all modules, and import behavior will be
-defaulted to the entire module.
+defaulted to the entire module. IMPORTS may only be empty when a module
+hash is also supplied. If a module hash is not supplied, IMPORTS are
+required to be either a non-empty list, or left undeclared.
 
 .. code:: lisp
 

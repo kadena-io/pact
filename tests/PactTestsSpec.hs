@@ -114,6 +114,8 @@ badErrors = M.fromList
    ,"Unexpected end of input")
   ,(pfx "bad-repl-native.repl"
    ,"module restore failed: Native lookup failed")
+  ,(pfx "bad-import-wrong-hash.repl"
+   ,"does not match specified hash")
   ]
   where
     pfx = ("tests/pact/bad/" ++)

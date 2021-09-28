@@ -1,0 +1,33 @@
+;; Positive unit tests for use/import-based forms
+(begin-tx)
+(module m G
+  (defcap G () true)
+  (defun f () true)
+)
+(commit-tx)
+(begin-tx)
+
+;; Show that empty imports work when hashes are
+;; supplied. For a negative test, see: ./bad/bad-import-emptylist.pact
+(module n H
+  (use m "S_uhfqHsatDTMeUQhDNwXOHMpio2hX2Jcd-S5YDiNNk"
+    [])
+
+  (defcap H () true)
+  (defun g () true)
+)
+
+(module o I
+  (use m [f])
+
+  (defcap I () true)
+  (defun h () true)
+)
+
+(module p J
+  (use m "S_uhfqHsatDTMeUQhDNwXOHMpio2hX2Jcd-S5YDiNNk"
+    [f])
+
+  (defcap J () true)
+  (defun i () true)
+)
