@@ -612,21 +612,22 @@ loadCli confm = case confm of
         go def
 
 
-setupCli :: ReplMode -> Maybe FilePath -> IO ReplState
-setupCli m confm = do
+setupCli :: ReplMode -> Maybe FilePath -> Maybe FilePath -> IO ReplState
+setupCli m confm loadm = do
   s <- initReplState m Nothing
   (`execStateT` s) $ do
     useReplLib
     loadCli confm
+    mapM_ (loadFile def) loadm
 
 _cli :: IO ()
 _cli = do
-  s <- setupCli Interactive Nothing
+  s <- setupCli Interactive Nothing Nothing
   void $ (`evalStateT` s) $ forever $ pipeLoop True stdin Nothing
 
 _eval :: Eval LibState a -> IO a
 _eval e = do
-  s <- setupCli Interactive Nothing
+  s <- setupCli Interactive Nothing Nothing
   (r,_) <- evalStateT (evalEval def e) s
   either (error . show) return r
 

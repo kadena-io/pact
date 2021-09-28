@@ -73,7 +73,7 @@ data Option =
   | OCombineSigs { _oSigFiles :: [FilePath], _oReqLocal :: Bool }
   | OSignCmd { _oSigFile :: [FilePath] }
 #ifdef CLI_REPL
-  | OCli { _oCliConfig :: Maybe FilePath }
+  | OCli { _oCliConfig :: Maybe FilePath, _oCliLoad :: Maybe FilePath }
 #endif
   deriving (Eq,Show)
 
@@ -152,10 +152,12 @@ signParser = O.command "sign" $ O.info (OSignCmd <$> parser <**> O.helper) i
 
 #ifdef CLI_REPL
 cliParser :: O.Mod O.CommandFields Option
-cliParser = O.command "cli" $ O.info (OCli <$> parser <**> O.helper) (cmdInfo "Run cli pact terminal")
+cliParser = O.command "cli" $ O.info (OCli <$> parser <*> fParser <**> O.helper) (cmdInfo "Run cli pact terminal")
   where
     parser = optional $ O.strOption
       (O.metavar "CONFIG_FILE" <> O.help cliHelp <> O.short 'c' <> O.long "cli-file")
+    fParser = optional $ O.argument O.str
+      (O.metavar "LOAD_FILE" <> O.help "Repl to load")
 #endif
 
 argParser :: O.ParserInfo Option
@@ -197,9 +199,9 @@ main = O.execParser argParser >>= \as -> case as of
 
     OSignCmd kfs -> BS8.putStrLn =<< signCmd kfs =<< fmap (encodeUtf8 . T.strip) T.getContents
 #ifdef CLI_REPL
-    OCli confM -> do
+    OCli confM loadM -> do
       m <- getMode
-      s <- setupCli m confM
+      s <- setupCli m confM loadM
       generalRepl' m s >>= exitEither (const (return ()))
 #endif
 
