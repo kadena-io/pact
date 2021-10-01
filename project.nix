@@ -51,5 +51,7 @@ in {
         ghc = ["pact"];
         ghcjs = ["pact"];
       };
+
+      passthru = { inherit (pkgs) z3;};
     });
 }

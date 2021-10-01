@@ -10,22 +10,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.8.4', '8.10.5']
+        ghc: ['8.8.4', '8.10.7']
         cabal: ['3.4']
         os: ['ubuntu-18.04', 'ubuntu-20.04', 'macOS-latest' ]
         cabalcache: ['true']
         flags: ['+build-tool']
-        exclude:
-        - os: 'macOS-latest'
-          ghc: '8.10.5'
         include:
-        - os: 'macOS-latest'
-          ghc: '8.10.4'
-          cabal: '3.4'
-          cabalcache: 'true'
-          flags: '+build-tool'
         - os: 'ubuntu-20.04'
-          ghc: '8.10.5'
+          ghc: '8.10.7'
           cabal: '3.4'
           cabalcache: 'true'
           flags: '-build-tool'
@@ -77,7 +69,7 @@ jobs:
 
     # Haskell Setup
     - name: Install GHC and Cabal
-      uses: haskell/actions/setup@v1.2.3
+      uses: haskell/actions/setup@v1.2
       with:
          ghc-version: ${{ matrix.ghc }}
          cabal-version: ${{ matrix.cabal }}
