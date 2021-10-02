@@ -635,7 +635,7 @@ verify i _as@[TLitString modName] = do
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
-    setop $ TcErrors $ unpack <$> renderedLines
+    setop $ Output renderedLines
     return _failureMessage
 #elif defined(BUILD_TOOL)
     -- ghc + build-tool: run verify
@@ -644,7 +644,7 @@ verify i _as@[TLitString modName] = do
     modResult <- liftIO $ Check.verifyModule de modules md
     let renderedLines = Check.renderVerifiedModule modResult
     setop $ Output renderedLines
-    if any _roFatal renderedLines
+    if any ((== OutputFailure) . _roType) renderedLines
       then return _failureMessage
       else return $ tStr $ "Verification of " <> modName <> " succeeded"
 #else

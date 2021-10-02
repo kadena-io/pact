@@ -136,7 +136,7 @@ instance Pretty m => Pretty (Overload m) where
 data Failure = Failure TcId String deriving (Eq,Ord,Show)
 
 renderTcFailure :: Failure -> RenderedOutput
-renderTcFailure (Failure t m) = RenderedOutput (pack m) (_tiInfo t) True
+renderTcFailure (Failure t m) = RenderedOutput (pack m) (_tiInfo t) OutputFailure
 
 data YieldResume n = YieldResume
   { _yrYield :: Maybe n

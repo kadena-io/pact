@@ -25,7 +25,7 @@ import           GHCJS.DOM.EventM           (onAsync)
 import qualified GHCJS.DOM.XMLHttpRequest   as XHR
 
 import qualified Pact.Analyze.Remote.Types  as Remote
-import           Pact.Types.Runtime         (ModuleData (..))
+import           Pact.Types.Runtime         (ModuleData (..), RenderedOutput (..), renderFatal)
 import           Pact.Types.Term            (ModuleName, derefDef,
                                              moduleDefName, Ref)
 
@@ -33,7 +33,7 @@ verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> (ModuleData Ref)                       -- ^ the module we're verifying
   -> String
-  -> IO [Text]
+  -> IO [RenderedOutput]
 verifyModule namedMods mod' uri = do
   let requestURI = uri ++ "/verify"
       body       = Remote.Request
@@ -47,7 +47,7 @@ verifyModule namedMods mod' uri = do
   XHR.setTimeout req 5000 -- Terminate at some point (5 seconds).
   XHR.setRequestHeader req ("content-type" :: Text) ("application/json;charset=utf-8" :: Text)
   alreadyHandled <- liftIO $ newIORef False
-  respVar :: MVar [Text] <- newEmptyMVar
+  respVar :: MVar [RenderedOutput] <- newEmptyMVar
   void $ req `onAsync` XHR.readyStateChange $ do
     readyState <- XHR.getReadyState req
     status <- XHR.getStatus req
@@ -56,7 +56,7 @@ verifyModule namedMods mod' uri = do
       if readyState == 4 then (True, handled) else (handled, handled)
 
     when (readyState == 4 && not handled) $ do
-      er :: Either Text [Text] <- runExceptT $ do
+      er :: Either Text [RenderedOutput] <- runExceptT $ do
         when (status /= 200 && status /= 201) $
           throwE $ "Request failed with status: " <> (T.pack . show) status <> "(" <> statusText <> ")."
 
@@ -66,7 +66,7 @@ verifyModule namedMods mod' uri = do
         case A.decodeStrict $ T.encodeUtf8 raw of
           Nothing -> throwE $ "Parsing result from verification server: " <> raw
           Just (Remote.Response outputLines) -> pure outputLines
-      let r = either (pure . ("Error: " <>)) id er
+      let r = either (pure . renderFatal . ("Error: " <>)) id er
       liftIO $ putMVar respVar r
   XHR.sendString req jsonBody
   liftIO $ takeMVar respVar
