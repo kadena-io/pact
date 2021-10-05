@@ -270,10 +270,13 @@ library
       build-depends: unix
 
     if flag(cli-repl)
-      exposed-modules: Pact.Repl.Cli
+      exposed-modules:
+        Pact.Repl.Cli
+        Pact.Embed
       build-depends:
         , connection >= 0.3.1
         , http-client-tls >= 0.3.5.3
+        , template-haskell
         , qrcode-core
         , qrcode-juicypixels
         , JuicyPixels

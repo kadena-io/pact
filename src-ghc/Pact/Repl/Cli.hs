@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -62,6 +63,7 @@ import Text.Trifecta as TF hiding (line,err,try,newline)
 
 import Pact.ApiReq
 import Pact.Compile
+import Pact.Embed
 import Pact.Eval
 import Pact.Native
 -- intentionally hidden unused functions to prevent lib functions from consuming gas
@@ -571,7 +573,7 @@ compilePact cmd = case TF.parseString exprsOnly mempty (unpack cmd) of
       Left l -> evalError (peInfo l) (peDoc l)
 
 data CliConfig = CliConfig
-    { cliRepl :: FilePath
+    { cliRepl :: Maybe FilePath
     , preloads :: [FilePath]
     }
     deriving (Eq,Show,Generic)
@@ -579,12 +581,14 @@ instance FromJSON CliConfig
 
 instance Default CliConfig where
   def = CliConfig
-      { cliRepl = "cli/cli.repl"
+      { cliRepl = Nothing
       , preloads = [] }
 
 cliHelp :: String
 cliHelp = "YAML file with properties 'cliRepl' (location of cli.repl file) and 'preloads' (list of repls to pre-load)"
 
+cliModule :: String
+cliModule = BS.unpack $ $(embedFile "cli/cli.repl")
 
 loadCli :: Maybe FilePath -> Repl ()
 loadCli confm = case confm of
@@ -596,7 +600,10 @@ loadCli confm = case confm of
       -- add all lib and cli defs to natives
       rEnv . eeRefStore . rsNatives %=
         HM.union (moduleToMap ("",snd cliDefs <> snd replDefs))
-      void $ loadFile def cliRepl
+      void $ maybe
+        (evalRepl' cliModule)
+        (loadFile def)
+        cliRepl
       forM_ preloads (loadFile def)
 
     loadDotFile = do
