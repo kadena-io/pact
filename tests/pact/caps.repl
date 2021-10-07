@@ -778,3 +778,18 @@
  [{ "module-hash": (at 'hash (describe-module 'events))
   , "name": "events.MGD", "params": [1] }]
  (let ((a (emit-mgd))) (env-events true)))
+
+(module recursive_caps g
+  (defcap g () true)
+  (defcap FOO ()
+    (compose-capability (BAR)))
+  (defcap BAR ()
+    (compose-capability (BAZ)))
+  (defcap BAZ () true)
+  (defun go-recursive-caps ()
+    (with-capability (FOO)
+      (require-capability (BAZ))
+    )))
+
+(go-recursive-caps) ;; Run recursive cap acquisition
+
