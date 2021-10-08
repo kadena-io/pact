@@ -155,7 +155,7 @@ evalUserCapability i af scope cap cdef test = go scope
       Just composed -> emitCap >> installComposed (CapSlot scope cap composed)
 
     installComposed c =
-      evalCapabilities . capStack . _head . csComposed %= (_csCap c:)
+      evalCapabilities . capStack . _head . csComposed <>= (_csCap c:_csComposed c)
 
     push = pushSlot (CapSlot scope cap [])
 
