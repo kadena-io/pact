@@ -138,8 +138,8 @@ instance FromJSON PactError where
         Right ss -> ss
 
 -- | Lenient info parser that is empty on error
-parseInf :: Text -> Info
-parseInf t = case parseOnly parseRenderedInfo t of
+parseInfo :: Text -> Info
+parseInfo t = case parseOnly parseRenderedInfo t of
   Left _e -> def
   Right i -> i
 
@@ -179,7 +179,7 @@ instance ToJSON RenderedOutput where
 instance FromJSON RenderedOutput where
   parseJSON = withObject "RenderedOutput" $ \o -> RenderedOutput
       <$> o .: "text"
-      <*> (parseInf <$> o .: "info")
+      <*> (parseInfo <$> o .: "info")
       <*> o .: "type"
 
 renderWarn, renderFatal :: Text -> RenderedOutput
