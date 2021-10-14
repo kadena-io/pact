@@ -128,7 +128,7 @@ instance FromJSON PactError where
   parseJSON = withObject "PactError" $ \o -> do
     typ <- o .: "type"
     doc <- o .: "message"
-    inf <- parseInf <$> o .: "info"
+    inf <- parseInfo <$> o .: "info"
     sf <- parseSFs <$> o .: "callStack"
     pure $ PactError typ inf sf (prettyString doc)
     where
