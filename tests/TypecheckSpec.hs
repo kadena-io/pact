@@ -84,12 +84,11 @@ verifyModule fp mn = describe (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
     checkResult <- case mModules of
       Left err           -> die def (show err)
       Right (modules, _) -> Check.verifyModule def modules modul
-    pure $ case checkResult of
-      Right checkResult'
-        | not (Check.hasVerificationError checkResult')
-        -> pure ()
-      _ -> expectationFailure $ T.unpack $ mconcat $
-        Check.renderVerifiedModule checkResult
+    let ros = Check.renderVerifiedModule checkResult
+    pure $ if any ((== OutputFailure) . _roType) ros
+       then expectationFailure $ T.unpack $
+            "Verification errors found: " <> T.intercalate "\n" (map renderCompactText ros)
+       else pure ()
   it (moduleName mn ++ ": module verifies") success
 
 prettyFail :: Failure -> String

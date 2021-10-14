@@ -20,6 +20,19 @@ module Pact.Types.PactError
   ( StackFrame(..), sfName, sfLoc, sfApp
   , PactError(..)
   , PactErrorType(..)
+
+
+  , RenderedOutput(..)
+  , OutputType(..)
+  , roText
+  , roInfo
+  , roType
+  , renderWarn
+  , renderFatal
+  , _OutputFailure
+  , _OutputWarning
+  , _OutputTrace
+
   ) where
 
 
@@ -115,17 +128,20 @@ instance FromJSON PactError where
   parseJSON = withObject "PactError" $ \o -> do
     typ <- o .: "type"
     doc <- o .: "message"
-    inf <- parseInf <$> o .: "info"
+    inf <- parseInfo <$> o .: "info"
     sf <- parseSFs <$> o .: "callStack"
     pure $ PactError typ inf sf (prettyString doc)
     where
-      parseInf t = case parseOnly parseRenderedInfo t of
-        Left _e -> def
-        Right i -> i
       parseSFs :: [Text] -> [StackFrame]
       parseSFs sfs = case sequence (map (parseOnly parseStackFrame) sfs) of
         Left _e -> []
         Right ss -> ss
+
+-- | Lenient info parser that is empty on error
+parseInfo :: Text -> Info
+parseInfo t = case parseOnly parseRenderedInfo t of
+  Left _e -> def
+  Right i -> i
 
 instance Show PactError where
     show (PactError t i _ s) = show i ++ ": Failure: " ++ maybe "" (++ ": ") msg ++ show s
@@ -136,3 +152,40 @@ instance Show PactError where
               DbError -> Just "Database exception"
               SyntaxError -> Just "Syntax error"
               GasError -> Just "Gas Error"
+
+data OutputType =
+  OutputFailure |
+  OutputWarning |
+  OutputTrace
+  deriving (Show,Eq,Generic)
+instance ToJSON OutputType
+instance FromJSON OutputType
+
+-- | Tool warning/error output.
+data RenderedOutput = RenderedOutput
+  { _roText :: Text
+  , _roInfo :: Info
+  , _roType :: OutputType }
+  deriving (Eq,Show)
+
+instance Pretty RenderedOutput where
+  pretty (RenderedOutput t i f) = pretty (renderInfo i) <> ":" <> pretty (show f) <> ": " <> pretty t
+
+instance ToJSON RenderedOutput where
+  toJSON RenderedOutput {..} = object
+      [ "text" .= _roText
+      , "info" .= renderInfo _roInfo
+      , "type" .= _roType ]
+instance FromJSON RenderedOutput where
+  parseJSON = withObject "RenderedOutput" $ \o -> RenderedOutput
+      <$> o .: "text"
+      <*> (parseInfo <$> o .: "info")
+      <*> o .: "type"
+
+renderWarn, renderFatal :: Text -> RenderedOutput
+renderWarn t = RenderedOutput t def OutputWarning
+renderFatal t = RenderedOutput t def OutputFailure
+
+
+makeLenses ''RenderedOutput
+makePrisms ''OutputType

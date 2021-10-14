@@ -20,7 +20,6 @@ module Pact.Analyze.Check
   , describeCheckFailure
   , describeCheckResult
   , describeParseFailure
-  , describeVerificationWarnings
   , falsifyingModel
   , showModel
   , hasVerificationError
@@ -33,6 +32,7 @@ module Pact.Analyze.Check
   , SmtFailure(..)
   , ParseFailure
   , VerificationFailure(..)
+  , RenderedOutput(..)
 
   -- Exported just for inclusion in haddocks:
   , verifyFunctionProperty
@@ -40,21 +40,12 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception          as E
-import           Control.Lens               (at, each, filtered, ifoldl,
-                                             ifoldrM, ifor, itraversed, ix,
-                                             toListOf, traverseOf, traversed,
-                                             view, (%~), (&), (.~), (<&>), (?~),
-                                             (^.), (^..), (^?), (^?!), (^@..),
-                                             _2, _Left)
+import           Control.Lens hiding (DefName)
 import           Control.Monad
-import           Control.Monad.Except       (Except, ExceptT (ExceptT),
-                                             catchError, liftEither,
-                                             runExceptT, throwError,
-                                             withExcept, withExceptT)
+import           Control.Monad.Except
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.State.Strict (evalStateT)
-import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
 import           Data.Foldable              (foldl')
@@ -63,7 +54,7 @@ import           Data.List                  (isPrefixOf,nub)
 import qualified Data.List                  as List
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
-import           Data.Maybe                 (mapMaybe, catMaybes)
+import           Data.Maybe                 (mapMaybe)
 import           Data.SBV                   (Symbolic)
 import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Control           as SBV
@@ -81,6 +72,7 @@ import           Pact.Types.Lang            (pattern ColonExp, pattern CommaExp,
                                              dFunType, dMeta, mModel,
                                              renderInfo, tDef, tInfo, tMeta,
                                              _aName, _dMeta, _mModel, _tDef)
+import Pact.Types.PactError
 import           Pact.Types.Pretty          (renderCompactText)
 import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
                                              Ref, Ref' (Ref),
@@ -93,10 +85,10 @@ import           Pact.Types.Term            (DefName (..),
                                              moduleDefName, _Ref, _gGovernance)
 import           Pact.Types.Type            (ftArgs, _ftArgs)
 import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                             Named, Node, TcId (_tiInfo),
+                                             Named, Node,
                                              TopLevel (TopConst, TopFun, TopTable),
                                              UserType (..), Schema (_schFields, _schName),
-                                             runTC, tcFailures, toplevelInfo, DynEnv, mkTcState)
+                                             runTC, tcFailures, toplevelInfo, DynEnv, mkTcState, renderTcFailure)
 import qualified Pact.Types.Typecheck       as TC
 
 import           Pact.Analyze.Alloc         (runAlloc)
@@ -113,11 +105,11 @@ import           Pact.Analyze.Util
 newtype VerificationWarnings = VerificationWarnings [Text]
   deriving (Eq, Show)
 
-describeVerificationWarnings :: VerificationWarnings -> Text
+describeVerificationWarnings :: VerificationWarnings -> [Text]
 describeVerificationWarnings (VerificationWarnings dups) = case dups of
-  [] -> ""
-  _  -> "Warning: duplicated property definitions for " <>
-    T.intercalate ", " dups
+  [] -> []
+  _  -> ["Duplicated property definitions for " <>
+    T.intercalate ", " dups]
 
 data CheckSuccess
   = SatisfiedProperty (Model 'Concrete)
@@ -233,7 +225,7 @@ data VerificationFailure
 _describeCheckSuccess :: CheckSuccess -> Text
 _describeCheckSuccess = \case
   SatisfiedProperty model -> "Property satisfied with model:\n"
-                          <> showModel model
+                          <> fst (showModel model)
   ProvedTheorem           -> "Property proven valid"
 
 describeParseFailure :: ParseFailure -> Text
@@ -243,7 +235,11 @@ describeParseFailure (exp, info)
 
 describeSmtFailure :: SmtFailure -> Text
 describeSmtFailure = \case
-  Invalid model    -> "Invalidating model found:\n" <> showModel model
+  Invalid model    ->
+    let (desc,header) = showModel model
+    in case header of
+      Just h -> "Invalidating model found in " <> h <> "\n" <> desc
+      Nothing -> "Invalidating model found\n" <> desc
   Unsatisfiable    -> "This property is unsatisfiable"
   Unknown reason   -> "The solver returned 'unknown':\n" <> tShow reason
   SortMismatch msg -> T.unlines
@@ -262,7 +258,7 @@ describeUnknownFailure = \case
 
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
-  Invalid model  -> "Invalid model failure:\n" <> showModel model
+  Invalid model  -> "Invalid model failure:\n" <> fst (showModel model)
   Unknown reason -> describeUnknownFailure reason
   err@SortMismatch{} -> "(QueryFailure): " <> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
@@ -276,28 +272,22 @@ describeVacuousProperty = \case
   Unsatisfiable -> "Vacuous property encountered! There is no way for a transaction to succeed if this function is called from the top-level. Because all `property` expressions in Pact assume transaction success, in this case it would be possible to validate *any* `property`, even e.g. `false`."
   UnexpectedFailure smtE -> T.pack $ show smtE
 
-describeCheckFailure :: CheckFailure -> Text
+describeCheckFailure :: CheckFailure -> [RenderedOutput]
 describeCheckFailure (CheckFailure info failure) = case failure of
-  TypecheckFailure fails -> T.unlines $ map
-    (\(TC.Failure ti s) -> (prefix (_tiInfo ti) <> T.pack s))
-    (Set.toList fails)
-
-  _ ->
-    let str = case failure of
-          NotAFunction name     -> "No function named " <> name
-          TypecheckFailure _    -> error "impossible (handled above)"
-          TranslateFailure' err -> describeTranslateFailureNoLoc err
-          AnalyzeFailure' err   -> describeAnalyzeFailureNoLoc err
-          SmtFailure err        -> describeSmtFailure err
-          QueryFailure err      -> describeQueryFailure err
-          VacuousProperty err   -> describeVacuousProperty err
-    in prefix info <> str
+  TypecheckFailure fails -> map renderTcFailure $ Set.toList fails
+  NotAFunction name     -> fatal $ "No function named " <> name
+  TranslateFailure' err -> pure $ setInf $ describeTranslateFailureNoLoc err
+  AnalyzeFailure' err   -> fatal $ describeAnalyzeFailureNoLoc err
+  SmtFailure err        -> fatal $ describeSmtFailure err
+  QueryFailure err      -> fatal $ describeQueryFailure err
+  VacuousProperty err   -> fatal $ describeVacuousProperty err
 
   where
-    prefix info' = T.pack (renderInfo info') <> ":Warning: "
+    fatal = pure . setInf . renderFatal
+    setInf = set roInfo info
 
-describeCheckResult :: CheckResult -> Maybe Text
-describeCheckResult = either (Just . describeCheckFailure) (const Nothing)
+describeCheckResult :: CheckResult -> [RenderedOutput]
+describeCheckResult = either describeCheckFailure (const [])
 
 falsifyingModel :: CheckFailure -> Maybe (Model 'Concrete)
 falsifyingModel (CheckFailure _ (SmtFailure (Invalid m))) = Just m
@@ -1247,38 +1237,39 @@ verifyModule de modules moduleData@(ModuleData modDef allRefs) = runExceptT $ do
 
       pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
 
-renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
+-- | Produce errors/warnings from result.
+renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [RenderedOutput]
 renderVerifiedModule = \case
   Left (ModuleParseFailure failure)  ->
-    [describeParseFailure failure]
-  Left (ModuleCheckFailure checkFailure) ->
-    [describeCheckFailure checkFailure]
+    [renderFatal $ describeParseFailure failure]
+  Left (ModuleCheckFailure checkFailure) -> describeCheckFailure checkFailure
   Left (TypeTranslationFailure msg ty) ->
-    [msg <> ": " <> tShow ty]
+    [renderFatal $ msg <> ": " <> tShow ty]
   Left InvalidDirectReference ->
-    ["Invalid Direct reference given to typechecker instead of Ref"]
+    [renderFatal $ "Invalid Direct reference given to typechecker instead of Ref"]
   Left ExpectedConcreteModule ->
-    ["Expected concrete module but encountered an interface"]
+    [renderFatal $ "Expected concrete module but encountered an interface"]
   Left (NonDefTerm term) ->
-    ["Expected TDef Term but encountered: " <> tShow term]
+    [renderFatal $ "Expected TDef Term but encountered: " <> tShow term]
   Left (FailedConstTranslation msg) ->
-    [T.pack msg]
+    [renderFatal $ T.pack msg]
   Left (SchemalessTable info) ->
-    [T.pack (renderInfo info) <>
-      ":Warning: Verification requires all tables to have schemas"
+    [renderFatal $ T.pack (renderInfo info) <>
+      "Verification requires all tables to have schemas"
     ]
   Left (ModuleSpecInSchemaPosition mn) ->
-    ["Found modref spec in schema position: " <> renderCompactText mn
+    [renderFatal $ "Found modref spec in schema position: " <> renderCompactText mn
     ]
   Left (ScopeErrors errs) ->
-    ":Warning: Scope checking errors" : fmap describeScopeError errs
+    renderFatal <$> ("Scope checking errors" : fmap describeScopeError errs)
   Right (ModuleChecks propResults stepResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         stepResults'      = toListOf (traverse.each)          stepResults
         invariantResults' = toListOf (traverse.traverse.each) invariantResults
         allResults         = propResults' <> stepResults' <> invariantResults'
-    in (catMaybes $ fmap describeCheckResult allResults) <>
-         [describeVerificationWarnings warnings]
+    in (concatMap describeCheckResult allResults) <>
+         (renderWarn <$> describeVerificationWarnings warnings)
+
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck

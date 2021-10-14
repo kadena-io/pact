@@ -5,12 +5,12 @@
 -- | Types for remote verification of pact programs from GHCJS in the browser.
 module Pact.Analyze.Remote.Types where
 
-import           Control.Lens       (makeLenses)
-import qualified Data.Aeson         as A
-import           Data.Text          (Text)
-import           GHC.Generics
+import Control.Lens (makeLenses)
+import qualified Data.Aeson as A
+import GHC.Generics
 
-import           Pact.Types.Term    (ModuleDef, ModuleName, Name)
+import Pact.Types.Term (ModuleDef, ModuleName, Name)
+import Pact.Types.PactError
 
 data Request
   = Request [ModuleDef Name] ModuleName -- ^ verify one of the modules, by name
@@ -29,8 +29,8 @@ instance A.ToJSON Request where
 
 newtype Response
   = Response
-    { _responseLines :: [Text] -- ^ REPL output from the server, whether
-                               -- verification has failed or succeeded.
+    { _responseLines :: [RenderedOutput]
+      -- ^ Repl interactive output
     } deriving (Eq, Show, Generic)
 
 instance A.FromJSON Response where

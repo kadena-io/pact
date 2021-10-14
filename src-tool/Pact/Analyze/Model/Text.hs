@@ -274,15 +274,25 @@ showEvent ksProvs tags event = do
       -> Text
     display l ident f = maybe "[ERROR:missing tag]" f $ tags ^. l.at ident
 
-showModel :: Model 'Concrete -> Text
+showModel :: Model 'Concrete -> (Text,Maybe Text)
 showModel model =
-    T.intercalate "\n" $ T.intercalate "\n" . map indent1 <$>
+    (T.intercalate "\n" $ T.intercalate "\n" . map indent1 <$>
       [ ["Program trace:"]
       , indent1 <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
       , [maybe "\nTransaction aborted." (const "") mRetval]
       ]
+    ,firstEventDesc traceEvents)
 
   where
     ExecutionTrace traceEvents mRetval = linearize model
 
     showEvent' = showEvent (model ^. modelGuardProvs) (model ^. modelTags)
+
+    firstEventDesc (TracePushScope _ scopeTy _:_) = case scopeTy of
+      FunctionScope mn fn -> Just $ desc mn fn
+      PactScope mn fn -> Just $ desc mn fn
+      CapabilityScope _ (CapName capName) -> Just $ Pact.asString capName
+      _ -> Nothing
+    firstEventDesc _ = Nothing
+
+    desc mn fn = Pact.asString mn <> "." <> fn

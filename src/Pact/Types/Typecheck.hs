@@ -26,7 +26,7 @@ module Pact.Types.Typecheck
     VarRole (..),
     OverloadSpecial (..),
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
-    Failure (..),prettyFails,
+    Failure (..),prettyFails,renderTcFailure,
     TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,
     tcVarToTypes,tcYieldResume,tcDynEnv,
     DynEnv,
@@ -54,9 +54,10 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Control.Monad.State
 import Data.Foldable
-import Data.Text (Text, unpack)
+import Data.Text (Text, unpack, pack)
 
 import Pact.Types.Lang hiding (App,Object,Step,ModRef)
+import Pact.Types.PactError
 import Pact.Types.Runtime (ModuleData(..))
 import Pact.Types.Pretty
 import Pact.Types.Native
@@ -133,6 +134,9 @@ instance Pretty m => Pretty (Overload m) where
     ]
 
 data Failure = Failure TcId String deriving (Eq,Ord,Show)
+
+renderTcFailure :: Failure -> RenderedOutput
+renderTcFailure (Failure t m) = RenderedOutput (pack m) (_tiInfo t) OutputFailure
 
 data YieldResume n = YieldResume
   { _yrYield :: Maybe n

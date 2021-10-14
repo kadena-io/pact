@@ -67,6 +67,7 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 import Pact.Types.Pretty (renderCompactText)
+import Pact.Types.PactError
 
 -- * Translation types
 
@@ -107,37 +108,67 @@ data TranslateFailureNoLoc
   | UnscopedCapability CapName
   deriving (Eq, Show)
 
-describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
+describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> RenderedOutput
 describeTranslateFailureNoLoc = \case
-  BranchesDifferentTypes t1 t2 -> "two branches unexpectedly have different types: (" <> tShow t1 <> ") vs (" <> tShow t2 <> ")"
-  NonStringLitInBinding ast -> "We only support analysis of binding forms (bind / with-read) binding string literals. Instead we found " <> tShow ast
-  EmptyBody -> "can't translate an empty body"
-  MalformedArithOp op args -> "Unsupported arithmetic op " <> op <> " with args " <> tShow args
-  MalformedLogicalOp op args -> "Unsupported logical op " <> op <> " with args " <> tShow args
-  MalformedComparison op args -> "Unsupported comparison op " <> op <> " with args " <> tShow args
-  NotConvertibleToSchema ty -> "Expected a schema, but found " <> tShow ty
-  TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
-  UnexpectedNode ast -> "Analysis doesn't support this construct yet: " <> renderCompactText ast
-  UnexpectedPactNode ast -> "Unexpected node in translation of a pact: " <> tShow ast
-  MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
-  MonadFailure str -> "Translation failure: " <> T.pack str
-  NonStaticColumns col -> "We require all column (field) names to be concrete in order to do analysis. We found " <> tShow col
-  BadNegationType node -> "Invalid: negation of a non-integer / decimal: " <> tShow node
-  BadTimeType node -> "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
-  FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
-  NoKeys _node  -> "`keys` is not yet supported"
-  NoReadMsg _ -> "`read-msg` is not yet supported"
-  DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
-  SimpleTypeRequired -> "Lists are currently limited to holding simply-typed objects"
-  TypeError node -> "\"impossible\" post-typechecker type error in node: " <> tShow node
-  FreeVarInvariantViolation msg -> msg
-  UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
-  SortLiteralObjError msg tm -> T.pack $ msg ++ show tm
-  CapabilityNotFound (CapName cn) -> "Found a reference to capability that does not exist: " <> T.pack cn
-  BadPartialBind (EType objTy) columnNames -> "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
-  UnexpectedDefaultReadType (EType expected) (EType received) -> "Bad type in a `with-default-read`: we expected " <> tShow expected <> " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
-  UnsupportedNonFatal msg -> "Unsupported operation: " <> msg
-  UnscopedCapability (CapName cap) -> "Direct execution restricted by capability " <> T.pack cap
+  BranchesDifferentTypes t1 t2 ->
+    renderFatal $ "two branches unexpectedly have different types: (" <> tShow t1 <> ") vs (" <> tShow t2 <> ")"
+  NonStringLitInBinding ast ->
+    renderFatal $ "We only support analysis of binding forms (bind / with-read) binding string literals. Instead we found " <> tShow ast
+  EmptyBody ->
+    renderFatal $ "can't translate an empty body"
+  MalformedArithOp op args ->
+    renderFatal $ "Unsupported arithmetic op " <> op <> " with args " <> tShow args
+  MalformedLogicalOp op args ->
+    renderFatal $ "Unsupported logical op " <> op <> " with args " <> tShow args
+  MalformedComparison op args ->
+    renderFatal $ "Unsupported comparison op " <> op <> " with args " <> tShow args
+  NotConvertibleToSchema ty ->
+    renderFatal $ "Expected a schema, but found " <> tShow ty
+  TypeMismatch ty1 ty2 ->
+    renderFatal $ "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
+  UnexpectedNode ast ->
+    renderFatal $ "Analysis doesn't support this construct yet: " <> renderCompactText ast
+  UnexpectedPactNode ast ->
+    renderFatal $ "Unexpected node in translation of a pact: " <> tShow ast
+  MissingConcreteType ty ->
+    renderFatal $ "The typechecker should always produce a concrete type, but we found " <> tShow ty
+  MonadFailure str ->
+    renderFatal $ "Translation failure: " <> T.pack str
+  NonStaticColumns col ->
+    renderFatal $ "We require all column (field) names to be concrete in order to do analysis. We found " <> tShow col
+  BadNegationType node ->
+    renderFatal $ "Invalid: negation of a non-integer / decimal: " <> tShow node
+  BadTimeType node ->
+    renderFatal $ "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
+  FailedVarLookup varName ->
+    renderFatal $ "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
+  NoKeys _node  ->
+    renderFatal $ "`keys` is not yet supported"
+  NoReadMsg _ ->
+    renderFatal $ "`read-msg` is not yet supported"
+  DeprecatedList node ->
+    renderFatal $ "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
+  SimpleTypeRequired ->
+    renderFatal $ "Lists are currently limited to holding simply-typed objects"
+  TypeError node ->
+    renderFatal $ "\"impossible\" post-typechecker type error in node: " <> tShow node
+  FreeVarInvariantViolation msg ->
+    renderFatal $ msg
+  UnhandledType node ty ->
+    renderFatal $ "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
+  SortLiteralObjError msg tm ->
+    renderFatal $ T.pack $ msg ++ show tm
+  CapabilityNotFound (CapName cn) ->
+    renderFatal $ "Found a reference to capability that does not exist: " <> T.pack cn
+  BadPartialBind (EType objTy) columnNames ->
+    renderFatal $ "Couldn't extract fields " <> tShow columnNames <> " from object of type " <> tShow objTy
+  UnexpectedDefaultReadType (EType expected) (EType received) ->
+    renderFatal $ "Bad type in a `with-default-read`: we expected " <> tShow expected <>
+    " (the type of the provided default), but saw " <> tShow received <> " (based on the fields that were bound)."
+  UnsupportedNonFatal msg ->
+    renderWarn $ "Unsupported operation: " <> msg
+  UnscopedCapability (CapName cap) ->
+    renderWarn $ "Direct execution restricted by capability " <> T.pack cap
 
 
 data TranslateEnv

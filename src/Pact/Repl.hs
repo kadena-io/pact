@@ -271,7 +271,7 @@ updateForOp i a = do
                     let verifyUri = _rlsVerifyUri replState
                     (initReplState mode verifyUri >>= put >> void useReplLib)
                   (a <$) <$> loadFile i fp
-    TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
+    Output es -> forM_ es (outStrLn HErr . renderPrettyString RColor) >> return (Right a)
     Print t -> do
       let rep = case t of TLitString s -> unpack s
                           _ -> show t
