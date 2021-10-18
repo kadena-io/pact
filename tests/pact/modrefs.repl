@@ -169,6 +169,17 @@
 
 )
 
+(interface dyn-recursive (defun f:bool ()))
+
+(module dyn-recursion-test g (defcap g () true)
+  (implements dyn-recursive)
+  (defschema s-recursive mr:module{dyn-recursive})
+  (deftable t-recursive:{s-recursive})
+  (defun f:bool () (let ((mr:module{dyn-recursive} (at 'mr (read t-recursive "")))) (mr::f)))
+  )
+(create-table t-recursive)
+(insert t-recursive "" { 'mr: dyn-recursion-test })
+
 ; implC tests
 
 (expect
@@ -197,6 +208,11 @@
 (expect-failure
   "module reference to unscoped cap fails - implD"
   (test-caps.test2 implD))
+
+(expect-failure "module references + late binding should not work as an escape to have recursive calls"
+  "Detected recursive call: dyn-recursion-test.f"
+  (dyn-recursion-test.f)
+  )
 
 
 ;; test modules in interfaces
