@@ -830,10 +830,10 @@ evalUserAppBody d@Def{..} (as',ft') ai g run =
   where
     isRecursiveAppCall (StackFrame sfn _ app) =
       sfn == fname && (_faModule . fst <$> app) == Just (Just _dModule)
-    guardRecursion act = do
-      hasRecursiveCall <- uses evalCallStack (any isRecursiveAppCall)
-      if hasRecursiveCall then evalError _dInfo $ "Detected recursive call:" <+> pretty _dModule <> "." <> pretty fname
-      else act
+    guardRecursion act =
+      uses evalCallStack (find isRecursiveAppCall) >>= \case
+        Nothing -> act
+        Just (StackFrame _ si _) -> evalError si $ "Detected recursive call:" <+> pretty _dModule <> "." <> pretty fname
     fname = asString _dDefName
     bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
     fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
