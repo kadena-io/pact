@@ -169,6 +169,40 @@
 
 )
 
+
+; Simple dynamic recursion.
+(interface dyn-recursive (defun f:bool ()))
+
+(module dyn-recursion-test g (defcap g () true)
+  (implements dyn-recursive)
+  (defschema s-recursive mr:module{dyn-recursive})
+  (deftable t-recursive:{s-recursive})
+  (defun f:bool () (let ((mr:module{dyn-recursive} (at 'mr (read t-recursive "")))) (mr::f)))
+  )
+(create-table t-recursive)
+(insert t-recursive "" { 'mr: dyn-recursion-test })
+
+; Nested Dynamic recursion
+
+(module dyn-recursion-nested1 g (defcap g () true)
+  (implements dyn-recursive)
+  (defun f:bool () (let ((mr:module{dyn-recursive} (at 'mr (read t-recursive "nested-1")))) (mr::f)))
+  )
+
+(module dyn-recursion-nested2 g (defcap g () true)
+  (implements dyn-recursive)
+  (defun f:bool () (let ((mr:module{dyn-recursive} (at 'mr (read t-recursive "nested-2")))) (mr::f)))
+  )
+
+(module dyn-recursion-nested3 g (defcap g () true)
+  (implements dyn-recursive)
+  (defun f:bool () (let ((mr:module{dyn-recursive} (at 'mr (read t-recursive "nested-3")))) (mr::f)))
+  )
+
+(insert t-recursive "nested-1" { 'mr: dyn-recursion-nested2 })
+(insert t-recursive "nested-2" { 'mr: dyn-recursion-nested3 })
+(insert t-recursive "nested-3" { 'mr: dyn-recursion-nested1 })
+
 ; implC tests
 
 (expect
@@ -197,6 +231,16 @@
 (expect-failure
   "module reference to unscoped cap fails - implD"
   (test-caps.test2 implD))
+
+(expect-failure "module references + late binding should not work as an escape to have recursive calls"
+  "Detected recursive call:"
+  (dyn-recursion-test.f)
+  )
+
+(expect-failure "module references + late binding should not work as an escape to have recursive calls - nested edition"
+  "Detected recursive call:"
+  (dyn-recursion-nested1.f)
+  )
 
 
 ;; test modules in interfaces

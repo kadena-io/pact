@@ -826,10 +826,17 @@ prepareUserAppArgs Def{..} args i = do
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
 evalUserAppBody d@Def{..} (as',ft') ai g run =
-    eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+  guardRecursion $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
   where
+    isRecursiveAppCall (StackFrame sfn _ app) =
+      sfn == fname && (_faModule . fst <$> app) == Just (Just _dModule)
+    guardRecursion act =
+      uses evalCallStack (find isRecursiveAppCall) >>= \case
+        Nothing -> act
+        Just (StackFrame _ si _) -> evalError si $ "Detected recursive call:" <+> pretty _dModule <> "." <> pretty fname
+    fname = asString _dDefName
     bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
-    fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+    fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
 
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
