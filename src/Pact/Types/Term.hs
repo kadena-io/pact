@@ -51,7 +51,6 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    BindPair(..),bpArg,bpVal,toBindPairs,
-   LamBindPair(..),lbpArg, lbpVal,
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
@@ -363,27 +362,10 @@ instance Pretty n => Pretty (BindPair n) where
   pretty (BindPair arg body) = pretty arg <+> pretty body
 
 instance NFData n => NFData (BindPair n)
-instance NFData n => NFData (LamBindPair n)
 
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
-data LamBindPair n
-  = LamBindPair
-  { _lbpArg :: !(Arg (Term n))
-  , _lbpVal :: !(Scope Int Term n) }
-  deriving (Functor,Traversable,Foldable,Generic)
-
-deriving instance (Show1 Term, Show n) => Show (LamBindPair n)
-deriving instance (Eq1 Term, Eq n) => Eq (LamBindPair n)
-
-instance Pretty n => Pretty (LamBindPair n) where
-  pretty (LamBindPair arg _) = pretty arg <+> undefined -- todo pretty body
-
-instance ToJSON n => ToJSON (LamBindPair n) where toJSON = undefined
-  -- lensyToJSON 3
-instance FromJSON n => FromJSON (LamBindPair n) where parseJSON = undefined
-  -- lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
 -- App
@@ -1519,7 +1501,6 @@ makeLenses ''FunApp
 makePrisms ''Ref'
 makeLenses ''Def
 makeLenses ''Object
-makeLenses ''LamBindPair
 makeLenses ''Term
 
 -- This noop TH splice is required to ensure that all types that are defined
@@ -1562,8 +1543,6 @@ instance Eq1 Def where
   liftEq = $(makeLiftEq ''Def)
 instance Eq1 Object where
   liftEq = $(makeLiftEq ''Object)
-instance Eq1 LamBindPair where
-  liftEq = $(makeLiftEq ''LamBindPair)
 instance Eq1 Term where
   liftEq = $(makeLiftEq ''Term)
 
@@ -1601,7 +1580,5 @@ instance Show1 Def where
   liftShowsPrec = $(makeLiftShowsPrec ''Def)
 instance Show1 Object where
   liftShowsPrec = $(makeLiftShowsPrec ''Object)
-instance Show1 LamBindPair where
-  liftShowsPrec = $(makeLiftShowsPrec ''LamBindPair)
 instance Show1 Term where
   liftShowsPrec = $(makeLiftShowsPrec ''Term)

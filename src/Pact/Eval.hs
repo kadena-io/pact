@@ -737,9 +737,10 @@ reduceLet ps bod i = do
   ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
   -- typecheck ps'
   reduceBody (instantiate (resolveArg i (map (either id mkDirect . snd) ps')) bod)
-  where
-  reduceLam t@TLam{} = Left <$> pure t
-  reduceLam t = Right <$> reduce t
+
+reduceLam :: Term Ref -> Eval e (Either (Term Ref) (Term Name))
+reduceLam t@TLam{} = Left <$> pure t
+reduceLam t = Right <$> reduce t
 
 
 {-# INLINE resolveArg #-}
@@ -752,12 +753,12 @@ appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
 
-enforcePactValue :: (Term Name) -> Eval e PactValue
+enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
 enforcePactValue t = case toPactValue t of
   Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
   Right v -> return v
 
-enforcePactValue' :: Traversable f => f (Term Name) -> Eval e (f PactValue)
+enforcePactValue' :: (Pretty n, Traversable f) => f (Term n) -> Eval e (f PactValue)
 enforcePactValue' = traverse enforcePactValue
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
@@ -765,25 +766,40 @@ reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
-  af <- prepareUserAppArgs d as ai
-  evalUserAppBody d af ai g $ \bod' ->
+  as' <- fmap (either id mkDirect) <$> mapM reduceLam as
+  ft' <- traverse reduce _dFunType
+  let bod' = instantiate (resolveArg ai as') _dDefBody
+      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  appCall fa ai as' $ fmap (g,) $
     case _dDefType of
       Defun -> reduceBody bod'
       Defpact -> do
         continuation <-
           PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
           . map elideModRefInfo
-          <$> enforcePactValue' (fst af)
+          <$> enforcePactValue' as'
         initPact ai continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
+  -- af <- prepareUserAppArgs d as ai
+  -- evalUserAppBody d af ai g $ \bod' ->
+    -- case _dDefType of
+    --   Defun -> reduceBody bod'
+    --   Defpact -> do
+    --     continuation <-
+    --       PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
+    --       . map elideModRefInfo
+    --       <$> enforcePactValue' (fst af)
+    --     initPact ai continuation bod'
+    --   Defcap ->
+    --     evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLam (lamName, _) funTy body _) as ai) = do
   gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
-  reducedArgs <- mapM reduce as
+  reducedArgs <- mapM reduceLam as
   ft' <- traverse reduce funTy
-  let bod = instantiate (resolveArg ai (map mkDirect reducedArgs)) body
+  let bod = instantiate (resolveArg ai (either id mkDirect <$> reducedArgs)) body
       fa = FunApp ai (asString lamName) Nothing Defun (funTypes ft') Nothing
-  appCall fa ai reducedArgs $ fmap (gas,) $ reduceBody bod
+  appCall fa ai as $ fmap (gas,) $ reduceBody bod
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of
@@ -891,7 +907,7 @@ applyPact i app (TList steps _ _) PactStep {..} = do
   executePrivate <- traverse reduce (_sEntity step) >>= traverse (\stepEntity -> case stepEntity of
     (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
       Just (EntityName en) -> return $ (se == en) -- execute if req entity matches context entity
-      Nothing -> evalError' step "applyPact: private step executed against non-private environment"
+      Nothing -> evalError' step "applyPact: private step executed against non-private envieonment"
     t -> evalError' t "applyPact: step entity must be String value")
 
   let stepCount = length steps

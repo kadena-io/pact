@@ -160,7 +160,7 @@ instance SizeOf PactValue where
 
 
 -- | Strict conversion.
-toPactValue :: Term Name -> Either Text PactValue
+toPactValue :: Pretty n => Term n -> Either Text PactValue
 toPactValue (TLiteral l _) = pure $ PLiteral l
 toPactValue (TObject (Object o _ _ _) _) = PObject <$> traverse toPactValue o
 toPactValue (TList l _ _) = PList <$> V.mapM toPactValue l
