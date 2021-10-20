@@ -696,6 +696,7 @@ reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
+reduce TLam{..} = evalError _tInfo "Cannot reduce bound lambda"
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = toTerm <$> compatPretty t
 reduce t@TNative {} = toTerm <$> compatPretty t
@@ -733,9 +734,12 @@ reduceBody t = evalError (_tInfo t) "Expected body forms"
 
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduce t) ps
-  typecheck ps'
-  reduceBody (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
+  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
+  -- typecheck ps'
+  reduceBody (instantiate (resolveArg i (map (either id mkDirect . snd) ps')) bod)
+  where
+  reduceLam t@TLam{} = Left <$> pure t
+  reduceLam t = Right <$> reduce t
 
 
 {-# INLINE resolveArg #-}
@@ -773,6 +777,13 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
         initPact ai continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
+reduceApp (App (TLam (lamName, _) funTy body _) as ai) = do
+  gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
+  reducedArgs <- mapM reduce as
+  ft' <- traverse reduce funTy
+  let bod = instantiate (resolveArg ai (map mkDirect reducedArgs)) body
+      fa = FunApp ai (asString lamName) Nothing Defun (funTypes ft') Nothing
+  appCall fa ai reducedArgs $ fmap (gas,) $ reduceBody bod
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of
@@ -846,7 +857,12 @@ reduceDirect TNative {..} as ai =
     eAdvise ai (AdviceNative _tNativeName) $ dup
         $ appCall fa ai as
         $ _nativeFun _tNativeFun fa as
-
+reduceDirect (TLam (lamName, _) funTy body _) as ai = do
+  gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
+  reducedArgs <- mapM reduce as
+  let bod = instantiate (resolveArg ai reducedArgs) body
+      fa = FunApp ai (asString lamName) Nothing Defun (funTypes funTy) Nothing
+  appCall fa ai reducedArgs $ pure (gas, bod)
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 

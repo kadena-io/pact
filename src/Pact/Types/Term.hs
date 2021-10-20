@@ -51,6 +51,7 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    BindPair(..),bpArg,bpVal,toBindPairs,
+   LamBindPair(..),lbpArg, lbpVal,
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
@@ -77,7 +78,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,
    tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
-   tDynModRef,tDynMember,tModRef,
+   tDynModRef,tDynMember,tModRef,tLamArg,tLamTy,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -362,9 +363,27 @@ instance Pretty n => Pretty (BindPair n) where
   pretty (BindPair arg body) = pretty arg <+> pretty body
 
 instance NFData n => NFData (BindPair n)
+instance NFData n => NFData (LamBindPair n)
 
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
+
+data LamBindPair n
+  = LamBindPair
+  { _lbpArg :: !(Arg (Term n))
+  , _lbpVal :: !(Scope Int Term n) }
+  deriving (Functor,Traversable,Foldable,Generic)
+
+deriving instance (Show1 Term, Show n) => Show (LamBindPair n)
+deriving instance (Eq1 Term, Eq n) => Eq (LamBindPair n)
+
+instance Pretty n => Pretty (LamBindPair n) where
+  pretty (LamBindPair arg _) = pretty arg <+> undefined -- todo pretty body
+
+instance ToJSON n => ToJSON (LamBindPair n) where toJSON = undefined
+  -- lensyToJSON 3
+instance FromJSON n => FromJSON (LamBindPair n) where parseJSON = undefined
+  -- lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
 -- App
@@ -1059,6 +1078,12 @@ data Term n =
     , _tBindType :: !(BindType (Type (Term n)))
     , _tInfo :: !Info
     } |
+    TLam {
+      _tLamArg :: !(Text, Info)
+    , _tLamTy  :: !(FunType (Term n))
+    , _tBindBody :: !(Scope Int Term n)
+    , _tInfo :: !Info
+    } |
     TObject {
       _tObject :: !(Object n)
     , _tInfo :: !Info
@@ -1123,6 +1148,7 @@ instance HasInfo (Term n) where
     TNative{..} -> _tInfo
     TObject{..} -> getInfo _tObject
     TSchema{..} -> _tInfo
+    TLam{..} -> _tInfo
     TStep{..} -> _tInfo
     TTable{..} -> _tInfo
     TUse{..} -> getInfo _tUse
@@ -1163,6 +1189,7 @@ instance Pretty n => Pretty (Term n) where
       [ commaBraces $ fmap pretty pairs
       , pretty $ unscope body
       ]
+    TLam _ _ _ _ -> undefined
     TObject o _ -> pretty o
     TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
@@ -1205,6 +1232,8 @@ instance Monad Term where
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f =
       TBinding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
+    TLam arg ty b i >>= f =
+      TLam arg (fmap (>>= f) ty) (b >>>= f) i
     TObject (Object bs t kf oi) i >>= f =
       TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
@@ -1238,6 +1267,7 @@ termCodec = Codec enc dec
       TBinding bs b c i -> ob [pairs .= bs, body .= b, type' .= c, inf i]
       TObject o _i -> toJSON o
       TLiteral l i -> ob [literal .= l, inf i]
+      TLam _ _ _ _ -> undefined
       TGuard k i -> ob [guard' .= k, inf i]
       TUse u _i -> toJSON u
       TStep s tmeta i -> ob [body .= s, meta .= tmeta, inf i]
@@ -1396,6 +1426,7 @@ typeof t = case t of
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt def
+      TLam{..} -> Right $ TyFun _tLamTy
       TObject (Object {..}) _ -> Right $ TySchema TyObject _oObjectType def
       TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
       TUse {} -> Left "use"
@@ -1488,6 +1519,7 @@ makeLenses ''FunApp
 makePrisms ''Ref'
 makeLenses ''Def
 makeLenses ''Object
+makeLenses ''LamBindPair
 makeLenses ''Term
 
 -- This noop TH splice is required to ensure that all types that are defined
@@ -1530,6 +1562,8 @@ instance Eq1 Def where
   liftEq = $(makeLiftEq ''Def)
 instance Eq1 Object where
   liftEq = $(makeLiftEq ''Object)
+instance Eq1 LamBindPair where
+  liftEq = $(makeLiftEq ''LamBindPair)
 instance Eq1 Term where
   liftEq = $(makeLiftEq ''Term)
 
@@ -1567,5 +1601,7 @@ instance Show1 Def where
   liftShowsPrec = $(makeLiftShowsPrec ''Def)
 instance Show1 Object where
   liftShowsPrec = $(makeLiftShowsPrec ''Object)
+instance Show1 LamBindPair where
+  liftShowsPrec = $(makeLiftShowsPrec ''LamBindPair)
 instance Show1 Term where
   liftShowsPrec = $(makeLiftShowsPrec ''Term)

@@ -875,6 +875,7 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
+toAST TLam{} = undefined
 toAST TModRef{..} = do
   tcid <- freshId _tInfo $ renderCompactText _tModRef
 
