@@ -735,8 +735,8 @@ reduceBody t = evalError (_tInfo t) "Expected body forms"
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
   ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
-  -- typecheck ps'
-  reduceBody (instantiate (resolveArg i (map (either id mkDirect . snd) ps')) bod)
+  typecheck $ fmap (\(l, r) -> (fmap mkDirect l, either id mkDirect r)) ps'
+  reduceBody (instantiate (resolveArg i (fmap (either id mkDirect . snd) ps')) bod)
 
 reduceLam :: Term Ref -> Eval e (Either (Term Ref) (Term Name))
 reduceLam t@TLam{} = Left <$> pure t
@@ -767,6 +767,7 @@ reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
   as' <- fmap (either id mkDirect) <$> mapM reduceLam as
+  typecheckArgs ai _dDefName _dFunType as'
   ft' <- traverse reduce _dFunType
   let bod' = instantiate (resolveArg ai as') _dDefBody
       fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
@@ -781,18 +782,6 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
         initPact ai continuation bod'
       Defcap ->
         evalError ai "Cannot directly evaluate defcap"
-  -- af <- prepareUserAppArgs d as ai
-  -- evalUserAppBody d af ai g $ \bod' ->
-    -- case _dDefType of
-    --   Defun -> reduceBody bod'
-    --   Defpact -> do
-    --     continuation <-
-    --       PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
-    --       . map elideModRefInfo
-    --       <$> enforcePactValue' (fst af)
-    --     initPact ai continuation bod'
-    --   Defcap ->
-    --     evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLam (lamName, _) funTy body _) as ai) = do
   gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
   reducedArgs <- mapM reduceLam as

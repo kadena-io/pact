@@ -1171,7 +1171,8 @@ instance Pretty n => Pretty (Term n) where
       [ commaBraces $ fmap pretty pairs
       , pretty $ unscope body
       ]
-    TLam _ _ _ _ -> undefined
+    TLam (arg, _) ty _ _ ->
+      pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> (parensSep $ pretty <$> _ftArgs ty)
     TObject o _ -> pretty o
     TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
@@ -1249,7 +1250,8 @@ termCodec = Codec enc dec
       TBinding bs b c i -> ob [pairs .= bs, body .= b, type' .= c, inf i]
       TObject o _i -> toJSON o
       TLiteral l i -> ob [literal .= l, inf i]
-      TLam _ _ _ _ -> undefined
+      TLam (arg, arginfo) ty lambody laminf ->
+        ob ["lambind" .= (arg, arginfo), "lamty" .= ty , body .= toJSON lambody , inf laminf]
       TGuard k i -> ob [guard' .= k, inf i]
       TUse u _i -> toJSON u
       TStep s tmeta i -> ob [body .= s, meta .= tmeta, inf i]
@@ -1284,6 +1286,8 @@ termCodec = Codec enc dec
         <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
         <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
         <|> parseWithInfo TUse
+        <|> wo "Lam"
+          (\o -> TLam <$> o .: "lambind" <*> o .: "lamty" <*> o .: body <*> inf' o)
         <|> wo "Step"
             (\o -> TStep <$> o .: body <*> o .: meta <*> inf' o)
        --  parseWithInfo TStep

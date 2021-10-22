@@ -101,7 +101,7 @@ data Reserved =
   | RInterface
   | RLet
   | RLetStar
-  | RFLet
+  | RLambda
   | RModule
   | RStep
   | RStepWithRollback
@@ -124,7 +124,7 @@ instance AsString Reserved where
     RInterface -> "interface"
     RLet -> "let"
     RLetStar -> "let*"
-    RFLet -> "flet"
+    RLambda -> "lambda"
     RModule -> "module"
     RStep -> "step"
     RStepWithRollback -> "step-with-rollback"
@@ -221,7 +221,6 @@ topLevel = specialFormOrApp topLevelForm <|> literals <|> varAtom  where
     RUse -> return useForm
     RLet -> return letForm
     RLetStar -> return letsForm
-    RFLet -> return fletForm
     RModule -> return moduleForm
     RInterface -> return interface
     _ -> expected "top-level form (use, let[*], module, interface)"
@@ -231,7 +230,6 @@ valueLevel :: Compile (Term Name)
 valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
   valueLevelForm r = case r of
     RLet -> return letForm
-    RFLet -> return fletForm
     RLetStar -> return letsForm
     RWithCapability -> return withCapability
     _ -> expected "value level form (let, let*)"
@@ -552,9 +550,21 @@ stepWithRollback = do
 
 
 letBindings :: Compile [BindPair (Term Name)]
-letBindings = withList' Parens $
-              some $ withList' Parens $
-              BindPair <$> arg <*> valueLevel
+letBindings =
+  withList' Parens $ some $ withList' Parens $ do
+    a <- arg
+    lam a <|> regularBind a
+  where
+  regularBind arg' =
+    BindPair arg' <$> valueLevel
+  lam (Arg name ty info) = try reservedAtom >>= \case
+    RLambda -> do
+      args <- withList' Parens $ many arg
+      let funTy = FunType args ty
+      lamValue <- TLam (name, info) funTy <$> abstractBody valueLevel args <*> contextInfo
+      pure (BindPair (Arg name (TyFun funTy) info) lamValue)
+    _ -> expected "impossible"
+
 
 abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)
 abstractBody term args = abstractBody' args =<< bodyForm term
@@ -584,22 +594,22 @@ abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames)
       return $ ModuleName mn (Just $ NamespaceName ns)
     ifVarName _ = expected "interface reference"
 
-fletForm :: Compile (Term Name)
-fletForm = do
-  bindings <- fletBindings
-  TBinding bindings
-    <$> abstractBody valueLevel (map _bpArg bindings)
-    <*> pure BindLet
-    <*> contextInfo
-  where
-  fletBindings =
-    withList' Parens $
-    some $ withList' Parens $ do
-      (AtomExp{..}, returnTy) <- typedAtom
-      args <- withList' Parens $ many arg
-      let funTy = FunType args returnTy
-      lamValue <- TLam (_atomAtom, _atomInfo) funTy <$> abstractBody valueLevel args <*> contextInfo
-      pure (BindPair (Arg _atomAtom (TyFun funTy) _atomInfo) lamValue)
+-- fletForm :: Compile (Term Name)
+-- fletForm = do
+--   bindings <- fletBindings
+--   TBinding bindings
+--     <$> abstractBody valueLevel (map _bpArg bindings)
+--     <*> pure BindLet
+--     <*> contextInfo
+--   where
+--   fletBindings =
+--     withList' Parens $
+--     some $ withList' Parens $ do
+--       (AtomExp{..}, returnTy) <- typedAtom
+--       args <- withList' Parens $ many arg
+--       let funTy = FunType args returnTy
+--       lamValue <- TLam (_atomAtom, _atomInfo) funTy <$> abstractBody valueLevel args <*> contextInfo
+--       pure (BindPair (Arg _atomAtom (TyFun funTy) _atomInfo) lamValue)
 
 letForm :: Compile (Term Name)
 letForm = do
