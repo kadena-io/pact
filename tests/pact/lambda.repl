@@ -11,15 +11,15 @@
 
 (expect "higher order function application works for lambdas"
   11
-  (let ((fHOF lambda (f  a) (f a)) (g lambda (x) x)) (fHOF g 11))
+  (let ((fHOF (lambda (f  a) (f a))) (g (lambda (x) x))) (fHOF g 11))
   )
 
 (expect "higher order function application works for lambda passed tdefs"
   13
-  (let ((fHOF lambda (f  a) (f a))) (fHOF add2 11))
+  (let ((fHOF (lambda (f  a) (f a)))) (fHOF add2 11))
   )
 
 (expect "higher order function application works for defs passed in lambdass"
   4
-  (let ((f lambda (a) (+ a a))) (appHOF f 2))
+  (let ((f (lambda (a) (+ a a)))) (appHOF f 2))
   )

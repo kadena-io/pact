@@ -557,7 +557,7 @@ letBindings =
   where
   regularBind arg' =
     BindPair arg' <$> valueLevel
-  lam (Arg name ty _) = try reservedAtom >>= \case
+  lam (Arg name ty _) = try $ withList' Parens $ reservedAtom >>= \case
     RLambda -> do
       args <- withList' Parens $ many arg
       let funTy = FunType args ty
