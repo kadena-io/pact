@@ -73,11 +73,11 @@ typecheckDef def defTy funTy = validateArgCount >> tcReturn >> tcArgs
 
 -- | Typecheck applied args against a FunType from some Def.
 typecheckArgs
-  :: (HasInfo i)
+  :: HasInfo i
   => i
   -> DefName
   -> FunType (Term Name)
-  -> [(Term Name)]
+  -> [Term Name]
   -> Eval e ()
 typecheckArgs i defName ft' as' = do
   let params = _ftArgs ft'

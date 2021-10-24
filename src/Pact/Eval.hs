@@ -786,18 +786,6 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
     Defcap -> evalError ai "Cannot directly evaluate defcap"
-  -- af <- prepareUserAppArgs d as ai
-  -- evalUserAppBody d af ai g $ \bod' ->
-  --   case _dDefType of
-  --     Defun -> reduceBody bod'
-  --     Defpact -> do
-  --       continuation <-
-  --         PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
-  --         . map elideModRefInfo
-  --         <$> enforcePactValue' (fst af)
-  --       initPact ai continuation bod'
-      -- Defcap ->
-      --   evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLam lamName funTy body _) as ai) = do
   gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
   reducedArgs <- mapM reduceLam as
@@ -857,7 +845,7 @@ prepareUserAppArgs Def{..} args i = do
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
-evalUserAppBody d@Def{..} (as',ft') ai g run = do
+evalUserAppBody d@Def{..} (as',ft') ai g run =
   eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
   where
   bod' = instantiate (resolveArg ai (mkDirect <$> as')) _dDefBody
@@ -879,8 +867,7 @@ typecheckArgs' i defName ft' as' = do
   typecheck' (zip params as')
 
 typecheck'
-  :: Foldable t
-  => t (Arg (Term Ref), Either (Term Ref) (Term Name))
+  :: [(Arg (Term Ref), Either (Term Ref) (Term Name))]
   -> Eval e ()
 typecheck' ps = foldM_ tvarCheck M.empty ps where
   -- This is a bit of a hack, but we cannot reduce lambdas and `TDef`s,
@@ -959,7 +946,7 @@ applyPact i app (TList steps _ _) PactStep {..} = do
   executePrivate <- traverse reduce (_sEntity step) >>= traverse (\stepEntity -> case stepEntity of
     (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
       Just (EntityName en) -> return $ (se == en) -- execute if req entity matches context entity
-      Nothing -> evalError' step "applyPact: private step executed against non-private envieonment"
+      Nothing -> evalError' step "applyPact: private step executed against non-private environment"
     t -> evalError' t "applyPact: step entity must be String value")
 
   let stepCount = length steps
