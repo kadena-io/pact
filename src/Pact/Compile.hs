@@ -557,11 +557,12 @@ letBindings =
   where
   regularBind arg' =
     BindPair arg' <$> valueLevel
-  lam (Arg name ty info) = try reservedAtom >>= \case
+  lam (Arg name ty _) = try reservedAtom >>= \case
     RLambda -> do
       args <- withList' Parens $ many arg
       let funTy = FunType args ty
-      lamValue <- TLam (name, info) funTy <$> abstractBody valueLevel args <*> contextInfo
+      info <- contextInfo
+      lamValue <- TLam name funTy <$> abstractBody valueLevel args <*> pure info
       pure (BindPair (Arg name (TyFun funTy) info) lamValue)
     _ -> expected "impossible"
 
@@ -593,23 +594,6 @@ abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames)
     ifVarName (TVar (QName (QualifiedName (ModuleName ns Nothing) mn _)) _) =
       return $ ModuleName mn (Just $ NamespaceName ns)
     ifVarName _ = expected "interface reference"
-
--- fletForm :: Compile (Term Name)
--- fletForm = do
---   bindings <- fletBindings
---   TBinding bindings
---     <$> abstractBody valueLevel (map _bpArg bindings)
---     <*> pure BindLet
---     <*> contextInfo
---   where
---   fletBindings =
---     withList' Parens $
---     some $ withList' Parens $ do
---       (AtomExp{..}, returnTy) <- typedAtom
---       args <- withList' Parens $ many arg
---       let funTy = FunType args returnTy
---       lamValue <- TLam (_atomAtom, _atomInfo) funTy <$> abstractBody valueLevel args <*> contextInfo
---       pure (BindPair (Arg _atomAtom (TyFun funTy) _atomInfo) lamValue)
 
 letForm :: Compile (Term Name)
 letForm = do
@@ -660,7 +644,6 @@ arg = typedAtom >>= \(AtomExp{..},ty) ->
 
 arg2Name :: Arg n -> Name
 arg2Name Arg{..} = Name $ BareName _aName _aInfo
-
 
 typed :: Compile (Type (Term Name))
 typed = sep Colon *> parseType

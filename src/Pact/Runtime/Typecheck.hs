@@ -22,9 +22,9 @@
 module Pact.Runtime.Typecheck
   ( typecheck
   , checkUserType
+  , typecheckTerm
   , typecheckDef
   , typecheckArgs
-  , typecheckWithRef
   ) where
 
 
@@ -37,25 +37,11 @@ import qualified Data.Vector as V
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
-
 -- | Runtime input typecheck, enforced on let bindings, consts, user defun app args.
 -- Output checking -- app return values -- left to static TC.
 -- Native funs not checked here, as they use pattern-matching etc.
 typecheck :: (Eq n, Pretty n) => [(Arg (Term n),Term n)] -> Eval e ()
 typecheck ps = foldM_ tvarCheck M.empty ps where
-  tvarCheck m (Arg {..},t) = do
-    r <- typecheckTerm _aInfo _aType t
-    case r of
-      Nothing -> return m
-      Just (v,ty) -> case M.lookup v m of
-        Nothing -> return $ M.insert v ty m
-        Just prevTy | prevTy == ty -> return m
-                    | otherwise ->
-                        evalError (_tInfo t) $ "Type error: values for variable " <> pretty _aType <>
-                        " do not match: " <> pretty (prevTy,ty)
-
-typecheckWithRef :: (Eq n, Pretty n) => [(Arg (Term n),Term n)] -> Eval e ()
-typecheckWithRef ps = foldM_ tvarCheck M.empty ps where
   tvarCheck m (Arg {..},t) = do
     r <- typecheckTerm _aInfo _aType t
     case r of
@@ -87,11 +73,11 @@ typecheckDef def defTy funTy = validateArgCount >> tcReturn >> tcArgs
 
 -- | Typecheck applied args against a FunType from some Def.
 typecheckArgs
-  :: (HasInfo i, Eq n, Pretty n)
+  :: (HasInfo i)
   => i
   -> DefName
-  -> FunType (Term n)
-  -> [Term n]
+  -> FunType (Term Name)
+  -> [(Term Name)]
   -> Eval e ()
 typecheckArgs i defName ft' as' = do
   let params = _ftArgs ft'
@@ -109,8 +95,12 @@ typecheckFailed i found spec = evalError' i $
 -- Returns `Nothing` on successful check against concrete/untyped,
 -- or `Just` a pair for successful check against a type variable, where
 -- the pair is the type variable itself and the term type.
-typecheckTerm :: forall n e. (Eq n, Pretty n) =>Info -> Type (Term n) -> Term n
-       -> Eval e (Maybe (TypeVar (Term n),Type (Term n)))
+typecheckTerm
+  :: forall n e. (Eq n, Pretty n)
+  => Info
+  -> Type (Term n)
+  -> Term n
+  -> Eval e (Maybe (TypeVar (Term n),Type (Term n)))
 typecheckTerm i' spec' t' = getTy i' t' >>= \ty' -> checkTy i' spec' ty' t'
   where
     getTy i t = case typeof t of
@@ -174,7 +164,7 @@ checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
   -- fields is lookup from name to arg.
   -- TODO consider OMap or equivalent for schema fields
   let fields = M.fromList . map (FieldKey . _aName &&& id) $ _tFields
-  aps :: [(Arg (Term n), Term n)] <- forM (M.toList ps) $ \(k,v) ->
+  aps <- forM (M.toList ps) $ \(k,v) ->
     case M.lookup k fields of
       Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k
       Just a -> return (a,v)

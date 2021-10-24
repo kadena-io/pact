@@ -689,7 +689,6 @@ deref (Ref r) = reduce r
 unsafeReduce :: Term Ref -> Eval e (Term Name)
 unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static term"))
 
-
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
 reduce (TApp a _) = reduceApp a
@@ -735,11 +734,14 @@ reduceBody t = evalError (_tInfo t) "Expected body forms"
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
   ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
-  typecheck $ fmap (\(l, r) -> (fmap mkDirect l, either id mkDirect r)) ps'
+  typecheck' $ fmap (\(l, r) -> (fmap mkDirect l, r)) ps'
   reduceBody (instantiate (resolveArg i (fmap (either id mkDirect . snd) ps')) bod)
 
 reduceLam :: Term Ref -> Eval e (Either (Term Ref) (Term Name))
 reduceLam t@TLam{} = Left <$> pure t
+reduceLam t@TDef{} = Left <$> pure t
+reduceLam (TVar (Ref n@TDef{}) _) = Left <$> pure n
+reduceLam (TVar (Ref n@TLam{}) _) = Left <$> pure n
 reduceLam t = Right <$> reduce t
 
 
@@ -766,23 +768,37 @@ reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   g <- computeUserAppGas d ai
-  as' <- fmap (either id mkDirect) <$> mapM reduceLam as
-  typecheckArgs ai _dDefName _dFunType as'
-  ft' <- traverse reduce _dFunType
-  let bod' = instantiate (resolveArg ai as') _dDefBody
-      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
-  appCall fa ai as' $ fmap (g,) $
-    case _dDefType of
-      Defun -> reduceBody bod'
-      Defpact -> do
+  case _dDefType of
+    Defun -> do
+      args <- traverse reduceLam as
+      typecheckArgs' ai _dDefName _dFunType args
+      fty <- traverse reduce _dFunType
+      let args' = either id mkDirect <$> args
+      let body = instantiate (resolveArg ai args') _dDefBody
+          fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes fty) (_mDocs _dMeta)
+      appCall fa ai args' $ fmap (g,) $ reduceBody body
+    Defpact -> do
+      af <- prepareUserAppArgs d as ai
+      evalUserAppBody d af ai g $ \bod' -> do
         continuation <-
           PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
           . map elideModRefInfo
-          <$> enforcePactValue' as'
+          <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
-      Defcap ->
-        evalError ai "Cannot directly evaluate defcap"
-reduceApp (App (TLam (lamName, _) funTy body _) as ai) = do
+    Defcap -> evalError ai "Cannot directly evaluate defcap"
+  -- af <- prepareUserAppArgs d as ai
+  -- evalUserAppBody d af ai g $ \bod' ->
+  --   case _dDefType of
+  --     Defun -> reduceBody bod'
+  --     Defpact -> do
+  --       continuation <-
+  --         PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
+  --         . map elideModRefInfo
+  --         <$> enforcePactValue' (fst af)
+  --       initPact ai continuation bod'
+      -- Defcap ->
+      --   evalError ai "Cannot directly evaluate defcap"
+reduceApp (App (TLam lamName funTy body _) as ai) = do
   gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
   reducedArgs <- mapM reduceLam as
   ft' <- traverse reduce funTy
@@ -834,19 +850,65 @@ computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) (GUser
 prepareUserAppArgs :: Def Ref -> [Term Ref] -> Info -> Eval e ([Term Name], FunType (Term Name))
 prepareUserAppArgs Def{..} args i = do
   as' <- mapM reduce args
-  ft' <- traverse reduce _dFunType
-  typecheckArgs i _dDefName ft' as'
-  return (as',ft')
+  ty <- traverse reduce _dFunType
+  typecheckArgs i _dDefName ty as'
+  return (as',ty)
 
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
-evalUserAppBody d@Def{..} (as',ft') ai g run =
-    eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+evalUserAppBody d@Def{..} (as',ft') ai g run = do
+  eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
   where
-    bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
-    fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  bod' = instantiate (resolveArg ai (mkDirect <$> as')) _dDefBody
+  fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
 
+-- A bit of a hack, but we don't have to worry about reducing individual terms this way to typecheck them.
+typecheckArgs'
+  :: (HasInfo i)
+  => i
+  -> DefName
+  -> FunType (Term Ref)
+  -> [Either (Term Ref) (Term Name)]
+  -> Eval e ()
+typecheckArgs' i defName ft' as' = do
+  let params = _ftArgs ft'
+  when (length params /= length as') $
+    evalError' i $ pretty defName <> ": Incorrect number of arguments (" <>
+      pretty (length as') <> ") supplied; expected " <> pretty (length params)
+  typecheck' (zip params as')
+
+typecheck'
+  :: Foldable t
+  => t (Arg (Term Ref), Either (Term Ref) (Term Name))
+  -> Eval e ()
+typecheck' ps = foldM_ tvarCheck M.empty ps where
+  -- This is a bit of a hack, but we cannot reduce lambdas and `TDef`s,
+  -- so the strategy is this: If we encounter a term which we cannot reduce, we can typecheck it
+  -- against its unreduced arg, then reduce the type once it typechecks.
+  tvarCheck m (Arg {..}, Left t) = do
+    r <- typecheckTerm _aInfo _aType t
+    r' <- traverse (\(a, b) -> (,) <$> traverse reduce a <*> traverse reduce b) r
+    case r' of
+      Nothing -> return m
+      Just (v,ty) -> case M.lookup v m of
+        Nothing -> return $ M.insert v ty m
+        Just prevTy | prevTy == ty -> return m
+                    | otherwise ->
+                        evalError (_tInfo t) $ "Type error: values for variable " <> pretty _aType <>
+                        " do not match: " <> pretty (prevTy,ty)
+  -- Term is reduced, so we reduce the arg
+  tvarCheck m (Arg {..}, Right t) = do
+    ty' <- traverse reduce _aType
+    r <- typecheckTerm _aInfo ty' t
+    case r of
+      Nothing -> return m
+      Just (v,ty) -> case M.lookup v m of
+        Nothing -> return $ M.insert v ty m
+        Just prevTy | prevTy == ty -> return m
+                    | otherwise ->
+                        evalError (_tInfo t) $ "Type error: values for variable " <> pretty _aType <>
+                          " do not match: " <> pretty (prevTy,ty)
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -862,9 +924,10 @@ reduceDirect TNative {..} as ai =
     eAdvise ai (AdviceNative _tNativeName) $ dup
         $ appCall fa ai as
         $ _nativeFun _tNativeFun fa as
-reduceDirect (TLam (lamName, _) funTy body _) as ai = do
+reduceDirect (TLam lamName funTy body _) as ai = do
   gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
   reducedArgs <- mapM reduce as
+  typecheckArgs ai (DefName lamName) funTy reducedArgs
   let bod = instantiate (resolveArg ai reducedArgs) body
       fa = FunApp ai (asString lamName) Nothing Defun (funTypes funTy) Nothing
   appCall fa ai reducedArgs $ pure (gas, bod)

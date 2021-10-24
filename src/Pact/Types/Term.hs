@@ -120,7 +120,7 @@ import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Serialize (Serialize)
 import Data.String
-import Data.Text (Text,pack)
+import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Pact.Time (UTCTime)
@@ -1061,7 +1061,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TLam {
-      _tLamArg :: !(Text, Info)
+      _tLamArg :: !Text
     , _tLamTy  :: !(FunType (Term n))
     , _tBindBody :: !(Scope Int Term n)
     , _tInfo :: !Info
@@ -1171,7 +1171,7 @@ instance Pretty n => Pretty (Term n) where
       [ commaBraces $ fmap pretty pairs
       , pretty $ unscope body
       ]
-    TLam (arg, _) ty _ _ ->
+    TLam arg ty _ _ ->
       pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> (parensSep $ pretty <$> _ftArgs ty)
     TObject o _ -> pretty o
     TLiteral l _ -> annotate Val $ pretty l
@@ -1250,8 +1250,8 @@ termCodec = Codec enc dec
       TBinding bs b c i -> ob [pairs .= bs, body .= b, type' .= c, inf i]
       TObject o _i -> toJSON o
       TLiteral l i -> ob [literal .= l, inf i]
-      TLam (arg, arginfo) ty lambody laminf ->
-        ob ["lambind" .= (arg, arginfo), "lamty" .= ty , body .= toJSON lambody , inf laminf]
+      TLam arg ty lambody laminf ->
+        ob ["lambind" .= arg, "lamty" .= ty , body .= toJSON lambody , inf laminf]
       TGuard k i -> ob [guard' .= k, inf i]
       TUse u _i -> toJSON u
       TStep s tmeta i -> ob [body .= s, meta .= tmeta, inf i]
@@ -1404,7 +1404,8 @@ typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule{}-> Left "module"
       TList {..} -> Right $ TyList _tListType
-      TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
+      -- TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
+      TDef{..} -> Right $ TyFun (_dFunType _tDef)
       TNative {} -> Left "defun"
       TConst {..} -> Left $ "const:" <> _aName _tConstArg
       TApp {} -> Left "app"
@@ -1412,6 +1413,7 @@ typeof t = case t of
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt def
+      -- This will likely change later on.
       TLam{..} -> Right $ TyFun _tLamTy
       TObject (Object {..}) _ -> Right $ TySchema TyObject _oObjectType def
       TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
