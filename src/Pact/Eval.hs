@@ -775,8 +775,9 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
       fty <- traverse reduce _dFunType
       let args' = either id mkDirect <$> args
       let body = instantiate (resolveArg ai args') _dDefBody
-          fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes fty) (_mDocs _dMeta)
-      appCall fa ai args' $ fmap (g,) $ reduceBody body
+          fname = asString _dDefName
+          fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes fty) (_mDocs _dMeta)
+      guardRecursion fname (Just _dModule) $ appCall fa ai args' $ fmap (g,) $ reduceBody body
     Defpact -> do
       af <- prepareUserAppArgs d as ai
       evalUserAppBody d af ai g $ \bod' -> do
@@ -792,7 +793,7 @@ reduceApp (App (TLam lamName funTy body _) as ai) = do
   ft' <- traverse reduce funTy
   let bod = instantiate (resolveArg ai (either id mkDirect <$> reducedArgs)) body
       fa = FunApp ai (asString lamName) Nothing Defun (funTypes ft') Nothing
-  appCall fa ai as $ fmap (gas,) $ reduceBody bod
+  guardRecursion lamName Nothing $ appCall fa ai as $ fmap (gas,) $ reduceBody bod
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of
@@ -842,14 +843,25 @@ prepareUserAppArgs Def{..} args i = do
   typecheckArgs i _dDefName ty as'
   return (as',ty)
 
+guardRecursion :: Text -> Maybe ModuleName -> Eval e b -> Eval e b
+guardRecursion fname m act  =
+  uses evalCallStack (find isRecursiveAppCall) >>= \case
+      Nothing -> act
+      Just (StackFrame _ si _) ->
+        evalError si $ "Detected recursive call:" <+> maybe mempty ((<> ".") . pretty) m <> pretty fname
+  where
+  isRecursiveAppCall (StackFrame sfn _ app) =
+    sfn == fname && (_faModule . fst =<< app) == m
+
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
 evalUserAppBody d@Def{..} (as',ft') ai g run =
-  eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+  guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
   where
-  bod' = instantiate (resolveArg ai (mkDirect <$> as')) _dDefBody
-  fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  fname = asString _dDefName
+  bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+  fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
 
 -- A bit of a hack, but we don't have to worry about reducing individual terms this way to typecheck them.
 typecheckArgs'
