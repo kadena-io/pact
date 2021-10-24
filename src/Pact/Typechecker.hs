@@ -794,7 +794,8 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun (TLam name ty body i) = do
-  let mn = ModuleName "%anonlam" Nothing
+  TcId _ _ newIx <- freshId i "%anonlam"
+  let mn = ModuleName ("%anonlam_" <> pack (show newIx)) Nothing
   withScopeBodyToFun name mn ty body Defun i
 toFun (TDef td i) = resolveDyn td
   where
