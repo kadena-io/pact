@@ -2,6 +2,7 @@
 (module lam-test g (defcap g () true)
   (defun add2 (x:integer) (+ x 2))
   (defun appHOF (f x) (f x))
+  (defun gt2 (x:integer) (> x 2))
   )
 
 (expect "higher order function application works for tdefs"
@@ -54,3 +55,27 @@
       (let ((h (lambda (x:integer) (+ x 2))))
            (h (g (f 2))))))
   )
+
+(expect "lambdas function within natives: map"
+  [1, 4, 9, 16, 25]
+  (let
+    ((squarelam (lambda(x) (* x x))))
+    (map (squarelam) [1, 2, 3, 4, 5]))
+)
+
+(expect "defuns function within natives: map"
+  [3, 4, 5, 6, 7]
+  (map (add2) [1, 2, 3, 4, 5])
+)
+
+(expect "lambdas function within natives: filter"
+  [4, 5]
+  (let
+    ((gt3 (lambda(x) (> x 3))))
+    (filter (gt3) [1, 2, 3, 4, 5]))
+)
+
+(expect "defuns function within natives: filter"
+  [3, 4, 5]
+    (filter (gt2) [1, 2, 3, 4, 5])
+)
