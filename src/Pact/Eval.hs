@@ -766,7 +766,7 @@ reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   case _dDefType of
-    Defun -> do
+    Defun ->
       functionApp _dDefName _dFunType (Just _dModule) as _dDefBody (_mDocs _dMeta) ai
     Defpact -> do
       g <- computeUserAppGas d ai
@@ -778,7 +778,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
     Defcap -> computeUserAppGas d ai *> evalError ai "Cannot directly evaluate defcap"
-reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) = do
+reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) =
   functionApp (DefName lamName) funTy Nothing as body Nothing ai
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
