@@ -793,7 +793,7 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
   return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
-toFun (TLam name ty body i) = do
+toFun (TLam (Lam name ty body _) i) = do
   TcId _ _ newIx <- freshId i "%anonlam"
   let mn = ModuleName ("%anonlam_" <> pack (show newIx)) Nothing
   withScopeBodyToFun name mn ty body Defun i

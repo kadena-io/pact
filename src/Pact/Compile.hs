@@ -553,18 +553,18 @@ letBindings :: Compile [BindPair (Term Name)]
 letBindings =
   withList' Parens $ some $ withList' Parens $ do
     a <- arg
-    lam a <|> regularBind a
+    regularBind a <|> lam a
   where
   regularBind arg' =
-    BindPair arg' <$> valueLevel
-  lam (Arg name ty _) = try $ withList' Parens $ reservedAtom >>= \case
+    BindPair arg' <$> try valueLevel
+  lam (Arg name ty _) = withList' Parens $ reservedAtom >>= \case
     RLambda -> do
       args <- withList' Parens $ many arg
       let funTy = FunType args ty
       info <- contextInfo
-      lamValue <- TLam name funTy <$> abstractBody valueLevel args <*> pure info
-      pure (BindPair (Arg name (TyFun funTy) info) lamValue)
-    _ -> expected "impossible"
+      lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
+      pure (BindPair (Arg name (TyFun funTy) info) (TLam lamValue info))
+    _ -> expected "Lambda form"
 
 
 abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)

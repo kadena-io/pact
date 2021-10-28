@@ -722,9 +722,6 @@ compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
   (pack $ show t)
   (renderCompactText t)
 
-mkDirect :: Term Name -> Term Ref
-mkDirect = (`TVar` def) . Direct
-
 reduceBody :: Term Ref -> Eval e (Term Name)
 reduceBody (TList bs _ _) =
   -- unsafe but only called in validated body contexts
@@ -734,16 +731,20 @@ reduceBody t = evalError (_tInfo t) "Expected body forms"
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
   ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
-  typecheck' $ fmap (\(l, r) -> (fmap mkDirect l, r)) ps'
-  reduceBody (instantiate (resolveArg i (fmap (either id mkDirect . snd) ps')) bod)
+  typecheck' $ fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
+  reduceBody (instantiate (resolveArg i (fmap (either id liftTerm . snd) ps')) bod)
 
+-- | Reduction where TDefs and TLams are kept unreduced.
+--   TVars that are nested `TVar (Ref n)`s are traversed in `deref` regardless
+--   so this is sound
 reduceLam :: Term Ref -> Eval e (Either (Term Ref) (Term Name))
-reduceLam t@TLam{} = Left <$> pure t
-reduceLam t@TDef{} = Left <$> pure t
-reduceLam (TVar (Ref n@TDef{}) _) = Left <$> pure n
-reduceLam (TVar (Ref n@TLam{}) _) = Left <$> pure n
-reduceLam t = Right <$> reduce t
-
+reduceLam = \case
+  -- TVar (Ref n) _ -> reduceLam n
+  t@TDef{} -> pure (Left t)
+  t@TLam{} -> pure (Left t)
+  TVar (Ref t@TDef{}) _ -> pure (Left t)
+  TVar (Ref t@TLam{}) _ -> pure (Left t)
+  x -> Right <$> reduce x
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> Int -> Term n
@@ -753,7 +754,6 @@ resolveArg ai as i = case atMay as i of
 
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
-
 
 enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
 enforcePactValue t = case toPactValue t of
@@ -767,18 +767,11 @@ reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
-  g <- computeUserAppGas d ai
   case _dDefType of
     Defun -> do
-      args <- traverse reduceLam as
-      typecheckArgs' ai _dDefName _dFunType args
-      fty <- traverse reduce _dFunType
-      let args' = either id mkDirect <$> args
-      let body = instantiate (resolveArg ai args') _dDefBody
-          fname = asString _dDefName
-          fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes fty) (_mDocs _dMeta)
-      guardRecursion fname (Just _dModule) $ appCall fa ai args' $ fmap (g,) $ reduceBody body
+      functionApp _dDefName _dFunType (Just _dModule) as _dDefBody (_mDocs _dMeta) ai
     Defpact -> do
+      g <- computeUserAppGas d ai
       af <- prepareUserAppArgs d as ai
       evalUserAppBody d af ai g $ \bod' -> do
         continuation <-
@@ -786,20 +779,37 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
           . map elideModRefInfo
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
-    Defcap -> evalError ai "Cannot directly evaluate defcap"
-reduceApp (App (TLam lamName funTy body _) as ai) = do
-  gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
-  reducedArgs <- mapM reduceLam as
-  ft' <- traverse reduce funTy
-  let bod = instantiate (resolveArg ai (either id mkDirect <$> reducedArgs)) body
-      fa = FunApp ai (asString lamName) Nothing Defun (funTypes ft') Nothing
-  guardRecursion lamName Nothing $ appCall fa ai as $ fmap (gas,) $ reduceBody bod
+    Defcap -> computeUserAppGas d ai *> evalError ai "Cannot directly evaluate defcap"
+reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) = do
+  functionApp (DefName lamName) funTy Nothing as body Nothing ai
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of
     Left v -> evalError ti $ "reduceApp: expected module member for dynamic: " <> pretty v
     Right d -> reduceApp $ App (TDef d (getInfo d)) as ai
 reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
+
+-- | Apply a userland function, and don't reduce args
+-- that correspond to higher order functions.
+functionApp
+  :: DefName
+  -> FunType (Term Ref)
+  -> Maybe ModuleName
+  -> [Term Ref]
+  -> Scope Int Term Ref
+  -> Maybe Text
+  -> Info
+  -> Eval e (Term Name)
+functionApp fnName funTy mod_ as fnBody docs ai = do
+  gas <- computeGas (Left (ai, asString fnName)) (GUserApp Defun)
+  args <- traverse reduceLam as
+  typecheckArgs' ai fnName funTy args
+  fty <- traverse reduce funTy
+  let args' = either id liftTerm <$> args
+  let body = instantiate (resolveArg ai args') fnBody
+      fname = asString fnName
+      fa = FunApp ai fname mod_ Defun (funTypes fty) docs
+  guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
 
 -- | Evaluate a dynamic ref to either a fully-reduced value from a 'TConst'
 -- or a module member 'Def' for applying.
@@ -860,10 +870,12 @@ evalUserAppBody d@Def{..} (as',ft') ai g run =
   guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
   where
   fname = asString _dDefName
-  bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+  bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
   fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
 
--- A bit of a hack, but we don't have to worry about reducing individual terms this way to typecheck them.
+-- | Checks that function arg length matches supplied arguments
+--   and typechecks against the reduced/unreduced terms.
+--   A more detailed explanation in 'typecheck''
 typecheckArgs'
   :: (HasInfo i)
   => i
@@ -878,6 +890,10 @@ typecheckArgs' i defName ft' as' = do
       pretty (length as') <> ") supplied; expected " <> pretty (length params)
   typecheck' (zip params as')
 
+-- | Typecheck an arg paired with either an unreduced term (terms that should not be reduced e.g lams, tdefs)
+--   or a fully reduced term (anything else that doesn't pass a scope pretty much).
+--   Both paths typecheck the arg and type, but we defer reducting the argument type until
+--   we know whether the value corresponding to it needs to be typechecked unreduced or not.
 typecheck'
   :: [(Arg (Term Ref), Either (Term Ref) (Term Name))]
   -> Eval e ()
@@ -923,13 +939,6 @@ reduceDirect TNative {..} as ai =
     eAdvise ai (AdviceNative _tNativeName) $ dup
         $ appCall fa ai as
         $ _nativeFun _tNativeFun fa as
-reduceDirect (TLam lamName funTy body _) as ai = do
-  gas <- computeGas (Left (ai, asString lamName)) (GUserApp Defun)
-  reducedArgs <- mapM reduce as
-  typecheckArgs ai (DefName lamName) funTy reducedArgs
-  let bod = instantiate (resolveArg ai reducedArgs) body
-      fa = FunApp ai (asString lamName) Nothing Defun (funTypes funTy) Nothing
-  appCall fa ai reducedArgs $ pure (gas, bod)
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
