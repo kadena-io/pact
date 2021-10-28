@@ -1310,7 +1310,6 @@ termCodec = Codec enc dec
         <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
         <|> parseWithInfo TUse
         <|> parseWithInfo TLam
-          -- (\o -> TLam <$> o .: "lambind" <*> o .: "lamty" <*> o .: body <*> inf' o)
         <|> wo "Step"
             (\o -> TStep <$> o .: body <*> o .: meta <*> inf' o)
        --  parseWithInfo TStep

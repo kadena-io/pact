@@ -739,11 +739,9 @@ reduceLet ps bod i = do
 --   so this is sound
 reduceLam :: Term Ref -> Eval e (Either (Term Ref) (Term Name))
 reduceLam = \case
-  -- TVar (Ref n) _ -> reduceLam n
+  TVar (Ref n) _ -> reduceLam n
   t@TDef{} -> pure (Left t)
   t@TLam{} -> pure (Left t)
-  TVar (Ref t@TDef{}) _ -> pure (Left t)
-  TVar (Ref t@TLam{}) _ -> pure (Left t)
   x -> Right <$> reduce x
 
 {-# INLINE resolveArg #-}
