@@ -2670,6 +2670,18 @@ They are used in [with-read](pact-functions.html#with-read), [with-default-read]
     (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 ```
 
+### Lambdas {#lambdas}
+Lambdas are supported in `let` and `let*`.
+Note: Lambdas are not atoms, since in pact we do not allow arbitrary recursion, therefore
+they must be let-bound and named.
+
+```lisp
+  ; identity function
+  (let ((f (lambda (x) x))) (f a))
+  ; Higher order example
+  (let ((hof (lambda (f a b)  (f a b))))  (hof + 1 2))
+```
+
 Type specifiers
 -----
 
@@ -3100,7 +3112,7 @@ Expressions may be [literals](#literals), atoms, s-expressions, or references.
 
 Atoms are non-reserved barewords starting with a letter or allowed symbol, and containing letters,
 digits and allowed symbols. Allowed symbols are `%#+-_&$@<>=?*!|/`. Atoms must
-resolve to a variable bound by a [defun](#defun), [defpact](#defpact), [binding](#bindings) form,
+resolve to a variable bound by a [defun](#defun), [defpact](#defpact), [binding](#bindings) form, [lambda](#lambda) form,
 or to symbols imported into the namespace with [use](#use).
 
 ### S-expressions {#sexp}

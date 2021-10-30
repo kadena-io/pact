@@ -52,6 +52,8 @@ spec = do
     ]
   describe "goldenAutoCap" $
     goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
+  describe "goldenLambdas" $
+    goldenModule "lambda-module" "golden/golden.lams.repl" "lams-test" []
 
 goldenModule
   :: String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
@@ -98,9 +100,6 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
   where
     ec True = mkExecutionConfig [FlagDisablePact40]
     ec False = def
-
-
-
 
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = doCRTest' def tn s code

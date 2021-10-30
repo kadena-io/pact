@@ -60,6 +60,7 @@ module Pact.Types.Term
    Use(..),
    App(..),appFun,appArgs,appInfo,
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,dDefMeta,
+   Lam(..), lamArg, lamBindBody, lamTy, lamInfo,
    DefMeta(..),
    DefcapMeta(..),
    Example(..),
@@ -77,7 +78,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,
    tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
-   tDynModRef,tDynMember,tModRef,
+   tDynModRef,tDynMember,tModRef,tLam,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -120,7 +121,7 @@ import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Serialize (Serialize)
 import Data.String
-import Data.Text (Text,pack)
+import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Pact.Time (UTCTime)
@@ -365,6 +366,7 @@ instance NFData n => NFData (BindPair n)
 
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
+
 
 -- -------------------------------------------------------------------------- --
 -- App
@@ -973,6 +975,31 @@ derefDef :: Def n -> Name
 derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
 -- -------------------------------------------------------------------------- --
+-- Lam
+
+data Lam n
+  = Lam
+  { _lamArg :: !Text
+  , _lamTy  :: !(FunType (Term n))
+  , _lamBindBody :: !(Scope Int Term n)
+  , _lamInfo :: !Info
+  } deriving (Functor,Foldable,Traversable,Generic)
+
+
+deriving instance (Show1 Term, Show n) => Show (Lam n)
+deriving instance (Eq1 Term, Eq n) => Eq (Lam n)
+
+instance HasInfo (Lam n) where getInfo = _lamInfo
+
+instance Pretty n => Pretty (Lam n) where
+  pretty (Lam arg ty _ _) =
+    pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> (parensSep $ pretty <$> _ftArgs ty) <+> "..."
+
+instance NFData n => NFData (Lam n)
+
+instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Lam n) where toJSON = lensyToJSON 2
+instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where parseJSON = lensyParseJSON 2
+-- -------------------------------------------------------------------------- --
 -- Object
 
 -- | Full Term object.
@@ -1059,6 +1086,10 @@ data Term n =
     , _tBindType :: !(BindType (Type (Term n)))
     , _tInfo :: !Info
     } |
+    TLam {
+      _tLam :: Lam n
+    , _tInfo :: !Info
+    } |
     TObject {
       _tObject :: !(Object n)
     , _tInfo :: !Info
@@ -1123,6 +1154,7 @@ instance HasInfo (Term n) where
     TNative{..} -> _tInfo
     TObject{..} -> getInfo _tObject
     TSchema{..} -> _tInfo
+    TLam{..} -> _tInfo
     TStep{..} -> _tInfo
     TTable{..} -> _tInfo
     TUse{..} -> getInfo _tUse
@@ -1163,6 +1195,7 @@ instance Pretty n => Pretty (Term n) where
       [ commaBraces $ fmap pretty pairs
       , pretty $ unscope body
       ]
+    TLam lam _ -> pretty lam
     TObject o _ -> pretty o
     TLiteral l _ -> annotate Val $ pretty l
     TGuard k _ -> pretty k
@@ -1205,6 +1238,8 @@ instance Monad Term where
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f =
       TBinding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
+    TLam (Lam arg ty b i) i' >>= f =
+      TLam (Lam arg (fmap (>>= f) ty) (b >>>= f) i) i'
     TObject (Object bs t kf oi) i >>= f =
       TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i
@@ -1238,6 +1273,8 @@ termCodec = Codec enc dec
       TBinding bs b c i -> ob [pairs .= bs, body .= b, type' .= c, inf i]
       TObject o _i -> toJSON o
       TLiteral l i -> ob [literal .= l, inf i]
+      TLam tlam _i -> toJSON tlam
+
       TGuard k i -> ob [guard' .= k, inf i]
       TUse u _i -> toJSON u
       TStep s tmeta i -> ob [body .= s, meta .= tmeta, inf i]
@@ -1272,6 +1309,7 @@ termCodec = Codec enc dec
         <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
         <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
         <|> parseWithInfo TUse
+        <|> parseWithInfo TLam
         <|> wo "Step"
             (\o -> TStep <$> o .: body <*> o .: meta <*> inf' o)
        --  parseWithInfo TStep
@@ -1388,7 +1426,7 @@ typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule{}-> Left "module"
       TList {..} -> Right $ TyList _tListType
-      TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
+      TDef{..} -> Right $ TyFun (_dFunType _tDef)
       TNative {} -> Left "defun"
       TConst {..} -> Left $ "const:" <> _aName _tConstArg
       TApp {} -> Left "app"
@@ -1396,6 +1434,8 @@ typeof t = case t of
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt def
+      -- This will likely change later on.
+      TLam{..} -> Right $ TyFun (_lamTy _tLam)
       TObject (Object {..}) _ -> Right $ TySchema TyObject _oObjectType def
       TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
       TUse {} -> Left "use"
@@ -1487,6 +1527,7 @@ makePrisms ''Guard
 makeLenses ''FunApp
 makePrisms ''Ref'
 makeLenses ''Def
+makeLenses ''Lam
 makeLenses ''Object
 makeLenses ''Term
 
@@ -1528,6 +1569,8 @@ instance Eq1 Step where
 
 instance Eq1 Def where
   liftEq = $(makeLiftEq ''Def)
+instance Eq1 Lam where
+  liftEq = $(makeLiftEq ''Lam)
 instance Eq1 Object where
   liftEq = $(makeLiftEq ''Object)
 instance Eq1 Term where
@@ -1565,6 +1608,8 @@ instance Show1 Step where
 
 instance Show1 Def where
   liftShowsPrec = $(makeLiftShowsPrec ''Def)
+instance Show1 Lam where
+  liftShowsPrec = $(makeLiftShowsPrec ''Lam)
 instance Show1 Object where
   liftShowsPrec = $(makeLiftShowsPrec ''Object)
 instance Show1 Term where

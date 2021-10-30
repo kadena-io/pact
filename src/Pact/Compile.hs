@@ -101,6 +101,7 @@ data Reserved =
   | RInterface
   | RLet
   | RLetStar
+  | RLambda
   | RModule
   | RStep
   | RStepWithRollback
@@ -123,6 +124,7 @@ instance AsString Reserved where
     RInterface -> "interface"
     RLet -> "let"
     RLetStar -> "let*"
+    RLambda -> "lambda"
     RModule -> "module"
     RStep -> "step"
     RStepWithRollback -> "step-with-rollback"
@@ -548,9 +550,22 @@ stepWithRollback = do
 
 
 letBindings :: Compile [BindPair (Term Name)]
-letBindings = withList' Parens $
-              some $ withList' Parens $
-              BindPair <$> arg <*> valueLevel
+letBindings =
+  withList' Parens $ some $ withList' Parens $ do
+    a <- arg
+    regularBind a <|> lam a
+  where
+  regularBind arg' =
+    BindPair arg' <$> try valueLevel
+  lam (Arg name ty _) = withList' Parens $ reservedAtom >>= \case
+    RLambda -> do
+      args <- withList' Parens $ many arg
+      let funTy = FunType args ty
+      info <- contextInfo
+      lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
+      pure (BindPair (Arg name (TyFun funTy) info) (TLam lamValue info))
+    _ -> expected "Lambda form"
+
 
 abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)
 abstractBody term args = abstractBody' args =<< bodyForm term
@@ -629,7 +644,6 @@ arg = typedAtom >>= \(AtomExp{..},ty) ->
 
 arg2Name :: Arg n -> Name
 arg2Name Arg{..} = Name $ BareName _aName _aInfo
-
 
 typed :: Compile (Type (Term Name))
 typed = sep Colon *> parseType

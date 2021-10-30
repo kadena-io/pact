@@ -689,13 +689,13 @@ deref (Ref r) = reduce r
 unsafeReduce :: Term Ref -> Eval e (Term Name)
 unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static term"))
 
-
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
 reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
+reduce TLam{..} = evalError _tInfo "Cannot reduce bound lambda"
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = toTerm <$> compatPretty t
 reduce t@TNative {} = toTerm <$> compatPretty t
@@ -722,9 +722,6 @@ compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
   (pack $ show t)
   (renderCompactText t)
 
-mkDirect :: Term Name -> Term Ref
-mkDirect = (`TVar` def) . Direct
-
 reduceBody :: Term Ref -> Eval e (Term Name)
 reduceBody (TList bs _ _) =
   -- unsafe but only called in validated body contexts
@@ -733,10 +730,19 @@ reduceBody t = evalError (_tInfo t) "Expected body forms"
 
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduce t) ps
-  typecheck ps'
-  reduceBody (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
+  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
+  typecheck' $ fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
+  reduceBody (instantiate (resolveArg i (fmap (either id liftTerm . snd) ps')) bod)
 
+-- | Reduction where TDefs and TLams are kept unreduced.
+--   TVars that are nested `TVar (Ref n)`s are traversed in `deref` regardless
+--   so this is sound
+reduceLam :: Term Ref -> Eval e (Either (Term Ref) (Term Name))
+reduceLam = \case
+  TVar (Ref n) _ -> reduceLam n
+  t@TDef{} -> pure (Left t)
+  t@TLam{} -> pure (Left t)
+  x -> Right <$> reduce x
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> Int -> Term n
@@ -747,38 +753,61 @@ resolveArg ai as i = case atMay as i of
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
-
-enforcePactValue :: (Term Name) -> Eval e PactValue
+enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
 enforcePactValue t = case toPactValue t of
   Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
   Right v -> return v
 
-enforcePactValue' :: Traversable f => f (Term Name) -> Eval e (f PactValue)
+enforcePactValue' :: (Pretty n, Traversable f) => f (Term n) -> Eval e (f PactValue)
 enforcePactValue' = traverse enforcePactValue
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
-  g <- computeUserAppGas d ai
-  af <- prepareUserAppArgs d as ai
-  evalUserAppBody d af ai g $ \bod' ->
-    case _dDefType of
-      Defun -> reduceBody bod'
-      Defpact -> do
+  case _dDefType of
+    Defun ->
+      functionApp _dDefName _dFunType (Just _dModule) as _dDefBody (_mDocs _dMeta) ai
+    Defpact -> do
+      g <- computeUserAppGas d ai
+      af <- prepareUserAppArgs d as ai
+      evalUserAppBody d af ai g $ \bod' -> do
         continuation <-
           PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
           . map elideModRefInfo
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
-      Defcap ->
-        evalError ai "Cannot directly evaluate defcap"
+    Defcap -> computeUserAppGas d ai *> evalError ai "Cannot directly evaluate defcap"
+reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) =
+  functionApp (DefName lamName) funTy Nothing as body Nothing ai
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of
     Left v -> evalError ti $ "reduceApp: expected module member for dynamic: " <> pretty v
     Right d -> reduceApp $ App (TDef d (getInfo d)) as ai
 reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
+
+-- | Apply a userland function, and don't reduce args
+-- that correspond to higher order functions.
+functionApp
+  :: DefName
+  -> FunType (Term Ref)
+  -> Maybe ModuleName
+  -> [Term Ref]
+  -> Scope Int Term Ref
+  -> Maybe Text
+  -> Info
+  -> Eval e (Term Name)
+functionApp fnName funTy mod_ as fnBody docs ai = do
+  gas <- computeGas (Left (ai, asString fnName)) (GUserApp Defun)
+  args <- traverse reduceLam as
+  typecheckArgs' ai fnName funTy args
+  fty <- traverse reduce funTy
+  let args' = either id liftTerm <$> args
+  let body = instantiate (resolveArg ai args') fnBody
+      fname = asString fnName
+      fa = FunApp ai fname mod_ Defun (funTypes fty) docs
+  guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
 
 -- | Evaluate a dynamic ref to either a fully-reduced value from a 'TConst'
 -- or a module member 'Def' for applying.
@@ -818,26 +847,81 @@ computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) (GUser
 prepareUserAppArgs :: Def Ref -> [Term Ref] -> Info -> Eval e ([Term Name], FunType (Term Name))
 prepareUserAppArgs Def{..} args i = do
   as' <- mapM reduce args
-  ft' <- traverse reduce _dFunType
-  typecheckArgs i _dDefName ft' as'
-  return (as',ft')
+  ty <- traverse reduce _dFunType
+  typecheckArgs i _dDefName ty as'
+  return (as',ty)
+
+guardRecursion :: Text -> Maybe ModuleName -> Eval e b -> Eval e b
+guardRecursion fname m act  =
+  uses evalCallStack (find isRecursiveAppCall) >>= \case
+      Nothing -> act
+      Just (StackFrame _ si _) ->
+        evalError si $ "Detected recursive call:" <+> maybe mempty ((<> ".") . pretty) m <> pretty fname
+  where
+  isRecursiveAppCall (StackFrame sfn _ app) =
+    sfn == fname && (_faModule . fst =<< app) == m
 
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
 evalUserAppBody d@Def{..} (as',ft') ai g run =
-  guardRecursion $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+  guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
   where
-    isRecursiveAppCall (StackFrame sfn _ app) =
-      sfn == fname && (_faModule . fst <$> app) == Just (Just _dModule)
-    guardRecursion act =
-      uses evalCallStack (find isRecursiveAppCall) >>= \case
-        Nothing -> act
-        Just (StackFrame _ si _) -> evalError si $ "Detected recursive call:" <+> pretty _dModule <> "." <> pretty fname
-    fname = asString _dDefName
-    bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
-    fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  fname = asString _dDefName
+  bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
+  fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
 
+-- | Checks that function arg length matches supplied arguments
+--   and typechecks against the reduced/unreduced terms.
+--   A more detailed explanation in 'typecheck''
+typecheckArgs'
+  :: (HasInfo i)
+  => i
+  -> DefName
+  -> FunType (Term Ref)
+  -> [Either (Term Ref) (Term Name)]
+  -> Eval e ()
+typecheckArgs' i defName ft' as' = do
+  let params = _ftArgs ft'
+  when (length params /= length as') $
+    evalError' i $ pretty defName <> ": Incorrect number of arguments (" <>
+      pretty (length as') <> ") supplied; expected " <> pretty (length params)
+  typecheck' (zip params as')
+
+-- | Typecheck an arg paired with either an unreduced term (terms that should not be reduced e.g lams, tdefs)
+--   or a fully reduced term (anything else that doesn't pass a scope pretty much).
+--   Both paths typecheck the arg and type, but we defer reducting the argument type until
+--   we know whether the value corresponding to it needs to be typechecked unreduced or not.
+typecheck'
+  :: [(Arg (Term Ref), Either (Term Ref) (Term Name))]
+  -> Eval e ()
+typecheck' ps = foldM_ tvarCheck M.empty ps where
+  -- This is a bit of a hack, but we cannot reduce lambdas and `TDef`s,
+  -- so the strategy is this: If we encounter a term which we cannot reduce, we can typecheck it
+  -- against its unreduced arg, then reduce the type once it typechecks.
+  tvarCheck m (Arg {..}, Left t) = do
+    r <- typecheckTerm _aInfo _aType t
+    r' <- traverse (\(a, b) -> (,) <$> traverse reduce a <*> traverse reduce b) r
+    case r' of
+      Nothing -> return m
+      Just (v,ty) -> case M.lookup v m of
+        Nothing -> return $ M.insert v ty m
+        Just prevTy | prevTy == ty -> return m
+                    | otherwise ->
+                        evalError (_tInfo t) $ "Type error: values for variable " <> pretty _aType <>
+                        " do not match: " <> pretty (prevTy,ty)
+  -- Term is reduced, so we reduce the arg
+  tvarCheck m (Arg {..}, Right t) = do
+    ty' <- traverse reduce _aType
+    r <- typecheckTerm _aInfo ty' t
+    case r of
+      Nothing -> return m
+      Just (v,ty) -> case M.lookup v m of
+        Nothing -> return $ M.insert v ty m
+        Just prevTy | prevTy == ty -> return m
+                    | otherwise ->
+                        evalError (_tInfo t) $ "Type error: values for variable " <> pretty _aType <>
+                          " do not match: " <> pretty (prevTy,ty)
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -853,7 +937,6 @@ reduceDirect TNative {..} as ai =
     eAdvise ai (AdviceNative _tNativeName) $ dup
         $ appCall fa ai as
         $ _nativeFun _tNativeFun fa as
-
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 

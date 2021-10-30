@@ -793,31 +793,44 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
   return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
+toFun (TLam (Lam name ty body _) i) = do
+  TcId _ _ newIx <- freshId i "%anonlam"
+  let mn = ModuleName ("%anonlam_" <> pack (show newIx)) Nothing
+  withScopeBodyToFun name mn ty body Defun i
 toFun (TDef td i) = resolveDyn td
   where
-    resolveDyn d@Def{..} = use tcDynEnv >>= \de -> case M.lookup _dModule de of
-      Nothing -> go i d
+    resolveDyn Def{..} = use tcDynEnv >>= \de -> case M.lookup _dModule de of
+      Nothing ->
+        withScopeBodyToFun (asString _dDefName) _dModule _dFunType _dDefBody _dDefType i
       Just ModuleData{..} -> case HM.lookup (asString _dDefName) _mdRefMap of
         Just r -> toFun (fmap Left $ TVar r i)
         Nothing -> die i $ "Dynamic substitution failed, module does not have member: " ++
           show (moduleDefName _mdModule) ++ "::" ++ show _dDefName
-    go _tInfo _tDef = do
-      let mn = _dModule _tDef
-          fn = asString $ _dDefName _tDef
-      args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
-        an <- freshId ai $ pfx fn n
-        t' <- mangleType an <$> traverse toUserType t
-        Named n <$> trackNode t' an <*> pure an
-      tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) (_dDefBody _tDef)
-      funType <- traverse toUserType (_dFunType _tDef)
-      funId <- freshId _tInfo fn
-      void $ trackNode (_ftReturn funType) funId
-      unless (null tcs) $ assocAST funId (last tcs)
-      return $ FDefun _tInfo mn fn (_dDefType _tDef) funType args tcs funId
 toFun (TDynamic ref mem i) = case (ref, mem) of
   (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
   _ -> die i "Malformed mod ref"
 toFun t = die (_tInfo t) "Non-var in fun position"
+
+withScopeBodyToFun
+  :: Show n
+  => Text
+  -> ModuleName
+  -> FunType (Term (Either Ref n))
+  -> Scope Int Term (Either Ref (AST Node))
+  -> DefType
+  -> Info
+  -> TC (Fun Node)
+withScopeBodyToFun fnname modname funTy body deftype info = do
+  args <- forM (_ftArgs funTy) $ \(Arg n t ai) -> do
+    an <- freshId ai $ pfx fnname n
+    t' <- mangleType an <$> traverse toUserType t
+    Named n <$> trackNode t' an <*> pure an
+  tcs <- scopeToBody info (map (Var . _nnNamed) args) body
+  funType <- traverse toUserType funTy
+  funId <- freshId info fnname
+  void $ trackNode (_ftReturn funType) funId
+  unless (null tcs) $ assocAST funId (last tcs)
+  return $ FDefun info modname fnname deftype funType args tcs funId
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
 assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
@@ -875,6 +888,7 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
+toAST TLam{..} = die _tInfo "lam in value position"
 toAST TModRef{..} = do
   tcid <- freshId _tInfo $ renderCompactText _tModRef
 

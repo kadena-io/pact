@@ -22,6 +22,7 @@
 module Pact.Runtime.Typecheck
   ( typecheck
   , checkUserType
+  , typecheckTerm
   , typecheckDef
   , typecheckArgs
   ) where
@@ -36,11 +37,10 @@ import qualified Data.Vector as V
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
-
 -- | Runtime input typecheck, enforced on let bindings, consts, user defun app args.
 -- Output checking -- app return values -- left to static TC.
 -- Native funs not checked here, as they use pattern-matching etc.
-typecheck :: [(Arg (Term Name),Term Name)] -> Eval e ()
+typecheck :: (Eq n, Pretty n) => [(Arg (Term n),Term n)] -> Eval e ()
 typecheck ps = foldM_ tvarCheck M.empty ps where
   tvarCheck m (Arg {..},t) = do
     r <- typecheckTerm _aInfo _aType t
@@ -54,7 +54,7 @@ typecheck ps = foldM_ tvarCheck M.empty ps where
                         " do not match: " <> pretty (prevTy,ty)
 
 -- | Typecheck a def against a declared fun type.
-typecheckDef :: Def Ref -> FunType (Term Name) -> FunType (Term Name) -> Eval e ()
+typecheckDef :: forall n e. (Eq n, Pretty n) => Def n -> FunType (Term n) -> FunType (Term n) -> Eval e ()
 typecheckDef def defTy funTy = validateArgCount >> tcReturn >> tcArgs
   where
     defArgCount = length $ _ftArgs defTy
@@ -95,8 +95,12 @@ typecheckFailed i found spec = evalError' i $
 -- Returns `Nothing` on successful check against concrete/untyped,
 -- or `Just` a pair for successful check against a type variable, where
 -- the pair is the type variable itself and the term type.
-typecheckTerm :: forall e . Info -> Type (Term Name) -> Term Name
-       -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
+typecheckTerm
+  :: forall n e. (Eq n, Pretty n)
+  => Info
+  -> Type (Term n)
+  -> Term n
+  -> Eval e (Maybe (TypeVar (Term n),Type (Term n)))
 typecheckTerm i' spec' t' = getTy i' t' >>= \ty' -> checkTy i' spec' ty' t'
   where
     getTy i t = case typeof t of
@@ -113,11 +117,11 @@ typecheckTerm i' spec' t' = getTy i' t' >>= \ty' -> checkTy i' spec' ty' t'
     -- to determine actual container value type, and compare for equality
     -- with top-level specified type 'spec'.
     paramCheck :: Info
-               -> Type (Term Name)
-               -> Type (Term Name)
-               -> Type (Term Name)
-               -> (Type (Term Name) -> Eval e (Type (Term Name)))
-               -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
+               -> Type (Term n)
+               -> Type (Term n)
+               -> Type (Term n)
+               -> (Type (Term n) -> Eval e (Type (Term n)))
+               -> Eval e (Maybe (TypeVar (Term n),Type (Term n)))
     paramCheck _ _ TyAny _ _ = tcOK -- no spec
     paramCheck i spec pspec pty check
       | pspec `canUnifyWith` pty = tcOK -- equality OK
@@ -128,7 +132,7 @@ typecheckTerm i' spec' t' = getTy i' t' >>= \ty' -> checkTy i' spec' ty' t'
           if spec `canUnifyWith` checked then tcOK else tcFail i pspec checked
 
     -- | Recur through list to validate element type
-    checkList :: V.Vector (Term Name) -> Type (Term Name) -> Eval e (Type (Term Name))
+    checkList :: V.Vector (Term n) -> Type (Term n) -> Eval e (Type (Term n))
     checkList es lty = do
       forM_ es $ \e -> do
         ty <- getTy (getInfo e) e
@@ -155,12 +159,12 @@ typecheckTerm i' spec' t' = getTy i' t' >>= \ty' -> checkTy i' spec' ty' t'
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
 -- Total flag allows for partial row types if False.
-checkUserType :: SchemaPartial -> Info -> ObjectMap (Term Name) -> Type (Term Name) -> Eval e (Type (Term Name))
+checkUserType :: forall n e. (Eq n, Pretty n) => SchemaPartial -> Info -> ObjectMap (Term n) -> Type (Term n) -> Eval e (Type (Term n))
 checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
   -- fields is lookup from name to arg.
   -- TODO consider OMap or equivalent for schema fields
   let fields = M.fromList . map (FieldKey . _aName &&& id) $ _tFields
-  aps :: [(Arg (Term Name), Term Name)] <- forM (M.toList ps) $ \(k,v) ->
+  aps <- forM (M.toList ps) $ \(k,v) ->
     case M.lookup k fields of
       Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k
       Just a -> return (a,v)

@@ -1,0 +1,81 @@
+
+(module lam-test g (defcap g () true)
+  (defun add2 (x:integer) (+ x 2))
+  (defun appHOF (f x) (f x))
+  (defun gt2 (x:integer) (> x 2))
+  )
+
+(expect "higher order function application works for tdefs"
+  4
+  (appHOF add2 2)
+)
+
+(expect "higher order function application works for lambdas"
+  11
+  (let ((fHOF (lambda (f  a) (f a))) (g (lambda (x) x))) (fHOF g 11))
+  )
+
+(expect "higher order function application works for lambda passed tdefs"
+  13
+  (let ((fHOF (lambda (f  a) (f a)))) (fHOF add2 11))
+  )
+
+(expect "higher order function application works for defs passed in lambdass"
+  4
+  (let ((f (lambda (a) (+ a a)))) (appHOF f 2))
+  )
+
+(expect "lambdas in let* behave as expected"
+  8
+  (let*
+    ((f (lambda (x:integer) (+ x 2)))
+     (g (lambda (x:integer) (+ (f x) 2)))
+     (h (lambda (x:integer) (+ (g x) 2)))
+    )
+    (h 2)
+  )
+  )
+
+(expect "nested lambdas in let reference as expected"
+  8
+  (let
+    ((f (lambda (x:integer) (+ x 2))))
+    (let
+      ((g (lambda (x:integer) (+ (f x) 2))))
+      (let ((h (lambda (x:integer) (+ (g x) 2))))
+           (h 2))))
+  )
+
+(expect "nested lambdas in let reference as expected v2"
+  8
+  (let
+    ((f (lambda (x:integer) (+ x 2))))
+    (let
+      ((g (lambda (x:integer) (+ x 2))))
+      (let ((h (lambda (x:integer) (+ x 2))))
+           (h (g (f 2))))))
+  )
+
+(expect "lambdas function within natives: map"
+  [1, 4, 9, 16, 25]
+  (let
+    ((squarelam (lambda(x) (* x x))))
+    (map (squarelam) [1, 2, 3, 4, 5]))
+)
+
+(expect "defuns function within natives: map"
+  [3, 4, 5, 6, 7]
+  (map (add2) [1, 2, 3, 4, 5])
+)
+
+(expect "lambdas function within natives: filter"
+  [4, 5]
+  (let
+    ((gt3 (lambda(x) (> x 3))))
+    (filter (gt3) [1, 2, 3, 4, 5]))
+)
+
+(expect "defuns function within natives: filter"
+  [3, 4, 5]
+    (filter (gt2) [1, 2, 3, 4, 5])
+)
