@@ -1,3 +1,10 @@
+4.1.1
+---
+* Guard for recursion at runtime on user apps (#913)
+* FV and TC give real errors (and warnings), improve model failure output (#904)
+* Fix nested capability acquisition (#910)
+* Add support for empty import lists when module hashes are present (#901)
+
 4.1
 ---
 * [Typechecking/FV] Support dynamic refs in TC/analyze (#894)
