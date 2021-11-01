@@ -18,6 +18,7 @@ where
 
 import Control.Lens
 import Control.Monad
+import Data.Foldable
 import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.Text (Text)
@@ -84,9 +85,9 @@ keyFormats :: [KeyFormat]
 keyFormats = [ed25519Hex]
 
 enforceKeyFormats :: HasInfo i => i -> KeySet -> Eval e ()
-enforceKeyFormats i (KeySet ks _p) = foldM go () ks
+enforceKeyFormats i (KeySet ks _p) = traverse_ go ks
   where
-    go _ k = unless (any ($ k) keyFormats) $ evalError' i "Invalid keyset"
+    go k = unless (any ($ k) keyFormats) $ evalError' i "Invalid keyset"
 
 defineKeyset :: GasRNativeFun e
 defineKeyset g0 fi as = case as of
