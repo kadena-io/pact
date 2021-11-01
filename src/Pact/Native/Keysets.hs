@@ -9,10 +9,17 @@
 -- Builtins for working with keysets.
 --
 
-module Pact.Native.Keysets where
+module Pact.Native.Keysets
+  ( keyDefs
+  , readKeysetDef
+  )
+
+where
 
 import Control.Lens
-
+import Control.Monad
+import qualified Data.ByteString.Char8 as BS
+import Data.Char
 import Data.Text (Text)
 
 import Pact.Eval
@@ -60,7 +67,26 @@ keyDefs =
 
 
 readKeySet' :: FunApp -> Text -> Eval e KeySet
-readKeySet' i key = parseMsgKey i "read-keyset" key
+readKeySet' i key = do
+  ks <- parseMsgKey i "read-keyset" key
+  whenExecutionFlagSet FlagEnforceKeyFormats $ enforceKeyFormats i ks
+  return ks
+
+-- | A predicate for public key format validation.
+type KeyFormat = PublicKey -> Bool
+
+-- | Current "Kadena" ED-25519 key format: 64-length hex.
+ed25519Hex :: KeyFormat
+ed25519Hex (PublicKey k) = BS.length k == 64 && BS.all isHexDigit k
+
+-- | Supported key formats.
+keyFormats :: [KeyFormat]
+keyFormats = [ed25519Hex]
+
+enforceKeyFormats :: HasInfo i => i -> KeySet -> Eval e ()
+enforceKeyFormats i (KeySet ks _p) = foldM go () ks
+  where
+    go _ k = unless (any ($ k) keyFormats) $ evalError' i "Invalid keyset"
 
 defineKeyset :: GasRNativeFun e
 defineKeyset g0 fi as = case as of
