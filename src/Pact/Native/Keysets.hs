@@ -78,7 +78,13 @@ type KeyFormat = PublicKey -> Bool
 
 -- | Current "Kadena" ED-25519 key format: 64-length hex.
 ed25519Hex :: KeyFormat
-ed25519Hex (PublicKey k) = BS.length k == 64 && BS.all isHexDigit k
+ed25519Hex (PublicKey k) = BS.length k == 64 && BS.all isHexDigitLower k
+
+-- | Lower-case hex numbers.
+isHexDigitLower :: Char -> Bool
+isHexDigitLower c =
+  -- adapted from GHC.Unicode#isHexDigit
+  isDigit c || (fromIntegral (ord c - ord 'a')::Word) <= 5
 
 -- | Supported key formats.
 keyFormats :: [KeyFormat]
