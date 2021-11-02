@@ -203,3 +203,54 @@
  "Scoped acquire of O succeeds"
  "Capability acquired"
  (test-capability (O)))
+
+;;
+;; keyset formats
+;;
+
+(env-exec-config ["EnforceKeyFormats"])
+(env-data
+ { 'bad: ['foo]
+ , 'short: ["12440d374865bdf0a3349634a70d1317fc279e7e13db98f2199ac5e7378975"]
+ , 'long: ["12440d374865bdf0a3349634a70d1317fc279e7e13db98f2199ac5e7378975eaea"]
+ , 'badchars: ["x2440d374865bdf0a3349634a70 1317fc279e7e13db9!f2199ac5e7378975ea"]
+ , 'ucase:  ["12440D374865BDF0A3349634A70D1317FC279E7E13DB98F2199AC5E7378975EA"]
+ , 'good:  ["12440d374865bdf0a3349634a70d1317fc279e7e13db98f2199ac5e7378975ea"]
+ , 'mixed: ['foo "12440d374865bdf0a3349634a70d1317fc279e7e13db98f2199ac5e7378975ea"]
+ , 'good2: ["12440d374865bdf0a3349634a70d1317fc279e7e13db98f2199ac5e7378975ea"
+            "fdd198807260fa07b86f97a918ff7fe3542d98b9ca41a76f509e886dba3ae177"]
+
+ })
+(expect-failure
+ "enforce kadena key format with flag: fail single"
+ "Invalid keyset"
+ (read-keyset 'bad))
+(expect-failure
+ "enforce kadena key format with flag: fail short"
+ "Invalid keyset"
+ (read-keyset 'short))
+(expect-failure
+ "enforce kadena key format with flag: fail long"
+ "Invalid keyset"
+ (read-keyset 'long))
+(expect-failure
+ "enforce kadena key format with flag: fail badchars"
+ "Invalid keyset"
+ (read-keyset 'badchars))
+(expect-failure
+ "enforce kadena key format with flag: fail uppercase"
+ "Invalid keyset"
+ (read-keyset 'ucase))
+
+(expect-failure
+ "enforce kadena key format with flag: fail one bad one good"
+ "Invalid keyset"
+ (read-keyset 'mixed))
+(expect-that
+ "enforce kadena key format with flag: success single"
+ (constantly true)
+ (read-keyset 'good))
+(expect-that
+ "enforce kadena key format with flag: success 2"
+ (constantly true)
+ (read-keyset 'good2))
