@@ -150,6 +150,8 @@ data ExecutionFlag
   | FlagPreserveShowDefs
   -- | Disable Pact 4.0 features
   | FlagDisablePact40
+  -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
+  | FlagEnforceKeyFormats
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
