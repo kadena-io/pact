@@ -27,6 +27,11 @@ flag ghc-flags
   default:     False
   manual:      True
 
+flag cli-repl
+  description: Include support for Pact Cli terminal.
+  default:     False
+  manual:      True
+
 flag build-tool
   description: Include modules and deps for tests + executable
   default:     True
@@ -143,6 +148,7 @@ library
     , vector >= 0.11.0.0 && < 0.13
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
+
   if flag(ghc-flags)
     build-tool-depends: hsinspect:hsinspect
     ghc-options: -fplugin GhcFlags.Plugin
@@ -262,6 +268,20 @@ library
         , ed25519-donna
     if !os(windows)
       build-depends: unix
+
+    if flag(cli-repl)
+      exposed-modules:
+        Pact.Repl.Cli
+        Pact.Embed
+      build-depends:
+        , connection >= 0.3.1
+        , http-client-tls >= 0.3.5.3
+        , template-haskell
+        , qrcode-core
+        , qrcode-juicypixels
+        , JuicyPixels
+      cpp-options: -DCLI_REPL
+
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)

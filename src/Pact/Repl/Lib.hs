@@ -83,7 +83,7 @@ initLibState loggers verifyUri = do
                 (newLogger loggers "Repl")
                 def 0 def)
   createSchema m
-  return (LibState m Noop def def verifyUri M.empty def)
+  return (LibState m Noop def def verifyUri M.empty def def)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)

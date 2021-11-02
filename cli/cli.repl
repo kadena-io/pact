@@ -1,0 +1,299 @@
+(module cli G
+  "Provides data model and utility functions for the Pact client terminal."
+  (defcap G () (enforce false "X"))
+
+  (defschema cap
+    "Capability storage"
+    name:string
+    args:list
+    signers:[string])
+
+  (defschema signer
+    "Signer ID and optional signature"
+    signer:string
+    signature:string)
+
+  (defschema env
+    "Transaction values that are kept in sync with REPL environment."
+    gaslimit:integer
+    gasprice:decimal
+    msgdata:object)
+
+  (defschema data
+    "Client state object."
+    sender:string
+    ttl:integer
+    network-id:string
+    creation-time:time
+    nonce:string
+    host:string
+    chain-id:integer
+    signers:[object{signer}]
+    caps:[object{cap}]
+    code:string
+    env:object{env}
+    )
+
+  (deftable state:{data})
+  (defconst S "S"
+    "State singleton key")
+
+  (defschema keydata
+    "Public key storage with optional alias or keyfile."
+    key:string
+    alias:string
+    file:string)
+
+  (deftable keystore:{keydata})
+
+  (defconst PACT_CHAIN_ID:integer -1
+    "chain id sentinel for pact -s server to not use SSL/TLS.")
+
+  (defun init ()
+    "Reset state to default values."
+    (write
+     state S
+     { 'sender: "sender"
+     , 'ttl: 150000
+     , 'network-id: "mainnet01"
+     , 'creation-time: (now)
+     , 'nonce: "nonce"
+     , 'host: "api.chainweb.com"
+     , 'chain-id: 0
+     , 'signers: []
+     , 'caps: []
+     , 'code: ""
+     , 'env:
+       { 'gaslimit: 5000
+       , 'gasprice: 0.00000000001
+       , 'msgdata: {}
+       }
+     })
+    (conform-env)
+    (rehash))
+
+  (defun conform-env ()
+    "Conform REPL environment to state."
+    (with-read state S
+      { 'env:= e }
+      (env-data (at 'msgdata e))
+      (env-gaslimit (at 'gaslimit e))
+      (env-gasprice (at 'gasprice e))))
+
+  (defun sstore (name:string)
+    "Store state under a custom NAME."
+    (write state name (cli-state)))
+
+  (defun sload(name:string)
+    "Load custom state NAME."
+    (write state S (read state name))
+    (conform-env)
+    (rehash))
+
+  (defun cli-state ()
+    "Read current state."
+    (read state S))
+
+  (defun mainnet ()
+    "Mainnet state vars."
+    (network-id "mainnet01")
+    (host "api.chainweb.com")
+    (rehash))
+
+  (defun testnet ()
+    "Testnet state vars."
+    (network-id "testnet04")
+    (host "api.testnet.chainweb.com")
+    (rehash))
+
+  (defun devnet ()
+    "Devnet state vars."
+    (network-id "development")
+    (host "us1.tn1.chainweb.com")
+    (rehash))
+
+  (defun update-state (u:object rh:bool)
+    "Update state to U and if RH, rehash."
+    (update state S u)
+    (conform-env)
+    (if rh (rehash) "State updated"))
+
+  (defun sender (s:string)
+    "Set state sender/gaspayer account."
+    (update-state { 'sender: s } true))
+
+  (defun sender-key (key:string)
+    "Set state sender/gaspayer account to KEY match in keystore."
+    (sender (find-key key)))
+
+  (defun gaslimit (i:integer)
+    "Set state gaslimit."
+    (update-env { 'gaslimit: i }))
+
+  (defun gasprice (d:decimal)
+    "Set state gasprice."
+    (update-env { 'gasprice: d }))
+
+  (defun msgdata (o:object)
+    "Set state message data."
+    (update-env { 'msgdata: o }))
+
+  (defun update-env (e:object)
+    "Update and rehash state with env value."
+    (update-state
+     { 'env:
+       (+ e (at 'env (cli-state)))}
+     true))
+
+  (defun ttl (i:integer)
+    "Set state TTL."
+    (update-state { 'ttl: i } true))
+
+  (defun network-id (s:string)
+    "Set state network id."
+    (update-state { 'network-id: s } true))
+
+  (defun creation-time (t:time)
+    "Set state creation time."
+    (update-state { 'creation-time: t } true))
+
+  (defun creation-ymd (s:string)
+    "Set state creation time as 'YYYY-MM-DD'"
+    (creation-time (parse-time "%F" s)))
+
+  (defun nonce (s:string)
+    "Set state nonce."
+    (update-state { 'nonce: s } true))
+
+  (defun host (h:string)
+    "Set state host value."
+    (update-state { 'host: h } false))
+
+  (defun chain-id (i:integer)
+    "Set state chain id."
+    (update-state { 'chain-id: i } true))
+
+  (defun set-code (s:string)
+    "Set state code."
+    (update-state { 'code: s } true))
+
+  (defun add-key:object{keydata} (key:string)
+    "Add KEY as public key to keystore with default values."
+    (with-default-read keystore key
+      { 'file: "", 'alias: "" }
+      { 'file:= f, 'alias:= a }
+      (let ((k { 'key: key, 'file: f, 'alias: a }))
+        (write keystore key k)
+        k)))
+
+  (defun add-key-alias:object{keydata} (alias:string key:string)
+    "Add KEY with ALIAS to keystore."
+    (with-default-read keystore key
+      { 'file: "" }
+      { 'file:= f }
+      (let ((k { 'key: key, 'file: f, 'alias: alias }))
+        (write keystore key k)
+        k)))
+
+  (defun add-keyfile1:object{keydata} (key:string file:string)
+    "INTERNAL add keyfile under KEY with FILE."
+    (with-default-read keystore key
+      { 'alias: "" }
+      { 'alias:= a}
+      (let ((k { 'key: key, 'file: file, 'alias: a }))
+        (write keystore key k)
+        (rehash)
+        k)))
+
+  (defun get-key:object{keydata} (key:string)
+    "Read keystore at KEY."
+    (read keystore key))
+
+  (defun add-cap1 (name:string args:list signers:[string])
+    "Add signature capability (NAME ARGS) for SIGNERS."
+    (let ((ss (map (add-signer) signers)))
+      (update-state
+       { 'caps:
+         (+ [{ 'name: name
+             , 'args: args
+             , 'signers: ss }]
+            (at 'caps (read state S)))}
+       true)))
+
+  (defun sign (signer:string signature:string)
+    "Set SIGNATURE for SIGNER."
+    (let ((s (add-signer signer)))
+      (update-state
+       { 'signers:
+         (map (sign1 s signature)
+               (at 'signers (cli-state))) } true)
+      (format "Added signature {}->{}" (map (elide) [signer signature]))))
+
+  (defun elide:string (s:string)
+    "Elide to 12 chars"
+    (if (< (length s) 12) s
+      (+ (take 12 s) "...")))
+
+  (defun sign1 (signer:string signature:string s:object{signer})
+    "INTERNAL update SIGNATURE in S if matches SIGNER."
+    (if (= signer (at 'signer s))
+        (+ { 'signature: signature} s)
+      s))
+
+
+  (defun add-signer-unsafe (s:string sig:string)
+    "INTERNAL add signer S with SIG without keystore check."
+    (let ((ss (at 'signers (read state S))))
+      (if (contains s (map (at 'signer) ss)) "Already added"
+        (update-state
+         { 'signers: (+ [{'signer:s,'signature:sig}] ss) } true))))
+
+  (defun add-signer (signer:string)
+    "Matches SIGNER to keystore to add to signers list."
+    (enforce (!= "" signer) "Empty signer")
+    (let ((matched (find-key signer)))
+      (add-signer-unsafe matched "")
+      matched))
+
+  (defun add-keyset-signers (aliased-only:bool k:keyset)
+    " Adds all keys in keyset to signers unless ALIASED-ONLY, in which \
+    \ case only adds aliased keys."
+    (let* ((ks (add-keyset k))
+           (ks1 (if aliased-only
+                    (filter (compose (at 'alias) (!= "")) ks)
+                  ks)))
+      (map (compose (at 'key) (add-signer)) ks1)
+      ks1))
+
+  (defun clear-sigs ()
+    "Clear signatures from state."
+    (update-state
+     { 'signers:
+       (map (+ { 'signature: "" })
+        (at 'signers (cli-state))) }
+     false))
+
+  (defun all-keys ()
+    "Table read from keystore."
+    (select keystore (constantly true)))
+
+  (defun find-key:string (k:string)
+    "Searches keystore by key and alias for K, returning key string"
+    (let ((matched (fold (match-key k) "" (all-keys))))
+      (enforce (!= "" matched) (format "Key not found: {}" [k]))
+      matched))
+
+  (defun match-key (part:string r:string key:object{keydata})
+    "INTERNAL for find-key."
+    (if (or (= part (take (length part) (at 'key key)))
+            (= part (take (length part) (at 'alias key))))
+        (let ((x 0))
+          (enforce (= "" r) "Multiple matches found")
+          (at 'key key))
+      r))
+
+
+)
+(create-table state)
+(create-table keystore)
+(init)

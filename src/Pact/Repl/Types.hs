@@ -2,11 +2,11 @@
 module Pact.Repl.Types
   ( ReplMode(..)
   , Hdl(..)
-  , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile,rTermOut
+  , ReplState(..),rEnv,rEvalState,rMode,rOut,rTermOut
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsDynEnv
+  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsFile,rlsDynEnv
   , Tx(..)
   , SPVMockKey(..)
   , getAllModules
@@ -52,7 +52,6 @@ data ReplState = ReplState {
     , _rMode :: ReplMode
     , _rOut :: String
     , _rTermOut :: [Term Name]
-    , _rFile :: Maybe FilePath
     }
 
 type Repl a = StateT ReplState IO a
@@ -99,6 +98,7 @@ data LibState = LibState
   , _rlsTests :: [TestResult]
   , _rlsVerifyUri :: Maybe String
   , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
+  , _rlsFile :: Maybe FilePath
   , _rlsDynEnv :: DynEnv
   }
 

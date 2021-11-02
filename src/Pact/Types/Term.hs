@@ -65,7 +65,7 @@ module Pact.Types.Term
    DefcapMeta(..),
    Example(..),
    derefDef,
-   ObjectMap(..),objectMapToListWith,
+   ObjectMap(..),objectMapToListWith,objectMap,
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
@@ -1523,6 +1523,7 @@ makeLenses ''Step
 makeLenses ''ModuleHash
 makeLenses ''ModRef
 makePrisms ''Guard
+makeLenses ''ObjectMap
 
 makeLenses ''FunApp
 makePrisms ''Ref'

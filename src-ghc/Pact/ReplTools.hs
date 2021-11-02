@@ -24,7 +24,6 @@ import System.Console.Haskeline
 
 import Pact.Parse
 import Pact.Types.Runtime
-import Pact.Native
 import Pact.Repl
 import Pact.Repl.Types
 
@@ -40,11 +39,12 @@ completeFn :: (MonadIO m, MonadState ReplState m) => CompletionFunc m
 completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') ("\"\'" ++ filenameWordBreakChars) $ \str -> do
     modules <- use (rEvalState . evalRefs . rsLoadedModules)
+    nats <- use (rEnv . eeRefStore . rsNatives)
     let namesInModules = toListOf (traverse . _1 . mdRefMap . to HM.keys . each) modules
         allNames = concat
           [ namesInModules
           , nameOfModule <$> HM.keys modules
-          , unName <$> HM.keys nativeDefs
+          , unName <$> HM.keys nats
           ]
         matchingNames = filter (str `isPrefixOf`) (unpack <$> allNames)
     pure $ simpleCompletion <$> matchingNames
@@ -65,10 +65,13 @@ replSettings = Settings
   True -- automatically add each line to history
 
 generalRepl :: ReplMode -> IO (Either () (Term Name))
-generalRepl m = initReplState m Nothing >>= \s -> case m of
+generalRepl m = initReplState m Nothing >>= generalRepl' m
+
+generalRepl' :: ReplMode -> ReplState -> IO (Either () (Term Name))
+generalRepl' m s = case m of
   Interactive -> evalStateT
     (runInputT replSettings (withInterrupt (haskelineLoop [] Nothing)))
-    (setReplLib s)
+    s
   _StdInPipe -> runPipedRepl s stdin
 
 type HaskelineRepl = InputT (StateT ReplState IO)

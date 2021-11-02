@@ -18,8 +18,8 @@
 
 module Pact.Types.API
   ( RequestKeys(..), rkRequestKeys
-  , SubmitBatch(..), sbCmds
-  , Poll(..)
+  , SubmitBatch(..), sbCmds, mkSubmitBatch
+  , Poll(..), mkPoll
   , PollResponses(..)
   , ListenerRequest(..)
   , ListenResponse(..)
@@ -33,7 +33,7 @@ import Control.Monad
 import Data.Text (Text)
 import Data.Aeson hiding (Success)
 import qualified Data.HashMap.Strict as HM
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty(..))
 
 import GHC.Generics
 
@@ -55,6 +55,9 @@ newtype SubmitBatch = SubmitBatch { _sbCmds :: NonEmpty (Command Text) }
   deriving (Eq,Generic,Show)
 makeLenses ''SubmitBatch
 
+mkSubmitBatch :: Command Text -> [Command Text] -> SubmitBatch
+mkSubmitBatch h t = SubmitBatch (h :| t)
+
 instance ToJSON SubmitBatch where
   toJSON = lensyToJSON 3
 instance FromJSON SubmitBatch where
@@ -63,6 +66,9 @@ instance FromJSON SubmitBatch where
 -- | Poll for results by RequestKey
 newtype Poll = Poll { _pRequestKeys :: NonEmpty RequestKey }
   deriving (Eq,Show,Generic)
+
+mkPoll :: RequestKey -> [RequestKey] -> Poll
+mkPoll h t = Poll (h :| t)
 
 instance ToJSON Poll where
   toJSON = lensyToJSON 2
