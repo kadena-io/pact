@@ -97,6 +97,8 @@ singFloat ty p = case p of
     -> PropSpecific . DecCellDelta tn cn  <$> float a
 
   -- str
+  CoreProp (StrTake s1 s2) -> PStrTake <$> float s1 <*> float s2
+  CoreProp (StrDrop s1 s2) -> PStrDrop <$> float s1 <*> float s2
   CoreProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
   CoreProp (Typeof tya a) -> CoreProp . Typeof tya <$> singFloat tya a
 
