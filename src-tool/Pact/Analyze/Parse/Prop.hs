@@ -605,6 +605,9 @@ inferPreProp preProp = case preProp of
       SList ty' -> do
         index' <- checkPreProp SInteger index
         pure $ Some ty $ CoreProp $ ListTake ty' index' lstOrObj'
+      SStr -> do
+        index' <- checkPreProp SInteger index
+        pure $ Some ty $ CoreProp $ StrTake index' lstOrObj'
       SObject{} -> do
         fieldNames  <- checkPreProp (SList SStr) index
         fieldNames' <- extractStringList "take" preProp fieldNames
@@ -620,6 +623,9 @@ inferPreProp preProp = case preProp of
       SList ty' -> do
         index' <- checkPreProp SInteger index
         pure $ Some ty $ CoreProp $ ListDrop ty' index' lstOrObj'
+      SStr -> do
+        index' <- checkPreProp SInteger index
+        pure $ Some ty $ CoreProp $ StrDrop index' lstOrObj'
       SObject{} -> do
         fieldNames  <- checkPreProp (SList SStr) index
         fieldNames' <- extractStringList "drop" preProp fieldNames
