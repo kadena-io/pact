@@ -575,6 +575,10 @@ eqCoreTm _ (StrToIntBase b1 s1)          (StrToIntBase b2 s2)
   = eqTm b1 b2 && eqTm s1 s2
 eqCoreTm _ (StrContains a1 b1)           (StrContains a2 b2)
   = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (StrTake i1 l1)          (StrTake i2 l2)
+  = eqTm i1 i2 && eqTm l1 l2
+eqCoreTm _ (StrDrop i1 l1)          (StrDrop i2 l2)
+  = eqTm i1 i2 && eqTm l1 l2
 eqCoreTm ty (Numerical a)                (Numerical b)
   = eqNumerical ty a b
 eqCoreTm _ (IntAddTime a1 b1)            (IntAddTime a2 b2)
