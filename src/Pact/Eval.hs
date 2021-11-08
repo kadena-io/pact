@@ -32,7 +32,7 @@ module Pact.Eval
     ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
     ,deref
-    ,liftTerm,apply
+    ,liftTerm,apply,reduceApp
     ,acquireModuleAdmin
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName

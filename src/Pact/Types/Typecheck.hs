@@ -119,8 +119,7 @@ data Overload m = Overload {
   _oRoles :: M.Map VarRole m,
   _oTypes :: FunTypes UserType,
   _oSolved :: Maybe (FunType UserType),
-  _oSpecial :: Maybe OverloadSpecial
-    }
+  _oSpecial :: Maybe OverloadSpecial }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 
 instance Pretty m => Pretty (Overload m) where
