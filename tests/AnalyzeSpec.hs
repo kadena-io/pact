@@ -2883,6 +2883,14 @@ spec = describe "analyze" $ do
         `shouldBe`
         Left "in (+ 0 1), unexpected argument types for (+): integer and integer"
 
+    it "check take/drop" $ do
+      textToProp SStr "(take 2 \"asdf\")"
+        `shouldBe`
+        Right (PStrTake (Lit' 2) (Lit' "asdf"))
+      textToProp SStr "(drop 2 \"asdf\")"
+        `shouldBe`
+        Right (PStrDrop (Lit' 2) (Lit' "asdf"))
+
     it "infers prop objects" $ do
       -- let pairSchema = Schema $
       --       Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
@@ -3575,6 +3583,65 @@ spec = describe "analyze" $ do
           |]
     -- we expect this to give an error
     expectVerified code
+
+  describe "string drop" $ do
+    let code1 model = [text|
+          (defun test:string ()
+            @model $model
+            (drop 2 "abc"))
+          |]
+    expectVerified  $ code1 "[(property (= result \"c\"))]"
+    expectFalsified $ code1 "[(property (= result \"bc\"))]"
+
+    let code1' model = [text|
+          (defun test:string ()
+            @model $model
+            (drop -1 "abc"))
+          |]
+    expectVerified  $ code1' "[(property (= result \"ab\"))]"
+    expectFalsified $ code1' "[(property (= result \"a\"))]"
+
+    let code2 = [text|
+          (defun test:string ()
+            @model [(property (= result ""))
+                    (property (= (length result) 0))
+                   ]
+            (drop 4 "abc"))
+          |]
+    expectVerified code2
+
+  describe "string take" $ do
+    let code3 model = [text|
+          (defun test:string ()
+            @model $model
+            (take 2 "abc"))
+          |]
+    expectVerified  $ code3 "[(property (= result \"ab\"))]"
+    expectFalsified $ code3 "[(property (= result \"bc\"]))]"
+
+    let code3' model = [text|
+          (defun test:string ()
+            @model $model
+            (take -2 "abc"))
+          |]
+    expectVerified  $ code3' "[(property (= result \"bc\"))]"
+    expectFalsified $ code3' "[(property (= result \"ab\"))]"
+
+    let code4 = [text|
+          (defun test:string ()
+            @model [(property (= result "abc"))
+                    (property (= (length result) 3))
+                   ]
+            (take 4 "abc"))
+          |]
+    expectVerified code4
+
+    let code5 = [text|
+          (defun test:bool ()
+            @model [(property (= result true))]
+            (= "" (take 0 "abc")))
+          |]
+    expectVerified code5
 
   describe "list drop" $ do
     let code1 model = [text|

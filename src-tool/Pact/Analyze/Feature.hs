@@ -122,6 +122,8 @@ data Feature
   | FStringLength
   | FConcatenation
   | FStringToInteger
+  | FStringTake
+  | FStringDrop
   -- Temporal operators
   | FTemporalAddition
   -- Quantification forms
@@ -1089,6 +1091,38 @@ doc FFold = Doc
 
 -- String features
 
+doc FStringTake = Doc
+  "take"
+  CString
+  InvAndProp
+  "take the first `n` values from `xs` (taken from the end if `n` is negative)"
+  [ Usage
+      "(take n s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("s", TyCon str)
+        ]
+      (TyCon str)
+  ]
+
+doc FStringDrop = Doc
+  "drop"
+  CString
+  InvAndProp
+  "drop the first `n` values from `xs` (dropped from the end if `n` is negative)"
+  [ Usage
+      "(drop n s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("s", TyCon str)
+        ]
+      (TyCon str)
+  ]
+
 doc FStringLength = Doc
   "length"
   CString
@@ -1698,6 +1732,8 @@ PAT(SObjectDrop, FObjectDrop)
 PAT(SObjectTake, FObjectTake)
 PAT(SObjectLength, FObjectLength)
 PAT(SStringLength, FStringLength)
+PAT(SStringTake, FStringTake)
+PAT(SStringDrop, FStringDrop)
 PAT(SConcatenation, FConcatenation)
 PAT(SStringToInteger, FStringToInteger)
 PAT(STemporalAddition, FTemporalAddition)

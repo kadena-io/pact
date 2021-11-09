@@ -64,6 +64,8 @@ module Pact.Analyze.Types.Languages
   , pattern PNumerical
   , pattern POr
   , pattern PStrConcat
+  , pattern PStrTake
+  , pattern PStrDrop
   , pattern PStrLength
   , pattern PVar
 
@@ -191,6 +193,10 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- string ops
   -- | The concatenation of two 'String' expressions
   StrConcat    :: t 'TyStr     -> t 'TyStr -> Core t 'TyStr
+  -- | Take on strings
+  StrTake      :: t 'TyInteger -> t 'TyStr -> Core t 'TyStr
+  -- | Drop on strings
+  StrDrop      :: t 'TyInteger -> t 'TyStr -> Core t 'TyStr
   -- | The length of a 'String' expression
   StrLength    :: t 'TyStr     ->             Core t 'TyInteger
   -- | Conversion of a base-10 string to an integer
@@ -569,6 +575,10 @@ eqCoreTm _ (StrToIntBase b1 s1)          (StrToIntBase b2 s2)
   = eqTm b1 b2 && eqTm s1 s2
 eqCoreTm _ (StrContains a1 b1)           (StrContains a2 b2)
   = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (StrTake i1 l1)          (StrTake i2 l2)
+  = eqTm i1 i2 && eqTm l1 l2
+eqCoreTm _ (StrDrop i1 l1)          (StrDrop i2 l2)
+  = eqTm i1 i2 && eqTm l1 l2
 eqCoreTm ty (Numerical a)                (Numerical b)
   = eqNumerical ty a b
 eqCoreTm _ (IntAddTime a1 b1)            (IntAddTime a2 b2)
@@ -702,6 +712,8 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showChar ' '
     . singShowsOpen tyc c
   StrConcat a b    -> showString "StrConcat "    . showsTm 11 a . showChar ' ' . showsTm 11 b
+  StrTake a b      -> showString "StrTake "      . showsTm 11 a . showChar ' ' . showsTm 11 b
+  StrDrop a b      -> showString "StrDrop "      . showsTm 11 a . showChar ' ' . showsTm 11 b
   StrLength a      -> showString "StrLength "    . showsTm 11 a
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
   StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showChar ' ' . showsTm 11 b
@@ -937,6 +949,8 @@ prettyCore ty = \case
   Constantly tyb a b       -> parensSep [pretty SConstantly, singPrettyTm ty a, singPrettyTm tyb b]
   Compose _ tyb tyc _ b c  -> parensSep [pretty SCompose, singPrettyOpen tyb b, singPrettyOpen tyc c]
   StrConcat x y            -> parensSep [pretty SConcatenation, prettyTm x, prettyTm y]
+  StrTake l r              -> parensSep [pretty SStringTake, prettyTm l, prettyTm r]
+  StrDrop l r              -> parensSep [pretty SStringDrop, prettyTm l, prettyTm r]
   StrLength str            -> parensSep [pretty SStringLength, prettyTm str]
   StrToInt s               -> parensSep [pretty SStringToInteger, prettyTm s]
   StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
@@ -1251,6 +1265,12 @@ pattern PNumerical x = CoreProp (Numerical x)
 
 pattern PStrConcat :: Prop 'TyStr -> Prop 'TyStr -> Prop 'TyStr
 pattern PStrConcat x y = CoreProp (StrConcat x y)
+
+pattern PStrTake :: Prop 'TyInteger -> Prop 'TyStr -> Prop 'TyStr
+pattern PStrTake x y = CoreProp (StrTake x y)
+
+pattern PStrDrop :: Prop 'TyInteger -> Prop 'TyStr -> Prop 'TyStr
+pattern PStrDrop x y = CoreProp (StrDrop x y)
 
 pattern PIntAddTime :: Prop 'TyTime -> Prop 'TyInteger -> Prop 'TyTime
 pattern PIntAddTime x y = CoreProp (IntAddTime x y)
@@ -1782,6 +1802,10 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     StrConcat <$> f tm1 <*> f tm2
   StrLength tm ->
     StrLength <$> f tm
+  StrTake tm1 tm2 ->
+    StrTake <$> f tm1 <*> f tm2
+  StrDrop tm1 tm2 ->
+    StrDrop <$> f tm1 <*> f tm2
   StrToInt tm ->
     StrToInt <$> f tm
   StrToIntBase tm1 tm2 ->
