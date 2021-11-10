@@ -1,3 +1,7 @@
+4.1.2
+---
+* Enforce key format in keyset creation (#918)
+
 4.1.1
 ---
 * Guard for recursion at runtime on user apps (#913)
