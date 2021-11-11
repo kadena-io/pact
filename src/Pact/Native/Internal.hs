@@ -257,7 +257,7 @@ requireDefApp dt App{..} = case _appFun of
   (TVar (Ref (TDef d@Def{} _)) _) -> matchDefTy d
   TDynamic tref tmem ti -> reduceDynamic tref tmem ti >>= \case
     Left v -> evalError ti $ "requireDefApp: expected module member for dynamic: " <> pretty v
-    Right d -> matchDefTy d
+    Right (d, _) -> matchDefTy d
   t -> evalError (_tInfo t) $ pretty (show t)
   where
     matchDefTy d

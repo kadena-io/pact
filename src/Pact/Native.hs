@@ -47,6 +47,7 @@ module Pact.Native
     , lengthDef
     , takeDef
     , dropDef
+    , implicitDef
     , atDef
     , chainDataSchema
     , cdChainId, cdBlockHeight, cdBlockTime, cdSender, cdGasLimit, cdGasPrice
@@ -152,7 +153,7 @@ enforceOneDef =
     enforceOne :: NativeFun e
     enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
-        msg' <- reduce msg >>= \m -> case m of
+        msg' <- reduce msg >>= \case
           TLitString s -> return s
           _ -> argsError' i as
         let tryCond r@Just {} _ = return r
@@ -584,6 +585,11 @@ composeDef = defNative "compose" compose (funType c [("x",lam a b),("y", lam b c
   ["(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])"]
   "Compose X and Y, such that X operates on VALUE, and Y on the results of X."
 
+implicitDef :: NativeDef
+implicitDef = defRNative "implicit" implicit' (funType TyAny [("x", TyAny), ("y", TyAny)])
+  ["(module m g (defcap g () true)  (defun f:bool () true)) (implicit m 1)"]
+  "Instantiate the implicit parameter k "
+
 takeDef :: NativeDef
 takeDef = defRNative "take" take' takeDrop
   [ "(take 2 \"abcd\")"
@@ -667,6 +673,7 @@ langDefs =
     ,whereDef
     ,composeDef
     ,lengthDef
+    ,implicitDef
     ,takeDef
     ,dropDef
     ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
@@ -826,21 +833,22 @@ reverse' _ [l@TList{}] = return $ over tList V.reverse l
 reverse' i as = argsError i as
 
 fold' :: NativeFun e
-fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
-           t -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
+fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \case
+  TList ls _ _ ->
+    reduce initv >>= \initv' -> foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
+  t -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
 fold' i as = argsError' i as
 
 
 filter' :: NativeFun e
-filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
-           TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
-                           t <- apply (_tApp app) [a']
-                           case t of
-                             (TLiteral (LBool bo) _) -> return bo
-                             _ -> return False -- hmm, too permissive here, select is stricter
-           t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \case
+  TList ls lt _ ->
+    fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
+      t <- apply (_tApp app) [a']
+      case t of
+        (TLiteral (LBool bo) _) -> return bo
+        _ -> return False -- hmm, too permissive here, select is stricter
+  t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
 filter' i as = argsError' i as
 
 length' :: RNativeFun e
@@ -848,6 +856,14 @@ length' _ [TList ls _ _] = return $ toTerm (length ls)
 length' _ [TLitString s] = return $ toTerm (T.length s)
 length' _ [TObject (Object ps _ _ _) _] = return $ toTerm (length ps)
 length' i as = argsError i as
+
+-- todo:
+-- what are the semantics of `(implicit (implicit impl a) b)
+-- it would make sense to be `(implicit (implicit impl a) b) == (implicit impl b)
+implicit' :: RNativeFun e
+implicit' _ [TModRef m _ i, arg] =
+  return $ TModRef m (Just arg) i
+implicit' i as = argsError i as
 
 take' :: RNativeFun e
 take' _ [TLitInteger c',TList l t _] = return $ TList (tordV V.take c' l) t def

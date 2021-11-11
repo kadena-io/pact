@@ -361,7 +361,7 @@ loadModule m bod1 mi g0 = do
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid module member"
   evaluatedDefs <- evaluateDefs mi $ mangleDefs (_mName m) <$> mdefs
-  (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
+  (m', solvedDefs) <- evaluateConstraints mi (liftTerm <$> m) evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
   installModule True md Nothing
@@ -421,10 +421,10 @@ collectNames g0 args body k = case instantiate' body of
 
 resolveGovernance
   :: HM.HashMap Text Ref
-  -> Module (Term Name)
+  -> Module (Term Ref)
   -> Eval e (ModuleDef (Def Ref))
 resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
-    TVar (Name (BareName n _)) _ -> case HM.lookup n solvedDefs of
+    TVar (Direct (TVar (Name (BareName n _)) _)) _ -> case HM.lookup n solvedDefs of
       Just r -> case r of
         Ref (TDef govDef _) -> case _dDefType govDef of
           Defcap -> return govDef
@@ -472,7 +472,7 @@ evaluateDefs info defs = do
           (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn ds of
               Just _ -> return (Left fn) -- decl found
-              Nothing -> resolveModRef f (ModuleName fn Nothing) >>= \r -> case r of
+              Nothing -> resolveModRef f (ModuleName fn Nothing) >>= \case
                 Just mr -> return (Right mr) -- mod ref found
                 Nothing ->
                   evalError' f $ "Cannot resolve " <> dquotes (pretty f)
@@ -484,23 +484,23 @@ evaluateDefs info defs = do
 -- | Evaluate interface constraints in module.
 evaluateConstraints
   :: Info
-  -> (Module n)
+  -> Module (Term Ref)
   -> HM.HashMap Text Ref
-  -> Eval e (Module n, HM.HashMap Text Ref)
+  -> Eval e (Module (Term Ref), HM.HashMap Text Ref)
 evaluateConstraints info m evalMap = do
   (m',evalMap',newIfs) <- foldM evaluateConstraint (m, evalMap, []) $ _mInterfaces m
   return (set mInterfaces (reverse newIfs) m',evalMap')
   where
-    evaluateConstraint (m', refMap, newIfs) ifn = do
+    evaluateConstraint (m', refMap, newIfs) (InterfaceSpec ifn arg) = do
       refData <- resolveModule info ifn
       case refData of
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
         Just (ModuleData (MDInterface Interface{..}) irefs) -> do
-          em' <- HM.foldrWithKey (solveConstraint ifn info) (pure refMap) irefs
+          em' <- HM.foldrWithKey (solveConstraint ifn info arg) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
           newIf <- ifExecutionFlagSet' FlagPreserveModuleIfacesBug ifn _interfaceName
-          pure (um, em', newIf:newIfs)
+          pure (um, em', (InterfaceSpec newIf arg):newIfs)
         Just _ -> evalError info "Unexpected: module found in interface position while solving constraints"
 
 -- | Compare implemented member signatures with their definitions.
@@ -508,14 +508,15 @@ evaluateConstraints info m evalMap = do
 solveConstraint
   :: ModuleName
   -> Info
+  -> Maybe (Arg (Term Ref))
   -> Text
   -> Ref
   -> Eval e (HM.HashMap Text Ref)
   -> Eval e (HM.HashMap Text Ref)
-solveConstraint _ifn info refName (Direct t) _ =
+solveConstraint _ifn info _ refName (Direct t) _ =
   evalError info $ "found native reference " <> pretty t
   <> " while resolving module contraints: " <> pretty refName
-solveConstraint ifn info refName (Ref t) evalMap = do
+solveConstraint ifn info arg refName (Ref t) evalMap = do
   em <- evalMap
   case HM.lookup refName em of
     Nothing ->
@@ -531,11 +532,12 @@ solveConstraint ifn info refName (Ref t) evalMap = do
       case (t, s) of
         (TDef (Def _n _mn dt (FunType args rty) _ m dmeta _) _,
           TDef (Def _n' _mn' dt' (FunType args' rty') _ _ dmeta' _) _) -> do
+          let withImplicit = maybe args (:args) arg
           match s "Def type mismatch" dt dt'
           matchWith termRefEq' s "Return type mismatch" rty rty'
-          match s "Arity mismatch" (length args) (length args')
+          match s "Arity mismatch" (length withImplicit) (length args')
           matchWith (liftEq defMetaEq) s "Defmeta mismatch" dmeta dmeta'
-          forM_ (args `zip` args') $ \((Arg n ty _), a@(Arg n' ty' _)) -> do
+          forM_ (withImplicit `zip` args') $ \(Arg n ty _, a@(Arg n' ty' _)) -> do
             -- FV requires exact argument names as opposed to positional info
             match a "Argument name mismatch" n n'
             matchWith termRefEq' a ("Argument type mismatch for " <> n) ty ty'
@@ -626,13 +628,13 @@ resolveRef' _ _i (DName d@(DynamicName mem _ sigs i)) = do
 resolveModRef :: HasInfo i => i -> ModuleName -> Eval e (Maybe Ref)
 resolveModRef i mn = moduleResolver lkp i mn
   where
-    lkp _ m = lookupModule i m >>= \r -> return $ case r of
+    lkp _ m = lookupModule i m <&> \case
       Nothing -> Nothing
       (Just (ModuleData (MDModule mdm) _)) ->
-        return $ Ref $ (`TModRef` (getInfo i)) $
-        ModRef (_mName mdm) (Just $ _mInterfaces mdm) (getInfo i)
+        return $ Ref $ (\a -> TModRef a Nothing (getInfo i)) $
+        ModRef (_mName mdm) (Just (_ispecModuleName <$> _mInterfaces mdm)) (getInfo i)
       (Just (ModuleData (MDInterface mdi) _)) ->
-        return $ Ref $ (`TModRef` (getInfo i)) $
+        return $ Ref $ (\a -> TModRef a Nothing (getInfo i)) $
         ModRef (_interfaceName mdi) Nothing (getInfo i)
 
 
@@ -713,9 +715,9 @@ reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
 reduce t@TModRef{} = unsafeReduce t
-reduce (TDynamic tref tmem i)  = reduceDynamic tref tmem i >>= \rd -> case rd of
+reduce (TDynamic tref tmem i)  = reduceDynamic tref tmem i >>= \case
   Left v -> return v
-  Right d -> reduce (TDef d (getInfo d))
+  Right (d, _) -> reduce (TDef d (getInfo d))
 
 compatPretty :: (Show a, Pretty a) => a -> Eval e Text
 compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
@@ -782,9 +784,9 @@ reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) =
   functionApp (DefName lamName) funTy Nothing as body Nothing ai
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
-  reduceDynamic tref tmem ti >>= \rd -> case rd of
+  reduceDynamic tref tmem ti >>= \case
     Left v -> evalError ti $ "reduceApp: expected module member for dynamic: " <> pretty v
-    Right d -> reduceApp $ App (TDef d (getInfo d)) as ai
+    Right (d, arg) -> reduceApp $ App (TDef d (getInfo d)) (maybe as ((:as) . liftTerm) arg) ai
 reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
 
 -- | Apply a userland function, and don't reduce args
@@ -816,20 +818,19 @@ reduceDynamic
     => Term Ref
     -> Term (Ref' (Term Name))
     -> i
-    -> Eval e (Either (Term Name) (Def (Ref' (Term Name))))
+    -> Eval e (Either (Term Name) (Def (Ref' (Term Name)), Maybe (Term Name)))
 reduceDynamic tref tmem i = do
-  ref <- reduce tref >>= \case
-    TModRef (ModRef m _ _) _ -> return m
+  (ref, arg) <- reduce tref >>= \case
+    TModRef (ModRef m _ _) arg _ -> return (m, arg)
     _ -> evalError' i $ "reduceDynamic: expected module reference: " <> pretty tref
-
   case tmem of
-    TVar (Ref (TConst {})) _ -> Left <$> reduce tmem
+    TVar (Ref TConst {}) _ -> Left <$> reduce tmem
     TVar (Ref (TDef d _)) _ -> do
       let (DefName mem) = _dDefName d
       md <- resolveModule i ref
       case md of
         Just (ModuleData _ refs) -> case HM.lookup mem refs of
-          Just (Ref (TDef mdef _)) -> return (Right mdef)
+          Just (Ref (TDef mdef _)) -> return (Right (mdef, arg))
           _ -> evalError' i $ "reduceDynamic: unknown module ref: " <> pretty tref
         Nothing -> evalError' i
           $ "reduceDynamic: unable to resolve dynamic module reference: "

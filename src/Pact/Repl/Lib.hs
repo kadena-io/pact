@@ -6,6 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Repl.Lib
@@ -146,7 +147,7 @@ replDefs = ("Repl",
      ,defZRNative "env-entity" setentity
       (funType tTyString [] <> funType tTyString [("entity",tTyString)])
       [LitExample "(env-entity \"my-org\")", LitExample "(env-entity)"]
-      ("Set environment confidential ENTITY id, or unset with no argument.")
+      "Set environment confidential ENTITY id, or unset with no argument."
      ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
       [ExecExample "(begin-tx \"load module\")"] "Begin transaction with optional NAME."
@@ -309,8 +310,8 @@ setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 envDynRef :: RNativeFun LibState
-envDynRef i [TModRef iface _,TModRef impl _] =
-  lookupModule i (_modRefName impl) >>= \r -> case r of
+envDynRef i [TModRef iface _ _,TModRef impl _ _] =
+  lookupModule i (_modRefName impl) >>= \case
     Nothing -> evalError' i "Unable to resolve impl module"
     Just md -> do
       setLibState $ over rlsDynEnv $ M.insert (_modRefName iface) md

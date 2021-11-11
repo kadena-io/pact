@@ -51,6 +51,7 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    BindPair(..),bpArg,bpVal,toBindPairs,
+   InterfaceSpec(..),ispecModuleName, ispecImplicitArg,
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
@@ -78,7 +79,7 @@ module Pact.Types.Term
    tNativeDocs,tNativeFun,tNativeName,tNativeExamples,
    tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
-   tDynModRef,tDynMember,tModRef,tLam,
+   tDynModRef,tDynMember,tModRef,tLam,tImplicitArg,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -768,14 +769,28 @@ instance (FromJSON a,ToJSON a) => FromJSON (Guard a) where parseJSON = decoder g
 -- -------------------------------------------------------------------------- --
 -- Module
 
-data Module g = Module
+data InterfaceSpec t
+  = InterfaceSpec
+  { _ispecModuleName :: !ModuleName
+  , _ispecImplicitArg :: !(Maybe (Arg t))}
+  deriving (Eq, Functor, Foldable, Traversable, Show, Generic)
+
+
+instance NFData t => NFData (InterfaceSpec t)
+instance ToJSON t => ToJSON (InterfaceSpec t) where
+  toJSON = undefined
+instance FromJSON t => FromJSON (InterfaceSpec t) where
+  parseJSON = undefined
+
+data Module g
+  = Module
   { _mName :: !ModuleName
   , _mGovernance :: !(Governance g)
   , _mMeta :: !Meta
   , _mCode :: !Code
   , _mHash :: !ModuleHash
   , _mBlessed :: !(HS.HashSet ModuleHash)
-  , _mInterfaces :: ![ModuleName]
+  , _mInterfaces :: ![InterfaceSpec g]
   , _mImports :: ![Use]
   } deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
 
@@ -1120,6 +1135,7 @@ data Term n =
     } |
     TModRef {
       _tModRef :: !ModRef
+    , _tImplicitArg :: !(Maybe (Term n))
     , _tInfo :: !Info
     } |
     TTable {
@@ -1161,6 +1177,7 @@ instance HasInfo (Term n) where
     TVar{..} -> _tInfo
     TDynamic{..} -> _tInfo
     TModRef{..} -> _tInfo
+    -- TImplicit{..} -> _tInfo
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -1213,7 +1230,7 @@ instance Pretty n => Pretty (Term n) where
       , pretty _tMeta
       ]
     TDynamic ref var _i -> pretty ref <> "::" <> pretty var
-    TModRef mr _ -> pretty mr
+    TModRef mr _ _ -> pretty mr
     where
       prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
 
@@ -1252,7 +1269,7 @@ instance Monad Term where
     TTable {..} >>= f =
       TTable _tTableName _tModuleName _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
     TDynamic r m i >>= f = TDynamic (r >>= f) (m >>= f) i
-    TModRef mr i >>= _ = TModRef mr i
+    TModRef mr arg i >>= f = TModRef mr (fmap (>>= f) arg) i
 
 termCodec :: (ToJSON n, FromJSON n) => Codec (Term n)
 termCodec = Codec enc dec
@@ -1286,7 +1303,8 @@ termCodec = Codec enc dec
            , meta .= tmeta, inf i ]
       TDynamic r m i ->
         ob [ dynRef .= r, dynMem .= m, inf i ]
-      TModRef mr _i -> toJSON mr
+      -- todo: adaptable json here
+      TModRef mr _ _i -> toJSON mr
 
     dec decval =
       let wo n f = withObject n f decval
@@ -1323,7 +1341,7 @@ termCodec = Codec enc dec
         <|> wo "Dynamic"
             (\o -> TDynamic <$> o .: dynRef <*> o .: dynMem <*> inf' o)
 
-        <|> parseWithInfo TModRef
+        <|> parseWithInfo (flip TModRef Nothing)
 
     ob = object
     moduleDef = "module"
@@ -1443,12 +1461,12 @@ typeof t = case t of
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
-      TModRef m _ -> Right $ modRefTy m
+      TModRef m _ _ -> Right $ modRefTy m
 {-# INLINE typeof #-}
 
 -- | Populate 'TyModule' using a 'ModRef'
 modRefTy :: ModRef -> Type (Term a)
-modRefTy (ModRef _mn is _) = TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) def)) is
+modRefTy (ModRef _mn is _) = TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) Nothing def)) is
 
 -- | Return string type description.
 typeof' :: Pretty a => Term a -> Text
@@ -1499,7 +1517,8 @@ termEq1 eq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == 
 termEq1 eq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && argEq d h
   where argEq = liftEq (liftEq (termEq1 eq))
 termEq1 eq (TVar a _) (TVar b _) = eq a b
-termEq1 _ (TModRef (ModRef am as _) _) (TModRef (ModRef bm bs _) _) = am == bm && as == bs
+-- Todo: do we care about implicit param for TermEq1???
+termEq1 _ (TModRef (ModRef am as _) _ _) (TModRef (ModRef bm bs _) _ _) = am == bm && as == bs
 termEq1 _ _ _ = False
 
 -- | Workhorse runtime typechecker on `Type (Term n)` to specialize
@@ -1513,6 +1532,7 @@ canUnifyWith = unifiesWith termEq
 
 makeLenses ''Namespace
 makeLenses ''Meta
+makeLenses ''InterfaceSpec
 makeLenses ''Module
 makeLenses ''Interface
 makePrisms ''ModuleDef
@@ -1558,6 +1578,8 @@ instance Eq1 DefMeta where
   liftEq = $(makeLiftEq ''DefMeta)
 instance Eq1 ModuleDef where
   liftEq = $(makeLiftEq ''ModuleDef)
+instance Eq1 InterfaceSpec where
+  liftEq = $(makeLiftEq ''InterfaceSpec)
 instance Eq1 Module where
   liftEq = $(makeLiftEq ''Module)
 instance Eq1 Governance where
@@ -1599,6 +1621,8 @@ instance Show1 DefMeta where
   liftShowsPrec = $(makeLiftShowsPrec ''DefMeta)
 instance Show1 ModuleDef where
   liftShowsPrec = $(makeLiftShowsPrec ''ModuleDef)
+instance Show1 InterfaceSpec where
+  liftShowsPrec = $(makeLiftShowsPrec ''InterfaceSpec)
 instance Show1 Module where
   liftShowsPrec = $(makeLiftShowsPrec ''Module)
 instance Show1 Governance where

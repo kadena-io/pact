@@ -181,7 +181,7 @@ descModule i [TLitString t] = do
             , ("keyset"    , tStr $ pack $ show _mGovernance)
             , ("blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
             , ("code"      , tStr $ asString _mCode)
-            , ("interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
+            , ("interfaces", toTList tTyString def $ (tStr . asString . _ispecModuleName) <$> _mInterfaces)
             ]
         MDInterface Interface{..} ->
           return $ toTObject TyAny def

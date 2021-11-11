@@ -69,7 +69,7 @@ data ModuleState = ModuleState
   { _msName :: ModuleName
   , _msHash :: ModuleHash
   , _msBlessed :: [ModuleHash]
-  , _msImplements :: [ModuleName]
+  , _msImplements :: [InterfaceSpec (Term Name)]
   , _msImports :: [Use]
   }
 makeLenses ''ModuleState
@@ -235,18 +235,18 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
     _ -> expected "value level form (let, let*)"
 
 moduleLevel :: Compile [Term Name]
-moduleLevel = specialForm $ \r -> case r of
-    RUse -> returnl useForm
-    RDefconst -> returnl defconst
-    RBless -> return (bless >> return [])
-    RDeftable -> returnl deftable
-    RDefschema -> returnl defschema
-    RDefun -> returnl $ defunOrCap Defun
-    RDefcap -> returnl $ defunOrCap Defcap
-    RDefpact -> returnl defpact
-    RImplements -> return $ implements >> return []
-    _ -> expected "module level form (use, def..., special form)"
-    where returnl a = return (pure <$> a)
+moduleLevel = specialForm $ \case
+  RUse -> returnl useForm
+  RDefconst ->  returnl defconst
+  RBless -> return (bless >> return [])
+  RDeftable -> returnl deftable
+  RDefschema -> returnl defschema
+  RDefun -> returnl $ defunOrCap Defun
+  RDefcap -> returnl $ defunOrCap Defcap
+  RDefpact -> returnl defpact
+  RImplements -> return $ implements >> return []
+  _ -> expected "module level form (use, def..., special form)"
+  where returnl a = return (pure <$> a)
 
 
 literals :: Compile (Term Name)
@@ -486,7 +486,8 @@ moduleForm = do
 implements :: Compile ()
 implements = do
   (ifn,_) <- qualifiedModuleName
-  overModuleState msImplements (ifn:)
+  arg' <- (pure <$> arg) <|> pure Nothing
+  overModuleState msImplements (InterfaceSpec ifn arg':)
 
 
 interface :: Compile (Term Name)

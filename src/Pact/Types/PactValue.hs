@@ -165,7 +165,8 @@ toPactValue (TLiteral l _) = pure $ PLiteral l
 toPactValue (TObject (Object o _ _ _) _) = PObject <$> traverse toPactValue o
 toPactValue (TList l _ _) = PList <$> V.mapM toPactValue l
 toPactValue (TGuard x _) = PGuard <$> traverse toPactValue x
-toPactValue (TModRef m _) = pure $ PModRef m
+-- todo: do modref implicits need to be shoved into the pact value
+toPactValue (TModRef m _ _) = pure $ PModRef m
 toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
 
 fromPactValue :: PactValue -> Term Name
@@ -173,7 +174,8 @@ fromPactValue (PLiteral l) = TLiteral l def
 fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny def def) def
 fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny def
 fromPactValue (PGuard x) = TGuard (fmap fromPactValue x) def
-fromPactValue (PModRef r) = TModRef r def
+-- todo: do modref implicits need to be shoved into the pact value
+fromPactValue (PModRef r) = TModRef r Nothing def
 
 elideModRefInfo :: PactValue -> PactValue
 elideModRefInfo (PModRef m) = PModRef (set modRefInfo def m)

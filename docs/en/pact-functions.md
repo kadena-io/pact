@@ -316,6 +316,18 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 ```
 
 
+### implicit {#implicit}
+
+*x*&nbsp;`*` *y*&nbsp;`*` *&rarr;*&nbsp;`*`
+
+
+placeHODLer
+```lisp
+pact> (module m g (defcap g () true)  (defun f:bool () true)) (implicit m 1)
+m
+```
+
+
 ### int-to-str {#int-to-str}
 
 *base*&nbsp;`integer` *val*&nbsp;`integer` *&rarr;*&nbsp;`string`

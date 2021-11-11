@@ -106,6 +106,7 @@ pactISO8601Format = "%Y-%m-%dT%H:%M:%SZ"
 highPrecFormat :: String
 highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
 
+
 -- | Time uses
 timeCodec :: Codec UTCTime
 timeCodec = Codec enc dec
