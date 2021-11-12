@@ -136,8 +136,8 @@ instance FromJSON PactValue where
     (PLiteral <$> parseJSON v) <|>
     (PList <$> parseJSON v) <|>
     (PGuard <$> parseJSON v) <|>
-    (PObject <$> parseJSON v) <|>
-    (PModRef <$> (parseNoInfo v <|> parseJSON v))
+    (PModRef <$> (parseNoInfo v <|> parseJSON v)) <|>
+    (PObject <$> parseJSON v)
     where
       parseNoInfo = withObject "ModRef" $ \o -> ModRef
         <$> o .: "refName"
