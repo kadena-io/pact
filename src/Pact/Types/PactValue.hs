@@ -125,9 +125,10 @@ instance ToJSON PactValue where
   toJSON (PObject o) = toJSON o
   toJSON (PList v) = toJSON v
   toJSON (PGuard x) = toJSON x
-  toJSON (PModRef (ModRef refName refSpec refInfo)) = object $
+  toJSON (PModRef (ModRef refName refSpec refImplicit refInfo)) = object $
     [ "refName" .= refName
     , "refSpec" .= refSpec
+    , "refImplicit" .= refImplicit
     ] ++
     [ "refInfo" .= refInfo | refInfo /= def ]
 
@@ -142,6 +143,7 @@ instance FromJSON PactValue where
       parseNoInfo = withObject "ModRef" $ \o -> ModRef
         <$> o .: "refName"
         <*> o .: "refSpec"
+        <*> o .: "refImplicit"
         <*> (fromMaybe def <$> o .:? "refInfo")
 
 instance Pretty PactValue where
@@ -152,11 +154,11 @@ instance Pretty PactValue where
   pretty (PModRef m) = pretty m
 
 instance SizeOf PactValue where
-  sizeOf (PLiteral l) = (constructorCost 1) + (sizeOf l)
-  sizeOf (PList v) = (constructorCost 1) + (sizeOf v)
-  sizeOf (PObject o) = (constructorCost 1) + (sizeOf o)
-  sizeOf (PGuard g) = (constructorCost 1) + (sizeOf g)
-  sizeOf (PModRef m) = (constructorCost 1) + (sizeOf m)
+  sizeOf (PLiteral l) = constructorCost 1 + sizeOf l
+  sizeOf (PList v) = constructorCost 1 + sizeOf v
+  sizeOf (PObject o) = constructorCost 1 + sizeOf o
+  sizeOf (PGuard g) = constructorCost 1 + sizeOf g
+  sizeOf (PModRef m) = constructorCost 1 + sizeOf m
 
 
 -- | Strict conversion.
@@ -166,7 +168,7 @@ toPactValue (TObject (Object o _ _ _) _) = PObject <$> traverse toPactValue o
 toPactValue (TList l _ _) = PList <$> V.mapM toPactValue l
 toPactValue (TGuard x _) = PGuard <$> traverse toPactValue x
 -- todo: do modref implicits need to be shoved into the pact value
-toPactValue (TModRef m _ _) = pure $ PModRef m
+toPactValue (TModRef m _) = pure $ PModRef m
 toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
 
 fromPactValue :: PactValue -> Term Name
@@ -175,7 +177,7 @@ fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny def def
 fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny def
 fromPactValue (PGuard x) = TGuard (fmap fromPactValue x) def
 -- todo: do modref implicits need to be shoved into the pact value
-fromPactValue (PModRef r) = TModRef r Nothing def
+fromPactValue (PModRef r) = TModRef r def
 
 elideModRefInfo :: PactValue -> PactValue
 elideModRefInfo (PModRef m) = PModRef (set modRefInfo def m)

@@ -161,7 +161,7 @@ tTyObjectAny :: Type n; tTyObjectAny = tTyObject TyAny
 tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
 
 getPactId :: FunApp -> Eval e PactId
-getPactId i = use evalPactExec >>= \pe -> case pe of
+getPactId i = use evalPactExec >>= \case
   Nothing -> evalError' i "pact-id: not in pact execution"
   Just PactExec{..} -> return _pePactId
 

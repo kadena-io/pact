@@ -32,7 +32,7 @@ testJSONPersist = do
   rt "string" (PLiteral (LString "hello"))
   rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
   rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
-  rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
+  rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) Nothing def))
 
 testJSONColumns :: Spec
 testJSONColumns =
@@ -88,4 +88,4 @@ testUnification = do
     ifaceA = "ifaceA"
     ifaceB = "ifaceB"
     modRef :: [ModuleName] -> Type (Term ())
-    modRef is = modRefTy (ModRef "a" (Just is) def)
+    modRef is = modRefTy (ModRef "a" (Just is) Nothing def)

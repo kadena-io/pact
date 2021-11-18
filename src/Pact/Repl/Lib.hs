@@ -310,7 +310,7 @@ setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 envDynRef :: RNativeFun LibState
-envDynRef i [TModRef iface _ _,TModRef impl _ _] =
+envDynRef i [TModRef iface _,TModRef impl _] =
   lookupModule i (_modRefName impl) >>= \case
     Nothing -> evalError' i "Unable to resolve impl module"
     Just md -> do

@@ -861,8 +861,10 @@ length' i as = argsError i as
 -- what are the semantics of `(implicit (implicit impl a) b)
 -- it would make sense to be `(implicit (implicit impl a) b) == (implicit impl b)
 implicit' :: RNativeFun e
-implicit' _ [TModRef m _ i, arg] =
-  return $ TModRef m (Just arg) i
+implicit' _ [TModRef m i, arg] =
+  case _modRefImplicit m of
+    Nothing -> return $ TModRef (set modRefImplicit (Just arg) m) i
+    Just _ -> evalError i "module ref already has implicit arg instantiatied"
 implicit' i as = argsError i as
 
 take' :: RNativeFun e

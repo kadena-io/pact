@@ -321,7 +321,7 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 *x*&nbsp;`*` *y*&nbsp;`*` *&rarr;*&nbsp;`*`
 
 
-placeHODLer
+Instantiate the implicit parameter k 
 ```lisp
 pact> (module m g (defcap g () true)  (defun f:bool () true)) (implicit m 1)
 m

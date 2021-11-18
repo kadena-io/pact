@@ -631,11 +631,11 @@ resolveModRef i mn = moduleResolver lkp i mn
     lkp _ m = lookupModule i m <&> \case
       Nothing -> Nothing
       (Just (ModuleData (MDModule mdm) _)) ->
-        return $ Ref $ (\a -> TModRef a Nothing (getInfo i)) $
-        ModRef (_mName mdm) (Just (_ispecModuleName <$> _mInterfaces mdm)) (getInfo i)
+        return $ Ref $ flip TModRef (getInfo i) $
+        ModRef (_mName mdm) (Just (_ispecModuleName <$> _mInterfaces mdm)) Nothing (getInfo i)
       (Just (ModuleData (MDInterface mdi) _)) ->
-        return $ Ref $ (\a -> TModRef a Nothing (getInfo i)) $
-        ModRef (_interfaceName mdi) Nothing (getInfo i)
+        return $ Ref $ (\a -> TModRef a (getInfo i)) $
+        ModRef (_interfaceName mdi) Nothing Nothing (getInfo i)
 
 
 -- | Perform module name lookup and locate the TDef or TConst associated with a
@@ -755,7 +755,7 @@ resolveArg ai as i = case atMay as i of
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
-enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
+enforcePactValue :: Pretty n => Term n -> Eval e PactValue
 enforcePactValue t = case toPactValue t of
   Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
   Right v -> return v
@@ -821,7 +821,7 @@ reduceDynamic
     -> Eval e (Either (Term Name) (Def (Ref' (Term Name)), Maybe (Term Name)))
 reduceDynamic tref tmem i = do
   (ref, arg) <- reduce tref >>= \case
-    TModRef (ModRef m _ _) arg _ -> return (m, arg)
+    TModRef (ModRef m _ arg _) _ -> return (m, arg)
     _ -> evalError' i $ "reduceDynamic: expected module reference: " <> pretty tref
   case tmem of
     TVar (Ref TConst {}) _ -> Left <$> reduce tmem
