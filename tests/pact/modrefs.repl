@@ -263,3 +263,9 @@
  "exercise interface with modref impl"
  true
  (modref-iface-impl.mir-impl modref-iface-impl "hi"))
+
+
+;; Implicits test
+
+(interface modref-iface-def
+  (defun mid-impl:bool (a:string)))

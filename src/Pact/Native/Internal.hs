@@ -161,7 +161,7 @@ tTyObjectAny :: Type n; tTyObjectAny = tTyObject TyAny
 tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
 
 getPactId :: FunApp -> Eval e PactId
-getPactId i = use evalPactExec >>= \pe -> case pe of
+getPactId i = use evalPactExec >>= \case
   Nothing -> evalError' i "pact-id: not in pact execution"
   Just PactExec{..} -> return _pePactId
 
@@ -257,7 +257,7 @@ requireDefApp dt App{..} = case _appFun of
   (TVar (Ref (TDef d@Def{} _)) _) -> matchDefTy d
   TDynamic tref tmem ti -> reduceDynamic tref tmem ti >>= \case
     Left v -> evalError ti $ "requireDefApp: expected module member for dynamic: " <> pretty v
-    Right d -> matchDefTy d
+    Right (d, _) -> matchDefTy d
   t -> evalError (_tInfo t) $ pretty (show t)
   where
     matchDefTy d

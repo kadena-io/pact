@@ -51,6 +51,7 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    BindPair(..),bpArg,bpVal,toBindPairs,
+   InterfaceSpec(..),ispecModuleName, ispecImplicitArg,
    Module(..),mName,mGovernance,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    Interface(..),interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleDef(..),_MDModule,_MDInterface,moduleDefName,moduleDefCode,moduleDefMeta,
@@ -69,7 +70,7 @@ module Pact.Types.Term
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
-   ModRef(..),modRefName,modRefSpec,modRefInfo,
+   ModRef(..),modRefName,modRefSpec,modRefImplicit,modRefInfo,
    modRefTy,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
@@ -179,7 +180,7 @@ newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
   deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
 
 instance Arbitrary PublicKey where
-  arbitrary = PublicKey <$> encodeUtf8 <$> T.pack <$> vectorOf 64 genValidPublicKeyChar
+  arbitrary = PublicKey . encodeUtf8 . T.pack <$> vectorOf 64 genValidPublicKeyChar
     where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
 instance Serialize PublicKey
 instance NFData PublicKey
@@ -567,25 +568,32 @@ instance Pretty n => Pretty (Step n) where
 
 -- | A reference to a module or interface.
 data ModRef = ModRef
-    { _modRefName :: !ModuleName
-      -- ^ Fully-qualified module name.
-    , _modRefSpec :: !(Maybe [ModuleName])
-      -- ^ Specification: for modules, 'Just' implemented interfaces;
-      -- for interfaces, 'Nothing'.
-    , _modRefInfo :: !Info
-    } deriving (Eq,Show,Generic)
+  { _modRefName :: !ModuleName
+    -- ^ Fully-qualified module name.
+  , _modRefSpec :: !(Maybe [ModuleName])
+    -- ^ Specification: for modules, 'Just' implemented interfaces;
+    -- for interfaces, 'Nothing'.
+  , _modRefImplicit :: !(Maybe (Term Name))
+    -- Instantiated implicit arg.
+  , _modRefInfo :: !Info
+  } deriving (Generic)
+
+deriving instance Eq ModRef
+deriving instance Show ModRef
+
 instance NFData ModRef
 instance HasInfo ModRef where getInfo = _modRefInfo
 instance Pretty ModRef where
-  pretty (ModRef mn _sm _i) = pretty mn
+  pretty (ModRef mn _sm _ _i) = pretty mn
 instance ToJSON ModRef where toJSON = lensyToJSON 4
 instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
-  (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
+  (ModRef a b _ _) `compare` (ModRef c d _ _) = (a,b) `compare` (c,d)
 instance Arbitrary ModRef where
-  arbitrary = ModRef <$> arbitrary <*> arbitrary <*> pure def
+  arbitrary = ModRef <$> arbitrary <*> arbitrary <*> pure Nothing <*> pure def
+-- Note: Can't really `sizeOf` the implicit param.
 instance SizeOf ModRef where
-  sizeOf (ModRef n s _) = constructorCost 1 + sizeOf n + sizeOf s
+  sizeOf (ModRef n s _ _) = constructorCost 1 + sizeOf n + sizeOf s
 
 -- -------------------------------------------------------------------------- --
 -- ModuleGuard
@@ -608,7 +616,7 @@ instance Pretty ModuleGuard where
 
 instance SizeOf ModuleGuard where
   sizeOf (ModuleGuard md n) =
-    (constructorCost 2) + (sizeOf md) + (sizeOf n)
+    constructorCost 2 + sizeOf md + sizeOf n
 
 instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
@@ -768,14 +776,31 @@ instance (FromJSON a,ToJSON a) => FromJSON (Guard a) where parseJSON = decoder g
 -- -------------------------------------------------------------------------- --
 -- Module
 
-data Module g = Module
+data InterfaceSpec t
+  = InterfaceSpec
+  { _ispecModuleName :: !ModuleName
+  , _ispecImplicitArg :: !(Maybe (Arg t))}
+  deriving (Eq, Functor, Foldable, Traversable, Show, Generic)
+
+
+instance NFData t => NFData (InterfaceSpec t)
+instance ToJSON t => ToJSON (InterfaceSpec t) where
+  toJSON (InterfaceSpec m arg) =
+    object ["ispecModuleName" .= m, "ispecArg" .= arg]
+instance FromJSON t => FromJSON (InterfaceSpec t) where
+  parseJSON =
+    withObject "InterfaceSpec" $ \v ->
+      InterfaceSpec <$> v .: "ispecModuleName" <*> v .: "ispecArg"
+
+data Module g
+  = Module
   { _mName :: !ModuleName
   , _mGovernance :: !(Governance g)
   , _mMeta :: !Meta
   , _mCode :: !Code
   , _mHash :: !ModuleHash
   , _mBlessed :: !(HS.HashSet ModuleHash)
-  , _mInterfaces :: ![ModuleName]
+  , _mInterfaces :: ![InterfaceSpec g]
   , _mImports :: ![Use]
   } deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
 
@@ -1161,6 +1186,7 @@ instance HasInfo (Term n) where
     TVar{..} -> _tInfo
     TDynamic{..} -> _tInfo
     TModRef{..} -> _tInfo
+    -- TImplicit{..} -> _tInfo
 
 instance Pretty n => Pretty (Term n) where
   pretty = \case
@@ -1448,7 +1474,7 @@ typeof t = case t of
 
 -- | Populate 'TyModule' using a 'ModRef'
 modRefTy :: ModRef -> Type (Term a)
-modRefTy (ModRef _mn is _) = TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) def)) is
+modRefTy (ModRef _mn is _ _) = TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing Nothing def) def)) is
 
 -- | Return string type description.
 typeof' :: Pretty a => Term a -> Text
@@ -1499,7 +1525,8 @@ termEq1 eq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == 
 termEq1 eq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && argEq d h
   where argEq = liftEq (liftEq (termEq1 eq))
 termEq1 eq (TVar a _) (TVar b _) = eq a b
-termEq1 _ (TModRef (ModRef am as _) _) (TModRef (ModRef bm bs _) _) = am == bm && as == bs
+-- Todo: do we care about implicit param for TermEq1???
+termEq1 _ (TModRef (ModRef am as imparg _) _) (TModRef (ModRef bm bs imparg' _) _) = am == bm && as == bs && imparg == imparg'
 termEq1 _ _ _ = False
 
 -- | Workhorse runtime typechecker on `Type (Term n)` to specialize
@@ -1513,6 +1540,7 @@ canUnifyWith = unifiesWith termEq
 
 makeLenses ''Namespace
 makeLenses ''Meta
+makeLenses ''InterfaceSpec
 makeLenses ''Module
 makeLenses ''Interface
 makePrisms ''ModuleDef
@@ -1558,6 +1586,8 @@ instance Eq1 DefMeta where
   liftEq = $(makeLiftEq ''DefMeta)
 instance Eq1 ModuleDef where
   liftEq = $(makeLiftEq ''ModuleDef)
+instance Eq1 InterfaceSpec where
+  liftEq = $(makeLiftEq ''InterfaceSpec)
 instance Eq1 Module where
   liftEq = $(makeLiftEq ''Module)
 instance Eq1 Governance where
@@ -1599,6 +1629,8 @@ instance Show1 DefMeta where
   liftShowsPrec = $(makeLiftShowsPrec ''DefMeta)
 instance Show1 ModuleDef where
   liftShowsPrec = $(makeLiftShowsPrec ''ModuleDef)
+instance Show1 InterfaceSpec where
+  liftShowsPrec = $(makeLiftShowsPrec ''InterfaceSpec)
 instance Show1 Module where
   liftShowsPrec = $(makeLiftShowsPrec ''Module)
 instance Show1 Governance where
