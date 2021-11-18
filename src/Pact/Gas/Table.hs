@@ -120,6 +120,7 @@ defaultGasTable =
   ,("log", 3)
   ,("make-list",1)
   ,("map", 4)
+  ,("zip", 4)
   ,("minutes", 4)
   ,("mod", 1)
   ,("namespace", 12)

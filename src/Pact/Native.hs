@@ -37,7 +37,7 @@ module Pact.Native
     , readStringDef
     , baseStrToInt
     , mapDef
-    , zipWithDef
+    , zipDef
     , foldDef
     , makeListDef
     , reverseDef
@@ -601,13 +601,12 @@ dropDef = defRNative "drop" drop' takeDrop
   ]
   "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
 
-zipWithDef :: NativeDef
-zipWithDef = defNative "zipWith" zipWith' zipWithTys
-  [ "(zipWith (+) [1 2 3 4] [4 5 6 7])"
-  , "(zipWith (f) [1 2 3 4] [4 5 6 7])"
-  , "(drop ['name] { 'name: \"Vlad\", 'active: false})"
+zipDef :: NativeDef
+zipDef = defNative "zip" zip' zipTy
+  [ "(zip (+) [1 2 3 4] [4 5 6 7])"
+  , "(zip (-) [1 2 3 4] [4 5 6 7])"
   ]
-  "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end. If COUNT exceeds the interval (-2^63,2^63), it is truncated to that range."
+  "Combine two lists with some function f, into a new list, the length of which is the length of the shortest list."
 
 
 atDef :: NativeDef
@@ -678,7 +677,7 @@ langDefs =
     ,lengthDef
     ,takeDef
     ,dropDef
-    ,zipWithDef
+    ,zipDef
     ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
      ["(remove \"bar\" { \"foo\": 1, \"bar\": 2 })"]
      "Remove entry for KEY from OBJECT."
@@ -777,8 +776,8 @@ takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)] <>
 -- Todo: wrong
 -- The type I want here is:
 -- (a -> b -> c) -> [a] -> [b] -> [c]
-zipWithTys :: FunTypes n
-zipWithTys = funType listStringA [("f",tTyInteger ),("list",listStringA)]
+zipTy :: FunTypes n
+zipTy = funType (TyList c) [("f", TyFun $ funType' c [("x", a), ("y", b)]),("list1", TyList a), ("list2", TyList b)]
 
 lam :: Type v -> Type v -> Type v
 lam x y = TyFun $ funType' y [("x",x)]
@@ -879,15 +878,15 @@ drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList
   return $ toTObjectMap oTy def $ ObjectMap $ M.withoutKeys o l
 drop' i as = argsError i as
 
-zipWith' :: NativeFun e
-zipWith' f as@[TApp app _, TList l1 _ _, TList l2 _ _] = gasUnreduced f as $ do
+zip' :: NativeFun e
+zip' f as@[TApp app _, TList l1 _ _, TList l2 _ _] = gasUnreduced f as $ do
   -- reduce list terms first, though unfortunately
   -- this means that lambdas within lists won't work for now.
   l1' <- traverse reduce l1
   l2' <- traverse reduce l2
   terms <- sequence $ V.zipWith (\e1 e2 -> apply app [e1, e2]) l1' l2'
   pure $ TList terms TyAny (getInfo f)
-zipWith' i as = argsError' i as
+zip' i as = argsError' i as
 
 asKeyList :: V.Vector (Term Name) -> Eval e (S.Set FieldKey)
 asKeyList l = fmap (S.fromList . V.toList) . V.forM l $ \t -> case t of
