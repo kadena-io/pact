@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ExistentialQuantification #-}
 module Pact.Repl.Types
   ( ReplMode(..)
   , Hdl(..)
@@ -7,6 +8,7 @@ module Pact.Repl.Types
   , Repl
   , LibOp(..)
   , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsDynEnv
+  , LibDb(..)
   , Tx(..)
   , SPVMockKey(..)
   , getAllModules
@@ -24,7 +26,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 
 import Pact.PersistPactDb (DbEnv)
-import Pact.Persist.Pure (PureDb)
 import Pact.Runtime.Utils
 import Pact.Types.Runtime
 import Pact.Types.Pretty (Pretty, pretty, renderCompactText)
@@ -92,8 +93,10 @@ instance Eq SPVMockKey where
 instance Ord SPVMockKey where
   a `compare` b = renderCompactText a `compare` renderCompactText b
 
+data LibDb = forall e . LibDb (MVar (DbEnv e))
+
 data LibState = LibState
-  { _rlsPure :: MVar (DbEnv PureDb)
+  { _rlsPure :: LibDb
   , _rlsOp :: LibOp
   , _rlsTx :: (Maybe TxId, Maybe Text)
   , _rlsTests :: [TestResult]
