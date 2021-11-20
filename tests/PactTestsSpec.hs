@@ -15,12 +15,12 @@ import Data.Maybe
 import Data.Text (unpack)
 
 import Pact.Repl
-import Pact.Repl.Lib
+-- import Pact.Repl.Lib
 import Pact.Repl.Types
-import Pact.Types.Logger
+-- import Pact.Types.Logger
 import Pact.Types.Runtime
-import Pact.Persist.SQLite as SQLite
-import Pact.Interpreter
+-- import Pact.Persist.SQLite as SQLite
+-- import Pact.Interpreter
 
 
 import System.Directory
@@ -68,10 +68,10 @@ findTests' tdir = (map (tdir </>) . filter ((== ".repl") . reverse . take 5 . re
 runScript :: String -> SpecWith ()
 runScript fp = describe fp $ do
   (r,ReplState{..}) <- runIO $ do
-    (PactDbEnv _ pdb) <- mkSQLiteEnv (newLogger neverLog "") False (SQLiteConfig "" []) neverLog
-    ls <- initLibState' (LibDb pdb) Nothing
-    rs <- initReplState' ls Quiet
-    execScriptState' fp rs id
+    -- (PactDbEnv _ pdb) <- mkSQLiteEnv (newLogger neverLog "") False (SQLiteConfig "" []) neverLog
+    -- ls <- initLibState' (LibDb pdb) Nothing
+    -- rs <- initReplState' ls Quiet
+    execScript' Quiet fp -- execScriptState' fp rs id
   case r of
     Left e -> it ("failed to load " ++ fp) $ expectationFailure e
     Right _ -> do

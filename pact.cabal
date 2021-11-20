@@ -325,6 +325,7 @@ test-suite hspec
 
   if !impl(ghcjs)
     other-modules:
+      PactTestsSpec
       ParserSpec
       SchemeSpec
       SignatureSpec
@@ -342,7 +343,6 @@ test-suite hspec
     if flag(build-tool)
       cpp-options: -DBUILD_TOOL
       other-modules:
-        PactTestsSpec
         AnalyzePropertiesSpec
         AnalyzeSpec
         Analyze.Eval
