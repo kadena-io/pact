@@ -7,7 +7,7 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsDynEnv
+  , LibState(..),rlsDb,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsDynEnv
   , LibDb(..)
   , Tx(..)
   , SPVMockKey(..)
@@ -96,7 +96,7 @@ instance Ord SPVMockKey where
 data LibDb = forall e . LibDb (MVar (DbEnv e))
 
 data LibState = LibState
-  { _rlsPure :: LibDb
+  { _rlsDb :: LibDb
   , _rlsOp :: LibOp
   , _rlsTx :: (Maybe TxId, Maybe Text)
   , _rlsTests :: [TestResult]
