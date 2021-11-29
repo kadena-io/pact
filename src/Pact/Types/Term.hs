@@ -643,7 +643,7 @@ instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 -- ObjectMap
 
 -- | Simple dictionary for object values.
-newtype ObjectMap v = ObjectMap { _objectMap :: (M.Map FieldKey v) }
+newtype ObjectMap v = ObjectMap { _objectMap :: M.Map FieldKey v }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable,Generic,SizeOf)
 
 instance NFData v => NFData (ObjectMap v)

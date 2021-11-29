@@ -46,6 +46,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
 import Data.Typeable (Typeable)
+import qualified Data.Vector as V
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
@@ -117,6 +118,18 @@ instance FromJSON (Ref' PersistDirect) where
     withObject "Ref" (\o -> Ref <$> o .: "ref") v <|>
     withObject "Direct" (\o -> Direct <$> o .: "direct") v
 
+data PersistenceValue
+  = PIRNative !NativeDefName
+  | PIRSchema Text
+  | PIRLiteral Literal
+  | PIRList (V.Vector PersistenceValue)
+  | PIRModRef !ModuleName !(Maybe [ModuleName])
+  | PIRObject (ObjectMap PersistenceValue)
+  | PIRGuard (Guard PersistenceValue)
+  deriving Show
+
+data PersistenceTerm
+  = PIRDef ()
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
