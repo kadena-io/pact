@@ -152,11 +152,11 @@ instance Pretty PactValue where
   pretty (PModRef m) = pretty m
 
 instance SizeOf PactValue where
-  sizeOf (PLiteral l) = (constructorCost 1) + (sizeOf l)
-  sizeOf (PList v) = (constructorCost 1) + (sizeOf v)
-  sizeOf (PObject o) = (constructorCost 1) + (sizeOf o)
-  sizeOf (PGuard g) = (constructorCost 1) + (sizeOf g)
-  sizeOf (PModRef m) = (constructorCost 1) + (sizeOf m)
+  sizeOf (PLiteral l) = constructorCost 1 + sizeOf l
+  sizeOf (PList v) = constructorCost 1 + sizeOf v
+  sizeOf (PObject o) = constructorCost 1 + sizeOf o
+  sizeOf (PGuard g) = constructorCost 1 + sizeOf g
+  sizeOf (PModRef m) = constructorCost 1 + sizeOf m
 
 
 -- | Strict conversion.
