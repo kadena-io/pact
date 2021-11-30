@@ -265,23 +265,3 @@
  (modref-iface-impl.mir-impl modref-iface-impl "hi"))
 
 (rollback-tx)
-
-;;
-;; modref persistence
-;;
-
-(namespace 'ns)
-
-(module modref-persistence G
-  (defcap G () 1)
-  (defschema s mr:module{ifaceB})
-  (deftable t:{s})
-  (defun mwrite (mr:module{ifaceB}) (write t "" {'mr:mr}))
-  (defun go ()
-   (with-read t "" { 'mr:=mr:module{ifaceB}}
-     (mr::opB1 "")))
-  (implements ifaceB)
-  (defun opB1:integer (s:string) 1))
-(create-table t)
-(mwrite modref-persistence)
-(expect "exercise persisted all-namespace modref" 1 (go))
