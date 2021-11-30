@@ -25,6 +25,7 @@ module Pact.Repl
   , execScript'
   , execScriptF
   , execScriptF'
+  , execScriptState'
   , evalPact
   , evalRepl
   , evalRepl'
@@ -33,6 +34,7 @@ module Pact.Repl
   , handleParse
   , initPureEvalEnv
   , initReplState
+  , initReplState'
   , isPactFile
   , loadFile
   , parsedCompileEval
@@ -112,12 +114,21 @@ runPipedRepl' p s@ReplState{} h =
     evalStateT (useReplLib >> pipeLoop p h Nothing) s
 
 initReplState :: MonadIO m => ReplMode -> Maybe String -> m ReplState
-initReplState m verifyUri =
-  liftIO (initPureEvalEnv verifyUri) >>= \e -> return (ReplState e def m def def def)
+initReplState m verifyUri = liftIO $ do
+  ls <- liftIO $ initLibState neverLog verifyUri
+  initReplState' ls m
+
+initReplState' :: MonadIO m => LibState -> ReplMode -> m ReplState
+initReplState' ls m =
+  liftIO (initEvalEnv ls) >>= \e -> return (ReplState e def m def def def)
 
 initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
-  mv <- initLibState neverLog verifyUri >>= newMVar
+  initLibState neverLog verifyUri >>= initEvalEnv
+
+initEvalEnv :: LibState -> IO (EvalEnv LibState)
+initEvalEnv ls = do
+  mv <- newMVar ls
   return $ EvalEnv (RefStore nativeDefs) mempty Null Transactional
     def def mv repldb def pactInitialHash freeGasEnv
     permissiveNamespacePolicy (spvs mv) def def def
@@ -362,7 +373,12 @@ execScriptF' :: ReplMode -> FilePath -> (ReplState -> ReplState)
             -> IO (Either String (Term Name),ReplState)
 execScriptF' m fp stateMod = do
   s <- initReplState m Nothing
-  runStateT (useReplLib >> modify stateMod >> loadFile def fp) s
+  execScriptState' fp s stateMod
+
+execScriptState' :: FilePath -> ReplState -> (ReplState -> ReplState)
+            -> IO (Either String (Term Name),ReplState)
+execScriptState' fp initState stateMod =
+  runStateT (useReplLib >> modify stateMod >> loadFile def fp) initState
 
 
 -- | Run an 'Eval' in repl.

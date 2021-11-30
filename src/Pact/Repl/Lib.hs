@@ -19,7 +19,6 @@
 
 module Pact.Repl.Lib where
 
-
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
@@ -79,11 +78,16 @@ import Pact.Runtime.Utils
 
 initLibState :: Loggers -> Maybe String -> IO LibState
 initLibState loggers verifyUri = do
-  m <- newMVar (DbEnv def persister
+  m <- newMVar (DbEnv (def :: PureDb) persister
                 (newLogger loggers "Repl")
                 def 0 def)
-  createSchema m
-  return (LibState m Noop def def verifyUri M.empty def)
+  initLibState' (LibDb m) verifyUri
+
+initLibState' :: LibDb -> Maybe String -> IO LibState
+initLibState' ldb@(LibDb db') verifyUri = do
+  createSchema db'
+  return (LibState ldb Noop def def verifyUri M.empty def)
+
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -267,23 +271,23 @@ replDefs = ("Repl",
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
-invokeEnv :: (MVar (DbEnv PureDb) -> IO b) -> MVar LibState -> IO b
-invokeEnv f e = withMVar e $ \ls -> f $! _rlsPure ls
+invokeEnv :: (LibDb -> IO b) -> MVar LibState -> IO b
+invokeEnv f e = withMVar e $ \ls -> f $! (_rlsDb ls)
 {-# INLINE invokeEnv #-}
 
 repldb :: PactDb LibState
 repldb = PactDb {
 
-    _readRow = \d k -> invokeEnv $ _readRow pactdb d k
-  , _writeRow = \wt d k v -> invokeEnv $ _writeRow pactdb wt d k v
-  , _keys = \t -> invokeEnv $ _keys pactdb t
-  , _txids = \t tid -> invokeEnv $ _txids pactdb t tid
-  , _createUserTable = \t m -> invokeEnv $ _createUserTable pactdb t m
-  , _getUserTableInfo = \t -> invokeEnv $ _getUserTableInfo pactdb t
-  , _beginTx = \tid -> invokeEnv $ _beginTx pactdb tid
-  , _commitTx = invokeEnv $ _commitTx pactdb
-  , _rollbackTx = invokeEnv $ _rollbackTx pactdb
-  , _getTxLog = \d t -> invokeEnv $ _getTxLog pactdb d t
+    _readRow = \d k -> invokeEnv $ \(LibDb e) -> _readRow pactdb d k e
+  , _writeRow = \wt d k v -> invokeEnv $ \(LibDb e) ->  _writeRow pactdb wt d k v e
+  , _keys = \t -> invokeEnv $ \(LibDb e) ->  _keys pactdb t e
+  , _txids = \t tid -> invokeEnv $ \(LibDb e) ->  _txids pactdb t tid e
+  , _createUserTable = \t m -> invokeEnv $ \(LibDb e) ->  _createUserTable pactdb t m e
+  , _getUserTableInfo = \t -> invokeEnv $ \(LibDb e) ->  _getUserTableInfo pactdb t e
+  , _beginTx = \tid -> invokeEnv $ \(LibDb e) ->  _beginTx pactdb tid e
+  , _commitTx = invokeEnv $ \(LibDb e) ->  _commitTx pactdb e
+  , _rollbackTx = invokeEnv $ \(LibDb e) ->  _rollbackTx pactdb e
+  , _getTxLog = \d t -> invokeEnv $ \(LibDb e) ->  _getTxLog pactdb d t e
 
 }
 
