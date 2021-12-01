@@ -604,7 +604,8 @@ dropDef = defRNative "drop" drop' takeDrop
 zipDef :: NativeDef
 zipDef = defNative "zip" zip' zipTy
   [ "(zip (+) [1 2 3 4] [4 5 6 7])"
-  , "(zip (-) [1 2 3 4] [4 5 6 7])"
+  , "(zip (-) [1 2 3 4] [4 5 6])"
+  , "(zip (+) [1 2 3] [4 5 6 7])"
   ]
   "Combine two lists with some function f, into a new list, the length of which is the length of the shortest list."
 
@@ -773,9 +774,6 @@ takeDrop :: FunTypes n
 takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)] <>
            funType obj [("keys",TyList tTyString),("object",obj)]
 
--- Todo: wrong
--- The type I want here is:
--- (a -> b -> c) -> [a] -> [b] -> [c]
 zipTy :: FunTypes n
 zipTy = funType (TyList c) [("f", TyFun $ funType' c [("x", a), ("y", b)]),("list1", TyList a), ("list2", TyList b)]
 
@@ -879,13 +877,13 @@ drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList
 drop' i as = argsError i as
 
 zip' :: NativeFun e
-zip' f as@[TApp app _, TList l1 _ _, TList l2 _ _] = gasUnreduced f as $ do
-  -- reduce list terms first, though unfortunately
+zip' i as@[TApp app _, l1, l2] = gasUnreduced i as $ (,) <$> reduce l1 <*> reduce l2 >>= \case
+ -- reduce list terms first, though unfortunately
   -- this means that lambdas within lists won't work for now.
-  l1' <- traverse reduce l1
-  l2' <- traverse reduce l2
-  terms <- sequence $ V.zipWith (\e1 e2 -> apply app [e1, e2]) l1' l2'
-  pure $ TList terms TyAny (getInfo f)
+  (TList l1' _ _, TList l2' _ _) -> do
+    terms <- sequence $ V.zipWith (\e1 e2 -> apply app [e1, e2]) l1' l2'
+    pure $ TList terms TyAny (getInfo i)
+  (l, r) -> argsError i [l, r]
 zip' i as = argsError' i as
 
 asKeyList :: V.Vector (Term Name) -> Eval e (S.Set FieldKey)

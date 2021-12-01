@@ -675,8 +675,10 @@ Combine two lists with some function f, into a new list, the length of which is 
 ```lisp
 pact> (zip (+) [1 2 3 4] [4 5 6 7])
 [5 7 9 11]
-pact> (zip (-) [1 2 3 4] [4 5 6 7])
-[-3 -3 -3 -3]
+pact> (zip (-) [1 2 3 4] [4 5 6])
+[-3 -3 -3]
+pact> (zip (+) [1 2 3] [4 5 6 7])
+[5 7 9]
 ```
 
 ## Database {#Database}

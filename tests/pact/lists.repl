@@ -85,3 +85,24 @@
   "zip combines properly"
   [5 7 9]
   (zip (+) [1 2 3] [4 5 6]))
+
+(expect
+  "zip combines properly left shortest"
+  [5 7]
+  (zip (+) [1 2] [4 5 6]))
+
+(expect
+  "zip combines properly right shortest"
+  [5 7]
+  (zip (+) [1 2 3] [4 5]))
+
+(expect
+  "zip with empty list left"
+  []
+  (zip (+) [] [4 5 6]))
+
+
+(expect
+  "zip with empty list right"
+  []
+  (zip (+) [1 2 3] []))
