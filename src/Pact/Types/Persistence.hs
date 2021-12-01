@@ -118,19 +118,6 @@ instance FromJSON (Ref' PersistDirect) where
     withObject "Ref" (\o -> Ref <$> o .: "ref") v <|>
     withObject "Direct" (\o -> Direct <$> o .: "direct") v
 
-data PersistenceValue
-  = PIRNative !NativeDefName
-  | PIRSchema Text
-  | PIRLiteral Literal
-  | PIRList (V.Vector PersistenceValue)
-  | PIRModRef !ModuleName !(Maybe [ModuleName])
-  | PIRObject (ObjectMap PersistenceValue)
-  | PIRGuard (Guard PersistenceValue)
-  deriving Show
-
-data PersistenceTerm
-  = PIRDef ()
-
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty,Generic,NFData)

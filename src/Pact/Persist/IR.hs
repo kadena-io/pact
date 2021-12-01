@@ -25,21 +25,24 @@ data PIRBindPair name tyname info =
   PIRBindPair (PIRArg name tyname) (PIRTerm name tyname info)
   deriving Show
 
-data PIRType n
+data PIRType n info
   = PIRAnyType
   | PIRTyVar n
   | PIRPrimType PrimType
-  | PIRListType (PIRType n)
-  | PIRSchemaType SchemaType (PIRType n) SchemaPartial
-  | PIRFun [PIRArg n n] (PIRType n)
+  | PIRListType (PIRType n info)
+  | PIRSchemaType SchemaType (PIRSchema n n info) SchemaPartial
+  | PIRFun [PIRArg n n] (PIRType n info)
   deriving Show
 
 data PIRTerm name tyname info
   = PIRVar !name info
   | PIRLet ![PIRBindPair name tyname info] !(PIRTerm name tyname info) info
-  | PIRLam !name !(PIRType tyname) !(PIRTerm name tyname info) info
-  | PIRApp (PIRTerm name tyname info) [PIRTerm name tyname info] info
+  | PIRLam !name !(PIRType tyname info) !(PIRTerm name tyname info) info
+  | PIRDynamic ()
+  | PIRApp !(PIRTerm name tyname info) [PIRTerm name tyname info] info
   | PIRList [PIRTerm name tyname info] info
+  | PIRLit !Literal info
+  | PIRConst (ConstVal (PIRTerm name tyname info))
   deriving Show
 
 data PIRDefCapMeta name tyname info
@@ -47,27 +50,28 @@ data PIRDefCapMeta name tyname info
   | PIRDefCapEvent
   deriving (Show)
 
-data PIRDef name tyname info = PIRDef
-  { _dDefName :: !DefName
-  , _dModule :: !ModuleName
-  , _dDefType :: !DefType
-  , _dFunType :: !(PIRType tyname)
-  , _dDefBody :: !(PIRTerm name tyname info)
-  , _dMeta :: !Meta
-  , _dDefMeta :: !(Maybe (PIRDefCapMeta name tyname info))
-  , _dInfo :: info
+data PIRDef name tyname info
+  = PIRDef
+  { _pirdDefName :: !DefName
+  , _pirdModule :: !ModuleName
+  , _pirdDefType :: !DefType
+  , _pirdFunType :: !(PIRType tyname info)
+  , _pirdDefBody :: !(PIRTerm name tyname info)
+  , _pirdMeta :: !Meta
+  , _pirdDefMeta :: !(Maybe (PIRDefCapMeta name tyname info))
+  , _pirdInfo :: info
   } deriving (Show)
 
 data PIRSchema name tyname info
   = PIRSchema
-  { _tSchemaName :: !Text
-  , _tModule :: !(Maybe ModuleName)
-  , _tMeta :: !Meta
-  , _tFields :: ![PIRArg name tyname]
-  , _tInfo :: !info
-  }
+  { _pirSSchemaName :: !Text
+  , _pirSModule :: !(Maybe ModuleName)
+  , _pirSMeta :: !Meta
+  , _pirSFields :: ![PIRArg name tyname]
+  , _pirSInfo :: !info
+  } deriving Show
 
-
-data PIRToplevel name tyname info =
-  PIRTLDef (PIRDef name tyname info)
-
+data PIRToplevel name tyname info
+  = PIRTLDef (PIRDef name tyname info)
+  | PIRTLSchema (PIRSchema name tyname info)
+  
