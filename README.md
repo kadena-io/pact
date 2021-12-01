@@ -27,7 +27,7 @@ For additional information, press, and development inquires, please refer to the
   - [Binary Distributions](#binary-distributions)
   - [Instructions for Mac users](#instructions-for-mac-users)
   - [Instructions for Linux users](#instructions-for-linux-users)
-  - [Building from Source](#installing-from-source)
+  - [Building from Source](#building-from-source)
   - [Verifying Installation](#verifying-installation)
 - [Supported Editors](#supported-editors)
   - [Chainweaver](#chainweaver)

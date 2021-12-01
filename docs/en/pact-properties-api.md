@@ -804,6 +804,34 @@ String to integer conversion
 
 Supported in either invariants or properties.
 
+### take {#FStringTake}
+
+```lisp
+(take n s)
+```
+
+* takes `n`: `integer`
+* takes `s`: `string`
+* produces `string`
+
+take the first `n` values from `xs` (taken from the end if `n` is negative)
+
+Supported in either invariants or properties.
+
+### drop {#FStringDrop}
+
+```lisp
+(drop n s)
+```
+
+* takes `n`: `integer`
+* takes `s`: `string`
+* produces `string`
+
+drop the first `n` values from `xs` (dropped from the end if `n` is negative)
+
+Supported in either invariants or properties.
+
 ## Temporal operators {#Temporal}
 
 ### add-time {#FTemporalAddition}

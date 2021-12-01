@@ -1487,6 +1487,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
             Some (SList SStr) keys -> pure $ Some retTy $ CoreTerm $ ObjDrop objTy keys obj
             _ -> unexpectedNode astNode
           _ -> throwError' $ TypeError node
+        Some SStr str' -> translateNode numOrKeys >>= \case
+          Some SInteger num -> pure $ Some SStr $ CoreTerm $ StrDrop num str'
+          _ -> unexpectedNode astNode
         _ -> throwError' $ TypeError node
 
   AST_Take node numOrKeys list -> do
@@ -1500,7 +1503,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
           SObject{} -> translateNode numOrKeys >>= \case
             Some (SList SStr) keys -> pure $ Some retTy $ CoreTerm $ ObjTake objTy keys obj
             _ -> unexpectedNode astNode
-          _ -> throwError' $ TypeError node
+          _ -> unexpectedNode astNode
+        Some SStr str' -> translateNode numOrKeys >>= \case
+          Some SInteger num -> pure $ Some SStr $ CoreTerm $ StrTake num str'
+          _ -> unexpectedNode astNode
         _ -> throwError' $ TypeError node
 
   AST_MakeList _node num a -> translateNode num >>= \case

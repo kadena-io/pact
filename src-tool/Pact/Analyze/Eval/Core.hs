@@ -21,6 +21,7 @@ import           Data.SBV                    (EqSymbolic ((./=), (.==)), OrdSymb
                                               SBV, SymVal, ite, literal,
                                               uninterpret, unliteral)
 import           Data.SBV.List               ((.:))
+import qualified Data.SBV                    as SBV
 import qualified Data.SBV.List               as SBVL
 import qualified Data.SBV.String             as SBVS
 import           Data.SBV.Tools.BoundedList  (band, bfoldr, bfoldrM, bmapM,
@@ -166,6 +167,8 @@ evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
 evalCore (StrToInt s)                      = evalStrToInt s
 evalCore (StrToIntBase b s)                = evalStrToIntBase b s
+evalCore (StrTake n s)                     = evalStrTake n s
+evalCore (StrDrop n s)                     = evalStrDrop n s
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
@@ -549,6 +552,24 @@ evalStrToInt sT = do
   let nat = SBVS.strToNat s
   markFailure $ nat .< 0 -- will happen if empty or contains a non-digit
   pure $ sansProv nat
+
+type StrTruncate = SBV.SInteger -> SBV.SString -> SBV.SString
+
+evalStrTruncate :: Analyzer m => StrTruncate -> StrTruncate -> TermOf m 'TyInteger -> TermOf m 'TyStr -> m (S Str)
+evalStrTruncate f g n s = do
+  S _ n' <- eval n
+  S _ s' <- eval s
+  let sc = coerceSBV @Str @String s'
+  pure $ sansProv $ coerceSBV $ ite (n' .>= 0)
+    (f (truncate63 n') sc)
+    (g (truncate63 (SBVS.length sc + n')) sc)
+
+evalStrTake :: Analyzer m => TermOf m 'TyInteger -> TermOf m 'TyStr ->  m (S Str)
+evalStrTake = evalStrTruncate SBVS.take SBVS.drop
+
+evalStrDrop :: Analyzer m => TermOf m 'TyInteger -> TermOf m 'TyStr ->  m (S Str)
+evalStrDrop = evalStrTruncate SBVS.drop SBVS.take
+
 
 evalStrToIntBase
   :: (Analyzer m) => TermOf m 'TyInteger -> TermOf m 'TyStr -> m (S Integer)

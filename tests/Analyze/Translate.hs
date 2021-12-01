@@ -98,6 +98,12 @@ toPactTm = \case
     StrToIntBase b s ->
       mkApp strToIntDef [Some SInteger b, Some SStr s]
 
+    StrTake i l2 ->
+      mkApp takeDef [ Some SInteger i, Some SStr l2 ]
+
+    StrDrop i l2 ->
+      mkApp dropDef [ Some SInteger i, Some SStr l2 ]
+
     Comparison ty' op x y ->
       mkApp (comparisonOpToDef op) [Some ty' x, Some ty' y]
 
