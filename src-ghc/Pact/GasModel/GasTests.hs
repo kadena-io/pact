@@ -100,6 +100,7 @@ unitTestFromDef nativeName = tests
       "list-modules"         -> Just $ listModulesTests nativeName
       "make-list"            -> Just $ makeListTests nativeName
       "map"                  -> Just $ mapTests nativeName
+      "zip"                  -> Just $ zipTests nativeName
       "namespace"            -> Just $ namespaceTests nativeName
       "pact-id"              -> Just $ pactIdTests nativeName
       "pact-version"         -> Just $ pactVersionTests nativeName
@@ -1524,9 +1525,14 @@ mapTests = defGasUnitTests allExprs
   where
     mapExpr li =
       [text| (map (identity) $li) |]
-
     allExprs = NEL.map (createPactExpr mapExpr) intListsExpr
 
+zipTests :: NativeDefName -> GasUnitTests
+zipTests = defGasUnitTests allExprs
+  where
+    zipExpr li =
+      [text| (zip (+) $li $li) |]
+    allExprs = NEL.map (createPactExpr zipExpr) intListsExpr
 
 makeListTests :: NativeDefName -> GasUnitTests
 makeListTests = defGasUnitTests allExprs

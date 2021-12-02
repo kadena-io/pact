@@ -505,6 +505,12 @@
   - 4
 - - (format "{}...{}" smallNumberList)
   - 4
+- - (zip (+) longNumberList longNumberList)
+  - 10004
+- - (zip (+) medNumberList medNumberList)
+  - 104
+- - (zip (+) smallNumberList smallNumberList)
+  - 14
 - - (tx-hash)
   - 1
 - - (and false true)
@@ -666,12 +672,12 @@
   - 4
 - - (keys accounts.accounts)
   - 201
-- - (concat longEscapedStrList)                                                                                                                                                                                             
-  - 1026                                                                                                                                                                                                                    
-- - (concat medEscapedStrList)                                                                                                                                                                                              
-  - 3                                                                                                                                                                                                                       
-- - (concat smallEscapedStrList)                                                                                                                                                                                            
-  - 2                                                                                                                                                                                                                       
+- - (concat longEscapedStrList)
+  - 1026
+- - (concat medEscapedStrList)
+  - 3
+- - (concat smallEscapedStrList)
+  - 2
 - - (!= longNumber longNumber)
   - 2
 - - (!= medNumber medNumber)
