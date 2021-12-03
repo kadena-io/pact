@@ -10,6 +10,12 @@ in {
     kpkgs.rp.project ({ pkgs, hackGet, ... }: with pkgs.haskell.lib; {
       name = "pact";
       overrides = self: super: {
+        direct-sqlite = dontCheck (self.callHackageDirect {
+          pkg = "direct-sqlite";
+          ver = "2.3.26";
+          sha256 = "1kdkisj534nv5r0m3gmxy2iqgsn6y1dd881x77a87ynkx1glxfva";
+        } {});
+
         # The z3 dependency needs to be conditional so pact can be a
         # dependency of ghcjs apps.
         pact = if self.ghc.isGhcjs or false
