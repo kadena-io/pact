@@ -18,9 +18,9 @@ in {
 
         # The z3 dependency needs to be conditional so pact can be a
         # dependency of ghcjs apps.
-        pact = if self.ghc.isGhcjs or false
+        pact = dontCheck (if self.ghc.isGhcjs or false
                  then super.pact
-                 else addBuildDepend super.pact pkgs.z3;
+                 else addBuildDepend super.pact pkgs.z3);
 
         pact-time = dontCheck (self.callHackageDirect {
           pkg = "pact-time";
