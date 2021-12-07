@@ -157,7 +157,7 @@ strLists :: NEL.NonEmpty (T.Text, NEL.NonEmpty T.Text)
 strLists = NEL.map format intLists
   where
     format (desc, li) = (desc,
-                         (NEL.map (("a" <>) . intToStr) li))
+                         NEL.map (("a" <>) . intToStr) li)
 
 
 -- example: [ "[ \"a1\" \"a2\" \"a3\" \"a4\" ]" ]

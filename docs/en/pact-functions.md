@@ -665,6 +665,22 @@ Yield OBJECT for use with 'resume' in following pact step. With optional argumen
 (yield { "amount": 100.0 } "some-chain-id")
 ```
 
+
+### zip {#zip}
+
+*f*&nbsp;`x:<a> y:<b> -> <c>` *list1*&nbsp;`[<a>]` *list2*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<c>]`
+
+
+Combine two lists with some function f, into a new list, the length of which is the length of the shortest list.
+```lisp
+pact> (zip (+) [1 2 3 4] [4 5 6 7])
+[5 7 9 11]
+pact> (zip (-) [1 2 3 4] [4 5 6])
+[-3 -3 -3]
+pact> (zip (+) [1 2 3] [4 5 6 7])
+[5 7 9]
+```
+
 ## Database {#Database}
 
 ### create-table {#create-table}
