@@ -26,6 +26,7 @@ import Pact.Types.PactValue
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Native (nativeDefs)
+import Pact.Types.RowData
 
 
 loadModule :: IO (ModuleName, ModuleData Ref, PersistModuleData)
@@ -65,10 +66,10 @@ runRegression p = do
     (commit v)
   void $ begin v
   assertEquals' "user table info correct" "free.some-Module" $ _getUserTableInfo pactdb user1 v
-  let row = ObjectMap $ M.fromList [("gah",PLiteral (LDecimal 123.454345))]
+  let row = ObjectMap $ M.fromList [("gah",pactValueToRowData RDV1 $ PLiteral (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" row v
   assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
-  let row' = ObjectMap $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
+  let row' = ObjectMap $ fmap (pactValueToRowData RDV1) $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
   _writeRow pactdb Update usert "key1" row' v
   assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
   let ks = mkKeySet [PublicKey "skdjhfskj"] "predfun"

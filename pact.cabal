@@ -89,6 +89,7 @@ library
     Pact.Types.Persistence
     Pact.Types.Pretty
     Pact.Types.Purity
+    Pact.Types.RowData
     Pact.Types.RPC
     Pact.Types.Runtime
     Pact.Types.Orphans

@@ -46,7 +46,7 @@ import GHC.Generics
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
-import Pact.Types.PactValue
+import Pact.Types.RowData
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Persist as P
@@ -246,11 +246,11 @@ debug :: Show a => String -> a -> MVState p ()
 debug s a = logDebug $ s ++ ": " ++ show a
 
 
-readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (ObjectMap PactValue))
+readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (ObjectMap RowData))
 readUserTable e t k = runMVState e $ readUserTable' t k
 {-# INLINE readUserTable #-}
 
-readUserTable' :: TableName -> RowKey -> MVState p (Maybe (ObjectMap PactValue))
+readUserTable' :: TableName -> RowKey -> MVState p (Maybe (ObjectMap RowData))
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
 {-# INLINE readUserTable' #-}
 
@@ -270,7 +270,7 @@ writeSys s wt tbl k v = runMVState s $ do
 
 {-# INLINE writeSys #-}
 
-writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> ObjectMap PactValue -> IO ()
+writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> ObjectMap RowData -> IO ()
 writeUser s wt tn rk row = runMVState s $ do
   let ut = userDataTable tn
       tt = userTxRecord tn

@@ -78,6 +78,7 @@ import Pact.Types.Capability (SigCapability)
 import Pact.Types.Command
 import Pact.Types.Lang
 import Pact.Types.PactValue (toPactValueLenient, PactValue(..))
+import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Parse
 
@@ -369,9 +370,9 @@ regressionModule moduleName = [text|
      ) |]
   where moduleNameText = asString moduleName
 
-acctRow :: ObjectMap PactValue
+acctRow :: ObjectMap RowData
 acctRow = ObjectMap $ M.fromList
-          [("balance", PLiteral (LDecimal 100.0))]
+          [("balance", pactValueToRowData RDV0 $ PLiteral (LDecimal 100.0))]
 
 sampleLoadedKeysetName :: T.Text
 sampleLoadedKeysetName = "some-loaded-keyset"
