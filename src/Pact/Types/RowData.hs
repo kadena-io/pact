@@ -1,6 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+-- |
+-- Module      :  Pact.Types.RowData
+-- Copyright   :  (C) 2021 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Versioned persistence for 'PactValue'.
+--
 module Pact.Types.RowData
   ( RowData(..)
   , RowDataVersion(..)
