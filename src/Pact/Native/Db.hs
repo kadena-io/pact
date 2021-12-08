@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
 
 -- |
@@ -29,6 +30,7 @@ import Control.Monad.Reader (ask)
 import Data.Default
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
+import Data.Foldable (foldlM)
 import qualified Data.Vector as V
 import Data.Text (pack)
 
@@ -91,7 +93,7 @@ dbDefs =
      [ LitExample "(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n\
        \  (format \"Balance for {} is {} {}\" [id bal ccy]))"
      ]
-     "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements."
+     "Special form to read row from TABLE for KEY aI have a few questions about writing proper gas for this when you get the chancend bind columns per BINDINGS over subsequent body statements."
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
@@ -119,7 +121,9 @@ dbDefs =
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
      [LitExample "(keys accounts)"] "Return all keys in TABLE."
-
+    ,defGasNative "fold-db" foldDB'
+      (funType TyAny [("table", TyAny), ("qry", TyAny), ("consumer", TyAny)])
+      [LitExample ""] "asdf"
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      [LitExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
@@ -218,6 +222,29 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
         _ -> columnsToObject' (_tTableType table) cols cs
 
 read' _ i as = argsError i as
+
+foldDB' :: GasNativeFun e
+foldDB' g0 i [tbl, TApp qry _, TApp consumer _] = do
+  table <- reduce tbl >>= \case
+    t@TTable{} -> return t
+    t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
+  (g1, ks) <- getKeys g0 table
+  (g2, xs) <- foldlM (fdb table) (g1, []) ks
+  pure (g2, TList (V.fromList (reverse xs)) TyAny def)
+  where
+  asBool (TLiteral (LBool satisfies) _) = return satisfies
+  asBool t = evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
+  getKeys g table = gasPostReads i g (map toTerm) $ do
+    guardTable i table GtKeys
+    keys (_faInfo i) (userTable table)
+  fdb table (g, acc) key = do
+    (g1, row) <- read' g i [table, key]
+    cond <- asBool =<< apply qry [key, row]
+    if cond then do
+      r' <- apply consumer [row]
+      pure (g1, r':acc)
+    else pure (g1, acc)
+foldDB' _ i as = argsError' i as
 
 gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas
 gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
