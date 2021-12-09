@@ -83,6 +83,7 @@ dbDefs =
       bindTy = TySchema TyBinding rt def
       partialize = set tySchemaPartial AnySubschema
       a = mkTyVar "a" []
+      b = mkTyVar "c" []
   in ("Database",
     [setTopLevelOnly $ defGasRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
@@ -93,7 +94,7 @@ dbDefs =
      [ LitExample "(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n\
        \  (format \"Balance for {} is {} {}\" [id bal ccy]))"
      ]
-     "Special form to read row from TABLE for KEY aI have a few questions about writing proper gas for this when you get the chancend bind columns per BINDINGS over subsequent body statements."
+     "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements."
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
@@ -121,9 +122,20 @@ dbDefs =
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
      [LitExample "(keys accounts)"] "Return all keys in TABLE."
+
     ,defGasNative "fold-db" foldDB'
-      (funType TyAny [("table", TyAny), ("qry", TyAny), ("consumer", TyAny)])
-      [LitExample ""] "asdf"
+      (funType (TyList b)
+        [ ("table", tableTy)
+        , ("qry", TyFun (funType' (TyPrim TyBool) [("a", TyPrim TyString), ("b", rowTy)] ))
+        , ("consumer", TyFun (funType' b [("a", TyPrim TyString), ("b", rowTy)]))])
+      [LitExample "(let* \
+                  \ ((qry (lambda (k obj) true)) ;; select all rows \
+                  \ (f (lambda (x) [(at 'firstName x), (at 'b x)])) \
+                  \ ) \
+                  \ (fold-db people (qry) (f)) \
+                  \)"]
+      "Select rows in database using `qry` using a predicate with both key and value, and then accumulate results of the query \
+      \ transforming them with `consumer`"
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      [LitExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
@@ -223,6 +235,7 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
 
 read' _ i as = argsError i as
 
+
 foldDB' :: GasNativeFun e
 foldDB' g0 i [tbl, TApp qry _, TApp consumer _] = do
   table <- reduce tbl >>= \case
@@ -241,7 +254,7 @@ foldDB' g0 i [tbl, TApp qry _, TApp consumer _] = do
     (g1, row) <- read' g i [table, key]
     cond <- asBool =<< apply qry [key, row]
     if cond then do
-      r' <- apply consumer [row]
+      r' <- apply consumer [key, row]
       pure (g1, r':acc)
     else pure (g1, acc)
 foldDB' _ i as = argsError' i as
