@@ -125,7 +125,7 @@ class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactDbValue v where
 
 instance PactDbValue v => PactDbValue (TxLog v) where
   prettyPactDbValue = pretty . fmap (SomeDoc . prettyPactDbValue)
-instance PactDbValue (ObjectMap RowData) where
+instance PactDbValue RowData where
   prettyPactDbValue = pretty
 instance PactDbValue a => PactDbValue [a] where
   prettyPactDbValue = prettyList . fmap (SomeDoc . prettyPactDbValue)

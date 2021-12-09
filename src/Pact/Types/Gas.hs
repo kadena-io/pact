@@ -68,7 +68,7 @@ instance Wrapped GasPrice
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
 data ReadValue
-  = ReadData !(ObjectMap RowData)
+  = ReadData !RowData
   | ReadKey !RowKey
   | ReadTxId
   | ReadModule !ModuleName !Code

@@ -45,15 +45,15 @@ import Pact.Types.PactValue
 class Readable a where
   readable :: a -> ReadValue
 
-instance Readable (ObjectMap RowData) where
+instance Readable RowData where
   readable = ReadData
 instance Readable RowKey where
   readable = ReadKey
 instance Readable TxId where
   readable = const ReadTxId
-instance Readable (TxLog (ObjectMap RowData)) where
+instance Readable (TxLog RowData) where
   readable = ReadData . _txValue
-instance Readable (TxId, TxLog (ObjectMap RowData)) where
+instance Readable (TxId, TxLog RowData) where
   readable = ReadData . _txValue . snd
 
 -- | Parameterize calls to 'guardTable' with op.
@@ -193,7 +193,7 @@ descModule i [TLitString t] = do
 descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
-userTable :: Show n => Term n -> Domain RowKey (ObjectMap RowData)
+userTable :: Show n => Term n -> Domain RowKey RowData
 userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
@@ -232,12 +232,12 @@ gasPostReads i g0 postProcess action = do
   rs <- action
   (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
-columnsToObject :: Type (Term Name) -> ObjectMap RowData -> Term Name
-columnsToObject ty m = TObject (Object (fmap (fromPactValue . rowDataToPactValue) m) ty def def) def
+columnsToObject :: Type (Term Name) -> RowData -> Term Name
+columnsToObject ty m = TObject (Object (fmap (fromPactValue . rowDataToPactValue) (_rdData m)) ty def def) def
 
 columnsToObject' :: Type (Term Name) -> [(Info,FieldKey)] ->
-                    ObjectMap RowData -> Eval m (Term Name)
-columnsToObject' ty cols (ObjectMap m) = do
+                    RowData -> Eval m (Term Name)
+columnsToObject' ty cols (RowData _ (ObjectMap m)) = do
   ps <- forM cols $ \(ci,col) ->
                 case M.lookup col m of
                   Nothing -> evalError ci $ "read: invalid column: " <> pretty col
@@ -294,7 +294,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue' defaultRow)
-        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> row)
+        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
 
@@ -308,7 +308,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
-        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> row)
+        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
@@ -343,11 +343,11 @@ txlog g i [table@TTable {},TLitInteger tid] = do
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog _ i as = argsError i as
 
-txlogToObj :: TxLog (ObjectMap RowData) -> Term Name
+txlogToObj :: TxLog RowData -> Term Name
 txlogToObj TxLog{..} = toTObject TyAny def
   [ ("table", toTerm _txDomain)
   , ("key", toTerm _txKey)
-  , ("value", toTObjectMap TyAny def (fmap (fromPactValue . rowDataToPactValue) _txValue))
+  , ("value", toTObjectMap TyAny def (fmap (fromPactValue . rowDataToPactValue) (_rdData _txValue)))
   ]
 
 checkNonLocalAllowed :: HasInfo i => i -> Eval e ()
@@ -387,7 +387,7 @@ write wt partial i as = do
         tty -> void $ checkUserType partial (_faInfo i) ps tty
       rdv <- ifExecutionFlagSet' FlagRowDataV0 RDV0 RDV1
       r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) $
-          (pactValueToRowData rdv <$> ps')
+          RowData rdv (pactValueToRowData <$> ps')
       return (cost0 + cost1, r)
     _ -> argsError i ts
 

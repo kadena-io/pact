@@ -126,7 +126,7 @@ newtype RowKey = RowKey Text
 -- | Specify key and value types for database domains.
 data Domain k v where
   -- | User tables accept a TableName and map to an 'ObjectMap PactValue'
-  UserTables :: !TableName -> Domain RowKey (ObjectMap RowData)
+  UserTables :: !TableName -> Domain RowKey RowData
   -- | Keysets
   KeySets :: Domain KeySetName KeySet
   -- | Modules
