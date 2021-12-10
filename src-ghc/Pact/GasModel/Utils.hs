@@ -370,9 +370,9 @@ regressionModule moduleName = [text|
      ) |]
   where moduleNameText = asString moduleName
 
-acctRow :: ObjectMap RowData
-acctRow = ObjectMap $ M.fromList
-          [("balance", pactValueToRowData RDV0 $ PLiteral (LDecimal 100.0))]
+acctRow :: RowData
+acctRow = RowData RDV0 $ ObjectMap $ M.fromList
+          [("balance", pactValueToRowData $ PLiteral (LDecimal 100.0))]
 
 sampleLoadedKeysetName :: T.Text
 sampleLoadedKeysetName = "some-loaded-keyset"
