@@ -46,7 +46,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import Data.String
-import Data.Text (Text,unpack)
+import Data.Text (Text,unpack,pack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Vector as V
 
@@ -197,6 +197,17 @@ freshTyVar = do
   c <- state (view (psUser . csFresh) &&& over (psUser . csFresh) succ)
   return $ mkTyVar (cToTV c) []
 
+freshNameRaw :: Compile Text
+freshNameRaw = do
+  c <- state (view (psUser . csFresh) &&& over (psUser . csFresh) succ)
+  pure $ "_af" <> pack (show c)
+
+-- freshName :: Compile Name
+-- freshName = do
+--   n <- freshNameRaw
+--   i <- contextInfo
+--   pure $ Name (BareName n i)
+
 cToTV :: Int -> TypeVarName
 cToTV n | n < 26 = fromString [toC n]
         | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
@@ -231,8 +242,19 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
   valueLevelForm r = case r of
     RLet -> return letForm
     RLetStar -> return letsForm
+    RLambda -> return lam
     RWithCapability -> return withCapability
     _ -> expected "value level form (let, let*)"
+
+lam :: Compile (Term Name)
+lam = do
+  name <- freshNameRaw
+  -- tv <- freshTyVar
+  args <- withList' Parens $ many arg
+  let funTy = FunType args TyAny
+  info <- contextInfo
+  lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
+  pure (TLam lamValue info)
 
 moduleLevel :: Compile [Term Name]
 moduleLevel = specialForm $ \r -> case r of
@@ -273,7 +295,30 @@ app = do
   v <- varAtom
   args <- many (valueLevel <|> bindingForm)
   i <- contextInfo
-  return $ TApp (App v args i) i
+  let underscores = filter isUnderscore (v:args)
+  if null underscores then return $ TApp (App v args i) i
+  else lambdaApp v args i underscores
+  where
+  isUnderscore = \case
+    TVar (Name (BareName n _)) _ -> n == "_"
+    _ -> False
+  lambdaApp v args i ucs = do
+    ln <- freshNameRaw
+    -- freshTy <- freshTyVar
+    freshNames <- traverse (const freshNameRaw) ucs
+    let
+      freshArgs = (\n -> Arg n TyAny i) <$> freshNames
+      freshTerms = flip TVar i . (Name . flip BareName i) <$> freshNames
+      newArgs = appUnderscores freshTerms args
+      newApp = TList (V.singleton (TApp (App v newArgs i) i)) TyAny i
+    body <- abstractBody' freshArgs newApp
+    let lam' = TLam (Lam ln (FunType freshArgs TyAny) body i) i
+    pure $ TApp (App lam' [] def) def
+  appUnderscores (x:xs) (y:ys)
+    | isUnderscore y = x:appUnderscores xs ys
+    | otherwise      = y:appUnderscores (x:xs) ys
+  appUnderscores _ ys = ys
+
 
 -- | Bindings (`{ "column" := binding }`) do not syntactically scope the
 -- following body form as a sexp, instead letting the body contents
@@ -552,20 +597,13 @@ stepWithRollback = do
 letBindings :: Compile [BindPair (Term Name)]
 letBindings =
   withList' Parens $ some $ withList' Parens $ do
-    a <- arg
-    regularBind a <|> lam a
-  where
-  regularBind arg' =
-    BindPair arg' <$> try valueLevel
-  lam (Arg name ty _) = withList' Parens $ reservedAtom >>= \case
-    RLambda -> do
-      args <- withList' Parens $ many arg
-      let funTy = FunType args ty
-      info <- contextInfo
-      lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
-      pure (BindPair (Arg name (TyFun funTy) info) (TLam lamValue info))
-    _ -> expected "Lambda form"
-
+    info <- contextInfo
+    BindPair a@(Arg n ty _) t <- BindPair <$> arg <*> valueLevel
+    case t of
+      TLam l _ ->
+        let l' =  TLam (l & lamArg .~ n & lamTy . ftReturn .~ ty & lamInfo .~ info) info
+        in pure (BindPair (Arg n ty info) l')
+      _ -> pure (BindPair a t)
 
 abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)
 abstractBody term args = abstractBody' args =<< bodyForm term
