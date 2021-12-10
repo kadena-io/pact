@@ -2946,6 +2946,37 @@ each BINDPAIR; thus `let` is preferred where possible.
 > 22
 ```
 
+### cond; {#cond}
+
+```
+(cond (CONDITION BRANCH) [(CONDITION BRANCH)] ELSE-CONDITION)
+```
+
+`cond` is syntactic sugar for `if-else` statements.
+
+```lisp
+(cond
+   (a b)
+   (c d)
+   (e f)
+   g)
+```
+
+Is equivalent to.
+
+```lisp
+(if a b (if c d (if e f g)))
+```
+
+or in pseudocode
+
+```
+if a then b
+  elif c then d
+  elif e then f
+  else g
+```
+
 ### step {#step}
 ```
 (step EXPR)

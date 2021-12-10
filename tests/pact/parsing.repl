@@ -35,10 +35,10 @@
     1)
 
   (defun test-cond (a)
-    (cond ((< a 10) 1)
-          ((< a 20) 2)
-          ((< a 30) 3)
-          4))
+    (cond ((< a 10) "a")
+          ((< a 20) "b")
+          ((< a 30) "c")
+          "d"))
 )
 
 
@@ -58,5 +58,5 @@
 
 (expect
   "cond folds ifs correctly"
-  4
-  (+ (test-cond 1) (test-cond 21)))
+  "acbd"
+  (fold (+) "" [(test-cond 1) (test-cond 21)  (test-cond 11) (test-cond 31)]))
