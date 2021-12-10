@@ -83,7 +83,7 @@ dbDefs =
       bindTy = TySchema TyBinding rt def
       partialize = set tySchemaPartial AnySubschema
       a = mkTyVar "a" []
-      b = mkTyVar "c" []
+      b = mkTyVar "b" []
   in ("Database",
     [setTopLevelOnly $ defGasRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
@@ -134,8 +134,8 @@ dbDefs =
                   \ ) \
                   \ (fold-db people (qry) (f)) \
                   \)"]
-      "Select rows in database using `qry` using a predicate with both key and value, and then accumulate results of the query \
-      \ transforming them with `consumer`"
+      "Select rows from TABLE using QRY using a predicate with both key and value, and then accumulate results of the query \
+      \in CONSUMER"
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      [LitExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
