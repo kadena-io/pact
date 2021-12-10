@@ -206,8 +206,8 @@ benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
 benchKeySet :: KeySet
 benchKeySet = mkKeySet [PublicKey "benchadmin"] ">"
 
-acctRow :: ObjectMap RowData
-acctRow = fmap (pactValueToRowData RDV1) $ ObjectMap $ M.fromList
+acctRow :: RowData
+acctRow = RowData RDV1 $ fmap pactValueToRowData $ ObjectMap $ M.fromList
   [("balance",PLiteral (LDecimal 100.0))
   ,("guard",PGuard $ GKeySet (mkKeySet [PublicKey $ encodeUtf8 pk] "keys-all"))
   ]
