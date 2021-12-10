@@ -732,6 +732,17 @@ Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code'
 Top level only: this function will fail if used in module code.
 
 
+### fold-db {#fold-db}
+
+*table*&nbsp;`table:<{row}>` *qry*&nbsp;`a:string b:object:<{row}> -> bool` *consumer*&nbsp;`a:string b:object:<{row}> -> <c>` *&rarr;*&nbsp;`[<c>]`
+
+
+Select rows in database using `qry` using a predicate with both key and value, and then accumulate results of the query  transforming them with `consumer`
+```lisp
+(let*  ((qry (lambda (k obj) true)) ;; select all rows  (f (lambda (x) [(at 'firstName x), (at 'b x)]))  )  (fold-db people (qry) (f)) )
+```
+
+
 ### insert {#insert}
 
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`

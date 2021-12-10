@@ -193,6 +193,7 @@ unitTestFromDef nativeName = tests
       "with-default-read" -> Just $ withDefaultReadTests nativeName
       "with-read"         -> Just $ withReadTests nativeName
       "write"             -> Just $ writeTests nativeName
+      "fold-db"           -> Just $ foldDBTests nativeName
 
       -- Capabilities native functions
       "compose-capability"  -> Just $ composeCapabilityTests nativeName
@@ -475,6 +476,19 @@ writeTests = defGasUnitTests allExprs
                     "some-id-that-is-not-present"
                     { "balance": 0.0 }
              ) |]
+    allExprs = writeExpr :| []
+
+foldDBTests :: NativeDefName -> GasUnitTests
+foldDBTests = defGasUnitTests allExprs
+  where
+    writeExpr =
+      defPactExpression [text|
+      (let*
+        ((qry (lambda (k obj) true)) ;; select all rows
+          (f (lambda (k x) (at 'balance x)))
+        )
+        (fold-db $acctModuleNameText.accounts (qry) (f))
+        ) |]
     allExprs = writeExpr :| []
 
 

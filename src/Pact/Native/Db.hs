@@ -250,8 +250,8 @@ foldDB' g0 i [tbl, TApp qry _, TApp consumer _] = do
   getKeys g table = gasPostReads i g (map toTerm) $ do
     guardTable i table GtKeys
     keys (_faInfo i) (userTable table)
-  fdb table (g, acc) key = do
-    (g1, row) <- read' g i [table, key]
+  fdb table (!g, acc) key = do
+    (!g1, row) <- read' g i [table, key]
     cond <- asBool =<< apply qry [key, row]
     if cond then do
       r' <- apply consumer [key, row]
