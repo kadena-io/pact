@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -80,6 +81,13 @@ instance FromJSON RowDataValue where
 data RowDataVersion = RDV0 | RDV1
   deriving (Eq,Show,Generic,Ord,Enum,Bounded)
 instance NFData RowDataVersion
+instance ToJSON RowDataVersion where
+  toJSON = toJSON . fromEnum
+instance FromJSON RowDataVersion where
+  parseJSON = withScientific "RowDataVersion" $ \case
+    0 -> pure RDV0
+    1 -> pure RDV1
+    _ -> fail "RowDataVersion"
 
 data RowData = RowData
     { _rdVersion :: RowDataVersion
@@ -117,17 +125,15 @@ instance Pretty RowDataValue where
 
 instance ToJSON RowData where
   toJSON (RowData RDV0 m) = toJSON $ fmap rowDataToPactValue m
-  toJSON (RowData RDV1 m) = object
-      [ "$v" .= (1::Int), "$d" .= m ]
+  toJSON (RowData v m) = object
+      [ "$v" .= v, "$d" .= m ]
 
 
 instance FromJSON RowData where
   parseJSON v =
-    RowData RDV1 <$> parseV1 v <|>
+    parseVersioned v <|>
     RowData RDV0 . fmap pactValueToRowData <$> parseJSON v
     where
-      parseV1 = withObject "RowData" $ \o -> do
-        ver <- o .: "$v"
-        case ver of
-          (1::Int) -> o .: "$d"
-          _ -> fail "RowData V1"
+      parseVersioned = withObject "RowData" $ \o -> RowData
+          <$> o .: "$v"
+          <*> o .: "$d"
