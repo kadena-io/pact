@@ -942,9 +942,6 @@ compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   apply (_tApp appB) [a']
 compose i as = argsError' i as
 
-
-
-
 readMsg :: RNativeFun e
 readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
 readMsg i [] = fromPactValue <$> parseMsgKey' i "read-msg" Nothing

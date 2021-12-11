@@ -202,11 +202,6 @@ freshNameRaw = do
   c <- state (view (psUser . csFresh) &&& over (psUser . csFresh) succ)
   pure $ "_af" <> pack (show c)
 
--- freshName :: Compile Name
--- freshName = do
---   n <- freshNameRaw
---   i <- contextInfo
---   pure $ Name (BareName n i)
 
 cToTV :: Int -> TypeVarName
 cToTV n | n < 26 = fromString [toC n]
@@ -249,9 +244,9 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
 lam :: Compile (Term Name)
 lam = do
   name <- freshNameRaw
-  -- tv <- freshTyVar
+  tv <- freshTyVar
   args <- withList' Parens $ many arg
-  let funTy = FunType args TyAny
+  let funTy = FunType args tv
   info <- contextInfo
   lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
   pure (TLam lamValue info)
@@ -295,7 +290,7 @@ app = do
   v <- varAtom
   args <- many (valueLevel <|> bindingForm)
   i <- contextInfo
-  let underscores = filter isUnderscore (v:args)
+  let underscores = filter isUnderscore args
   if null underscores then return $ TApp (App v args i) i
   else lambdaApp v args i underscores
   where
@@ -304,15 +299,14 @@ app = do
     _ -> False
   lambdaApp v args i ucs = do
     ln <- freshNameRaw
-    -- freshTy <- freshTyVar
     freshNames <- traverse (const freshNameRaw) ucs
     let
-      freshArgs = (\n -> Arg n TyAny i) <$> freshNames
-      freshTerms = flip TVar i . (Name . flip BareName i) <$> freshNames
+      freshArgs = (\n -> Arg n TyAny def) <$> freshNames
+      freshTerms = flip TVar i . (Name . flip BareName def) <$> freshNames
       newArgs = appUnderscores freshTerms args
-      newApp = TList (V.singleton (TApp (App v newArgs i) i)) TyAny i
+      newApp = TList (V.singleton (TApp (App v newArgs i) i)) TyAny def
     body <- abstractBody' freshArgs newApp
-    let lam' = TLam (Lam ln (FunType freshArgs TyAny) body i) i
+    let lam' = TLam (Lam ln (FunType freshArgs TyAny) body def) def
     pure $ TApp (App lam' [] def) def
   appUnderscores (x:xs) (y:ys)
     | isUnderscore y = x:appUnderscores xs ys
