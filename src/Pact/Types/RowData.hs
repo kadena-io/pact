@@ -98,7 +98,7 @@ pactValueToRowData pv = case pv of
   PModRef m -> RDModRef m
   where
     recur :: Functor f => f PactValue -> f RowDataValue
-    recur = fmap $ pactValueToRowData
+    recur = fmap pactValueToRowData
 
 rowDataToPactValue :: RowDataValue -> PactValue
 rowDataToPactValue rdv = case rdv of
@@ -109,7 +109,7 @@ rowDataToPactValue rdv = case rdv of
   RDModRef m -> PModRef m
   where
     recur :: Functor f => f RowDataValue -> f PactValue
-    recur = fmap $ rowDataToPactValue
+    recur = fmap rowDataToPactValue
 
 instance Pretty RowDataValue where
   pretty = pretty . rowDataToPactValue
