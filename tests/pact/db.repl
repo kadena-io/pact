@@ -189,3 +189,56 @@
 (commit-tx)
 
 (nested-tx.test-nested-tx)
+
+(module fdb G
+  (defcap G () true)
+  (defschema fdb-test a:integer b:integer)
+  (deftable fdb-tbl:{fdb-test})
+)
+
+(create-table fdb-tbl)
+(insert fdb-tbl 'a {'a:1, 'b:1})
+(insert fdb-tbl 'b {'a:2, 'b:2})
+(insert fdb-tbl 'c {'a:3, 'b:3})
+(insert fdb-tbl 'd {'a:4, 'b:4})
+
+(expect
+  "fold-db query filters correctly by key"
+  ["a" "b"]
+  (let*
+    ((qry (lambda (k o)  (< k "c")))
+     (consume (lambda (k o) k))
+    )
+    (fold-db fdb-tbl (qry) (consume))
+    ))
+
+(expect
+  "fold-db query filters correctly by key"
+  ["a" "b"]
+  (let*
+    ((qry (lambda (k o)  (< k "c")))
+     (consume (lambda (k o) k))
+    )
+    (fold-db fdb-tbl (qry) (consume))
+    ))
+
+(expect
+  "fold-db query handles key/obj transform correctly"
+  [["a" 1] ["b" 2]]
+  (let*
+    ((qry (lambda (k o)  (< k "c")))
+     (consume (lambda (k o) [k (at 'a o)]))
+    )
+    (fold-db fdb-tbl (qry) (consume))
+    ))
+
+(expect
+  "fold-db spits out all entries on true qry"
+  [{'entry:'a, 'value:{'a:1, 'b:1}} {'entry:'b, 'value:{'a:2, 'b:2}} {'entry:'c, 'value:{'a:3, 'b:3}} {'entry:'d, 'value:{'a:4, 'b:4}}]
+  (let*
+    ((qry (lambda (k o) true))
+     (consume (lambda (k o) {'entry:k, 'value:o}))
+    )
+    (fold-db fdb-tbl (qry) (consume))
+    ))
+

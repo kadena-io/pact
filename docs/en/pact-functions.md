@@ -734,10 +734,10 @@ Top level only: this function will fail if used in module code.
 
 ### fold-db {#fold-db}
 
-*table*&nbsp;`table:<{row}>` *qry*&nbsp;`a:string b:object:<{row}> -> bool` *consumer*&nbsp;`a:string b:object:<{row}> -> <c>` *&rarr;*&nbsp;`[<c>]`
+*table*&nbsp;`table:<{row}>` *qry*&nbsp;`a:string b:object:<{row}> -> bool` *consumer*&nbsp;`a:string b:object:<{row}> -> <b>` *&rarr;*&nbsp;`[<b>]`
 
 
-Select rows in database using `qry` using a predicate with both key and value, and then accumulate results of the query  transforming them with `consumer`
+Select rows from TABLE using QRY using a predicate with both key and value, and then accumulate results of the query in CONSUMER
 ```lisp
 (let*  ((qry (lambda (k obj) true)) ;; select all rows  (f (lambda (x) [(at 'firstName x), (at 'b x)]))  )  (fold-db people (qry) (f)) )
 ```
