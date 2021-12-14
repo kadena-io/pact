@@ -2946,6 +2946,30 @@ each BINDPAIR; thus `let` is preferred where possible.
 > 22
 ```
 
+### cond; {#cond}
+
+```
+(cond (TEST BRANCH) [(TEST2 BRANCH2) [...]] ELSE-BRANCH)
+```
+
+Special form/sugar to produce a series of "if-elseif-else" expressions, such that if TEST1 passes, BRANCH1 is evaluated, otherwise followed by evaluating TEST2 -> BRANCH2 etc. ELSE-BRANCH is evaluated if all tests fail.
+
+`cond` is syntactically expanded such that
+
+```lisp
+(cond
+   (a b)
+   (c d)
+   (e f)
+   g)
+```
+
+is expanded to:
+
+```lisp
+(if a b (if c d (if e f g)))
+```
+
 ### step {#step}
 ```
 (step EXPR)
