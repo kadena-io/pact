@@ -43,6 +43,7 @@ import Pact.Types.Info
 import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.PactValue
+import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Parse
 
@@ -67,7 +68,7 @@ instance Wrapped GasPrice
 -- | DB Read value for per-row gas costing.
 -- Data is included if variable-size.
 data ReadValue
-  = ReadData !(ObjectMap PactValue)
+  = ReadData !RowData
   | ReadKey !RowKey
   | ReadTxId
   | ReadModule !ModuleName !Code

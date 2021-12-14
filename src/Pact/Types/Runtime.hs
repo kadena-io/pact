@@ -152,6 +152,8 @@ data ExecutionFlag
   | FlagDisablePact40
   -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
   | FlagEnforceKeyFormats
+  -- | Use v0 RowData persistence
+  | FlagRowDataV0
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

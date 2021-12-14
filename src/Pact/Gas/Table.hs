@@ -10,6 +10,7 @@ import qualified Data.Text as T
 
 import Pact.Types.Continuation
 import Pact.Types.Gas
+import Pact.Types.RowData
 import Pact.Types.SizeOf
 import Pact.Types.Term
 
@@ -219,7 +220,7 @@ tableGasModel gasConfig =
         GConcatenation i j ->
           fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
         GPostRead r -> case r of
-          ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap cols))
+          ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap $ _rdData cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
           ReadTxId -> _gasCostConfig_readColumnCost gasConfig
           ReadModule _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig

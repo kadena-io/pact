@@ -27,6 +27,7 @@ import Data.Typeable
 
 import Pact.Types.PactValue
 import Pact.Types.Pretty
+import Pact.Types.RowData
 import Pact.Types.Runtime
 
 type Persist s a = s -> IO (s,a)
@@ -124,7 +125,7 @@ class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactDbValue v where
 
 instance PactDbValue v => PactDbValue (TxLog v) where
   prettyPactDbValue = pretty . fmap (SomeDoc . prettyPactDbValue)
-instance PactDbValue (ObjectMap PactValue) where
+instance PactDbValue RowData where
   prettyPactDbValue = pretty
 instance PactDbValue a => PactDbValue [a] where
   prettyPactDbValue = prettyList . fmap (SomeDoc . prettyPactDbValue)
