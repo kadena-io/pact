@@ -235,7 +235,7 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
     RLetStar -> return letsForm
     RWithCapability -> return withCapability
     RCond -> return condForm
-    _ -> expected "value level form (let, let*)"
+    _ -> expected "value level form (let, let*, with-capability, cond)"
 
 moduleLevel :: Compile [Term Name]
 moduleLevel = specialForm $ \r -> case r of

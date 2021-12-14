@@ -2949,10 +2949,12 @@ each BINDPAIR; thus `let` is preferred where possible.
 ### cond; {#cond}
 
 ```
-(cond (CONDITION BRANCH) [(CONDITION BRANCH)] ELSE-CONDITION)
+(cond (TEST BRANCH) [(TEST2 BRANCH2) [...]] ELSE-BRANCH)
 ```
 
-`cond` is syntactic sugar for `if-else` statements.
+Special form/sugar to produce a series of "if-elseif-else" expressions, such that if TEST1 passes, BRANCH1 is evaluated, otherwise followed by evaluating TEST2 -> BRANCH2 etc. ELSE-BRANCH is evaluated if all tests fail.
+
+`cond` is syntactically expanded such that
 
 ```lisp
 (cond
@@ -2962,19 +2964,10 @@ each BINDPAIR; thus `let` is preferred where possible.
    g)
 ```
 
-Is equivalent to.
+is expanded to:
 
 ```lisp
 (if a b (if c d (if e f g)))
-```
-
-or in pseudocode
-
-```
-if a then b
-  elif c then d
-  elif e then f
-  else g
 ```
 
 ### step {#step}
