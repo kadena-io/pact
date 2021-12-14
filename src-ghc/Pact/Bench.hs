@@ -44,6 +44,7 @@ import Pact.Types.Crypto
 import Pact.Types.Lang
 import Pact.Types.Logger
 import Pact.Types.PactValue
+import Pact.Types.RowData
 import Pact.Types.Advice
 import Pact.Types.RPC
 import Pact.Types.Runtime
@@ -205,8 +206,8 @@ benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
 benchKeySet :: KeySet
 benchKeySet = mkKeySet [PublicKey "benchadmin"] ">"
 
-acctRow :: ObjectMap PactValue
-acctRow = ObjectMap $ M.fromList
+acctRow :: RowData
+acctRow = RowData RDV1 $ fmap pactValueToRowData $ ObjectMap $ M.fromList
   [("balance",PLiteral (LDecimal 100.0))
   ,("guard",PGuard $ GKeySet (mkKeySet [PublicKey $ encodeUtf8 pk] "keys-all"))
   ]
