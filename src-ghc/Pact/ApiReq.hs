@@ -52,7 +52,9 @@ import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude
 import System.Directory
+import System.Exit hiding (die)
 import System.FilePath
+import System.IO
 
 import Pact.Types.API
 import Pact.Types.Capability
@@ -219,9 +221,11 @@ returnCommandIfDone outputLocal sd =
     Right c -> do
       let res = verifyCommand $ fmap encodeUtf8 c
           out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
-      return $ case res :: ProcessedCommand Value ParsedCode of
-        ProcSucc _ -> BSL.toStrict out
-        ProcFail _ -> Y.encodeWith yamlOptions sd
+      case res :: ProcessedCommand Value ParsedCode of
+        ProcSucc _ -> pure $ BSL.toStrict out
+        ProcFail e -> do
+          let msg = unlines ["Command verification failed!", e]
+          hPutStrLn stderr msg >> hFlush stderr >> exitFailure
 
 addSigReq :: SigData Text -> FilePath -> IO (SigData Text)
 addSigReq sd keyFile = do
