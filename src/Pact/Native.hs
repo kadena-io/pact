@@ -852,7 +852,7 @@ filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \case
                            t <- apply (_tApp app) [a']
                            case t of
                              (TLiteral (LBool bo) _) -> return bo
-                             _ -> return False -- hmm, too permissive here, select is stricter
+                             _ ->  evalError' i $ "filter: expected closure to return bool: " <> pretty app
            t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
 filter' i as = argsError' i as
 
