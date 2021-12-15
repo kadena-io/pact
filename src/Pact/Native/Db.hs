@@ -243,8 +243,10 @@ foldDB' g0 i [tbl, TApp qry _, TApp consumer _] = do
   table <- reduce tbl >>= \case
     t@TTable{} -> return t
     t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
-  (g1, ks) <- getKeys g0 table
-  (g2, xs) <- foldlM (fdb table) (g1, []) ks
+  keysGas <- computeGas (Left (_faInfo i, "keys")) (GUnreduced [])
+  readGas <- computeGas (Left (_faInfo i, "read")) (GUnreduced [])
+  (!g1, ks) <- getKeys (g0+keysGas) table
+  (!g2, xs) <- foldlM (fdb table readGas) (g1, []) ks
   pure (g2, TList (V.fromList (reverse xs)) TyAny def)
   where
   asBool (TLiteral (LBool satisfies) _) = return satisfies
@@ -252,13 +254,13 @@ foldDB' g0 i [tbl, TApp qry _, TApp consumer _] = do
   getKeys g table = gasPostReads i g (map toTerm . sort) $ do
     guardTable i table GtKeys
     keys (_faInfo i) (userTable table)
-  fdb table (!g, acc) key = do
+  fdb table readGas (!g, acc) key = do
     (!g1, row) <- read' g i [table, key]
     cond <- asBool =<< apply qry [key, row]
     if cond then do
       r' <- apply consumer [key, row]
-      pure (g1, r':acc)
-    else pure (g1, acc)
+      pure (g1+readGas, r':acc)
+    else pure (g1+readGas, acc)
 foldDB' _ i as = argsError' i as
 
 gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas

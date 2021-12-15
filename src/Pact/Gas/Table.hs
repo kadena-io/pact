@@ -177,7 +177,7 @@ defaultGasTable =
   -- Multi row read, tx penalty
   ,("keys", 200)
   ,("select", 200)
-  ,("fold-db", 200)
+  ,("fold-db", 10)
 
   -- Metadata, tx penalty
   ,("describe-keyset", 100)
