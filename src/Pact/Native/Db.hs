@@ -243,16 +243,17 @@ foldDB' i [tbl, TApp qry _, TApp consumer _] = do
   table <- reduce tbl >>= \case
     t@TTable{} -> return t
     t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
-  g0 <- computeGas (Right i) (GUnreduced [])
-  (!g1, ks) <- getKeys g0 table
-  (!g2, xs) <- foldlM (fdb table) (g1, []) ks
+  !g0 <- computeGas (Right i) (GUnreduced [])
+  !g1 <- computeGas (Right i) GFoldDB
+  ks <- getKeys table
+  (!g2, xs) <- foldlM (fdb table) (g0+g1, []) ks
   pure (g2, TList (V.fromList (reverse xs)) TyAny def)
   where
   asBool (TLiteral (LBool satisfies) _) = return satisfies
   asBool t = evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
-  getKeys g table = gasPostReads i g sort $ do
+  getKeys table = do
     guardTable i table GtKeys
-    keys (_faInfo i) (userTable table)
+    sort <$> keys (_faInfo i) (userTable table)
   fdb table (!g0, acc) key = do
     mrow <- readRow (_faInfo i) (userTable table) key
     case mrow of
@@ -310,7 +311,8 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
     guardTable i tbl GtSelect
     let fi = _faInfo i
         tblTy = _tTableType tbl
-    ks <- keys fi (userTable tbl)
+    msort <- ifExecutionFlagSet' FlagDisablePact420 id sort
+    ks <- msort <$> keys fi (userTable tbl)
     fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
       (\f -> foldM f (g0 + g1, []) ks) $ \(gPrev,rs) k -> do
 
@@ -367,9 +369,10 @@ bindToRow ps bd b (ObjectMap row) =
   bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 
 keys' :: GasRNativeFun e
-keys' g i [table@TTable {}] =
+keys' g i [table@TTable {}] = do
+  msort <- ifExecutionFlagSet' FlagDisablePact420 id sort
   gasPostReads i g
-    ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
+    ((\b -> TList (V.fromList b) tTyString def) . map toTerm . msort) $ do
       guardTable i table GtKeys
       keys (_faInfo i) (userTable table)
 keys' _ i as = argsError i as
@@ -434,7 +437,7 @@ write wt partial i as = do
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      rdv <- ifExecutionFlagSet' FlagRowDataV0 RDV0 RDV1
+      rdv <- ifExecutionFlagSet' FlagDisablePact420 RDV0 RDV1
       r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) $
           RowData rdv (pactValueToRowData <$> ps')
       return (cost0 + cost1, r)

@@ -36,6 +36,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_writeBytesCost :: Gas -- cost per bytes to write to database
   , _gasCostConfig_functionApplicationCost :: Gas
   , _gasCostConfig_defPactCost :: Gas
+  , _gasCostConfig_foldDBCost :: Gas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -53,6 +54,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_writeBytesCost = 1
   , _gasCostConfig_functionApplicationCost = 1
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
+  , _gasCostConfig_foldDBCost = 1
   }
 
 defaultGasTable :: Map Text Gas
@@ -219,6 +221,7 @@ tableGasModel gasConfig =
           fromIntegral n * _gasCostConfig_sortFactor gasConfig
         GConcatenation i j ->
           fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
+        GFoldDB -> _gasCostConfig_foldDBCost gasConfig
         GPostRead r -> case r of
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap $ _rdData cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
