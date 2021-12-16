@@ -3399,7 +3399,7 @@ keys must be strings.
 ::
 
    pact> { "foo": (+ 1 2), "bar": "baz" }
-   { "foo": (+ 1 2), "bar": "baz" }
+   { "foo": 3, "bar": "baz" }
 
 Bindings
 ~~~~~~~~
