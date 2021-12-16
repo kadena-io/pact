@@ -784,7 +784,7 @@
       )
       (fold-db accounts.accounts (qry) (f))
       )
-  - 226
+  - 206
 - - (sort longNumberList)
   - 1027
 - - (sort medNumberList)

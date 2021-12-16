@@ -125,7 +125,7 @@ dbDefs =
      (funType (TyList tTyString) [("table",tableTy)])
      [LitExample "(keys accounts)"] "Return all keys in TABLE."
 
-    ,defGasNative "fold-db" foldDB'
+    ,defNative "fold-db" foldDB'
       (funType (TyList b)
         [ ("table", tableTy)
         , ("qry", TyFun (funType' (TyPrim TyBool) [("a", TyPrim TyString), ("b", rowTy)] ))
@@ -238,30 +238,36 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
 read' _ i as = argsError i as
 
 
-foldDB' :: GasNativeFun e
-foldDB' g0 i [tbl, TApp qry _, TApp consumer _] = do
+foldDB' :: NativeFun e
+foldDB' i [tbl, TApp qry _, TApp consumer _] = do
   table <- reduce tbl >>= \case
     t@TTable{} -> return t
     t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
-  keysGas <- computeGas (Left (_faInfo i, "keys")) (GUnreduced [])
-  readGas <- computeGas (Left (_faInfo i, "read")) (GUnreduced [])
-  (!g1, ks) <- getKeys (g0+keysGas) table
-  (!g2, xs) <- foldlM (fdb table readGas) (g1, []) ks
+  g0 <- computeGas (Right i) (GUnreduced [])
+  (!g1, ks) <- getKeys g0 table
+  (!g2, xs) <- foldlM (fdb table) (g1, []) ks
   pure (g2, TList (V.fromList (reverse xs)) TyAny def)
   where
   asBool (TLiteral (LBool satisfies) _) = return satisfies
   asBool t = evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
-  getKeys g table = gasPostReads i g (map toTerm . sort) $ do
+  getKeys g table = gasPostReads i g sort $ do
     guardTable i table GtKeys
     keys (_faInfo i) (userTable table)
-  fdb table readGas (!g, acc) key = do
-    (!g1, row) <- read' g i [table, key]
-    cond <- asBool =<< apply qry [key, row]
-    if cond then do
-      r' <- apply consumer [key, row]
-      pure (g1+readGas, r':acc)
-    else pure (g1+readGas, acc)
-foldDB' _ i as = argsError' i as
+  fdb table (!g0, acc) key = do
+    mrow <- readRow (_faInfo i) (userTable table) key
+    case mrow of
+      Just row -> do
+        g1 <- gasPostRead i g0 row
+        let obj = columnsToObject (_tTableType table) row
+        let key' = toTerm key
+        cond <- asBool =<< apply qry [key', obj]
+        if cond then do
+          r' <- apply consumer [key', obj]
+          pure (g1, r':acc)
+        else pure (g1, acc)
+      Nothing -> evalError (_faInfo i) $ "foldDb: unexpected error, key: "
+                 <> pretty key <> " not found in table: " <> pretty table
+foldDB' i as = argsError' i as
 
 gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas
 gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
