@@ -19,7 +19,7 @@ module Pact.Native.Internal
   ,parseMsgKey,parseMsgKey'
   ,bindReduce
   ,enforceGuard
-  ,defNative,defGasNative,defGasRNative,defRNative
+  ,defNative,defGasRNative,defRNative
   ,defSchema
   ,defConst
   ,setTopLevelOnly
@@ -113,12 +113,6 @@ setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
 defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defNative n fun ftype examples docs =
   (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
-
-defGasNative ::  NativeDefName -> GasNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
-defGasNative n fun ftype examples docs =
-  (n, TNative n (NativeDFun n (unsafeCoerce (gassed fun))) ftype examples docs False def)
-  where
-  gassed f fi as = gasUnreduced fi as (pure as) >>= \(g, as') -> f g fi as'
 
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef

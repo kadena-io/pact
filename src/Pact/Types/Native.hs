@@ -46,9 +46,6 @@ isSpecialForm = (`M.lookup` sfLookup)
 type NativeFun e = FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, initial gas pre-compute that computes final gas.
-type GasNativeFun e = Gas -> FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
-
--- | Native function with reduced arguments, initial gas pre-compute that computes final gas.
 type GasRNativeFun e = Gas -> FunApp -> [Term Name] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, final gas pre-computed.
