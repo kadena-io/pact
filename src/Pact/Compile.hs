@@ -108,6 +108,7 @@ data Reserved =
   | RTrue
   | RUse
   | RWithCapability
+  | RCond
   deriving (Eq,Enum,Bounded)
 
 instance AsString Reserved where
@@ -130,6 +131,7 @@ instance AsString Reserved where
     RStepWithRollback -> "step-with-rollback"
     RTrue -> "true"
     RUse -> "use"
+    RCond -> "cond"
     RWithCapability -> "with-capability"
 
 instance Show Reserved where show = unpack . asString
@@ -232,7 +234,8 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
     RLet -> return letForm
     RLetStar -> return letsForm
     RWithCapability -> return withCapability
-    _ -> expected "value level form (let, let*)"
+    RCond -> return condForm
+    _ -> expected "value level form (let, let*, with-capability, cond)"
 
 moduleLevel :: Compile [Term Name]
 moduleLevel = specialForm $ \r -> case r of
@@ -594,6 +597,16 @@ abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames)
     ifVarName (TVar (QName (QualifiedName (ModuleName ns Nothing) mn _)) _) =
       return $ ModuleName mn (Just $ NamespaceName ns)
     ifVarName _ = expected "interface reference"
+
+condForm :: Compile (Term Name)
+condForm = do
+  conds <- conds'
+  elseCond <- valueLevel
+  i <- contextInfo
+  let if' = TVar (Name (BareName "if" i)) i
+  pure $ foldr (\(cond, act) e -> TApp (App if' [cond, act, e] i) i) elseCond conds
+  where
+  conds' = some $ withList' Parens $ (,) <$> valueLevel <*> valueLevel
 
 letForm :: Compile (Term Name)
 letForm = do
