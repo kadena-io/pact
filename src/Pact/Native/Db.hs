@@ -29,7 +29,6 @@ import Control.Monad
 import Control.Monad.Reader (ask)
 import Data.Default
 import qualified Data.HashSet as HS
-import Data.List(sort)
 import qualified Data.Map.Strict as M
 import Data.Foldable (foldlM)
 import qualified Data.Vector as V
@@ -253,7 +252,7 @@ foldDB' i [tbl, TApp qry _, TApp consumer _] = do
   asBool t = evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
   getKeys table = do
     guardTable i table GtKeys
-    sort <$> keys (_faInfo i) (userTable table)
+    keys (_faInfo i) (userTable table)
   fdb table (!g0, acc) key = do
     mrow <- readRow (_faInfo i) (userTable table) key
     case mrow of
