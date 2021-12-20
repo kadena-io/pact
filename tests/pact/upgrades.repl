@@ -1,0 +1,7 @@
+(module m g (defcap g () 2) (defschema s a:integer b:string))
+
+(interface i (defun foo:object{m.s} (o:object{m.s})))
+
+(module m g (defcap g () 1) (defschema s a:integer b:string))
+
+(module n g (defcap g () 1) (implements i) (defun foo:object{m.s} (o:object{m.s}) o))
