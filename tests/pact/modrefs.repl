@@ -285,3 +285,28 @@
 (create-table t)
 (mwrite modref-persistence)
 (expect "exercise persisted all-namespace modref" 1 (go))
+(rollback-tx)
+
+;;
+;; self-references
+;;
+
+(interface selfref-i (defun f:bool ()))
+
+(namespace 'ns)
+
+(interface selfref-j (defun f:bool ()))
+
+(module selfref G
+  (defcap G () true)
+  (implements selfref-i)
+  (implements selfref-j)
+  (defun f:bool () true)
+  (defun g (m:module{selfref-i} n:module{selfref-j})
+    (m::f)
+    (n::f))
+  (defun h ()
+    "Witness that self-reference loads"
+    (g selfref selfref)))
+
+(expect "exercise selfref" true (h))
