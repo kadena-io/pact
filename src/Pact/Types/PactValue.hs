@@ -136,6 +136,7 @@ instance FromJSON PactValue where
     (PLiteral <$> parseJSON v) <|>
     (PList <$> parseJSON v) <|>
     (PGuard <$> parseJSON v) <|>
+    (PModRef <$> parseNewModRef v) <|>
     (PObject <$> parseJSON v) <|>
     (PModRef <$> (parseNoInfo v <|> parseJSON v))
     where
@@ -143,6 +144,10 @@ instance FromJSON PactValue where
         <$> o .: "refName"
         <*> o .: "refSpec"
         <*> (fromMaybe def <$> o .:? "refInfo")
+      parseNewModRef = withObject "ModRef-new" $ \o -> ModRef
+        <$> o .: "modref"
+        <*> o .: "modspec"
+        <*> pure def
 
 instance Pretty PactValue where
   pretty (PLiteral l) = pretty l
