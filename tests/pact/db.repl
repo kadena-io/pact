@@ -1,7 +1,6 @@
 (env-data { "k": { "keys": ["admin"], "pred": "=" },
             "k2": { "keys": ["admin"], "pred": "=" } })
 (env-keys ["admin"])
-(env-exec-config ["DisablePact420"])
 (begin-tx)
 (define-keyset 'dbtest-admin (read-keyset "k"))
 (module dbtest 'dbtest-admin
@@ -49,7 +48,7 @@
 
 (expect "keylog works" [{"txid": 1, "value": ROW_A}] (keylog persons ID_A 1))
 
-(env-exec-config ["DisableHistoryInTransactionalMode", "DisablePact420"])
+(env-exec-config ["DisableHistoryInTransactionalMode"])
 (expect-failure
  "txids disabled"
  "Operation only permitted in local execution mode"
@@ -126,7 +125,7 @@
 
 (commit-tx)
 ;; test disabling admin table guards
-(env-exec-config ["AllowReadInLocal","DisablePact420"])
+(env-exec-config ["AllowReadInLocal"])
 (use dbtest)
 (expect-failure
  "write protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
@@ -201,10 +200,16 @@
 )
 
 (create-table fdb-tbl)
-(insert fdb-tbl 'a {'a:1, 'b:1})
+;; inserts shuffled to test key sort guarantees:
+;; (insert fdb-tbl 'a {'a:1, 'b:1})
+;; (insert fdb-tbl 'b {'a:2, 'b:2})
+;; (insert fdb-tbl 'c {'a:3, 'b:3})
+;; (insert fdb-tbl 'd {'a:4, 'b:4})
 (insert fdb-tbl 'b {'a:2, 'b:2})
-(insert fdb-tbl 'c {'a:3, 'b:3})
 (insert fdb-tbl 'd {'a:4, 'b:4})
+(insert fdb-tbl 'c {'a:3, 'b:3})
+(insert fdb-tbl 'a {'a:1, 'b:1})
+
 
 (expect
   "fold-db query filters correctly by key"
@@ -254,6 +259,20 @@
 
 (expect
   "sorted output based on keys from select for pact 4.2.0"
+  [{"a": 1} {"a": 2} {"a": 3} {"a": 4}]
+  (select fdb-tbl ['a] (constantly true))
+  )
+
+(env-exec-config ["DisablePact420"])
+
+(expect
+  "keys output pre-4.2.0"
+  ["a" "b" "c" "d"]
+  (keys fdb-tbl)
+  )
+
+(expect
+  "select output pre-4.2.0"
   [{"a": 1} {"a": 2} {"a": 3} {"a": 4}]
   (select fdb-tbl ['a] (constantly true))
   )
