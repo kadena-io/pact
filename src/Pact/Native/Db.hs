@@ -130,11 +130,11 @@ dbDefs =
         [ ("table", tableTy)
         , ("qry", TyFun (funType' (TyPrim TyBool) [("a", TyPrim TyString), ("b", rowTy)] ))
         , ("consumer", TyFun (funType' b [("a", TyPrim TyString), ("b", rowTy)]))])
-      [LitExample "(let* \
-                  \ ((qry (lambda (k obj) true)) ;; select all rows \
-                  \ (f (lambda (x) [(at 'firstName x), (at 'b x)])) \
-                  \ ) \
-                  \ (fold-db people (qry) (f)) \
+      [LitExample "(let* \n\
+                  \ ((qry (lambda (k obj) true)) ;; select all rows\n\
+                  \  (f (lambda (x) [(at 'firstName x), (at 'b x)]))\n\
+                  \ )\n\
+                  \ (fold-db people (qry) (f))\n\
                   \)"]
       "Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query \
       \in CONSUMER"

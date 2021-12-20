@@ -739,7 +739,12 @@ Top level only: this function will fail if used in module code.
 
 Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER
 ```lisp
-(let*  ((qry (lambda (k obj) true)) ;; select all rows  (f (lambda (x) [(at 'firstName x), (at 'b x)]))  )  (fold-db people (qry) (f)) )
+(let* 
+ ((qry (lambda (k obj) true)) ;; select all rows
+  (f (lambda (x) [(at 'firstName x), (at 'b x)]))
+ )
+ (fold-db people (qry) (f))
+)
 ```
 
 
