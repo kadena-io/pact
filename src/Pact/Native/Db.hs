@@ -136,7 +136,7 @@ dbDefs =
                   \ ) \
                   \ (fold-db people (qry) (f)) \
                   \)"]
-      "Select rows from TABLE using QRY using a predicate with both key and value, and then accumulate results of the query \
+      "Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query \
       \in CONSUMER"
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])

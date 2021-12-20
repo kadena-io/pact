@@ -5,14 +5,14 @@
 
 Constant denoting the ASCII charset
 
-Constant:
+Constant: 
 &nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
 
 ### CHARSET_LATIN1 {#CHARSET_LATIN1}
 
 Constant denoting the Latin-1 charset ISO-8859-1
 
-Constant:
+Constant: 
 &nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
 
 ### at {#at}
@@ -737,14 +737,9 @@ Top level only: this function will fail if used in module code.
 *table*&nbsp;`table:<{row}>` *qry*&nbsp;`a:string b:object:<{row}> -> bool` *consumer*&nbsp;`a:string b:object:<{row}> -> <b>` *&rarr;*&nbsp;`[<b>]`
 
 
-Select rows from TABLE using QRY, a predicate function based on the key and value derived from each row, and then accumulate results of the query in CONSUMER.
+Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER
 ```lisp
-(let*
-  ((qry (lambda (k obj) true)) ;; select all rows
-   (f (lambda (x) [(at 'firstName x), (at 'b x)]))
-   )
-  (fold-db people (qry) (f))
-  )
+(let*  ((qry (lambda (k obj) true)) ;; select all rows  (f (lambda (x) [(at 'firstName x), (at 'b x)]))  )  (fold-db people (qry) (f)) )
 ```
 
 
@@ -898,7 +893,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") 15)
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N days, for use with 'add-time'
+N days, for use with 'add-time' 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 "2016-07-23T12:00:00Z"
@@ -936,7 +931,7 @@ pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N hours, for use with 'add-time'
+N hours, for use with 'add-time' 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 "2016-07-22T13:00:00Z"
@@ -950,7 +945,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N minutes, for use with 'add-time'.
+N minutes, for use with 'add-time'. 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 "2016-07-22T12:01:00Z"
@@ -974,7 +969,7 @@ pact> (parse-time "%F" "2016-09-12")
 *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
+Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ). 
 ```lisp
 pact> (time "2016-07-22T11:26:35Z")
 "2016-07-22T11:26:35Z"
@@ -1786,7 +1781,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePact40","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs","DisablePact420"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePact40","DisablePact420","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
