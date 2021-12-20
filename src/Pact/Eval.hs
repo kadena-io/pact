@@ -53,6 +53,7 @@ import Data.Foldable
 import Data.Functor.Classes
 import Data.Graph
 import qualified Data.HashMap.Strict as HM
+import Data.IORef
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Vector as V
@@ -445,7 +446,7 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
 -- the table itself: the topological sort of the graph ensures the reference will be there.
 evaluateDefs :: Info -> ModuleDef (Term Name) -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
 evaluateDefs info mdef defs = do
-  cs <- traverseGraph defs
+  cs <- liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- forM cs $ \c -> case c of
     AcyclicSCC v -> return v
     CyclicSCC vs -> do
@@ -465,7 +466,7 @@ evaluateDefs info mdef defs = do
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
     -- | traverse to find deps and form graph
-    traverseGraph ds = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
+    traverseGraph ds memo = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
       d' <- forM d $ \(f :: Name) -> do
         dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
         case (dm, f) of
@@ -474,7 +475,7 @@ evaluateDefs info mdef defs = do
           (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn ds of
               Just _ -> return (Left fn) -- decl found
-              Nothing -> resolveBareModRef f fn >>= \r -> case r of
+              Nothing -> resolveBareModRef f fn memo >>= \r -> case r of
                 Just mr -> return (Right mr) -- mod ref found
                 Nothing ->
                   evalError' f $ "Cannot resolve " <> dquotes (pretty f)
@@ -483,11 +484,15 @@ evaluateDefs info mdef defs = do
 
       return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
 
-    resolveBareModRef f fn
+    resolveBareModRef f fn memo
         | fn /= moduleBareName mdef = resolveModRef f (ModuleName fn Nothing)
-        | otherwise = do
-            mdef' <- (_MDModule . mInterfaces . traverse) (resolveIfs f) mdef
-            pure $ Just $ Ref $ mkModRef f mdef'
+        | otherwise = liftIO (readIORef memo) >>= \case
+            Just cachedMR -> return $ Just cachedMR
+            Nothing -> do
+              mdef' <- (_MDModule . mInterfaces . traverse) (resolveIfs f) mdef
+              let mr = Just $ Ref $ mkModRef f mdef'
+              liftIO $ writeIORef memo mr
+              pure mr
 
     resolveIfs i mn = do
       resolveModule (getInfo i) mn >>= \case
