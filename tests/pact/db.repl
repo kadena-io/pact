@@ -262,17 +262,3 @@
   [{"a": 1} {"a": 2} {"a": 3} {"a": 4}]
   (select fdb-tbl ['a] (constantly true))
   )
-
-(env-exec-config ["DisablePact420"])
-
-(expect
-  "keys output pre-4.2.0"
-  ["a" "b" "c" "d"]
-  (keys fdb-tbl)
-  )
-
-(expect
-  "select output pre-4.2.0"
-  [{"a": 1} {"a": 2} {"a": 3} {"a": 4}]
-  (select fdb-tbl ['a] (constantly true))
-  )

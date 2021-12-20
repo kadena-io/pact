@@ -311,8 +311,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
     guardTable i tbl GtSelect
     let fi = _faInfo i
         tblTy = _tTableType tbl
-    msort <- ifExecutionFlagSet' FlagDisablePact420 id sort
-    ks <- msort <$> keys fi (userTable tbl)
+    ks <- keys fi (userTable tbl)
     fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
       (\f -> foldM f (g0 + g1, []) ks) $ \(gPrev,rs) k -> do
 
@@ -370,9 +369,8 @@ bindToRow ps bd b (ObjectMap row) =
 
 keys' :: GasRNativeFun e
 keys' g i [table@TTable {}] = do
-  msort <- ifExecutionFlagSet' FlagDisablePact420 id sort
   gasPostReads i g
-    ((\b -> TList (V.fromList b) tTyString def) . map toTerm . msort) $ do
+    ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table GtKeys
       keys (_faInfo i) (userTable table)
 keys' _ i as = argsError i as
