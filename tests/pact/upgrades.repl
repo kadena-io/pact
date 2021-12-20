@@ -1,7 +1,11 @@
-(module m g (defcap g () 2) (defschema s a:integer b:string))
+(module schema-mod g (defcap g () 2) (defschema s a:integer b:string))
 
-(interface i (defun foo:object{m.s} (o:object{m.s})))
+(interface schema-ref-iface (defun foo:object{m.s} (o:object{m.s})))
 
-(module m g (defcap g () 1) (defschema s a:integer b:string))
+;; upgrade schema module with identical schema
+(module schema-mod g (defcap g () 1) (defschema s a:integer b:string))
 
+;; implement iface defined with pre-upgraded schema to exercise module unification holds across upgrade
 (module n g (defcap g () 1) (implements i) (defun foo:object{m.s} (o:object{m.s}) o))
+
+
