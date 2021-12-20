@@ -737,7 +737,7 @@ Top level only: this function will fail if used in module code.
 *table*&nbsp;`table:<{row}>` *qry*&nbsp;`a:string b:object:<{row}> -> bool` *consumer*&nbsp;`a:string b:object:<{row}> -> <b>` *&rarr;*&nbsp;`[<b>]`
 
 
-Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER
+Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER. Output is sorted by the ordering of keys.
 ```lisp
 (let* 
  ((qry (lambda (k obj) true)) ;; select all rows
@@ -775,7 +775,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`[string]`
 
 
-Return all keys in TABLE.
+Return all keys in TABLE as a sorted list.
 ```lisp
 (keys accounts)
 ```
@@ -801,7 +801,7 @@ Read row from TABLE for KEY, returning database record object, or just COLUMNS i
 *table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
 
-Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
+Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys.
 ```lisp
 (select people ['firstName,'lastName] (where 'name (= "Fatima")))
 (select people (where 'age (> 30)))?

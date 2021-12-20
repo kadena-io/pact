@@ -119,11 +119,11 @@ dbDefs =
       [ LitExample "(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))"
       , LitExample "(select people (where 'age (> 30)))?"
       ]
-      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion."
+      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys."
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     [LitExample "(keys accounts)"] "Return all keys in TABLE."
+     [LitExample "(keys accounts)"] "Return all keys in TABLE as a sorted list."
 
     ,defNative "fold-db" foldDB'
       (funType (TyList b)
@@ -137,7 +137,7 @@ dbDefs =
                   \ (fold-db people (qry) (f))\n\
                   \)"]
       "Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query \
-      \in CONSUMER"
+      \in CONSUMER. Output is sorted by the ordering of keys."
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      [LitExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
