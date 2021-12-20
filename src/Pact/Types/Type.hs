@@ -105,10 +105,6 @@ data Arg o = Arg {
   _aInfo :: Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
-argEq1 :: (n -> n -> Bool) -> Arg n -> Arg n -> Bool
-argEq1 eq (Arg n t _) (Arg n' t' _) =
-  n == n' && liftEq eq t t'
-
 instance NFData o => NFData (Arg o)
 instance Pretty o => Pretty (Arg o) where
   pretty (Arg n t _) = pretty n <> colon <> pretty t
@@ -448,3 +444,6 @@ instance Eq1 FunType where
 instance Eq1 Arg where
     liftEq = $(makeLiftEq ''Arg)
 
+argEq1 :: (n -> n -> Bool) -> Arg n -> Arg n -> Bool
+argEq1 eq (Arg n t _) (Arg n' t' _) =
+  n == n' && liftEq eq t t'
