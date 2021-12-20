@@ -23,6 +23,7 @@ import Control.Applicative
 import Control.DeepSeq (NFData)
 import Data.Aeson
 import Data.Default
+import Data.Maybe(fromMaybe)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import GHC.Generics
@@ -128,11 +129,29 @@ instance ToJSON RowData where
   toJSON (RowData v m) = object
       [ "$v" .= v, "$d" .= m ]
 
+newtype OldPactValue =
+  OldPactValue { unP :: PactValue }
+
+instance FromJSON OldPactValue where
+  parseJSON v = fmap OldPactValue $
+    (PLiteral <$> parseJSON v) <|>
+    (PList <$> parseJSON v) <|>
+    (PGuard <$> parseJSON v) <|>
+    (PObject <$> parseJSON v) <|>
+    (PModRef <$> (parseNoInfo v <|> parseJSON v))
+    where
+      parseNoInfo = withObject "ModRef" $ \o -> ModRef
+        <$> o .: "refName"
+        <*> o .: "refSpec"
+        <*> (fromMaybe def <$> o .:? "refInfo")
 
 instance FromJSON RowData where
   parseJSON v =
     parseVersioned v <|>
-    RowData RDV0 . fmap pactValueToRowData <$> parseJSON v
+    -- note: Parsing into `OldPactValue` here defaults to the code used in
+    -- the old FromJSON instance for PactValue, prior to the fix of moving
+    -- the `PModRef` parsing before PObject
+    RowData RDV0 . fmap (pactValueToRowData . unP) <$> parseJSON v
     where
       parseVersioned = withObject "RowData" $ \o -> RowData
           <$> o .: "$v"
