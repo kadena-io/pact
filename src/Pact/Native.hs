@@ -848,12 +848,14 @@ fold' i as = argsError' i as
 
 filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \case
-           TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
-                           t <- apply (_tApp app) [a']
-                           case t of
-                             (TLiteral (LBool bo) _) -> return bo
-                             _ ->  evalError' i $ "filter: expected closure to return bool: " <> pretty app
-           t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+  TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
+    t <- apply (_tApp app) [a']
+    case t of
+      (TLiteral (LBool bo) _) -> return bo
+      _ -> ifExecutionFlagSet FlagDisablePact420
+             (return False)
+             (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
+  t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
 filter' i as = argsError' i as
 
 length' :: RNativeFun e
