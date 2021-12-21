@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-module TypesSpec (spec) where
+{-# LANGUAGE TypeApplications #-}
+module RoundTripSpec (spec) where
 
 
 import Test.Hspec
@@ -10,6 +11,7 @@ import Data.Default
 import Data.Map.Strict (fromList)
 import qualified Data.HashSet as HS
 
+import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 
@@ -22,7 +24,8 @@ spec = do
   describe "testUnification" testUnification
 
 rt :: (FromJSON a,ToJSON a,Show a,Eq a) => String -> a -> Spec
-rt n p = it ("roundtrips " ++ n) $ decode (encode p) `shouldBe` Just p
+rt n p = it ("roundtrips " ++ n) $ do
+  decode (encode p) `shouldBe` Just p
 
 testJSONPersist :: Spec
 testJSONPersist = do
@@ -33,10 +36,22 @@ testJSONPersist = do
   rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
   rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
   rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
+  rt "object" (ObjectMap (fromList [("A",PLiteral (LInteger 123)), ("B",PLiteral (LBool False))]))
 
 testJSONColumns :: Spec
-testJSONColumns =
-  rt "object" (ObjectMap (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
+testJSONColumns = do
+  rt "object" obj
+  it "roundtrips as rowdata" $ do
+    decode @RowData (encode obj) `shouldBe` Just (RowData RDV0 (pactValueToRowData <$> obj))
+  where
+  obj = ObjectMap $ fromList
+    [("A", PLiteral (LInteger 123))
+    ,("B", PLiteral (LBool False))
+    ,("C", PLiteral (LString "hello"))
+    ,("D", PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
+    ,("E", PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
+    ,("F", PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
+    ,("G", PObject (ObjectMap (fromList [("A",PLiteral (LInteger 123))])))]
 
 testJSONModules :: Spec
 testJSONModules = rt "module" tmod
