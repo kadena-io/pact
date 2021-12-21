@@ -176,8 +176,21 @@ eqTy :: FunTypes n
 eqTy = binTy tTyBool eqA eqA
 
 eqA :: Type n
-eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-  TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
+eqA = mkTyVar "a"
+    [tTyInteger
+    ,tTyString
+    ,tTyTime
+    ,tTyDecimal
+    ,tTyBool
+    ,TyList (mkTyVar "l" [])
+    ,TySchema TyObject (mkSchemaVar "o") def
+    ,tTyKeySet
+    ,tTyGuard Nothing
+    ,tTyModRef
+    ]
+
+tTyModRef :: Type n
+tTyModRef = TyModule (Just [])
 
 orDef :: NativeDef
 orDef = defLogic "or" (||) True
@@ -304,29 +317,33 @@ binTy :: Type n -> Type n -> Type n -> FunTypes n
 binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
 defCmp :: NativeDefName -> RNativeFun e -> NativeDef
-defCmp o f = let o' = asString o
-                 ex a' b
-                   = ExecExample $ "(" <> o' <> " " <> a' <> " " <> b <> ")"
-                 a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime]
-             in
-             defRNative o f (binTy tTyBool a a)
-             [ ex "1" "3"
-             , ex "5.24" "2.52"
-             , ex "\"abc\"" "\"def\""
-             ]
-             $ "True if X " <> o' <> " Y."
+defCmp o f =
+  defRNative o f (binTy tTyBool a a)
+    [ ex "1" "3"
+    , ex "5.24" "2.52"
+    , ex "\"abc\"" "\"def\""
+    ]
+    $ "True if X " <> o' <> " Y."
+  where
+    o' = asString o
+    ex a' b = ExecExample $ "(" <> o' <> " " <> a' <> " " <> b <> ")"
+    a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime,tTyBool,tTyModRef]
+
 
 -- | Monomorphic compare.
 cmp :: (Ordering -> Bool) -> RNativeFun e
-cmp cmpFun fi as@[TLiteral a _,TLiteral b _] = do
-    c <- case (a,b) of
-           (LInteger i,LInteger j) -> return $ i `compare` j
-           (LDecimal i,LDecimal j) -> return $ i `compare` j
-           (LString i,LString j) -> return $ i `compare` j
-           (LTime i,LTime j) -> return $ i `compare` j
-           _ -> argsError fi as
-    return $ toTerm (cmpFun c)
-cmp _ fi as = argsError fi as
+cmp cmpFun fi as = do
+  c <- case as of
+    [TLiteral a _,TLiteral b _] -> case (a,b) of
+      (LInteger i,LInteger j) -> return $ i `compare` j
+      (LDecimal i,LDecimal j) -> return $ i `compare` j
+      (LString i,LString j) -> return $ i `compare` j
+      (LTime i,LTime j) -> return $ i `compare` j
+      (LBool i,LBool j) -> return $ i `compare` j
+      _ -> argsError fi as
+    [TModRef (ModRef i _ _) _,TModRef (ModRef j _ _) _] -> return $ i `compare` j
+    _ -> argsError fi as
+  return $ toTerm (cmpFun c)
 {-# INLINE cmp #-}
 
 liftOp :: (a -> a -> a) -> a -> a -> Either b a
