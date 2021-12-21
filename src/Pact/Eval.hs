@@ -53,6 +53,7 @@ import Data.Foldable
 import Data.Functor.Classes
 import Data.Graph
 import qualified Data.HashMap.Strict as HM
+import Data.IORef
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Vector as V
@@ -360,7 +361,8 @@ loadModule m bod1 mi g0 = do
     tt@TTable{} -> return $ Just $ asString (_tTableName tt)
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid module member"
-  evaluatedDefs <- evaluateDefs mi $ mangleDefs (_mName m) <$> mdefs
+  evaluatedDefs <- evaluateDefs mi (MDModule m) $
+      mangleDefs (_mName m) <$> mdefs
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
   let md = ModuleData mGov solvedDefs
@@ -381,7 +383,8 @@ loadInterface i body info gas0 = do
     TSchema n _ _ _ _ -> return $ Just $ asString n
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid interface member"
-  evaluatedDefs <- evaluateDefs info $ mangleDefs (_interfaceName i) <$> idefs
+  evaluatedDefs <- evaluateDefs info (MDInterface i) $
+      mangleDefs (_interfaceName i) <$> idefs
   let md = ModuleData (MDInterface i) evaluatedDefs
   installModule True md Nothing
   return (gas1,md)
@@ -441,9 +444,9 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
 -- to be non-recursive. The graph is walked to unify the Either to
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
-evaluateDefs :: Info -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
-evaluateDefs info defs = do
-  cs <- traverseGraph defs
+evaluateDefs :: Info -> ModuleDef (Term Name) -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
+evaluateDefs info mdef defs = do
+  cs <- liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- forM cs $ \c -> case c of
     AcyclicSCC v -> return v
     CyclicSCC vs -> do
@@ -463,7 +466,7 @@ evaluateDefs info defs = do
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
     -- | traverse to find deps and form graph
-    traverseGraph ds = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
+    traverseGraph ds memo = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
       d' <- forM d $ \(f :: Name) -> do
         dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
         case (dm, f) of
@@ -472,7 +475,7 @@ evaluateDefs info defs = do
           (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn ds of
               Just _ -> return (Left fn) -- decl found
-              Nothing -> resolveModRef f (ModuleName fn Nothing) >>= \r -> case r of
+              Nothing -> resolveBareModRef f fn memo >>= \r -> case r of
                 Just mr -> return (Right mr) -- mod ref found
                 Nothing ->
                   evalError' f $ "Cannot resolve " <> dquotes (pretty f)
@@ -480,6 +483,25 @@ evaluateDefs info defs = do
           (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
 
       return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
+
+    resolveBareModRef f fn memo
+        | fn /= moduleBareName mdef = resolveModRef f (ModuleName fn Nothing)
+        | otherwise = liftIO (readIORef memo) >>= \case
+            Just cachedMR -> return $ Just cachedMR
+            Nothing -> do
+              mdef' <- (_MDModule . mInterfaces . traverse) (resolveIfs f) mdef
+              let mr = Just $ Ref $ mkModRef f mdef'
+              liftIO $ writeIORef memo mr
+              pure mr
+
+    resolveIfs i mn = do
+      resolveModule (getInfo i) mn >>= \case
+        Nothing -> evalError info $ "Modref Interface not defined: " <> pretty mn
+        Just (ModuleData (MDInterface Interface{..}) _irefs) -> pure _interfaceName
+        Just _ -> evalError info "Unexpected: module found in interface position while resolving constraints"
+
+    moduleBareName (MDInterface i) = _mnName $ _interfaceName i
+    moduleBareName (MDModule m) = _mnName $ _mName m
 
 -- | Evaluate interface constraints in module.
 evaluateConstraints
@@ -628,13 +650,16 @@ resolveModRef i mn = moduleResolver lkp i mn
   where
     lkp _ m = lookupModule i m >>= \r -> return $ case r of
       Nothing -> Nothing
-      (Just (ModuleData (MDModule mdm) _)) ->
-        return $ Ref $ (`TModRef` (getInfo i)) $
-        ModRef (_mName mdm) (Just $ _mInterfaces mdm) (getInfo i)
-      (Just (ModuleData (MDInterface mdi) _)) ->
-        return $ Ref $ (`TModRef` (getInfo i)) $
-        ModRef (_interfaceName mdi) Nothing (getInfo i)
+      (Just (ModuleData md _)) -> return $ Ref $ mkModRef i md
 
+mkModRef :: HasInfo i => i -> ModuleDef m -> Term n
+mkModRef i = \case
+  MDModule mdm ->
+      (`TModRef` (getInfo i)) $
+      ModRef (_mName mdm) (Just $ _mInterfaces mdm) (getInfo i)
+  MDInterface mdi ->
+      (`TModRef` (getInfo i)) $
+      ModRef (_interfaceName mdi) Nothing (getInfo i)
 
 -- | Perform module name lookup and locate the TDef or TConst associated with a
 -- module reference.
