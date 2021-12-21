@@ -340,6 +340,7 @@ test-suite hspec
       , mtl
       , text
       , transformers
+      , vector
 
     if flag(build-tool)
       cpp-options: -DBUILD_TOOL
@@ -375,5 +376,4 @@ test-suite hspec
         , prettyprinter
         , sbv
         , servant-client
-        , vector
         , yaml
