@@ -23,6 +23,7 @@ import Control.Applicative
 import Control.DeepSeq (NFData)
 import Data.Aeson
 import Data.Default
+import Data.Maybe(fromMaybe)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import GHC.Generics
@@ -128,12 +129,55 @@ instance ToJSON RowData where
   toJSON (RowData v m) = object
       [ "$v" .= v, "$d" .= m ]
 
+data OldPactValue
+  = OldPLiteral Literal
+  | OldPList (Vector OldPactValue)
+  | OldPObject (ObjectMap OldPactValue)
+  | OldPGuard (Guard OldPactValue)
+  | OldPModRef ModRef
+
+-- Needed for parsing guard
+instance ToJSON OldPactValue where
+  toJSON = \case
+    OldPLiteral l -> toJSON l
+    OldPObject o -> toJSON o
+    OldPList v -> toJSON v
+    OldPGuard x -> toJSON x
+    OldPModRef (ModRef refName refSpec refInfo) -> object $
+      [ "refName" .= refName
+      , "refSpec" .= refSpec
+      ] ++
+      [ "refInfo" .= refInfo | refInfo /= def ]
+
+instance FromJSON OldPactValue where
+  parseJSON v =
+    (OldPLiteral <$> parseJSON v) <|>
+    (OldPList <$> parseJSON v) <|>
+    (OldPGuard <$> parseJSON v) <|>
+    (OldPObject <$> parseJSON v) <|>
+    (OldPModRef <$> (parseNoInfo v <|> parseJSON v))
+    where
+      parseNoInfo = withObject "ModRef" $ \o -> ModRef
+        <$> o .: "refName"
+        <*> o .: "refSpec"
+        <*> (fromMaybe def <$> o .:? "refInfo")
 
 instance FromJSON RowData where
   parseJSON v =
     parseVersioned v <|>
-    RowData RDV0 . fmap pactValueToRowData <$> parseJSON v
+    -- note: Parsing into `OldPactValue` here defaults to the code used in
+    -- the old FromJSON instance for PactValue, prior to the fix of moving
+    -- the `PModRef` parsing before PObject
+    RowData RDV0 . fmap oldPactValueToRowData <$> parseJSON v
     where
+      oldPactValueToRowData = \case
+        OldPLiteral l -> RDLiteral l
+        OldPList l -> RDList $ recur l
+        OldPObject o -> RDObject $ recur o
+        OldPGuard g -> RDGuard $ recur g
+        OldPModRef m -> RDModRef m
+      recur :: Functor f => f OldPactValue -> f RowDataValue
+      recur = fmap oldPactValueToRowData
       parseVersioned = withObject "RowData" $ \o -> RowData
           <$> o .: "$v"
           <*> o .: "$d"
