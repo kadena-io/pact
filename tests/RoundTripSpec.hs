@@ -36,7 +36,7 @@ testJSONPersist = do
   rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
   rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
   rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
-  rt "object" (ObjectMap (fromList [("A",PLiteral (LInteger 123)), ("B",PLiteral (LBool False))]))
+  rt "object" (PObject (ObjectMap (fromList [("A",PLiteral (LInteger 123)), ("B",PLiteral (LBool False))])))
 
 testJSONColumns :: Spec
 testJSONColumns = do
