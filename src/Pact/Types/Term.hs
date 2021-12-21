@@ -1471,6 +1471,7 @@ canEq TLiteral{} TLiteral{} = True
 canEq TTable{} TTable{} = True
 canEq TSchema{} TSchema{} = True
 canEq TGuard{} TGuard{} = True
+canEq TModRef{} TModRef{} = True
 canEq _ _ = False
 
 -- | Support pact `=` for value-level terms

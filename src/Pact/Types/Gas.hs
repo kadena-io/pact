@@ -138,6 +138,8 @@ data GasArgs
   -- ^ Cost of using a function, capability, or defpact
   | GMakeList !Integer
   -- ^ Cost of make-list
+  | GFoldDB
+  -- ^ Cost of the fold-db call
 
 instance Pretty GasArgs where
   pretty g = case g of
@@ -155,6 +157,7 @@ instance Pretty GasArgs where
     GMakeList i -> "GMakeList:" <> pretty i
     GSort i -> "GSort:" <> pretty i
     GDistinct i -> "GDistinct:" <> pretty i
+    GFoldDB -> "GFoldDB"
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
