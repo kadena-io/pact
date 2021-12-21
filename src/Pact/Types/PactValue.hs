@@ -106,7 +106,6 @@ genUserGuard genSize = do
   fun <- arbitrary  -- TODO enforce that it's a non-native Name
   pure $ GUser $ UserGuard fun args
 
-
 data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
@@ -136,8 +135,8 @@ instance FromJSON PactValue where
     (PLiteral <$> parseJSON v) <|>
     (PList <$> parseJSON v) <|>
     (PGuard <$> parseJSON v) <|>
-    (PObject <$> parseJSON v) <|>
-    (PModRef <$> (parseNoInfo v <|> parseJSON v))
+    (PModRef <$> (parseNoInfo v <|> parseJSON v)) <|>
+    (PObject <$> parseJSON v)
     where
       parseNoInfo = withObject "ModRef" $ \o -> ModRef
         <$> o .: "refName"

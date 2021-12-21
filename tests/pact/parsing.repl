@@ -34,6 +34,11 @@
     "test module ref parsing"
     1)
 
+  (defun test-cond (a)
+    (cond ((< a 10) "a")
+          ((< a 20) "b")
+          ((< a 30) "c")
+          "d"))
 )
 
 
@@ -50,3 +55,8 @@
  "list equivalence with commas or without"
  [1 "2" true (+ 3 4)]
  [1, "2", true, (+ 3 4)])
+
+(expect
+  "cond folds ifs correctly"
+  "acbd"
+  (fold (+) "" [(test-cond 1) (test-cond 21)  (test-cond 11) (test-cond 31)]))

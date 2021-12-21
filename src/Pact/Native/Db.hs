@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
 
 -- |
@@ -29,6 +30,7 @@ import Control.Monad.Reader (ask)
 import Data.Default
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
+import Data.Foldable (foldlM)
 import qualified Data.Vector as V
 import Data.Text (pack)
 
@@ -82,6 +84,7 @@ dbDefs =
       bindTy = TySchema TyBinding rt def
       partialize = set tySchemaPartial AnySubschema
       a = mkTyVar "a" []
+      b = mkTyVar "b" []
   in ("Database",
     [setTopLevelOnly $ defGasRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
@@ -115,12 +118,25 @@ dbDefs =
       [ LitExample "(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))"
       , LitExample "(select people (where 'age (> 30)))?"
       ]
-      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion."
+      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys."
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     [LitExample "(keys accounts)"] "Return all keys in TABLE."
+     [LitExample "(keys accounts)"] "Return all keys in TABLE as a sorted list."
 
+    ,defNative "fold-db" foldDB'
+      (funType (TyList b)
+        [ ("table", tableTy)
+        , ("qry", TyFun (funType' (TyPrim TyBool) [("a", TyPrim TyString), ("b", rowTy)] ))
+        , ("consumer", TyFun (funType' b [("a", TyPrim TyString), ("b", rowTy)]))])
+      [LitExample "(let* \n\
+                  \ ((qry (lambda (k obj) true)) ;; select all rows\n\
+                  \  (f (lambda (x) [(at 'firstName x), (at 'b x)]))\n\
+                  \ )\n\
+                  \ (fold-db people (qry) (f))\n\
+                  \)"]
+      "Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query \
+      \in CONSUMER. Output is sorted by the ordering of keys."
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      [LitExample "(txids accounts 123849535)"] "Return all txid values greater than or equal to TXID in TABLE."
@@ -220,6 +236,39 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
 
 read' _ i as = argsError i as
 
+
+foldDB' :: NativeFun e
+foldDB' i [tbl, TApp qry _, TApp consumer _] = do
+  table <- reduce tbl >>= \case
+    t@TTable{} -> return t
+    t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
+  !g0 <- computeGas (Right i) (GUnreduced [])
+  !g1 <- computeGas (Right i) GFoldDB
+  ks <- getKeys table
+  (!g2, xs) <- foldlM (fdb table) (g0+g1, []) ks
+  pure (g2, TList (V.fromList (reverse xs)) TyAny def)
+  where
+  asBool (TLiteral (LBool satisfies) _) = return satisfies
+  asBool t = evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
+  getKeys table = do
+    guardTable i table GtKeys
+    keys (_faInfo i) (userTable table)
+  fdb table (!g0, acc) key = do
+    mrow <- readRow (_faInfo i) (userTable table) key
+    case mrow of
+      Just row -> do
+        g1 <- gasPostRead i g0 row
+        let obj = columnsToObject (_tTableType table) row
+        let key' = toTerm key
+        cond <- asBool =<< apply qry [key', obj]
+        if cond then do
+          r' <- apply consumer [key', obj]
+          pure (g1, r':acc)
+        else pure (g1, acc)
+      Nothing -> evalError (_faInfo i) $ "foldDb: unexpected error, key: "
+                 <> pretty key <> " not found in table: " <> pretty table
+foldDB' i as = argsError' i as
+
 gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas
 gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
 
@@ -318,7 +367,7 @@ bindToRow ps bd b (ObjectMap row) =
   bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 
 keys' :: GasRNativeFun e
-keys' g i [table@TTable {}] =
+keys' g i [table@TTable {}] = do
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table GtKeys
@@ -385,7 +434,7 @@ write wt partial i as = do
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      rdv <- ifExecutionFlagSet' FlagRowDataV0 RDV0 RDV1
+      rdv <- ifExecutionFlagSet' FlagDisablePact420 RDV0 RDV1
       r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) $
           RowData rdv (pactValueToRowData <$> ps')
       return (cost0 + cost1, r)

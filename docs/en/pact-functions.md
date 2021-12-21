@@ -437,7 +437,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.1.1"
+"4.1.3"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -732,6 +732,22 @@ Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code'
 Top level only: this function will fail if used in module code.
 
 
+### fold-db {#fold-db}
+
+*table*&nbsp;`table:<{row}>` *qry*&nbsp;`a:string b:object:<{row}> -> bool` *consumer*&nbsp;`a:string b:object:<{row}> -> <b>` *&rarr;*&nbsp;`[<b>]`
+
+
+Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER. Output is sorted by the ordering of keys.
+```lisp
+(let* 
+ ((qry (lambda (k obj) true)) ;; select all rows
+  (f (lambda (x) [(at 'firstName x), (at 'b x)]))
+ )
+ (fold-db people (qry) (f))
+)
+```
+
+
 ### insert {#insert}
 
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
@@ -759,7 +775,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`[string]`
 
 
-Return all keys in TABLE.
+Return all keys in TABLE as a sorted list.
 ```lisp
 (keys accounts)
 ```
@@ -785,7 +801,7 @@ Read row from TABLE for KEY, returning database record object, or just COLUMNS i
 *table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
 
-Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
+Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys.
 ```lisp
 (select people ['firstName,'lastName] (where 'name (= "Fatima")))
 (select people (where 'age (> 30)))?
@@ -1770,7 +1786,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePact40","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs","RowDataV0"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePact40","DisablePact420","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
