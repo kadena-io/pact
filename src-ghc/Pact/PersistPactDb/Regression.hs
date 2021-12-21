@@ -11,6 +11,8 @@ import Control.Exception
 import Control.Monad
 import Control.Lens hiding ((.=))
 import Control.DeepSeq
+import Data.Text(pack)
+import Data.Foldable(for_)
 
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
@@ -113,6 +115,10 @@ runRegression p = do
   _rollbackTx pactdb v
   assertEquals' "rollback erases key2" Nothing $ _readRow pactdb usert "key2" v
   assertEquals' "keys" ["key1"] $ _keys pactdb (UserTables user1) v
+  -- Reversed just to ensure inserts are not in order.
+  for_ (reverse [2::Int .. 9]) $ \k ->
+    _writeRow pactdb Insert usert (RowKey $ "key" <> (pack $ show k)) row' v
+  assertEquals' "keys" [RowKey ("key" <> (pack $ show k)) | k <- [1 :: Int .. 9]] $ _keys pactdb (UserTables user1) v
   return v
 
 toTerm' :: ToTerm a => a -> Term Name

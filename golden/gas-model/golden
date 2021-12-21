@@ -777,6 +777,14 @@
   - 6
 - - (or? (identity) (identity) true)
   - 3
+- - |-
+    (let*
+      ((qry (lambda (k obj) true)) ;; select all rows
+        (f (lambda (k x) (at 'balance x)))
+      )
+      (fold-db accounts.accounts (qry) (f))
+      )
+  - 206
 - - (sort longNumberList)
   - 1027
 - - (sort medNumberList)

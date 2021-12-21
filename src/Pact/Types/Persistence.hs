@@ -222,7 +222,7 @@ data PactDb e = PactDb {
     -- | Write a domain value at key. WriteType argument governs key behavior.
   , _writeRow :: forall k v . (AsString k,ToJSON v) =>
                  WriteType -> Domain k v -> k -> v -> Method e ()
-    -- | Retrieve all keys for a domain.
+    -- | Retrieve all keys for a domain, Key output guaranteed sorted.
   , _keys :: forall k v . (IsString k,AsString k) => Domain k v -> Method e [k]
     -- | Retrieve all transaction ids greater than supplied txid for table.
   , _txids ::  TableName -> TxId -> Method e [TxId]
