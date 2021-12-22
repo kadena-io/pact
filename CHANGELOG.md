@@ -1,3 +1,24 @@
+4.2.0
+---
+* Fixed formal verification for take/drop functions (#921)
+* `zip` native (#922)
+* Versoned PactValue persistence (#926)
+* Run Repls with Sqlite backend (#934)
+* `cond` syntactic form (#938)
+* `fold-db` native (#941)
+* Internal native fix (#945)
+* Docs expression evaluation fixed (#946)
+* Fix schema unification on module upgrades (#948)
+* Fix modref payload serialization, decouple from persistence backcompat (#949)
+* Allow self modrefs (#950)
+* Provide comparisons for bool, modrefs + equality for modrefs  (#951)
+
+
+4.1.2
+---
+* Enforce key format in keyset creation (#918)
+
+
 4.1.1
 ---
 * Guard for recursion at runtime on user apps (#913)

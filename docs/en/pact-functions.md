@@ -437,7 +437,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.1.3"
+"4.2.0"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -984,7 +984,7 @@ pact> (time "2016-07-22T11:26:35Z")
 
 ### != {#bangeq}
 
-*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 True if X does not equal Y.
@@ -1084,7 +1084,7 @@ pact> (/ 8 3)
 
 ### < {#lt}
 
-*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 True if X < Y.
@@ -1100,7 +1100,7 @@ true
 
 ### <= {#lteq}
 
-*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 True if X <= Y.
@@ -1116,7 +1116,7 @@ true
 
 ### = {#eq}
 
-*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 Compare alike terms for equality, returning TRUE if X is equal to Y. Equality comparisons will fail immediately on type mismatch, or if types are not value types.
@@ -1132,7 +1132,7 @@ true
 
 ### > {#gt}
 
-*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 True if X > Y.
@@ -1148,7 +1148,7 @@ false
 
 ### >= {#gteq}
 
-*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 True if X >= Y.
