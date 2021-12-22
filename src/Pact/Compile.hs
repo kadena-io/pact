@@ -46,7 +46,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
 import Data.String
-import Data.Text (Text,unpack)
+import Data.Text (Text,unpack, pack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Vector as V
 
@@ -199,6 +199,13 @@ freshTyVar = do
   c <- state (view (psUser . csFresh) &&& over (psUser . csFresh) succ)
   return $ mkTyVar (cToTV c) []
 
+freshNameRaw :: Compile Text
+freshNameRaw = do
+  c <- state (view (psUser . csFresh) &&& over (psUser . csFresh) succ)
+  -- does not collide bc backtick is
+  -- not a legal symbol in pact
+  pure $ "`af" <> pack (show c)
+
 cToTV :: Int -> TypeVarName
 cToTV n | n < 26 = fromString [toC n]
         | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
@@ -234,6 +241,7 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
     RLet -> return letForm
     RLetStar -> return letsForm
     RWithCapability -> return withCapability
+    RLambda -> return lam
     RCond -> return condForm
     _ -> expected "value level form (let, let*, with-capability, cond)"
 
@@ -550,24 +558,39 @@ stepWithRollback = do
        <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
   return $ TStep s m i
 
-
+lam :: Compile (Term Name)
+lam = do
+  name <- freshNameRaw
+  tv <- freshTyVar
+  args <- withList' Parens $ many arg
+  let funTy = FunType args tv
+  info <- contextInfo
+  lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
+  pure (TLam lamValue info)
 
 letBindings :: Compile [BindPair (Term Name)]
 letBindings =
   withList' Parens $ some $ withList' Parens $ do
-    a <- arg
-    regularBind a <|> lam a
-  where
-  regularBind arg' =
-    BindPair arg' <$> try valueLevel
-  lam (Arg name ty _) = withList' Parens $ reservedAtom >>= \case
-    RLambda -> do
-      args <- withList' Parens $ many arg
-      let funTy = FunType args ty
-      info <- contextInfo
-      lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
-      pure (BindPair (Arg name (TyFun funTy) info) (TLam lamValue info))
-    _ -> expected "Lambda form"
+    info <- contextInfo
+    BindPair a@(Arg n ty _) t <- BindPair <$> arg <*> valueLevel
+    case t of
+      TLam l _ ->
+        let l' =  TLam (l & lamArg .~ n & lamTy . ftReturn .~ ty & lamInfo .~ info) info
+        in pure (BindPair (Arg n ty info) l')
+      _ -> pure (BindPair a t)
+    -- a <- arg
+    -- regularBind a <|> lam a
+  -- where
+  -- regularBind arg' =
+  --   BindPair arg' <$> try valueLevel
+  -- lam (Arg name ty _) = withList' Parens $ reservedAtom >>= \case
+  --   RLambda -> do
+  --     args <- withList' Parens $ many arg
+  --     let funTy = FunType args ty
+  --     info <- contextInfo
+  --     lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
+  --     pure (BindPair (Arg name (TyFun funTy) info) (TLam lamValue info))
+  --   _ -> expected "Lambda form"
 
 
 abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)

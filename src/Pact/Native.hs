@@ -792,6 +792,8 @@ map' :: NativeFun e
 map' i as@[TApp app _,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply app . pure)
            t -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
+map' i [lam'@TLam{}, l] =
+  map' i [TApp (App lam' [] def) def, l]
 map' i as = argsError' i as
 
 list :: RNativeFun e
@@ -856,6 +858,8 @@ filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \case
              (return False)
              (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
   t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+filter' i [lam'@TLam{}, l] =
+  filter' i [TApp (App lam' [] def) def, l]
 filter' i as = argsError' i as
 
 
@@ -887,6 +891,8 @@ zip' i as@[TApp app _, l1, l2] = gasUnreduced i as $ (,) <$> reduce l1 <*> reduc
     terms <- sequence $ V.zipWith (\e1 e2 -> apply app [e1, e2]) l1' l2'
     pure $ TList terms TyAny (getInfo i)
   (l, r) -> argsError i [l, r]
+zip' i [lam'@TLam{}, l1, l2] =
+  zip' i [TApp (App lam' [] def) def, l1, l2]
 zip' i as = argsError' i as
 
 asKeyList :: V.Vector (Term Name) -> Eval e (S.Set FieldKey)
@@ -1021,6 +1027,8 @@ where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
   (k,r@TObject {}) -> lookupObj k (_oObject $ _tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
+where' i [k, lam'@TLam{}, r] =
+  where' i [k, TApp (App lam' [] def) def, r]
 where' i as = argsError' i as
 
 distinct :: GasRNativeFun e
