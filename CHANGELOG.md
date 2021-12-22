@@ -1,5 +1,6 @@
 4.2.0
 ---
+* Lambdas released on pact! (#915)
 * Fixed formal verification for take/drop functions (#921)
 * `zip` native (#922)
 * Versoned PactValue persistence (#926)
@@ -13,11 +14,9 @@
 * Allow self modrefs (#950)
 * Provide comparisons for bool, modrefs + equality for modrefs  (#951)
 
-
 4.1.2
 ---
 * Enforce key format in keyset creation (#918)
-
 
 4.1.1
 ---
