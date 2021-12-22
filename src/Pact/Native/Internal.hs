@@ -36,6 +36,7 @@ module Pact.Native.Internal
   ,enforceYield
   ,appToCap
   ,requireDefApp
+  , tLamToApp
   ) where
 
 import Bound
@@ -285,3 +286,8 @@ appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
   prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
   cap <- SigCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
   return (cap,d,prep)
+
+tLamToApp :: Term n -> Term n
+tLamToApp = \case
+  l@TLam{} -> TApp (App l [] def) def
+  x -> x

@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
 
 -- |
@@ -238,7 +239,7 @@ read' _ i as = argsError i as
 
 
 foldDB' :: NativeFun e
-foldDB' i [tbl, TApp qry _, TApp consumer _] = do
+foldDB' i [tbl, tLamToApp -> TApp qry _, tLamToApp -> TApp consumer _] = do
   table <- reduce tbl >>= \case
     t@TTable{} -> return t
     t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t

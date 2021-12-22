@@ -106,3 +106,8 @@
   "zip with empty list right"
   []
   (zip (+) [1 2 3] []))
+
+(expect
+  "zip functions with inline lambda"
+  [5 7 9]
+  (zip (lambda (x:integer y:integer) (+ x y)) [1 2 3] [4 5 6]))

@@ -101,3 +101,13 @@
   [4, 5]
   (filter (lambda(x) (> x 3)) [1, 2, 3, 4, 5])
 )
+
+(expect "inline lambdas function within natives: fold"
+  6
+  (fold (lambda (x y) (+ x y)) 0 [1, 2, 3])
+  )
+
+(expect "inline lambdas function within natives: compose"
+  2
+  (compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1)) 0)
+)
