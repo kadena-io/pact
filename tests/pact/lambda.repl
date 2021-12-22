@@ -8,14 +8,14 @@
 (expect "higher order function application works for tdefs"
   4
   (appHOF add2 2)
-)
+  )
 
 (expect "higher order function application works for lambdas"
   11
   (let ((fHOF (lambda (f  a) (f a))) (g (lambda (x) x))) (fHOF g 11))
   )
 
-  (expect "higher order function application works for lambdas passed inline lambdas"
+(expect "higher order function application works for lambdas passed inline lambdas"
   11
   (let ((fHOF (lambda (f  a) (f a)))) (fHOF (lambda (x) x) 11))
   )
@@ -33,7 +33,7 @@
 (expect "higher order function application works for tdefs passed inline lambdas"
   4
   (appHOF (lambda (x:integer) (+ x 2)) 2)
-)
+  )
 
 
 
