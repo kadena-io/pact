@@ -78,3 +78,18 @@
   2
   (compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1)) 0)
 )
+
+(expect "inline lambdas function within natives: and?"
+  true
+  (and? (lambda (x) (< x 20)) (lambda (x) (<= x 15)) 15)
+)
+
+(expect "inline lambdas function within natives: or?"
+  true
+  (or? (lambda (x) (> x 20)) (lambda (x) (<= x 15)) 15)
+)
+
+(expect "inline lambdas function within natives: not?"
+  false
+  (not? (lambda (x) (> x 20)) 22)
+)

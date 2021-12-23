@@ -36,7 +36,7 @@ module Pact.Native.Internal
   ,enforceYield
   ,appToCap
   ,requireDefApp
-  , tLamToApp
+  ,tLamToApp
   ) where
 
 import Bound

@@ -2671,16 +2671,18 @@ They are used in [with-read](pact-functions.html#with-read), [with-default-read]
 ```
 
 ### Lambdas {#lambdas}
-Lambdas are supported in `let` and `let*`, and as inline function arguments in value positions.
+Lambdas are supported in `let`, `let*`, and as inline arguments to built-in function applications.
 
 ```lisp
   ; identity function
   (let ((f (lambda (x) x))) (f a))
-  ; Higher order example
-  (let ((hof (lambda (f a b)  (f a b))))  (hof + 1 2))
-  ; Inline example:
+  ; native example
+  (let ((f (lambda (x) x))) (map (f) [1 2 3]))
+  ; Inline native example:
   (map (lambda (x) x) [1 2 3])
 ```
+
+Note: Lambdas and defs as function arguments are currently not supported outside of built-in functions: `map`, `zip`, `filter`, `fold-db`, `and?`, `or?`, `not?`, `compose`.
 
 Type specifiers
 -----
