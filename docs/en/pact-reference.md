@@ -2682,8 +2682,6 @@ Lambdas are supported in `let`, `let*`, and as inline arguments to built-in func
   (map (lambda (x) x) [1 2 3])
 ```
 
-Note: Lambdas and defs as function arguments are currently not supported outside of built-in functions: `map`, `zip`, `filter`, `fold`, `fold-db`, `and?`, `or?`, `not?`, `compose`.
-
 Type specifiers
 -----
 
@@ -3147,10 +3145,10 @@ S-expressions are formed with parentheses, with the first atom determining if
 the expression is a [special form](#special-forms) or a function application, in
 which case the first atom must refer to a definition.
 
-#### Partial application {#partialapplication}
+#### Partial application {#partial-application}
 An application with less than the required arguments is in some contexts a valid
 *partial application* of the function. However, this is only supported in
-Pact's [functional-style functions](#functional-concepts); anywhere else this will result in a
+Pact's [functional-style functions](#fp); anywhere else this will result in a
 runtime error.
 
 ### References {#references}
