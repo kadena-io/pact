@@ -767,7 +767,6 @@ reduceLam = \case
   TVar (Ref n) _ -> reduceLam n
   t@TDef{} -> pure (Left t)
   t@TLam{} -> pure (Left t)
-  t@TNative{} -> pure (Left t)
   x -> Right <$> reduce x
 
 {-# INLINE resolveArg #-}
@@ -826,10 +825,10 @@ functionApp
   -> Eval e (Term Name)
 functionApp fnName funTy mod_ as fnBody docs ai = do
   gas <- computeGas (Left (ai, asString fnName)) (GUserApp Defun)
-  args <- traverse reduceLam as
-  typecheckArgs' ai fnName funTy args
+  args <- traverse reduce as
   fty <- traverse reduce funTy
-  let args' = either id liftTerm <$> args
+  typecheckArgs ai fnName fty args
+  let args' = liftTerm <$> args
   let body = instantiate (resolveArg ai args') fnBody
       fname = asString fnName
       fa = FunApp ai fname mod_ Defun (funTypes fty) docs
@@ -896,23 +895,6 @@ evalUserAppBody d@Def{..} (as',ft') ai g run =
   fname = asString _dDefName
   bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
   fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
-
--- | Checks that function arg length matches supplied arguments
---   and typechecks against the reduced/unreduced terms.
---   A more detailed explanation in 'typecheck''
-typecheckArgs'
-  :: (HasInfo i)
-  => i
-  -> DefName
-  -> FunType (Term Ref)
-  -> [Either (Term Ref) (Term Name)]
-  -> Eval e ()
-typecheckArgs' i defName ft' as' = do
-  let params = _ftArgs ft'
-  when (length params /= length as') $
-    evalError' i $ pretty defName <> ": Incorrect number of arguments (" <>
-      pretty (length as') <> ") supplied; expected " <> pretty (length params)
-  typecheck' (zip params as')
 
 -- | Typecheck an arg paired with either an unreduced term (terms that should not be reduced e.g lams, tdefs)
 --   or a fully reduced term (anything else that doesn't pass a scope pretty much).

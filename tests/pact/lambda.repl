@@ -1,50 +1,7 @@
 
 (module lam-test g (defcap g () true)
   (defun add2 (x:integer) (+ x 2))
-  (defun appHOF (f x) (f x))
   (defun gt2 (x:integer) (> x 2))
-  )
-
-;; Higher order args passed to tdefs
-(expect "higher order function application works for tdefs"
-  4
-  (appHOF add2 2)
-  )
-
-(expect "higher order function application works for defs passed in lambdas"
-  4
-  (let ((f (lambda (a) (+ a a)))) (appHOF f 2))
-  )
-
-(expect "higher order function application works for tdefs passed inline lambdas"
-  4
-  (appHOF (lambda (x:integer) (+ x 2)) 2)
-  )
-
-(expect "higher order function application works for tdefs passed natives"
-  4
-  (appHOF abs -4)
-  )
-
-;; Higher order args passed to lambdas
-(expect "higher order function application works for lambdas"
-  11
-  (let ((fHOF (lambda (f  a) (f a))) (g (lambda (x) x))) (fHOF g 11))
-  )
-
-(expect "higher order function application works for lambdas passed inline lambdas"
-  11
-  (let ((fHOF (lambda (f  a) (f a)))) (fHOF (lambda (x) x) 11))
-  )
-
-(expect "higher order function application works for lambda passed tdefs"
-  13
-  (let ((fHOF (lambda (f  a) (f a)))) (fHOF add2 11))
-  )
-
-(expect "higher order function application works for lambda passed native"
-  13
-  (let ((fHOF (lambda (f  a) (f a)))) (fHOF abs -13))
   )
 
 (expect "lambdas in let* behave as expected"
