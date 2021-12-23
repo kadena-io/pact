@@ -2682,7 +2682,7 @@ Lambdas are supported in `let`, `let*`, and as inline arguments to built-in func
   (map (lambda (x) x) [1 2 3])
 ```
 
-Note: Lambdas and defs as function arguments are currently not supported outside of built-in functions: `map`, `zip`, `filter`, `fold-db`, `and?`, `or?`, `not?`, `compose`.
+Note: Lambdas and defs as function arguments are currently not supported outside of built-in functions: `map`, `zip`, `filter`, `fold`, `fold-db`, `and?`, `or?`, `not?`, `compose`.
 
 Type specifiers
 -----

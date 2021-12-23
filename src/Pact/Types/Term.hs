@@ -119,7 +119,6 @@ import qualified Data.HashSet as HS
 import Data.Hashable
 import Data.Int (Int64)
 import Data.List
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Set (Set)
@@ -1432,7 +1431,7 @@ typeof t = case t of
       TModule{}-> Left "module"
       TList {..} -> Right $ TyList _tListType
       TDef{..} -> Right $ TyFun (_dFunType _tDef)
-      TNative {..} -> Right $ TyFun $ NonEmpty.head _tFunTypes
+      TNative {} -> Left "defun"
       TConst {..} -> Left $ "const:" <> _aName _tConstArg
       TApp {} -> Left "app"
       TVar {} -> Left "var"
