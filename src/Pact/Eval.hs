@@ -767,6 +767,7 @@ reduceLam = \case
   TVar (Ref n) _ -> reduceLam n
   t@TDef{} -> pure (Left t)
   t@TLam{} -> pure (Left t)
+  t@TNative{} -> pure (Left t)
   x -> Right <$> reduce x
 
 {-# INLINE resolveArg #-}

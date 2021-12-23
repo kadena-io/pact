@@ -287,6 +287,9 @@ appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
   cap <- SigCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
   return (cap,d,prep)
 
+-- | Function intended for use as a View pattern
+-- to convert inline-lambdas to `TApp`s for
+-- use within natives.
 tLamToApp :: Term n -> Term n
 tLamToApp = \case
   l@TLam{} -> TApp (App l [] def) def

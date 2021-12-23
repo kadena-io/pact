@@ -882,15 +882,13 @@ drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList
 drop' i as = argsError i as
 
 zip' :: NativeFun e
-zip' i as@[TApp app _, l1, l2] = gasUnreduced i as $ (,) <$> reduce l1 <*> reduce l2 >>= \case
+zip' i as@[tLamToApp -> TApp app _, l1, l2] = gasUnreduced i as $ (,) <$> reduce l1 <*> reduce l2 >>= \case
  -- reduce list terms first, though unfortunately
   -- this means that lambdas within lists won't work for now.
   (TList l1' _ _, TList l2' _ _) -> do
     terms <- sequence $ V.zipWith (\e1 e2 -> apply app [e1, e2]) l1' l2'
     pure $ TList terms TyAny (getInfo i)
   (l, r) -> argsError i [l, r]
-zip' i [lam'@TLam{}, l1, l2] =
-  zip' i [TApp (App lam' [] def) def, l1, l2]
 zip' i as = argsError' i as
 
 asKeyList :: V.Vector (Term Name) -> Eval e (S.Set FieldKey)
