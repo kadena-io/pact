@@ -1,11 +1,8 @@
 (module lams-test G
   (defcap G () true)
-  (defun appHOF (f x) (f x))
-  (defun add2 (x:integer) (+ x 2))
   (defun f (amount:decimal)
     (let ((g (lambda (x:decimal) (+ 3.20 x))))
     (g amount)))
   )
 
-(appHOF add2 2)
 (lams-test.f 1.0)

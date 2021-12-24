@@ -6,6 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Repl.Lib
@@ -566,7 +567,7 @@ expectFail i as = case as of
                   <> "', got '" <> pretty e <> "'"
 
 expectThat :: ZNativeFun LibState
-expectThat i as@[_,TApp pred' predi,expr'] = do
+expectThat i as@[_,tLamToApp -> TApp pred' predi,expr'] = do
   doc <- testDoc i as
   testCatch i doc (reduce expr') "evaluation of expression failed" $ \v ->
     testCatch i doc (apply pred' [v]) "evaluation of predicate failed" $ \p -> case p of
