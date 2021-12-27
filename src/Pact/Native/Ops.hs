@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Native.Ops
@@ -278,7 +279,7 @@ liftLogic n bop desc shortCircuit =
     ("Apply logical '" <> desc <> "' to the results of applying VALUE to A and B, with short-circuit.")
   where
     r = mkTyVar "r" []
-    fun i as@[a@TApp{},b@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> do
+    fun i as@[tLamToApp -> a@TApp{},tLamToApp -> b@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> do
       ar <- apply (_tApp a) [v]
       case ar of
         TLitBool ab
@@ -292,7 +293,7 @@ liftLogic n bop desc shortCircuit =
     fun i as = argsError' i as
 
 liftNot :: NativeFun e
-liftNot i as@[app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply (_tApp app) [v] >>= \r -> case r of
+liftNot i as@[tLamToApp -> app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply (_tApp app) [v] >>= \r -> case r of
   TLitBool b -> return $ toTerm $ not b
   _ -> delegateError "not?" app r
 liftNot i as = argsError' i as

@@ -2671,15 +2671,15 @@ They are used in [with-read](pact-functions.html#with-read), [with-default-read]
 ```
 
 ### Lambdas {#lambdas}
-Lambdas are supported in `let` and `let*`.
-Note: Lambdas are not atoms, since in pact we do not allow arbitrary recursion, therefore
-they must be let-bound and named.
+Lambdas are supported in `let`, `let*`, and as inline arguments to built-in function applications.
 
 ```lisp
   ; identity function
   (let ((f (lambda (x) x))) (f a))
-  ; Higher order example
-  (let ((hof (lambda (f a b)  (f a b))))  (hof + 1 2))
+  ; native example
+  (let ((f (lambda (x) x))) (map (f) [1 2 3]))
+  ; Inline native example:
+  (map (lambda (x) x) [1 2 3])
 ```
 
 Type specifiers
@@ -3145,10 +3145,10 @@ S-expressions are formed with parentheses, with the first atom determining if
 the expression is a [special form](#special-forms) or a function application, in
 which case the first atom must refer to a definition.
 
-#### Partial application {#partialapplication}
+#### Partial application {#partial-application}
 An application with less than the required arguments is in some contexts a valid
 *partial application* of the function. However, this is only supported in
-Pact's [functional-style functions](#functional-concepts); anywhere else this will result in a
+Pact's [functional-style functions](#fp); anywhere else this will result in a
 runtime error.
 
 ### References {#references}

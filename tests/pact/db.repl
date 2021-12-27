@@ -262,3 +262,9 @@
   [{"a": 1} {"a": 2} {"a": 3} {"a": 4}]
   (select fdb-tbl ['a] (constantly true))
   )
+
+(expect
+  "fold-db query handles key/obj transform correctly: inline lambdas version"
+  [["a" 1] ["b" 2]]
+  (fold-db fdb-tbl (lambda (k o)  (< k "c")) (lambda (k o) [k (at 'a o)]))
+  )

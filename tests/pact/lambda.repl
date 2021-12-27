@@ -1,28 +1,7 @@
 
 (module lam-test g (defcap g () true)
   (defun add2 (x:integer) (+ x 2))
-  (defun appHOF (f x) (f x))
   (defun gt2 (x:integer) (> x 2))
-  )
-
-(expect "higher order function application works for tdefs"
-  4
-  (appHOF add2 2)
-)
-
-(expect "higher order function application works for lambdas"
-  11
-  (let ((fHOF (lambda (f  a) (f a))) (g (lambda (x) x))) (fHOF g 11))
-  )
-
-(expect "higher order function application works for lambda passed tdefs"
-  13
-  (let ((fHOF (lambda (f  a) (f a)))) (fHOF add2 11))
-  )
-
-(expect "higher order function application works for defs passed in lambdass"
-  4
-  (let ((f (lambda (a) (+ a a)))) (appHOF f 2))
   )
 
 (expect "lambdas in let* behave as expected"
@@ -78,4 +57,39 @@
 (expect "defuns function within natives: filter"
   [3, 4, 5]
     (filter (gt2) [1, 2, 3, 4, 5])
+)
+
+(expect "inline lambdas function within natives: map"
+  [1, 4, 9, 16, 25]
+  (map (lambda(x) (* x x)) [1, 2, 3, 4, 5])
+)
+
+(expect "inline lambdas function within natives: filter"
+  [4, 5]
+  (filter (lambda(x) (> x 3)) [1, 2, 3, 4, 5])
+)
+
+(expect "inline lambdas function within natives: fold"
+  6
+  (fold (lambda (x y) (+ x y)) 0 [1, 2, 3])
+  )
+
+(expect "inline lambdas function within natives: compose"
+  2
+  (compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1)) 0)
+)
+
+(expect "inline lambdas function within natives: and?"
+  true
+  (and? (lambda (x) (< x 20)) (lambda (x) (<= x 15)) 15)
+)
+
+(expect "inline lambdas function within natives: or?"
+  true
+  (or? (lambda (x) (> x 20)) (lambda (x) (<= x 15)) 15)
+)
+
+(expect "inline lambdas function within natives: not?"
+  false
+  (not? (lambda (x) (> x 20)) 22)
 )
