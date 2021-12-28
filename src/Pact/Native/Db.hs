@@ -119,11 +119,11 @@ dbDefs =
       [ LitExample "(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))"
       , LitExample "(select people (where 'age (> 30)))?"
       ]
-      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys."
+      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion."
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     [LitExample "(keys accounts)"] "Return all keys in TABLE as a sorted list."
+     [LitExample "(keys accounts)"] "Return all keys in TABLE."
 
     ,defNative "fold-db" foldDB'
       (funType (TyList b)
