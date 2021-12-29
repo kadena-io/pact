@@ -86,10 +86,6 @@
 (expect "= string string" true (= "hello" "hello"))
 (expect "!= string string" true (!= "hello" "goodbye"))
 
-(expect "< bool bool" true (< false true))
-(expect "<= bool bool" true (<= false false))
-(expect "> bool bool" true (> true false))
-(expect ">= bool bool" true (>= true false))
 (expect "= bool bool" true (= true true))
 (expect "!= bool bool" true (!= false true))
 
