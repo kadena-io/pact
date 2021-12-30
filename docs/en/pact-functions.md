@@ -437,7 +437,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.1.3"
+"4.2.0"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -775,7 +775,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`[string]`
 
 
-Return all keys in TABLE as a sorted list.
+Return all keys in TABLE.
 ```lisp
 (keys accounts)
 ```
@@ -801,7 +801,7 @@ Read row from TABLE for KEY, returning database record object, or just COLUMNS i
 *table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
 
-Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys.
+Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
 ```lisp
 (select people ['firstName,'lastName] (where 'name (= "Fatima")))
 (select people (where 'age (> 30)))?
@@ -1084,7 +1084,7 @@ pact> (/ 8 3)
 
 ### < {#lt}
 
-*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X < Y.
@@ -1100,7 +1100,7 @@ true
 
 ### <= {#lteq}
 
-*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X <= Y.
@@ -1132,7 +1132,7 @@ true
 
 ### > {#gt}
 
-*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X > Y.
@@ -1148,7 +1148,7 @@ false
 
 ### >= {#gteq}
 
-*x*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *y*&nbsp;`<a[integer,decimal,string,time,bool,module{}]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X >= Y.

@@ -264,24 +264,13 @@
   (defun fails-tc-call-modref:bool ()
     (tc-modref tc-test-impl2))
 
-  (defun tc-cmp-modref:bool (a:module{tctest-iface} b:module{tctest-iface})
-    (> a b))
-
   (defun tc-eq-modref:bool (a:module{tctest-iface} b:module{tctest-iface})
     (= a b))
 
   (defun tc-cmp-modref-call:bool ()
     "test compliant modrefs with varying impl lists"
-    (tc-cmp-modref tc-test-impl tc-test-impl-both)
     (tc-eq-modref tc-test-impl tc-test-impl-both)
     )
-
-  (defun tc-bool-cmp:bool (a:bool b:bool)
-    (> a b))
-
-  (defun fails-cmp-modref (a:module{tctest-iface} b:module{tctest-iface2})
-    (> a b))
-
 )
 
 (create-table persons)

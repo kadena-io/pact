@@ -86,10 +86,6 @@
 (expect "= string string" true (= "hello" "hello"))
 (expect "!= string string" true (!= "hello" "goodbye"))
 
-(expect "< bool bool" true (< false true))
-(expect "<= bool bool" true (<= false false))
-(expect "> bool bool" true (> true false))
-(expect ">= bool bool" true (>= true false))
 (expect "= bool bool" true (= true true))
 (expect "!= bool bool" true (!= false true))
 
@@ -99,20 +95,8 @@
 (module my g (defcap g () true) (implements iy) (defun f:bool () true))
 (module ny g (defcap g () true) (implements iy) (defun f:bool () true))
 
-(expect "< module{ix} module{ix}" true (< mx my))
-(expect "<= module{ix} module{ix}" true (<= mx mx))
-(expect "> module{ix} module{ix}" true (> my mx))
-(expect ">= module{ix} module{ix}" true (>= my mx))
 (expect "= module{ix} module{ix}" true (= mx mx))
 (expect "!= module{ix} module{ix}" true (!= my mx))
-
-;; this won't typecheck but runtime is ok.
-(expect "< module{ix} module{iy}" true (< ix ny))
-
-(define-namespace 'ns (sig-keyset) (sig-keyset))
-(namespace 'ns)
-(module mx g (defcap g () true) (implements ix) (defun f:bool () true))
-(expect "< module{ix} module{ix} namespaced" true (< mx ns.mx))
 
 "===== math"
 (expect "sqrt decimal" 4.0 (sqrt 16.0))

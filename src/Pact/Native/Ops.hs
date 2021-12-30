@@ -328,7 +328,7 @@ defCmp o f =
   where
     o' = asString o
     ex a' b = ExecExample $ "(" <> o' <> " " <> a' <> " " <> b <> ")"
-    a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime,tTyBool,tTyModRef]
+    a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime]
 
 
 -- | Monomorphic compare.
@@ -340,9 +340,7 @@ cmp cmpFun fi as = do
       (LDecimal i,LDecimal j) -> return $ i `compare` j
       (LString i,LString j) -> return $ i `compare` j
       (LTime i,LTime j) -> return $ i `compare` j
-      (LBool i,LBool j) -> return $ i `compare` j
       _ -> argsError fi as
-    [TModRef (ModRef i _ _) _,TModRef (ModRef j _ _) _] -> return $ i `compare` j
     _ -> argsError fi as
   return $ toTerm (cmpFun c)
 {-# INLINE cmp #-}
