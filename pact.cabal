@@ -78,6 +78,7 @@ library
     Pact.Types.Gas
     Pact.Types.Hash
     Pact.Types.Info
+    Pact.Types.KeySet
     Pact.Types.Lang
     Pact.Types.Logger
     Pact.Types.Names
