@@ -102,8 +102,6 @@ import Data.Aeson hiding (pairs,Object, (<?>))
 #else
 import Data.Aeson hiding (pairs,Object)
 #endif
-import qualified Data.ByteString.UTF8 as BS
-import Data.Char (isAlphaNum)
 import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
@@ -117,13 +115,10 @@ import Data.Int (Int64)
 import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
-import Data.Set (Set)
-import qualified Data.Set as S
 import Data.Serialize (Serialize)
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.Encoding
 import Pact.Time (UTCTime)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -137,6 +132,7 @@ import Pact.Types.Codec
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
+import Pact.Types.Keyset
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
@@ -172,81 +168,7 @@ instance Semigroup Meta where
 instance Monoid Meta where
   mempty = Meta Nothing []
 
--- -------------------------------------------------------------------------- --
--- PublicKey
 
-newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
-  deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
-
-instance Arbitrary PublicKey where
-  arbitrary = PublicKey <$> encodeUtf8 <$> T.pack <$> vectorOf 64 genValidPublicKeyChar
-    where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
-instance Serialize PublicKey
-instance NFData PublicKey
-instance FromJSON PublicKey where
-  parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
-instance ToJSON PublicKey where
-  toJSON = toJSON . decodeUtf8 . _pubKey
-
-instance Pretty PublicKey where
-  pretty (PublicKey s) = prettyString (BS.toString s)
-
--- -------------------------------------------------------------------------- --
--- KeySet
-
--- | KeySet pairs keys with a predicate function name.
-data KeySet = KeySet
-  { _ksKeys :: !(Set PublicKey)
-  , _ksPredFun :: !Name
-  } deriving (Eq,Generic,Show,Ord)
-
-instance NFData KeySet
-
-instance Pretty KeySet where
-  pretty (KeySet ks f) = "KeySet" <+> commaBraces
-    [ "keys: " <> prettyList (toList ks)
-    , "pred: " <> pretty f
-    ]
-
-instance SizeOf KeySet where
-  sizeOf (KeySet pkArr ksPred) =
-    (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
-
-instance Arbitrary KeySet where
-  arbitrary = do
-    pks <- listOf1 arbitrary
-    name <- frequency
-      [ (3, pure "keys-all")
-      , (2, pure "keys-any")
-      , (1, pure "keys-2")
-      , (1, genBareText)
-      ]
-    pure $ mkKeySet pks name
-
--- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
--- | the latter cases defaulting to "keys-all"
-instance FromJSON KeySet where
-    parseJSON v = withObject "KeySet" (\o ->
-                    KeySet <$> o .: "keys" <*>
-                    (fromMaybe defPred <$> o .:? "pred")) v <|>
-                  (KeySet <$> parseJSON v <*> pure defPred)
-      where defPred = Name (BareName "keys-all" def)
-instance ToJSON KeySet where
-    toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
-
-
-mkKeySet :: [PublicKey] -> Text -> KeySet
-mkKeySet pks n = KeySet (S.fromList pks) (Name $ BareName n def)
-
--- -------------------------------------------------------------------------- --
--- KeySetName
-
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)
-
-instance Arbitrary KeySetName where
-  arbitrary = KeySetName <$> genBareText
-instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
 -- -------------------------------------------------------------------------- --
 -- PactId
