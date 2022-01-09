@@ -132,7 +132,7 @@ import Pact.Types.Codec
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
-import Pact.Types.Keyset
+import Pact.Types.KeySet
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf

@@ -21,7 +21,7 @@ import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types.Keyset
+import Pact.Types.KeySet
 import Pact.Types.Purity
 import Pact.Types.Runtime
 
