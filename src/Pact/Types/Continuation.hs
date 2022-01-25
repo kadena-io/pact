@@ -27,7 +27,7 @@ module Pact.Types.Continuation
     -- * Optics
   , peStepCount, peYield, peExecuted, pePactId
   , peStep, peContinuation, peStepHasRollback
-  , psStep, psRollback, psPactId, psResume
+  , psStep, psRollback, psPactId, psResume, peNested
   , pcDef, pcArgs
   , yData, yProvenance, ySourceChain
   , pTargetChainId, pModuleHash
@@ -39,6 +39,7 @@ import Control.DeepSeq (NFData)
 import Control.Lens hiding ((.=))
 
 import Data.Aeson
+import Data.Map.Strict(Map)
 
 import Test.QuickCheck
 
@@ -151,6 +152,7 @@ data PactExec = PactExec
     -- ^ Strict (in arguments) application of pact, for future step invocations.
   , _peStepHasRollback :: !Bool
     -- ^ Track whether a current step has a rollback
+  , _peNested :: Map PactId PactExec
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec

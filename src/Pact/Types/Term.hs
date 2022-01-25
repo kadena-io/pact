@@ -256,7 +256,7 @@ instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 -- PactId
 
 newtype PactId = PactId Text
-    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,Generic,NFData,SizeOf)
+    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON, FromJSONKey, ToJSONKey, Generic,NFData,SizeOf)
 
 instance Arbitrary PactId where
   arbitrary = PactId <$> hashToText <$> arbitrary

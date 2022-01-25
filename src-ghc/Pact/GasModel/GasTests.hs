@@ -303,6 +303,7 @@ createPactGuardTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
     updateWithPactExec = setState (set evalPactExec mockPactExec)
 
     tests =
@@ -1282,6 +1283,7 @@ pactIdTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
     updateState = setState (set evalPactExec mockPactExec)
 
     tests =
@@ -1298,6 +1300,7 @@ yieldTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
 
     mockModules = HM.fromList [(someModuleName, someModuleData)]
     mockStackframe = [someStackFrame]

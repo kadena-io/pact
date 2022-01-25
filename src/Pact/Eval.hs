@@ -59,7 +59,8 @@ import Data.Maybe
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
 import qualified Data.Text as T
-import Safe
+import qualified Data.Text.Encoding as T
+import Safe hiding (at)
 
 import Pact.Gas
 import Pact.Runtime.Capabilities
@@ -950,15 +951,88 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 
 initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
 initPact i app bod = view eePactStep >>= \es -> case es of
-  Just v -> evalError i $ "initPact: internal error: step already in environment: " <> pretty v
+  Just _v@(PactStep step b _pId _) -> do
+    -- todo: turn pactId into Bytestring then use that as parent, as opposed to block hash.
+    -- todo: ensure pact continuation being applied is _not_ the parent.
+    Hash parent <- view eeHash
+    let Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText (_pcDef app)
+        newPactId = toPactId (pactHash (parent <> ":" <> name'))
+    applyNestedPact i app bod $ PactStep step b newPactId Nothing
+    -- evalError i $ "initPact: internal error: step already in environment: " <> pretty v
   Nothing -> view eeHash >>= \hsh ->
     applyPact i app bod $ PactStep 0 False (toPactId hsh) Nothing
+
+applyNestedPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
+applyNestedPact i app (TList steps _a _b) PactStep {..} = do
+  -- liftIO $ print $ pretty $ TList steps _a _b
+  -- only one pact state allowed in a transaction
+  -- TODO: FORK
+  parentExec <- use evalPactExec >>= \case
+    Nothing -> evalError i "Nested Pact attempted but no pactExec found"
+    -- Nested pact execution
+    Just pe -> pure pe
+
+  -- retrieve indicated step from code
+  st <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
+  step <- case st of
+    TStep step _meta _i -> return step
+    t -> evalError (_tInfo t) "expected step"
+
+  -- determine if step is skipped (for private execution)
+  executePrivate <- traverse reduce (_sEntity step) >>= traverse (\stepEntity -> case stepEntity of
+    (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
+      Just (EntityName en) -> return $ (se == en) -- execute if req entity matches context entity
+      Nothing -> evalError' step "applyPact: private step executed against non-private environment"
+    t -> evalError' t "applyPact: step entity must be String value")
+
+  let stepCount = length steps
+      rollback = isJust $ _sRollback step
+  exec <- case parentExec ^. peNested . at _psPactId of
+    -- If the step == 0, we expect this to be the case
+    Nothing ->
+      if _psStep == 0 then pure (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback mempty)
+      else evalError' step $ "Nested pact executing same nested pact twice"
+    Just pe ->
+      if _psStep > 0 && (_peStep pe == _psStep + 1) then pure pe
+      else evalError' step $ "Nested pact never started at prior step"
+  -- set the pact state to the "local" nested exec to eval the result
+  evalPactExec .=
+      Just exec
+
+  -- evaluate
+  result <- case executePrivate of
+    Just False -> return $ tStr "skip step"
+    _ -> case (_psRollback,_sRollback step) of
+      (False,_) -> reduce $ _sExec step
+      (True,Just rexp) -> reduce rexp
+      (True,Nothing) -> evalError' step $ "Rollback requested but none in step"
+
+  resultState <- use evalPactExec >>= (`maybe` pure)
+    (evalError i "Internal error, pact exec state not found after execution")
+  -- Update the entry of the pactExec at the parent
+  let newParent = parentExec & peNested . at _psPactId .~ Just resultState
+  evalPactExec .= Just newParent
+  -- Todo: XChain
+  -- update database, determine if done
+  -- let isLastStep = _psStep == pred stepCount
+  --     private = isJust executePrivate
+  --     done =
+  --       (not _psRollback && isLastStep) -- done if normal exec of last step
+  --       || (not private && _psRollback) -- done if public rollback
+  --       || (private && _psRollback && _psStep == 0) -- done if private and rolled back to step 0
+
+  -- writeRow i Write Pacts _psPactId $ if done then Nothing else Just resultState
+
+  -- unlessExecutionFlagSet FlagDisablePact40 $ emitXChainEvents _psResume resultState
+
+  return result
+applyNestedPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
 
 
 -- | Apply or resume a pactdef step.
 applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
-applyPact i app (TList steps _ _) PactStep {..} = do
-
+applyPact i app (TList steps _a _b) PactStep {..} = do
+  -- liftIO $ print $ pretty $ TList steps _a _b
   -- only one pact state allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $
     evalError i "Multiple or nested pact exec found"
@@ -981,7 +1055,7 @@ applyPact i app (TList steps _ _) PactStep {..} = do
 
   -- init pact state
   evalPactExec .=
-      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback)
+      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback mempty)
 
   -- evaluate
   result <- case executePrivate of
@@ -1007,7 +1081,6 @@ applyPact i app (TList steps _ _) PactStep {..} = do
   unlessExecutionFlagSet FlagDisablePact40 $ emitXChainEvents _psResume resultState
 
   return result
-
 applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
 
 
