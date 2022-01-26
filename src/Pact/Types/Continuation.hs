@@ -153,6 +153,7 @@ data PactExec = PactExec
   , _peStepHasRollback :: !Bool
     -- ^ Track whether a current step has a rollback
   , _peNested :: Map PactId PactExec
+    -- ^ Track whether a current step has a rollback
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec

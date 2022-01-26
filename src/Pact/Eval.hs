@@ -951,22 +951,26 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 
 initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
 initPact i app bod = view eePactStep >>= \es -> case es of
-  Just _v@(PactStep step b _pId _) -> do
+  Just v@(PactStep step b _pId _) -> do
+    whenExecutionFlagSet FlagDisableNestedDefpacts $
+      evalError i $ "initPact: internal error: step already in environment: " <> pretty v
     -- todo: turn pactId into Bytestring then use that as parent, as opposed to block hash.
     -- todo: ensure pact continuation being applied is _not_ the parent.
     Hash parent <- view eeHash
     let Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText (_pcDef app)
         newPactId = toPactId (pactHash (parent <> ":" <> name'))
     applyNestedPact i app bod $ PactStep step b newPactId Nothing
-    -- evalError i $ "initPact: internal error: step already in environment: " <> pretty v
-  Nothing -> view eeHash >>= \hsh ->
-    applyPact i app bod $ PactStep 0 False (toPactId hsh) Nothing
+  Nothing -> view eeHash >>= \hsh -> do
+    let pStep = PactStep 0 False (toPactId hsh) Nothing
+    local (set eePactStep (Just pStep)) $ applyPact i app bod pStep mempty
 
+-- Nested defpact application, subject to a few conditions:
+-- - If parent step has rollback, this step _Also_ needs to have rollback.
+-- - Todo: private pacts
+-- - Todo: same argsin continuation.
 applyNestedPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
 applyNestedPact i app (TList steps _a _b) PactStep {..} = do
-  -- liftIO $ print $ pretty $ TList steps _a _b
   -- only one pact state allowed in a transaction
-  -- TODO: FORK
   parentExec <- use evalPactExec >>= \case
     Nothing -> evalError i "Nested Pact attempted but no pactExec found"
     -- Nested pact execution
@@ -985,15 +989,15 @@ applyNestedPact i app (TList steps _a _b) PactStep {..} = do
       Nothing -> evalError' step "applyPact: private step executed against non-private environment"
     t -> evalError' t "applyPact: step entity must be String value")
 
-  let stepCount = length steps
-      rollback = isJust $ _sRollback step
+  (rollback, stepCount) <- verifyParent parentExec step
   exec <- case parentExec ^. peNested . at _psPactId of
     -- If the step == 0, we expect this to be the case
     Nothing ->
       if _psStep == 0 then pure (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback mempty)
       else evalError' step $ "Nested pact executing same nested pact twice"
     Just pe ->
-      if _psStep > 0 && (_peStep pe == _psStep + 1) then pure pe
+      if _psStep > 0 && (_peStep pe + 1 == _psStep) then
+        pure $ pe & peStep +~ 1
       else evalError' step $ "Nested pact never started at prior step"
   -- set the pact state to the "local" nested exec to eval the result
   evalPactExec .=
@@ -1010,29 +1014,23 @@ applyNestedPact i app (TList steps _a _b) PactStep {..} = do
   resultState <- use evalPactExec >>= (`maybe` pure)
     (evalError i "Internal error, pact exec state not found after execution")
   -- Update the entry of the pactExec at the parent
-  let newParent = parentExec & peNested . at _psPactId .~ Just resultState
+  let newParent = parentExec & peNested %~ M.insert _psPactId resultState
   evalPactExec .= Just newParent
-  -- Todo: XChain
-  -- update database, determine if done
-  -- let isLastStep = _psStep == pred stepCount
-  --     private = isJust executePrivate
-  --     done =
-  --       (not _psRollback && isLastStep) -- done if normal exec of last step
-  --       || (not private && _psRollback) -- done if public rollback
-  --       || (private && _psRollback && _psStep == 0) -- done if private and rolled back to step 0
-
-  -- writeRow i Write Pacts _psPactId $ if done then Nothing else Just resultState
-
-  -- unlessExecutionFlagSet FlagDisablePact40 $ emitXChainEvents _psResume resultState
 
   return result
+  where
+  verifyParent PactExec{..} step =  do
+    let stepCount = length steps
+        rollback = isJust $ _sRollback step
+    when (stepCount /= _peStepCount) $ evalError' step $ "applyPact: invalid nested defpact length, must match length of parent"
+    when (rollback /= _peStepHasRollback) $ evalError' step $ "applyPact: invalid nested defpact step, must match parent rollback"
+    pure (rollback, stepCount)
 applyNestedPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
 
 
 -- | Apply or resume a pactdef step.
-applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
-applyPact i app (TList steps _a _b) PactStep {..} = do
-  -- liftIO $ print $ pretty $ TList steps _a _b
+applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> M.Map PactId PactExec ->  Eval e (Term Name)
+applyPact i app (TList steps _a _b) PactStep {..} nested = do
   -- only one pact state allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $
     evalError i "Multiple or nested pact exec found"
@@ -1055,7 +1053,7 @@ applyPact i app (TList steps _a _b) PactStep {..} = do
 
   -- init pact state
   evalPactExec .=
-      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback mempty)
+      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback nested)
 
   -- evaluate
   result <- case executePrivate of
@@ -1081,7 +1079,7 @@ applyPact i app (TList steps _a _b) PactStep {..} = do
   unlessExecutionFlagSet FlagDisablePact40 $ emitXChainEvents _psResume resultState
 
   return result
-applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
+applyPact _ _ t _ _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
 
 
 -- | Synthesize events for cross chain. Usually only submits yield OR resume,
@@ -1211,7 +1209,7 @@ resumePactExec i req ctx = do
   -- run local environment with yield from pact exec
   local (set eePactStep (Just $ set psResume resume req)) $
     evalUserAppBody def' af i g $ \bod ->
-      applyPact i (_peContinuation ctx) bod req
+      applyPact i (_peContinuation ctx) bod req (_peNested ctx)
 
 
 -- | Create special error form handled in 'reduceApp'

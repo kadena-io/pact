@@ -154,6 +154,8 @@ data ExecutionFlag
   | FlagEnforceKeyFormats
   -- | Enable Pact 4.2.0 db sorted key guarantees, and row persistence
   | FlagDisablePact420
+  -- | Enable nested defpacts.
+  | FlagDisableNestedDefpacts
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
