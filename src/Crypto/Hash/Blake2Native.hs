@@ -15,6 +15,7 @@ module Crypto.Hash.Blake2Native where
 import Data.Word
 import Data.Bits
 import Data.ByteString as B (ByteString,index,unpack,pack,length,take,splitAt,null,replicate)
+import Data.Foldable (foldl')
 import Data.Vector as V (Vector,(//),(!),fromList,(++))
 import Control.Lens ((&),(<&>))
 import Prelude as P hiding (last)
@@ -23,11 +24,11 @@ type V = Vector
 
 -- | state context
 data Blake2Ctx w = Blake2Ctx
-  { _b :: ByteString -- 128 input buffer
-  , _h :: V w        --   8 chained state
-  , _t0 :: w         --   total number of bytes 0
-  , _t1 :: w         --                         1
-  , _c :: Int        -- pointer for b[]
+  { _b :: !ByteString -- 128 input buffer
+  , _h :: !(V w)        --   8 chained state
+  , _t0 :: !w         --   total number of bytes 0
+  , _t1 :: !w         --                         1
+  , _c :: !Int        -- pointer for b[]
   , _outlen :: Int   -- digest size
   } deriving (Eq)
 instance (Show w) => Show (Blake2Ctx w) where
@@ -53,7 +54,7 @@ cat = (V.++)
 
 -- | flipped foldl
 ffoldl :: Foldable t => b -> t a -> (b -> a -> b) -> b
-ffoldl i l f = foldl f i l
+ffoldl i l f = foldl' f i l
 
 
 -- | Cyclic right rotation, 64 bit

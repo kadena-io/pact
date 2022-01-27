@@ -91,8 +91,8 @@ conjToOp c = fromString $ case c of
 {-# INLINE conjToOp #-}
 
 data KeyQuery k =
-  KQKey { kqCmp :: KeyCmp, kqKey :: k } |
-  KQConj { kqL :: KeyQuery k, kqConj :: KeyConj, kqR :: KeyQuery k }
+  KQKey { kqCmp :: !KeyCmp, kqKey :: !k } |
+  KQConj { kqL :: !(KeyQuery k), kqConj :: !KeyConj, kqR :: !(KeyQuery k) }
   deriving (Eq,Show)
 
 -- | Convenience for infix usage.

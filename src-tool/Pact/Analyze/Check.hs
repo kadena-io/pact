@@ -64,6 +64,7 @@ import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
+import qualified Data.Vector                as V
 import           Prelude                    hiding (exp)
 
 import           Pact.Typechecker           (typecheckTopLevel)
@@ -206,7 +207,7 @@ data FunData = FunData
 
 mkFunInfo :: Fun Node -> FunData
 mkFunInfo = \case
-  FDefun{_fInfo, _fArgs, _fBody} -> FunData _fInfo _fArgs _fBody
+  FDefun{_fInfo, _fArgs, _fBody} -> FunData _fInfo (V.toList _fArgs) (V.toList _fBody)
   _ -> error "invariant violation: mkFunInfo called on non-function"
 
 data VerificationFailure
@@ -592,10 +593,10 @@ moduleTables modules modRefs consts = do
         invariants <- case schemas ^? ix schemaName._Ref.tMeta.mModel of
           -- no model = no invariants
           Nothing    -> pure []
-          Just model -> case normalizeListLit model of
+          Just model -> case normalizeListLit (V.toList model) of
             Nothing -> throwError $ ModuleParseFailure
               -- reconstruct an `Exp Info` for this list
-              ( Pact.EList $ Pact.ListExp model Pact.Brackets $
+              ( Pact.EList $ Pact.ListExp (V.toList model) Pact.Brackets $
                   schemas ^?! ix schemaName._Ref.tInfo
               , "malformed list (inconsistent use of comma separators?)"
               )
@@ -631,7 +632,7 @@ moduleCapabilities de mds = fmap concat $ forM mds $ \md -> do
 
     mkCap :: TopLevel Node -> Except VerificationFailure Capability
     mkCap toplevel = do
-        eSchema <- mkESchema <$> traverse (translateArgTy "argument") pactArgs
+        eSchema <- mkESchema <$> traverse (translateArgTy "argument") (V.toList pactArgs)
         pure $ case eSchema of
           ESchema schema -> Capability schema capName
 
@@ -784,7 +785,7 @@ data ModelDecl = ModelDecl
 -- | Get the model defined in this module
 moduleModelDecl :: ModuleData Ref -> Either ParseFailure ModelDecl
 moduleModelDecl ModuleData{..} = do
-  lst <- parseModuleModelDecl $ Pact._mModel $ moduleDefMeta _mdModule
+  lst <- parseModuleModelDecl $ V.toList $ Pact._mModel $ moduleDefMeta _mdModule
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
 
@@ -807,14 +808,14 @@ mkInvariantEnv :: UserType -> Except VerificationFailure VarEnv
 mkInvariantEnv (TC.UTModSpec (TC.ModSpec mn)) = throwError $ ModuleSpecInSchemaPosition mn
 mkInvariantEnv (TC.UTSchema TC.Schema{_schFields}) = do
   tys <- Map.fromList . map (first (env Map.!)) <$>
-    traverse (translateArgTy "schema field's") _schFields
+    traverse (translateArgTy "schema field's") (V.toList _schFields)
   pure $ VarEnv vidStart env tys
 
   where
     -- Order variables lexicographically over their names when assigning
     -- variable IDs.
     env :: Map Text VarId
-    env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName _schFields
+    env = Map.fromList $ flip zip [0..] $ List.sort $ map Pact._aName (V.toList _schFields)
 
     vidStart :: VarId
     vidStart = VarId $ Map.size env
@@ -852,7 +853,7 @@ makeFunctionEnv (Pact.FunType argTys resultTy) = do
 
   let env :: [Binding]
       env = resultBinding :
-        (zip vids argTys' <&> \(vid, (Unmunged nm, ty))
+        (zip vids (V.toList argTys') <&> \(vid, (Unmunged nm, ty))
           -> Binding vid (Unmunged nm) (Munged nm) ty)
 
       nameVids :: Map Text VarId
@@ -871,7 +872,7 @@ mkTableEnv tables = TableMap $ Map.fromList $ foldr go [] tables
       TC.UTModSpec{} -> acc
       TC.UTSchema schema ->
         let fields = _schFields schema
-            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+            colMap = ColumnMap $ Map.fromList $ flip mapMaybe (V.toList fields) $
               \(Pact.Arg argName ty _) ->
                 (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
         in (TableName (T.unpack _tableName), colMap):acc
@@ -922,7 +923,7 @@ moduleFunCheck tables modCheckExps consts propDefs defTerm funTy = do
 
   checks <- case defTerm of
     TDef def info ->
-      let model = _mModel (_dMeta def)
+      let model = V.toList $ _mModel (_dMeta def)
       in case normalizeListLit model of
         Nothing -> throwError $ ModuleParseFailure
           -- reconstruct an `Exp Info` for this list
@@ -1021,9 +1022,9 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de) defpactRefs = do
       case maybeDef of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
         Right (TopFun (FDefun info _ _ Defpact funType args steps _) _meta)
-          -> pure $ ifoldl
+          -> pure $ ifoldl'
             (\i stepAccum step ->
-              stepAccum & at (name, i) ?~ ((step, args, info), funType))
+              stepAccum & at (name, i) ?~ ((step, (V.toList args), info), funType))
             accum
             steps
         Right _ -> error
@@ -1037,7 +1038,7 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de) defpactRefs = do
     <- hoist generalize $ for steps $ \((step, args, info), pactType) ->
       case step of
         TC.Step _ _ exec _ _ model -> ((exec,args,info),) <$>
-          stepCheck tables consts propDefs pactType model
+          stepCheck tables consts propDefs pactType (V.toList model)
         _ -> error
           "invariant violation: anything but a step is unexpected in stepChecks"
 
@@ -1128,11 +1129,11 @@ scopeCheckInterface globalNames refs = refs <&&> \case
   Pact.Direct _ -> [ScopeInvalidDirectRef]
   Pact.Ref defn -> case defn ^? tDef . dMeta . mModel of
     Nothing -> []
-    Just model -> case normalizeListLit model of
+    Just model -> case normalizeListLit (V.toList model) of
       Nothing ->
         [ ScopeParseFailure
           -- reconstruct an `Exp Info` for this list
-          ( Pact.EList (Pact.ListExp model Pact.Brackets (defn ^. tInfo))
+          ( Pact.EList (Pact.ListExp (V.toList model) Pact.Brackets (defn ^. tInfo))
           , "malformed list (inconsistent use of comma separators?)"
           )
         ]
@@ -1140,7 +1141,7 @@ scopeCheckInterface globalNames refs = refs <&&> \case
         Left err   -> [ScopeParseFailure err]
         Right exps -> exps <&&> \(_propTy, meta) -> do
           let args     = fmap _aName $ defn ^. tDef . dFunType . ftArgs
-              nameEnv  = Map.fromList $ ("result", 0) : zip args [1..]
+              nameEnv  = Map.fromList $ ("result", 0) : zip (V.toList args) [1..]
               genStart = fromIntegral $ length nameEnv
           case evalStateT (runReaderT (expToPreProp meta) nameEnv) genStart of
             Left err           -> [ScopeParseFailure (meta, err)]

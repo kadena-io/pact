@@ -24,6 +24,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
+import qualified Data.Vector as V
 import Pact.Time
 
 import System.IO
@@ -178,7 +179,7 @@ benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
-               PactDbEnv e -> ParsedCode -> IO [PactValue]
+               PactDbEnv e -> ParsedCode -> IO (V.Vector PactValue)
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
       e = (\ee -> ee { _eeAdvice = pt }) $ setupEvalEnv dbEnv entity Transactional md
@@ -291,8 +292,8 @@ main = do
   !bench10Cmds <- parseCode (intercalate " " (replicate 10 "(bench.bench)"))
   let
     !params = [PLiteral $ LString "Acct1",PLiteral $ LString "Acct2", PLiteral $ LDecimal 1.0]
-    !mcaps = [SigCapability (QualifiedName "bench" "MTRANSFER" def) params
-             ,SigCapability (QualifiedName "bench" "TRANSFER" def) params]
+    !mcaps = [SigCapability (QualifiedName "bench" "MTRANSFER" def) (V.fromList params)
+             ,SigCapability (QualifiedName "bench" "TRANSFER" def) (V.fromList params)]
 
     !signer = [Signer Nothing pk Nothing []]
     !msigner = [Signer Nothing pk Nothing mcaps]

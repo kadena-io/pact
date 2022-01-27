@@ -199,7 +199,7 @@ descModule i [TLitString t] = do
             , ("keyset"    , tStr $ pack $ show _mGovernance)
             , ("blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
             , ("code"      , tStr $ asString _mCode)
-            , ("interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
+            , ("interfaces", toTList tTyString def $ (tStr . asString) <$> V.toList _mInterfaces)
             ]
         MDInterface Interface{..} ->
           return $ toTObject TyAny def
@@ -343,8 +343,8 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
       guardTable fi table GtWithDefaultRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue' defaultRow)
-        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
+        Nothing -> (g0,) <$> (bindToRow (V.toList ps) bd b =<< enforcePactValue' defaultRow)
+        (Just row) -> gasPostRead' fi g0 row $ bindToRow (V.toList ps) bd b (rowDataToPactValue <$> _rdData row)
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
 
@@ -358,7 +358,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
-        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
+        (Just row) -> gasPostRead' fi g0 row $ bindToRow (V.toList ps) bd b (rowDataToPactValue <$> _rdData row)
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 

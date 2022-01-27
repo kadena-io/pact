@@ -108,7 +108,7 @@ hashLength Blake2b_256 = 32
 hashLength SHA3_256 = 32
 
 -- | Typed hash, to indicate algorithm
-data TypedHash (h :: HashAlgo) where
+newtype TypedHash (h :: HashAlgo) where
   TypedHash :: ByteString -> TypedHash h
   deriving (Eq, Ord, Generic)
 

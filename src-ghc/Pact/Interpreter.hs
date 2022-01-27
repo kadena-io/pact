@@ -1,8 +1,11 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- | "Production" interpreter for Pact, as opposed to the REPL.
 --
@@ -38,9 +41,9 @@ module Pact.Interpreter
   ) where
 
 import Control.Concurrent
+import Control.DeepSeq
 import Control.Monad.Catch
 import Control.Monad.Except
-import Control.Monad.State (modify)
 import Control.Lens
 
 import Data.Aeson
@@ -51,8 +54,9 @@ import Data.Maybe
 import qualified Data.Set as S
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Vector as V
+import GHC.Generics (Generic)
 import System.Directory
-
 
 import Pact.Compile
 import Pact.Eval
@@ -66,6 +70,7 @@ import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.State.Strict
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
@@ -78,7 +83,7 @@ data MsgData = MsgData {
   mdData :: !Value,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
-  mdSigners :: [Signer]
+  mdSigners :: ![Signer]
   }
 
 
@@ -112,23 +117,23 @@ defaultInterpreterState stateF = Interpreter $ \runInput ->
 data EvalResult = EvalResult
   { _erInput :: !EvalInput
     -- ^ compiled user input
-  , _erOutput :: ![PactValue]
+  , _erOutput :: !(V.Vector PactValue)
     -- ^ Output values
-  , _erLogs :: ![TxLog Value]
+  , _erLogs :: !(V.Vector (TxLog Value))
     -- ^ Transaction logs
   , _erExec :: !(Maybe PactExec)
     -- ^ Result of defpact execution if any
-  , _erGas :: Gas
+  , _erGas :: !Gas
     -- ^ Gas consumed/charged
-  , _erLoadedModules :: HashMap ModuleName (ModuleData Ref,Bool)
+  , _erLoadedModules :: !(HashMap ModuleName (ModuleData Ref,Bool))
     -- ^ Modules loaded, with flag indicating "newly loaded"
   , _erTxId :: !(Maybe TxId)
     -- ^ Transaction id, if executed transactionally
-  , _erLogGas :: Maybe [(Text, Gas)]
+  , _erLogGas :: !(Maybe (V.Vector (Text, Gas)))
     -- ^ Details on each gas consumed/charged
-  , _erEvents :: [PactEvent]
+  , _erEvents :: !(V.Vector PactEvent)
     -- ^ emitted events
-  } deriving (Eq,Show)
+  } deriving (Eq,Show, Generic, NFData)
 
 -- | Execute pact statements.
 evalExec :: Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
@@ -142,7 +147,7 @@ initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modul
 
 -- | Resume a defpact execution, with optional PactExec.
 evalContinuation :: Interpreter e -> EvalEnv e -> ContMsg -> IO EvalResult
-evalContinuation runner ee cm = case (_cmProof cm) of
+evalContinuation runner ee cm = case _cmProof cm of
   Nothing ->
     interpret runner (setStep Nothing) (Left Nothing)
   Just p -> do
@@ -216,39 +221,59 @@ initSchema PactDbEnv {..} = createSchema pdPactDbVar
 
 interpret :: Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
 interpret runner evalEnv terms = do
-  ((rs,logs,txid),state) <-
+  ((!rs, !logs, !txid), !state) <-
     runEval def evalEnv $ evalTerms runner terms
-  let gas = _evalGas state
-      gasLogs = _evalLogGas state
-      pactExec = _evalPactExec state
-      modules = _rsLoadedModules $ _evalRefs state
+  let !gas = _evalGas state
+      !gasLogs = _evalLogGas state
+      !pactExec = _evalPactExec state
+      !modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion
-  return $! EvalResult
+  return $ EvalResult
     terms
-    (map (elideModRefInfo . toPactValueLenient) rs)
-    logs pactExec gas modules txid gasLogs (_evalEvents state)
+    (V.fromList $ map (elideModRefInfo . toPactValueLenient) rs)
+    (V.fromList logs) pactExec gas modules txid (V.fromList <$> gasLogs) (V.fromList (_evalEvents state))
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
 evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)
 
   where
 
-    withRollback act = handle (\(e :: SomeException) -> safeRollback >> throwM e) act
+    -- FIXME: Are we sure that the handle is effective? It seems that the validation of
+    -- act contains lots of thunks.
+    --
+    withRollback act = handle (\(e :: SomeException) -> safeRollback >> throwM e) $ do
+        !a <- act
+        return a
 
+    -- This swallows asynchronous exceptions, like @ThreadKilled@, which can iterfer
+    -- with program termination logic and is generally problematic for library code.
+    --
+    -- If this function return a `Left` value, will the respective exception be
+    -- raised elsewhere?
+    --
+    -- TODO: it seems like the pact state with th result of @try@ is discarded
+    -- when withRollback rethrows the original exception. Is that correct
+    -- behavior? What would happen if @evalRollbackTx@ throws and that isn't
+    -- detected?
+    --
+    -- TODO: Is it guranteed that @evalRollbackTx def@ is strictly evaluated?
+    -- Is it guaranteed that @try@ in the is strictly evaluated in the 'Eval'
+    -- monad?
+    --
     safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
 
     start act = do
-      txid <- evalBeginTx def
-      (,txid) <$> act
+      !txid <- evalBeginTx def
+      (,txid) <$!> act
 
-    end (rs,txid) = do
-      logs <- evalCommitTx def
+    end (!rs, !txid) = do
+      !logs <- evalCommitTx def
       return (rs,logs,txid)
 
     runInput = case input of
-      Right ts -> mapM eval ts
-      Left pe -> (:[]) <$> resumePact def pe
+      Right !ts -> mapM eval ts
+      Left !pe -> (:[]) <$!> resumePact def pe
 
 
 {-# INLINE evalTerms #-}

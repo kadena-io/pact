@@ -1,9 +1,10 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module PactContinuationSpec (spec) where
 
@@ -1003,8 +1004,8 @@ newtype ExpectResult = ExpectResult (CommandResult Hash -> Expectation)
     deriving (Semigroup)
 
 data CommandResultCheck = CommandResultCheck
-  { _crcReqKey :: RequestKey
-  , _crcExpect :: ExpectResult
+  { _crcReqKey :: !RequestKey
+  , _crcExpect :: !ExpectResult
   }
 
 
@@ -1068,7 +1069,7 @@ resultShouldBe expect = ExpectResult $ \cr ->
     (Left (Just expErr),
      Left err)             -> unless (expErr `isInfixOf` err) (toExpectationFailure expErr err)
     (Right (Just expVal),
-     Right val)            -> unless (expVal == val) (toExpectationFailure expVal val)
+     Right val) -> unless (expVal == (V.toList <$> val)) (toExpectationFailure expVal val)
     (Left Nothing,
      Left _)               -> return ()
     (Right Nothing,

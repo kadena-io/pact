@@ -37,6 +37,7 @@ import           Pact.Native               (dropDef, enforceDef, enforceOneDef,
 import           Pact.Native.Keysets
 import           Pact.Native.Ops
 import           Pact.Native.Time
+import           Pact.State.Strict
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Exp            (Literal (..))
 import           Pact.Types.Native         (NativeDef)
@@ -208,7 +209,7 @@ toPactTm = \case
       -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
     mkApp (_, defTm) args = do
       args' <- traverse toPactTm args
-      pure $ TApp (App (liftTerm defTm) args' dummyInfo) dummyInfo
+      pure $ TApp (App (liftTerm defTm) (V.fromList args') dummyInfo) dummyInfo
 
     -- Like mkApp but for functions that take two arguments, the second of
     -- which is a list. This pattern is used in `enforce-one` and `format`
@@ -221,7 +222,7 @@ toPactTm = \case
       arg'     <- toPactTm arg
       argList' <- traverse toPactTm argList
       pure $ (`TApp` dummyInfo) $ App (liftTerm defTm)
-        [arg', Pact.TList (V.fromList argList') (Pact.TyList Pact.TyAny) dummyInfo]
+        (V.fromList [arg', Pact.TList (V.fromList argList') (Pact.TyList Pact.TyAny) dummyInfo])
         dummyInfo
 
     arithOpToDef :: ArithOp -> NativeDef
@@ -288,9 +289,9 @@ toAnalyze
 toAnalyze ty tm = do
   let cnst = TConst
         (Pact.Arg "tm" ty dummyInfo)
-        (Just "module")
+        (Just' "module")
         (Pact.CVRaw tm)
-        (Meta Nothing [])
+        (Meta Nothing' mempty)
         dummyInfo
       ref = Pact.Ref cnst
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref
@@ -311,7 +312,7 @@ reverseTranslateType = \case
   SInteger  -> Pact.TyPrim Pact.TyInteger
   SStr      -> Pact.TyPrim Pact.TyString
   STime     -> Pact.TyPrim Pact.TyTime
-  SGuard    -> Pact.TyPrim $ Pact.TyGuard Nothing
+  SGuard    -> Pact.TyPrim $ Pact.TyGuard Nothing'
   SAny      -> Pact.TyAny
   SList a   -> Pact.TyList $ reverseTranslateType a
   -- SObject needs to hold a type name or something

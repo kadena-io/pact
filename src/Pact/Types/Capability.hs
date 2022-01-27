@@ -37,6 +37,7 @@ import Data.Aeson
 import Data.Default
 import Data.Set (Set)
 import Data.Text (Text)
+import qualified Data.Vector as V
 
 import GHC.Generics
 
@@ -48,8 +49,8 @@ import Pact.Types.Pretty
 
 
 data Capability
-  = CapModuleAdmin ModuleName
-  | CapUser UserCapability
+  = CapModuleAdmin !ModuleName
+  | CapUser !UserCapability
   deriving (Eq,Show,Ord,Generic)
 instance NFData Capability
 
@@ -62,15 +63,15 @@ instance Pretty Capability where
 type UserCapability = SigCapability
 data SigCapability = SigCapability
   { _scName :: !QualifiedName
-  , _scArgs :: ![PactValue]
+  , _scArgs :: !(V.Vector PactValue)
   } deriving (Eq,Show,Generic,Ord)
 instance NFData SigCapability
 
 instance Pretty SigCapability where
-  pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
+  pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty (V.toList _scArgs))
 
 instance ToJSON SigCapability where
-  toJSON (SigCapability n args) = object $
+  toJSON (SigCapability n args) = object
     [ "name" .=  n
     , "args" .= args
     ]
@@ -85,7 +86,7 @@ instance FromJSON SigCapability where
 data CapEvalResult
   = NewlyAcquired
   | AlreadyAcquired
-  | NewlyInstalled (ManagedCapability UserCapability)
+  | NewlyInstalled !(ManagedCapability UserCapability)
   deriving (Eq,Show)
 
 data CapScope
@@ -102,22 +103,26 @@ instance Pretty CapScope where pretty = viaShow
 
 -- | Runtime storage of acquired or managed capability.
 data CapSlot c = CapSlot
-  { _csScope :: CapScope
-  , _csCap :: c
-  , _csComposed :: [c]
+  { _csScope :: !CapScope
+  , _csCap :: !c
+  , _csComposed :: !(V.Vector c)
+    -- ^ during evaluation this grows via monoidal concat. The use of @Vector@ or
+    -- @[]@ could possibly result in quadratic overhead and we could explore using
+    -- a dlist instead. We prefer @Vector@ over @[]@ because it enforces strict
+    -- evaluation.
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
 instance NFData c => NFData (CapSlot c)
 
 -- | Model a managed capability where a user-provided function
 -- maintains a selected parameter value.
 data UserManagedCap = UserManagedCap
-  { _umcManagedValue :: PactValue
+  { _umcManagedValue :: !PactValue
     -- ^ mutating value
-  , _umcManageParamIndex :: Int
+  , _umcManageParamIndex :: !Int
     -- ^ index of managed param value in defcap
-  , _umcManageParamName :: Text
+  , _umcManageParamName :: !Text
     -- ^ name of managed param value in defcap
-  , _umcMgrFun :: Def Ref
+  , _umcMgrFun :: !(Def Ref)
     -- ^ manager function
   } deriving (Show,Generic)
 instance NFData UserManagedCap
@@ -132,26 +137,26 @@ instance Pretty AutoManagedCap where
   pretty = viaShow
 
 data ManagedCapability c = ManagedCapability
-  { _mcInstalled :: CapSlot c
+  { _mcInstalled :: !(CapSlot c)
     -- ^ original installed capability
-  , _mcStatic :: UserCapability
+  , _mcStatic :: !UserCapability
     -- ^ Cap without any mutating components (for auto, same as cap in installed)
-  , _mcManaged :: Either AutoManagedCap UserManagedCap
+  , _mcManaged :: !(Either AutoManagedCap UserManagedCap)
     -- ^ either auto-managed or user-managed
   } deriving (Show,Generic,Foldable)
 
 -- | Given arg index, split capability args into (before,at,after)
-decomposeManaged :: Int -> UserCapability -> Maybe ([PactValue],PactValue,[PactValue])
+decomposeManaged :: Int -> UserCapability -> Maybe (V.Vector PactValue,PactValue, V.Vector PactValue)
 decomposeManaged idx SigCapability{..}
   | idx < 0 || idx >= length _scArgs = Nothing
-  | otherwise = Just (take idx _scArgs,_scArgs !! idx,drop (succ idx) _scArgs)
+  | otherwise = Just (V.take idx _scArgs, _scArgs V.! idx, V.drop (succ idx) _scArgs)
 {-# INLINABLE decomposeManaged #-}
 
 -- | Given arg index, get "static" capability and value
 decomposeManaged' :: Int -> UserCapability -> Maybe (SigCapability,PactValue)
 decomposeManaged' idx cap@SigCapability{..} = case decomposeManaged idx cap of
   Nothing -> Nothing
-  Just (h,v,t) -> Just (SigCapability _scName (h ++ t),v)
+  Just (h,v,t) -> Just (SigCapability _scName (h <> t),v)
 {-# INLINABLE decomposeManaged' #-}
 
 -- | Match static value to managed.
@@ -174,18 +179,18 @@ instance NFData a => NFData (ManagedCapability a)
 
 -- | Runtime datastructure.
 data Capabilities = Capabilities
-  { _capStack :: [CapSlot UserCapability]
+  { _capStack :: ![CapSlot UserCapability]
     -- ^ Stack of "acquired" capabilities.
-  , _capManaged :: Set (ManagedCapability UserCapability)
+  , _capManaged :: !(Set (ManagedCapability UserCapability))
     -- ^ Set of installed managed capabilities. Maybe indicates whether it has been
     -- initialized from signature set.
-  , _capModuleAdmin :: (Set ModuleName)
+  , _capModuleAdmin :: !(Set ModuleName)
     -- ^ Set of module admin capabilities.
-  , _capAutonomous :: (Set UserCapability)
+  , _capAutonomous :: !(Set UserCapability)
   }
   deriving (Eq,Show,Generic)
 
-instance Default Capabilities where def = Capabilities [] mempty mempty mempty
+instance Default Capabilities where def = Capabilities mempty mempty mempty mempty
 instance NFData Capabilities
 
 makeLenses ''ManagedCapability

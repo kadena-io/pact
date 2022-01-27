@@ -11,6 +11,7 @@ import Control.Monad.Trans.Except
 import Data.Bifunctor (first)
 import Data.Default (def)
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Vector as V
 
 import Pact.Repl
 import Pact.Repl.Types
@@ -37,15 +38,15 @@ compareModelSpec = describe "Module models" $ do
     Right (md, ifd) -> do
       let mModels = case _mdModule md of
             MDModule m -> _mModel $ _mMeta m
-            _ -> def
+            _ -> V.fromList def
           iModels = case _mdModule ifd of
             MDInterface i -> _mModel $ _interfaceMeta i
-            _ -> def
+            _ -> V.fromList def
           mfunModels = aggregateFunctionModels md
           ifunModels = aggregateFunctionModels ifd
 
       -- test toplevel models
-      hasAllExps mModels iModels
+      hasAllExps (V.toList mModels) (V.toList iModels)
       -- test function modules
       hasAllExps mfunModels ifunModels
 
@@ -56,10 +57,10 @@ hasAllExps mexps iexps = forM_ iexps $ \e ->
 
 aggregateFunctionModels :: ModuleData Ref -> [Exp Info]
 aggregateFunctionModels ModuleData{..} =
-  foldMap (extractExp . snd) $ HM.toList _mdRefMap
+    foldMap (V.toList . extractExp . snd) $ HM.toList _mdRefMap
   where
     extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _ _) _)) = m
-    extractExp _ = []
+    extractExp _ = mempty
 
 -- Because models will necessarily have conflicting Info values
 -- we need to define a new form of equality which forgets

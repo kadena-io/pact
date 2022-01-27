@@ -47,7 +47,7 @@ instance (Serialize i) => Serialize (DecimalRaw i) where
 
 instance Serialize A.Value where
     put v = put (A.encode v)
-    get = get >>= \g -> either fail return $ A.eitherDecode g
+    get = get >>= \g -> either fail return $ A.eitherDecodeStrict' g
     {-# INLINE put #-}
     {-# INLINE get #-}
 

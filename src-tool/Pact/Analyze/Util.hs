@@ -14,6 +14,7 @@ import qualified Data.SBV             as SBV
 import qualified Data.Default         as Default
 import qualified Data.Foldable        as Foldable
 import           GHC.Stack            (HasCallStack)
+import           Pact.State.Strict
 import           Pact.Types.Lang      (Info (_iInfo), Parsed)
 import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
 
@@ -40,8 +41,8 @@ nodeToInfo =  _tiInfo . _aId
 
 infoToParsed :: Info -> Parsed
 infoToParsed parsed = case _iInfo parsed of
-  Nothing               -> dummyParsed
-  Just (_code, parsed') -> parsed'
+  Nothing'               -> dummyParsed
+  Just' (T2 _code parsed') -> parsed'
 
 -- | A 'Parsed' for when there is no location info available.
 dummyParsed :: Parsed

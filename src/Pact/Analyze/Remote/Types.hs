@@ -13,7 +13,7 @@ import Pact.Types.Term (ModuleDef, ModuleName, Name)
 import Pact.Types.PactError
 
 data Request
-  = Request [ModuleDef Name] ModuleName -- ^ verify one of the modules, by name
+  = Request ![ModuleDef Name] !ModuleName -- ^ verify one of the modules, by name
   deriving (Eq, Show, Generic)
 
 instance A.FromJSON Request where

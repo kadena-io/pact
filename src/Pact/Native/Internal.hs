@@ -53,6 +53,7 @@ import Unsafe.Coerce
 
 import Pact.Eval
 import Pact.Gas
+import Pact.State.Strict
 import Pact.Types.Capability
 import Pact.Types.Native
 import Pact.Types.PactValue
@@ -113,7 +114,7 @@ setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
 -- | Specify a 'NativeFun'
 defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defNative n fun ftype examples docs =
-  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype examples docs False def)
+  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype (V.fromList examples) docs False def)
 
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
@@ -129,15 +130,15 @@ defRNative name fun = defNative name (reduced fun)
 defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
 defSchema n doc fields =
   (n,
-   TSchema (TypeName $ asString n) Nothing (Meta (Just doc) [])
-   (map (\(fr,ty) -> Arg (asString fr) ty def) fields)
+   TSchema (TypeName $ asString n) Nothing' (Meta (Just' doc) mempty)
+   (V.fromList $ map (\(fr,ty) -> Arg (asString fr) ty def) fields)
    def)
 
 defConst :: NativeDefName -> Text -> Type (Term Name) -> Term Name -> NativeDef
-defConst name doc ty term = (name, TConst arg Nothing cval meta def )
+defConst name doc ty term = (name, TConst arg Nothing' cval meta def )
   where
     arg = Arg (asString name) ty def
-    meta = Meta (Just doc) []
+    meta = Meta (Just' doc) mempty
     cval = CVEval term term
 
 foldDefs :: Monad m => [m a] -> m [a]
@@ -148,7 +149,7 @@ funType t as = funTypes $ funType' t as
 
 
 funType' :: Type n -> [(Text,Type n)] -> FunType n
-funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
+funType' t as = FunType (V.fromList $ map (\(s,ty) -> Arg s ty def) as) t
 
 
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger
@@ -156,10 +157,10 @@ tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
 tTyTime :: Type n; tTyTime = TyPrim TyTime
 tTyBool :: Type n; tTyBool = TyPrim TyBool
 tTyString :: Type n; tTyString = TyPrim TyString
-tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard $ Just GTyKeySet)
+tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard $ Just' GTyKeySet)
 tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o def
 tTyObjectAny :: Type n; tTyObjectAny = tTyObject TyAny
-tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
+tTyGuard :: Maybe' GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
 
 getPactId :: FunApp -> Eval e PactId
 getPactId i = use evalPactExec >>= \pe -> case pe of
@@ -169,7 +170,7 @@ getPactId i = use evalPactExec >>= \pe -> case pe of
 enforceGuardDef :: NativeDefName -> NativeDef
 enforceGuardDef dn =
   defRNative dn enforceGuard'
-  (funType tTyBool [("guard",tTyGuard Nothing)] <>
+  (funType tTyBool [("guard",tTyGuard Nothing')] <>
    funType tTyBool [("keysetname",tTyString)])
   [ LitExample $ "(" <> asString dn <> " 'admin-keyset)"
   , LitExample $ "(" <> asString dn <> " row-guard)"
@@ -200,7 +201,7 @@ enforceGuard i g = case g of
           void $ acquireModuleAdmin (_faInfo i) _mName _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
-    void $ runSysOnly $ evalByName _ugFun _ugArgs (_faInfo i)
+    void $ runSysOnly $ evalByName _ugFun (toList _ugArgs) (_faInfo i)
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
@@ -283,8 +284,8 @@ appToCap
   :: App (Term Ref)
   -> Eval e (UserCapability, Def Ref, ([Term Name], FunType (Term Name)))
 appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
-  prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-  cap <- SigCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
+  prep@(args,_) <- prepareUserAppArgs d (toList _appArgs) _appInfo
+  cap <- SigCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) . V.fromList <$> argsToParams _appInfo args
   return (cap,d,prep)
 
 -- | Function intended for use as a View pattern
@@ -292,5 +293,5 @@ appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
 -- use within natives.
 tLamToApp :: Term n -> Term n
 tLamToApp = \case
-  l@TLam{} -> TApp (App l [] def) def
+  l@TLam{} -> TApp (App l mempty def) def
   x -> x

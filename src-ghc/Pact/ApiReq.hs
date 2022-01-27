@@ -67,32 +67,32 @@ import Pact.Types.SPV
 
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {
-  _akpSecret :: PrivateKeyBS,
-  _akpPublic :: Maybe PublicKeyBS,
-  _akpAddress :: Maybe Text,
-  _akpScheme :: Maybe PPKScheme,
-  _akpCaps :: Maybe [SigCapability]
+  _akpSecret :: !PrivateKeyBS,
+  _akpPublic :: !(Maybe PublicKeyBS),
+  _akpAddress :: !(Maybe Text),
+  _akpScheme :: !(Maybe PPKScheme),
+  _akpCaps :: !(Maybe [SigCapability])
   } deriving (Eq, Show, Generic)
 instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
 
 -- | For unsigned commands
 data ApiSigner = ApiSigner {
-  _asPublic :: Text,
-  _asAddress :: Maybe Text,
-  _asScheme :: Maybe PPKScheme,
-  _asCaps :: Maybe [SigCapability]
+  _asPublic :: !Text,
+  _asAddress :: !(Maybe Text),
+  _asScheme :: !(Maybe PPKScheme),
+  _asCaps :: !(Maybe [SigCapability])
   } deriving (Eq, Show, Generic)
 instance ToJSON ApiSigner where toJSON = lensyToJSON 3
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
 
 data ApiPublicMeta = ApiPublicMeta
-  { _apmChainId :: Maybe ChainId
-  , _apmSender :: Maybe Text
-  , _apmGasLimit :: Maybe GasLimit
-  , _apmGasPrice :: Maybe GasPrice
-  , _apmTTL :: Maybe TTLSeconds
-  , _apmCreationTime :: Maybe TxCreationTime
+  { _apmChainId :: !(Maybe ChainId)
+  , _apmSender :: !(Maybe Text)
+  , _apmGasLimit :: !(Maybe GasLimit)
+  , _apmGasPrice :: !(Maybe GasPrice)
+  , _apmTTL :: !(Maybe TTLSeconds)
+  , _apmCreationTime :: !(Maybe TxCreationTime)
   } deriving (Eq, Show, Generic)
 
 instance ToJSON ApiPublicMeta where
@@ -121,36 +121,36 @@ instance FromJSON ApiPublicMeta where
 
 
 data ApiReq = ApiReq {
-  _ylType :: Maybe Text,
-  _ylPactTxHash :: Maybe Hash,
-  _ylStep :: Maybe Int,
-  _ylRollback :: Maybe Bool,
-  _ylData :: Maybe Value,
-  _ylProof :: Maybe ContProof,
-  _ylDataFile :: Maybe FilePath,
-  _ylCode :: Maybe Text,
-  _ylCodeFile :: Maybe FilePath,
-  _ylKeyPairs :: Maybe [ApiKeyPair],
-  _ylSigners :: Maybe [ApiSigner],
-  _ylNonce :: Maybe Text,
-  _ylPublicMeta :: Maybe ApiPublicMeta,
-  _ylNetworkId :: Maybe NetworkId
+  _ylType :: !(Maybe Text),
+  _ylPactTxHash :: !(Maybe Hash),
+  _ylStep :: !(Maybe Int),
+  _ylRollback :: !(Maybe Bool),
+  _ylData :: !(Maybe Value),
+  _ylProof :: !(Maybe ContProof),
+  _ylDataFile :: !(Maybe FilePath),
+  _ylCode :: !(Maybe Text),
+  _ylCodeFile :: !(Maybe FilePath),
+  _ylKeyPairs :: !(Maybe [ApiKeyPair]),
+  _ylSigners :: !(Maybe [ApiSigner]),
+  _ylNonce :: !(Maybe Text),
+  _ylPublicMeta :: !(Maybe ApiPublicMeta),
+  _ylNetworkId :: !(Maybe NetworkId)
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 
 data SignReq = SignReq
-  { _srHash :: Hash
-  , _srKeyPairs :: [ApiKeyPair]
+  { _srHash :: !Hash
+  , _srKeyPairs :: ![ApiKeyPair]
   } deriving (Eq,Show,Generic)
 instance ToJSON SignReq where toJSON = lensyToJSON 3
 instance FromJSON SignReq where parseJSON = lensyParseJSON 3
 
 
 data AddSigsReq = AddSigsReq
-  { _asrUnsigned :: Command Text
-  , _asrSigs :: [UserSig]
+  { _asrUnsigned :: !(Command Text)
+  , _asrSigs :: ![UserSig]
   } deriving (Eq,Show,Generic)
 instance ToJSON AddSigsReq where toJSON = lensyToJSON 4
 instance FromJSON AddSigsReq where parseJSON = lensyParseJSON 4
@@ -170,7 +170,7 @@ combineSigDatas sds outputLocal = do
       cmds = S.fromList $ catMaybes $ map _sigDataCmd sds
   when (S.size hashes /= 1 || S.size cmds /= 1) $ do
     error "SigData files must contain exactly one unique hash and command.  Aborting..."
-  let sigs = foldl1 f $ map _sigDataSigs sds
+  let sigs = foldl1' f $ map _sigDataSigs sds
   returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
   where
     f accum sigs

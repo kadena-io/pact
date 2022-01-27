@@ -25,6 +25,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
+import           Pact.State.Strict          (T2(..), maybe')
 import qualified Pact.Types.Info            as Pact
 import qualified Pact.Types.Lang            as Pact
 import qualified Pact.Types.Persistence     as Pact
@@ -130,7 +131,7 @@ showAssert recov (Located (Pact.Info mInfo) lsb) = case SBV.unliteral lsb of
     Just False -> showFailure recov <> " to satisfy assertion" <> context
 
   where
-    context = maybe "" (\(Pact.Code code, _) -> ": " <> code) mInfo
+    context = maybe' "" (\(T2 (Pact.Code code) _) -> ": " <> code) mInfo
 
 showGE :: Recoverability -> Maybe Provenance -> Located GuardEnforcement -> Text
 showGE recov mProv (_located -> GuardEnforcement sg sbool) =

@@ -42,7 +42,7 @@ spec = do
   describe "multiple modules, sent out of order" testUnsortedModules
 
 data TestFailure
-  = ReplError String
+  = ReplError !String
   deriving Show
 
 loadCode :: Text -> IO (Either TestFailure ReplState)

@@ -27,6 +27,7 @@ import           Data.Function
 import           Data.List
 import           Data.Text                    (unpack, pack, replace)
 import qualified Data.Text                    as T
+import qualified Data.Vector                  as V
 import           System.IO
 
 import qualified Pact.Analyze.Feature as Analyze
@@ -34,6 +35,7 @@ import           Pact.Native
 import           Pact.Repl
 import           Pact.Repl.Lib
 import           Pact.Repl.Types
+import           Pact.State.Strict
 import           Pact.Types.Lang
 import           Pact.Types.Pretty
 
@@ -62,7 +64,7 @@ renderTerm h TNative{..} = do
   termHeader h _tNativeName
   forM_ _tFunTypes $ \FunType {..} -> do
     hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++
-      "*&nbsp;`" ++ renderCompactString t ++ "`") (map (prettyTypeTerm <$>) _ftArgs)) ++
+      "*&nbsp;`" ++ renderCompactString t ++ "`") (map (prettyTypeTerm <$>) (V.toList _ftArgs))) ++
       " *&rarr;*&nbsp;`" ++ renderCompactString (prettyTypeTerm <$> _ftReturn) ++ "`"
     hPutStrLn h ""
   hPutStrLn h ""
@@ -70,7 +72,7 @@ renderTerm h TNative{..} = do
 
   -- render docs and examples
   hPutStrLn h $ unpack _tNativeDocs
-  if null _tNativeExamples then noexs else renderExamples h _tNativeName _tNativeExamples
+  if null _tNativeExamples then noexs else renderExamples h _tNativeName (V.toList _tNativeExamples)
 
   when _tNativeTopLevelOnly $ do
     hPutStrLn h ""
@@ -80,20 +82,20 @@ renderTerm h TNative{..} = do
 renderTerm h TSchema{..} = do
   termHeader h _tSchemaName
   case _mDocs _tMeta of
-    Nothing -> hPutStrLn stderr $ "No docs for schema " ++ renderCompactString _tSchemaName
-    Just d -> do
+    Nothing' -> hPutStrLn stderr $ "No docs for schema " ++ renderCompactString _tSchemaName
+    Just' d -> do
       hPutStrLn h $ unpack d
       hPutStrLn h ""
   hPutStrLn h "Fields:"
-  forM_ (map (prettyTypeTerm <$>) _tFields) $ \(Arg n t _) ->
+  forM_ (map (prettyTypeTerm <$>) (V.toList _tFields)) $ \(Arg n t _) ->
     hPutStrLn h $ "&nbsp;&nbsp;`" ++ unpack n ++ ":" ++ renderCompactString t ++ "`"
   hPutStrLn h ""
 
 renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
   termHeader h n
   case _mDocs meta of
-    Nothing -> hPutStrLn stderr $ "No docs for constant " <> renderCompactString n
-    Just docs -> do
+    Nothing' -> hPutStrLn stderr $ "No docs for constant " <> renderCompactString n
+    Just' docs -> do
       hPutStrLn h $ unpack docs
       hPutStrLn h ""
 

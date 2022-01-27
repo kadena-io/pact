@@ -49,15 +49,15 @@ import Control.Monad.Catch
 newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
 
 data SQLiteConfig = SQLiteConfig
-  { _dbFile :: FilePath
-  , _pragmas :: [Pragma]
+  { _dbFile :: !FilePath
+  , _pragmas :: ![Pragma]
   } deriving (Eq,Show,Generic)
 instance FromJSON SQLiteConfig
 instance ToJSON SQLiteConfig
 makeLenses ''SQLiteConfig
 
 -- | Statement input types
-data SType = SInt Int64 | SDouble Double | SText Utf8 | SBlob BS.ByteString deriving (Eq,Show)
+data SType = SInt !Int64 | SDouble !Double | SText !Utf8 | SBlob !BS.ByteString deriving (Eq,Show)
 -- | Result types
 data RType = RInt | RDouble | RText | RBlob deriving (Eq,Show)
 

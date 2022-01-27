@@ -70,7 +70,7 @@ makeLenses ''GasSetup
 
 
 data GasTest = GasTest
-  { _gasTestFunctionName :: NativeDefName
+  { _gasTestFunctionName :: !NativeDefName
   , _gasTestExpression :: !PactExpression
   , _gasTestSetups :: !(GasSetup SQLiteDb, GasSetup ())
   }

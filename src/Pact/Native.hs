@@ -57,7 +57,7 @@ module Pact.Native
     ) where
 
 import Control.Arrow hiding (app)
-import Control.Lens hiding (parts,Fold,contains)
+import Control.Lens hiding (parts,Fold,contains, (.=))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.IO.Class
@@ -92,6 +92,7 @@ import Pact.Native.Ops
 import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
+import Pact.State.Strict
 import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
@@ -339,7 +340,7 @@ readStringDef = defRNative "read-string" readString
 toGuardPactValue :: Guard (Term Name) -> Either Text (Guard PactValue)
 toGuardPactValue g = case g of
   (GUser (UserGuard n ts)) -> do
-    pvs <- map elideModRefInfo <$> traverse toPactValue ts
+    pvs <- V.map elideModRefInfo <$> traverse toPactValue ts
     return (GUser (UserGuard n pvs))
   (GKeySet k) -> Right (GKeySet k)
   (GKeySetRef k) -> Right (GKeySetRef k)
@@ -348,7 +349,7 @@ toGuardPactValue g = case g of
 
 fromGuardPactValue :: Guard PactValue -> Guard (Term Name)
 fromGuardPactValue g = case g of
-  (GUser (UserGuard n ts)) -> GUser (UserGuard n (map fromPactValue ts))
+  (GUser (UserGuard n ts)) -> GUser (UserGuard n (V.map fromPactValue ts))
   (GKeySet k) -> GKeySet k
   (GKeySetRef k) -> GKeySetRef k
   (GModule m) -> GModule m
@@ -371,7 +372,7 @@ fromNamespacePactValue (Namespace n userg adming) =
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
-  (funType tTyString [("namespace", tTyString), ("user-guard", tTyGuard Nothing), ("admin-guard", tTyGuard Nothing)])
+  (funType tTyString [("namespace", tTyString), ("user-guard", tTyGuard Nothing'), ("admin-guard", tTyGuard Nothing')])
   [LitExample "(define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))"]
   "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
   \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
@@ -424,7 +425,7 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
         (Just (Ref d@TDef {})) -> return d
         Just t -> evalError i $ "invalid ns policy fun: " <> pretty t
         Nothing -> evalError i $ "ns policy fun not found: " <> pretty fun
-      asBool =<< apply (App def' [] i) mkArgs
+      asBool =<< apply (App def' mempty i) mkArgs
       where
         asBool (TLiteral (LBool allow) _) = return allow
         asBool t = evalError' fi $
@@ -958,7 +959,7 @@ pactId i as = argsError i as
 
 bind :: NativeFun e
 bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
-  reduce src >>= bindObjectLookup >>= bindReduce ps bd bi
+  reduce src >>= bindObjectLookup >>= bindReduce (toList ps) bd bi
 bind i as = argsError' i as
 
 bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
@@ -1011,7 +1012,7 @@ resume i as = case as of
         computeGas' g0 i (GPostRead (ReadYield y)) $ do
           o <- fmap fromPactValue . _yData <$> enforceYield i y
           l <- bindObjectLookup (toTObjectMap TyAny def o)
-          bindReduce ps bd bi l
+          bindReduce (toList ps) bd bi l
   _ -> argsError' i as
 
 where' :: NativeFun e
@@ -1093,7 +1094,7 @@ contains _i [TLitString s,TLitString t] = return $ toTerm $ T.isInfixOf s t
 contains i as = argsError i as
 
 searchTermList :: (Foldable t, Eq n) => Term n -> t (Term n) -> Bool
-searchTermList val = foldl search False
+searchTermList val = foldl' search False
   where search True _ = True
         search _ t = t `termEq` val
 

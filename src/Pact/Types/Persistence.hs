@@ -49,6 +49,7 @@ import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
+import Pact.State.Strict hiding ((.=))
 import Pact.Types.Continuation
 import Pact.Types.Exp
 import Pact.Types.PactValue
@@ -60,8 +61,8 @@ import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
 
 
 data PersistDirect =
-    PDValue PactValue
-  | PDNative NativeDefName
+    PDValue !PactValue
+  | PDNative !NativeDefName
   deriving (Eq,Show,Generic)
 
 instance NFData PersistDirect
@@ -81,8 +82,8 @@ instance Pretty PersistDirect where
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
 toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
-toPersistDirect (TSchema n Nothing _ _ _) = pure $ PDNative (NativeDefName (asString n))
-toPersistDirect (TConst carg Nothing _ _ _) = pure $ PDNative (NativeDefName $ _aName carg)
+toPersistDirect (TSchema n Nothing' _ _ _) = pure $ PDNative (NativeDefName (asString n))
+toPersistDirect (TConst carg Nothing' _ _ _) = pure $ PDNative (NativeDefName $ _aName carg)
 toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e
@@ -95,8 +96,8 @@ fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
 
 -- | Module ref store
 data ModuleData r = ModuleData
-  { _mdModule :: ModuleDef (Def r)
-  , _mdRefMap :: HM.HashMap Text r
+  { _mdModule :: !(ModuleDef (Def r))
+  , _mdRefMap :: !(HM.HashMap Text r)
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
 

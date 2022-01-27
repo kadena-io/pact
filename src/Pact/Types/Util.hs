@@ -1,11 +1,12 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -79,8 +80,8 @@ fromText = parse parseText
 {-# INLINE fromText #-}
 
 resultToEither :: Result a -> Either String a
-resultToEither (Success s) = Right s
-resultToEither (Error s) = Left s
+resultToEither (Success !s) = Right s
+resultToEither (Error !s) = Left s
 
 fromText' :: ParseText a => Text -> Either String a
 fromText' = resultToEither . fromText
