@@ -88,6 +88,7 @@ import Data.Set (Set, isSubsetOf)
 import qualified Data.Set as Set
 import Data.String
 import Data.Text (Text,unpack)
+import qualified Data.Vector as V
 import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving
@@ -103,9 +104,9 @@ newtype TypeName = TypeName Text
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
-  _aName :: Text,
-  _aType :: Type o,
-  _aInfo :: Info
+  _aName :: !Text,
+  _aType :: !(Type o),
+  _aInfo :: !Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (Arg o)
@@ -117,13 +118,13 @@ instance HasInfo (Arg o) where getInfo = _aInfo
 
 -- | Function type
 data FunType o = FunType {
-  _ftArgs :: [Arg o],
-  _ftReturn :: Type o
+  _ftArgs :: !(V.Vector (Arg o)),
+  _ftReturn :: !(Type o)
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (FunType o)
 instance (Pretty o) => Pretty (FunType o) where
-  pretty (FunType as t) = hsep (map pretty as) <+> "->" <+> pretty t
+  pretty (FunType as t) = hsep (map pretty (toList as)) <+> "->" <+> pretty t
 
 instance ToJSON o => ToJSON (FunType o) where toJSON = lensyToJSON 3
 instance FromJSON o => FromJSON (FunType o) where parseJSON = lensyParseJSON 3
@@ -172,7 +173,7 @@ data PrimType =
   TyTime |
   TyBool |
   TyString |
-  TyGuard (Maybe GuardType)
+  TyGuard !(Maybe GuardType)
   deriving (Eq,Ord,Generic,Show)
 
 instance NFData PrimType
@@ -251,8 +252,8 @@ instance Show TypeVarName where show (TypeVarName t) = show t
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
-  TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
-  SchemaVar { _tvName :: TypeVarName }
+  TypeVar { _tvName :: !TypeVarName, _tvConstraint :: ![Type v] } |
+  SchemaVar { _tvName :: !TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic,Show)
 
 instance ToJSON v => ToJSON (TypeVar v) where toJSON = lensyToJSON 3
@@ -307,17 +308,17 @@ showPartial AnySubschema = "~"
 -- | Pact types.
 data Type v =
   TyAny |
-  TyVar { _tyVar :: TypeVar v } |
-  TyPrim PrimType |
-  TyList { _tyListType :: Type v } |
+  TyVar { _tyVar :: !(TypeVar v) } |
+  TyPrim !PrimType |
+  TyList { _tyListType :: !(Type v) } |
   TySchema
-  { _tySchema :: SchemaType
-  , _tySchemaType :: Type v
-  , _tySchemaPartial :: SchemaPartial } |
-  TyFun { _tyFunType :: FunType v } |
-  TyUser { _tyUser :: v } |
+  { _tySchema :: !SchemaType
+  , _tySchemaType :: !(Type v)
+  , _tySchemaPartial :: !SchemaPartial } |
+  TyFun { _tyFunType :: !(FunType v) } |
+  TyUser { _tyUser :: !v } |
   TyModule
-  { _tyModuleSpec :: Maybe [v]
+  { _tyModuleSpec :: !(Maybe (V.Vector v))
     -- ^ Nothing for interfaces, implemented ifaces for modules
   }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)

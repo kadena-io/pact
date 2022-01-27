@@ -228,8 +228,8 @@ instance Pretty (LiteralExp i) where
 data AtomExp i = AtomExp
   { _atomAtom :: !Text
   , _atomQualifiers :: ![Text]
-  , _atomDynamic :: Bool
-  , _atomInfo :: i
+  , _atomDynamic :: !Bool
+  , _atomInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
@@ -287,10 +287,10 @@ instance Pretty (SeparatorExp i) where
 
 -- | Pact syntax expressions
 data Exp i =
-  ELiteral (LiteralExp i) |
-  EAtom (AtomExp i) |
-  EList (ListExp i) |
-  ESeparator (SeparatorExp i)
+  ELiteral !(LiteralExp i) |
+  EAtom !(AtomExp i) |
+  EList !(ListExp i) |
+  ESeparator !(SeparatorExp i)
   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 
 instance Pretty (Exp i) where

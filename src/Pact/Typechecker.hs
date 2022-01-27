@@ -1,13 +1,14 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Typechecker
@@ -139,10 +140,10 @@ isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
 
 
 data RoleTys = RoleTys
-  { _rtCandArgTy :: Type UserType
-  , _rtAST :: AST Node
-  , _rtTyVar :: TypeVar UserType
-  , _rtResolvedTy :: Type UserType
+  { _rtCandArgTy :: !(Type UserType)
+  , _rtAST :: !(AST Node)
+  , _rtTyVar :: !(TypeVar UserType)
+  , _rtResolvedTy :: !(Type UserType)
   }
 instance Show RoleTys where
   show (RoleTys a b c d) =
@@ -206,7 +207,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
               Just _ -> return $ Just (rol,RoleTys candArgTy roleAST roleTyVar roleResolvedTy)
 
   -- try arg and return roles
-  argRoles <- forM (zip candArgs [0..]) $ \(Arg _ candArgTy _,ai) -> tryRole (ArgVar ai) candArgTy
+  argRoles <- forM (zip (toList candArgs) [0..]) $ \(Arg _ candArgTy _,ai) -> tryRole (ArgVar ai) candArgTy
   allRoles <- (:argRoles) <$> tryRole RetVar candRetTy
   case sequence allRoles of
     Nothing -> do
@@ -222,7 +223,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
       debug $ "tryFunType: trying " ++ showPretty cand ++ " with " ++ showPretty (M.toList byFunType)
 
       let solvedM = sequence $ (`map` M.toList byFunType) $ \(fty,tvTys) ->
-            let tys = foldl1 unifyM $ (Just fty:) $ map (Just . view _3) tvTys
+            let tys = foldl1' unifyM $ (Just fty:) $ map (Just . view _3) tvTys
                 unifyM (Just a) (Just b) = either id id <$> unifyTypes a b
                 unifyM _ _ = Nothing
             in case tys of
@@ -303,7 +304,7 @@ applySchemas Pre ast = case ast of
         return $ Just (FieldKey bn,(Var node,ni,vt'))
       _ -> addFailure ni ("Found non-string key in schema binding: " ++ showPretty bv) >> return Nothing
     case sequence pmapM of
-      Just pmap -> validateSchema sch partial (M.fromList pmap) >>= \pm ->
+      Just pmap -> validateSchema sch partial (M.fromList $ toList pmap) >>= \pm ->
         forM_ pm $ \pkeys -> case partial of
           PartialSchema{} -> do
             debug $ "Specializing schema ty for sublist: " ++ show pkeys
@@ -318,7 +319,7 @@ applySchemas Pre ast = case ast of
       return ast
     (TyList lty) -> do
       debug ("validateList: " ++ show lty)
-      validateList n lty ls
+      validateList n lty (toList ls)
       return ast
     _ -> return ast
 
@@ -331,7 +332,7 @@ applySchemas Pre ast = case ast of
                    -> M.Map FieldKey (AST Node, TcId, Type UserType) -> TC (Maybe (Set Text))
     validateSchema (UTSchema sch) partial pmap = do
       -- smap: lookup from field name to ty
-      let smap = filterPartial partial $ M.fromList $ (`map` _schFields sch) $ \(Arg an aty _) -> (an,aty)
+      let smap = filterPartial partial $ M.fromList $ (`map` toList (_schFields sch)) $ \(Arg an aty _) -> (an,aty)
           filterPartial FullSchema = id
           filterPartial AnySubschema = id
           filterPartial (PartialSchema ks) = (`M.restrictKeys` ks)
@@ -404,12 +405,12 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
             $ "native function supplied "
             <> (if n < m then "too few" else "too many")
             <> " args: "
-            <> showPretty argASTs
+            <> showPretty (toList argASTs)
 
         Just{} -> return ()
 
       -- zip funtype 'Arg's with AST args, and assoc each.
-      args <- (\f -> zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
+      args <- (\f -> V.zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
         (TyFun lambdaType,partialAST@App{}) -> do
           debug $ "associating partial AST app with lambda return type: " ++ show lambdaType
           assocAstTy (_aNode argAST) $ _ftReturn lambdaType
@@ -419,7 +420,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
               saturated = length partialArgASTs - length lamArgTys
           when (saturated < 0) $
             die' (_aId (_aNode argAST)) $ "Invalid/unsaturated partial application: " ++ show argTy
-          (\f -> zipWithM_ f lamArgTys (drop saturated partialArgASTs)) $ \(Arg _ lamArgTy _) partialArgAST ->
+          (\f -> V.zipWithM_ f lamArgTys (V.drop saturated partialArgASTs)) $ \(Arg _ lamArgTy _) partialArgAST ->
             assocAstTy (_aNode partialArgAST) lamArgTy
           return (argAST,argTy)
         (TyFun{},_) -> die' (_aId (_aNode argAST)) $ "App required: " ++ show argTy
@@ -442,10 +443,10 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
               assocAstTy sn (_aType (last (toList $ _ftArgs mangledFunType)))
             (List _ln ll) -> do -- TODO, for with-capability
               -- assoc app return with last of body
-              assocAstTy (_aNode $ last ll) $ _ftReturn mangledFunType
+              assocAstTy (_aNode $ V.last ll) $ _ftReturn mangledFunType
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
           -- TODO the following is dodgy, schema may not be resolved.
-          ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty _)]) -> asPrimString field >>= \fld -> case uty of
+          ((Where,_), [(field,_),(partialAst,_),(_,TySchema TyObject uty _)]) -> asPrimString field >>= \fld -> case uty of
             TyUser u -> case findSchemaField fld u of
               Nothing -> return ()
               Just fty -> assocTyWithAppArg fty partialAst 0
@@ -454,7 +455,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType (_aId i)) fts
-          argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) aa) [0..] argASTs
+          argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) aa) [0..] (toList argASTs)
           ospec | _fName == "at" = Just OAt
                 | _fName == asString Select = Just OSelect
                 | otherwise = Nothing
@@ -467,9 +468,11 @@ processNatives _ a = return a
 
 
 assocTyWithAppArg :: Type UserType -> AST Node -> Int -> TC ()
-assocTyWithAppArg tl t@(App _ _ as) offset = debug ("assocTyWithAppArg: " ++ show (tl,offset,t)) >> case as `atMay` (length as - offset - 1 ) of
-  Just a -> assocAstTy (_aNode a) tl
-  Nothing -> return ()
+assocTyWithAppArg tl t@(App _ _ as) offset = do
+  debug ("assocTyWithAppArg: " ++ show (tl,offset,t))
+  case as V.!? (length as - offset - 1 ) of
+    Just a -> assocAstTy (_aNode a) tl
+    Nothing -> return ()
 assocTyWithAppArg _ _ _ = return ()
 
 -- | Inlines function call arguments into a defun, returning the new body. We
@@ -494,7 +497,7 @@ inlineAppArgs appNode defunType defunArgs defunBody args = do
   letNode <- trackIdNode letId
   assocAstTy letNode retTy
 
-  letBinders :: [Named Node] <- forM (zip args argTys) $
+  letBinders :: [Named Node] <- forM (zip args (toList argTys)) $
     \(arg, Arg nm argTy info) -> do
       let uniqueName = tShow letId `pfx` nm
       varId <- freshId info uniqueName
@@ -516,7 +519,7 @@ inlineAppArgs appNode defunType defunArgs defunBody args = do
       substitute sub = walkAST (substAppDefun (Just sub))
 
   body' <- forM defunBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
-  return [Binding letNode letBindings body' bindType]
+  return [Binding letNode (V.fromList letBindings) (V.fromList body') bindType]
 
 -- | Visitor to process Apps of user defuns.
 -- We want to a) replace AST nodes with the app arg ASTs,
@@ -530,8 +533,8 @@ substAppDefun Nothing Post (App appNode fun args) = do -- Post, to allow AST sub
       FNative {} ->
         return fun -- noop
       FDefun {_fType,_fArgs,_fBody} -> do
-        body' <- inlineAppArgs appNode _fType _fArgs _fBody args
-        return $ set fBody body' fun
+        body' <- inlineAppArgs appNode _fType (toList _fArgs) (toList _fBody) (toList args)
+        return $ set fBody (V.fromList body') fun
     return (App appNode fun' args)
 substAppDefun _ _ t = return t
 
@@ -825,12 +828,12 @@ withScopeBodyToFun fnname modname funTy body deftype info = do
     an <- freshId ai $ pfx fnname n
     t' <- mangleType an <$> traverse toUserType t
     Named n <$> trackNode t' an <*> pure an
-  tcs <- scopeToBody info (map (Var . _nnNamed) args) body
+  tcs <- scopeToBody info (map (Var . _nnNamed) (toList args)) body
   funType <- traverse toUserType funTy
   funId <- freshId info fnname
   void $ trackNode (_ftReturn funType) funId
   unless (null tcs) $ assocAST funId (last tcs)
-  return $ FDefun info modname fnname deftype funType args tcs funId
+  return $ FDefun info modname fnname deftype funType args (V.fromList tcs) funId
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
 assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
@@ -878,9 +881,10 @@ assocStepYieldReturns _ _ = return ()
 
 
 
-notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
-notEmpty i msg [] = die i msg
-notEmpty _ _ as = return as
+notEmpty :: MonadThrow m => Info -> String -> V.Vector a -> m (V.Vector a)
+notEmpty i msg as
+    | V.null as = die i msg
+    | otherwise = return as
 
 
 -- | Build ASTs from terms.
@@ -928,7 +932,7 @@ toAST (TApp Term.App{..} _) = do
     FDefun {..} -> do
       if null _fBody
       then assocNode _fRetId n -- TODO: is this necessary?
-      else assocAST i (last _fBody)
+      else assocAST i (V.last _fBody)
 
       mkApp fun args
 
@@ -952,7 +956,7 @@ toAST (TApp Term.App{..} _) = do
       -- detect partial app args: for funtype args, add phantom arg to partial app
       args' <- if NE.length (_fTypes fun') > 1 then return args else do
         let funType = NE.head (_fTypes fun')
-        (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST ->
+        (\f -> V.zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST ->
           case (argTy,argAST) of
             (TyFun lambdaTy,App{}) ->
               (\f -> foldM f argAST (_ftArgs lambdaTy)) $ \argAST' (Arg lamArgName _ _) -> do
@@ -960,7 +964,7 @@ toAST (TApp Term.App{..} _) = do
                   freshId (_tiInfo (_aId (_aNode argAST')))
                   (_fName (_aAppFun argAST) <> "_" <> lamArgName <> "_p")
                 debug $ "Adding fresh arg to partial application: " ++ show freshArg
-                return $ over aAppArgs (++ [Var freshArg]) argAST'
+                return $ over aAppArgs (<> (V.singleton (Var freshArg))) argAST'
             (TyFun t,a) -> die'' argAST $ "App required for funtype argument: " ++ show t ++ ", found: " ++ show a
             _ -> return argAST
 
@@ -972,9 +976,9 @@ toAST (TApp Term.App{..} _) = do
         Just sf -> do
 
           let specialBind = do
-                initArgs <- init <$> notEmpty _appInfo "Invalid binding invocation" args'
+                initArgs <- V.init <$> notEmpty _appInfo "Invalid binding invocation" args'
                 -- bind forms have binding in last position, move into SBinding
-                mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') initArgs
+                mkApp (set fSpecial (Just (sf,SBinding (V.last args'))) fun') initArgs
 
               setOrAssocYR :: Lens' (YieldResume Node) (Maybe Node) -> Node -> TC ()
               setOrAssocYR yrLens target = do
@@ -996,7 +1000,7 @@ toAST (TApp Term.App{..} _) = do
               return app'
             Resume -> do
               app' <- specialBind
-              case head args' of -- 'specialBind' ensures non-empty args
+              case V.head args' of -- 'specialBind' ensures non-empty args
                 (Binding _ _ _ (AstBindSchema sty)) ->
                   setOrAssocYR yrResume sty
                 a -> die'' a "Expected binding"
@@ -1020,7 +1024,7 @@ toAST TBinding {..} = do
       BindSchema _ -> do
         _fieldName <- asPrimString v'
         return (Named n an aid,v')
-  bb <- scopeToBody _tInfo (map (Var . _nnNamed . fst) bs) _tBindBody
+  bb <- scopeToBody _tInfo (map (Var . _nnNamed . fst) (toList bs)) _tBindBody
   assocAST bi (last bb)
   bt <- case _tBindType of
     BindLet -> return AstBindLet
@@ -1028,11 +1032,11 @@ toAST TBinding {..} = do
       sty' <- mangleType bi <$> traverse toUserType sty
       sn <- trackNode sty' =<< freshId _tInfo (pack $ show bi ++ "schema")
       return $ AstBindSchema sn
-  return $ Binding bn bs bb bt
+  return $ Binding bn bs (V.fromList bb) bt
 
 toAST TList {..} = do
   ty <- TyList <$> traverse toUserType _tListType
-  List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST (V.toList _tList)
+  List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
 toAST (TObject Term.Object {..} _) = do
   debug $ "TObject: " ++ show _oObjectType
   ty <- TySchema TyObject <$> traverse toUserType _oObjectType <*> pure FullSchema
@@ -1089,7 +1093,7 @@ toUserType t = case t of
 
 toUserType' :: Show n => Term (Either Ref n) -> TC UserType
 toUserType' TSchema {..} = fmap UTSchema $ Schema _tSchemaName _tModule
-  <$> mapM (traverse toUserType) _tFields
+  <$> V.mapM (traverse toUserType) _tFields
   <*> pure _tInfo
 toUserType' TModRef {..} = case _modRefSpec _tModRef of
   Nothing -> return $ UTModSpec (ModSpec $ _modRefName _tModRef)
@@ -1189,8 +1193,8 @@ showFails = do
   unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
 
 -- | unsafe lens for using `typecheckBody` with const
-singLens :: Iso' a [a]
-singLens = iso pure head
+singLens :: Iso' a (V.Vector a)
+singLens = iso pure V.head
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
@@ -1203,7 +1207,7 @@ typecheck tl = return tl
 
 -- | Workhorse function. Perform AST substitutions, associate types, solve overloads,
 -- enforce schemas, resolve all type variables, populate back into AST.
-typecheckBody :: TopLevel Node -> Traversal' (TopLevel Node) [AST Node] -> TC (TopLevel Node)
+typecheckBody :: TopLevel Node -> Traversal' (TopLevel Node) (V.Vector (AST Node)) -> TC (TopLevel Node)
 typecheckBody tl bodyLens = do
   let body = view bodyLens tl
   debug "--------------------------------\n Substitute defuns:\n"
@@ -1211,7 +1215,7 @@ typecheckBody tl bodyLens = do
   debug "--------------------------------\nSubstitute natives:\n"
   nativesProc <- mapM (walkAST processNatives) appSub
   debug "--------------------------------\nAssoc Yield/Resume:\n"
-  assocStepYieldReturns tl nativesProc
+  assocStepYieldReturns tl (toList nativesProc)
   debug "--------------------------------\nApply Schemas:\n"
   schEnforced <- mapM (walkAST applySchemas) nativesProc
   debug "--------------------------------\nSolve Overloads:\n"

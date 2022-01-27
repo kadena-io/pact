@@ -65,6 +65,7 @@ library
     Pact.Runtime.Typecheck
     Pact.Runtime.Utils
     Pact.Server.API
+    Pact.State.Strict
     Pact.Types.API
     Pact.Types.Capability
     Pact.Types.ChainId

@@ -38,8 +38,8 @@ import Pact.Types.SPV
 
 
 data PactRPC c =
-    Exec (ExecMsg c) |
-    Continuation ContMsg
+    Exec !(ExecMsg c) |
+    Continuation !ContMsg
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (PactRPC c)
@@ -56,8 +56,8 @@ instance ToJSON c => ToJSON (PactRPC c) where
 
 
 data ExecMsg c = ExecMsg
-  { _pmCode :: c
-  , _pmData :: Value
+  { _pmCode :: !c
+  , _pmData :: !Value
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)

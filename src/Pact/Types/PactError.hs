@@ -55,7 +55,7 @@ import Pact.Types.Pretty
 data StackFrame = StackFrame {
       _sfName :: !Text
     , _sfLoc :: !Info
-    , _sfApp :: Maybe (FunApp,[Text])
+    , _sfApp :: !(Maybe (FunApp,[Text]))
     } deriving (Eq,Generic)
 instance NFData StackFrame
 instance ToJSON StackFrame where toJSON = toJSON . show
@@ -87,7 +87,7 @@ parseStackFrame = do
       void $ char '('
       deets <- T.init <$> takeText
       return $ StackFrame deets i $
-        Just (FunApp def "" Nothing Defun (funTypes $ FunType [] TyAny) Nothing
+        Just (FunApp def "" Nothing Defun (funTypes $ FunType mempty TyAny) Nothing
              ,[])
     justName i = takeText >>= \n -> return $ StackFrame n i Nothing
 
@@ -110,10 +110,10 @@ instance ToJSON PactErrorType
 instance FromJSON PactErrorType
 
 data PactError = PactError
-  { peType :: PactErrorType
-  , peInfo :: Info
-  , peCallStack :: [StackFrame]
-  , peDoc :: Doc }
+  { peType :: !PactErrorType
+  , peInfo :: !Info
+  , peCallStack :: ![StackFrame]
+  , peDoc :: !Doc }
   deriving (Eq,Generic)
 
 instance NFData PactError
@@ -163,9 +163,9 @@ instance FromJSON OutputType
 
 -- | Tool warning/error output.
 data RenderedOutput = RenderedOutput
-  { _roText :: Text
-  , _roInfo :: Info
-  , _roType :: OutputType }
+  { _roText :: !Text
+  , _roInfo :: !Info
+  , _roType :: !OutputType }
   deriving (Eq,Show)
 
 instance Pretty RenderedOutput where

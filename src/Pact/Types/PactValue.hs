@@ -104,14 +104,14 @@ genUserGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
 genUserGuard genSize = do
   args <- listOf1 (genSomePactValue genSize)
   fun <- arbitrary  -- TODO enforce that it's a non-native Name
-  pure $ GUser $ UserGuard fun args
+  pure $ GUser $ UserGuard fun (V.fromList args)
 
 data PactValue
-  = PLiteral Literal
-  | PList (Vector PactValue)
-  | PObject (ObjectMap PactValue)
-  | PGuard (Guard PactValue)
-  | PModRef ModRef
+  = PLiteral !Literal
+  | PList !(Vector PactValue)
+  | PObject !(ObjectMap PactValue)
+  | PGuard !(Guard PactValue)
+  | PModRef !ModRef
   deriving (Eq,Show,Generic,Ord)
 
 instance Arbitrary PactValue where

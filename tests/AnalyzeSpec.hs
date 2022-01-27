@@ -91,11 +91,11 @@ wrapNoTable code =
   |]
 
 data TestFailure
-  = TestCheckFailure CheckFailure
+  = TestCheckFailure !CheckFailure
   | NoTestModule
-  | ReplError String
-  | VerificationFailure VerificationFailure
-  | ScopeError' ScopeError
+  | ReplError !String
+  | VerificationFailure !VerificationFailure
+  | ScopeError' !ScopeError
   deriving Show
 
 renderTestFailure :: TestFailure -> IO String

@@ -64,8 +64,8 @@ instance Arbitrary NamespaceName where
 
 
 data ModuleName = ModuleName
-  { _mnName      :: Text
-  , _mnNamespace :: Maybe NamespaceName
+  { _mnName      :: !Text
+  , _mnNamespace :: !(Maybe NamespaceName)
   } deriving (Eq, Ord, Generic, Show)
 
 instance Arbitrary ModuleName where
@@ -121,9 +121,9 @@ newtype DefName = DefName Text
 
 
 data QualifiedName = QualifiedName
-  { _qnQual :: ModuleName
-  , _qnName :: Text
-  , _qnInfo :: Info
+  { _qnQual :: !ModuleName
+  , _qnName :: !Text
+  , _qnInfo :: !Info
   } deriving (Generic,Show)
 
 instance Arbitrary QualifiedName where
@@ -166,8 +166,8 @@ parseQualifiedName i = AP.parseOnly (qualifiedNameParser i <* eof)
 
 
 data BareName = BareName
-  { _bnName :: Text
-  , _bnInfo :: Info
+  { _bnName :: !Text
+  , _bnInfo :: !Info
   } deriving (Generic,Eq,Show)
 instance Arbitrary BareName where
   arbitrary = BareName <$> genBareText <*> arbitrary
@@ -182,10 +182,10 @@ instance SizeOf BareName where
     (constructorCost 2) + (sizeOf n) + (sizeOf i)
 
 data DynamicName = DynamicName
-    { _dynMember :: Text
-    , _dynRefArg :: Text
-    , _dynInterfaces :: Set ModuleName
-    , _dynInfo :: Info
+    { _dynMember :: !Text
+    , _dynRefArg :: !Text
+    , _dynInterfaces :: !(Set ModuleName)
+    , _dynInfo :: !Info
     } deriving (Generic,Eq,Show)
 instance NFData DynamicName
 instance Arbitrary DynamicName where
@@ -207,9 +207,9 @@ instance SizeOf DynamicName where
 
 -- | A named reference from source.
 data Name
-  = QName QualifiedName
-  | Name BareName
-  | DName DynamicName
+  = QName !QualifiedName
+  | Name !BareName
+  | DName !DynamicName
   deriving (Generic, Show)
 
 instance Arbitrary Name where

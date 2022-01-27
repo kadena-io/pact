@@ -56,7 +56,7 @@ import Pact.Types.Util (lensyToJSON, lensyParseJSON)
 data Provenance = Provenance
   { _pTargetChainId :: !ChainId
     -- ^ the target chain id for the endorsement
-  , _pModuleHash :: ModuleHash
+  , _pModuleHash :: !ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 
@@ -123,8 +123,8 @@ instance Pretty PactStep where
 -- | The type of pact continuations (i.e. defpact)
 --
 data PactContinuation = PactContinuation
-  { _pcDef :: Name
-  , _pcArgs :: [PactValue]
+  { _pcDef :: !Name
+  , _pcArgs :: ![PactValue]
   } deriving (Eq, Show, Generic)
 
 instance Pretty PactContinuation where
@@ -137,17 +137,17 @@ instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
 -- | Result of evaluation of a 'defpact'.
 --
 data PactExec = PactExec
-  { _peStepCount :: Int
+  { _peStepCount :: !Int
     -- ^ Count of steps in pact (discovered when code is executed)
   , _peYield :: !(Maybe Yield)
     -- ^ Yield value if invoked
-  , _peExecuted :: Maybe Bool
+  , _peExecuted :: !(Maybe Bool)
     -- ^ Only populated for private pacts, indicates if step was executed or skipped.
-  , _peStep :: Int
+  , _peStep :: !Int
     -- ^ Step that was executed or skipped
-  , _pePactId :: PactId
+  , _pePactId :: !PactId
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
-  , _peContinuation :: PactContinuation
+  , _peContinuation :: !PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
   , _peStepHasRollback :: !Bool
     -- ^ Track whether a current step has a rollback

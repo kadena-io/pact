@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 module RoundTripSpec (spec) where
@@ -115,4 +116,4 @@ testUnification = do
     ifaceA = "ifaceA"
     ifaceB = "ifaceB"
     modRef :: [ModuleName] -> Type (Term ())
-    modRef is = modRefTy (ModRef "a" (Just is) def)
+    modRef is = modRefTy (ModRef "a" (Just $ V.fromList is) def)

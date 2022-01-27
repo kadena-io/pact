@@ -63,6 +63,7 @@ import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
 import Data.Maybe  (fromMaybe)
+import qualified Data.Vector as V
 
 import GHC.Generics
 
@@ -241,7 +242,7 @@ data Signer = Signer
  -- ^ pub key value
  , _siAddress :: !(Maybe Text)
  -- ^ optional "address", for different pub key formats like ETH
- , _siCapList :: [SigCapability]
+ , _siCapList :: ![SigCapability]
  -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 
@@ -329,7 +330,7 @@ data CommandResult l = CommandResult {
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
   -- | Events
-  , _crEvents :: [PactEvent]
+  , _crEvents :: !(V.Vector PactEvent)
   } deriving (Eq,Show,Generic)
 
 instance (ToJSON l) => ToJSON (CommandResult l) where
@@ -353,7 +354,7 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
       <*> o .: "metaData"
       <*> (events <$> o .:? "events")
     where
-      events Nothing = []
+      events Nothing = mempty
       events (Just es) = es
 instance NFData a => NFData (CommandResult a)
 
@@ -367,8 +368,8 @@ type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
 type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
 data CommandExecInterface m a l = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd l
-  , _ceiApplyPPCmd :: ApplyPPCmd m a l
+  { _ceiApplyCmd :: !(ApplyCmd l)
+  , _ceiApplyPPCmd :: !(ApplyPPCmd m a l)
   }
 
 

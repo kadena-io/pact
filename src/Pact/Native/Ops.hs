@@ -191,7 +191,7 @@ eqA = mkTyVar "a"
     ]
 
 tTyModRef :: Type n
-tTyModRef = TyModule (Just [])
+tTyModRef = TyModule (Just mempty)
 
 orDef :: NativeDef
 orDef = defLogic "or" (||) True

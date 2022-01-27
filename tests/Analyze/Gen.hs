@@ -105,14 +105,14 @@ type ECore = Existential (Core Analyze.Term)
 type NumBound = Interval Double
 
 data BoundedType where
-  BoundedInt     :: NumBound -> BoundedType
-  BoundedDecimal :: NumBound -> BoundedType
-  BoundedString  :: Int      -> BoundedType
-  BoundedTime    ::             BoundedType
-  BoundedBool    ::             BoundedType
-  BoundedKeySet  ::             BoundedType
+  BoundedInt     :: !NumBound -> BoundedType
+  BoundedDecimal :: !NumBound -> BoundedType
+  BoundedString  :: !Int      -> BoundedType
+  BoundedTime    ::              BoundedType
+  BoundedBool    ::              BoundedType
+  BoundedKeySet  ::              BoundedType
 
-  BoundedList :: Int -> BoundedType -> BoundedType
+  BoundedList :: !Int -> !BoundedType -> BoundedType
 
   -- TODO: cover objects
 

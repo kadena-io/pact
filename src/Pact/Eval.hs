@@ -1,14 +1,15 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.
@@ -44,7 +45,7 @@ module Pact.Eval
     ) where
 
 import Bound
-import Control.Lens hiding (DefName)
+import Control.Lens hiding (DefName, (.=), (%=))
 import Control.Monad
 import Control.Monad.Reader
 import Data.Aeson (Value)
@@ -65,6 +66,7 @@ import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
+import Pact.State.Strict
 import Pact.Types.Advice
 import Pact.Types.Capability
 import Pact.Types.PactValue
@@ -90,8 +92,8 @@ evalCommitTx i = do
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet mksn ks))
-  runSysOnly $ enforceKeySet mi (Just mksn) ks
+  !_ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet mksn ks))
+  runSysOnly $! enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
@@ -136,7 +138,7 @@ evalByName n as i = do
 
   -- Build and resolve TApp
 
-  app <- enscope (TApp (App (TVar n def) as i) i)
+  app <- enscope (TApp (App (TVar n def) (V.fromList as) i) i)
 
   -- lens into user function if any to test for loop
 
@@ -164,11 +166,11 @@ evalByName n as i = do
 
 -- | Application with additional args.
 apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
-apply app as = reduceApp $ over appArgs (++ map liftTerm as) app
+apply app as = reduceApp $! over appArgs (<> (V.fromList (map liftTerm as))) app
 
 topLevelCall
   :: Info -> Text -> GasArgs -> (Gas -> Eval e (Gas, a)) -> Eval e a
-topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
+topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $!
   computeGas (Left (i,name)) gasArgs >>= action
 
 -- | Acquire module admin with enforce.
@@ -204,7 +206,7 @@ evalNamespace info setter m = do
       unless (allowRoot policy) $
         evalError info "Definitions in default namespace are not authorized"
       return m
-    Just (Namespace n _ _) -> return $ over setter (mangleModuleName n) m
+    Just (Namespace n _ _) -> return $! over setter (mangleModuleName n) m
   where
     mangleModuleName :: NamespaceName -> ModuleName -> ModuleName
     mangleModuleName n mn@(ModuleName nn ns) =
@@ -252,7 +254,7 @@ eval (TModule tm@(MDModule m) bod i) =
         void $ acquireModuleAdminCapability capMName $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
-    _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
+    !_ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
     return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
 
@@ -266,7 +268,7 @@ eval (TModule tm@(MDInterface m) bod i) =
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
     (g,govI) <- loadInterface mangledI bod i gas
-    _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
+    !_ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
 eval t = enscope t >>= reduce
@@ -336,7 +338,7 @@ validateImports i rs mh (Just is)
       Just _ -> return ()
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
-mangleDefs mn term = modifyMn term
+mangleDefs mn term = let !x = modifyMn term in x
   where
     modifyMn = case term of
       TDef{}    -> set (tDef . dModule) mn
@@ -511,7 +513,7 @@ evaluateConstraints
   -> Eval e (Module n, HM.HashMap Text Ref)
 evaluateConstraints info m evalMap = do
   (m',evalMap',newIfs) <- foldM evaluateConstraint (m, evalMap, []) $ _mInterfaces m
-  return (set mInterfaces (reverse newIfs) m',evalMap')
+  return (set mInterfaces (V.fromList (reverse newIfs)) m',evalMap')
   where
     evaluateConstraint (m', refMap, newIfs) ifn = do
       refData <- resolveModule info ifn
@@ -557,7 +559,7 @@ solveConstraint ifn info refName (Ref t) evalMap = do
           matchWith termRefEq' s "Return type mismatch" rty rty'
           match s "Arity mismatch" (length args) (length args')
           matchWith (liftEq defMetaEq) s "Defmeta mismatch" dmeta dmeta'
-          forM_ (args `zip` args') $ \((Arg n ty _), a@(Arg n' ty' _)) -> do
+          forM_ (args `V.zip` args') $ \((Arg n ty _), a@(Arg n' ty' _)) -> do
             -- FV requires exact argument names as opposed to positional info
             match a "Argument name mismatch" n n'
             matchWith termRefEq' a ("Argument type mismatch for " <> n) ty ty'
@@ -753,11 +755,11 @@ reduceBody (TList bs _ _) =
   V.last <$> V.mapM reduce bs
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
-reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: V.Vector (BindPair (Term Ref)) -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
-  typecheck' $ fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
-  reduceBody (instantiate (resolveArg i (fmap (either id liftTerm . snd) ps')) bod)
+  ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) $ toList ps
+  typecheck' $! fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
+  reduceBody $! instantiate (resolveArg i (map (either id liftTerm . snd) ps')) bod
 
 -- | Reduction where TDefs and TLams are kept unreduced.
 --   TVars that are nested `TVar (Ref n)`s are traversed in `deref` regardless
@@ -787,15 +789,15 @@ enforcePactValue' :: (Pretty n, Traversable f) => f (Term n) -> Eval e (f PactVa
 enforcePactValue' = traverse enforcePactValue
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
-reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
+reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t (toList as) ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   case _dDefType of
     Defun ->
-      functionApp _dDefName _dFunType (Just _dModule) as _dDefBody (_mDocs _dMeta) ai
+      functionApp _dDefName _dFunType (Just _dModule) (toList as) _dDefBody (_mDocs _dMeta) ai
     Defpact -> do
       g <- computeUserAppGas d ai
-      af <- prepareUserAppArgs d as ai
+      af <- prepareUserAppArgs d (toList as) ai
       evalUserAppBody d af ai g $ \bod' -> do
         continuation <-
           PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
@@ -804,7 +806,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
         initPact ai continuation bod'
     Defcap -> computeUserAppGas d ai *> evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) =
-  functionApp (DefName lamName) funTy Nothing as body Nothing ai
+  functionApp (DefName lamName) funTy Nothing (toList as) body Nothing ai
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of
@@ -1143,7 +1145,7 @@ resumePactExec i req ctx = do
 
 -- | Create special error form handled in 'reduceApp'
 appError :: Info -> Doc -> Term n
-appError i errDoc = TApp (App (msg errDoc) [] i) i
+appError i errDoc = TApp (App (msg errDoc) mempty i) i
 
 resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
 resolveFreeVars i b = traverse r b where

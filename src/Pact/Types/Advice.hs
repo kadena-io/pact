@@ -49,17 +49,17 @@ data DbContext =
 -- the bracketed operation.
 data AdviceContext r where
     -- | Advise on user function, return result
-    AdviceUser :: (Def Ref,[Term Name]) -> AdviceContext (Term Name)
+    AdviceUser :: !(Def Ref,[Term Name]) -> AdviceContext (Term Name)
     -- | Advise on native, return result
-    AdviceNative :: NativeDefName -> AdviceContext (Term Name)
+    AdviceNative :: !NativeDefName -> AdviceContext (Term Name)
     -- | Transaction execution wrapper
-    AdviceTx :: PactHash -> AdviceContext ()
+    AdviceTx :: !PactHash -> AdviceContext ()
     -- | Db operation
-    AdviceDb :: DbContext -> AdviceContext ()
+    AdviceDb :: !DbContext -> AdviceContext ()
     -- | Module or interface install/upgrade, returns loaded module data.
-    AdviceModule :: (ModuleDef (Term Name)) -> AdviceContext (ModuleData Ref)
+    AdviceModule :: !(ModuleDef (Term Name)) -> AdviceContext (ModuleData Ref)
     -- | Arbitrary advice.
-    AdviceOther :: Text -> AdviceContext Text
+    AdviceOther :: !Text -> AdviceContext Text
 
 instance Show (AdviceContext r) where
   show AdviceUser {} = "AdviceUser"

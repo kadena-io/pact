@@ -1,7 +1,9 @@
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Pattern synonym definitions for translation from typechecked 'AST' to
 -- 'Term'.
@@ -10,6 +12,7 @@ module Pact.Analyze.Patterns where
 import           Control.Lens         ((^?))
 import           Data.Maybe           (isJust)
 import           Data.Text            (Text)
+import qualified Data.Vector as V
 
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (Literal (LString))
@@ -41,14 +44,14 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
-pattern AST_InlinedApp :: Lang.ModuleName -> Text -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_InlinedApp :: Lang.ModuleName -> Text -> V.Vector (Named a, AST a) -> V.Vector (AST a) -> AST a
 pattern AST_InlinedApp modName funName bindings body <-
   App _ (FDefun _ modName funName _ _ _ [Binding _ bindings body AstBindInlinedCallArgs] _) _args
 
-pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_Let :: forall a. V.Vector (Named a, AST a) -> V.Vector (AST a) -> AST a
 pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
 
-pattern AST_BindSchema :: forall a. a -> [(Named a, AST a)] -> a -> [AST a] -> AST a
+pattern AST_BindSchema :: forall a. a -> V.Vector (Named a, AST a) -> a -> V.Vector (AST a) -> AST a
 pattern AST_BindSchema node bindings schema body <- Binding node bindings body (AstBindSchema schema)
 
 pattern AST_Var :: forall a. a -> AST a
@@ -63,10 +66,10 @@ pattern AST_NegativeVar var <- App _ (NativeFunc "-") [AST_Var var]
 pattern AST_NegativeLit :: forall a. Literal -> AST a
 pattern AST_NegativeLit lit <- App _ (NativeFunc "-") [AST_Lit lit]
 
-pattern AST_NFun :: forall a. a -> Text -> [AST a] -> AST a
+pattern AST_NFun :: forall a. a -> Text -> V.Vector (AST a) -> AST a
 pattern AST_NFun node fn args <- App node (NativeFunc fn) args
 
-pattern AST_NFun_Basic :: forall a. Text -> [AST a] -> AST a
+pattern AST_NFun_Basic :: forall a. Text -> V.Vector (AST a) -> AST a
 pattern AST_NFun_Basic fn args <- AST_NFun _ (ofBasicOp -> Just fn) args
 
 pattern AST_If :: forall a. a -> AST a -> AST a -> AST a -> AST a
@@ -94,7 +97,7 @@ pattern AST_CreateModuleGuard name <-
 
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
-  App node (NativeFunc "enforce") (cond:_rest)
+  App node (NativeFunc "enforce") (V.toList -> (cond:_rest))
 
 pattern AST_ReadKeyset :: forall a. AST a -> AST a
 pattern AST_ReadKeyset name <-
@@ -148,11 +151,11 @@ pattern AST_EnforceGuard_Guard :: AST Node -> AST Node
 pattern AST_EnforceGuard_Guard g <-
   App _node (NativeFunc "enforce-guard") [typeSatisfying isGuardTy -> Just g]
 
-pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
+pattern AST_EnforceOne :: forall a. a -> V.Vector (AST a) -> AST a
 pattern AST_EnforceOne node enforces <-
   App node (NativeFunc "enforce-one") [_, List _ enforces]
 
-pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
+pattern AST_Format :: forall a. AST a -> V.Vector (AST a) -> AST a
 pattern AST_Format str vars <-
   App _node (NativeFunc "format") [str, List _ vars]
 
@@ -186,9 +189,9 @@ pattern AST_WithRead
   :: Node
   -> Text
   -> AST Node
-  -> [(Named Node, AST Node)]
+  -> V.Vector (Named Node, AST Node)
   -> Node
-  -> [AST Node]
+  -> V.Vector (AST Node)
   -> AST Node
 pattern AST_WithRead node table key bindings schema body <-
   App node
@@ -199,10 +202,10 @@ pattern AST_WithDefaultRead
   :: Node                     -- ^ node
   -> Text                     -- ^ table name
   -> AST Node                 -- ^ key
-  -> [(Named Node, AST Node)] -- ^ table bindings
+  -> V.Vector (Named Node, AST Node) -- ^ table bindings
   -> Node                     -- ^ schema node
   -> AST Node                 -- ^ default node
-  -> [AST Node]               -- ^ body
+  -> V.Vector (AST Node)               -- ^ body
   -> AST Node
 pattern AST_WithDefaultRead node table key bindings schema default' body <-
   App node (NativeFuncSpecial "with-default-read" (AST_BindSchema _ bindings schema body))
@@ -211,9 +214,9 @@ pattern AST_WithDefaultRead node table key bindings schema default' body <-
 pattern AST_Bind
   :: Node
   -> AST Node
-  -> [(Named Node, AST Node)]
+  -> V.Vector (Named Node, AST Node)
   -> Node
-  -> [AST Node]
+  -> V.Vector (AST Node)
   -> AST Node
 pattern AST_Bind node object bindings schema body <-
   App node
@@ -222,7 +225,7 @@ pattern AST_Bind node object bindings schema body <-
 
 pattern AST_WithCapability
   :: AST Node
-  -> [AST Node]
+  -> V.Vector (AST Node)
   -> AST Node
 pattern AST_WithCapability app body <-
   App _node
@@ -230,7 +233,7 @@ pattern AST_WithCapability app body <-
       [app]
 
 pattern AST_Resume
-  :: Node -> [(Named Node, AST Node)] -> Node -> [AST Node] -> AST Node
+  :: Node -> V.Vector (Named Node, AST Node) -> Node -> V.Vector (AST Node) -> AST Node
 pattern AST_Resume node bindings schema body <-
   App node
       (NativeFuncSpecial "resume" (AST_BindSchema _ bindings schema body))
@@ -256,7 +259,7 @@ pattern NativeFuncSpecial f bdy <- FNative _ f _ (Just (_,SBinding bdy))
 pattern AST_Read :: Node -> Text -> AST Node -> AST Node
 pattern AST_Read node tn key <- App node (NativeFunc "read") [ShortTableName tn, key]
 
-pattern AST_ReadCols :: Node -> Text -> AST Node -> [AST Node] -> AST Node
+pattern AST_ReadCols :: Node -> Text -> AST Node -> V.Vector (AST Node) -> AST Node
 pattern AST_ReadCols node tn key columns
   <- App node (NativeFunc "read") [ShortTableName tn, key, List _ columns]
 
@@ -284,11 +287,11 @@ pattern AST_MakeList node num val <- App node (NativeFunc SMakeList) [num, val]
 pattern AST_Obj :: forall a. a -> Lang.ObjectMap (AST a) -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
 
-pattern AST_List :: forall a. a -> [AST a] -> AST a
+pattern AST_List :: forall a. a -> V.Vector (AST a) -> AST a
 pattern AST_List node elems <- List node elems
 
 pattern AST_Step :: a -> Maybe (AST a) -> AST a -> Maybe (AST a) -> Maybe (YieldResume a) -> AST a
 pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr _model
 
-pattern AST_ModRef :: a -> Lang.ModuleName -> Maybe [Lang.ModuleName] -> AST a
+pattern AST_ModRef :: a -> Lang.ModuleName -> Maybe (V.Vector (Lang.ModuleName)) -> AST a
 pattern AST_ModRef node refName refSpec <- ModRef node refName refSpec

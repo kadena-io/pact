@@ -24,6 +24,7 @@ import Data.Default
 import Data.Aeson (Value, encode)
 import qualified Data.ByteString.Lazy  as BSL
 import Data.Text (Text)
+import qualified Data.Vector as V
 
 import Pact.Gas
 import Pact.Interpreter
@@ -118,7 +119,7 @@ resultFailure :: Maybe TxId ->
                  RequestKey ->
                  PactError ->
                  CommandResult Hash
-resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing []
+resultFailure tx cmd a = CommandResult cmd tx (PactResult . Left $ a) (Gas 0) Nothing Nothing Nothing mempty
 
 resultSuccess :: Maybe TxId ->
                  RequestKey ->
@@ -130,7 +131,7 @@ resultSuccess :: Maybe TxId ->
                  CommandResult Hash
 resultSuccess tx cmd gas a pe l evs =
   CommandResult cmd tx (PactResult $ Right a)
-    gas (Just hshLog) pe Nothing evs
+    gas (Just hshLog) pe Nothing (V.fromList evs)
   where hshLog = fullToHashLogCr l
 
 fullToHashLogCr :: [TxLog Value] -> Hash
@@ -152,7 +153,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
                 initRefStore _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
-  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
+  return $ resultSuccess _erTxId rk _erGas (V.last _erOutput) _erExec (V.toList _erLogs) (V.toList _erEvents)
 
 
 applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
@@ -163,4 +164,4 @@ applyContinuation rk hsh signers cm = do
                 (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) initRefStore
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
-  return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
+  return $ resultSuccess _erTxId rk _erGas (V.last _erOutput) _erExec (V.toList _erLogs) (V.toList _erEvents)

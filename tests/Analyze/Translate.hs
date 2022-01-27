@@ -208,7 +208,7 @@ toPactTm = \case
       -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
     mkApp (_, defTm) args = do
       args' <- traverse toPactTm args
-      pure $ TApp (App (liftTerm defTm) args' dummyInfo) dummyInfo
+      pure $ TApp (App (liftTerm defTm) (V.fromList args') dummyInfo) dummyInfo
 
     -- Like mkApp but for functions that take two arguments, the second of
     -- which is a list. This pattern is used in `enforce-one` and `format`
@@ -221,7 +221,7 @@ toPactTm = \case
       arg'     <- toPactTm arg
       argList' <- traverse toPactTm argList
       pure $ (`TApp` dummyInfo) $ App (liftTerm defTm)
-        [arg', Pact.TList (V.fromList argList') (Pact.TyList Pact.TyAny) dummyInfo]
+        (V.fromList [arg', Pact.TList (V.fromList argList') (Pact.TyList Pact.TyAny) dummyInfo])
         dummyInfo
 
     arithOpToDef :: ArithOp -> NativeDef
@@ -290,7 +290,7 @@ toAnalyze ty tm = do
         (Pact.Arg "tm" ty dummyInfo)
         (Just "module")
         (Pact.CVRaw tm)
-        (Meta Nothing [])
+        (Meta Nothing mempty)
         dummyInfo
       ref = Pact.Ref cnst
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref

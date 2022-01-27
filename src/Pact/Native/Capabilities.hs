@@ -23,6 +23,7 @@ import Control.Monad
 import Data.Default
 import Data.Maybe (isJust)
 import qualified Data.Set as S
+import qualified Data.Vector as V
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -151,7 +152,7 @@ applyMgrFun mgrFunDef mgArg capArg = doApply (map fromPactValue [mgArg,capArg])
   where
 
     doApply as = do
-      r <- apply (App appVar [] (getInfo mgrFunDef)) as
+      r <- apply (App appVar mempty (getInfo mgrFunDef)) as
       case toPactValue r of
         Left e -> evalError' mgrFunDef $ "Invalid return value from mgr function: " <> pretty e
         Right v -> return v
@@ -163,14 +164,14 @@ capFuns = (applyMgrFun,installSigCap)
 
 installSigCap :: InstallMgd e
 installSigCap SigCapability{..} cdef = do
-  r <- evalCap cdef CapManaged True $ mkApp cdef (map fromPactValue _scArgs)
+  r <- evalCap cdef CapManaged True $ mkApp cdef (V.map fromPactValue _scArgs)
   case r of
     NewlyInstalled mc -> return mc
     _ -> evalError' cdef "Unexpected result from managed sig cap install"
   where
     mkApp d@Def{} as =
       App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
-          (map liftTerm as) (getInfo d)
+          (V.map liftTerm as) (getInfo d)
 
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()

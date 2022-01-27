@@ -60,8 +60,8 @@ import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
 
 
 data PersistDirect =
-    PDValue PactValue
-  | PDNative NativeDefName
+    PDValue !PactValue
+  | PDNative !NativeDefName
   deriving (Eq,Show,Generic)
 
 instance NFData PersistDirect
@@ -95,8 +95,8 @@ fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
 
 -- | Module ref store
 data ModuleData r = ModuleData
-  { _mdModule :: ModuleDef (Def r)
-  , _mdRefMap :: HM.HashMap Text r
+  { _mdModule :: !(ModuleDef (Def r))
+  , _mdRefMap :: !(HM.HashMap Text r)
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
 

@@ -63,7 +63,7 @@ verifyModule namedMods mod' uri = do
         raw :: Text <- do
           mRaw <- XHR.getResponseText req
           maybe (throwE "Got no response body from verification server!") pure mRaw
-        case A.decodeStrict $ T.encodeUtf8 raw of
+        case A.decodeStrict' $ T.encodeUtf8 raw of
           Nothing -> throwE $ "Parsing result from verification server: " <> raw
           Just (Remote.Response outputLines) -> pure outputLines
       let r = either (pure . renderFatal . ("Error: " <>)) id er

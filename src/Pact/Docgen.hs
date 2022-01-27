@@ -27,6 +27,7 @@ import           Data.Function
 import           Data.List
 import           Data.Text                    (unpack, pack, replace)
 import qualified Data.Text                    as T
+import qualified Data.Vector                  as V
 import           System.IO
 
 import qualified Pact.Analyze.Feature as Analyze
@@ -62,7 +63,7 @@ renderTerm h TNative{..} = do
   termHeader h _tNativeName
   forM_ _tFunTypes $ \FunType {..} -> do
     hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++
-      "*&nbsp;`" ++ renderCompactString t ++ "`") (map (prettyTypeTerm <$>) _ftArgs)) ++
+      "*&nbsp;`" ++ renderCompactString t ++ "`") (map (prettyTypeTerm <$>) (V.toList _ftArgs))) ++
       " *&rarr;*&nbsp;`" ++ renderCompactString (prettyTypeTerm <$> _ftReturn) ++ "`"
     hPutStrLn h ""
   hPutStrLn h ""
@@ -70,7 +71,7 @@ renderTerm h TNative{..} = do
 
   -- render docs and examples
   hPutStrLn h $ unpack _tNativeDocs
-  if null _tNativeExamples then noexs else renderExamples h _tNativeName _tNativeExamples
+  if null _tNativeExamples then noexs else renderExamples h _tNativeName (V.toList _tNativeExamples)
 
   when _tNativeTopLevelOnly $ do
     hPutStrLn h ""
@@ -85,7 +86,7 @@ renderTerm h TSchema{..} = do
       hPutStrLn h $ unpack d
       hPutStrLn h ""
   hPutStrLn h "Fields:"
-  forM_ (map (prettyTypeTerm <$>) _tFields) $ \(Arg n t _) ->
+  forM_ (map (prettyTypeTerm <$>) (V.toList _tFields)) $ \(Arg n t _) ->
     hPutStrLn h $ "&nbsp;&nbsp;`" ++ unpack n ++ ":" ++ renderCompactString t ++ "`"
   hPutStrLn h ""
 

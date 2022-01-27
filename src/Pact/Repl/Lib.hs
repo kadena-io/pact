@@ -27,8 +27,7 @@ import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 
-import Data.Aeson (eitherDecode,toJSON)
-import qualified Data.ByteString.Lazy as BSL
+import Data.Aeson (eitherDecodeStrict',toJSON)
 import Data.Default
 import Data.Foldable
 import qualified Data.Map.Strict as M
@@ -261,7 +260,7 @@ replDefs = ("Repl",
        "Normally, environment changes must execute at top-level for the change to take effect. " <>
        "This allows scoped application of non-toplevel environment changes.")
      ,defZRNative "env-dynref" envDynRef
-      (funType tTyString [("iface",TyModule Nothing),("impl",TyModule (Just []))] <>
+      (funType tTyString [("iface",TyModule Nothing),("impl",TyModule (Just mempty))] <>
        funType tTyString [])
       [LitExample "(env-dynref fungible-v2 coin)"]
       ("Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. " <>
@@ -388,7 +387,7 @@ setsigs' i as = argsError' i as
 setmsg :: RNativeFun LibState
 setmsg i as = case as of
   [TLitString j] ->
-    case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
+    case eitherDecodeStrict' (encodeUtf8 j) of
       Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
       Right v -> go v
   [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))

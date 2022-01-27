@@ -5,6 +5,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE MultiWayIf                 #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
@@ -15,6 +16,7 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ViewPatterns               #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Translation from typechecked 'AST' to 'Term', while accumulating an
 -- execution graph to be used during symbolic analysis and model reporting.
@@ -44,6 +46,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
+import qualified Data.Vector as V
 import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 
@@ -445,9 +448,9 @@ maybeTranslateUserType
   -> Maybe QType
 maybeTranslateUserType _ (Pact.UTModSpec _) = Just $ EType $ mkSObject (SingList SNil)
 maybeTranslateUserType _ (Pact.UTSchema (Pact.Schema _ _ [] _)) = Just $ EType $ mkSObject (SingList SNil)
-maybeTranslateUserType restrictKeys (Pact.UTSchema (Pact.Schema a b (Pact.Arg name ty _:tys) c)) = do
+maybeTranslateUserType restrictKeys (Pact.UTSchema (Pact.Schema a b (V.toList -> (Pact.Arg name ty _):tys) c)) = do
   subTy@(EType (SObject tys'))
-    <- maybeTranslateUserType restrictKeys $ Pact.UTSchema $ Pact.Schema a b tys c
+    <- maybeTranslateUserType restrictKeys $ Pact.UTSchema $ Pact.Schema a b (V.fromList tys) c
   EType ty' <- maybeTranslateType ty
 
   let keepThisKey = case restrictKeys of
@@ -860,7 +863,10 @@ translateObjBinding pairs schema bodyA rhsT = do
         translateBody bodyA
 
 pattern EmptyList :: Term ('TyList a)
-pattern EmptyList = CoreTerm (Lit [])
+-- pattern EmptyList = CoreTerm (Lit [])
+pattern EmptyList <- CoreTerm (Lit [])
+  where
+    EmptyList = CoreTerm (Lit [])
 
 translateNamedGuard :: AST Node -> TranslateM ETerm
 translateNamedGuard strA = translateNode strA >>= \case
@@ -899,14 +905,14 @@ genGuard = do
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
-    withTranslatedBindings bindings $ \bindingTs -> do
+    withTranslatedBindings (V.toList bindings) $ \bindingTs -> do
       withNewScope LetScope bindingTs $
-        translateBody body
+        translateBody (V.toList body)
 
   AST_InlinedApp modName funName bindings body -> do
-    withTranslatedBindings bindings $ \bindingTs -> do
+    withTranslatedBindings (V.toList bindings) $ \bindingTs -> do
       withNewScope (FunctionScope modName funName) bindingTs $
-        translateBody body
+        translateBody (V.toList body)
 
   AST_Var node -> do
     mVar     <- view $ teNodeVars.at node
@@ -950,7 +956,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_Format formatStr vars -> translateNode formatStr >>= \case
     Some SStr formatStr' -> do
       vars' <- for vars translateNode
-      pure $ Some SStr $ Format formatStr' vars'
+      pure $ Some SStr $ Format formatStr' (V.toList vars')
     _ -> unexpectedNode astNode
 
   AST_FormatTime formatStr time -> translateNode formatStr >>= \case
@@ -1007,9 +1013,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_CreateUserGuard (AST_InlinedApp modName funName bindings appBodyA) -> do
     guard <- genGuard
-    body <- withTranslatedBindings bindings $ \bindingTs ->
+    body <- withTranslatedBindings (V.toList bindings) $ \bindingTs ->
       withNewScope (FunctionScope modName funName) bindingTs $
-        translateBody appBodyA
+        translateBody (V.toList appBodyA)
     pure $ Some SGuard $ MkUserGuard guard body
 
   AST_CreateModuleGuard strA -> translateNode strA >>= \case
@@ -1036,7 +1042,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     tid <- tagAssert node
     return $ Some SBool $ EnforceOne $ Left tid
 
-  AST_EnforceOne _ casesA@(_:_) -> do
+  AST_EnforceOne _ casesA@(V.toList -> (_:_)) -> do
     let n = length casesA -- invariant: n > 0
         genPath = Path <$> genTagId
     preEnforcePath <- use tsCurrentPath
@@ -1054,7 +1060,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
               ++ [Unrecoverable]
 
     (terms, vertices) <- fmap unzip $
-      for (zip3 casesA newPaths recovs) $ \(caseA, mNewPath, recov) -> do
+      for (zip3 (V.toList casesA) newPaths recovs) $ \(caseA, mNewPath, recov) -> do
         maybe (pure ()) startSubpath mNewPath
         withNestedRecoverability recov (translateNode caseA) >>= \case
           Some SBool caseT -> do
@@ -1104,20 +1110,20 @@ translateNode astNode = withAstContext astNode $ case astNode of
     case (aT, bT) of
 
       (Some (SList SAny) EmptyList, Some (SList ty) lst) -> do
-        op' <- toOp eqNeqP fn ?? MalformedComparison fn args
+        op' <- toOp eqNeqP fn ?? MalformedComparison fn (V.toList args)
         pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' EmptyList lst
 
       (Some (SList ty) lst, Some (SList SAny) EmptyList) -> do
-        op' <- toOp eqNeqP fn ?? MalformedComparison fn args
+        op' <- toOp eqNeqP fn ?? MalformedComparison fn (V.toList args)
         pure $ Some SBool $ CoreTerm $ ListEqNeq ty op' lst EmptyList
 
       (Some (SList ta) a', Some (SList tb) b') -> do
         Refl <- singEq ta tb ?? TypeMismatch (EType ta) (EType tb)
-        op'  <- toOp eqNeqP fn ?? MalformedComparison fn args
+        op'  <- toOp eqNeqP fn ?? MalformedComparison fn (V.toList args)
         pure $ Some SBool $ inject $ ListEqNeq ta op' a' b'
 
       (Some ta@SObjectUnsafe{} a', Some tb@SObjectUnsafe{} b') -> do
-        op' <- toOp eqNeqP fn ?? MalformedComparison fn args
+        op' <- toOp eqNeqP fn ?? MalformedComparison fn (V.toList args)
         pure $ Some SBool $ inject $ ObjectEqNeq ta tb op' a' b'
 
       (Some ta a', Some tb b') -> do
@@ -1125,7 +1131,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         pure $ Some SBool $ inject $ Comparison ta op a' b'
 
   AST_NFun_Basic fn@(toOp comparisonOpP -> Just _) args
-    -> throwError' $ MalformedComparison fn args
+    -> throwError' $ MalformedComparison fn (V.toList args)
 
   -- logical: not, and, or
 
@@ -1144,10 +1150,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
           SLogicalDisjunction -> pure $
             Some SBool $ inject $ Logical OrOp [a', b']
           _ -> error "impossible"
-        _ -> throwError' $ MalformedLogicalOp fn args
+        _ -> throwError' $ MalformedLogicalOp fn (V.toList args)
 
   AST_NFun_Basic fn@(toOp logicalOpP -> Just _) args
-    -> throwError' $ MalformedLogicalOp fn args
+    -> throwError' $ MalformedLogicalOp fn (V.toList args)
 
   -- arithmetic
 
@@ -1161,19 +1167,19 @@ translateNode astNode = withAstContext astNode $ case astNode of
           Some SDecimal $ inject $ RoundingLikeOp2 op a' b'
         (SDecimal, SInteger, Floor)   -> pure $
           Some SDecimal $ inject $ RoundingLikeOp2 op a' b'
-        _ -> throwError' $ MalformedArithOp fn args
+        _ -> throwError' $ MalformedArithOp fn (V.toList args)
 
   AST_NFun_Basic fn@(toOp roundingLikeOpP -> Just op) args@[a] -> do
       Some ty a' <- translateNode a
       case ty of
         SDecimal -> pure $ Some SInteger $ inject $ RoundingLikeOp1 op a'
-        _        -> throwError' $ MalformedArithOp fn args
+        _        -> throwError' $ MalformedArithOp fn (V.toList args)
 
   -- trap sqrt here to shim
   AST_NFun node fn@"sqrt" as@[a] -> translateNode a >>= \a' -> case a' of
     (Some SInteger _) -> shimNative' node fn [] "original value" a'
     (Some SDecimal _) -> shimNative' node fn [] "original value" a'
-    _ -> throwError' $ MalformedArithOp fn as
+    _ -> throwError' $ MalformedArithOp fn (V.toList as)
 
 
   AST_NFun_Basic fn@(toOp unaryArithOpP -> Just op) args@[a] -> do
@@ -1181,7 +1187,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       case ty of
         SInteger -> pure $ Some SInteger $ inject $ IntUnaryArithOp op a'
         SDecimal -> pure $ Some SDecimal $ inject $ DecUnaryArithOp op a'
-        _        -> throwError' $ MalformedArithOp fn args
+        _        -> throwError' $ MalformedArithOp fn (V.toList args)
 
   --
   -- NOTE: We don't use a feature symbol here because + is overloaded across
@@ -1197,7 +1203,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
           pure $ Some retTy $ inject $ ObjMerge ty1 ty2 o1 o2
 
         (Some (SList tyA) a', Some (SList tyB) b') -> do
-          Refl <- singEq tyA tyB ?? MalformedArithOp fn args
+          Refl <- singEq tyA tyB ?? MalformedArithOp fn (V.toList args)
           -- Feature 4: list concatenation
           pure $ Some (SList tyA) $ inject $ ListConcat tyA a' b'
 
@@ -1210,7 +1216,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
             (SDecimal, SDecimal) -> pure $ Some SDecimal $ inject $ DecArithOp Add a' b'
             (SInteger, SDecimal) -> pure $ Some SDecimal $ inject $ IntDecArithOp Add a' b'
             (SDecimal, SInteger) -> pure $ Some SDecimal $ inject $ DecIntArithOp Add a' b'
-            _ -> throwError' $ MalformedArithOp fn args
+            _ -> throwError' $ MalformedArithOp fn (V.toList args)
 
   AST_NFun_Basic fn@(toOp arithOpP -> Just op) args@[a, b] -> do
       Some tyA a' <- translateNode a
@@ -1224,10 +1230,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
           Some SDecimal $ inject $ IntDecArithOp op a' b'
         (SDecimal, SInteger)     -> pure $
           Some SDecimal $ inject $ DecIntArithOp op a' b'
-        _ -> throwError' $ MalformedArithOp fn args
+        _ -> throwError' $ MalformedArithOp fn (V.toList args)
 
   AST_NFun_Basic fn@(toOp arithOpP -> Just _) args
-    -> throwError' $ MalformedArithOp fn args
+    -> throwError' $ MalformedArithOp fn (V.toList args)
   --
   -- NOTE: We don't use a feature symbol here because `length` is overloaded
   -- across multiple (3) features.
@@ -1289,14 +1295,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_WithRead node table key bindings schemaNode body -> translateType schemaNode >>= \case
     EType rowTy@SObject{} -> translateNode key >>= \case
-      Some SStr key' -> typeOfPartialBind rowTy bindings >>= \case
+      Some SStr key' -> typeOfPartialBind rowTy (V.toList bindings) >>= \case
         EType partialReadTy@(SObject schema) -> do
           let tname = TableName (T.unpack table)
           tid <- tagRead tname node (ESchema schema)
           let readT = Some partialReadTy $ Read rowTy partialReadTy Nothing tid tname key'
 
           withNodeContext node $
-            translateObjBinding bindings partialReadTy body readT
+            translateObjBinding (V.toList bindings) partialReadTy (V.toList body) readT
         _ -> unexpectedNode astNode
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
@@ -1304,7 +1310,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> translateType schemaNode >>= \case
     EType rowTy@SObject{} -> translateNode key >>= \case
       Some SStr key' -> translateNode defaultNode >>= \case
-        Some defTy@SObject{} def -> typeOfPartialBind rowTy bindings >>= \case
+        Some defTy@SObject{} def -> typeOfPartialBind rowTy (V.toList bindings) >>= \case
           EType subsetTy@(SObject schema) -> do
             let tname = TableName (T.unpack table)
             tid <- tagRead tname node (ESchema schema)
@@ -1316,32 +1322,32 @@ translateNode astNode = withAstContext astNode $ case astNode of
               Just Refl -> do
                 let readT = Some subsetTy $
                       Read rowTy subsetTy (Just def) tid (TableName (T.unpack table)) key'
-                withNodeContext node $ translateObjBinding bindings defTy body readT
+                withNodeContext node $ translateObjBinding (V.toList bindings) defTy (V.toList body) readT
           _ -> unexpectedNode astNode
         _ -> unexpectedNode astNode
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
 
   AST_Bind node objectA bindings schemaNode body -> translateType schemaNode >>= \case
-    EType objTy@SObject{} -> typeOfPartialBind objTy bindings >>= \case
+    EType objTy@SObject{} -> typeOfPartialBind objTy (V.toList bindings) >>= \case
       EType partialReadTy@SObject{} -> do
         objectT <- translateNode objectA
         withNodeContext node $
-          translateObjBinding bindings partialReadTy body objectT
+          translateObjBinding (V.toList bindings) partialReadTy (V.toList body) objectT
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
 
   AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
     let capName = mkCapName modName funName
-    appET <- translateCapabilityApp modName capName bindings appBodyA
+    appET <- translateCapabilityApp modName capName (V.toList bindings) (V.toList appBodyA)
     Some ty withBodyT <- trackCapScope capName $
-      translateBody withBodyA
+      translateBody (V.toList withBodyA)
     pure $ Some ty $ WithCapability appET withBodyT
 
   AST_RequireCapability node (AST_InlinedApp modName funName bindings _) -> do
     let capName = mkCapName modName funName
     cap <- lookupCapability capName
-    withTranslatedBindings bindings $ \bindingTs -> do
+    withTranslatedBindings (V.toList bindings) $ \bindingTs -> do
       let vars = (\b -> (_mungedName . _bmName $ b, _bVid b)) . _located <$>
             bindingTs
       recov <- view teRecoverability
@@ -1363,7 +1369,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) -> do
     let capName = mkCapName modName funName
-    app <- translateCapabilityApp modName (mkCapName modName funName) bindings appBodyA
+    app <- translateCapabilityApp modName (mkCapName modName funName) (V.toList bindings) (V.toList appBodyA)
     tsStaticCapsInScope %= Set.insert capName
     return app
 
@@ -1401,7 +1407,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
           AST_Lit (LString col) -> pure $ T.unpack col
           bad                   -> throwError' $ NonStaticColumns bad
 
-        let columnSet = Set.fromList litColumns
+        let columnSet = Set.fromList (V.toList litColumns)
 
             -- the filtered schema contains only the columns we want
             eFilteredSchema = foldrSingList
@@ -1420,7 +1426,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
             tid <- tagRead tname node (ESchema tableSchema)
             pure $ Some filteredObjTy $
               CoreTerm $ ObjTake tableObjTy
-                (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> litColumns)))
+                (CoreTerm (LiteralList SStr (CoreTerm . Lit . Str <$> V.toList litColumns)))
                 (Read tableObjTy tableObjTy Nothing tid tname key')
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
@@ -1449,7 +1455,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_List node elems -> do
     elems' <- traverse translateNode elems
-    Some ty litList <- mkLiteralList elems' ?? TypeError node
+    Some ty litList <- mkLiteralList (V.toList elems') ?? TypeError node
     pure $ Some ty $ CoreTerm litList
 
   AST_Contains node val collection -> do
@@ -1625,11 +1631,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     -- modrefs are coerced to strings
     pure $ Some SStr $ CoreTerm $ Lit $ Str $ T.unpack
       (asString refName <>
-       maybe "" (\ss -> "{" <> T.intercalate "," (map asString ss) <> "}") refSpec)
+       maybe "" (\ss -> "{" <> T.intercalate "," (map asString ss) <> "}") (V.toList <$> refSpec))
 
   -- NOTE: we ignore the optional target chain during analysis, for now at
   -- least.
-  AST_NFun node "yield" (obj : _optionalTargetChain) -> do
+  AST_NFun node "yield" (V.toList -> (obj : _optionalTargetChain)) -> do
     Some objTy obj' <- translateNode obj
     ety <- translateType node
     tid <- tagYield ety
@@ -1637,10 +1643,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   -- Translate into a resume-and-bind
   AST_Resume node bindings schemaNode body -> translateType schemaNode >>= \case
-    EType objTy@SObject{} -> typeOfPartialBind objTy bindings >>= \case
+    EType objTy@SObject{} -> typeOfPartialBind objTy (V.toList bindings) >>= \case
       ety@(EType partialReadTy@SObject{}) -> do
         tid <- tagResume ety
-        withNodeContext node $ translateObjBinding bindings partialReadTy body $
+        withNodeContext node $ translateObjBinding (V.toList bindings) partialReadTy (V.toList body) $
           Some partialReadTy $ Resume tid
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
@@ -1654,7 +1660,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some SInteger arg' -> pure arg'
       _ -> unexpectedNode astNode
     pure $ Some SInteger $ inject @(Numerical Term) $
-      BitwiseOp op args'
+      BitwiseOp op (V.toList args')
 
   AST_NFun node fn@"install-capability" [_] -> do
     -- current system does not grok managed caps yet, so
@@ -1671,7 +1677,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
   AST_NFun node fn@"enumerate" args ->
-    shimNative' node fn args "[0]" (Some (SList SInteger) (Lit' [0]))
+    shimNative' node fn (V.toList args) "[0]" (Some (SList SInteger) (Lit' [0]))
 
   AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
     -- uncaught case is dynamic list, sub format string
@@ -1679,7 +1685,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
 
-  AST_NFun node fn as -> shimNative astNode node fn as
+  AST_NFun node fn as -> shimNative astNode node fn (V.toList as)
 
   _ -> unexpectedNode astNode
 

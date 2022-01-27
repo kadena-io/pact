@@ -65,7 +65,7 @@ typecheckDef def defTy funTy = validateArgCount >> tcReturn >> tcArgs
                     "', expected " <> pretty ftyArgCount <>
                     ", found " <> pretty defArgCount
     tcReturn = tc def (_ftReturn defTy) (_ftReturn funTy)
-    tcArgs = zipWithM_ tcArg (_ftArgs defTy) (_ftArgs defTy)
+    tcArgs = V.zipWithM_ tcArg (_ftArgs defTy) (_ftArgs defTy)
     tcArg a specA = tc a (_aType a) (_aType specA)
     tc i ty specTy = unless (ty `canUnifyWith` specTy) $
       typecheckFailed i ty specTy
@@ -80,7 +80,7 @@ typecheckArgs
   -> [Term Name]
   -> Eval e ()
 typecheckArgs i defName ft' as' = do
-  let params = _ftArgs ft'
+  let params = V.toList $ _ftArgs ft'
   when (length params /= length as') $
     evalError' i $ pretty defName <> ": Incorrect number of arguments (" <>
       pretty (length as') <> ") supplied; expected " <> pretty (length params)
@@ -163,7 +163,7 @@ checkUserType :: forall n e. (Eq n, Pretty n) => SchemaPartial -> Info -> Object
 checkUserType partial i (ObjectMap ps) (TyUser tu@TSchema {..}) = do
   -- fields is lookup from name to arg.
   -- TODO consider OMap or equivalent for schema fields
-  let fields = M.fromList . map (FieldKey . _aName &&& id) $ _tFields
+  let fields = M.fromList . map (FieldKey . _aName &&& id) $ V.toList _tFields
   aps <- forM (M.toList ps) $ \(k,v) ->
     case M.lookup k fields of
       Nothing -> evalError i $ "Invalid field for {" <> pretty _tSchemaName <> "}: " <> pretty k

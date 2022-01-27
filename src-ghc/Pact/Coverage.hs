@@ -99,20 +99,20 @@ cover ref i ctx f = case _iInfo i of
               let fm = HM.singleton dn $ FunctionReport l dn 0
                   (_fn,l) = parseInf _fInfo
                   dn = renderCompactText _fModule <> "." <> _fName
-                  lns = HM.unions $ map astRep _fBody
+                  lns = HM.unions $ map astRep $ toList _fBody
               return (HM.union fs fm,HM.unions [ls,lns,lnReport'' _fInfo 0])
             _ -> return acc
         _ -> return acc
 
     astRep :: AST Node -> HM.HashMap Int LineReport
-    astRep App {..} = HM.unions $ [lnReport'' _aNode 0,specials] ++ map astRep _aAppArgs
+    astRep App {..} = HM.unions $ [lnReport'' _aNode 0,specials] ++ map astRep (toList _aAppArgs)
         where specials = case _aAppFun of
                 (FNative _ _ _ (Just (_,SBinding bast))) -> astRep bast
                 _ -> mempty
-    astRep List {..} = HM.unions $ map astRep _aList
+    astRep List {..} = HM.unions $ map astRep (toList _aList)
     astRep Object {..} = HM.unions $ map astRep $ toList _aObject
     astRep Step {..} = HM.union (astRep _aExec) $ maybe mempty astRep _aRollback
-    astRep Binding {..} = HM.unions $ map (astRep . snd) _aBindings ++ map astRep _aBody
+    astRep Binding {..} = HM.unions $ map (astRep . snd) (toList _aBindings) ++ map astRep (toList _aBody)
     astRep _ = mempty
 
 parseInf :: HasInfo i => i -> (FilePath,Int)

@@ -1,12 +1,13 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -53,7 +54,7 @@ module Pact.Types.Runtime
 
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
-import Control.Lens hiding ((.=),DefName)
+import Control.Lens hiding ((.=),DefName, (%=))
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -68,6 +69,7 @@ import Data.String
 import Data.Text (Text,pack)
 import GHC.Generics (Generic)
 
+import Pact.State.Strict
 import Pact.Types.Capability
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
@@ -87,10 +89,10 @@ import Pact.Types.Util
 -- 1. Whether a namespace can be created.
 -- 2. Whether the default namespace can be used.
 data NamespacePolicy =
-  SimpleNamespacePolicy (Maybe (Namespace (Term Name)) -> Bool)
+  SimpleNamespacePolicy !(Maybe (Namespace (Term Name)) -> Bool)
   -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
   |
-  SmartNamespacePolicy Bool QualifiedName
+  SmartNamespacePolicy !Bool !QualifiedName
   -- ^ Bool governs root usage, Name governs ns creation.
   -- Def is (defun xxx:bool (ns:string ns-admin:guard))
 
@@ -107,7 +109,7 @@ keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [minBound .. maxBound]
 
 -- | Storage for natives.
-data RefStore = RefStore {
+newtype RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
@@ -194,31 +196,31 @@ data EvalEnv e = EvalEnv {
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode
-    , _eeMode :: ExecutionMode
+    , _eeMode :: !ExecutionMode
       -- | Entity governing private/encrypted 'pact' executions.
     , _eeEntity :: !(Maybe EntityName)
       -- | Step value for 'pact' executions.
     , _eePactStep :: !(Maybe PactStep)
       -- | Back-end state MVar.
-    , _eePactDbVar :: MVar e
+    , _eePactDbVar :: !(MVar e)
       -- | Back-end function record.
-    , _eePactDb :: PactDb e
+    , _eePactDb :: !(PactDb e)
       -- | Pure indicator
-    , _eePurity :: Purity
+    , _eePurity :: !Purity
       -- | Transaction hash
-    , _eeHash :: Hash
+    , _eeHash :: !Hash
       -- | Gas Environment
-    , _eeGasEnv :: GasEnv
+    , _eeGasEnv :: !GasEnv
       -- | Namespace Policy
-    , _eeNamespacePolicy :: NamespacePolicy
+    , _eeNamespacePolicy :: !NamespacePolicy
       -- | SPV backend
-    , _eeSPVSupport :: SPVSupport
+    , _eeSPVSupport :: !SPVSupport
       -- | Env public data
-    , _eePublicData :: PublicData
+    , _eePublicData :: !PublicData
       -- | Execution configuration flags
-    , _eeExecutionConfig :: ExecutionConfig
+    , _eeExecutionConfig :: !ExecutionConfig
       -- | Advice bracketer
-    , _eeAdvice :: Advice
+    , _eeAdvice :: !Advice
     }
 makeLenses ''EvalEnv
 
@@ -229,11 +231,11 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Name Ref
+      _rsLoaded :: !(HM.HashMap Name Ref)
       -- | Modules that were loaded, and flag if updated.
-    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
+    , _rsLoadedModules :: !(HM.HashMap ModuleName (ModuleData Ref, Bool))
       -- | Current Namespace
-    , _rsNamespace :: Maybe (Namespace (Term Name))
+    , _rsNamespace :: !(Maybe (Namespace (Term Name)))
     } deriving (Eq,Show,Generic)
 makeLenses ''RefState
 instance NFData RefState
@@ -260,11 +262,11 @@ data EvalState = EvalState {
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
       -- | Gas tally
-    , _evalGas :: Gas
+    , _evalGas :: !Gas
       -- | Capability list
-    , _evalCapabilities :: Capabilities
+    , _evalCapabilities :: !Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
-    , _evalLogGas :: Maybe [(Text,Gas)]
+    , _evalLogGas :: !(Maybe [(Text,Gas)])
       -- | Accumulate events
     , _evalEvents :: ![PactEvent]
     } deriving (Show, Generic)
@@ -322,11 +324,11 @@ unlessExecutionFlagSet f onFalse =
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a
-call s act = do
+call !s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act
+  (_gas, r) <- act
   evalCallStack %= drop 1
-  return r
+  return $! r
 {-# INLINE call #-}
 
 -- | Invoke a backend method, catching all exceptions as 'DbError'

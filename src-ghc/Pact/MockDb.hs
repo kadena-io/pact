@@ -38,12 +38,12 @@ newtype MockGetTxLog =
 instance Default MockGetTxLog where def = MockGetTxLog (\_t _i -> rc [])
 
 data MockDb = MockDb {
-  mockRead :: MockRead,
-  mockKeys :: MockKeys,
-  mockTxIds :: MockTxIds,
-  mockGetUserTableInfo :: MockGetUserTableInfo,
-  mockCommitTx :: MockCommitTx,
-  mockGetTxLog :: MockGetTxLog
+  mockRead :: !MockRead,
+  mockKeys :: !MockKeys,
+  mockTxIds :: !MockTxIds,
+  mockGetUserTableInfo :: !MockGetUserTableInfo,
+  mockCommitTx :: !MockCommitTx,
+  mockGetTxLog :: !MockGetTxLog
   }
 instance Default MockDb where def = MockDb def def def def def def
 

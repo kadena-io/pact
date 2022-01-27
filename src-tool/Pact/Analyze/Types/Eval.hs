@@ -21,7 +21,7 @@
 module Pact.Analyze.Types.Eval where
 
 import           Control.Applicative          (ZipList (..))
-import           Control.Lens                 (Lens', at, ifoldl, iso, ix, lens,
+import           Control.Lens                 (Lens', at, ifoldl', iso, ix, lens,
                                                makeLenses, singular, view, (&),
                                                (.~), (<&>), (?~))
 import           Control.Lens.Wrapped
@@ -40,6 +40,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:)(Refl))
+import qualified Data.Vector                  as V
 import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
@@ -460,7 +461,7 @@ mkTableColumnMap tables f defValue = TableMap $ Map.fromList $ foldr go [] table
       Pact.UTModSpec{} -> acc
       Pact.UTSchema schema ->
         let fields = Pact._schFields schema
-            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+            colMap = ColumnMap $ Map.fromList $ flip mapMaybe (V.toList fields) $
               \(Pact.Arg argName ty _) ->
                 if f ty
                 then Just (ColumnName (T.unpack argName), defValue)
@@ -473,14 +474,14 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
     cellsList = tables <&> \Table { _tableName, _tableType } ->
         let fields' = case _tableType of
               Pact.UTSchema (Pact.Schema _ _ fields _) -> Map.fromList $
-                map (\(Pact.Arg argName ty _i) -> (argName, ty)) fields
+                map (\(Pact.Arg argName ty _i) -> (argName, ty)) (V.toList fields)
               Pact.UTModSpec Pact.ModSpec{} -> mempty
 
         in (TableName (T.unpack _tableName), mkCells _tableName fields')
 
 
     mkCells :: Text -> Map Text (Pact.Type Pact.UserType) -> SymbolicCells
-    mkCells tableName fields = ifoldl
+    mkCells tableName fields = ifoldl'
       (\colName cells ty ->
         let col      = ColumnName $ T.unpack colName
 

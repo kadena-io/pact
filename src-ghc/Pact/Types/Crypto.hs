@@ -133,7 +133,7 @@ class ( ConvertBS (PublicKey a),  Eq (PublicKey a), Show (PublicKey a)
 
 --------- CONNECTS PPKSCHEME TO SPPKSCHEME ---------
 
-data SomeScheme = forall a. Scheme (SPPKScheme a) => SomeScheme (SPPKScheme a)
+data SomeScheme = forall a. Scheme (SPPKScheme a) => SomeScheme !(SPPKScheme a)
 
 defaultScheme :: SomeScheme
 defaultScheme = toScheme defPPKScheme
@@ -255,9 +255,9 @@ instance ConvertBS (ECDSA.Signature) where
 
 -- | Specialized KeyPair datatype for schemes
 data KeyPair a = KeyPair
-  { _kpScheme :: a
-  , _kpPublicKey :: PublicKey a
-  , _kpPrivateKey :: PrivateKey a
+  { _kpScheme :: !a
+  , _kpPublicKey :: !(PublicKey a)
+  , _kpPrivateKey :: !(PrivateKey a)
   }
 
 instance Scheme a => Show (KeyPair a) where
@@ -270,7 +270,7 @@ instance Scheme a => Show (KeyPair a) where
 -- key pairs of different schemes
 data SomeKeyPair =
   forall a. Scheme (SPPKScheme a) =>
-    SomeKeyPair (KeyPair (SPPKScheme a))
+    SomeKeyPair !(KeyPair (SPPKScheme a))
 
 instance Show SomeKeyPair where
   show (SomeKeyPair kp) = "SomeKeyPair (" ++ show kp ++")"

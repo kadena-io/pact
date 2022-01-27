@@ -33,24 +33,24 @@ import Pact.Types.Logger hiding (Logging (..))
 
 
 data TableStmts = TableStmts
-  { sInsertReplace :: Statement
-  , sInsert :: Statement
-  , sReplace :: Statement
-  , sRead :: Statement
+  { sInsertReplace :: !Statement
+  , sInsert :: !Statement
+  , sReplace :: !Statement
+  , sRead :: !Statement
   }
 
 data TxStmts = TxStmts
-  { tBegin :: Statement
-  , tCommit :: Statement
-  , tRollback :: Statement
+  { tBegin :: !Statement
+  , tCommit :: !Statement
+  , tRollback :: !Statement
   }
 
 data SQLite = SQLite
-  { conn :: Database
-  , config :: SQLiteConfig
-  , logger :: Logger
-  , tableStmts :: M.Map Utf8 TableStmts
-  , txStmts :: TxStmts
+  { conn :: !Database
+  , config :: !SQLiteConfig
+  , logger :: !Logger
+  , tableStmts :: !(M.Map Utf8 TableStmts)
+  , txStmts :: !TxStmts
   }
 
 toUtf8 :: Text -> Utf8
@@ -87,35 +87,35 @@ persister = Persister {
   }
 
 data KeyTys k = KeyTys {
-  textTy :: Utf8,
-  inFun :: k -> SType,
-  outTy :: RType,
-  outFun :: SType -> IO k
+  textTy :: !Utf8,
+  inFun :: !(k -> SType),
+  outTy :: !RType,
+  outFun :: !(SType -> IO k)
   }
 
 decodeText :: SType -> IO DataKey
-decodeText (SText (Utf8 t)) = return $ DataKey $ decodeUtf8 t
-decodeText v = throwDbError $ "Expected text, got: " <> viaShow v
+decodeText (SText (Utf8 t)) = return $! DataKey $! decodeUtf8 t
+decodeText v = throwDbError $! "Expected text, got: " <> viaShow v
 
 decodeInt :: SType -> IO TxKey
-decodeInt (SInt i) = return $ fromIntegral i
-decodeInt v = throwDbError $ "Expected int, got: " <> viaShow v
+decodeInt (SInt i) = return $! fromIntegral i
+decodeInt v = throwDbError $! "Expected int, got: " <> viaShow v
 
 decodeBlob :: (FromJSON v) => SType -> IO v
-decodeBlob (SText (Utf8 t)) = liftEither (return $ eitherDecodeStrict' t)
-decodeBlob v = throwDbError $ "Expected text blob, got: " <> viaShow v
+decodeBlob (SText (Utf8 t)) = liftEither $! return $! eitherDecodeStrict' t
+decodeBlob v = throwDbError $! "Expected text blob, got: " <> viaShow v
 
 encodeBlob :: ToJSON a => a -> SType
-encodeBlob a = SText $ Utf8 $ BSL.toStrict $ encode a
+encodeBlob a = SText $ Utf8 $! BSL.toStrict $! encode a
 {-# INLINE encodeBlob #-}
 
 expectSing :: Show a => String -> [a] -> IO a
 expectSing _ [s] = return s
-expectSing desc v = throwDbError $ "Expected single-" <> prettyString desc <> " result, got: " <> viaShow v
+expectSing desc v = throwDbError $! "Expected single-" <> prettyString desc <> " result, got: " <> viaShow v
 
 expectTwo :: Show a => String -> [a] -> IO (a,a)
 expectTwo _ [a,b] = return (a,b)
-expectTwo desc v = throwDbError $ "Expected two-" <> prettyString desc <> " result, got: " <> viaShow v
+expectTwo desc v = throwDbError $! "Expected two-" <> prettyString desc <> " result, got: " <> viaShow v
 
 kTextTys :: KeyTys DataKey
 kTextTys = KeyTys "text" (SText . toUtf8 . asString) RText decodeText
@@ -142,7 +142,7 @@ createTable' t e = do
            mkstmt ("INSERT INTO " <> tn <> " VALUES (?,?)") <*>
            mkstmt ("REPLACE INTO " <> tn <> " VALUES (?,?)") <*>
            mkstmt ("SELECT VALUE FROM " <> tn <> " WHERE KEY = ?")
-  return $ e { tableStmts = M.insert tn ss (tableStmts e) }
+  return $! e { tableStmts = M.insert tn ss (tableStmts e) }
 
 
 query' :: FromJSON v => Table k -> Maybe (KeyQuery k) -> SQLite -> IO [(k,v)]
@@ -167,7 +167,7 @@ doQuery t kq cols outParams e = do
 getStmts :: SQLite -> Table k -> IO TableStmts
 getStmts e t = case M.lookup (tableName t) (tableStmts e) of
   Just ss -> return ss
-  Nothing -> throwDbError $ "No such table: " <> pretty t
+  Nothing -> throwDbError $! "No such table: " <> pretty t
 
 readData' :: FromJSON v => Table k -> k -> SQLite -> IO (Maybe v)
 readData' t k e = do

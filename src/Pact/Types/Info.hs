@@ -1,8 +1,9 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- |
 -- Module      :  Pact.Types.Info
@@ -55,8 +56,8 @@ import Pact.Types.Util
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {
-  _pDelta :: Delta,
-  _pLength :: Int
+  _pDelta :: !Delta,
+  _pLength :: !Int
   } deriving (Eq,Show,Ord,Generic)
 
 instance Arbitrary Parsed where
@@ -105,9 +106,9 @@ instance SizeOf Info where
 
 -- make an Info that refers to the indicated text
 mkInfo :: Text -> Info
-mkInfo t = Info $ Just (Code t,Parsed delt len)
-  where len = T.length t
-        delt = Directed (encodeUtf8 t) 0 0 (fromIntegral len) (fromIntegral len)
+mkInfo !t = Info $ Just (Code t,Parsed delt len)
+  where !len = T.length t
+        delt = Directed (force $ encodeUtf8 t) 0 0 (force $ fromIntegral len) (force $ fromIntegral len)
 
 #if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
 instance Mergeable Info where

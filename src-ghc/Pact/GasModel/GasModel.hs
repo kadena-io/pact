@@ -29,8 +29,8 @@ import Pact.Types.Runtime hiding (GasPrice)
 
 
 data Option = Option
-  { _oFilter :: Maybe T.Text
-  , _oBenchOnly :: Bool
+  { _oFilter :: !(Maybe T.Text)
+  , _oBenchOnly :: !Bool
   }
   deriving (Eq,Show)
 

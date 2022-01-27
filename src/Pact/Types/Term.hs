@@ -152,7 +152,7 @@ import Pact.Types.Util
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
-  , _mModel :: ![Exp Info]   -- ^ models
+  , _mModel :: !(V.Vector (Exp Info))   -- ^ models
   } deriving (Eq, Show, Generic)
 
 instance Pretty Meta where
@@ -161,20 +161,21 @@ instance Pretty Meta where
 
 instance NFData Meta
 
-prettyModel :: [Exp Info] -> Doc
-prettyModel []    = mempty
-prettyModel props = "@model " <> list (pretty <$> props)
+prettyModel :: V.Vector (Exp Info) -> Doc
+prettyModel props
+    | V.null props = mempty
+    | otherwise = "@model " <> list (pretty <$> toList props)
 
 instance ToJSON Meta where toJSON = lensyToJSON 2
 instance FromJSON Meta where parseJSON = lensyParseJSON 2
 
-instance Default Meta where def = Meta def def
+instance Default Meta where def = Meta def mempty
 
 instance Semigroup Meta where
   (Meta d m) <> (Meta d' m') = Meta (d <> d') (m <> m')
 
 instance Monoid Meta where
-  mempty = Meta Nothing []
+  mempty = Meta Nothing mempty
 
 -- -------------------------------------------------------------------------- --
 -- PublicKey
@@ -266,7 +267,7 @@ instance Arbitrary PactId where
 
 data UserGuard a = UserGuard
   { _ugFun :: !Name
-  , _ugArgs :: ![a]
+  , _ugArgs :: !(V.Vector a)
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable,Ord)
 
 instance (Arbitrary a) => Arbitrary (UserGuard a) where
@@ -277,7 +278,7 @@ instance NFData a => NFData (UserGuard a)
 instance Pretty a => Pretty (UserGuard a) where
   pretty UserGuard{..} = "UserGuard" <+> commaBraces
     [ "fun: " <> pretty _ugFun
-    , "args: " <> pretty _ugArgs
+    , "args: " <> pretty (toList _ugArgs)
     ]
 
 instance (SizeOf p) => SizeOf (UserGuard p) where
@@ -377,7 +378,7 @@ instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
 data App t = App
   { _appFun :: !t
-  , _appArgs :: ![t]
+  , _appArgs :: !(V.Vector t)
   , _appInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
 
@@ -387,7 +388,7 @@ instance ToJSON t => ToJSON (App t) where toJSON = lensyToJSON 4
 instance FromJSON t => FromJSON (App t) where parseJSON = lensyParseJSON 4
 
 instance Pretty n => Pretty (App n) where
-  pretty App{..} = parensSep $ pretty _appFun : map pretty _appArgs
+  pretty App{..} = parensSep $ pretty _appFun : map pretty (toList _appArgs)
 
 instance NFData t => NFData (App t)
 
@@ -573,7 +574,7 @@ instance Pretty n => Pretty (Step n) where
 data ModRef = ModRef
     { _modRefName :: !ModuleName
       -- ^ Fully-qualified module name.
-    , _modRefSpec :: !(Maybe [ModuleName])
+    , _modRefSpec :: !(Maybe (V.Vector ModuleName))
       -- ^ Specification: for modules, 'Just' implemented interfaces;
       -- for interfaces, 'Nothing'.
     , _modRefInfo :: !Info
@@ -658,7 +659,7 @@ instance (Eq v, FromJSON v, ToJSON v, Arbitrary v) => Arbitrary (ObjectMap v) wh
 
 -- | O(n) conversion to list. Adapted from 'M.toAscList'
 objectMapToListWith :: (FieldKey -> v -> r) -> ObjectMap v -> [r]
-objectMapToListWith f (ObjectMap m) = M.foldrWithKey (\k x xs -> (f k x):xs) [] m
+objectMapToListWith f (ObjectMap m) = M.foldrWithKey' (\k x xs -> (f k x):xs) [] m
 
 instance Pretty v => Pretty (ObjectMap v) where
   pretty om = annotate Val $ commaBraces $
@@ -779,8 +780,8 @@ data Module g = Module
   , _mCode :: !Code
   , _mHash :: !ModuleHash
   , _mBlessed :: !(HS.HashSet ModuleHash)
-  , _mInterfaces :: ![ModuleName]
-  , _mImports :: ![Use]
+  , _mInterfaces :: !(V.Vector ModuleName)
+  , _mImports :: !(V.Vector Use)
   } deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
 
 instance NFData g => NFData (Module g)
@@ -799,7 +800,7 @@ data Interface = Interface
   { _interfaceName :: !ModuleName
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
-  , _interfaceImports :: ![Use]
+  , _interfaceImports :: !(V.Vector Use)
   } deriving (Eq,Show,Generic)
 instance Pretty Interface where
   pretty Interface{..} = parensSep [ "interface", pretty _interfaceName ]
@@ -968,7 +969,7 @@ instance Pretty (Term n) => Pretty (Def n) where
   pretty Def{..} = parensSep $
     [ prettyString (defTypeRep _dDefType)
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
-    , parensSep $ pretty <$> _ftArgs _dFunType
+    , parensSep $ pretty <$> toList (_ftArgs _dFunType)
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
     ++ maybe [] (pure . pretty) _dDefMeta
 
@@ -997,7 +998,7 @@ instance HasInfo (Lam n) where getInfo = _lamInfo
 
 instance Pretty n => Pretty (Lam n) where
   pretty (Lam arg ty _ _) =
-    pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> (parensSep $ pretty <$> _ftArgs ty) <+> "..."
+    pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> (parensSep $ pretty <$> toList (_ftArgs ty)) <+> "..."
 
 instance NFData n => NFData (Lam n)
 
@@ -1010,7 +1011,7 @@ instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where parseJSO
 data Object n = Object
   { _oObject :: !(ObjectMap (Term n))
   , _oObjectType :: !(Type (Term n))
-  , _oKeyOrder :: !(Maybe [FieldKey])
+  , _oKeyOrder :: !(Maybe (V.Vector FieldKey))
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
@@ -1026,7 +1027,7 @@ instance Pretty n => Pretty (Object n) where
     map (\(k,v) -> pretty k <> ": " <> pretty v) $
     sortBy (compare `on` (keyOrder . fst)) $
     M.toList om
-    where keyOrder f = elemIndex f ko
+    where keyOrder f = V.elemIndex f ko
 
 instance NFData n => NFData (Object n)
 
@@ -1057,14 +1058,14 @@ data Term n =
     , _tInfo :: !Info
     } |
     TDef {
-      _tDef :: Def n
+      _tDef :: !(Def n)
     , _tInfo :: !Info
     } |
     TNative {
       _tNativeName :: !NativeDefName
     , _tNativeFun :: !NativeDFun
     , _tFunTypes :: !(FunTypes (Term n))
-    , _tNativeExamples :: ![Example]
+    , _tNativeExamples :: !(Vector Example)
     , _tNativeDocs :: !Text
     , _tNativeTopLevelOnly :: !Bool
     , _tInfo :: !Info
@@ -1085,13 +1086,13 @@ data Term n =
     , _tInfo :: !Info
     } |
     TBinding {
-      _tBindPairs :: ![BindPair (Term n)]
+      _tBindPairs :: !(Vector (BindPair (Term n)))
     , _tBindBody :: !(Scope Int Term n)
     , _tBindType :: !(BindType (Type (Term n)))
     , _tInfo :: !Info
     } |
     TLam {
-      _tLam :: Lam n
+      _tLam :: !(Lam n)
     , _tInfo :: !Info
     } |
     TObject {
@@ -1102,7 +1103,7 @@ data Term n =
       _tSchemaName :: !TypeName
     , _tModule :: !(Maybe ModuleName)
     , _tMeta :: !Meta
-    , _tFields :: ![Arg (Term n)]
+    , _tFields :: !(Vector (Arg (Term n)))
     , _tInfo :: !Info
     } |
     TLiteral {
@@ -1179,11 +1180,11 @@ instance Pretty n => Pretty (Term n) where
       <> line <> annotate Header "Type:"
       <> line <> align (vsep (prettyFunType <$> toList _tFunTypes))
       <> examples
-      ) where examples = case _tNativeExamples of
-                [] -> mempty
-                exs ->
+      ) where examples
+                | null _tNativeExamples = mempty
+                | otherwise =
                      line <> line <> annotate Header "Examples:"
-                  <> line <> align (vsep (pretty <$> exs))
+                  <> line <> align (vsep (pretty <$> toList _tNativeExamples))
     TConst{..} -> "constant "
         <> maybe "" ((<>) "." .  pretty) _tModule
         <> pretty _tConstArg
@@ -1192,11 +1193,11 @@ instance Pretty n => Pretty (Term n) where
     TVar n _ -> pretty n
     TBinding pairs body BindLet _i -> parensSep
       [ "let"
-      , parensSep $ fmap pretty pairs
+      , parensSep $ fmap pretty (toList pairs)
       , pretty $ unscope body
       ]
     TBinding pairs body (BindSchema _) _i -> parensSep
-      [ commaBraces $ fmap pretty pairs
+      [ commaBraces $ fmap pretty (toList pairs)
       , pretty $ unscope body
       ]
     TLam lam _ -> pretty lam
@@ -1209,7 +1210,7 @@ instance Pretty n => Pretty (Term n) where
       [ "defschema"
       , pretty _tSchemaName
       , pretty _tMeta
-      , prettyList _tFields
+      , prettyList (toList _tFields)
       ]
     TTable{..} -> parensSep
       [ "deftable"
@@ -1219,7 +1220,7 @@ instance Pretty n => Pretty (Term n) where
     TDynamic ref var _i -> pretty ref <> "::" <> pretty var
     TModRef mr _ -> pretty mr
     where
-      prettyFunType (FunType as r) = pretty (FunType (map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
+      prettyFunType (FunType as r) = pretty (FunType (V.map (fmap prettyTypeTerm) as) (prettyTypeTerm <$> r))
 
 prettyTypeTerm :: Term n -> SpecialPretty (Term n)
 prettyTypeTerm TSchema{..} = SPSpecial ("{" <> asString _tSchemaName <> "}")
@@ -1241,7 +1242,7 @@ instance Monad Term where
     TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f =
-      TBinding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
+      TBinding (V.map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TLam (Lam arg ty b i) i' >>= f =
       TLam (Lam arg (fmap (>>= f) ty) (b >>>= f) i) i'
     TObject (Object bs t kf oi) i >>= f =
@@ -1432,7 +1433,7 @@ typeof t = case t of
       TList {..} -> Right $ TyList _tListType
       TDef{..} -> Right $ TyFun (_dFunType _tDef)
       TNative {} -> Left "defun"
-      TConst {..} -> Left $ "const:" <> _aName _tConstArg
+      TConst {..} -> Left $! "const:" <> _aName _tConstArg
       TApp {} -> Left "app"
       TVar {} -> Left "var"
       TBinding {..} -> case _tBindType of
@@ -1444,7 +1445,7 @@ typeof t = case t of
       TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
       TUse {} -> Left "use"
       TStep {} -> Left "step"
-      TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
+      TSchema {..} -> Left $! "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
       TModRef m _ -> Right $ modRefTy m
@@ -1452,7 +1453,7 @@ typeof t = case t of
 
 -- | Populate 'TyModule' using a 'ModRef'
 modRefTy :: ModRef -> Type (Term a)
-modRefTy (ModRef _mn is _) = TyModule $ fmap (map (\i -> TModRef (ModRef i Nothing def) def)) is
+modRefTy (ModRef _mn is _) = TyModule $ fmap (V.map (\i -> TModRef (ModRef i Nothing def) def)) is
 
 -- | Return string type description.
 typeof' :: Pretty a => Term a -> Text
@@ -1501,7 +1502,7 @@ termEq1 eq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap 
 termEq1 _ (TLiteral a _) (TLiteral b _) = a == b
 termEq1 eq (TGuard a _) (TGuard b _) = liftEq (termEq1 eq) a b
 termEq1 eq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g && liftEq (termEq1 eq) d h && x == y
-termEq1 eq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && length d == length h && and (zipWith (argEq1 (termEq1 eq)) d h)
+termEq1 eq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && length d == length h && and (V.zipWith (argEq1 (termEq1 eq)) d h)
 termEq1 eq (TVar a _) (TVar b _) = eq a b
 termEq1 _ (TModRef (ModRef am as _) _) (TModRef (ModRef bm bs _) _) = am == bm && as == bs
 termEq1 _ _ _ = False

@@ -220,8 +220,8 @@ escapedStringsExpr = NEL.map format strings
 
 -- | Helper functions and types for creating pact expressions
 data PactExpression = PactExpression
-  { _pactExpressionFull :: T.Text
-  , _pactExpressionAbridged :: Maybe T.Text
+  { _pactExpressionFull :: !T.Text
+  , _pactExpressionAbridged :: !(Maybe T.Text)
   }
 
 defPactExpression :: T.Text -> PactExpression
@@ -239,13 +239,13 @@ createPactExpr f (PactExpression arg abridged) =
 
 
 data MockPactType =
-    MockObject (HM.HashMap T.Text Integer)
-  | MockBinding (HM.HashMap T.Text Integer)
-  | MockList [MockPactType]
-  | MockBool Bool
-  | MockInt Integer
-  | MockString T.Text
-  | MockExpr T.Text
+    MockObject !(HM.HashMap T.Text Integer)
+  | MockBinding !(HM.HashMap T.Text Integer)
+  | MockList ![MockPactType]
+  | MockBool !Bool
+  | MockInt !Integer
+  | MockString !T.Text
+  | MockExpr !T.Text
   deriving (Show)
 
 toText :: MockPactType -> T.Text
@@ -405,7 +405,7 @@ someStackFrame :: StackFrame
 someStackFrame =
   StackFrame "" def
   (Just ((FunApp def ""
-           (Just someModuleName) Defun (funTypes $ FunType [] TyAny) Nothing)
+           (Just someModuleName) Defun (funTypes $ FunType mempty TyAny) Nothing)
         ,[])
   )
 
@@ -421,7 +421,7 @@ someModuleData = ModuleData modDef refMap
         scopeOfRef :: Scope Int Term Ref
         scopeOfRef = abstract fst' scd'
 
-        defOfRef = Def (DefName "") someModuleName Defun (FunType [] TyAny) scopeOfRef def def def
+        defOfRef = Def (DefName "") someModuleName Defun (FunType mempty TyAny) scopeOfRef def def def
         modDef = MDModule mod'
         gov = Governance $ Right defOfRef
-        mod' = Module someModuleName gov def (Code "") someModuleHash HS.empty [] []
+        mod' = Module someModuleName gov def (Code "") someModuleHash HS.empty mempty mempty

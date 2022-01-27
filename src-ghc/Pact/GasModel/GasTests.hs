@@ -355,8 +355,8 @@ requireCapabilityTests = tests
       defPactExpression [text| (require-capability ($acctModuleNameText.GOV)) |]
     allExprs = requireCapExpr :| []
 
-    cap = SigCapability (QualifiedName acctModuleName "GOV" def) []
-    capSlot = CapSlot CapCallStack cap []
+    cap = SigCapability (QualifiedName acctModuleName "GOV" def) mempty
+    capSlot = CapSlot CapCallStack cap mempty
     updateGrantedCap = setState (set (evalCapabilities . capStack) [capSlot])
 
     tests =
@@ -375,7 +375,7 @@ composeCapabilityTests = tests
     capInStackframe =
       StackFrame "" def
       (Just ((FunApp def ""
-           (Just someModuleName) Defcap (funTypes $ FunType [] TyAny) Nothing)
+           (Just someModuleName) Defcap (funTypes $ FunType mempty TyAny) Nothing)
         ,[])
       )
     updateStateWithCap = setState (set evalCallStack [capInStackframe])

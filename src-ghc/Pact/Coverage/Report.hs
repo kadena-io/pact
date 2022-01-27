@@ -38,10 +38,10 @@ instance Monoid LcovReport where
   mempty = LcovReport mempty
 
 data FileReport = FileReport
-  { fileReportLocation  :: FilePath
-  , fileReportFunctions :: HM.HashMap Text FunctionReport
-  , fileReportBranches  :: HM.HashMap Int BranchReport
-  , fileReportLines     :: HM.HashMap Int LineReport
+  { fileReportLocation  :: !FilePath
+  , fileReportFunctions :: !(HM.HashMap Text FunctionReport)
+  , fileReportBranches  :: !(HM.HashMap Int BranchReport)
+  , fileReportLines     :: !(HM.HashMap Int LineReport)
   } deriving (Show, Eq)
 instance Semigroup FileReport where
   FileReport a b c d <> FileReport _e f g h = FileReport a
@@ -50,25 +50,25 @@ instance Semigroup FileReport where
     (HM.unionWith (<>) d h)
 
 data FunctionReport = FunctionReport
-  { functionReportLine :: Int
-  , functionReportName :: Text
-  , functionReportHits :: Integer
+  { functionReportLine :: !Int
+  , functionReportName :: !Text
+  , functionReportHits :: !Integer
   } deriving (Show, Eq)
 instance Semigroup FunctionReport where
   (FunctionReport a b c) <> (FunctionReport _d _e f) = FunctionReport a b (c + f)
 
 data BranchReport = BranchReport
-  { branchReportLine      :: Int
-  , branchReportHash      :: Int
-  , branchReportTrueHits  :: Integer
-  , branchReportFalseHits :: Integer
+  { branchReportLine      :: !Int
+  , branchReportHash      :: !Int
+  , branchReportTrueHits  :: !Integer
+  , branchReportFalseHits :: !Integer
   } deriving (Show, Eq)
 instance Semigroup BranchReport where
   (BranchReport a b c d) <> (BranchReport _e _f g h) = BranchReport a b (c + g) (d + h)
 
 data LineReport = LineReport
-  { lineReportLine :: Int
-  , lineReportHits :: Integer
+  { lineReportLine :: !Int
+  , lineReportHits :: !Integer
   } deriving (Show, Eq)
 instance Semigroup LineReport where
   (LineReport a b) <> (LineReport _c d) = LineReport a (b + d)

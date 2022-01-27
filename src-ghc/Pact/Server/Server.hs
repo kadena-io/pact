@@ -45,15 +45,15 @@ import Pact.Server.History.Service
 import Pact.Server.PactService
 
 data Config = Config {
-  _port :: Word16,
-  _persistDir :: Maybe FilePath,
-  _logDir :: FilePath,
-  _pragmas :: [Pragma],
-  _verbose :: Bool,
-  _entity :: Maybe EntityName,
-  _gasLimit :: Maybe Int,
-  _gasRate :: Maybe Int,
-  _execConfig :: Maybe ExecutionConfig
+  _port :: !Word16,
+  _persistDir :: !(Maybe FilePath),
+  _logDir :: !FilePath,
+  _pragmas :: ![Pragma],
+  _verbose :: !Bool,
+  _entity :: !(Maybe EntityName),
+  _gasLimit :: !(Maybe Int),
+  _gasRate :: !(Maybe Int),
+  _execConfig :: !(Maybe ExecutionConfig)
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1

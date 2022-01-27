@@ -66,20 +66,20 @@ import Pact.Types.Util
 
 
 data ModuleState = ModuleState
-  { _msName :: ModuleName
-  , _msHash :: ModuleHash
-  , _msBlessed :: [ModuleHash]
-  , _msImplements :: [ModuleName]
-  , _msImports :: [Use]
+  { _msName :: !ModuleName
+  , _msHash :: !ModuleHash
+  , _msBlessed :: !(V.Vector ModuleHash)
+  , _msImplements :: !(V.Vector ModuleName)
+  , _msImports :: !(V.Vector Use)
   }
 makeLenses ''ModuleState
 
 initModuleState :: ModuleName -> ModuleHash -> ModuleState
-initModuleState n h = ModuleState n h def def def
+initModuleState n h = ModuleState n h mempty mempty mempty
 
 data CompileState = CompileState
-  { _csFresh :: Int
-  , _csModule :: Maybe ModuleState
+  { _csFresh :: !Int
+  , _csModule :: !(Maybe ModuleState)
   }
 makeLenses ''CompileState
 
@@ -284,7 +284,7 @@ app = do
   v <- varAtom
   args <- many (valueLevel <|> bindingForm)
   i <- contextInfo
-  return $ TApp (App v args i) i
+  return $ TApp (App v (V.fromList args) i) i
 
 -- | Bindings (`{ "column" := binding }`) do not syntactically scope the
 -- following body form as a sexp, instead letting the body contents
@@ -299,7 +299,7 @@ bindingForm = do
         return $ BindPair a col
   (bindings,bi) <- withList' Braces $
     (,) <$> pair `sepBy1` sep Comma <*> contextInfo
-  TBinding bindings <$> abstractBody valueLevel (map _bpArg bindings) <*>
+  TBinding (V.fromList bindings) <$> abstractBody valueLevel (map _bpArg bindings) <*>
     pure (BindSchema TyAny) <*> pure bi
 
 varAtom :: Compile (Term Name)
@@ -340,7 +340,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         val <- sep Colon *> valueLevel
         return (key,val)
   ps <- (pair `sepBy` sep Comma) <* eof
-  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny (Just (map fst ps)) _listInfo) _listInfo
+  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny (Just (V.fromList (map fst ps))) _listInfo) _listInfo
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
@@ -355,7 +355,7 @@ withCapability = do
   capApp <- sexp app
   body@(top:_) <- some valueLevel
   i <- contextInfo
-  return $ TApp (App wcVar [capApp,TList (V.fromList body) TyAny (_tInfo top)] i) i
+  return $ TApp (App wcVar (V.fromList [capApp, TList (V.fromList body) TyAny (_tInfo top)]) i) i
 
 deftable :: Compile (Term Name)
 deftable = do
@@ -372,7 +372,7 @@ deftable = do
 bless :: Compile ()
 bless = do
   h <- hash'
-  overModuleState msBlessed (h:)
+  overModuleState msBlessed (V.cons h)
 
 
 defconst :: Compile (Term Name)
@@ -387,20 +387,20 @@ data ModelAllowed
   = ModelAllowed
   | ModelNotAllowed
 
-data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
+data AtPair = DocPair !Text | ModelPair ![Exp Info] deriving (Eq,Ord)
 
 modelOnly :: Compile Meta
 modelOnly = do
   symbol "@model"
   (ListExp props _ _i, _) <- list' Brackets
-  pure $ Meta Nothing props
+  pure $ Meta Nothing (V.fromList props)
 
 meta :: ModelAllowed -> Compile Meta
 meta modelAllowed =
   -- hiding labels/errors here because otherwise they hang around for all module errors
   hidden atPairs <|> hidden (try docStr) <|> return def
   where
-    docStr = Meta <$> (Just <$> str) <*> pure []
+    docStr = Meta <$> (Just <$> str) <*> pure mempty
     docPair = symbol "@doc" >> (DocPair <$> str)
     modelPair = do
       symbol "@model"
@@ -412,9 +412,9 @@ meta modelAllowed =
     atPairs = do
       ps <- sort <$> (some (docPair <|> modelPair))
       case ps of
-        [DocPair doc] -> return (Meta (Just doc) [])
-        [ModelPair es] -> whenModelAllowed $ return (Meta Nothing es)
-        [DocPair doc, ModelPair es] -> whenModelAllowed $ return (Meta (Just doc) es)
+        [DocPair doc] -> return (Meta (Just doc) mempty)
+        [ModelPair es] -> whenModelAllowed $ return (Meta Nothing $ V.fromList es)
+        [DocPair doc, ModelPair es] -> whenModelAllowed $ return (Meta (Just doc) $ V.fromList es)
         _ -> expected $ case modelAllowed of
           ModelNotAllowed -> "@doc declaration"
           ModelAllowed -> "@doc and/or @model declarations"
@@ -424,7 +424,7 @@ defschema = do
   modName <- currentModuleName
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
-  fields <- many arg
+  fields <- V.fromList <$> many arg
   TSchema (TypeName tn) (Just modName) m fields <$> contextInfo
 
 defunOrCap :: DefType -> Compile (Term Name)
@@ -437,7 +437,7 @@ defunOrCap dt = do
   b <- abstractBody valueLevel args
   i <- contextInfo
   return $ (`TDef` i) $
-    Def (DefName defname) modName dt (FunType args returnTy)
+    Def (DefName defname) modName dt (FunType (V.fromList args) returnTy)
       b m dm i
 
 defcapManaged :: DefType -> Compile (Maybe (DefMeta (Term Name)))
@@ -469,7 +469,7 @@ defpact = do
   i <- contextInfo
   abody <- abstractBody' args (TList (V.fromList body) TyAny bi)
   return $ TDef
-    (Def (DefName defname) modName Defpact (FunType args returnTy)
+    (Def (DefName defname) modName Defpact (FunType (V.fromList args) returnTy)
       abody
       m Nothing i) i
 
@@ -490,14 +490,14 @@ moduleForm = do
       modHash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
-    (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
+    (MDModule $ Module modName gov m code modHash (HS.fromList $ V.toList _msBlessed) _msImplements _msImports)
     (abstract (const Nothing) (TList (V.fromList (concat bd)) TyAny bi)) i
 
 
 implements :: Compile ()
 implements = do
   (ifn,_) <- qualifiedModuleName
-  overModuleState msImplements (ifn:)
+  overModuleState msImplements (V.cons ifn)
 
 
 interface :: Compile (Term Name)
@@ -537,13 +537,13 @@ defSig dt = do
   info <- contextInfo
   return $ (`TDef` info) $
     Def (DefName defName) modName dt
-      (FunType args returnTy) (abstract (const Nothing) (TList V.empty TyAny info))
+      (FunType (V.fromList args) returnTy) (abstract (const Nothing) (TList V.empty TyAny info))
       m dm info
 
 
 step :: Compile (Term Name)
 step = do
-  m <- option (Meta Nothing []) modelOnly
+  m <- option (Meta Nothing mempty) modelOnly
   cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
           (Step Nothing <$> valueLevel)
   i <- contextInfo
@@ -552,7 +552,7 @@ step = do
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
   i <- contextInfo
-  m <- option (Meta Nothing []) modelOnly
+  m <- option (Meta Nothing mempty) modelOnly
   s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
             (Just <$> valueLevel) <*> pure i)
        <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
@@ -563,7 +563,7 @@ lam = do
   name <- freshNameRaw
   tv <- freshTyVar
   args <- withList' Parens $ many arg
-  let funTy = FunType args tv
+  let funTy = FunType (V.fromList args) tv
   info <- contextInfo
   lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
   pure (TLam lamValue info)
@@ -594,7 +594,7 @@ abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames)
 
     enrichDynamic n@(DName dyn@(DynamicName _ ref ifs _))
       | S.null ifs = case M.lookup ref modRefArgs of
-        Just ifs' -> DName . setIfs dyn . S.fromList <$> traverse ifVarName (fromMaybe [] ifs')
+        Just ifs' -> DName . setIfs dyn . S.fromList <$> traverse ifVarName (maybe [] V.toList ifs')
         Nothing -> return n
       | otherwise = return n
     enrichDynamic n = return n
@@ -613,14 +613,14 @@ condForm = do
   elseCond <- valueLevel
   i <- contextInfo
   let if' = TVar (Name (BareName "if" i)) i
-  pure $ foldr (\(cond, act) e -> TApp (App if' [cond, act, e] i) i) elseCond conds
+  pure $ foldr (\(cond, act) e -> TApp (App if' (V.fromList [cond, act, e]) i) i) elseCond conds
   where
   conds' = some $ withList' Parens $ (,) <$> valueLevel <*> valueLevel
 
 letForm :: Compile (Term Name)
 letForm = do
-  bindings <- letBindings
-  TBinding bindings <$> abstractBody valueLevel (map _bpArg bindings) <*>
+  bindings <- V.fromList <$> letBindings
+  TBinding bindings <$> abstractBody valueLevel (map _bpArg $ V.toList bindings) <*>
     pure BindLet <*> contextInfo
 
 -- | let* is a macro to nest lets for referencing previous
@@ -634,7 +634,7 @@ letsForm = do
           _ -> do
             rest' <- nest rest
             pure $ TList (V.singleton rest') TyAny def
-        TBinding [binding] scope BindLet <$> contextInfo
+        TBinding (V.singleton binding) scope BindLet <$> contextInfo
       nest [] =  syntaxError "letsForm: invalid state (bug)"
   nest bindings
 
@@ -649,7 +649,7 @@ useForm = do
       u = Use mn h v i
 
   -- this is the one place module may not be present, use traversal
-  psUser . csModule . _Just . msImports %= (u:)
+  psUser . csModule . _Just . msImports %= V.cons u
   return $ TUse u i
 
 hash' :: Compile ModuleHash
@@ -696,7 +696,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 
 parseModuleRefType :: Compile (Type (Term Name))
 parseModuleRefType = symbol "module" >>
-  (TyModule . Just <$> withList' Braces
+  (TyModule . Just . V.fromList <$> withList' Braces
    ((snd <$> qualifiedModuleName) `sepBy1` sep Comma))
 
 parseUserSchemaType :: Compile (Type (Term Name))

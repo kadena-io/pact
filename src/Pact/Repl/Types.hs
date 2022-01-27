@@ -33,7 +33,7 @@ import Pact.Types.Typecheck
 
 data ReplMode =
     Interactive |
-    Script { rmTrace :: Bool, rmFile :: FilePath } |
+    Script { rmTrace :: !Bool, rmFile :: !FilePath } |
     FailureTest |
     Quiet |
     StringEval |
@@ -48,12 +48,12 @@ data TestResult = TestResult
   }
 
 data ReplState = ReplState {
-      _rEnv :: EvalEnv LibState
-    , _rEvalState :: EvalState
-    , _rMode :: ReplMode
-    , _rOut :: String
-    , _rTermOut :: [Term Name]
-    , _rFile :: Maybe FilePath
+      _rEnv :: !(EvalEnv LibState)
+    , _rEvalState :: !EvalState
+    , _rMode :: !ReplMode
+    , _rOut :: !String
+    , _rTermOut :: ![Term Name]
+    , _rFile :: !(Maybe FilePath)
     }
 
 type Repl a = StateT ReplState IO a
@@ -61,13 +61,13 @@ type Repl a = StateT ReplState IO a
 -- | A REPL operation that requires top-level evaluation.
 data LibOp
     = Noop
-    | UpdateEnv (Endo (EvalEnv LibState))
+    | UpdateEnv !(Endo (EvalEnv LibState))
       -- ^ mutate the read-only environment
-    | Load FilePath Bool
+    | Load !FilePath !Bool
       -- ^ load a filepath script
-    | Print (Term Name)
+    | Print !(Term Name)
       -- ^ print to terminal
-    | Output [RenderedOutput]
+    | Output ![RenderedOutput]
       -- ^ special output for typechecker/FV
 instance Default LibOp where def = Noop
 
@@ -93,16 +93,16 @@ instance Eq SPVMockKey where
 instance Ord SPVMockKey where
   a `compare` b = renderCompactText a `compare` renderCompactText b
 
-data LibDb = forall e . LibDb (MVar (DbEnv e))
+data LibDb = forall e . LibDb !(MVar (DbEnv e))
 
 data LibState = LibState
-  { _rlsDb :: LibDb
-  , _rlsOp :: LibOp
-  , _rlsTx :: (Maybe TxId, Maybe Text)
-  , _rlsTests :: [TestResult]
-  , _rlsVerifyUri :: Maybe String
-  , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
-  , _rlsDynEnv :: DynEnv
+  { _rlsDb :: !LibDb
+  , _rlsOp :: !LibOp
+  , _rlsTx :: !(Maybe TxId, Maybe Text)
+  , _rlsTests :: ![TestResult]
+  , _rlsVerifyUri :: !(Maybe String)
+  , _rlsMockSPV :: !(M.Map SPVMockKey (Object Name))
+  , _rlsDynEnv :: !DynEnv
   }
 
 

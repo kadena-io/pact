@@ -1,13 +1,14 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 -- |
 -- Module      :  Pact.Runtime.Capabilities
@@ -34,10 +35,10 @@ import Control.Monad
 import Control.Lens hiding (DefName)
 import Data.Default
 import Data.Foldable
-import Data.List
 import Data.Text (Text)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import qualified Data.Vector as V
 
 import Pact.Types.Capability
 import Pact.Types.PactValue
@@ -146,18 +147,18 @@ evalUserCapability i af scope cap cdef test = go scope
     -- otherwise push and test.
     evalStack = checkManaged i af cap cdef >>= \r -> case r of
       Nothing -> push >> test >> emitMaybe
-      Just composed -> emitCap >> pushSlot (CapSlot scope cap composed)
+      Just composed -> emitCap >> pushSlot (CapSlot scope cap (V.fromList composed))
 
     -- Composed: check if managed, in which case install onto head/emit,
     -- otherwise push, test, pop and install onto head
     evalComposed = checkManaged i af cap cdef >>= \r -> case r of
       Nothing -> push >> test >> emitMaybe >> popCapStack installComposed
-      Just composed -> emitCap >> installComposed (CapSlot scope cap composed)
+      Just composed -> emitCap >> installComposed (CapSlot scope cap (V.fromList composed))
 
     installComposed c =
-      evalCapabilities . capStack . _head . csComposed <>= (_csCap c:_csComposed c)
+      evalCapabilities . capStack . _head . csComposed <>= (V.cons (_csCap c) (_csComposed c))
 
-    push = pushSlot (CapSlot scope cap [])
+    push = pushSlot (CapSlot scope cap mempty)
 
     emitCap = emitCapability i cap
 
@@ -167,7 +168,7 @@ evalUserCapability i af scope cap cdef test = go scope
     pushSlot s = evalCapabilities . capStack %= (s:)
 
 emitCapability :: HasInfo i => i -> UserCapability -> Eval e ()
-emitCapability i cap = emitEvent i (_scName cap) (_scArgs cap)
+emitCapability i cap = emitEvent i (_scName cap) (toList $ _scArgs cap)
 
 defCapMetaParts :: UserCapability -> Text -> Def Ref
                 -> Either Doc (Int, SigCapability, PactValue)
@@ -177,7 +178,7 @@ defCapMetaParts cap argName cdef = case findArg argName of
     Nothing -> Left $ "Missing argument index from capability: " <> pretty idx
     Just (static,v) -> return (idx,static,v)
   where
-    findArg an = findIndex ((==) an . _aName) $ _ftArgs (_dFunType cdef)
+    findArg an = V.findIndex ((==) an . _aName) $ _ftArgs (_dFunType cdef)
 
 -- Check managed state, if any, to approve acquisition.
 -- Handles lazy installation of sig + auto caps, as a fallback
@@ -195,7 +196,7 @@ checkManaged
 checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef of
   -- managed: go
   Just (DMDefcap dcm@DefcapManaged {}) ->
-    use (evalCapabilities . capManaged) >>= go dcm . S.toList
+    use (evalCapabilities . capManaged) >>= fmap (fmap V.toList) . go dcm . S.toList
   -- otherwise noop
   _ -> return Nothing
 

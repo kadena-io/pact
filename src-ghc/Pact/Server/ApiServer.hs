@@ -59,9 +59,9 @@ type ServerError = ServantErr
 #endif
 
 data ApiEnv = ApiEnv
-  { _aiLog :: String -> IO ()
-  , _aiHistoryChan :: HistoryChannel
-  , _aiInboundPactChan :: InboundPactChan
+  { _aiLog :: !(String -> IO ())
+  , _aiHistoryChan :: !HistoryChannel
+  , _aiInboundPactChan :: !InboundPactChan
   }
 makeLenses ''ApiEnv
 
