@@ -35,6 +35,7 @@ import           Pact.Native
 import           Pact.Repl
 import           Pact.Repl.Lib
 import           Pact.Repl.Types
+import           Pact.State.Strict
 import           Pact.Types.Lang
 import           Pact.Types.Pretty
 
@@ -81,8 +82,8 @@ renderTerm h TNative{..} = do
 renderTerm h TSchema{..} = do
   termHeader h _tSchemaName
   case _mDocs _tMeta of
-    Nothing -> hPutStrLn stderr $ "No docs for schema " ++ renderCompactString _tSchemaName
-    Just d -> do
+    Nothing' -> hPutStrLn stderr $ "No docs for schema " ++ renderCompactString _tSchemaName
+    Just' d -> do
       hPutStrLn h $ unpack d
       hPutStrLn h ""
   hPutStrLn h "Fields:"
@@ -93,8 +94,8 @@ renderTerm h TSchema{..} = do
 renderTerm h (TConst (Arg n ty _) _ cval meta _) = do
   termHeader h n
   case _mDocs meta of
-    Nothing -> hPutStrLn stderr $ "No docs for constant " <> renderCompactString n
-    Just docs -> do
+    Nothing' -> hPutStrLn stderr $ "No docs for constant " <> renderCompactString n
+    Just' docs -> do
       hPutStrLn h $ unpack docs
       hPutStrLn h ""
 

@@ -74,6 +74,7 @@ import qualified Data.List.NonEmpty as NEL
 
 
 import Pact.Compile (compileExps, mkTextInfo)
+import Pact.State.Strict
 import Pact.Types.Capability (SigCapability)
 import Pact.Types.Command
 import Pact.Types.Lang
@@ -405,7 +406,7 @@ someStackFrame :: StackFrame
 someStackFrame =
   StackFrame "" def
   (Just ((FunApp def ""
-           (Just someModuleName) Defun (funTypes $ FunType mempty TyAny) Nothing)
+           (Just' someModuleName) Defun (funTypes $ FunType mempty TyAny) Nothing')
         ,[])
   )
 

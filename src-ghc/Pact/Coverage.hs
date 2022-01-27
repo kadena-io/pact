@@ -40,6 +40,7 @@ import Pact.Types.Typecheck
 import Pact.Types.Runtime (ModuleData(..),eeAdvice)
 import Pact.Repl
 import Pact.Repl.Types
+import Pact.State.Strict
 
 
 mkCoverageAdvice :: IO (IORef LcovReport,Advice)
@@ -47,7 +48,7 @@ mkCoverageAdvice = newIORef mempty >>= \r -> return (r,Advice $ cover r)
 
 cover :: MonadIO m => IORef LcovReport -> Info -> AdviceContext r -> m (r,a) -> m a
 cover ref i ctx f = case _iInfo i of
-    Just {} -> do
+    Just' {} -> do
       post <- report (parseInf i)
       (r,a) <- f
       post r
@@ -107,18 +108,18 @@ cover ref i ctx f = case _iInfo i of
     astRep :: AST Node -> HM.HashMap Int LineReport
     astRep App {..} = HM.unions $ [lnReport'' _aNode 0,specials] ++ map astRep (toList _aAppArgs)
         where specials = case _aAppFun of
-                (FNative _ _ _ (Just (_,SBinding bast))) -> astRep bast
+                (FNative _ _ _ (Just' (_,SBinding bast))) -> astRep bast
                 _ -> mempty
     astRep List {..} = HM.unions $ map astRep (toList _aList)
     astRep Object {..} = HM.unions $ map astRep $ toList _aObject
-    astRep Step {..} = HM.union (astRep _aExec) $ maybe mempty astRep _aRollback
+    astRep Step {..} = HM.union (astRep _aExec) $ maybe' mempty astRep _aRollback
     astRep Binding {..} = HM.unions $ map (astRep . snd) (toList _aBindings) ++ map astRep (toList _aBody)
     astRep _ = mempty
 
 parseInf :: HasInfo i => i -> (FilePath,Int)
 parseInf inf = case getInfo inf of
-  Info (Just (_,Parsed (Directed fn l _ _ _) _)) -> (T.unpack $ decodeUtf8 fn,succ $ fromIntegral l)
-  Info (Just (_,Parsed (Lines l _ _ _) _)) -> nofile $ succ $ fromIntegral l
+  Info (Just' (T2 _ (Parsed (Directed fn l _ _ _) _))) -> (T.unpack $ decodeUtf8 fn,succ $ fromIntegral l)
+  Info (Just' (T2 _ (Parsed (Lines l _ _ _) _))) -> nofile $ succ $ fromIntegral l
   _ -> nofile 0
   where nofile l = ("<interactive>",l)
 

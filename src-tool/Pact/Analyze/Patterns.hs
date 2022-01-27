@@ -14,6 +14,7 @@ import           Data.Maybe           (isJust)
 import           Data.Text            (Text)
 import qualified Data.Vector as V
 
+import           Pact.State.Strict
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (Literal (LString))
 import           Pact.Types.Typecheck (AST (..),
@@ -254,7 +255,7 @@ pattern ShortTableName :: Text -> AST Node
 pattern ShortTableName tn <- Table _node (Lang.TableName tn)
 
 pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
-pattern NativeFuncSpecial f bdy <- FNative _ f _ (Just (_,SBinding bdy))
+pattern NativeFuncSpecial f bdy <- FNative _ f _ (Just' (_,SBinding bdy))
 
 pattern AST_Read :: Node -> Text -> AST Node -> AST Node
 pattern AST_Read node tn key <- App node (NativeFunc "read") [ShortTableName tn, key]
@@ -290,8 +291,8 @@ pattern AST_Obj objNode kvs <- Object objNode kvs
 pattern AST_List :: forall a. a -> V.Vector (AST a) -> AST a
 pattern AST_List node elems <- List node elems
 
-pattern AST_Step :: a -> Maybe (AST a) -> AST a -> Maybe (AST a) -> Maybe (YieldResume a) -> AST a
+pattern AST_Step :: a -> Maybe' (AST a) -> AST a -> Maybe' (AST a) -> Maybe' (YieldResume a) -> AST a
 pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback yr _model
 
-pattern AST_ModRef :: a -> Lang.ModuleName -> Maybe (V.Vector (Lang.ModuleName)) -> AST a
+pattern AST_ModRef :: a -> Lang.ModuleName -> Maybe' (V.Vector (Lang.ModuleName)) -> AST a
 pattern AST_ModRef node refName refSpec <- ModRef node refName refSpec

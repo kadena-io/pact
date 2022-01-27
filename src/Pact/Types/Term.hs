@@ -137,6 +137,7 @@ import Prelude
 import Test.QuickCheck hiding (Success)
 import Text.Show.Deriving
 
+import Pact.State.Strict hiding ((.=))
 import Pact.Types.Codec
 import Pact.Types.Exp
 import Pact.Types.Hash
@@ -151,13 +152,13 @@ import Pact.Types.Util
 -- Meta
 
 data Meta = Meta
-  { _mDocs  :: !(Maybe Text) -- ^ docs
+  { _mDocs  :: !(Maybe' Text) -- ^ docs
   , _mModel :: !(V.Vector (Exp Info))   -- ^ models
   } deriving (Eq, Show, Generic)
 
 instance Pretty Meta where
-  pretty (Meta (Just doc) model) = dquotes (pretty doc) <> line <> prettyModel model
-  pretty (Meta Nothing    model) = prettyModel model
+  pretty (Meta (Just' doc) model) = dquotes (pretty doc) <> line <> prettyModel model
+  pretty (Meta Nothing'    model) = prettyModel model
 
 instance NFData Meta
 
@@ -175,7 +176,7 @@ instance Semigroup Meta where
   (Meta d m) <> (Meta d' m') = Meta (d <> d') (m <> m')
 
 instance Monoid Meta where
-  mempty = Meta Nothing mempty
+  mempty = Meta Nothing' mempty
 
 -- -------------------------------------------------------------------------- --
 -- PublicKey
@@ -431,7 +432,7 @@ instance Arbitrary ModuleHash where
 -- | Metadata specific to Defcaps.
 data DefcapMeta n =
   DefcapManaged
-  { _dcManaged :: !(Maybe (Text,n))
+  { _dcManaged :: !(Maybe' (Text,n))
     -- ^ "Auto" managed or user-managed by (param,function)
   } |
   DefcapEvent
@@ -440,26 +441,26 @@ data DefcapMeta n =
 instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
   pretty (DefcapManaged m) = case m of
-    Nothing -> tag
-    Just (p,f) -> tag <> " " <> pretty p <> " " <> pretty f
+    Nothing' -> tag
+    Just' (p,f) -> tag <> " " <> pretty p <> " " <> pretty f
     where
       tag = "@managed"
   pretty DefcapEvent = "@event"
 instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
-  toJSON (DefcapManaged (Just (p,f))) = object
+  toJSON (DefcapManaged (Just' (p,f))) = object
     [ "managerFun" .= f
     , "managedParam" .= p
     ]
-  toJSON (DefcapManaged Nothing) = object [ "managerAuto" .= True ]
+  toJSON (DefcapManaged Nothing') = object [ "managerAuto" .= True ]
   toJSON DefcapEvent = "event"
 instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
   parseJSON v = parseUser v <|> parseAuto v <|> parseEvent v
     where
-      parseUser = withObject "DefcapMeta" $ \o -> (DefcapManaged . Just) <$>
+      parseUser = withObject "DefcapMeta" $ \o -> (DefcapManaged . Just') <$>
         ((,) <$> o .: "managedParam" <*> o .: "managerFun")
       parseAuto = withObject "DefcapMeta" $ \o -> do
         b <- o .: "managerAuto"
-        if b then pure (DefcapManaged Nothing)
+        if b then pure (DefcapManaged Nothing')
         else fail "Expected True"
       parseEvent = withText "DefcapMeta" $ \t ->
         if t == "event" then pure DefcapEvent
@@ -544,9 +545,9 @@ instance Arbitrary FieldKey where
 -- Step
 
 data Step n = Step
-  { _sEntity :: !(Maybe n)
+  { _sEntity :: !(Maybe' n)
   , _sExec :: !n
-  , _sRollback :: !(Maybe n)
+  , _sRollback :: !(Maybe' n)
   , _sInfo :: !Info
   } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 instance NFData n => NFData (Step n)
@@ -555,14 +556,14 @@ instance FromJSON n => FromJSON (Step n) where parseJSON = lensyParseJSON 2
 instance HasInfo (Step n) where getInfo = _sInfo
 instance Pretty n => Pretty (Step n) where
   pretty = \case
-    Step mEntity exec Nothing _i -> parensSep $
+    Step mEntity exec Nothing' _i -> parensSep $
       [ "step"
-      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
+      ] ++ maybe' [] (\entity -> [pretty entity]) mEntity ++
       [ pretty exec
       ]
-    Step mEntity exec (Just rollback) _i -> parensSep $
+    Step mEntity exec (Just' rollback) _i -> parensSep $
       [ "step-with-rollback"
-      ] ++ maybe [] (\entity -> [pretty entity]) mEntity ++
+      ] ++ maybe' [] (\entity -> [pretty entity]) mEntity ++
       [ pretty exec
       , pretty rollback
       ]
@@ -574,7 +575,7 @@ instance Pretty n => Pretty (Step n) where
 data ModRef = ModRef
     { _modRefName :: !ModuleName
       -- ^ Fully-qualified module name.
-    , _modRefSpec :: !(Maybe (V.Vector ModuleName))
+    , _modRefSpec :: !(Maybe' (V.Vector ModuleName))
       -- ^ Specification: for modules, 'Just' implemented interfaces;
       -- for interfaces, 'Nothing'.
     , _modRefInfo :: !Info
@@ -682,8 +683,8 @@ instance Default (ObjectMap v) where
 
 data Use = Use
   { _uModuleName :: !ModuleName
-  , _uModuleHash :: !(Maybe ModuleHash)
-  , _uImports :: !(Maybe (Vector Text))
+  , _uModuleHash :: !(Maybe' ModuleHash)
+  , _uImports :: !(Maybe' (Vector Text))
   , _uInfo :: !Info
   } deriving (Eq, Show, Generic)
 
@@ -691,7 +692,7 @@ instance HasInfo Use where getInfo = _uInfo
 
 instance Pretty Use where
   pretty Use{..} =
-    let args = pretty _uModuleName : maybe [] (\mh -> [pretty mh]) _uModuleHash
+    let args = pretty _uModuleName : maybe' [] (\mh -> [pretty mh]) _uModuleHash
     in parensSep $ "use" : args
 
 instance ToJSON Use where
@@ -705,8 +706,8 @@ instance ToJSON Use where
 instance FromJSON Use where
   parseJSON = withObject "Use" $ \o ->
     Use <$> o .: "module"
-        <*> o .:? "hash"
-        <*> o .:? "imports"
+        <*> (toMaybe' <$> o .:? "hash")
+        <*> (toMaybe' <$> o .:? "imports")
         <*> o .: "i"
 
 instance NFData Use
@@ -887,10 +888,10 @@ moduleDefMeta (MDInterface m) = _interfaceMeta m
 data FunApp = FunApp {
       _faInfo :: !Info
     , _faName :: !Text
-    , _faModule :: !(Maybe ModuleName)
+    , _faModule :: !(Maybe' ModuleName)
     , _faDefType :: !DefType
     , _faTypes :: !(FunTypes (Term Name))
-    , _faDocs :: !(Maybe Text)
+    , _faDocs :: !(Maybe' Text)
     } deriving (Generic)
 
 deriving instance (Show1 Term) => Show FunApp
@@ -952,7 +953,7 @@ data Def n = Def
   , _dFunType :: !(FunType (Term n))
   , _dDefBody :: !(Scope Int Term n)
   , _dMeta :: !Meta
-  , _dDefMeta :: !(Maybe (DefMeta (Term n)))
+  , _dDefMeta :: !(Maybe' (DefMeta (Term n)))
   , _dInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
@@ -970,8 +971,8 @@ instance Pretty (Term n) => Pretty (Def n) where
     [ prettyString (defTypeRep _dDefType)
     , pretty _dModule <> "." <> pretty _dDefName <> ":" <> pretty (_ftReturn _dFunType)
     , parensSep $ pretty <$> toList (_ftArgs _dFunType)
-    ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
-    ++ maybe [] (pure . pretty) _dDefMeta
+    ] ++ maybe' [] (\docs -> [pretty docs]) (_mDocs _dMeta)
+    ++ maybe' [] (pure . pretty) _dDefMeta
 
 instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Def n) where toJSON = lensyToJSON 2
 instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
@@ -1011,7 +1012,7 @@ instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where parseJSO
 data Object n = Object
   { _oObject :: !(ObjectMap (Term n))
   , _oObjectType :: !(Type (Term n))
-  , _oKeyOrder :: !(Maybe (V.Vector FieldKey))
+  , _oKeyOrder :: !(Maybe' (V.Vector FieldKey))
   , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
@@ -1021,8 +1022,8 @@ deriving instance (Eq1 Term, Eq n) => Eq (Object n)
 instance HasInfo (Object n) where getInfo = _oInfo
 
 instance Pretty n => Pretty (Object n) where
-  pretty (Object bs _ Nothing _) = pretty bs
-  pretty (Object (ObjectMap om) _ (Just ko) _) =
+  pretty (Object bs _ Nothing' _) = pretty bs
+  pretty (Object (ObjectMap om) _ (Just' ko) _) =
     annotate Val $ commaBraces $
     map (\(k,v) -> pretty k <> ": " <> pretty v) $
     sortBy (compare `on` (keyOrder . fst)) $
@@ -1036,11 +1037,14 @@ instance (ToJSON n, FromJSON n) => ToJSON (Object n) where
     [ "obj" .= _oObject
     , "type" .= _oObjectType
     , "i" .= _oInfo ] ++
-    maybe [] (pure . ("keyorder" .=)) _oKeyOrder
+    maybe' [] (pure . ("keyorder" .=)) _oKeyOrder
 
 instance (ToJSON n, FromJSON n) => FromJSON (Object n) where
-  parseJSON = withObject "Object" $ \o ->
-    Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
+  parseJSON = withObject "Object" $ \o -> Object
+    <$> o .: "obj"
+    <*> o .: "type"
+    <*> (toMaybe' <$> o .:? "keyorder")
+    <*> o .: "i"
 
 -- -------------------------------------------------------------------------- --
 -- Term
@@ -1072,7 +1076,7 @@ data Term n =
     } |
     TConst {
       _tConstArg :: !(Arg (Term n))
-    , _tModule :: !(Maybe ModuleName)
+    , _tModule :: !(Maybe' ModuleName)
     , _tConstVal :: !(ConstVal (Term n))
     , _tMeta :: !Meta
     , _tInfo :: !Info
@@ -1101,7 +1105,7 @@ data Term n =
     } |
     TSchema {
       _tSchemaName :: !TypeName
-    , _tModule :: !(Maybe ModuleName)
+    , _tModule :: !(Maybe' ModuleName)
     , _tMeta :: !Meta
     , _tFields :: !(Vector (Arg (Term n)))
     , _tInfo :: !Info
@@ -1186,7 +1190,7 @@ instance Pretty n => Pretty (Term n) where
                      line <> line <> annotate Header "Examples:"
                   <> line <> align (vsep (pretty <$> toList _tNativeExamples))
     TConst{..} -> "constant "
-        <> maybe "" ((<>) "." .  pretty) _tModule
+        <> maybe' "" ((<>) "." .  pretty) _tModule
         <> pretty _tConstArg
         <> " " <> pretty _tMeta
     TApp a _ -> pretty a
@@ -1442,7 +1446,7 @@ typeof t = case t of
       -- This will likely change later on.
       TLam{..} -> Right $ TyFun (_lamTy _tLam)
       TObject (Object {..}) _ -> Right $ TySchema TyObject _oObjectType def
-      TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
+      TGuard {..} -> Right $ TyPrim $ TyGuard $ Just' $ guardTypeOf _tGuard
       TUse {} -> Left "use"
       TStep {} -> Left "step"
       TSchema {..} -> Left $! "defobject:" <> asString _tSchemaName
@@ -1453,7 +1457,8 @@ typeof t = case t of
 
 -- | Populate 'TyModule' using a 'ModRef'
 modRefTy :: ModRef -> Type (Term a)
-modRefTy (ModRef _mn is _) = TyModule $ fmap (V.map (\i -> TModRef (ModRef i Nothing def) def)) is
+modRefTy (ModRef _mn is _) = TyModule $
+    (V.map (\i -> TModRef (ModRef i Nothing' def) def)) <$> is
 
 -- | Return string type description.
 typeof' :: Pretty a => Term a -> Text

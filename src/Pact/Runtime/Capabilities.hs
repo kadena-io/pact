@@ -32,7 +32,7 @@ module Pact.Runtime.Capabilities
     ) where
 
 import Control.Monad
-import Control.Lens hiding (DefName)
+import Control.Lens (_Left, use, set, view, _2, preuse, _head, ix)
 import Data.Default
 import Data.Foldable
 import Data.Text (Text)
@@ -40,6 +40,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Vector as V
 
+import Pact.State.Strict (Maybe'(..), (.=), (%=), (<>=))
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -128,10 +129,10 @@ evalUserCapability i af scope cap cdef test = go scope
           evalCapabilities . capManaged %= S.insert mc
           return (NewlyInstalled mc)
         mkMC = case _dDefMeta cdef of
-          Just (DMDefcap (DefcapManaged dcm)) -> case dcm of
-            Nothing -> return $!
+          Just' (DMDefcap (DefcapManaged dcm)) -> case dcm of
+            Nothing' -> return $!
               ManagedCapability cs (_csCap cs) (Left (AutoManagedCap True))
-            Just (argName,mgrFunRef) -> case defCapMetaParts cap argName cdef of
+            Just' (argName,mgrFunRef) -> case defCapMetaParts cap argName cdef of
               Left e -> evalError' cdef e
               Right (idx,static,v) -> case mgrFunRef of
                 (TVar (Ref (TDef d di)) _) -> case _dDefType d of
@@ -163,7 +164,7 @@ evalUserCapability i af scope cap cdef test = go scope
     emitCap = emitCapability i cap
 
     emitMaybe =
-      when (_dDefMeta cdef == Just (DMDefcap DefcapEvent)) emitCap
+      when (_dDefMeta cdef == Just' (DMDefcap DefcapEvent)) emitCap
 
     pushSlot s = evalCapabilities . capStack %= (s:)
 
@@ -195,7 +196,7 @@ checkManaged
   -> Eval e (Maybe [UserCapability])
 checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef of
   -- managed: go
-  Just (DMDefcap dcm@DefcapManaged {}) ->
+  Just' (DMDefcap dcm@DefcapManaged {}) ->
     use (evalCapabilities . capManaged) >>= fmap (fmap V.toList) . go dcm . S.toList
   -- otherwise noop
   _ -> return Nothing
@@ -237,8 +238,8 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
       return $ Just $ _csComposed _mcInstalled
 
     getStatic (DefcapManaged dcm) c = case dcm of
-      Nothing -> return c
-      Just (argName,_) -> view _2 <$> defCapMetaParts c argName cdef
+      Nothing' -> return c
+      Just' (argName,_) -> view _2 <$> defCapMetaParts c argName cdef
     getStatic DefcapEvent c = return c
 
     -- check sig and autonomous caps for match

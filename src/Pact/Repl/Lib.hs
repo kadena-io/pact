@@ -22,7 +22,7 @@ module Pact.Repl.Lib where
 
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
@@ -74,6 +74,7 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
+import Pact.State.Strict
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -239,7 +240,7 @@ replDefs = ("Repl",
      ,defZNative "env-namespace-policy" envNamespacePolicy
       (funType tTyString
        [("allow-root", tTyBool),
-        ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing)])])
+        ("ns-policy-fun",TyFun $ funType' tTyBool [("ns",tTyString),("ns-admin",tTyGuard Nothing')])])
       [LitExample "(env-namespace-policy (my-ns-policy-fun))"]
       "Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN."
      ,defZRNative "env-events" envEvents
@@ -260,7 +261,7 @@ replDefs = ("Repl",
        "Normally, environment changes must execute at top-level for the change to take effect. " <>
        "This allows scoped application of non-toplevel environment changes.")
      ,defZRNative "env-dynref" envDynRef
-      (funType tTyString [("iface",TyModule Nothing),("impl",TyModule (Just mempty))] <>
+      (funType tTyString [("iface",TyModule Nothing'),("impl",TyModule (Just' mempty))] <>
        funType tTyString [])
       [LitExample "(env-dynref fungible-v2 coin)"]
       ("Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. " <>
@@ -514,7 +515,7 @@ testDoc _ (doc'':_) = reduce doc'' >>= \doc' -> case doc' of
     enrichTestName :: Text -> Eval e Text
     enrichTestName msg = use evalCallStack >>= return . foldl' go msg
 
-    go m StackFrame{..} = case preview (_Just . _1 . faModule . _Just) _sfApp of
+    go m StackFrame{..} = case preview (_Just . _1 . faModule . _Just') _sfApp of
       Just {} -> _sfName <> "." <> m
       _ -> m
 testDoc i as = argsError' i as
@@ -577,7 +578,7 @@ expectThat i as@[_,tLamToApp -> TApp pred' predi,expr'] = do
               <> prettyPred predi <> ": " <> pretty v <> ":" <> pretty (typeof' v)
       t -> testFailure i doc $ "predicate did not return boolean: " <> pretty t
   where
-    prettyPred (Info (Just (c,_))) = " " <> pretty c
+    prettyPred (Info (Just' (T2 c _))) = " " <> pretty c
     prettyPred _ = ""
 expectThat i as = argsError' i as
 
@@ -756,7 +757,7 @@ setGasModel _ as = do
 testCapability :: ZNativeFun ReplState
 testCapability i [ (TApp app _) ] = do
   (_,d,_) <- appToCap app
-  let scope = maybe CapCallStack (const CapManaged) (_dDefMeta d)
+  let scope = maybe' CapCallStack (const CapManaged) (_dDefMeta d)
   r <- evalCap i scope False $ app
   return . tStr $ case r of
     AlreadyAcquired -> "Capability already acquired"

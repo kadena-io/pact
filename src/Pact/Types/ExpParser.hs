@@ -105,17 +105,17 @@ type MkInfo = Parsed -> Info
 
 {-# INLINE mkEmptyInfo #-}
 mkEmptyInfo :: MkInfo
-mkEmptyInfo !e = Info (Just (mempty,e))
+mkEmptyInfo !e = Info (Just' (T2 mempty e))
 
 {-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
-mkStringInfo s d = Info (Just (force $ fromString $ take (_pLength d) $
-                               drop (fromIntegral $ TF.bytes d) s, force d))
+mkStringInfo s d = Info $ Just' $ T2 (fromString $ take (_pLength d) $ drop (fromIntegral $ TF.bytes d) s) d
 
 {-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
-mkTextInfo s d = Info (Just (Code $ force $ T.take (_pLength d) $
-                             T.drop (fromIntegral $ TF.bytes d) s, force d))
+mkTextInfo s d = Info $ Just' $ T2
+    (Code $ force $ T.take (_pLength d) $ T.drop (fromIntegral $ TF.bytes d) s)
+    d
 
 type ExpParse s a = StateT (ParseState s) (Parsec Void Cursor) a
 

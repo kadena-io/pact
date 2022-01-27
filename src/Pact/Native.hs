@@ -57,7 +57,7 @@ module Pact.Native
     ) where
 
 import Control.Arrow hiding (app)
-import Control.Lens hiding (parts,Fold,contains)
+import Control.Lens hiding (parts,Fold,contains, (.=))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.IO.Class
@@ -92,6 +92,7 @@ import Pact.Native.Ops
 import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
+import Pact.State.Strict
 import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
@@ -371,7 +372,7 @@ fromNamespacePactValue (Namespace n userg adming) =
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
-  (funType tTyString [("namespace", tTyString), ("user-guard", tTyGuard Nothing), ("admin-guard", tTyGuard Nothing)])
+  (funType tTyString [("namespace", tTyString), ("user-guard", tTyGuard Nothing'), ("admin-guard", tTyGuard Nothing')])
   [LitExample "(define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))"]
   "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
   \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \

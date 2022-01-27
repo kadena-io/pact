@@ -93,6 +93,7 @@ import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving
 
+import Pact.State.Strict hiding ((.=))
 import Pact.Types.Codec
 import Pact.Types.Info
 import Pact.Types.Pretty
@@ -173,7 +174,7 @@ data PrimType =
   TyTime |
   TyBool |
   TyString |
-  TyGuard !(Maybe GuardType)
+  TyGuard !(Maybe' GuardType)
   deriving (Eq,Ord,Generic,Show)
 
 instance NFData PrimType
@@ -219,7 +220,7 @@ instance Pretty PrimType where
     TyBool -> tyBool
     TyString -> tyString
     TyGuard tg -> case tg of
-      Just GTyKeySet -> tyKeySet
+      Just' GTyKeySet -> tyKeySet
       _ -> tyGuard
 
 data SchemaType =
@@ -318,7 +319,7 @@ data Type v =
   TyFun { _tyFunType :: !(FunType v) } |
   TyUser { _tyUser :: !v } |
   TyModule
-  { _tyModuleSpec :: !(Maybe (V.Vector v))
+  { _tyModuleSpec :: !(Maybe' (V.Vector v))
     -- ^ Nothing for interfaces, implemented ifaces for modules
   }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
@@ -333,7 +334,7 @@ instance (Pretty o) => Pretty (Type o) where
     TySchema s t p -> pretty s <> colon <> prettyList (showPartial p) <> pretty t
     TyList t       -> brackets $ pretty t
     TyPrim t       -> pretty t
-    TyModule is    -> "module" <> (maybe "" commaBraces' is)
+    TyModule is    -> "module" <> maybe' "" commaBraces' is
     TyAny          -> "*"
 
 
@@ -400,8 +401,8 @@ unifiesWith f (TyList a) (TyList b) = unifiesWith f a b
 unifiesWith f (TySchema _ aTy aP) (TySchema _ bTy bP)
   = unifiesWith f aTy bTy && bP `isSubPartial` aP
 unifiesWith _ (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
-  (Nothing,Just _) -> True
-  (Just _,Nothing) -> True
+  (Nothing',Just' _) -> True
+  (Just' _,Nothing') -> True
   _ -> a == b
 unifiesWith f (TyModule a) (TyModule b) =
   liftEq (\x y -> all (\xe -> elem' f xe y) x) a b

@@ -21,13 +21,14 @@ module Pact.Runtime.Utils
   , emitReservedEvent
   ) where
 
-import Control.Lens
+import Control.Lens hiding ((%=))
 import Control.Monad
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
 
 import Pact.Gas
+import Pact.State.Strict
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -69,7 +70,7 @@ calledByModule Module{..} =
   maybe False (const True) <$> searchCallStackApps forModule
   where
     forModule :: FunApp -> Maybe ()
-    forModule FunApp{..} | _faModule == Just _mName = Just ()
+    forModule FunApp{..} | _faModule == Just' _mName = Just ()
                          | otherwise = Nothing
 
 
@@ -83,7 +84,7 @@ getModule i mn = lookupModule i mn >>= \r -> case r of
 --
 findCallingModule :: Eval e (Maybe ModuleName)
 findCallingModule =
-  preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just
+  preuse $ evalCallStack . traverse . sfApp . _Just . _1 . faModule . _Just'
 
 
 -- | Retrieve current calling module data or fail if not found

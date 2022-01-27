@@ -150,7 +150,7 @@ evalByName n as i = do
 
       let sameName :: DefName -> ModuleName -> FunApp -> Maybe ()
           sameName dn mn FunApp{..}
-            | (DefName _faName) == dn && Just mn == _faModule = Just ()
+            | (DefName _faName) == dn && Just' mn == _faModule = Just ()
             | otherwise = Nothing
 
       found <- searchCallStackApps $ sameName _dDefName _dModule
@@ -221,7 +221,7 @@ evalNamespace info setter m = do
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
-eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
+eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName (toMaybe _uModuleHash)) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval (TModule tm@(MDModule m) bod i) =
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 ->
@@ -297,20 +297,20 @@ evalUse (Use mn mh mis i) = do
       case _mdModule md of
         MDModule Module{..} ->
           case mh of
-            Nothing -> return ()
-            Just h | h == _mHash -> return ()
+            Nothing' -> return ()
+            Just' h | h == _mHash -> return ()
                    | otherwise -> evalError i $ "Module " <>
                        pretty mn <> " does not match specified hash: " <>
                        pretty mh <> ", " <> pretty _mHash
         MDInterface i' ->
           case mh of
-            Nothing -> return ()
-            Just _ -> evalError i
+            Nothing' -> return ()
+            Just' _ -> evalError i
               $ "Interfaces should not have associated hashes: "
               <> pretty (_interfaceName i')
 
-      validateImports i (_mdRefMap md) mh mis
-      installModule False md mis
+      validateImports i (_mdRefMap md) (toMaybe mh) (toMaybe mis)
+      installModule False md (toMaybe mis)
 
 validateImports
   :: Info
@@ -342,8 +342,8 @@ mangleDefs mn term = let !x = modifyMn term in x
   where
     modifyMn = case term of
       TDef{}    -> set (tDef . dModule) mn
-      TConst{}  -> set tModule $ Just mn
-      TSchema{} -> set tModule $ Just mn
+      TConst{}  -> set tModule $ Just' mn
+      TSchema{} -> set tModule $ Just' mn
       TTable{}  -> set tModuleName mn
       _         -> id
 
@@ -581,10 +581,10 @@ solveConstraint ifn info refName (Ref t) evalMap = do
     defMetaEq :: DefMeta (Term Ref) -> DefMeta (Term Ref) -> Bool
     defMetaEq (DMDefcap (DefcapManaged ifaceDM)) (DMDefcap (DefcapManaged implDM)) = case (ifaceDM,implDM) of
       -- interface auto or unspecified: OK
-      (Nothing,_) -> True
+      (Nothing',_) -> True
       -- interface explicit: match name+arg
-      (Just a,Just b) -> getDefName a == getDefName b
-      (Just _,Nothing) -> False
+      (Just' a,Just' b) -> getDefName a == getDefName b
+      (Just' _,Nothing') -> False
     defMetaEq a b = a == b
     getDefName (an,TVar (Ref (TDef Def {..} _)) _) = Just (_dDefName,an)
     getDefName _ = Nothing
@@ -658,10 +658,10 @@ mkModRef :: HasInfo i => i -> ModuleDef m -> Term n
 mkModRef i = \case
   MDModule mdm ->
       (`TModRef` (getInfo i)) $
-      ModRef (_mName mdm) (Just $ _mInterfaces mdm) (getInfo i)
+      ModRef (_mName mdm) (Just' $ _mInterfaces mdm) (getInfo i)
   MDInterface mdi ->
       (`TModRef` (getInfo i)) $
-      ModRef (_interfaceName mdi) Nothing (getInfo i)
+      ModRef (_interfaceName mdi) Nothing' (getInfo i)
 
 -- | Perform module name lookup and locate the TDef or TConst associated with a
 -- module reference.
@@ -794,7 +794,7 @@ reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   case _dDefType of
     Defun ->
-      functionApp _dDefName _dFunType (Just _dModule) (toList as) _dDefBody (_mDocs _dMeta) ai
+      functionApp _dDefName _dFunType (Just _dModule) (toList as) _dDefBody (toMaybe $ _mDocs _dMeta) ai
     Defpact -> do
       g <- computeUserAppGas d ai
       af <- prepareUserAppArgs d (toList as) ai
@@ -833,7 +833,7 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
   let args' = liftTerm <$> args
   let body = instantiate (resolveArg ai args') fnBody
       fname = asString fnName
-      fa = FunApp ai fname mod_ Defun (funTypes fty) docs
+      fa = FunApp ai fname (toMaybe' mod_) Defun (funTypes fty) (toMaybe' docs)
   guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
 
 -- | Evaluate a dynamic ref to either a fully-reduced value from a 'TConst'
@@ -886,7 +886,7 @@ guardRecursion fname m act  =
         evalError si $ "Detected recursive call:" <+> maybe mempty ((<> ".") . pretty) m <> pretty fname
   where
   isRecursiveAppCall (StackFrame sfn _ app) =
-    sfn == fname && (_faModule . fst =<< app) == m
+    sfn == fname && (_faModule . fst =<< (toMaybe' app)) == (toMaybe' m)
 
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
@@ -896,7 +896,7 @@ evalUserAppBody d@Def{..} (as',ft') ai g run =
   where
   fname = asString _dDefName
   bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
-  fa = FunApp _dInfo fname (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  fa = FunApp _dInfo fname (Just' _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
 
 -- | Typecheck an arg paired with either an unreduced term (terms that should not be reduced e.g lams, tdefs)
 --   or a fully reduced term (anything else that doesn't pass a scope pretty much).
@@ -935,10 +935,10 @@ typecheck' ps = foldM_ tvarCheck M.empty ps where
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
-  let fa = FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)
+  let fa = FunApp ai (asString _tNativeName) Nothing' Defun _tFunTypes (Just' _tNativeDocs)
       -- toplevel: only empty callstack or non-module-having callstack allowed
       enforceTopLevel = traverse_ $ \c ->
-        case preview (sfApp . _Just . _1 . faModule . _Just) c of
+        case preview (sfApp . _Just . _1 . faModule . _Just') c of
           Nothing -> return ()
           Just m -> evalError ai $ "Top-level call used in module " <> pretty m <>
             ": " <> pretty _tNativeName
@@ -979,26 +979,26 @@ applyPact i app (TList steps _ _) PactStep {..} = do
     t -> evalError' t "applyPact: step entity must be String value")
 
   let stepCount = length steps
-      rollback = isJust $ _sRollback step
+      rollback = isJust' $ _sRollback step
 
   -- init pact state
   evalPactExec .=
-      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback)
+      Just (PactExec stepCount Nothing (toMaybe executePrivate) _psStep _psPactId app rollback)
 
   -- evaluate
   result <- case executePrivate of
-    Just False -> return $ tStr "skip step"
+    Just' False -> return $ tStr "skip step"
     _ -> case (_psRollback,_sRollback step) of
       (False,_) -> reduce $ _sExec step
-      (True,Just rexp) -> reduce rexp
-      (True,Nothing) -> evalError' step $ "Rollback requested but none in step"
+      (True,Just' rexp) -> reduce rexp
+      (True,Nothing') -> evalError' step $ "Rollback requested but none in step"
 
   resultState <- use evalPactExec >>= (`maybe` pure)
     (evalError i "Internal error, pact exec state not found after execution")
 
   -- update database, determine if done
   let isLastStep = _psStep == pred stepCount
-      private = isJust executePrivate
+      private = isJust' executePrivate
       done =
         (not _psRollback && isLastStep) -- done if normal exec of last step
         || (not private && _psRollback) -- done if public rollback

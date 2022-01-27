@@ -53,6 +53,7 @@ import Unsafe.Coerce
 
 import Pact.Eval
 import Pact.Gas
+import Pact.State.Strict
 import Pact.Types.Capability
 import Pact.Types.Native
 import Pact.Types.PactValue
@@ -129,15 +130,15 @@ defRNative name fun = defNative name (reduced fun)
 defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef
 defSchema n doc fields =
   (n,
-   TSchema (TypeName $ asString n) Nothing (Meta (Just doc) mempty)
+   TSchema (TypeName $ asString n) Nothing' (Meta (Just' doc) mempty)
    (V.fromList $ map (\(fr,ty) -> Arg (asString fr) ty def) fields)
    def)
 
 defConst :: NativeDefName -> Text -> Type (Term Name) -> Term Name -> NativeDef
-defConst name doc ty term = (name, TConst arg Nothing cval meta def )
+defConst name doc ty term = (name, TConst arg Nothing' cval meta def )
   where
     arg = Arg (asString name) ty def
-    meta = Meta (Just doc) mempty
+    meta = Meta (Just' doc) mempty
     cval = CVEval term term
 
 foldDefs :: Monad m => [m a] -> m [a]
@@ -156,10 +157,10 @@ tTyDecimal :: Type n; tTyDecimal = TyPrim TyDecimal
 tTyTime :: Type n; tTyTime = TyPrim TyTime
 tTyBool :: Type n; tTyBool = TyPrim TyBool
 tTyString :: Type n; tTyString = TyPrim TyString
-tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard $ Just GTyKeySet)
+tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard $ Just' GTyKeySet)
 tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o def
 tTyObjectAny :: Type n; tTyObjectAny = tTyObject TyAny
-tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
+tTyGuard :: Maybe' GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
 
 getPactId :: FunApp -> Eval e PactId
 getPactId i = use evalPactExec >>= \pe -> case pe of
@@ -169,7 +170,7 @@ getPactId i = use evalPactExec >>= \pe -> case pe of
 enforceGuardDef :: NativeDefName -> NativeDef
 enforceGuardDef dn =
   defRNative dn enforceGuard'
-  (funType tTyBool [("guard",tTyGuard Nothing)] <>
+  (funType tTyBool [("guard",tTyGuard Nothing')] <>
    funType tTyBool [("keysetname",tTyString)])
   [ LitExample $ "(" <> asString dn <> " 'admin-keyset)"
   , LitExample $ "(" <> asString dn <> " row-guard)"

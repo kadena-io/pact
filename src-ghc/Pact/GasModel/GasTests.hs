@@ -34,6 +34,7 @@ import Pact.GasModel.Types
 import Pact.GasModel.Utils
 import Pact.Interpreter
 import Pact.Native
+import Pact.State.Strict
 import Pact.Types.Capability
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
@@ -375,7 +376,7 @@ composeCapabilityTests = tests
     capInStackframe =
       StackFrame "" def
       (Just ((FunApp def ""
-           (Just someModuleName) Defcap (funTypes $ FunType mempty TyAny) Nothing)
+           (Just' someModuleName) Defcap (funTypes $ FunType mempty TyAny) Nothing')
         ,[])
       )
     updateStateWithCap = setState (set evalCallStack [capInStackframe])

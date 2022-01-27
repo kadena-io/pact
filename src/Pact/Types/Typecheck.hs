@@ -57,6 +57,7 @@ import Control.Monad.State
 import Data.Foldable
 import Data.Text (Text, unpack, pack)
 
+import Pact.State.Strict
 import Pact.Types.Lang hiding (App,Object,Step,ModRef)
 import Pact.Types.PactError
 import Pact.Types.Runtime (ModuleData(..))
@@ -71,7 +72,7 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 
 data Schema = Schema
   { _schName :: !TypeName
-  , _schModule :: !(Maybe ModuleName)
+  , _schModule :: !(Maybe' ModuleName)
   , _schFields :: !(V.Vector (Arg UserType))
   , _schInfo :: !Info
   } deriving (Eq, Ord)
@@ -83,7 +84,7 @@ newtype ModSpec = ModSpec { _specModName :: ModuleName }
 data UserType = UTSchema !Schema | UTModSpec !ModSpec
   deriving (Eq,Ord)
 instance Show UserType where
-  show (UTSchema Schema {..}) = "{" ++ unpack (maybe "" ((<>) "." . asString) _schModule) ++ unpack (asString _schName) ++ " " ++ show _schFields ++ "}"
+  show (UTSchema Schema {..}) = "{" ++ unpack (maybe' "" ((<>) "." . asString) _schModule) ++ unpack (asString _schName) ++ " " ++ show _schFields ++ "}"
   show (UTModSpec (ModSpec mn)) = show mn
 instance Pretty UserType where
   pretty (UTSchema Schema {..}) = braces (pretty _schModule <> dot <> pretty _schName)
@@ -119,8 +120,8 @@ data Overload m = Overload {
   _oFunName :: !Text,
   _oRoles :: !(M.Map VarRole m),
   _oTypes :: !(FunTypes UserType),
-  _oSolved :: !(Maybe (FunType UserType)),
-  _oSpecial :: !(Maybe OverloadSpecial) }
+  _oSolved :: !(Maybe' (FunType UserType)),
+  _oSpecial :: !(Maybe' OverloadSpecial) }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 
 instance Pretty m => Pretty (Overload m) where
@@ -139,8 +140,8 @@ renderTcFailure :: Failure -> RenderedOutput
 renderTcFailure (Failure t m) = RenderedOutput (pack m) (_tiInfo t) OutputFailure
 
 data YieldResume n = YieldResume
-  { _yrYield :: !(Maybe n)
-  , _yrResume :: !(Maybe n)
+  { _yrYield :: !(Maybe' n)
+  , _yrResume :: !(Maybe' n)
   , _yrCrossChain :: !Bool }
   deriving (Eq,Show,Functor,Foldable,Traversable)
 instance Default (YieldResume n) where def = YieldResume def def False
@@ -161,7 +162,7 @@ data TcState = TcState {
   -- | Maps type vars to types.
   _tcVarToTypes :: !(M.Map (TypeVar UserType) (Type UserType)),
   -- | Used in AST walk to track step yields and resumes.
-  _tcYieldResume :: !(Maybe (YieldResume Node)),
+  _tcYieldResume :: !(Maybe' (YieldResume Node)),
   _tcDynEnv :: !DynEnv
   } deriving (Eq,Show)
 
@@ -214,7 +215,7 @@ data TopLevel t =
     _tlName :: Text,
     _tlType :: Type UserType,
     _tlConstVal :: AST t,
-    _tlDoc :: Maybe Text
+    _tlDoc :: Maybe' Text
     } |
   TopTable {
     _tlInfo :: Info,
@@ -225,7 +226,7 @@ data TopLevel t =
   TopUserType {
     _tlInfo :: Info,
     _tlUserType :: UserType,
-    _tlDoc :: Maybe Text
+    _tlDoc :: Maybe' Text
   }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 instance Pretty t => Pretty (TopLevel t) where
@@ -255,7 +256,7 @@ data Fun t =
     _fInfo :: !Info,
     _fName :: !Text,
     _fTypes :: !(FunTypes UserType),
-    _fSpecial :: !(Maybe (SpecialForm,Special t))
+    _fSpecial :: !(Maybe' (SpecialForm,Special t))
     } |
   FDefun {
     _fInfo   :: !Info,
@@ -274,8 +275,8 @@ instance Pretty t => Pretty (Fun t) where
     [ "(native " <> pretty _fName
     , indent 2 ("::" <+> align (vsep (map pretty (toList _fTypes)))) <>
         (case _fSpecial of
-           Nothing -> mempty
-           Just (_,SBinding bod) -> line <> indent 2 (pretty bod)
+           Nothing' -> mempty
+           Just' (_,SBinding bod) -> line <> indent 2 (pretty bod)
            _ -> mempty)
     ]
   pretty FDefun {..} = parensSep
@@ -361,10 +362,10 @@ data AST n =
   } |
   Step {
   _aNode :: !n,
-  _aEntity :: !(Maybe (AST n)),
+  _aEntity :: !(Maybe' (AST n)),
   _aExec :: !(AST n),
-  _aRollback :: !(Maybe (AST n)),
-  _aYieldResume :: !(Maybe (YieldResume n)),
+  _aRollback :: !(Maybe' (AST n)),
+  _aYieldResume :: !(Maybe' (YieldResume n)),
   _aModel :: !(V.Vector (Exp Info))
   } |
   Dynamic {
@@ -375,7 +376,7 @@ data AST n =
   ModRef {
   _aNode :: !n,
   _aModRefName :: !ModuleName,
-  _aModRefSpec :: !(Maybe (V.Vector ModuleName))
+  _aModRefSpec :: !(Maybe' (V.Vector ModuleName))
   }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
@@ -409,8 +410,8 @@ instance Pretty t => Pretty (AST t) where
    where
      go :: Text -> [Doc] -> Doc
      go n is = sep (pretty n:pretty (_aNode a):is)
-     may Nothing _ = []
-     may (Just v) f = f v
+     may Nothing' _ = []
+     may (Just' v) f = f v
 
 
 makeLenses ''AST

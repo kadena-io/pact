@@ -13,6 +13,7 @@ import Data.Map.Strict (fromList)
 import qualified Data.HashSet as HS
 import qualified Data.Vector as V
 
+import Pact.State.Strict
 import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.PactValue
@@ -37,7 +38,7 @@ testJSONPersist = do
   rt "string" (PLiteral (LString "hello"))
   rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
   rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
-  rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
+  rt "modref" (PModRef (ModRef "foo.bar" (Just' ["baz", "bof.quux"]) def))
   rt "list" (PList (V.fromList [PLiteral (LInteger 123), PLiteral (LBool False), PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC"))]))
   rt "object" (PObject (ObjectMap (fromList [("A",PLiteral (LInteger 123)), ("B",PLiteral (LBool False))])))
 
@@ -58,7 +59,7 @@ testJSONColumns = do
     ,("C", PLiteral (LString "hello"))
     ,("D", PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
     ,("E", PGuard uguard)
-    ,("F", PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
+    ,("F", PModRef (ModRef "foo.bar" (Just' ["baz", "bof.quux"]) def))
     ,("G", PObject (ObjectMap (fromList [("A",PLiteral (LInteger 123))])))
     ,("H", PList (V.fromList [PLiteral (LInteger 123), PLiteral (LBool False), PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC"))]))
     ,("I", PGuard pguard)
@@ -116,4 +117,4 @@ testUnification = do
     ifaceA = "ifaceA"
     ifaceB = "ifaceB"
     modRef :: [ModuleName] -> Type (Term ())
-    modRef is = modRefTy (ModRef "a" (Just $ V.fromList is) def)
+    modRef is = modRefTy (ModRef "a" (Just' $ V.fromList is) def)

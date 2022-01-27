@@ -48,6 +48,7 @@ import Control.DeepSeq (NFData)
 
 import GHC.Generics
 
+import Pact.State.Strict hiding ((.=))
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
@@ -87,7 +88,7 @@ parseStackFrame = do
       void $ char '('
       deets <- T.init <$> takeText
       return $ StackFrame deets i $
-        Just (FunApp def "" Nothing Defun (funTypes $ FunType mempty TyAny) Nothing
+        Just (FunApp def "" Nothing' Defun (funTypes $ FunType mempty TyAny) Nothing'
              ,[])
     justName i = takeText >>= \n -> return $ StackFrame n i Nothing
 

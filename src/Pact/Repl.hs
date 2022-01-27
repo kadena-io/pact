@@ -57,9 +57,9 @@ import System.IO
 import System.FilePath
 
 import Control.Concurrent
-import Control.Lens hiding (op)
+import Control.Lens hiding (op, (.=), (%=))
 import Control.Monad.Catch
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict hiding (modify)
 
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
@@ -88,6 +88,7 @@ import Pact.Types.Logger
 import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
+import Pact.State.Strict
 
 -- | for use in GHCI
 repl :: IO (Either () (Term Name))
@@ -201,11 +202,11 @@ handleCompile src exp a =
       Right t -> a t
       Left er -> do
           case _iInfo (peInfo er) of
-            Just (_,d) -> do
+            Just' (T2 _ d) -> do
                         mode <- use rMode
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
                         outStrLn HErr $ ": error: " ++ renderCompactString' (peDoc er)
-            Nothing -> outStrLn HErr $ "[No location]: " ++ renderCompactString' (peDoc er)
+            Nothing' -> outStrLn HErr $ "[No location]: " ++ renderCompactString' (peDoc er)
           Left <$> renderErr er
 
 compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
@@ -261,8 +262,8 @@ renderErr a
   | peInfo a == def = do
       m <- use rMode
       let i = case m of
-                Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
-                _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
+                Script _ f -> Info (Just' (T2 mempty (Parsed (Directed (BS.fromString f) 0 0 0 0) 0)))
+                _ -> Info (Just' (T2 mempty (Parsed (Lines 0 0 0 0) 0)))
       return $ renderInfo i ++ ":" ++ renderCompactString' (peDoc a)
   | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peDoc a)
 

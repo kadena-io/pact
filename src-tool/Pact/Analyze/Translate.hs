@@ -26,14 +26,14 @@ import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, toListOf, use, view, zoom,
-                                             (%=), (%~), (+~), (.=), (.~),
-                                             (<>~), (?=), (^.), (<&>), _1, (^..))
+                                             (%~), (+~), (.~),
+                                             (^.), (<&>), _1, (^..))
 import           Control.Monad              hiding (guard)
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
-                                             modify', runStateT)
+                                             runStateT)
 import           Data.Foldable              (foldl', for_, foldlM)
 import           Data.List                  (sort)
 import qualified Data.Map                   as Map
@@ -50,6 +50,7 @@ import qualified Data.Vector as V
 import           GHC.Natural                (Natural)
 import           GHC.TypeLits
 
+import           Pact.State.Strict
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
                  ( Info, Literal (..)
@@ -325,7 +326,7 @@ failing s = do
 -- * Translation
 
 emit :: TraceEvent -> TranslateM ()
-emit event = modify' $ tsPendingEvents %~ flip snoc event
+emit event = modify $ tsPendingEvents %~ flip snoc event
 
 -- | Call when entering a node to set the current context
 withNodeContext :: Node -> TranslateM a -> TranslateM a
@@ -784,7 +785,7 @@ translateStep firstStep ast = case ast of
       _ -> throwError' $ UnexpectedPactNode ast
     Some ty exec' <- translateNode exec
     postVertex    <- extendPath
-    pure (Step (exec' , ty) p mEntity Nothing Nothing, postVertex, rollback)
+    pure (Step (exec' , ty) p (toMaybe mEntity) Nothing Nothing, postVertex, (toMaybe rollback))
   _ -> throwError' $ UnexpectedPactNode ast
 
 lookupCapability :: CapName -> TranslateM Capability
@@ -1631,7 +1632,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     -- modrefs are coerced to strings
     pure $ Some SStr $ CoreTerm $ Lit $ Str $ T.unpack
       (asString refName <>
-       maybe "" (\ss -> "{" <> T.intercalate "," (map asString ss) <> "}") (V.toList <$> refSpec))
+       maybe' "" (\ss -> "{" <> T.intercalate "," (map asString ss) <> "}") (V.toList <$> refSpec))
 
   -- NOTE: we ignore the optional target chain during analysis, for now at
   -- least.

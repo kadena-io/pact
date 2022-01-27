@@ -36,10 +36,10 @@ module Pact.Typechecker where
 
 import Bound.Scope
 import Control.Arrow hiding ((<+>))
-import Control.Lens hiding (List,Fold)
+import Control.Lens hiding (List,Fold, (.=), (%=))
 import Control.Monad
 import Control.Monad.Catch
-import Control.Monad.State
+import Control.Monad.State.Strict hiding (modify)
 import Data.Bitraversable (bimapM)
 import Data.Default
 import Data.Foldable
@@ -57,7 +57,7 @@ import qualified Data.Vector as V
 import Data.Text (Text, unpack, pack)
 import Safe hiding (at)
 
-
+import Pact.State.Strict
 import Pact.Types.Native
 import Pact.Types.Pretty
 import qualified Pact.Types.Runtime as Term
@@ -113,10 +113,10 @@ walkAST f t@App {} = do
   t' <- App (_aNode a) <$>
         (case _aAppFun a of
            fun@FNative {..} -> case _fSpecial of
-             Nothing -> return fun
-             Just (fs,SBinding bod) -> do
+             Nothing' -> return fun
+             Just' (fs,SBinding bod) -> do
                bod' <- walkAST f bod
-               return (set fSpecial (Just (fs,SBinding bod')) fun)
+               return (set fSpecial (Just' (fs,SBinding bod')) fun)
              _ -> return fun
            fun@FDefun {..} -> do
              db <- mapM (walkAST f) _fBody
@@ -168,8 +168,8 @@ solveOverloads = do
   let runSolve os = fmap M.fromList $ forM oids $ \oid -> case M.lookup oid os of
         Nothing -> die def $ "Internal error, unknown overload id: " ++ show oid
         Just o@Overload {..} -> fmap (oid,) $ case _oSolved of
-          Just {} -> return o
-          Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing _oTypes
+          Just' {} -> return o
+          Nothing' -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing' _oTypes
 
       rptSolve os = runSolve os >>= \os' -> if os' == os then return os' else rptSolve os'
 
@@ -177,16 +177,16 @@ solveOverloads = do
   tcOverloads .= fmap (fmap fst) done
 
   forM_ (M.toList done) $ \(i,o) -> case _oSolved o of
-      Nothing -> do
+      Nothing' -> do
         debug $ "Unable to solve overload: " ++ show (i,o)
         addFailure i $ "Unable to solve overloaded function: " ++ unpack (_oFunName o)
-      Just {} -> return ()
+      Just' {} -> return ()
 
 
 -- | Attempt to solve an overload with one of its candidate types.
-tryFunType :: Overload (AST Node,TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
-               TC (Maybe (FunType UserType))
-tryFunType _ r@Just {} _ = return r
+tryFunType :: Overload (AST Node,TypeVar UserType) -> Maybe' (FunType UserType) -> FunType UserType ->
+               TC (Maybe' (FunType UserType))
+tryFunType _ r@Just' {} _ = return r
 tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
 
   -- see if var role unifies with with fun role. If so, return singleton list of var information
@@ -212,12 +212,12 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
   case sequence allRoles of
     Nothing -> do
       debug $ "tryFunType: failed: " ++ showPretty cand ++ ": roles=" ++ showPretty allRoles
-      return Nothing
+      return Nothing'
     Just ars -> do
 
       debug $ "tryFunType: cand: " ++ showPretty cand ++ ", roles=" ++ showPretty allRoles
 
-      let byRole = handleSpecialOverload _oSpecial $ M.fromList ars
+      let byRole = handleSpecialOverload (toMaybe _oSpecial) $ M.fromList ars
           byFunType = M.fromListWith (++) $ map (\(RoleTys fty i tv ty) -> (fty,[(_aId (_aNode i),tv,ty)])) $ M.elems byRole
 
       debug $ "tryFunType: trying " ++ showPretty cand ++ " with " ++ showPretty (M.toList byFunType)
@@ -233,7 +233,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
           allConcrete = all isConcreteTy . map (fst . snd)
 
       case solvedM of
-        Nothing -> return Nothing
+        Nothing -> return Nothing'
         Just solved
           | allConcrete solved -> do
 
@@ -242,11 +242,11 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
                 debug $ "Adjusting type for solution: " ++ showPretty (tv,fty,uty)
                 uncurry assocTy tv fty
                 uncurry assocTy tv uty
-              return $ Just cand
+              return $ Just' cand
 
           | otherwise -> do
               debug $ "tryFunType: not all concrete: " ++ show solved
-              return Nothing
+              return Nothing'
 
 
 handleSpecialOverload :: Maybe OverloadSpecial ->
@@ -397,7 +397,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
       debug $ "Mangled funtype: " ++ showPretty orgFunType ++ " -> " ++ showPretty mangledFunType
 
       case _fSpecial of
-        Nothing -> do
+        Nothing' -> do
           let !n = length ftargs
               !m = length argASTs
           -- check arg arity so we don't accidentally trim any zipped args
@@ -407,7 +407,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
             <> " args: "
             <> showPretty (toList argASTs)
 
-        Just{} -> return ()
+        Just'{} -> return ()
 
       -- zip funtype 'Arg's with AST args, and assoc each.
       args <- (\f -> V.zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
@@ -432,8 +432,8 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
       assocAstTy i $ _ftReturn mangledFunType
       -- perform extra assocs for special forms
       case _fSpecial of
-        Nothing -> return ()
-        Just spec -> case (spec,args) of
+        Nothing' -> return ()
+        Just' spec -> case (spec,args) of
           -- bindings
           ((_,SBinding b),_) -> case b of
             (Binding bn _ _ (AstBindSchema sn)) -> do
@@ -459,7 +459,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
           ospec | _fName == "at" = Just OAt
                 | _fName == asString Select = Just OSelect
                 | otherwise = Nothing
-          oload = Overload _fName (argOvers <> M.singleton RetVar a) fts' Nothing ospec
+          oload = Overload _fName (argOvers <> M.singleton RetVar a) fts' Nothing' (toMaybe' ospec)
       tcOverloads %= M.insert (_aId i) oload
       tcOverloadOrder %= (_aId i:)
   return a
@@ -680,15 +680,15 @@ unifyTypes l r = case (l,r) of
   (TyAny,_) -> Just (Right r)
   (_,TyAny) -> Just (Left l)
   (TyPrim (TyGuard gl), TyPrim (TyGuard gr)) -> case (gl,gr) of
-    (Just _, Nothing) -> Just (Left l)
-    (Nothing, Just _) -> Just (Right r)
+    (Just' _, Nothing') -> Just (Left l)
+    (Nothing', Just' _) -> Just (Right r)
     _ -> Just (Right r) -- equality already covered above, and Nothing/Nothing ok
   (TyVar v,s) -> unifyVar Left Right v s
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam Just a b
   (TySchema sa a spa,TySchema sb b spb) | sa == sb -> unifyParam (specializePartial spa spb) a b
   (TyModule ms, TyModule ms') -> case (ms, ms') of
-    (Just a, Just b) -> do
+    (Just' a, Just' b) -> do
       a' <- traverse toModuleName a
       b' <- traverse toModuleName b
       if testElems a' b' then return $ Left l
@@ -793,7 +793,7 @@ mangleFunType f = over ftReturn (mangleType f) .
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
 toFun (TVar (Left (Direct TNative {..})) _) = do
   ft' <- traverse (traverse toUserType') (fmap (fmap (fmap Right)) _tFunTypes)
-  return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
+  return $ FNative _tInfo (asString _tNativeName) ft' Nothing' -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun (TLam (Lam name ty body _) i) = do
@@ -837,7 +837,7 @@ withScopeBodyToFun fnname modname funTy body deftype info = do
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
 assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
-  void $ toStepYRs >>= foldM go (Nothing,0::Int)
+  toStepYRs >>= foldM_ go (Nothing',0::Int)
   where
     lastStep = pred $ length steps
     toStepYRs = forM steps $ \step -> case step of
@@ -845,14 +845,14 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
 
         -- check that a cross-chain yield and rollback do not occur
         -- in the same step, otherwise build the tuple
-        (Just y, Just{}) ->
+        (Just' y, Just'{}) ->
           if _yrCrossChain y
           then die'' step "Illegal rollback with yield"
           else return (_aNode, _aYieldResume)
         _ -> return (_aNode, _aYieldResume)
       _ -> die'' step "Non-step in defpact"
-    yrMay l yr = preview (_Just . l . _Just) yr
-    go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
+    yrMay l yr = preview (_Just' . l . _Just') yr
+    go :: (Maybe' (YieldResume Node),Int) -> (Node, Maybe' (YieldResume Node)) -> TC (Maybe' (YieldResume Node),Int)
     go (prev,idx) (n,curr) = do
       case (yrMay yrYield prev, yrMay yrYield curr, yrMay yrResume curr) of
         -- resume in first step
@@ -911,11 +911,11 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
         trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
       TConst{..} -> case _tModule of
         -- if modulename is nothing, it's a builtin
-        Nothing -> toAST $ return $ Left (Direct $ constTerm _tConstVal)
+        Nothing' -> toAST $ return $ Left (Direct $ constTerm _tConstVal)
         _ -> die i $ "Non-native constant value in native context: " ++ show t
       TGuard{..} -> do
         g <- traverse (toAST . return . Left . Direct) _tGuard
-        trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard g)
+        trackPrim _tInfo (TyGuard $ Just' $ guardTypeOf _tGuard) (PrimGuard g)
       _ -> die i $ "Native in value context: " <> show t
   (Right t) -> return t
 
@@ -978,15 +978,15 @@ toAST (TApp Term.App{..} _) = do
           let specialBind = do
                 initArgs <- V.init <$> notEmpty _appInfo "Invalid binding invocation" args'
                 -- bind forms have binding in last position, move into SBinding
-                mkApp (set fSpecial (Just (sf,SBinding (V.last args'))) fun') initArgs
+                mkApp (set fSpecial (Just' (sf,SBinding (V.last args'))) fun') initArgs
 
-              setOrAssocYR :: Lens' (YieldResume Node) (Maybe Node) -> Node -> TC ()
+              setOrAssocYR :: Lens' (YieldResume Node) (Maybe' Node) -> Node -> TC ()
               setOrAssocYR yrLens target = do
                 use tcYieldResume >>= \yrm -> case yrm of
-                  Nothing -> tcYieldResume .= Just (set yrLens (Just $ target) def)
-                  Just yr -> case view yrLens yr of
-                    Nothing -> tcYieldResume .= Just (set yrLens (Just $ target) yr)
-                    Just prevYr -> assocNode (_aId prevYr) target
+                  Nothing' -> tcYieldResume .= Just' (set yrLens (Just' $ target) def)
+                  Just' yr -> case view yrLens yr of
+                    Nothing' -> tcYieldResume .= Just' (set yrLens (Just' $ target) yr)
+                    Just' prevYr -> assocNode (_aId prevYr) target
 
           case sf of
             Bind -> specialBind
@@ -996,7 +996,7 @@ toAST (TApp Term.App{..} _) = do
             YieldSF -> do
               app' <- mkApp fun' args'
               setOrAssocYR yrYield (_aNode app')
-              tcYieldResume . _Just . yrCrossChain .= (argCount >= 2)
+              tcYieldResume . _Just' . yrCrossChain .= (argCount >= 2)
               return app'
             Resume -> do
               app' <- specialBind
@@ -1045,7 +1045,7 @@ toAST (TObject Term.Object {..} _) = do
 toAST TConst {..} = toAST $ constTerm _tConstVal -- TODO(stuart): typecheck here
 toAST TGuard {..} = do
   g <- traverse toAST _tGuard
-  trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard g)
+  trackPrim _tInfo (TyGuard $ Just' $ guardTypeOf _tGuard) (PrimGuard g)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
@@ -1062,10 +1062,10 @@ toAST (TStep Term.Step {..} (Meta _doc model) _) = do
     return e'
   si <- freshId _sInfo "step"
   sn <- trackIdNode si
-  tcYieldResume .= Nothing
+  tcYieldResume .= Nothing'
   ex <- toAST _sExec
   assocAST si ex
-  yr <- state (_tcYieldResume &&& set tcYieldResume Nothing)
+  yr <- state (_tcYieldResume &&& set tcYieldResume Nothing')
   Step sn ent ex <$> traverse toAST _sRollback <*> pure yr <*> pure model
 toAST TDynamic {..} = do -- only comes up for consts, functions are in 'toFun'
   r <- toAST _tDynModRef
@@ -1096,8 +1096,8 @@ toUserType' TSchema {..} = fmap UTSchema $ Schema _tSchemaName _tModule
   <$> V.mapM (traverse toUserType) _tFields
   <*> pure _tInfo
 toUserType' TModRef {..} = case _modRefSpec _tModRef of
-  Nothing -> return $ UTModSpec (ModSpec $ _modRefName _tModRef)
-  Just{} -> die _tInfo "toUserType': expected interface modref"
+  Nothing' -> return $ UTModSpec (ModSpec $ _modRefName _tModRef)
+  Just'{} -> die _tInfo "toUserType': expected interface modref"
 toUserType' t = die (_tInfo t) $ "toUserType': expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
@@ -1118,7 +1118,7 @@ mkTop t@TDef {..} = do
   TopFun <$> toFun t <*> pure (_dMeta _tDef)
 mkTop t@TConst {..} = do
   debug $ "===== Const: " ++ abbrevStr (AbbrevNode <$> t)
-  TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
+  TopConst _tInfo (asString (toMaybe _tModule) <> "." <> _aName _tConstArg) <$>
     traverse toUserType (_aType _tConstArg) <*>
     toAST (constTerm _tConstVal) <*> pure (_mDocs _tMeta)
 mkTop t@TTable {..} = do

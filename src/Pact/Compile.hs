@@ -33,7 +33,7 @@ import Bound
 import Control.Applicative hiding (some,many)
 import Control.Arrow ((&&&),first)
 import Control.Exception hiding (try)
-import Control.Lens hiding (prism)
+import Control.Lens hiding (prism, (.=), (%=))
 import Control.Monad
 import Control.Monad.State
 
@@ -54,6 +54,7 @@ import Text.Megaparsec as MP
 import qualified Text.Trifecta as TF hiding (expected)
 
 import Pact.Parse (exprsOnly,parseExprs)
+import Pact.State.Strict
 import Pact.Types.Exp
 import Pact.Types.ExpParser
 import Pact.Types.Hash
@@ -340,7 +341,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         val <- sep Colon *> valueLevel
         return (key,val)
   ps <- (pair `sepBy` sep Comma) <* eof
-  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny (Just (V.fromList (map fst ps))) _listInfo) _listInfo
+  return $ TObject (Object (ObjectMap $ M.fromList ps) TyAny (Just' (V.fromList (map fst ps))) _listInfo) _listInfo
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
@@ -381,7 +382,7 @@ defconst = do
   a <- arg
   v <- valueLevel
   m <- meta ModelNotAllowed
-  TConst a (Just modName) (CVRaw v) m <$> contextInfo
+  TConst a (Just' modName) (CVRaw v) m <$> contextInfo
 
 data ModelAllowed
   = ModelAllowed
@@ -393,14 +394,14 @@ modelOnly :: Compile Meta
 modelOnly = do
   symbol "@model"
   (ListExp props _ _i, _) <- list' Brackets
-  pure $ Meta Nothing (V.fromList props)
+  pure $ Meta Nothing' (V.fromList props)
 
 meta :: ModelAllowed -> Compile Meta
 meta modelAllowed =
   -- hiding labels/errors here because otherwise they hang around for all module errors
   hidden atPairs <|> hidden (try docStr) <|> return def
   where
-    docStr = Meta <$> (Just <$> str) <*> pure mempty
+    docStr = Meta <$> (Just' <$> str) <*> pure mempty
     docPair = symbol "@doc" >> (DocPair <$> str)
     modelPair = do
       symbol "@model"
@@ -412,9 +413,9 @@ meta modelAllowed =
     atPairs = do
       ps <- sort <$> (some (docPair <|> modelPair))
       case ps of
-        [DocPair doc] -> return (Meta (Just doc) mempty)
-        [ModelPair es] -> whenModelAllowed $ return (Meta Nothing $ V.fromList es)
-        [DocPair doc, ModelPair es] -> whenModelAllowed $ return (Meta (Just doc) $ V.fromList es)
+        [DocPair doc] -> return (Meta (Just' doc) mempty)
+        [ModelPair es] -> whenModelAllowed $ return (Meta Nothing' $ V.fromList es)
+        [DocPair doc, ModelPair es] -> whenModelAllowed $ return (Meta (Just' doc) $ V.fromList es)
         _ -> expected $ case modelAllowed of
           ModelNotAllowed -> "@doc declaration"
           ModelAllowed -> "@doc and/or @model declarations"
@@ -425,7 +426,7 @@ defschema = do
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
   fields <- V.fromList <$> many arg
-  TSchema (TypeName tn) (Just modName) m fields <$> contextInfo
+  TSchema (TypeName tn) (Just' modName) m fields <$> contextInfo
 
 defunOrCap :: DefType -> Compile (Term Name)
 defunOrCap dt = do
@@ -438,7 +439,7 @@ defunOrCap dt = do
   i <- contextInfo
   return $ (`TDef` i) $
     Def (DefName defname) modName dt (FunType (V.fromList args) returnTy)
-      b m dm i
+      b m (toMaybe' dm) i
 
 defcapManaged :: DefType -> Compile (Maybe (DefMeta (Term Name)))
 defcapManaged dt = case dt of
@@ -446,7 +447,7 @@ defcapManaged dt = case dt of
   _ -> return Nothing
   where
     doDefcapMeta = symbol "@managed" *>
-      ((DMDefcap . DefcapManaged) <$> (doUserMgd <|> doAuto))
+      ((DMDefcap . DefcapManaged . toMaybe') <$> (doUserMgd <|> doAuto))
     doUserMgd = Just <$> ((,) <$> (_atomAtom <$> userAtom) <*> userVar)
     doAuto = pure Nothing
     doEvent = symbol "@event" *> pure (DMDefcap DefcapEvent)
@@ -462,7 +463,7 @@ defpact = do
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
   case last body of -- note: `last` is safe, since bodyForm uses `some`
-    TStep (Step _ _ (Just _) _) _ _ -> syntaxError "rollbacks aren't allowed on the last \
+    TStep (Step _ _ (Just' _) _) _ _ -> syntaxError "rollbacks aren't allowed on the last \
       \step (the last step can never roll back -- once it's executed the pact \
       \is complete)"
     _ -> pure ()
@@ -471,7 +472,7 @@ defpact = do
   return $ TDef
     (Def (DefName defname) modName Defpact (FunType (V.fromList args) returnTy)
       abody
-      m Nothing i) i
+      m Nothing' i) i
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
@@ -484,8 +485,8 @@ moduleForm = do
     Nothing -> return ()
   i <- contextInfo
   let code = case i of
-        Info Nothing -> "<code unavailable>"
-        Info (Just (c,_)) -> c
+        Info Nothing' -> "<code unavailable>"
+        Info (Just' (T2 c _)) -> c
       modName = ModuleName modName' Nothing
       modHash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
@@ -509,8 +510,8 @@ interface = do
     Nothing -> return ()
   info <- contextInfo
   let code = case info of
-        Info Nothing -> "<code unavailable>"
-        Info (Just (c,_)) -> c
+        Info Nothing' -> "<code unavailable>"
+        Info (Just' (T2 c _)) -> c
       iname = ModuleName iname' Nothing
       ihash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
@@ -538,24 +539,24 @@ defSig dt = do
   return $ (`TDef` info) $
     Def (DefName defName) modName dt
       (FunType (V.fromList args) returnTy) (abstract (const Nothing) (TList V.empty TyAny info))
-      m dm info
+      m (toMaybe' dm) info
 
 
 step :: Compile (Term Name)
 step = do
-  m <- option (Meta Nothing mempty) modelOnly
-  cont <- try (Step <$> (Just <$> valueLevel) <*> valueLevel) <|>
-          (Step Nothing <$> valueLevel)
+  m <- option (Meta Nothing' mempty) modelOnly
+  cont <- try (Step <$> (Just' <$> valueLevel) <*> valueLevel) <|>
+          (Step Nothing' <$> valueLevel)
   i <- contextInfo
-  pure $ TStep (cont Nothing i) m i
+  pure $ TStep (cont Nothing' i) m i
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
   i <- contextInfo
-  m <- option (Meta Nothing mempty) modelOnly
-  s <- try (Step <$> (Just <$> valueLevel) <*> valueLevel <*>
-            (Just <$> valueLevel) <*> pure i)
-       <|> (Step Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> pure i)
+  m <- option (Meta Nothing' mempty) modelOnly
+  s <- try (Step <$> (Just' <$> valueLevel) <*> valueLevel <*>
+            (Just' <$> valueLevel) <*> pure i)
+       <|> (Step Nothing' <$> valueLevel <*> (Just' <$> valueLevel) <*> pure i)
   return $ TStep s m i
 
 lam :: Compile (Term Name)
@@ -594,7 +595,7 @@ abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames)
 
     enrichDynamic n@(DName dyn@(DynamicName _ ref ifs _))
       | S.null ifs = case M.lookup ref modRefArgs of
-        Just ifs' -> DName . setIfs dyn . S.fromList <$> traverse ifVarName (maybe [] V.toList ifs')
+        Just ifs' -> DName . setIfs dyn . S.fromList <$> traverse ifVarName (maybe' [] V.toList ifs')
         Nothing -> return n
       | otherwise = return n
     enrichDynamic n = return n
@@ -646,7 +647,7 @@ useForm = do
   l <- optional $ withList' Brackets (many userAtom <* eof)
 
   let v = fmap (V.fromList . fmap _atomAtom) l
-      u = Use mn h v i
+      u = Use mn (toMaybe' h) (toMaybe' v) i
 
   -- this is the one place module may not be present, use traversal
   psUser . csModule . _Just . msImports %= V.cons u
@@ -683,8 +684,8 @@ parseType = msum
   , TyPrim TyBool    <$ symbol tyBool
   , TyPrim TyString  <$ symbol tyString
   , TyList TyAny     <$ symbol tyList
-  , TyPrim (TyGuard $ Just GTyKeySet)  <$ symbol tyKeySet
-  , TyPrim (TyGuard Nothing) <$ symbol tyGuard
+  , TyPrim (TyGuard $ Just' GTyKeySet)  <$ symbol tyKeySet
+  , TyPrim (TyGuard Nothing') <$ symbol tyGuard
   ]
 
 parseListType :: Compile (Type (Term Name))
@@ -696,7 +697,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 
 parseModuleRefType :: Compile (Type (Term Name))
 parseModuleRefType = symbol "module" >>
-  (TyModule . Just . V.fromList <$> withList' Braces
+  (TyModule . Just' . V.fromList <$> withList' Braces
    ((snd <$> qualifiedModuleName) `sepBy1` sep Comma))
 
 parseUserSchemaType :: Compile (Type (Term Name))

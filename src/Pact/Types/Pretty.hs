@@ -81,6 +81,8 @@ import qualified Data.Text.Prettyprint.Doc.Render.Terminal as Term
 import           Data.Text.Prettyprint.Doc.Render.Text as RText
 import           Text.Trifecta.Delta hiding (prettyDelta)
 
+import Pact.State.Strict
+
 data RenderColor = RColor | RPlain
 
 -- | Annotations allowed on pretty-printing 'Doc's
@@ -124,6 +126,7 @@ instance Pretty Int                   where pretty = PP.pretty
 instance Pretty Int64                 where pretty = viaShow
 instance Pretty ()                    where pretty = PP.pretty
 instance Pretty a => Pretty (Maybe a) where pretty = maybe mempty pretty
+instance Pretty a => Pretty (Maybe' a) where pretty = maybe' mempty pretty
 instance (Pretty a, Pretty b) => Pretty (a, b) where
   pretty (a, b) = tupled [pretty a, pretty b]
 instance (Pretty a, Pretty b, Pretty c) => Pretty (a, b, c) where

@@ -1,6 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -16,6 +18,7 @@
 
 module Pact.Types.Info
  (
+   T2(..),
    Parsed(..),
    Code(..),
    Info(..),
@@ -25,7 +28,6 @@ module Pact.Types.Info
    parseRenderedInfo,
    HasInfo(..)
    ) where
-
 
 import Control.Monad
 import Text.Trifecta.Delta
@@ -47,6 +49,7 @@ import Data.SBV (Mergeable (symbolicMerge))
 import qualified Data.Vector as V
 import Test.QuickCheck
 
+import Pact.State.Strict hiding ((.=))
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
@@ -77,7 +80,8 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,SizeOf)
+  deriving (Eq,Ord, Generic)
+  deriving newtype (IsString,ToJSON,FromJSON,Semigroup,Monoid,NFData,AsString,SizeOf)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c)
@@ -91,14 +95,16 @@ instance Arbitrary Code where
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Eq,Ord,Generic,Arbitrary)
+newtype Info = Info { _iInfo :: Maybe' (T2 Code Parsed) }
+    deriving (Eq,Ord,Generic)
+    deriving newtype (Arbitrary)
 
 instance NFData Info
 instance Show Info where
-    show (Info Nothing) = ""
-    show (Info (Just (r,_d))) = renderCompactString r
+    show (Info Nothing') = ""
+    show (Info (Just' (T2 r _d))) = renderCompactString r
 
-instance Default Info where def = Info Nothing
+instance Default Info where def = Info Nothing'
 
 -- | Charge zero for Info to avoid quadratic blowup (i.e. for modules)
 instance SizeOf Info where
@@ -106,7 +112,7 @@ instance SizeOf Info where
 
 -- make an Info that refers to the indicated text
 mkInfo :: Text -> Info
-mkInfo !t = Info $ Just (Code t,Parsed delt len)
+mkInfo !t = Info $ Just' (T2 (Code t) (Parsed delt len))
   where !len = T.length t
         delt = Directed (force $ encodeUtf8 t) 0 0 (force $ fromIntegral len) (force $ fromIntegral len)
 
@@ -120,8 +126,8 @@ instance Mergeable Info where
 
 -- renderer for line number output.
 renderInfo :: Info -> String
-renderInfo (Info Nothing) = ""
-renderInfo (Info (Just (_, parsed))) = renderParsed parsed
+renderInfo (Info Nothing') = ""
+renderInfo (Info (Just' (T2 _ parsed))) = renderParsed parsed
 
 renderParsed :: Parsed -> String
 renderParsed (Parsed d _) = case d of
@@ -133,7 +139,7 @@ renderParsed (Parsed d _) = case d of
 -- | Lame parsing of 'renderInfo' parsing for UX only.
 parseRenderedInfo :: AP.Parser Info
 parseRenderedInfo = peekChar >>= \c -> case c of
-  Nothing -> return (Info Nothing)
+  Nothing -> return (Info Nothing')
   Just _ -> do
     fOrI <- takeTill isColon
     colon'
@@ -147,7 +153,7 @@ parseRenderedInfo = peekChar >>= \c -> case c of
             -- otherwise Lines, which reverses the 'succ' above
             | otherwise -> Lines (pred ln) cn 0 0
           f -> Directed (encodeUtf8 f) (pred ln) cn 0 0
-    return (Info (Just ("",(Parsed delt 0))))
+    return (Info (Just' (T2 "" (Parsed delt 0))))
   where
     colon' = void $ char ':'
     isColon = (== ':')
@@ -161,8 +167,8 @@ class HasInfo a where
 instance HasInfo Info where getInfo = id
 
 instance ToJSON Info where
-  toJSON (Info Nothing) = Null
-  toJSON (Info (Just (code,Parsed{..}))) = object
+  toJSON (Info Nothing') = Null
+  toJSON (Info (Just' (T2 code Parsed{..}))) = object
     [ "c" .= code
     , "d" .= case _pDelta of
         (Directed a b c d e) -> [pl,toJSON (decodeUtf8 a),toJSON b,toJSON c,toJSON d,toJSON e]
@@ -173,11 +179,11 @@ instance ToJSON Info where
     ] where pl = toJSON _pLength
 
 instance FromJSON Info where
-  parseJSON Null = pure $ Info Nothing
+  parseJSON Null = pure $ Info Nothing'
   parseJSON v = withObject "Info" go v
     where
-      go o = Info . Just <$>
-        ((,) <$> o .: "c" <*> (o .: "d" >>= withArray "Delta" doParsed))
+      go o = Info . Just' <$>
+        (T2 <$> o .: "c" <*> (o .: "d" >>= withArray "Delta" doParsed))
       doParsed d = parsed $ case V.length d of
         6 -> Directed <$> (encodeUtf8 <$> col 1) <*> col 2 <*> col 3 <*> col 4 <*> col 5
         5 -> Lines <$> col 1 <*> col 2 <*> col 3 <*> col 4

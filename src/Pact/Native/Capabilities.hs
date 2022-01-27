@@ -18,7 +18,7 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
-import Control.Lens
+import Control.Lens hiding ((%=))
 import Control.Monad
 import Data.Default
 import Data.Maybe (isJust)
@@ -29,6 +29,7 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Utils
+import Pact.State.Strict
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -238,7 +239,7 @@ defcapInStack limit = use evalCallStack >>= return . go limit
 createPactGuard :: NativeDef
 createPactGuard =
   defRNative "create-pact-guard" createPactGuard'
-  (funType (tTyGuard (Just GTyPact)) [("name",tTyString)])
+  (funType (tTyGuard (Just' GTyPact)) [("name",tTyString)])
   []
   "Defines a guard predicate by NAME that captures the results of 'pact-id'. \
   \At enforcement time, the success condition is that at that time 'pact-id' must \
@@ -255,7 +256,7 @@ createPactGuard =
 createModuleGuard :: NativeDef
 createModuleGuard =
   defRNative "create-module-guard" createModuleGuard'
-  (funType (tTyGuard (Just GTyModule)) [("name",tTyString)])
+  (funType (tTyGuard (Just' GTyModule)) [("name",tTyString)])
   []
   "Defines a guard by NAME that enforces the current module admin predicate."
   where
@@ -269,7 +270,7 @@ createModuleGuard =
 keysetRefGuard :: NativeDef
 keysetRefGuard =
   defRNative "keyset-ref-guard" keysetRefGuard'
-  (funType (tTyGuard (Just GTyKeySetName)) [("keyset-ref",tTyString)])
+  (funType (tTyGuard (Just' GTyKeySetName)) [("keyset-ref",tTyString)])
   []
   "Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. \
   \Concrete keysets are themselves guard types; this function is specifically to \
@@ -288,7 +289,7 @@ keysetRefGuard =
 createUserGuard :: NativeDef
 createUserGuard =
   defNative "create-user-guard" createUserGuard'
-  (funType (tTyGuard (Just GTyUser)) [("closure",TyFun $ funType' tTyBool [])])
+  (funType (tTyGuard (Just' GTyUser)) [("closure",TyFun $ funType' tTyBool [])])
   []
   "Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, \
   \to be supplied to indicated function at enforcement time."
@@ -322,7 +323,7 @@ emitEventDef =
     emitEvent' i as = argsError' i as
 
     enforceMeta i Def{..} = case _dDefMeta of
-      (Just (DMDefcap dmeta)) -> case dmeta of
+      (Just' (DMDefcap dmeta)) -> case dmeta of
         -- being total here in case we have another value later
         DefcapManaged {} -> return ()
         DefcapEvent -> return ()

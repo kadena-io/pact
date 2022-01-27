@@ -36,6 +36,7 @@ import qualified Data.Text as T
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.State.Strict
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 
@@ -186,12 +187,12 @@ eqA = mkTyVar "a"
     ,TyList (mkTyVar "l" [])
     ,TySchema TyObject (mkSchemaVar "o") def
     ,tTyKeySet
-    ,tTyGuard Nothing
+    ,tTyGuard Nothing'
     ,tTyModRef
     ]
 
 tTyModRef :: Type n
-tTyModRef = TyModule (Just mempty)
+tTyModRef = TyModule (Just' mempty)
 
 orDef :: NativeDef
 orDef = defLogic "or" (||) True
