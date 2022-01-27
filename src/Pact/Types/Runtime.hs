@@ -218,7 +218,7 @@ data EvalEnv e = EvalEnv {
       -- | Execution configuration flags
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
-    , _eeAdvice :: Advice
+    , _eeAdvice :: !Advice
     }
 makeLenses ''EvalEnv
 

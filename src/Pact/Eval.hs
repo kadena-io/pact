@@ -65,12 +65,13 @@ import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
-import Pact.Types.Advice
+-- import Pact.Types.Advice
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
+-- import Control.DeepSeq
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -221,9 +222,9 @@ evalNamespace info setter m = do
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
-eval (TModule tm@(MDModule m) bod i) =
-  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 ->
-  eAdvise i (AdviceModule tm) $ do
+eval (TModule _tm@(MDModule m) bod i) =
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
+  -- eAdvise i (AdviceModule tm) $ do
     checkAllowModule i
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
@@ -254,11 +255,12 @@ eval (TModule tm@(MDModule m) bod i) =
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
-    return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
+    -- return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
+    return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
-eval (TModule tm@(MDInterface m) bod i) =
-  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas ->
-  eAdvise i (AdviceModule tm) $ do
+eval (TModule _tm@(MDInterface m) bod i) =
+  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
+  -- eAdvise i (AdviceModule tm) $ do
     checkAllowModule i
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m
@@ -268,11 +270,12 @@ eval (TModule tm@(MDInterface m) bod i) =
     (g,govI) <- loadInterface mangledI bod i gas
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
-    return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
+    -- return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
+    return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 eval t = enscope t >>= reduce
 
-dup :: Monad m => m a -> m (a,a)
-dup a = a >>= \r -> return (r,r)
+-- dup :: Monad m => m a -> m (a,a)
+-- dup a = a >>= \r -> return (r,r)
 
 checkAllowModule :: Info -> Eval e ()
 checkAllowModule i = do
@@ -889,8 +892,9 @@ guardRecursion fname m act  =
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
-evalUserAppBody d@Def{..} (as',ft') ai g run =
-  guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+evalUserAppBody _d@Def{..} (as',ft') ai g run =
+  guardRecursion fname (Just _dModule) $ appCall fa ai as' $ fmap (g,) $ run bod'
+  -- guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
   where
   fname = asString _dDefName
   bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
@@ -942,9 +946,10 @@ reduceDirect TNative {..} as ai =
             ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
-    eAdvise ai (AdviceNative _tNativeName) $ dup
-        $ appCall fa ai as
-        $ _nativeFun _tNativeFun fa as
+    appCall fa ai as $ _nativeFun _tNativeFun fa as
+    -- eAdvise ai (AdviceNative _tNativeName) $ dup
+        -- $ appCall fa ai as
+        -- $ _nativeFun _tNativeFun fa as
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
