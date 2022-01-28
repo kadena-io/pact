@@ -107,7 +107,7 @@ library
     , QuickCheck >= 2.12.6.1
     , aeson >= 0.11.3.0 && < 1.6
     , attoparsec >= 0.13.0.2 && < 0.15
-    , base >=4.9.0.0 && < 4.16
+    , base >=4.9.0.0 && < 4.17
     , base16-bytestring >=0.1.1.6 && < 0.2
     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
         -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
@@ -133,7 +133,6 @@ library
     , prettyprinter-ansi-terminal >= 1.1 && < 1.2
     , quickcheck-instances >= 0.3
     , reflection
-    , safe >= 0.3.11 && < 0.4
     , semigroupoids >= 5.0
     , servant
     , text >= 1.2.2.1 && < 1.3

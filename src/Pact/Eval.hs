@@ -59,7 +59,7 @@ import Data.Maybe
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
 import qualified Data.Text as T
-import Safe
+-- import Safe
 
 import Pact.Gas
 import Pact.Runtime.Capabilities
@@ -774,7 +774,7 @@ reduceLam = \case
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> Int -> Term n
-resolveArg ai as i = case atMay as i of
+resolveArg ai as i = case as ^? ix i of
   Nothing -> appError ai $ "Missing argument value at index " <> pretty i
   Just i' -> i'
 
