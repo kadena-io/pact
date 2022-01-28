@@ -54,8 +54,7 @@ module Pact.Types.Runtime
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)
-import Control.Monad.Catch
-import Control.Monad.Except
+import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.DeepSeq
@@ -333,7 +332,7 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAny (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 --

@@ -23,7 +23,7 @@ module Pact.Repl.Lib where
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
-import Control.Monad.Catch
+import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 

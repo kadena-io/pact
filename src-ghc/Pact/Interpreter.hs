@@ -38,8 +38,8 @@ module Pact.Interpreter
   ) where
 
 import Control.Concurrent
-import Control.Monad.Catch
-import Control.Monad.Except
+import Control.Exception.Safe
+import Control.Monad
 import Control.Monad.State (modify)
 import Control.Lens
 
