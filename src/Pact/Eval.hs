@@ -9,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.

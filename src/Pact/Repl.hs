@@ -60,6 +60,7 @@ import Control.Concurrent
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
+import Control.DeepSeq
 
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
@@ -111,7 +112,7 @@ runPipedRepl = runPipedRepl' False
 
 runPipedRepl' :: Bool -> ReplState -> Handle -> IO (Either () (Term Name))
 runPipedRepl' p s@ReplState{} h =
-    evalStateT (useReplLib >> pipeLoop p h Nothing) s
+  evalStateT (useReplLib >> pipeLoop p h Nothing) s
 
 initReplState :: MonadIO m => ReplMode -> Maybe String -> m ReplState
 initReplState m verifyUri = liftIO $ do
@@ -311,7 +312,7 @@ loadFile i f = do
           r <- parsedCompileEval src pr
           when (isPactFile f) $ void useReplLib
           restoreFile
-          return r)
+          return $!! r)
          $ \(e :: SomeException) -> do
                restoreFile
                pe <- renderErr $

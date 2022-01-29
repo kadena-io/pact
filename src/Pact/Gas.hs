@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 module Pact.Gas where
 
 import Data.Text
@@ -17,7 +18,7 @@ computeGas i args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- use evalGas
   let
-    (info,name) = either id (_faInfo &&& _faName) i
+    (info,!name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
   evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),g1):)
   let gUsed = g0 + g1
