@@ -275,7 +275,7 @@ instance Default EvalState where def = EvalState def def def 0 def def def
 newtype Eval e a =
     Eval { unEval :: ReaderT (EvalEnv e) (StateT EvalState IO) a }
     deriving (Functor,Applicative,Monad,MonadState EvalState,
-                     MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
+                     MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadMask,MonadIO)
 
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
