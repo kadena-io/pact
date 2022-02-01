@@ -1225,6 +1225,18 @@ prettyTypeTerm :: Term n -> SpecialPretty (Term n)
 prettyTypeTerm TSchema{..} = SPSpecial ("{" <> asString _tSchemaName <> "}")
 prettyTypeTerm t = SPNormal t
 
+instance (SizeOf a) => SizeOf (Term a) where
+  sizeOf = \case
+    TModule{..} ->
+      sizeOf _tModuleDef + scopeSize _tModuleBody
+    TList {..} ->
+       foldMap sizeOf _tList + sizeOf _tListType
+    TDef{..} ->
+      sizeOf _tDef
+    TNative {..} ->
+      sizeOf _tNativeName + sizeOf  
+    where
+    scopeSize = undefined
 
 instance Applicative Term where
     pure = return

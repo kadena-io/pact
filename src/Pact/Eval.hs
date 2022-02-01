@@ -720,7 +720,10 @@ unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static te
 
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
-reduce (TApp a _) = reduceApp a
+reduce (TApp a _) = do
+  -- liftIO $ putStrLn "APP!"
+  -- liftIO $ print a
+  reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
