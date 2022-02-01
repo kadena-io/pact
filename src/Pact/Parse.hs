@@ -190,8 +190,9 @@ instance Wrapped ParsedInteger
 
 
 -- | "Production" parser: atto, parse multiple exps.
+-- TODO: Mainnet replay + forking in chainweb.
 parseExprs :: Text -> Either String [Exp Parsed]
-parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
+parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs <* TF.eof))
 
 
 -- | ParsedCode version of 'parseExprs'
