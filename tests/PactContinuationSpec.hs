@@ -598,7 +598,7 @@ pactWithSameNameYield moduleName =
                     result1))
                  (step
                    (resume { "result" := res }
-                     res)))))|]
+                     res))))|]
 
 
 testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Bool -> Expectation
