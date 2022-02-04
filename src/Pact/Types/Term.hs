@@ -161,6 +161,8 @@ instance Pretty Meta where
 
 instance NFData Meta
 
+instance SizeOf Meta
+
 prettyModel :: [Exp Info] -> Doc
 prettyModel []    = mempty
 prettyModel props = "@model " <> list (pretty <$> props)
@@ -300,6 +302,9 @@ instance FromJSON DefType
 instance ToJSON DefType
 instance NFData DefType
 
+instance SizeOf DefType where
+  sizeOf _ = 0
+
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
@@ -352,6 +357,8 @@ instance FromJSON n => FromJSON (BindType n) where
 
 instance NFData n => NFData (BindType n)
 
+instance (SizeOf n) => SizeOf (BindType n)
+
 -- -------------------------------------------------------------------------- --
 -- BindPair
 
@@ -371,6 +378,7 @@ instance NFData n => NFData (BindPair n)
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
+instance (SizeOf n) => SizeOf (BindPair n)
 
 -- -------------------------------------------------------------------------- --
 -- App
@@ -391,11 +399,15 @@ instance Pretty n => Pretty (App n) where
 
 instance NFData t => NFData (App t)
 
+instance (SizeOf t) => SizeOf (App t)
+
 -- -------------------------------------------------------------------------- --
 -- Governance
 
 newtype Governance g = Governance { _gGovernance :: Either KeySetName g }
-  deriving (Eq,Ord,Functor,Foldable,Traversable,Show,NFData)
+  deriving (Eq,Ord,Functor,Foldable,Traversable,Show,NFData, Generic)
+
+instance (SizeOf g) => SizeOf (Governance g)
 
 instance Pretty g => Pretty (Governance g) where
   pretty = \case
@@ -436,6 +448,7 @@ data DefcapMeta n =
   DefcapEvent
     -- ^ Eventing defcap.
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
+
 instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
   pretty (DefcapManaged m) = case m of
@@ -464,6 +477,8 @@ instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
         if t == "event" then pure DefcapEvent
         else fail "Expected 'event'"
 
+instance (SizeOf a) => SizeOf (DefcapMeta a)
+
 -- | Def metadata specific to 'DefType'.
 -- Currently only specified for Defcap.
 data DefMeta n =
@@ -476,6 +491,8 @@ instance (ToJSON n,FromJSON n) => ToJSON (DefMeta n) where
   toJSON (DMDefcap m) = toJSON m
 instance (ToJSON n,FromJSON n) => FromJSON (DefMeta n) where
   parseJSON = fmap DMDefcap . parseJSON
+
+instance (SizeOf a) => SizeOf (DefMeta a)
 
 -- -------------------------------------------------------------------------- --
 -- ConstVal
@@ -504,6 +521,8 @@ constTerm :: ConstVal a -> a
 constTerm (CVRaw raw) = raw
 constTerm (CVEval _raw eval) = eval
 
+instance (SizeOf n) => SizeOf (ConstVal n)
+
 -- -------------------------------------------------------------------------- --
 -- Example
 
@@ -526,6 +545,8 @@ instance IsString Example where
   fromString = ExecExample . fromString
 
 instance NFData Example
+
+instance SizeOf Example
 
 -- -------------------------------------------------------------------------- --
 -- FieldKey
@@ -565,6 +586,8 @@ instance Pretty n => Pretty (Step n) where
       [ pretty exec
       , pretty rollback
       ]
+
+instance (SizeOf n) => SizeOf (Step n)
 
 -- -------------------------------------------------------------------------- --
 -- ModRef
@@ -709,6 +732,7 @@ instance FromJSON Use where
         <*> o .: "i"
 
 instance NFData Use
+instance SizeOf Use
 
 -- -------------------------------------------------------------------------- --
 -- Guard
@@ -792,6 +816,8 @@ instance Pretty g => Pretty (Module g) where
 instance ToJSON g => ToJSON (Module g) where toJSON = lensyToJSON 2
 instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
+instance (SizeOf g) => SizeOf (Module g)
+
 -- -------------------------------------------------------------------------- --
 -- Interface
 
@@ -808,6 +834,8 @@ instance ToJSON Interface where toJSON = lensyToJSON 10
 instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
 instance NFData Interface
+
+instance SizeOf Interface
 
 -- -------------------------------------------------------------------------- --
 -- Namespace
@@ -854,6 +882,8 @@ instance ToJSON g => ToJSON (ModuleDef g) where
 
 instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
+
+instance (SizeOf g) => SizeOf (ModuleDef g)
 
 moduleDefName :: ModuleDef g -> ModuleName
 moduleDefName (MDModule m) = _mName m
@@ -978,6 +1008,8 @@ instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Def n) where parseJSO
 derefDef :: Def n -> Name
 derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
+instance (SizeOf n) => SizeOf (Def n)
+
 -- -------------------------------------------------------------------------- --
 -- Lam
 
@@ -988,7 +1020,6 @@ data Lam n
   , _lamBindBody :: !(Scope Int Term n)
   , _lamInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
-
 
 deriving instance (Show1 Term, Show n) => Show (Lam n)
 deriving instance (Eq1 Term, Eq n) => Eq (Lam n)
@@ -1003,6 +1034,8 @@ instance NFData n => NFData (Lam n)
 
 instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Lam n) where toJSON = lensyToJSON 2
 instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where parseJSON = lensyParseJSON 2
+
+instance (SizeOf n) => SizeOf (Lam n)
 -- -------------------------------------------------------------------------- --
 -- Object
 
@@ -1040,6 +1073,8 @@ instance (ToJSON n, FromJSON n) => ToJSON (Object n) where
 instance (ToJSON n, FromJSON n) => FromJSON (Object n) where
   parseJSON = withObject "Object" $ \o ->
     Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
+
+instance (SizeOf n) => SizeOf (Object n)
 
 -- -------------------------------------------------------------------------- --
 -- Term
@@ -1225,18 +1260,47 @@ prettyTypeTerm :: Term n -> SpecialPretty (Term n)
 prettyTypeTerm TSchema{..} = SPSpecial ("{" <> asString _tSchemaName <> "}")
 prettyTypeTerm t = SPNormal t
 
-instance (SizeOf a) => SizeOf (Term a) where
-  sizeOf = \case
+instance SizeOf1 Term where
+  sizeOf1 = \case
     TModule{..} ->
-      sizeOf _tModuleDef + scopeSize _tModuleBody
+      sizeOf _tModuleDef + sizeOf _tModuleBody + sizeOf _tInfo
     TList {..} ->
-       foldMap sizeOf _tList + sizeOf _tListType
+       sizeOf _tList + sizeOf _tListType + sizeOf _tInfo
     TDef{..} ->
-      sizeOf _tDef
+      sizeOf _tDef + sizeOf _tInfo
     TNative {..} ->
-      sizeOf _tNativeName + sizeOf  
-    where
-    scopeSize = undefined
+      sizeOf _tNativeName + sizeOf _tFunTypes + sizeOf _tInfo
+    TConst {..} ->
+      sizeOf _tConstArg + sizeOf _tModule + sizeOf _tConstVal + sizeOf _tInfo
+    TApp{..} -> sizeOf _tApp + sizeOf _tInfo
+    TVar{..} -> sizeOf _tVar + sizeOf _tInfo
+    TBinding{..} ->
+      sizeOf _tBindPairs + sizeOf _tBindBody + sizeOf _tBindType + sizeOf _tInfo
+    TLam{..} -> sizeOf _tLam + sizeOf _tInfo
+    TObject{..} -> sizeOf _tObject + sizeOf _tInfo
+    TSchema{..} ->
+      sizeOf _tSchemaName + sizeOf _tModule + sizeOf _tMeta + sizeOf _tFields + sizeOf _tInfo
+    TLiteral{..} -> sizeOf _tLiteral + sizeOf _tInfo
+    TGuard{..} -> sizeOf _tGuard + sizeOf _tInfo
+    TUse{..} -> sizeOf _tUse + sizeOf _tInfo
+    TStep{..} -> sizeOf _tStep + sizeOf _tMeta + sizeOf _tInfo
+    TModRef{..} -> sizeOf _tModRef + sizeOf _tInfo
+    TTable{..} ->
+      sizeOf _tTableName + sizeOf _tModuleName
+        + sizeOf _tHash + sizeOf _tTableType + sizeOf _tMeta + sizeOf _tInfo
+    TDynamic{..} ->
+      sizeOf _tDynModRef + sizeOf _tDynMember + sizeOf _tInfo
+    -- where
+    -- sizeOfVar = \case
+    --   B a -> sizeOf a
+    --   F n -> sizeOf n
+    -- scopeSize :: forall b. SizeOf b => Scope b Term a -> Int64
+    -- scopeSize s = case unscope s of
+    --   TVar{..} -> sizeOfVar _tVar + sizeOf _tInfo
+    --   _ -> undefined
+
+instance (SizeOf a) => SizeOf (Term a) where
+  sizeOf t = sizeOf1 t
 
 instance Applicative Term where
     pure = return

@@ -39,6 +39,7 @@ import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Reflection
 import Data.Proxy
 import Test.QuickCheck
+import Test.QuickCheck.Instances()
 
 #if !defined(ghcjs_HOST_OS)
 
