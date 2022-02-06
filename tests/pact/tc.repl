@@ -263,6 +263,14 @@
 
   (defun fails-tc-call-modref:bool ()
     (tc-modref tc-test-impl2))
+
+  (defun tc-eq-modref:bool (a:module{tctest-iface} b:module{tctest-iface})
+    (= a b))
+
+  (defun tc-cmp-modref-call:bool ()
+    "test compliant modrefs with varying impl lists"
+    (tc-eq-modref tc-test-impl tc-test-impl-both)
+    )
 )
 
 (create-table persons)

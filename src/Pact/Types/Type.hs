@@ -40,6 +40,9 @@ module Pact.Types.Type
   , tvName
   , tvConstraint
   , Type(..)
+  , _TyAny, _TyVar, _TyPrim
+  , _TyList, _TySchema, _TyFun
+  , _TyUser, _TyModule
   , tyFunType
   , tyListType
   , tySchema
@@ -421,6 +424,7 @@ elem' :: Foldable t => (a -> a -> Bool) -> a -> t a -> Bool
 elem' f = any . f
 
 makeLenses ''Type
+makePrisms ''Type
 makeLenses ''FunType
 makeLenses ''Arg
 makeLenses ''TypeVar

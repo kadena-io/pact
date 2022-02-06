@@ -437,7 +437,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.1.3"
+"4.2.0"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -775,7 +775,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`[string]`
 
 
-Return all keys in TABLE as a sorted list.
+Return all keys in TABLE.
 ```lisp
 (keys accounts)
 ```
@@ -801,7 +801,7 @@ Read row from TABLE for KEY, returning database record object, or just COLUMNS i
 *table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`row:object:<{row}> -> bool` *&rarr;*&nbsp;`[object:<{row}>]`
 
 
-Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys.
+Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
 ```lisp
 (select people ['firstName,'lastName] (where 'name (= "Fatima")))
 (select people (where 'age (> 30)))?
@@ -984,7 +984,7 @@ pact> (time "2016-07-22T11:26:35Z")
 
 ### != {#bangeq}
 
-*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 True if X does not equal Y.
@@ -1116,7 +1116,7 @@ true
 
 ### = {#eq}
 
-*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>` *&rarr;*&nbsp;`bool`
 
 
 Compare alike terms for equality, returning TRUE if X is equal to Y. Equality comparisons will fail immediately on type mismatch, or if types are not value types.

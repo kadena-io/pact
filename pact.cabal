@@ -323,7 +323,7 @@ test-suite hspec
   other-modules:
     Blake2Spec
     KeysetSpec
-    TypesSpec
+    RoundTripSpec
 
   if !impl(ghcjs)
     other-modules:
@@ -341,6 +341,7 @@ test-suite hspec
       , mtl
       , text
       , transformers
+      , vector
 
     if flag(build-tool)
       cpp-options: -DBUILD_TOOL
@@ -376,5 +377,4 @@ test-suite hspec
         , prettyprinter
         , sbv
         , servant-client
-        , vector
         , yaml

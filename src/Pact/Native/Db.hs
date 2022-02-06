@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
 
 -- |
@@ -118,11 +119,11 @@ dbDefs =
       [ LitExample "(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))"
       , LitExample "(select people (where 'age (> 30)))?"
       ]
-      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion. Output sorted based on keys."
+      "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion."
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     [LitExample "(keys accounts)"] "Return all keys in TABLE as a sorted list."
+     [LitExample "(keys accounts)"] "Return all keys in TABLE."
 
     ,defNative "fold-db" foldDB'
       (funType (TyList b)
@@ -238,7 +239,7 @@ read' _ i as = argsError i as
 
 
 foldDB' :: NativeFun e
-foldDB' i [tbl, TApp qry _, TApp consumer _] = do
+foldDB' i [tbl, tLamToApp -> TApp qry _, tLamToApp -> TApp consumer _] = do
   table <- reduce tbl >>= \case
     t@TTable{} -> return t
     t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t

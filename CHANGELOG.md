@@ -1,3 +1,31 @@
+4.2.0
+---
+* Language features:
+  * Lambdas: let-bound function definitions (#915)
+  * In-line lambdas @ application use sites: (#954)
+  * Provide equality for modrefs (#951)
+
+* Bug Fixes
+  * Fixed formal verification for take/drop functions (#921)
+  * Internal native fix (#945)
+  * Fix schema unification on module upgrades (#948)
+  * Docs expression evaluation fixed (#946)
+  * Allow self modrefs (#950)
+
+* New Natives
+  * `zip` native (#922)
+  * `cond` syntactic form (#938)
+  * `fold-db` native (#941)
+
+* Persistence improvements
+  * Versoned PactValue persistence (#926)
+  * Fix modref payload serialization, decouple from persistence backcompat (#949)
+  * Run Repls with Sqlite backend (#934)
+
+4.1.2
+---
+* Enforce key format in keyset creation (#918)
+
 4.1.1
 ---
 * Guard for recursion at runtime on user apps (#913)

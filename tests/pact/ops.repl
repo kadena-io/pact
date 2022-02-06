@@ -86,6 +86,18 @@
 (expect "= string string" true (= "hello" "hello"))
 (expect "!= string string" true (!= "hello" "goodbye"))
 
+(expect "= bool bool" true (= true true))
+(expect "!= bool bool" true (!= false true))
+
+(interface ix (defun f:bool ()))
+(interface iy (defun f:bool ()))
+(module mx g (defcap g () true) (implements ix) (defun f:bool () true))
+(module my g (defcap g () true) (implements iy) (defun f:bool () true))
+(module ny g (defcap g () true) (implements iy) (defun f:bool () true))
+
+(expect "= module{ix} module{ix}" true (= mx mx))
+(expect "!= module{ix} module{ix}" true (!= my mx))
+
 "===== math"
 (expect "sqrt decimal" 4.0 (sqrt 16.0))
 (expect "sqrt integer" 4.0 (sqrt 16))

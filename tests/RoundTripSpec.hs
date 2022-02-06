@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-module TypesSpec (spec) where
+{-# LANGUAGE TypeApplications #-}
+module RoundTripSpec (spec) where
 
 
 import Test.Hspec
@@ -9,7 +10,9 @@ import Data.Aeson
 import Data.Default
 import Data.Map.Strict (fromList)
 import qualified Data.HashSet as HS
+import qualified Data.Vector as V
 
+import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 
@@ -22,7 +25,8 @@ spec = do
   describe "testUnification" testUnification
 
 rt :: (FromJSON a,ToJSON a,Show a,Eq a) => String -> a -> Spec
-rt n p = it ("roundtrips " ++ n) $ decode (encode p) `shouldBe` Just p
+rt n p = it ("roundtrips " ++ n) $ do
+  decode (encode p) `shouldBe` Just p
 
 testJSONPersist :: Spec
 testJSONPersist = do
@@ -33,10 +37,33 @@ testJSONPersist = do
   rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
   rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
   rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
+  rt "list" (PList (V.fromList [PLiteral (LInteger 123), PLiteral (LBool False), PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC"))]))
+  rt "object" (PObject (ObjectMap (fromList [("A",PLiteral (LInteger 123)), ("B",PLiteral (LBool False))])))
 
 testJSONColumns :: Spec
-testJSONColumns =
-  rt "object" (ObjectMap (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
+testJSONColumns = do
+  rt "object" obj
+  it "roundtrips as rowdata" $ do
+    decode @RowData (encode obj) `shouldBe` Just (RowData RDV0 (pactValueToRowData <$> obj))
+  where
+  uguard = GUser $ UserGuard (Name (BareName "a" def)) [PLiteral (LInteger 123)]
+  pguard = GPact $ PactGuard (PactId "123") "456"
+  ksguard = GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"
+  ksrguard = GKeySetRef $ KeySetName "beepboop"
+  mguard = GModule $ ModuleGuard (ModuleName "beep" Nothing) "boop"
+  obj = ObjectMap $ fromList
+    [("A", PLiteral (LInteger 123))
+    ,("B", PLiteral (LBool False))
+    ,("C", PLiteral (LString "hello"))
+    ,("D", PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
+    ,("E", PGuard uguard)
+    ,("F", PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
+    ,("G", PObject (ObjectMap (fromList [("A",PLiteral (LInteger 123))])))
+    ,("H", PList (V.fromList [PLiteral (LInteger 123), PLiteral (LBool False), PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC"))]))
+    ,("I", PGuard pguard)
+    ,("J", PGuard ksguard)
+    ,("K", PGuard ksrguard)
+    ,("L", PGuard mguard)]
 
 testJSONModules :: Spec
 testJSONModules = rt "module" tmod

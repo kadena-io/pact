@@ -6,6 +6,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
+
 
 -- |
 -- Module      :  Pact.Native
@@ -789,7 +791,7 @@ b = mkTyVar "b" []
 c = mkTyVar "c" []
 
 map' :: NativeFun e
-map' i as@[TApp app _,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
+map' i as@[tLamToApp -> TApp app _,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply app . pure)
            t -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
 map' i as = argsError' i as
@@ -839,7 +841,7 @@ reverse' _ [l@TList{}] = return $ over tList V.reverse l
 reverse' i as = argsError i as
 
 fold' :: NativeFun e
-fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \case
+fold' i as@[tLamToApp -> app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \case
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
            t -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
@@ -847,14 +849,17 @@ fold' i as = argsError' i as
 
 
 filter' :: NativeFun e
-filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \case
-           TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
-                           t <- apply (_tApp app) [a']
-                           case t of
-                             (TLiteral (LBool bo) _) -> return bo
-                             _ -> return False -- hmm, too permissive here, select is stricter
-           t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+filter' i as@[tLamToApp -> app@TApp {},l] = gasUnreduced i as $ reduce l >>= \case
+  TList ls lt _ -> fmap (toTListV lt def) $ (`V.filterM` ls) $ \a' -> do
+    t <- apply (_tApp app) [a']
+    case t of
+      (TLiteral (LBool bo) _) -> return bo
+      _ -> ifExecutionFlagSet FlagDisablePact420
+             (return False)
+             (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
+  t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
 filter' i as = argsError' i as
+
 
 length' :: RNativeFun e
 length' _ [TList ls _ _] = return $ toTerm (length ls)
@@ -877,7 +882,7 @@ drop' _ [TList {..},TObject (Object (ObjectMap o) oTy _ _) _] = asKeyList _tList
 drop' i as = argsError i as
 
 zip' :: NativeFun e
-zip' i as@[TApp app _, l1, l2] = gasUnreduced i as $ (,) <$> reduce l1 <*> reduce l2 >>= \case
+zip' i as@[tLamToApp -> TApp app _, l1, l2] = gasUnreduced i as $ (,) <$> reduce l1 <*> reduce l2 >>= \case
  -- reduce list terms first, though unfortunately
   -- this means that lambdas within lists won't work for now.
   (TList l1' _ _, TList l2' _ _) -> do
@@ -936,21 +941,16 @@ remove _ [TLitString key,TObject (Object (ObjectMap ps) t _ _) _] =
 remove i as = argsError i as
 
 compose :: NativeFun e
-compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
+compose i as@[tLamToApp -> appA@TApp {},tLamToApp -> appB@TApp {},v] = gasUnreduced i as $ do
   v' <- reduce v
   a' <- apply (_tApp appA) [v']
   apply (_tApp appB) [a']
 compose i as = argsError' i as
 
-
-
-
 readMsg :: RNativeFun e
 readMsg i [TLitString key] = fromPactValue <$> parseMsgKey i "read-msg" key
 readMsg i [] = fromPactValue <$> parseMsgKey' i "read-msg" Nothing
 readMsg i as = argsError i as
-
-
 
 pactId :: RNativeFun e
 pactId i [] = toTerm <$> getPactId i
@@ -1015,7 +1015,7 @@ resume i as = case as of
   _ -> argsError' i as
 
 where' :: NativeFun e
-where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
+where' i as@[k',tLamToApp -> app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
   (k,r@TObject {}) -> lookupObj k (_oObject $ _tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as

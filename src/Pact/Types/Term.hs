@@ -79,6 +79,10 @@ module Pact.Types.Term
    tNativeTopLevelOnly,tObject,tSchemaName,
    tTableName,tTableType,tVar,tStep,tModuleName,
    tDynModRef,tDynMember,tModRef,tLam,
+   _TModule, _TList, _TDef, _TNative, _TConst, _TApp,
+   _TVar, _TBinding, _TLam, _TObject, _TSchema,
+   _TLiteral, _TGuard, _TUse, _TStep, _TModRef,
+   _TTable, _TDynamic,
    ToTerm(..),
    toTermList,toTObject,toTObjectMap,toTList,toTListV,
    typeof,typeof',guardTypeOf,
@@ -1393,6 +1397,7 @@ canEq TLiteral{} TLiteral{} = True
 canEq TTable{} TTable{} = True
 canEq TSchema{} TSchema{} = True
 canEq TGuard{} TGuard{} = True
+canEq TModRef{} TModRef{} = True
 canEq _ _ = False
 
 -- | Support pact `=` for value-level terms
@@ -1451,6 +1456,7 @@ makeLenses ''Def
 makeLenses ''Lam
 makeLenses ''Object
 makeLenses ''Term
+makePrisms ''Term
 
 -- This noop TH splice is required to ensure that all types that are defined
 -- above in this module are available in the type environment of the following
