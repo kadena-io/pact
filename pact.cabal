@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.2.0
+version:             4.2.0.1
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -78,6 +78,7 @@ library
     Pact.Types.Gas
     Pact.Types.Hash
     Pact.Types.Info
+    Pact.Types.KeySet
     Pact.Types.Lang
     Pact.Types.Logger
     Pact.Types.Names
