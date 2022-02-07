@@ -33,6 +33,7 @@ For additional information, press, and development inquires, please refer to the
   - [Chainweaver](#chainweaver)
   - [In Browser](#in-browser)
   - [Atom](#atom)
+  - [VS Code](#vs-code)
   - [Emacs](#emacs)
   - [Vim](#vim)
 - [The Pact REST Api](#the-pact-rest-api)
@@ -197,6 +198,10 @@ An implementation of Chainweaver exists [in the browser](http://pact.kadena.io),
 ### Atom
 
 For a full-fledged IDE experience, install the [Atom](https://atom.io)  editor along with `language-pact` using the [atom package manager](http://flight-manual.atom.io/using-atom/sections/atom-packages/).
+
+### VS Code
+
+The Pact language has community support for VS Code via the [pact-vscode](https://github.com/kadena-community/pact-vscode) package. (https://github.com/kadena-community/pact-vscode)
 
 ### Emacs
 
