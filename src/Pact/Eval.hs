@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.
@@ -62,19 +63,21 @@ import Data.Maybe
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
 import qualified Data.Text as T
--- import Safe
 
 import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
--- import Pact.Types.Advice
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
+
+#ifdef BUILD_ADVICE
+import Pact.Types.Advice
+#endif
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -218,16 +221,16 @@ evalNamespace info setter m = do
     allowRoot (SimpleNamespacePolicy f) = f Nothing
     allowRoot (SmartNamespacePolicy ar _) = ar
 
-
-
-
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval (TModule _tm@(MDModule m) bod i) =
+#ifdef BUILD_ADVICE
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> eAdvise i (AdviceModule _tm) $ do
+#else
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
-  -- eAdvise i (AdviceModule tm) $ do
+#endif
     checkAllowModule i
     -- prepend namespace def to module name
     mangledM <- evalNamespace i mName m
@@ -258,12 +261,18 @@ eval (TModule _tm@(MDModule m) bod i) =
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
-    -- return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
+#ifdef BUILD_ADVICE
+    return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
+#else
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
+#endif
 
 eval (TModule _tm@(MDInterface m) bod i) =
+#ifdef BUILD_ADVICE
+  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> eAdvise i (AdviceModule _tm) $ do
+#else
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
-  -- eAdvise i (AdviceModule tm) $ do
+#endif
     checkAllowModule i
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m
@@ -273,12 +282,18 @@ eval (TModule _tm@(MDInterface m) bod i) =
     (g,govI) <- loadInterface mangledI bod i gas
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
-    -- return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
+#ifdef BUILD_ADVICE
+    return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
+#else
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
+#endif
 eval t = enscope t >>= reduce
 
--- dup :: Monad m => m a -> m (a,a)
--- dup a = a >>= \r -> return (r,r)
+
+#ifdef BUILD_ADVICE
+dup :: Monad m => m a -> m (a,a)
+dup a = a >>= \r -> return (r,r)
+#endif
 
 checkAllowModule :: Info -> Eval e ()
 checkAllowModule i = do
@@ -465,6 +480,7 @@ evaluateDefs info mdef defs = do
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
   hl <- view eeHeapLimit
+  -- Todo: Charge gas here.
   unifiedDefs <-
     ifExecutionFlagSet FlagDisableInlineMemCheck
     (pure (foldl' dresolve HM.empty sortedDefs))
@@ -472,14 +488,16 @@ evaluateDefs info mdef defs = do
 
   traverse (runSysOnly . evalConsts) unifiedDefs
   where
-    -- A bea
+    -- Inline the defuns according to the set heap limit for modules.
+    -- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
+    -- per inlined function.
     dresolveMem heapLimit (!allDefs, costMemoEnv, !currMem) (defTerm, defName, _) = do
-      let (!unified, (!costMemoEnv', !totalMem)) = flip runState (costMemoEnv, sizeOf defTerm+currMem) $ traverse (unifyMemo allDefs) defTerm
+      let (!unified, (!costMemoEnv', !totalMem)) = flip runState (costMemoEnv, sizeOf defTerm+currMem) $
+                                                        traverse (unifyMemo allDefs) defTerm
       if totalMem >= heapLimit then evalError' info "Max memory for module defn exceeded"
       else pure (HM.insert defName (Ref unified) allDefs, costMemoEnv', totalMem)
     -- Note: modrefs are small, we can choose to not charge these, inlining these does
     -- not cause a significant memory increase
-    unifyMemo :: MonadState (M.Map Text Bytes, Bytes) m => HM.HashMap Text Ref -> Either Text Ref -> m Ref
     unifyMemo _ (Right r) = pure r
     -- We are inlining a def, so:
     --  - Check check mem cost in the memoization env (if not there add it)
@@ -488,13 +506,12 @@ evaluateDefs info mdef defs = do
       memoEnv <- use _1
       case memoEnv ^. at defn of
         Just heapCost -> do
-          _2 += heapCost
+          modify' (\(env, !total) -> (env, total + heapCost))
           pure (m HM.! defn)
         Nothing -> do
           let inlined = m HM.! defn
-              heapCost = sizeOf inlined
-          _1 %= M.insert defn heapCost
-          _2 += heapCost
+              !heapCost = sizeOf inlined
+          modify' (\(!env, !total) -> (M.insert defn heapCost env, total+heapCost))
           pure inlined
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
@@ -927,8 +944,11 @@ guardRecursion fname m act  =
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
 evalUserAppBody _d@Def{..} (as',ft') ai g run =
+#ifdef BUILD_ADVICE
+  guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+#else
   guardRecursion fname (Just _dModule) $ appCall fa ai as' $ fmap (g,) $ run bod'
-  -- guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+#endif
   where
   fname = asString _dDefName
   bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
@@ -980,10 +1000,13 @@ reduceDirect TNative {..} as ai =
             ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
+#ifdef BUILD_ADVICE
+    eAdvise ai (AdviceNative _tNativeName) $ dup
+        $ appCall fa ai as
+        $ _nativeFun _tNativeFun fa as
+#else
     appCall fa ai as $ _nativeFun _tNativeFun fa as
-    -- eAdvise ai (AdviceNative _tNativeName) $ dup
-        -- $ appCall fa ai as
-        -- $ _nativeFun _tNativeFun fa as
+#endif
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 

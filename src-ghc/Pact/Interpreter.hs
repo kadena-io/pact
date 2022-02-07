@@ -34,6 +34,7 @@ module Pact.Interpreter
   , Interpreter (..)
   , defaultInterpreter
   , defaultInterpreterState
+  , defaultHeapLimit
   , ExecutionConfig (..)
   ) where
 
@@ -155,7 +156,7 @@ evalContinuation runner ee cm = case (_cmProof cm) of
 
 -- 50 MB
 defaultHeapLimit :: Bytes
-defaultHeapLimit = 0
+defaultHeapLimit = 10 * 1024 * 1024
 
 setupEvalEnv
   :: PactDbEnv e

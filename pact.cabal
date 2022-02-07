@@ -32,6 +32,11 @@ flag build-tool
   default:     True
   manual:      True
 
+flag build-advice
+  description: Enable advice for repl executable
+  default:     False
+  manual:      True
+
 library
 
   -- common to all configurations:
@@ -262,6 +267,8 @@ library
         , ed25519-donna
     if !os(windows)
       build-depends: unix
+    if flag(build-advice)
+      cpp-options: -DBUILD_ADVICE
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)
@@ -282,6 +289,7 @@ benchmark bench
     buildable: False
   type:                exitcode-stdio-1.0
   main-is:             Bench.hs
+  cpp-options:       -DBUILD_TOOL
   build-depends:       base
                      , pact
   hs-source-dirs:      executables pact-lang-api.js
