@@ -10,6 +10,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.
@@ -48,6 +49,7 @@ import Bound
 import Control.Lens hiding (DefName)
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Aeson (Value)
 import Data.Default
 import Data.Foldable
@@ -72,7 +74,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
--- import Control.DeepSeq
+import Pact.Types.SizeOf
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -440,7 +442,6 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
       Nothing -> evalError (_tInfo g) "Unknown module governance reference"
     _ -> evalError (_tInfo g) "Invalid module governance, should be var"
 
-
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
 -- resolve to a definition in the module ('Left String'). A graph is formed from
@@ -463,21 +464,49 @@ evaluateDefs info mdef defs = do
 
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
   let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
-      unifiedDefs = foldl' dresolve HM.empty sortedDefs
+  hl <- view eeHeapLimit
+  unifiedDefs <-
+    ifExecutionFlagSet FlagDisableInlineMemCheck
+    (pure (foldl' dresolve HM.empty sortedDefs))
+    (view _1 <$> foldlM (dresolveMem hl) (HM.empty, M.empty , 0) sortedDefs)
 
   traverse (runSysOnly . evalConsts) unifiedDefs
   where
+    -- A bea
+    dresolveMem heapLimit (!allDefs, costMemoEnv, !currMem) (defTerm, defName, _) = do
+      let (!unified, (!costMemoEnv', !totalMem)) = flip runState (costMemoEnv, sizeOf defTerm+currMem) $ traverse (unifyMemo allDefs) defTerm
+      if totalMem >= heapLimit then evalError' info "Max memory for module defn exceeded"
+      else pure (HM.insert defName (Ref unified) allDefs, costMemoEnv', totalMem)
+    -- Note: modrefs are small, we can choose to not charge these, inlining these does
+    -- not cause a significant memory increase
+    unifyMemo :: MonadState (M.Map Text Bytes, Bytes) m => HM.HashMap Text Ref -> Either Text Ref -> m Ref
+    unifyMemo _ (Right r) = pure r
+    -- We are inlining a def, so:
+    --  - Check check mem cost in the memoization env (if not there add it)
+    --  - Inline and track the memory increase for the particular def.
+    unifyMemo m (Left defn) = do
+      memoEnv <- use _1
+      case memoEnv ^. at defn of
+        Just heapCost -> do
+          _2 += heapCost
+          pure (m HM.! defn)
+        Nothing -> do
+          let inlined = m HM.! defn
+              heapCost = sizeOf inlined
+          _1 %= M.insert defn heapCost
+          _2 += heapCost
+          pure inlined
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
 
     -- | traverse to find deps and form graph
-    traverseGraph ds memo = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
-      d' <- forM d $ \(f :: Name) -> do
+    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+      defTerm' <- forM defTerm $ \(f :: Name) -> do
         dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
         case (dm, f) of
           (Just t, _) -> return (Right t) -- ref found
           -- for barenames, check decls and finally modules
           (Nothing, Name (BareName fn _)) ->
-            case HM.lookup fn ds of
+            case HM.lookup fn allDefs of
               Just _ -> return (Left fn) -- decl found
               Nothing -> resolveBareModRef f fn memo >>= \r -> case r of
                 Just mr -> return (Right mr) -- mod ref found
@@ -486,7 +515,7 @@ evaluateDefs info mdef defs = do
           -- for qualified names, simply fail
           (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
 
-      return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
+      return (defTerm', defName, mapMaybe (either Just (const Nothing)) $ toList defTerm')
 
     resolveBareModRef f fn memo
         | fn /= moduleBareName mdef = resolveModRef f (ModuleName fn Nothing)
@@ -506,6 +535,7 @@ evaluateDefs info mdef defs = do
 
     moduleBareName (MDInterface i) = _mnName $ _interfaceName i
     moduleBareName (MDModule m) = _mnName $ _mName m
+
 
 -- | Evaluate interface constraints in module.
 evaluateConstraints

@@ -955,6 +955,8 @@ instance HasInfo n => HasInfo (Ref' n) where
   getInfo (Direct d) = getInfo d
   getInfo (Ref r) = getInfo r
 
+instance (SizeOf d) => SizeOf (Ref' d)
+
 -- -------------------------------------------------------------------------- --
 -- NativeDFun
 

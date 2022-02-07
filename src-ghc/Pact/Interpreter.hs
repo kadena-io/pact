@@ -66,6 +66,7 @@ import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.SizeOf (Bytes)
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
@@ -152,6 +153,10 @@ evalContinuation runner ee cm = case (_cmProof cm) of
   where
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
+-- 50 MB
+defaultHeapLimit :: Bytes
+defaultHeapLimit = 0
+
 setupEvalEnv
   :: PactDbEnv e
   -> Maybe EntityName
@@ -182,6 +187,8 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
   , _eePublicData = pd
   , _eeExecutionConfig = ec
   , _eeAdvice = def
+  -- TODO : CONFIGURE
+  , _eeHeapLimit = defaultHeapLimit
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss

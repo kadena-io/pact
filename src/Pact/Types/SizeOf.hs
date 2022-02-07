@@ -19,6 +19,7 @@ module Pact.Types.SizeOf
   ( SizeOf(..)
   , SizeOf1(..)
   , constructorCost
+  , Bytes
   ) where
 
 import Bound
@@ -194,6 +195,11 @@ instance (GSizeOf a, GSizeOf b) => GSizeOf (a :+: b) where
   gsizeOf = \case
     L1 a -> gsizeOf a
     R1 b -> gsizeOf b
+
+
+-- No fields ctors are shared.
+instance {-# OVERLAPS #-} GSizeOf (C1 c U1) where
+  gsizeOf (M1 _) = 0
 
 instance (GSizeOf f) => GSizeOf (C1 c f) where
   gsizeOf (M1 p) = headerCost + gsizeOf p

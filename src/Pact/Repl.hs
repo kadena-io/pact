@@ -132,7 +132,7 @@ initEvalEnv ls = do
   mv <- newMVar ls
   return $ EvalEnv (RefStore nativeDefs) mempty Null Transactional
     def def mv repldb def pactInitialHash freeGasEnv
-    permissiveNamespacePolicy (spvs mv) def def def
+    permissiveNamespacePolicy (spvs mv) def def def 100000000000
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport
 

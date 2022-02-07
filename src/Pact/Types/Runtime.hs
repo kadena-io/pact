@@ -25,7 +25,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eeAdvice,
+   eeAdvice, eeHeapLimit,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
@@ -52,6 +52,7 @@ module Pact.Types.Runtime
    ) where
 
 
+import Data.Int(Int64)
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)
@@ -155,6 +156,8 @@ data ExecutionFlag
   | FlagEnforceKeyFormats
   -- | Enable Pact 4.2.0 db sorted key guarantees, and row persistence
   | FlagDisablePact420
+  -- | Enable memory limit check
+  | FlagDisableInlineMemCheck
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -220,6 +223,8 @@ data EvalEnv e = EvalEnv {
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
+      -- | Eval
+    , _eeHeapLimit :: Int64
     }
 makeLenses ''EvalEnv
 
