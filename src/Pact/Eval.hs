@@ -221,11 +221,18 @@ evalNamespace info setter m = do
     allowRoot (SimpleNamespacePolicy f) = f Nothing
     allowRoot (SmartNamespacePolicy ar _) = ar
 
+eval :: Term Name -> Eval e (Term Name)
+eval t = ifExecutionFlagSet FlagDisableInlineMemCheck (eval' t) (eval' t')
+  where
+  t' = case t of
+    tt@TModule{} -> stripTermInfo tt
+    _ -> t
+
 -- | Evaluate top-level term.
-eval ::  Term Name ->  Eval e (Term Name)
-eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
+eval' ::  Term Name ->  Eval e (Term Name)
+eval' (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
-eval (TModule _tm@(MDModule m) bod i) =
+eval' (TModule _tm@(MDModule m) bod i) =
 #ifdef BUILD_ADVICE
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> eAdvise i (AdviceModule _tm) $ do
 #else
@@ -267,7 +274,7 @@ eval (TModule _tm@(MDModule m) bod i) =
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 #endif
 
-eval (TModule _tm@(MDInterface m) bod i) =
+eval' (TModule _tm@(MDInterface m) bod i) =
 #ifdef BUILD_ADVICE
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> eAdvise i (AdviceModule _tm) $ do
 #else
@@ -287,7 +294,7 @@ eval (TModule _tm@(MDInterface m) bod i) =
 #else
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 #endif
-eval t = enscope t >>= reduce
+eval' t = enscope t >>= reduce
 
 
 #ifdef BUILD_ADVICE

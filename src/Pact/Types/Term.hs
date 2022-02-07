@@ -99,7 +99,7 @@ import Bound
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.DeepSeq
-import Control.Lens (makeLenses,makePrisms)
+import Control.Lens hiding ((.=), DefName(..))
 import Control.Monad
 #if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
