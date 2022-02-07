@@ -75,7 +75,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
 
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
 import Pact.Types.Advice
 #endif
 
@@ -233,7 +233,7 @@ eval' ::  Term Name ->  Eval e (Term Name)
 eval' (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval' (TModule _tm@(MDModule m) bod i) =
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> eAdvise i (AdviceModule _tm) $ do
 #else
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
@@ -268,14 +268,14 @@ eval' (TModule _tm@(MDModule m) bod i) =
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
     return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
 #else
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 #endif
 
 eval' (TModule _tm@(MDInterface m) bod i) =
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> eAdvise i (AdviceModule _tm) $ do
 #else
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
@@ -289,7 +289,7 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     (g,govI) <- loadInterface mangledI bod i gas
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
     return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
 #else
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
@@ -297,7 +297,7 @@ eval' (TModule _tm@(MDInterface m) bod i) =
 eval' t = enscope t >>= reduce
 
 
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
 dup :: Monad m => m a -> m (a,a)
 dup a = a >>= \r -> return (r,r)
 #endif
@@ -951,7 +951,7 @@ guardRecursion fname m act  =
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
 evalUserAppBody _d@Def{..} (as',ft') ai g run =
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
   guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
 #else
   guardRecursion fname (Just _dModule) $ appCall fa ai as' $ fmap (g,) $ run bod'
@@ -1007,7 +1007,7 @@ reduceDirect TNative {..} as ai =
             ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
-#ifdef BUILD_ADVICE
+#ifndef NO_ADVICE
     eAdvise ai (AdviceNative _tNativeName) $ dup
         $ appCall fa ai as
         $ _nativeFun _tNativeFun fa as

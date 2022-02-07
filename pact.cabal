@@ -32,8 +32,8 @@ flag build-tool
   default:     True
   manual:      True
 
-flag build-advice
-  description: Enable advice for repl executable
+flag no-advice
+  description: Disable advice for repl executable
   default:     False
   manual:      True
 
@@ -267,8 +267,8 @@ library
         , ed25519-donna
     if !os(windows)
       build-depends: unix
-    if flag(build-advice)
-      cpp-options: -DBUILD_ADVICE
+    if flag(no-advice)
+      cpp-options: -DNO_ADVICE
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)
