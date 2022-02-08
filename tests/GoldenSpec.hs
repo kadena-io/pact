@@ -98,7 +98,7 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
     \  (step (resume { 'a:=a } a)))) \
     \(xchain.p 3)"
   where
-    ec True = mkExecutionConfig [FlagDisablePact40]
+    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck]
     ec False = def
 
 doCRTest :: String -> ReplState -> Text -> Spec
