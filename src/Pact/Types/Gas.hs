@@ -46,6 +46,7 @@ import Pact.Types.PactValue
 import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Parse
+import Pact.Types.SizeOf(Bytes)
 
 
 parseGT0 :: (FromJSON a,Num a,Ord a) => Value -> Parser a
@@ -140,6 +141,8 @@ data GasArgs
   -- ^ Cost of make-list
   | GFoldDB
   -- ^ Cost of the fold-db call
+  | GModuleMemory Bytes
+  -- ^ The cost of the in-memory representation of the module
 
 instance Pretty GasArgs where
   pretty g = case g of
@@ -158,6 +161,7 @@ instance Pretty GasArgs where
     GSort i -> "GSort:" <> pretty i
     GDistinct i -> "GDistinct:" <> pretty i
     GFoldDB -> "GFoldDB"
+    GModuleMemory i -> "GModuleMemory: " <> pretty i
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)

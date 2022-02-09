@@ -154,9 +154,9 @@ evalContinuation runner ee cm = case (_cmProof cm) of
   where
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
--- 50 MB
+-- 20 MB
 defaultHeapLimit :: Bytes
-defaultHeapLimit = 10 * 1024 * 1024
+defaultHeapLimit = 20 * 1024 * 1024
 
 setupEvalEnv
   :: PactDbEnv e

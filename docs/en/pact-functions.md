@@ -2065,14 +2065,3 @@ pact> (let ((a 1)) (env-data { 'b: 1 }) (with-applied-env (+ a (read-integer 'b)
 2
 ```
 
-
-### yolo-term {#yolo-term}
-
-*blah*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
-
-
-
-```lisp
-
-```
-

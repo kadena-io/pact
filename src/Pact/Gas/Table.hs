@@ -252,6 +252,7 @@ tableGasModel gasConfig =
         GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
+        GModuleMemory i -> moduleMemoryCost i
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
@@ -271,6 +272,21 @@ memoryCost val (Gas cost) = Gas totalCost
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
 {-# INLINE memoryCost #-}
 
+-- Calculated from a heap size limit of 20mb
+-- Note: to get this number, we use the equation:
+-- gas_limit = (max_size*fee_per_byte) + (max_size*fee_per_byte/512)^7
+--
+-- With gas limit
+moduleMemFeePerByte :: Rational
+moduleMemFeePerByte = 0.000133632
+
+moduleMemoryCost :: Bytes -> Gas
+moduleMemoryCost sz =
+  let totalByteCost = fromIntegral sz * moduleMemFeePerByte
+      bytePenalty = 512
+      sizePenalty = (totalByteCost/bytePenalty)^(7::Int)
+  in Gas (ceiling (totalByteCost + sizePenalty))
+{-# INLINE moduleMemoryCost #-}
 
 -- | Gas model that charges varible (positive) rate per tracked operation
 defaultGasModel :: GasModel

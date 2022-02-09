@@ -58,7 +58,8 @@ spec = do
 goldenModule
   :: String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
 goldenModule tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
-  (r,s) <- runIO $ execScript' Quiet fp
+  let ec = mkExecutionConfig [FlagDisableInlineMemCheck]
+  (r,s) <- runIO $ execScriptF' Quiet fp (\st -> st & rEnv . eeExecutionConfig .~ ec)
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
   case mr of

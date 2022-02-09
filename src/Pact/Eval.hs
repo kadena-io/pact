@@ -465,7 +465,7 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
       Nothing -> evalError (_tInfo g) "Unknown module governance reference"
     _ -> evalError (_tInfo g) "Invalid module governance, should be var"
 
-
+-- Auxiliary data types for strict fold on heap cost.
 data HeapMemState
   = HeapMemState
   { _hmMemoEnv :: !(M.Map Name Bytes)
@@ -478,6 +478,59 @@ data HeapFold
   , _hfMemoEnv :: !(M.Map Name Bytes)
   , _hfTotalMem :: !Bytes
   }
+
+-- Inline the defuns according to the set heap limit for modules.
+-- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
+-- per inlined function.
+dresolveMem
+  :: HasInfo i
+  => Bytes
+  -> i
+  -> HeapFold
+  -> (Term (Either Text (Ref' (Term Name))), Text, c)
+  -> Eval e HeapFold
+dresolveMem heapLimit info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
+  let
+    (!unified, (HeapMemState costMemoEnv' totalMem))
+      = flip runState (HeapMemState costMemoEnv (sizeOf defTerm+currMem)) $ traverse (unifyMemo allDefs) defTerm
+  if totalMem >= heapLimit then evalError' info "Max memory for module defn exceeded"
+  else case unified of
+    t@TConst{} -> do
+      t' <- runSysOnly $ evalConstsNonRec (Ref t)
+      pure (HeapFold (HM.insert defName t' allDefs) costMemoEnv' totalMem)
+    _ -> pure (HeapFold (HM.insert defName (Ref unified) allDefs) costMemoEnv' totalMem)
+  where
+  -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
+  unifyMemo _ (Right (Ref td@(TDef defn _))) = do
+    let (DefName defname) = _dDefName defn
+        name = QName (QualifiedName (_dModule defn) defname def)
+    memoEnv <- gets _hmMemoEnv
+    case M.lookup name memoEnv of
+      Just heapCost -> do
+        modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
+        pure (Ref td)
+      Nothing -> do
+        let !heapCost = sizeOf td
+        modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total+heapCost))
+        pure (Ref td)
+  -- Note: inlining only ever inlines tdefs and modrefs, it's fine to not charge
+  -- for the second case
+  unifyMemo _ (Right r) = pure r
+  -- We are inlining a def, so:
+  --  - Check check mem cost in the memoization env (if not there add it)
+  --  - Inline and track the memory increase for the particular def.
+  unifyMemo m (Left defn) = do
+    memoEnv <- gets _hmMemoEnv
+    case M.lookup (Name (BareName defn def)) memoEnv of
+      Just heapCost -> do
+        modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
+        pure (m HM.! defn)
+      Nothing -> do
+        let inlined = m HM.! defn
+            !heapCost = sizeOf inlined
+        modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total+heapCost))
+        pure inlined
+
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
@@ -500,57 +553,19 @@ evaluateDefs info mdef defs = do
       evalError i $ "Recursion detected: " <> prettyList pl
 
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
-  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
-      -- unifiedDefs = foldl' dresolve HM.empty sortedDefs
-  hl <- view eeHeapLimit
   -- Todo: Charge gas here.
-  unifiedDefs <-
-    ifExecutionFlagSet FlagDisableInlineMemCheck
-    (pure (foldl' dresolve HM.empty sortedDefs))
-    (_hfAllDefs <$> foldlM (dresolveMem hl) (HeapFold HM.empty M.empty 0) sortedDefs)
-
-  traverse (runSysOnly . evalConsts) unifiedDefs
+  isExecutionFlagSet FlagDisableInlineMemCheck >>= \case
+    True -> do
+      let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
+          unifiedDefs = (foldl' dresolve HM.empty sortedDefs)
+      traverse (runSysOnly . evalConsts) unifiedDefs
+    False -> do
+      hl <- view eeHeapLimit
+      hf <- foldlM (dresolveMem hl info) (HeapFold HM.empty M.empty 0) sortedDefs
+      _ <- computeGas (Left (info, "moduleMemory")) (GModuleMemory (_hfTotalMem hf))
+      pure (_hfAllDefs hf)
   where
-    -- Inline the defuns according to the set heap limit for modules.
-    -- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
-    -- per inlined function.
-    dresolveMem heapLimit (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
-      let (!unified, (HeapMemState costMemoEnv' totalMem)) = flip runState (HeapMemState costMemoEnv (sizeOf defTerm+currMem)) $
-                                                        traverse (unifyMemo allDefs) defTerm
-      if totalMem >= heapLimit then evalError' info "Max memory for module defn exceeded"
-      else pure (HeapFold (HM.insert defName (Ref unified) allDefs) costMemoEnv' totalMem)
-    -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
-    unifyMemo _ (Right (Ref td@(TDef defn _))) = do
-      let (DefName defname) = _dDefName defn
-          name = QName (QualifiedName (_dModule defn) defname def)
-      memoEnv <- gets _hmMemoEnv
-      case M.lookup name memoEnv of
-        Just heapCost -> do
-          modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
-          pure (Ref td)
-        Nothing -> do
-          let !heapCost = sizeOf td
-          modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total+heapCost))
-          pure (Ref td)
-    -- Note: inlining only ever inlines tdefs and modrefs, it's fine to not charge
-    -- for the second case
-    unifyMemo _ (Right r) = pure r
-    -- We are inlining a def, so:
-    --  - Check check mem cost in the memoization env (if not there add it)
-    --  - Inline and track the memory increase for the particular def.
-    unifyMemo m (Left defn) = do
-      memoEnv <- gets _hmMemoEnv
-      case M.lookup (Name (BareName defn def)) memoEnv of
-        Just heapCost -> do
-          modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
-          pure (m HM.! defn)
-        Nothing -> do
-          let inlined = m HM.! defn
-              !heapCost = sizeOf inlined
-          modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total+heapCost))
-          pure inlined
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
-
     -- | traverse to find deps and form graph
     traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
       defTerm' <- forM defTerm $ \(f :: Name) -> do
@@ -788,6 +803,18 @@ evalConsts rr@(Ref r) = case r of
     _ -> return rr
   _ -> Ref <$> traverse evalConsts r
 evalConsts !r = return r
+
+
+evalConstsNonRec :: PureSysOnly e => Ref -> Eval e Ref
+evalConstsNonRec rr@(Ref r) = case r of
+  TConst {..} -> case _tConstVal of
+    CVRaw raw -> do
+      v <- reduce raw
+      traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
+      return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
+    _ -> return rr
+  _ -> return rr
+evalConstsNonRec r = return r
 
 
 deref :: Ref -> Eval e (Term Name)

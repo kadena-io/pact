@@ -324,13 +324,6 @@ unlessExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
 unlessExecutionFlagSet f onFalse =
   ifExecutionFlagSet f (return ()) (void onFalse)
 
--- (%%%=) :: Lens' EvalState a -> (a -> a) -> Eval e ()
--- acc %%%= f = do
---   s <- get
---   let !s' = over acc f s
---   put s'
-
-
 -- | Bracket interpreter action pushing and popping frame on call stack.
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a
 call !s act = do

@@ -260,7 +260,6 @@ replDefs = ("Repl",
       ("Evaluate EXEC with any pending environment changes applied. " <>
        "Normally, environment changes must execute at top-level for the change to take effect. " <>
        "This allows scoped application of non-toplevel environment changes.")
-     ,defZNative "yolo-term" yoloTerm (funType a [("blah", a)]) [LitExample ""] ""
      ,defZRNative "env-dynref" envDynRef
       (funType tTyString [("iface",TyModule Nothing),("impl",TyModule (Just []))] <>
        funType tTyString [])
@@ -844,9 +843,3 @@ withEnv _ [exec] = do
     _ -> (ls,Endo id)
   local (appEndo updates) $ reduce exec
 withEnv i as = argsError' i as
-
-yoloTerm :: ZNativeFun e
-yoloTerm _ [e] = do
-  liftIO $ print e
-  reduce e
-yoloTerm i as = argsError' i as
