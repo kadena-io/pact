@@ -289,7 +289,6 @@ benchmark bench
     buildable: False
   type:                exitcode-stdio-1.0
   main-is:             Bench.hs
-  cpp-options:       -DBUILD_TOOL
   build-depends:       base
                      , pact
   hs-source-dirs:      executables pact-lang-api.js

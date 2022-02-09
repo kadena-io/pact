@@ -226,7 +226,7 @@ eval :: Term Name -> Eval e (Term Name)
 eval t = ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
   where
   stripped = case t of
-    tt@TModule{} -> stripTermInfo tt
+    TModule{} -> stripTermInfo t
     _ -> t
 
 -- | Evaluate top-level term.

@@ -3,6 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
+(env-exec-config ["DisableInlineMemCheck"])
 (env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))

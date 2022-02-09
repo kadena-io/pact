@@ -81,7 +81,7 @@ acctsFailureCR :: String -> ReplState -> Spec
 acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> ReplState -> Spec
-eventCR tn s = doCRTest tn s $
+eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck]) tn s $
     "(module events-test G \
     \  (defcap G () true) \
     \  (defcap CAP (name:string amount:decimal) @managed \
@@ -100,7 +100,7 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
     \(xchain.p 3)"
   where
     ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck]
-    ec False = def
+    ec False = mkExecutionConfig [FlagDisableInlineMemCheck]
 
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = doCRTest' def tn s code
