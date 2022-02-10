@@ -223,12 +223,12 @@ evalNamespace info setter m = do
     allowRoot (SmartNamespacePolicy ar _) = ar
 
 eval :: Term Name -> Eval e (Term Name)
-eval t = eval' $!! t
-  -- ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
-  -- where
-  -- stripped = case t of
-  --   TModule{} -> stripTermInfo t
-  --   _ -> t
+eval t = 
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
+  where
+  stripped = case t of
+    TModule{} -> stripTermInfo t
+    _ -> t
 
 -- | Evaluate top-level term.
 eval' ::  Term Name ->  Eval e (Term Name)
