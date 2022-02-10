@@ -1,11 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -28,6 +25,7 @@ module Pact.Parse
     ,PactParser(unPactParser)
     ,ParsedInteger(..),ParsedDecimal(..)
     ,parsePact
+    ,legacyParsePact
     )
 
 where
@@ -132,7 +130,6 @@ exprs :: (TokenParsing m, DeltaParsing m) => PactParser m [Exp Parsed]
 exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
--- Unnecessary with Atto's 'parseOnly'.
 exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
@@ -184,22 +181,28 @@ instance A.ToJSON ParsedInteger where
 
 instance Wrapped ParsedInteger
 
-
-
-
-
-
--- | "Production" parser: atto, parse multiple exps.
+-- | "Production" parser: atto, parse multiple exprs.
 parseExprs :: Text -> Either String [Exp Parsed]
-parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
+parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs <* TF.eof))
+{-# INLINABLE parseExprs #-}
 
+-- | Legacy version of "production" parser: atto, parse multiple exprs. This
+-- parser does not force EOF and thus accepts trailing inputs that are not valid
+-- pact code.
+legacyParseExprs :: Text -> Either String [Exp Parsed]
+legacyParseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
+{-# INLINABLE legacyParseExprs #-}
 
 -- | ParsedCode version of 'parseExprs'
 parsePact :: Text -> Either String ParsedCode
 parsePact code = ParsedCode code <$> parseExprs code
 {-# INLINABLE parsePact #-}
 
-
+-- | Legacy version of the production parser. This parser does not force EOF and
+-- thus accepts trailing inputs that are not valid pact code.
+legacyParsePact :: Text -> Either String ParsedCode
+legacyParsePact code = ParsedCode code <$> legacyParseExprs code
+{-# INLINABLE legacyParsePact #-}
 
 _parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
 _parseF p fp = do
