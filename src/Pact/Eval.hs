@@ -477,29 +477,40 @@ data HeapFold
   { _hfAllDefs :: !(HM.HashMap Text Ref)
   , _hfMemoEnv :: !(M.Map Name Bytes)
   , _hfTotalMem :: !Bytes
+  , _hfLastGas :: !Gas
   }
+
 
 -- Inline the defuns according to the set heap limit for modules.
 -- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
 -- per inlined function.
 dresolveMem
-  :: HasInfo i
-  => Bytes
-  -> i
+  :: Gas
+  -> Info
   -> HeapFold
   -> (Term (Either Text (Ref' (Term Name))), Text, c)
   -> Eval e HeapFold
-dresolveMem heapLimit info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
+dresolveMem gasLimit info (HeapFold allDefs costMemoEnv currMem _) (defTerm, defName, _) = do
   let
     (!unified, (HeapMemState costMemoEnv' totalMem))
       = flip runState (HeapMemState costMemoEnv (sizeOf defTerm+currMem)) $ traverse (unifyMemo allDefs) defTerm
-  if totalMem >= heapLimit then evalError' info "Max memory for module defn exceeded"
-  else case unified of
+  -- if total >= gasLimit then throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty total
+  case unified of
     t@TConst{} -> do
       t' <- runSysOnly $ evalConstsNonRec (Ref t)
-      pure (HeapFold (HM.insert defName t' allDefs) costMemoEnv' totalMem)
-    _ -> pure (HeapFold (HM.insert defName (Ref unified) allDefs) costMemoEnv' totalMem)
+      lastGas <- checkExtraGas totalMem
+      pure (HeapFold (HM.insert defName t' allDefs) costMemoEnv' totalMem lastGas)
+    _ -> do
+      lastGas <- checkExtraGas totalMem
+      pure (HeapFold (HM.insert defName (Ref unified) allDefs) costMemoEnv' totalMem lastGas)
   where
+  checkExtraGas tm = do
+    GasEnv {..} <- view eeGasEnv
+    !g0 <- use evalGas
+    let !gUsed = g0 + runGasModel _geGasModel "moduleMem" (GModuleMemory tm)
+    if gUsed > gasLimit then
+      throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
+    else return gUsed
   -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
   unifyMemo _ (Right (Ref td@(TDef defn _))) = do
     let (DefName defname) = _dDefName defn
@@ -560,9 +571,11 @@ evaluateDefs info mdef defs = do
           unifiedDefs = (foldl' dresolve HM.empty sortedDefs)
       traverse (runSysOnly . evalConsts) unifiedDefs
     False -> do
-      hl <- view eeHeapLimit
-      hf <- foldlM (dresolveMem hl info) (HeapFold HM.empty M.empty 0) sortedDefs
-      _ <- computeGas (Left (info, "moduleMemory")) (GModuleMemory (_hfTotalMem hf))
+      hl <- fromIntegral <$> view (eeGasEnv.geGasLimit)
+      hf <- foldlM (dresolveMem hl info) (HeapFold HM.empty M.empty 0 0) sortedDefs
+      -- note: hfLastGas computes post const reduction so we wet the gas to the amount currently used
+      -- it would error if it was past the gas limit
+      evalGas .= (_hfLastGas hf)
       pure (_hfAllDefs hf)
   where
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)

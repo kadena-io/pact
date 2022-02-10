@@ -39,7 +39,7 @@ gasUnreduced i as = computeGas' 0 i (GUnreduced as)
 
 -- | GasEnv for suppressing gas charging.
 freeGasEnv :: GasEnv
-freeGasEnv = GasEnv 0 0.0 (constGasModel 0)
+freeGasEnv = GasEnv 1000 0.0 (constGasModel 0)
 
 -- | Gas model that charges a fixed (positive) rate per tracked operation.
 constGasModel :: Word64 -> GasModel

@@ -83,7 +83,6 @@ import Pact.Parse
 import Pact.Eval
 import Pact.Types.Pretty hiding (line)
 import Pact.Types.Runtime
-import Pact.Interpreter(defaultHeapLimit)
 import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
@@ -133,7 +132,7 @@ initEvalEnv ls = do
   mv <- newMVar ls
   return $ EvalEnv (RefStore nativeDefs) mempty Null Transactional
     def def mv repldb def pactInitialHash freeGasEnv
-    permissiveNamespacePolicy (spvs mv) def def def defaultHeapLimit
+    permissiveNamespacePolicy (spvs mv) def def def
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport
 

@@ -98,7 +98,6 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eePublicData
     _eeExecutionConfig
     _eeAdvice
-    _eeHeapLimit
 
 -- | Operationally creates the sysread-only environment.
 -- Phantom type and typeclass assigned in "runXXX" functions.
