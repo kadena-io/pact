@@ -25,7 +25,7 @@ import qualified PersistSpec
 import qualified RemoteVerifySpec
 import qualified TypecheckSpec
 
-# endif
+#endif
 #endif
 
 main :: IO ()
