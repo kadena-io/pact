@@ -94,7 +94,7 @@ stripTermInfo = stripTerm' stripNameInfo
     TGuard g _info ->
       TGuard (stripTerm' f <$> g) def
     TUse u _info ->
-      TUse (stripUseInfo u) def
+      TUse u def
     TStep step meta _info ->
       TStep
         (stripStepInfo f step)
@@ -119,11 +119,11 @@ stripTermInfo = stripTerm' stripNameInfo
     MDModule m ->
       let m' = m & mGovernance %~ fmap (stripTerm' f)
                  & mMeta %~ stripMetaInfo
-                 & mImports %~ fmap stripUseInfo
+                --  & mImports %~ fmap stripUseInfo
       in MDModule m'
     MDInterface iface ->
       let iface' = iface & interfaceMeta %~ stripMetaInfo
-                         & interfaceImports %~ fmap stripUseInfo
+                        --  & interfaceImports %~ fmap stripUseInfo
       in MDInterface iface'
   stripTypeInfo f = \case
     TyAny -> TyAny
@@ -146,8 +146,7 @@ stripTermInfo = stripTerm' stripNameInfo
       Step (stripTerm' f <$> en) (stripTerm' f exec) (stripTerm' f <$> rb) def
   stripModRefInfo (ModRef mn ms _info) =
     ModRef mn ms def
-  stripUseInfo (Use mn mh ims _info) =
-    Use mn mh ims def
+  -- stripUseInfo u = u {_uInfo=def}
   stripDefInfo f (Def dn mn dt ftyp body meta dmeta _info) =
     Def dn mn dt
       (stripFunTypeInfo f ftyp)

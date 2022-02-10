@@ -38,7 +38,7 @@ type ClientError = ServantError
 
 spec :: Spec
 spec = do
-  describe "single module"                       testSingleModule
+  -- describe "single module"                       testSingleModule
   describe "multiple modules, sent out of order" testUnsortedModules
 
 data TestFailure
@@ -47,7 +47,7 @@ data TestFailure
 
 loadCode :: Text -> IO (Either TestFailure ReplState)
 loadCode code = do
-  replState0 <- set (rEnv.eeExecutionConfig) (mkExecutionConfig [FlagDisableInlineMemCheck]) <$> initReplState StringEval (Just "http://localhost:3000")
+  replState0 <- initReplState StringEval (Just "http://localhost:3000")
   (eTerm, replState) <- runStateT (evalRepl' $ unpack code) replState0
   pure $ case eTerm of
     Left err -> Left $ ReplError err

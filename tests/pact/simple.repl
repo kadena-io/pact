@@ -1,6 +1,5 @@
 ;; used in Pact.PersistPactDb.Regression
-;; 
-(env-gaslimit 1000)
+;;
 (module simple GOV
   (defcap GOV () true)
   (defun f (a) a))

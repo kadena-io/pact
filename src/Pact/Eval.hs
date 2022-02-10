@@ -319,7 +319,8 @@ evalUse :: Use -> Eval e ()
 evalUse (Use mn mh mis i) = do
   mm <- resolveModule i mn
   case mm of
-    Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
+    Nothing ->
+      evalError i $ "Module " <> pretty mn <> " not found"
     Just md -> do
       case _mdModule md of
         MDModule Module{..} ->
@@ -382,6 +383,7 @@ loadModule
   -> Gas
   -> Eval e (Gas,ModuleData Ref)
 loadModule m bod1 mi g0 = do
+  liftIO $ print $ _mImports m
   mapM_ evalUse $ _mImports m
   (g1,mdefs) <- collectNames g0 (GModuleMember $ MDModule m) bod1 $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)
@@ -494,7 +496,6 @@ dresolveMem gasLimit info (HeapFold allDefs costMemoEnv currMem _) (defTerm, def
   let
     (!unified, (HeapMemState costMemoEnv' totalMem))
       = flip runState (HeapMemState costMemoEnv (sizeOf defTerm+currMem)) $ traverse (unifyMemo allDefs) defTerm
-  -- if total >= gasLimit then throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty total
   case unified of
     t@TConst{} -> do
       t' <- runSysOnly $ evalConstsNonRec (Ref t)
@@ -815,7 +816,7 @@ evalConsts rr@(Ref r) = case r of
       return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
     _ -> return rr
   _ -> Ref <$> traverse evalConsts r
-evalConsts !r = return r
+evalConsts r = return r
 
 
 evalConstsNonRec :: PureSysOnly e => Ref -> Eval e Ref

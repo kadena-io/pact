@@ -629,7 +629,7 @@ data Use = Use
   , _uModuleHash :: !(Maybe ModuleHash)
   , _uImports :: !(Maybe (Vector Text))
   , _uInfo :: !Info
-  } deriving (Eq, Show, Generic)
+  } deriving (Show, Eq, Generic)
 
 instance HasInfo Use where getInfo = _uInfo
 
