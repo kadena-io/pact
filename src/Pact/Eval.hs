@@ -383,7 +383,6 @@ loadModule
   -> Gas
   -> Eval e (Gas,ModuleData Ref)
 loadModule m bod1 mi g0 = do
-  liftIO $ print $ _mImports m
   mapM_ evalUse $ _mImports m
   (g1,mdefs) <- collectNames g0 (GModuleMember $ MDModule m) bod1 $ \t -> case t of
     TDef d _ -> return $ Just $ asString (_dDefName d)

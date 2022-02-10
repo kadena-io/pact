@@ -38,7 +38,7 @@ type ClientError = ServantError
 
 spec :: Spec
 spec = do
-  -- describe "single module"                       testSingleModule
+  describe "single module"                       testSingleModule
   describe "multiple modules, sent out of order" testUnsortedModules
 
 data TestFailure
