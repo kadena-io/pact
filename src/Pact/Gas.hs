@@ -18,7 +18,7 @@ computeGas i args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- use evalGas
   let
-    (info,!name) = either id (_faInfo &&& _faName) i
+    (info,name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
   evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),g1):)
   let gUsed = g0 + g1
@@ -39,7 +39,7 @@ gasUnreduced i as = computeGas' 0 i (GUnreduced as)
 
 -- | GasEnv for suppressing gas charging.
 freeGasEnv :: GasEnv
-freeGasEnv = GasEnv 1000 0.0 (constGasModel 0)
+freeGasEnv = GasEnv 0 0.0 (constGasModel 0)
 
 -- | Gas model that charges a fixed (positive) rate per tracked operation.
 constGasModel :: Word64 -> GasModel
