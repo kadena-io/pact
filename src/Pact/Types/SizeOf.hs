@@ -40,9 +40,6 @@ import Data.Word (Word8)
 import GHC.Generics
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
--- import Test.QuickCheck hiding (mapSize)
--- import Test.QuickCheck.Instances()
-
 import Pact.Types.Orphans()
 
 -- |  Estimate of number of bytes needed to represent data type
@@ -158,17 +155,32 @@ instance SizeOf () where
   sizeOf _ = 0
 
 -- See: http://wiki.haskell.org/GHC/Memory_Footprint near bottom
+-- as well as https://blog.johantibell.com/2011/06/memory-footprints-of-some-common-data.html
+-- for both hash sets and hashmaps.
 instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
-  sizeOf = sizeOf . HM.toList
+  sizeOf m = hmSize
+    where
+    hmSize = (5*hmLength + 4*(hmLength-1))*wordSize + contentLength
+    contentLength = HM.foldlWithKey' (\a k v -> a + sizeOf k + sizeOf v) 0 m
+    hmLength = fromIntegral (HM.size m)
 
+-- Note: Atm hashset is only a newtype wrapper over hashmap with unit as the element
+-- member of every entry. This means you don't pay at all for the cost of (),
+-- but you do pay for the extra constructor field of holding it, hence the `hsSize` bit
+-- stays roughly the same.
 instance (SizeOf k) => SizeOf (HS.HashSet k) where
-  sizeOf = sizeOf . HS.toList
+  sizeOf hs = hsSize
+    where
+    hsSize = (5*hsLength + 4*(hsLength-1))*wordSize + contentLength
+    contentLength = HS.foldl' (\a v -> a + sizeOf v) 0 hs
+    hsLength = fromIntegral (HS.size hs)
 
 instance (SizeOf a, SizeOf b) => SizeOf (Either a b)
 
 instance  (SizeOf a) => SizeOf (NE.NonEmpty a) where
   sizeOf (a NE.:| rest) =
     constructorCost 2 + sizeOf a + sizeOf rest
+
 
 class SizeOf1 f where
   sizeOf1 :: SizeOf a => f a -> Bytes
@@ -185,12 +197,13 @@ instance (SizeOf b, SizeOf a, SizeOf1 f) => SizeOf (Scope b f a) where
 class GSizeOf f where
   gsizeOf :: f a -> Bytes
 
-instance GSizeOf U1 where
-  gsizeOf U1 = 0
-
+-- For sizes of products, we'll calculate the size at the leaves,
+-- and simply add 1 extra word for every leaf.
 instance (GSizeOf f, GSizeOf g) => GSizeOf (f :*: g) where
   gsizeOf (a :*: b) = gsizeOf a + gsizeOf b
 
+-- Sums we can just branch recursively as usual
+-- Ctor information is one level lower.
 instance (GSizeOf a, GSizeOf b) => GSizeOf (a :+: b) where
   gsizeOf = \case
     L1 a -> gsizeOf a
@@ -201,14 +214,28 @@ instance (GSizeOf a, GSizeOf b) => GSizeOf (a :+: b) where
 instance {-# OVERLAPS #-} GSizeOf (C1 c U1) where
   gsizeOf (M1 _) = 0
 
+-- Regular constructors pay the header cost
+-- and 1 word for each field, which is added @ the leaves.
 instance (GSizeOf f) => GSizeOf (C1 c f) where
   gsizeOf (M1 p) = headerCost + gsizeOf p
 
+-- Metainfo about selectors
 instance (GSizeOf f) => GSizeOf (S1 c f) where
   gsizeOf (M1 p) = gsizeOf p
 
+-- Metainfo about the whole data type.
 instance (GSizeOf f) => GSizeOf (D1 c f) where
   gsizeOf (M1 p) = gsizeOf p
 
+-- Single field, means cost of field + 1 word.
 instance (SizeOf c) => GSizeOf (K1 i c) where
   gsizeOf (K1 c) = sizeOf c + wordSize
+
+-- No-argument constructors are always shared by ghc
+-- so they don't really allocate.
+-- However, this instance is used whenever we hit a leaf
+-- that _does_ in fact allocate 1 word for the field itself.
+-- 0-cost constructor `SizeOf` is caught by the `GSizeOf (C1 c U1)`
+-- instance
+instance GSizeOf U1 where
+  gsizeOf U1 = wordSize

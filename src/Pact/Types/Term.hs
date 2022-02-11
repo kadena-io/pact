@@ -1214,14 +1214,6 @@ instance SizeOf1 Term where
         + sizeOf _tHash + sizeOf _tTableType + sizeOf _tMeta + sizeOf _tInfo
     TDynamic{..} ->
       sizeOf _tDynModRef + sizeOf _tDynMember + sizeOf _tInfo
-    -- where
-    -- sizeOfVar = \case
-    --   B a -> sizeOf a
-    --   F n -> sizeOf n
-    -- scopeSize :: forall b. SizeOf b => Scope b Term a -> Int64
-    -- scopeSize s = case unscope s of
-    --   TVar{..} -> sizeOfVar _tVar + sizeOf _tInfo
-    --   _ -> undefined
 
 instance (SizeOf a) => SizeOf (Term a) where
   sizeOf t = sizeOf1 t
