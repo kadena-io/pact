@@ -94,7 +94,7 @@ stripTermInfo = stripTerm' stripNameInfo
     TGuard g _info ->
       TGuard (stripTerm' f <$> g) def
     TUse u _info ->
-      TUse u def
+      TUse (stripUseInfo u) def
     TStep step meta _info ->
       TStep
         (stripStepInfo f step)
@@ -116,15 +116,19 @@ stripTermInfo = stripTerm' stripNameInfo
       F a -> F (stripTerm' f a)
       B b -> B b
   stripMDefInfo f = \case
-    MDModule m ->
-      let m' = m & mGovernance %~ fmap (stripTerm' f)
-                 & mMeta %~ stripMetaInfo
-                --  & mImports %~ fmap stripUseInfo
-      in MDModule m'
-    MDInterface iface ->
-      let iface' = iface & interfaceMeta %~ stripMetaInfo
-                        --  & interfaceImports %~ fmap stripUseInfo
-      in MDInterface iface'
+    MDModule (Module mname mgov mmeta code hs mhs ifaces imports) ->
+      MDModule $
+        Module
+          mname
+          (stripTerm' f <$> mgov)
+          (stripMetaInfo mmeta)
+          code
+          hs
+          mhs
+          ifaces
+          (stripUseInfo <$> imports)
+    MDInterface (Interface iname ic meta imports) ->
+      MDInterface (Interface iname ic (stripMetaInfo meta) (stripUseInfo <$> imports))
   stripTypeInfo f = \case
     TyAny -> TyAny
     TyVar v -> TyVar v
@@ -146,7 +150,7 @@ stripTermInfo = stripTerm' stripNameInfo
       Step (stripTerm' f <$> en) (stripTerm' f exec) (stripTerm' f <$> rb) def
   stripModRefInfo (ModRef mn ms _info) =
     ModRef mn ms def
-  -- stripUseInfo u = u {_uInfo=def}
+  stripUseInfo u = u {_uInfo=def}
   stripDefInfo f (Def dn mn dt ftyp body meta dmeta _info) =
     Def dn mn dt
       (stripFunTypeInfo f ftyp)
