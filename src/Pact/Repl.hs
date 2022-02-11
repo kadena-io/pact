@@ -264,7 +264,7 @@ renderErr a
       let i = case m of
                 Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
-      return $ renderInfo i ++ ":" ++ renderCompactString' (peDoc a)
+      return $ renderInfo i ++ ": " ++ renderCompactString' (peDoc a)
   | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peDoc a)
 
 updateForOp :: Info -> Term Name -> Repl (Either String (Term Name))
