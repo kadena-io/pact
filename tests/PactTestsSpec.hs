@@ -8,11 +8,13 @@ import Test.Hspec
 import Control.Concurrent
 import Control.Monad.State.Strict
 
+import Data.Either (isLeft, isRight)
 import Data.List
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Text (unpack)
+import qualified Data.Text.IO as T
 
 import Pact.Repl
 import Pact.Repl.Lib
@@ -21,6 +23,7 @@ import Pact.Types.Logger
 import Pact.Types.Runtime
 import Pact.Persist.SQLite as SQLite
 import Pact.Interpreter
+import Pact.Parse (parsePact, legacyParsePact)
 
 
 import System.Directory
@@ -33,6 +36,8 @@ spec = do
   accountsTest
   cpTest
   verifiedAccountsTest
+  prodParserTests
+  legacyProdParserTests
 
 
 pactTests :: Spec
@@ -135,3 +140,40 @@ _evalRefMap
   :: String -> IO (HM.HashMap ModuleName (ModuleData Ref, Bool))
 _evalRefMap cmd = fmap (_rsLoadedModules . _evalRefs . _rEvalState . snd)
   (initReplState Quiet Nothing >>= runStateT (evalRepl' cmd))
+
+-- -------------------------------------------------------------------------- --
+-- Production Parser Tests
+
+prodParserTests :: Spec
+prodParserTests =
+  describe "test production parser" $ do
+    fs <- runIO findTests
+    forM_ fs $ \fp ->
+        checkProdParser (notElem fp badParserTests) fp
+ where
+  badParserTests =
+   [ "tests/pact/bad/bad-parens.repl"
+   ]
+
+legacyProdParserTests :: Spec
+legacyProdParserTests =
+  describe "test legacy production parser" $ do
+    fs <- runIO findTests
+    forM_ fs (checkLegacyProdParser True)
+
+checkProdParser :: Bool -> String -> SpecWith ()
+checkProdParser expectSuccess fp = describe fp $ do
+  source <- runIO $ T.readFile fp
+  let pc = parsePact source
+  if expectSuccess
+    then it "parsing succeeds" $ pc `shouldSatisfy` isRight
+    else it "parsing fails as expected" $ pc `shouldSatisfy` isLeft
+
+checkLegacyProdParser :: Bool -> String -> SpecWith ()
+checkLegacyProdParser expectSuccess fp = describe fp $ do
+  source <- runIO $ T.readFile fp
+  let pc = legacyParsePact source
+  if expectSuccess
+    then it "parsing succeeds" $ pc `shouldSatisfy` isRight
+    else it "parsing fails as expected" $ pc `shouldSatisfy` isLeft
+
