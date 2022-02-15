@@ -609,6 +609,7 @@ d.G3
 ;;
 (begin-tx)
 (env-gas 0)
+(env-gaslimit 60000)
 (env-exec-config [])
 (module basic-module GOV
   (defcap GOV () true)
@@ -672,5 +673,5 @@ d.G3
   )
 )
 
-(expect "new module gas" 427 (env-gas))
+(expect "new module gas" 50162 (env-gas))
 (commit-tx)
