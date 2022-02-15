@@ -278,8 +278,7 @@ memoryCost val (Gas cost) = Gas totalCost
 --
 -- With gas limit
 moduleMemFeePerByte :: Rational
-moduleMemFeePerByte = 0.000133632
--- moduleMemFeePerByte = 0.0009342
+moduleMemFeePerByte = 0.0009342
 
 moduleMemoryCost :: Bytes -> Gas
 moduleMemoryCost sz =
