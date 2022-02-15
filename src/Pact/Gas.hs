@@ -3,7 +3,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
-module Pact.Gas where
+module Pact.Gas
+ ( computeGas
+ , computeGas'
+ , computeGasNonCommit
+ , recordGas
+ , logGas
+ , freeGasEnv
+ , gasUnreduced
+ , constGasModel )
+ where
 
 import Data.Text
 import Pact.Types.Runtime
@@ -20,14 +29,33 @@ computeGas i args = do
   let
     (info,name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),g1):)
+  logGas name args g1
   let gUsed = g0 + g1
-  evalGas .= gUsed
+  recordGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
     else return gUsed
 {-# INLINABLE computeGas #-}
 
+-- | Gas calculation for incremental computations, that does not emit a gas log,
+--   nor records it, but does check it against the gas limit.
+computeGasNonCommit :: Info -> Text -> GasArgs -> Eval e Gas
+computeGasNonCommit info name args = do
+  GasEnv {..} <- view eeGasEnv
+  g0 <- use evalGas
+  let !gUsed = g0 + runGasModel _geGasModel name args
+  if gUsed > fromIntegral _geGasLimit then
+    throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
+    else return gUsed
+
+logGas :: Text -> GasArgs -> Gas -> Eval e ()
+logGas name args gas =
+  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),gas):)
+{-# INLINABLE logGas #-}
+
+recordGas :: Gas -> Eval e ()
+recordGas = (evalGas .=)
+{-# INLINABLE recordGas #-}
 
 -- | Pre-compute gas for some application before some action.
 computeGas' :: Gas -> FunApp -> GasArgs -> Eval e a -> Eval e (Gas,a)

@@ -272,13 +272,14 @@ memoryCost val (Gas cost) = Gas totalCost
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
 {-# INLINE memoryCost #-}
 
--- Calculated from a heap size limit of 20mb
+-- Calculated for a max heap size of 3mb per module
 -- Note: to get this number, we use the equation:
 -- gas_limit = (max_size*fee_per_byte) + (max_size*fee_per_byte/512)^7
 --
 -- With gas limit
 moduleMemFeePerByte :: Rational
 moduleMemFeePerByte = 0.000133632
+-- moduleMemFeePerByte = 0.0009342
 
 moduleMemoryCost :: Bytes -> Gas
 moduleMemoryCost sz =

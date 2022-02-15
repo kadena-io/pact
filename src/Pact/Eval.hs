@@ -76,7 +76,7 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Control.DeepSeq
 
-#ifndef NO_ADVICE
+#ifdef ADVICE
 import Pact.Types.Advice
 #endif
 
@@ -223,7 +223,7 @@ evalNamespace info setter m = do
     allowRoot (SmartNamespacePolicy ar _) = ar
 
 eval :: Term Name -> Eval e (Term Name)
-eval t = 
+eval t =
   ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
   where
   stripped = case t of
@@ -235,7 +235,7 @@ eval' ::  Term Name ->  Eval e (Term Name)
 eval' (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval' (TModule _tm@(MDModule m) bod i) =
-#ifndef NO_ADVICE
+#ifdef ADVICE
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> eAdvise i (AdviceModule _tm) $ do
 #else
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
@@ -270,14 +270,14 @@ eval' (TModule _tm@(MDModule m) bod i) =
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
-#ifndef NO_ADVICE
+#ifdef ADVICE
     return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
 #else
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 #endif
 
 eval' (TModule _tm@(MDInterface m) bod i) =
-#ifndef NO_ADVICE
+#ifdef ADVICE
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> eAdvise i (AdviceModule _tm) $ do
 #else
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
@@ -291,7 +291,7 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     (g,govI) <- loadInterface mangledI bod i gas
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
-#ifndef NO_ADVICE
+#ifdef ADVICE
     return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
 #else
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
@@ -299,7 +299,7 @@ eval' (TModule _tm@(MDInterface m) bod i) =
 eval' t = enscope t >>= reduce
 
 
-#ifndef NO_ADVICE
+#ifdef ADVICE
 dup :: Monad m => m a -> m (a,a)
 dup a = a >>= \r -> return (r,r)
 #endif
@@ -479,7 +479,6 @@ data HeapFold
   { _hfAllDefs :: !(HM.HashMap Text Ref)
   , _hfMemoEnv :: !(M.Map Name Bytes)
   , _hfTotalMem :: !Bytes
-  , _hfLastGas :: !Gas
   }
 
 
@@ -487,61 +486,52 @@ data HeapFold
 -- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
 -- per inlined function.
 dresolveMem
-  :: Gas
-  -> Info
+  :: Info
   -> HeapFold
   -> (Term (Either Text (Ref' (Term Name))), Text, c)
   -> Eval e HeapFold
-dresolveMem gasLimit info (HeapFold allDefs costMemoEnv currMem _) (defTerm, defName, _) = do
-  let
-    (!unified, (HeapMemState costMemoEnv' totalMem))
-      = flip runState (HeapMemState costMemoEnv (sizeOf defTerm+currMem)) $ traverse (unifyMemo allDefs) defTerm
-  case unified of
-    t@TConst{} -> do
-      t' <- runSysOnly $ evalConstsNonRec (Ref t)
-      lastGas <- checkExtraGas totalMem
-      pure (HeapFold (HM.insert defName t' allDefs) costMemoEnv' totalMem lastGas)
-    _ -> do
-      lastGas <- checkExtraGas totalMem
-      pure (HeapFold (HM.insert defName (Ref unified) allDefs) costMemoEnv' totalMem lastGas)
+dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
+  (!unified, (HeapMemState costMemoEnv' totalMem))
+    <- runStateT (traverse (replaceMemo allDefs) defTerm)
+                 (HeapMemState costMemoEnv (sizeOf defTerm+currMem))
+  unified' <- case unified of
+    t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
+    _ -> pure (Ref unified)
+  pure (HeapFold (HM.insert defName unified' allDefs) costMemoEnv' totalMem)
   where
-  checkExtraGas tm = do
-    GasEnv {..} <- view eeGasEnv
-    !g0 <- use evalGas
-    let !gUsed = g0 + runGasModel _geGasModel "moduleMem" (GModuleMemory tm)
-    if gUsed > gasLimit then
-      throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
-    else return gUsed
   -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
-  unifyMemo _ (Right (Ref td@(TDef defn _))) = do
+  -- We also calculate the cost per callsite, to fail faster.
+  replaceMemo _ (Right (Ref td@(TDef defn _))) = do
     let (DefName defname) = _dDefName defn
         name = QName (QualifiedName (_dModule defn) defname def)
     memoEnv <- gets _hmMemoEnv
     case M.lookup name memoEnv of
       Just heapCost -> do
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
-        pure (Ref td)
       Nothing -> do
         let !heapCost = sizeOf td
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total+heapCost))
-        pure (Ref td)
+    !currMem' <- gets _hmTotalMem
+    _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
+    pure (Ref td)
   -- Note: inlining only ever inlines tdefs and modrefs, it's fine to not charge
   -- for the second case
-  unifyMemo _ (Right r) = pure r
-  -- We are inlining a def, so:
+  replaceMemo _ (Right r) = pure r
+  -- Looking up a def, so:
   --  - Check check mem cost in the memoization env (if not there add it)
-  --  - Inline and track the memory increase for the particular def.
-  unifyMemo m (Left defn) = do
+  --  - Check for gas overflow post replacing `Left defn` by the full definition.
+  replaceMemo m (Left defn) = do
     memoEnv <- gets _hmMemoEnv
+    let inlined = m HM.! defn
     case M.lookup (Name (BareName defn def)) memoEnv of
       Just heapCost -> do
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
-        pure (m HM.! defn)
       Nothing -> do
-        let inlined = m HM.! defn
-            !heapCost = sizeOf inlined
+        let !heapCost = sizeOf inlined
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total+heapCost))
-        pure inlined
+    !currMem' <- gets _hmTotalMem
+    _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
+    pure inlined
 
 
 -- | Definitions are transformed such that all free variables are resolved either to
@@ -565,18 +555,15 @@ evaluateDefs info mdef defs = do
       evalError i $ "Recursion detected: " <> prettyList pl
 
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
-  -- Todo: Charge gas here.
   isExecutionFlagSet FlagDisableInlineMemCheck >>= \case
     True -> do
       let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
           unifiedDefs = (foldl' dresolve HM.empty sortedDefs)
       traverse (runSysOnly . evalConsts) unifiedDefs
     False -> do
-      hl <- fromIntegral <$> view (eeGasEnv.geGasLimit)
-      hf <- foldlM (dresolveMem hl info) (HeapFold HM.empty M.empty 0 0) sortedDefs
-      -- note: hfLastGas computes post const reduction so we wet the gas to the amount currently used
-      -- it would error if it was past the gas limit
-      evalGas .= (_hfLastGas hf)
+      hf <- foldlM (dresolveMem info) (HeapFold HM.empty M.empty 0) sortedDefs
+      -- Compute, commit and log the final gas after getting the final memory cost.
+      _<- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
       pure (_hfAllDefs hf)
   where
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
@@ -617,6 +604,7 @@ evaluateDefs info mdef defs = do
 
     moduleBareName (MDInterface i) = _mnName $ _interfaceName i
     moduleBareName (MDModule m) = _mnName $ _mName m
+
 
 
 -- | Evaluate interface constraints in module.
@@ -807,6 +795,7 @@ unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right r) = r
 unify m (Left t) = m HM.! t
 
+-- | Evaluate consts in a module. Deprecated in favor of `evalConstsNonRec`
 evalConsts :: PureSysOnly e => Ref -> Eval e Ref
 evalConsts rr@(Ref r) = case r of
   TConst {..} -> case _tConstVal of
@@ -818,7 +807,7 @@ evalConsts rr@(Ref r) = case r of
   _ -> Ref <$> traverse evalConsts r
 evalConsts r = return r
 
-
+-- | Evaluate consts in a module, relying on correct dependency order, which avoids recursive invocations.
 evalConstsNonRec :: PureSysOnly e => Ref -> Eval e Ref
 evalConstsNonRec rr@(Ref r) = case r of
   TConst {..} -> case _tConstVal of
@@ -1018,7 +1007,7 @@ guardRecursion fname m act  =
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
 evalUserAppBody _d@Def{..} (as',ft') ai g run =
-#ifndef NO_ADVICE
+#ifdef ADVICE
   guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
 #else
   guardRecursion fname (Just _dModule) $ appCall fa ai as' $ fmap (g,) $ run bod'
@@ -1074,7 +1063,7 @@ reduceDirect TNative {..} as ai =
             ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
-#ifndef NO_ADVICE
+#ifdef ADVICE
     eAdvise ai (AdviceNative _tNativeName) $ dup
         $ appCall fa ai as
         $ _nativeFun _tNativeFun fa as

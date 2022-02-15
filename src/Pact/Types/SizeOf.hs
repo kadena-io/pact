@@ -154,13 +154,13 @@ instance SizeOf Bool where
 instance SizeOf () where
   sizeOf _ = 0
 
--- See: http://wiki.haskell.org/GHC/Memory_Footprint near bottom
+-- See ghc memory note above
 -- as well as https://blog.johantibell.com/2011/06/memory-footprints-of-some-common-data.html
 -- for both hash sets and hashmaps.
 instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
   sizeOf m = hmSize
     where
-    hmSize = (5*hmLength + 4*(hmLength-1))*wordSize + contentLength
+    hmSize = (5 * hmLength + 4 * (hmLength - 1)) * wordSize + contentLength
     contentLength = HM.foldlWithKey' (\a k v -> a + sizeOf k + sizeOf v) 0 m
     hmLength = fromIntegral (HM.size m)
 
@@ -171,7 +171,7 @@ instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
 instance (SizeOf k) => SizeOf (HS.HashSet k) where
   sizeOf hs = hsSize
     where
-    hsSize = (5*hsLength + 4*(hsLength-1))*wordSize + contentLength
+    hsSize = (5 * hsLength + 4 * (hsLength - 1)) * wordSize + contentLength
     contentLength = HS.foldl' (\a v -> a + sizeOf v) 0 hs
     hsLength = fromIntegral (HS.size hs)
 
