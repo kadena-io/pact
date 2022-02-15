@@ -9,7 +9,105 @@
 -- the invariant and property languages. Note that currently this omits
 -- features found in the Pact term language that do not appear in either
 -- properties or invariants -- e.g. @write@ for modifying a database table.
-module Pact.Analyze.Feature where
+module Pact.Analyze.Feature
+( Availability(..)
+, Bindings(..)
+, ConcreteType(..)
+, Constraint(..)
+, FormType(..)
+, Type(..)
+, TypeVar(..)
+, Usage(..)
+, Var(..)
+, availability
+, availableFeatures
+, classFeatures
+, classTitle
+, mkOpNamePrism
+, pattern Feature
+, symbolFeatures
+, toDoc
+, toOp
+, writeTypeP
+
+, pattern SAddition
+, pattern SSubtraction
+, pattern SMultiplication
+, pattern SDivision
+, pattern SExponentiation
+, pattern SLogarithm
+, pattern SNumericNegation
+, pattern SSquareRoot
+, pattern SNaturalLogarithm
+, pattern SExponential
+, pattern SAbsoluteValue
+, pattern SBankersRound
+, pattern SCeilingRound
+, pattern SFloorRound
+, pattern SModulus
+, pattern SBitwiseAnd
+, pattern SBitwiseOr
+, pattern SXor
+, pattern SShift
+, pattern SComplement
+, pattern SGreaterThan
+, pattern SLessThan
+, pattern SGreaterThanOrEqual
+, pattern SLessThanOrEqual
+, pattern SEquality
+, pattern SInequality
+, pattern SLogicalConjunction
+, pattern SLogicalDisjunction
+, pattern SLogicalNegation
+, pattern SLogicalImplication
+, pattern SAndQ
+, pattern SOrQ
+, pattern SObjectProjection
+, pattern SListLength
+, pattern SContains
+, pattern SReverse
+, pattern SSort
+, pattern SListDrop
+, pattern SListTake
+, pattern SMakeList
+, pattern SMap
+, pattern SFilter
+, pattern SFold
+, pattern SObjectMerge
+, pattern SObjectDrop
+, pattern SObjectTake
+, pattern SObjectLength
+, pattern SStringLength
+, pattern SConcatenation
+, pattern SStringToInteger
+, pattern STemporalAddition
+, pattern SUniversalQuantification
+, pattern SExistentialQuantification
+, pattern SColumnOf
+, pattern STransactionAborts
+, pattern STransactionSucceeds
+, pattern SGovernancePasses
+, pattern SFunctionResult
+, pattern STableWritten
+, pattern STableRead
+, pattern SCellDelta
+, pattern SColumnDelta
+, pattern SColumnWritten
+, pattern SColumnRead
+, pattern SRowRead
+, pattern SRowWritten
+, pattern SRowReadCount
+, pattern SRowWriteCount
+, pattern SRowExists
+, pattern SPropRead
+, pattern SAuthorizedBy
+, pattern SRowEnforced
+, pattern SIdentity
+, pattern SConstantly
+, pattern SCompose
+, pattern SWhere
+, pattern STypeof
+) where
 
 import           Control.Lens           (Prism', preview, prism', review)
 import           Data.Foldable          (foldl')

@@ -33,8 +33,7 @@ import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (UserType)
 import           Pact.Types.Pretty
 
-import           Pact.Analyze.Feature       hiding (Doc, Type, Var, ks, obj,
-                                             str)
+import           Pact.Analyze.Feature       hiding (Type, Var)
 import           Pact.Analyze.Types
 
 -- @PreProp@ stands between @Exp@ and @Prop@.

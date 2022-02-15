@@ -61,8 +61,7 @@ import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow,AsString(..))
 
-import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var, col,
-                                             list, obj, str, time)
+import           Pact.Analyze.Feature       hiding (TyFun, TyVar, Var)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util

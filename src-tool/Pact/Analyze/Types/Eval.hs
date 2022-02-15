@@ -27,6 +27,7 @@ import           Control.Lens                 (Lens', at, ifoldl, iso, ix, lens,
 import           Control.Lens.Wrapped
 import           Control.Monad.Except         (MonadError)
 import           Control.Monad.Reader         (MonadReader)
+import           Data.Kind                    (Type)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
@@ -44,7 +45,6 @@ import           GHC.Generics                 hiding (S)
 import           GHC.Stack                    (HasCallStack)
 
 import           Pact.Types.Lang              (Info)
-import           Pact.Types.Runtime           (Type (TyPrim))
 import qualified Pact.Types.Runtime           as Pact
 import qualified Pact.Types.Typecheck         as Pact
 
@@ -69,7 +69,7 @@ instance Wrapped SymbolicSuccess where
   _Wrapped' = iso successBool SymbolicSuccess
 
 class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
-  type TermOf m   :: Ty -> *
+  type TermOf m   :: Ty -> Type
   eval            :: SingI a => TermOf m a -> m (S (Concrete a))
   throwErrorNoLoc :: AnalyzeFailureNoLoc   -> m a
   getVar          :: VarId                 -> m (Maybe AVal)
@@ -430,10 +430,10 @@ mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
-    intCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyInteger) (mkPactSFunArray (const 0))
-    decCellDeltas   = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (mkPactSFunArray (const (fromInteger 0)))
-    intColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyInteger) 0
-    decColumnDeltas = mkTableColumnMap tables (== TyPrim Pact.TyDecimal) (fromInteger 0)
+    intCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) (mkPactSFunArray (const 0))
+    decCellDeltas   = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (mkPactSFunArray (const (fromInteger 0)))
+    intColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyInteger) 0
+    decColumnDeltas = mkTableColumnMap tables (== Pact.TyPrim Pact.TyDecimal) (fromInteger 0)
     cellsEnforced   = mkTableColumnMap tables isGuardTy (mkPactSFunArray (const sFalse))
     cellsWritten    = mkTableColumnMap tables (const True) (mkPactSFunArray (const sFalse))
 
