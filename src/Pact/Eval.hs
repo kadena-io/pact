@@ -491,12 +491,14 @@ dresolveMem
   -> (Term (Either Text (Ref' (Term Name))), Text, c)
   -> Eval e HeapFold
 dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
-  (!unified, (HeapMemState costMemoEnv' totalMem))
-    <- runStateT (traverse (replaceMemo allDefs) defTerm)
+  let
+    (!unified, (HeapMemState costMemoEnv' totalMem))
+      = runState (traverse (replaceMemo allDefs) defTerm)
                  (HeapMemState costMemoEnv (sizeOf defTerm+currMem))
   unified' <- case unified of
     t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
     _ -> pure (Ref unified)
+  _ <- computeGasNonCommit info "ModuleMemory" (GModuleMemory totalMem)
   pure (HeapFold (HM.insert defName unified' allDefs) costMemoEnv' totalMem)
   where
   -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
@@ -511,8 +513,8 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
       Nothing -> do
         let !heapCost = sizeOf td
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total+heapCost))
-    !currMem' <- gets _hmTotalMem
-    _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
+    -- !currMem' <- gets _hmTotalMem
+    -- _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
     pure (Ref td)
   -- Note: inlining only ever inlines tdefs and modrefs, it's fine to not charge
   -- for the second case
@@ -529,8 +531,8 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
       Nothing -> do
         let !heapCost = sizeOf inlined
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total+heapCost))
-    !currMem' <- gets _hmTotalMem
-    _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
+    -- !currMem' <- gets _hmTotalMem
+    -- _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
     pure inlined
 
 
