@@ -60,7 +60,6 @@ import Control.Concurrent
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
-import Control.DeepSeq
 
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
@@ -312,7 +311,7 @@ loadFile i f = do
           r <- parsedCompileEval src pr
           when (isPactFile f) $ void useReplLib
           restoreFile
-          return $!! r)
+          return r)
          $ \(e :: SomeException) -> do
                restoreFile
                pe <- renderErr $

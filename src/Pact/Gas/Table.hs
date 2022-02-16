@@ -272,10 +272,12 @@ memoryCost val (Gas cost) = Gas totalCost
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
 {-# INLINE memoryCost #-}
 
+-- Slope to costing function,
+-- sets a 5mb practical limit on module sizes.
 moduleMemFeePerByte :: Rational
 moduleMemFeePerByte = 0.02
 
--- Linear
+-- 0.02x+50000 linear costing funciton
 moduleMemoryCost :: Bytes -> Gas
 moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 50000
 {-# INLINE moduleMemoryCost #-}

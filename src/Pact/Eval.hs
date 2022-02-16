@@ -1006,11 +1006,11 @@ guardRecursion fname m act  =
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
-evalUserAppBody _d@Def{..} (as',ft') ai g run =
+evalUserAppBody _d@Def{..} (as',ft') ai g run = guardRecursion fname (Just _dModule) $
 #ifdef ADVICE
-  guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+  eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
 #else
-  guardRecursion fname (Just _dModule) $ appCall fa ai as' $ fmap (g,) $ run bod'
+  appCall fa ai as' $ fmap (g,) $ run bod'
 #endif
   where
   fname = asString _dDefName

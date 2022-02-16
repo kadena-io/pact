@@ -33,7 +33,7 @@ flag build-tool
   manual:      True
 
 flag no-advice
-  description: Disable advice for repl executable
+  description: Disable advice in interpreter
   default:     False
   manual:      True
 
@@ -367,6 +367,7 @@ test-suite hspec
         PersistSpec
         RemoteVerifySpec
         TypecheckSpec
+        SizeOfSpec
 
       build-depends:
         , Decimal

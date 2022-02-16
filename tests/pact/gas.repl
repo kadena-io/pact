@@ -673,5 +673,5 @@ d.G3
   )
 )
 
-(expect "new module gas" 51482 (env-gas))
+(expect "new module gas" 51493 (env-gas))
 (commit-tx)

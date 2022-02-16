@@ -20,6 +20,7 @@ module Pact.Types.SizeOf
   , SizeOf1(..)
   , constructorCost
   , Bytes
+  , wordSize
   ) where
 
 import Bound
@@ -211,8 +212,9 @@ instance (GSizeOf a, GSizeOf b) => GSizeOf (a :+: b) where
 
 
 -- No fields ctors are shared.
+-- We are ok charging a bit extra here.
 instance {-# OVERLAPS #-} GSizeOf (C1 c U1) where
-  gsizeOf (M1 _) = 0
+  gsizeOf (M1 _) = wordSize
 
 -- Regular constructors pay the header cost
 -- and 1 word for each field, which is added @ the leaves.
