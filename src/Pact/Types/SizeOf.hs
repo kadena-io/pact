@@ -188,8 +188,8 @@ class SizeOf1 f where
 
 instance (SizeOf a, SizeOf1 f, SizeOf b) => SizeOf (Var a (f b)) where
   sizeOf = \case
-    B a -> sizeOf a
-    F a -> sizeOf1 a
+    B a -> constructorCost 1 + sizeOf a
+    F a -> constructorCost 1 + sizeOf1 a
 
 instance (SizeOf b, SizeOf a, SizeOf1 f) => SizeOf (Scope b f a) where
   sizeOf = sizeOf1 . unscope

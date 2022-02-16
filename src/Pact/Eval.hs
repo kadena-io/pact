@@ -563,6 +563,7 @@ evaluateDefs info mdef defs = do
     False -> do
       hf <- foldlM (dresolveMem info) (HeapFold HM.empty M.empty 0) sortedDefs
       -- Compute, commit and log the final gas after getting the final memory cost.
+      liftIO $ putStrLn $ "TOTAL MEM FOR " <> show (moduleBareName' mdef) <> ": " <> show (_hfTotalMem hf)
       _<- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
       pure (_hfAllDefs hf)
   where
@@ -604,6 +605,8 @@ evaluateDefs info mdef defs = do
 
     moduleBareName (MDInterface i) = _mnName $ _interfaceName i
     moduleBareName (MDModule m) = _mnName $ _mName m
+    moduleBareName' (MDInterface i) = pretty $ _interfaceName i
+    moduleBareName' (MDModule m) = pretty $ _mName m
 
 
 

@@ -1186,34 +1186,46 @@ prettyTypeTerm t = SPNormal t
 
 instance SizeOf1 Term where
   sizeOf1 = \case
-    TModule{..} ->
-      sizeOf _tModuleDef + sizeOf _tModuleBody + sizeOf _tInfo
-    TList {..} ->
-       sizeOf _tList + sizeOf _tListType + sizeOf _tInfo
-    TDef{..} ->
-      sizeOf _tDef + sizeOf _tInfo
-    TNative {..} ->
-      sizeOf _tNativeName + sizeOf _tFunTypes + sizeOf _tInfo
-    TConst {..} ->
-      sizeOf _tConstArg + sizeOf _tModule + sizeOf _tConstVal + sizeOf _tInfo
-    TApp{..} -> sizeOf _tApp + sizeOf _tInfo
-    TVar{..} -> sizeOf _tVar + sizeOf _tInfo
-    TBinding{..} ->
-      sizeOf _tBindPairs + sizeOf _tBindBody + sizeOf _tBindType + sizeOf _tInfo
-    TLam{..} -> sizeOf _tLam + sizeOf _tInfo
-    TObject{..} -> sizeOf _tObject + sizeOf _tInfo
-    TSchema{..} ->
-      sizeOf _tSchemaName + sizeOf _tModule + sizeOf _tMeta + sizeOf _tFields + sizeOf _tInfo
-    TLiteral{..} -> sizeOf _tLiteral + sizeOf _tInfo
-    TGuard{..} -> sizeOf _tGuard + sizeOf _tInfo
-    TUse{..} -> sizeOf _tUse + sizeOf _tInfo
-    TStep{..} -> sizeOf _tStep + sizeOf _tMeta + sizeOf _tInfo
-    TModRef{..} -> sizeOf _tModRef + sizeOf _tInfo
-    TTable{..} ->
-      sizeOf _tTableName + sizeOf _tModuleName
-        + sizeOf _tHash + sizeOf _tTableType + sizeOf _tMeta + sizeOf _tInfo
-    TDynamic{..} ->
-      sizeOf _tDynModRef + sizeOf _tDynMember + sizeOf _tInfo
+    TModule defn body info ->
+      constructorCost 3 + sizeOf defn + sizeOf body + sizeOf info
+    TList li typ info ->
+       constructorCost 3 + sizeOf li + sizeOf typ + sizeOf info
+    TDef defn info ->
+      constructorCost 2 + sizeOf defn + sizeOf info
+    -- note: we actually strip docs and examples
+    -- post fork
+    TNative name _defun ftyps examples docs tlo info ->
+      constructorCost 7 + sizeOf name + sizeOf ftyps + sizeOf examples +
+        sizeOf docs + sizeOf tlo + sizeOf info
+    TConst arg mname cval meta info  ->
+      constructorCost 5 + sizeOf arg + sizeOf mname + sizeOf cval + sizeOf meta + sizeOf info
+    TApp app info ->
+      constructorCost 2 + sizeOf app + sizeOf info
+    TVar v info ->
+      constructorCost 2 + sizeOf v + sizeOf info
+    TBinding bps body btyp info ->
+      constructorCost 4 + sizeOf bps + sizeOf body + sizeOf btyp + sizeOf info
+    TLam lam info ->
+      constructorCost 2 + sizeOf lam + sizeOf info
+    TObject obj info ->
+      constructorCost 2 + sizeOf obj + sizeOf info
+    TSchema tn mn meta args info ->
+      constructorCost 5 + sizeOf tn + sizeOf mn + sizeOf meta + sizeOf args + sizeOf info
+    TLiteral lit info ->
+      constructorCost 2 + sizeOf lit + sizeOf info
+    TGuard g info ->
+      constructorCost 2 + sizeOf g + sizeOf info
+    TUse u info->
+      constructorCost 2 + sizeOf u + sizeOf info
+    TStep step meta info ->
+      constructorCost 3 + sizeOf step + sizeOf meta + sizeOf info
+    TModRef mr info ->
+      constructorCost 2 + sizeOf mr + sizeOf info
+    TTable tn mn hs typ meta info ->
+      constructorCost 6 + sizeOf tn + sizeOf mn + sizeOf hs + sizeOf typ
+        + sizeOf meta + sizeOf info
+    TDynamic e1 e2 info ->
+      constructorCost 3 + sizeOf e1 + sizeOf e2 + sizeOf info
 
 instance (SizeOf a) => SizeOf (Term a) where
   sizeOf t = sizeOf1 t
