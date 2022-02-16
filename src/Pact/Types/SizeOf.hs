@@ -149,7 +149,7 @@ instance SizeOf UTCTime where
     (constructorCost 1) + (sizeOf (toPosixTimestampMicros ti))
 
 instance SizeOf Bool where
-  sizeOf _ = 0
+  sizeOf _ = wordSize
 
 instance SizeOf () where
   sizeOf _ = 0
