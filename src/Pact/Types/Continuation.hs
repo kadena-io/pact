@@ -40,7 +40,7 @@ import Control.Lens hiding ((.=))
 
 import Data.Aeson
 import Data.Map.Strict(Map)
-import qualified Data.Map.Strict as Map
+-- import qualified Data.Map.Strict as Map
 
 import Test.QuickCheck
 
@@ -154,19 +154,20 @@ data PactExec = PactExec
   , _peStepHasRollback :: !Bool
     -- ^ Track whether a current step has a rollback
   , _peNested :: Map PactId PactExec
-    -- ^ Track whether a current step has a rollback
+    -- ^ Track whether a current step has nested defpact evaluation results
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec
 instance ToJSON PactExec where
-  toJSON PactExec{..} =
-    [ "executed" .= _peExecuted
-    , "pactId" .= _pePactId
-    , "stepHasRollback" .= _peStepHasRollback
-    , "step" .= _peStep
-    , "yield" .= _peYield
-    , "continuation" .= _peContinuation
-    , "stepCount" .= peStepCount ] ++ [ "nested" .= peNested | not (Map.null _peNested)]
+  toJSON _ = undefined -- PactExec{..}
+    -- [ "executed" .= _peExecuted
+    -- , "pactId" .= _pePactId
+    -- , "stepHasRollback" .= _peStepHasRollback
+    -- , "step" .= _peStep
+    -- , "yield" .= _peYield
+    -- , "continuation" .= _peContinuation
+    -- , "stepCount" .= _peStepCount
+    -- ] ++ [ "nested" .= _peNested | not (Map.null _peNested)]
   -- toJSON = lensyToJSON 3
 instance FromJSON PactExec where
   parseJSON = lensyParseJSON 3

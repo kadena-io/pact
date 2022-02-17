@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Repl.Lib
@@ -422,18 +423,61 @@ continuePact i as = case as of
         Nothing -> evalError' i
           "continue-pact: No pact id supplied and no pact exec in context"
         Just pid -> return $ PactId pid
-      y <- maybe (return Nothing) (toYield Nothing) mobj
+      y <- maybe (return Nothing) (mkSimpleYield Nothing) mobj
       return (pid, y)
     unwrapExec mpid mobj (Just ex) = do
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
         Nothing -> return $ _peYield ex
         Just o -> case _peYield ex of
-          Just (Yield _ p _) -> toYield p o
-          Nothing -> toYield Nothing o
+          Just (Yield _ p _) -> mkSimpleYield p o
+          Nothing -> mkSimpleYield Nothing o
       return (pid, y)
 
-    toYield p = fmap (Just . (\v -> Yield v p Nothing)) . enforcePactValue'
+mkSimpleYield
+  :: Pretty n
+  => Maybe Provenance
+  -> ObjectMap (Term n)
+  -> Eval e (Maybe Yield)
+mkSimpleYield p om =
+  Just . (\yieldData -> Yield yieldData p Nothing) <$> enforcePactValue' om
+
+continueNested :: RNativeFun LibState
+continueNested i as = case as of
+  [TLitInteger step] ->
+    go step False Nothing Nothing
+  [TLitInteger step, TLitBool rollback] ->
+    go step rollback Nothing Nothing
+  [TLitInteger step, TLitBool rollback, TLitString npid] ->
+    go step rollback (Just npid) Nothing
+  [TLitInteger step, TLitBool rollback, TLitString npid, TObject (Object o _ _ _) _] ->
+    go step rollback (Just npid) (Just o)
+  _ -> argsError i as
+  where
+    go
+      :: Integer
+      -> Bool
+      -> Maybe Text
+      -> Maybe (ObjectMap (Term Name))
+      -> Eval LibState (Term Name)
+    go step rollback mnpid muserResume = do
+      (npid, y) <- use evalPactExec >>= \case
+        Nothing -> evalError' i
+          "continue-nested-pact: No current pact exec in context"
+        Just pe -> case mnpid of
+          Nothing -> evalError' i
+            "continue-nested-pact: No pact id supplied for nested continuation"
+          Just npid -> do
+            y <- case muserResume of
+              Nothing -> pure $ _peYield pe
+              Just om -> case _peYield pe of
+                Just (Yield _ p _) -> mkSimpleYield p om
+                Nothing -> mkSimpleYield Nothing om
+            pure (npid, y)
+
+      let ps = PactStep (fromIntegral step) rollback (PactId npid) y
+      local (set eePactStep $ Just ps) $ resumePact (_faInfo i) Nothing
+
 
 setentity :: RNativeFun LibState
 setentity i as = case as of

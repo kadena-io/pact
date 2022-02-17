@@ -986,8 +986,8 @@ applyNestedPact i app (TList steps _a _b) PactStep {..} = do
   executePrivate <- traverse reduce (_sEntity step) >>= traverse (\stepEntity -> case stepEntity of
     (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
       Just (EntityName en) -> return $ (se == en) -- execute if req entity matches context entity
-      Nothing -> evalError' step "applyPact: private step executed against non-private environment"
-    t -> evalError' t "applyPact: step entity must be String value")
+      Nothing -> evalError' step "applyNestedPact: private step executed against non-private environment"
+    t -> evalError' t "applyNestedPact: step entity must be String value")
 
   (rollback, stepCount) <- verifyParent parentExec step
   exec <- case parentExec ^. peNested . at _psPactId of
@@ -1022,10 +1022,10 @@ applyNestedPact i app (TList steps _a _b) PactStep {..} = do
   verifyParent PactExec{..} step =  do
     let stepCount = length steps
         rollback = isJust $ _sRollback step
-    when (stepCount /= _peStepCount) $ evalError' step $ "applyPact: invalid nested defpact length, must match length of parent"
-    when (rollback /= _peStepHasRollback) $ evalError' step $ "applyPact: invalid nested defpact step, must match parent rollback"
+    when (stepCount /= _peStepCount) $ evalError' step $ "applyNestedPact: invalid nested defpact length, must match length of parent"
+    when (rollback /= _peStepHasRollback) $ evalError' step $ "applyNestedPact: invalid nested defpact step, must match parent rollback"
     pure (rollback, stepCount)
-applyNestedPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
+applyNestedPact _ _ t _ = evalError' t "applyNestedPact: invalid defpact body, expected list of steps"
 
 
 -- | Apply or resume a pactdef step.
