@@ -275,11 +275,11 @@ memoryCost val (Gas cost) = Gas totalCost
 -- Slope to costing function,
 -- sets a 10mb practical limit on module sizes.
 moduleMemFeePerByte :: Rational
-moduleMemFeePerByte = 0.01
+moduleMemFeePerByte = 0.006
 
 -- 0.01x+50000 linear costing funciton
 moduleMemoryCost :: Bytes -> Gas
-moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 50000
+moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
 {-# INLINE moduleMemoryCost #-}
 
 -- | Gas model that charges varible (positive) rate per tracked operation
