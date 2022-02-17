@@ -493,7 +493,7 @@ dresolveMem
 dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
   (!unified, (HeapMemState costMemoEnv' totalMem))
       <- runStateT (traverse (replaceMemo allDefs) defTerm)
-                 (HeapMemState costMemoEnv (sizeOf defTerm+currMem))
+                 (HeapMemState costMemoEnv (sizeOf defTerm + currMem))
   unified' <- case unified of
     t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
     _ -> pure (Ref unified)
@@ -510,7 +510,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
       Nothing -> do
         let !heapCost = sizeOf td
-        modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total+heapCost))
+        modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total + heapCost))
     !currMem' <- gets _hmTotalMem
     _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
     pure (Ref td)
@@ -518,7 +518,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
   -- for the second case
   replaceMemo _ (Right r) = pure r
   -- Looking up a def, so:
-  --  - Check check mem cost in the memoization env (if not there add it)
+  --  - Check mem cost in the memoization env (if not there add it)
   --  - Check for gas overflow post replacing `Left defn` by the full definition.
   replaceMemo m (Left defn) = do
     memoEnv <- gets _hmMemoEnv
@@ -528,7 +528,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
       Nothing -> do
         let !heapCost = sizeOf inlined
-        modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total+heapCost))
+        modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total + heapCost))
     !currMem' <- gets _hmTotalMem
     _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
     pure inlined
