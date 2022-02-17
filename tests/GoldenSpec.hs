@@ -58,7 +58,8 @@ spec = do
 goldenModule
   :: String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
 goldenModule tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
-  (r,s) <- runIO $ execScript' Quiet fp
+  let ec = mkExecutionConfig [FlagDisableInlineMemCheck]
+  (r,s) <- runIO $ execScriptF' Quiet fp (\st -> st & rEnv . eeExecutionConfig .~ ec)
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
   case mr of
@@ -80,7 +81,7 @@ acctsFailureCR :: String -> ReplState -> Spec
 acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> ReplState -> Spec
-eventCR tn s = doCRTest tn s $
+eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck]) tn s $
     "(module events-test G \
     \  (defcap G () true) \
     \  (defcap CAP (name:string amount:decimal) @managed \
@@ -98,8 +99,8 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
     \  (step (resume { 'a:=a } a)))) \
     \(xchain.p 3)"
   where
-    ec True = mkExecutionConfig [FlagDisablePact40]
-    ec False = def
+    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck]
+    ec False = mkExecutionConfig [FlagDisableInlineMemCheck]
 
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = doCRTest' def tn s code

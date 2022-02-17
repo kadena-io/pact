@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -154,6 +155,8 @@ data ExecutionFlag
   | FlagEnforceKeyFormats
   -- | Enable Pact 4.2.0 db sorted key guarantees, and row persistence
   | FlagDisablePact420
+  -- | Enable memory limit check
+  | FlagDisableInlineMemCheck
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -218,7 +221,7 @@ data EvalEnv e = EvalEnv {
       -- | Execution configuration flags
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
-    , _eeAdvice :: Advice
+    , _eeAdvice :: !Advice
     }
 makeLenses ''EvalEnv
 
@@ -317,8 +320,6 @@ whenExecutionFlagSet f onTrue =
 unlessExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
 unlessExecutionFlagSet f onFalse =
   ifExecutionFlagSet f (return ()) (void onFalse)
-
-
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a

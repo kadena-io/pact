@@ -3,6 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
+(env-exec-config ["DisableInlineMemCheck"])
 (env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
@@ -601,4 +602,76 @@ d.G3
 (env-gaslog)
 (expect "Cost: reading small data object" 10 (env-gas))
 
+(commit-tx)
+
+; ============================================================ ;
+;; TEST: new module cost, post fork.
+;;
+(begin-tx)
+(env-gas 0)
+(env-gaslimit 80000)
+(env-exec-config [])
+(module basic-module GOV
+  (defcap GOV () true)
+
+  ; Gas lower for const usage post-fork.
+  (defconst NETWORK_FEE 0.001)
+  (defconst MIN_FEE (+ NETWORK_FEE 0.1))
+  (defconst BANK "bank")
+
+  (defschema account-with-nickname
+    balance:decimal
+    nickname:string)
+
+  (defschema account
+    balance:decimal)
+
+  (defschema obj-table
+    name:object)
+
+  (deftable accounts:{account})
+  (deftable accounts-with-longname:{account})
+  (deftable accounts-with-nickname:{account-with-nickname})
+  (deftable objs-table:{obj-table})
+
+  (defun transfer (senderId receiverId amount)
+    "Send money from sender to receiver, charging a fee"
+    ;;Read current account information of the sender
+    (with-read accounts senderId {
+      "balance":= senderBalance }
+       ;;Read current account information of the receiver
+       (with-read accounts receiverId {
+         "balance":= receiverBalance }
+         ;;Update account balance of the sender
+         ;;Charge the sender the fee
+         (update accounts senderId {
+            "balance": (- senderBalance (+ amount MIN_FEE)) })
+         ;;Update account balance of the receiver
+         (update accounts receiverId {
+            "balance": (+ receiverBalance amount) })
+
+         (with-read accounts BANK {"balance" := bankBalance }
+           ;;Collect the fee
+           (update accounts BANK { "balance": (+ bankBalance MIN_FEE) })))))
+
+  (defun balance (id)
+    (at "balance" (read accounts id ["balance"]))
+  )
+
+  (defpact tester ()
+    (step "dummy step")
+    (step
+      (yield { "r": "a" }))
+    (step
+      (resume {"r" := res0 }
+       res0))
+    (step
+      (yield { "g": "b", "y": "b"}))
+    (step
+      (resume {"g" := res3 }
+        res3))
+  )
+)
+
+(expect "new module gas" 60841 (env-gas))
 (commit-tx)

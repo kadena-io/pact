@@ -24,6 +24,7 @@ import qualified PactContinuationSpec
 import qualified PersistSpec
 import qualified RemoteVerifySpec
 import qualified TypecheckSpec
+import qualified SizeOfSpec
 
 # endif
 #endif
@@ -55,6 +56,7 @@ main = hspec $ do
   describe "PersistSpec" PersistSpec.spec
   describe "RemoteVerifySpec" RemoteVerifySpec.spec
   describe "TypecheckSpec" TypecheckSpec.spec
+  describe "SizeOfSpec" SizeOfSpec.spec
 
 # endif
 #endif

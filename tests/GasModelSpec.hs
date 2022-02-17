@@ -14,6 +14,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 import qualified Data.Yaml as Y
 
+import Control.Lens hiding ((.=))
 import Control.Exception (bracket, throwIO)
 import Control.Monad (when)
 import Data.Aeson
@@ -114,9 +115,13 @@ runTest :: GasUnitTests -> IO [GasTestResult ([Term Name], EvalState)]
 runTest t = mapOverGasUnitTests t run run
   where
     run expr dbSetup = do
-      (res, st) <- bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
+      (res, st) <- bracket (setupEnv' dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
       res' <- eitherDie (getDescription expr dbSetup) res
       return (res', st)
+    setupEnv' dbs = do
+      (r, s) <- setupEnv dbs
+      let r' = set eeExecutionConfig (mkExecutionConfig [FlagDisableInlineMemCheck]) r
+      pure (r', s)
 
 toGoldenOutput :: GasTestResult ([Term Name], EvalState) -> (T.Text, Gas)
 toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
