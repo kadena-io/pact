@@ -74,7 +74,6 @@ import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
-import Control.DeepSeq
 
 #ifdef ADVICE
 import Pact.Types.Advice
@@ -224,7 +223,7 @@ evalNamespace info setter m = do
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
-  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' t) (eval' stripped)
   where
   stripped = case t of
     TModule{} -> stripTermInfo t
