@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -20,15 +21,20 @@ module Pact.Native.Capabilities
 
 import Control.Lens
 import Control.Monad
+import Data.Aeson (encode)
+import Data.ByteString.Lazy (toStrict)
 import Data.Default
+import Data.Foldable
 import Data.Maybe (isJust)
 import qualified Data.Set as S
+import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Utils
 import Pact.Types.Capability
+import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -47,6 +53,8 @@ capDefs =
    , createPactGuard
    , createModuleGuard
    , keysetRefGuard
+   , createPrincipalDef
+   , validatePrincipalDef
    ])
 
 tvA :: Type n
@@ -326,3 +334,51 @@ emitEventDef =
         DefcapManaged {} -> return ()
         DefcapEvent -> return ()
       _ -> evalError' i $ "emit-event: must be managed or event defcap"
+
+createPrincipalDef :: NativeDef
+createPrincipalDef =
+  defRNative "create-principal" createPrincipal'
+  (funType tTyString
+    [ ("guard", tTyGuard Nothing) ] )
+  [LitExample "(create-principal (read-keyset 'keyset))"]
+  "Create a principal which unambiguously identifies GUARD."
+  where
+    createPrincipal' :: RNativeFun e
+    createPrincipal' _i [TGuard g _] =
+      pure $! toTerm $ createPrincipal g
+    createPrincipal' i as = argsError i as
+
+createPrincipal :: Guard (Term Name) -> Text
+createPrincipal = \case
+  GPact (PactGuard pid n) ->
+    "p:" <> asString pid <> ":" <> n
+  GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
+    ([k],"keys-all") ->
+      "k:" <> asString k
+    (l,fun) ->
+      "w:" <> toHash (map _pubKey l) <> ":" <> fun
+  GKeySetRef (KeySetName n) ->
+    "r:" <> n
+  GModule (ModuleGuard mn n) ->
+    "m:" <> asString mn <> ":" <> n
+  GUser (UserGuard uf args) ->
+    "u:" <> asString uf <> ":" <> toHash (map toJSONPactValue args)
+
+  where
+    toHash = asString . pactHash . mconcat
+    toJSONPactValue = toStrict . encode . toPactValueLenient
+
+validatePrincipalDef :: NativeDef
+validatePrincipalDef =
+  defRNative "validate-principal" validatePrincipal'
+  (funType tTyBool
+    [ ("guard", tTyGuard Nothing)
+    , ("principal", tTyString) ] )
+  [LitExample
+   "(enforce (validate-principal (read-keyset 'keyset) account) \"Invalid account ID\")"]
+  "Validate that PRINCIPAL unambiguously identifies GUARD."
+  where
+    validatePrincipal' :: RNativeFun e
+    validatePrincipal' _i [TGuard g _, TLitString p] =
+      pure $! toTerm $ (p == createPrincipal g)
+    validatePrincipal' i as = argsError i as
