@@ -30,7 +30,7 @@ module Pact.Types.Persistence
    PactDb(..),
    TxId(..),
    PersistDirect(..),toPersistDirect,fromPersistDirect,
-   ModuleData(..),mdModule,mdRefMap,
+   ModuleData(..),mdModule,mdRefMap, mdDependencies,
    PersistModuleData,
    ExecutionMode(..)
    ) where
@@ -62,6 +62,7 @@ import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
 data PersistDirect =
     PDValue PactValue
   | PDNative NativeDefName
+  | PDFreeVar FullyQualifiedName
   deriving (Eq,Show,Generic)
 
 instance NFData PersistDirect
@@ -69,26 +70,31 @@ instance NFData PersistDirect
 instance ToJSON PersistDirect where
   toJSON (PDValue v) = object [ "pdval" .= v ]
   toJSON (PDNative n) = object [ "pdnat" .= n ]
+  toJSON (PDFreeVar n) = object [ "pdfv" .= n]
 
 instance FromJSON PersistDirect where
   parseJSON v =
     withObject "PDValue" (\o -> PDValue <$> o .: "pdval") v <|>
-    withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v
+    withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v <|>
+    withObject "PDFreeVar" (\o -> PDNative <$> o .: "pdfv") v
 
 instance Pretty PersistDirect where
   pretty (PDValue v) = pretty v
   pretty (PDNative n) = pretty $ "<native>" <> asString n
+  pretty (PDFreeVar f) = pretty f
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
 toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
 toPersistDirect (TSchema n Nothing _ _ _) = pure $ PDNative (NativeDefName (asString n))
 toPersistDirect (TConst carg Nothing _ _ _) = pure $ PDNative (NativeDefName $ _aName carg)
+toPersistDirect (TVar (FQName f) _) = pure $ PDFreeVar f
 toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e
 
 fromPersistDirect :: (NativeDefName -> Maybe (Term Name)) -> PersistDirect -> Either Text (Term Name)
 fromPersistDirect _ (PDValue v) = return $ fromPactValue v
+fromPersistDirect _ (PDFreeVar f) = return $ TVar (FQName f) def
 fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
   Just t -> return t
   Nothing -> Left $ "Native lookup failed: " <> tShow nn
@@ -97,6 +103,7 @@ fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
 data ModuleData r = ModuleData
   { _mdModule :: ModuleDef (Def r)
   , _mdRefMap :: HM.HashMap Text r
+  , _mdDependencies :: HM.HashMap FullyQualifiedName r
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
 

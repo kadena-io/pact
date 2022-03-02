@@ -28,7 +28,7 @@ module Pact.Types.Runtime
    eeAdvice,
    toPactId,
    Purity(..),
-   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsFQ,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
    evalGas,evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
@@ -232,15 +232,17 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Name Ref
+      _rsLoaded :: HM.HashMap Text FullyQualifiedName
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe (Namespace (Term Name))
+      -- |
+    , _rsFQ :: HM.HashMap FullyQualifiedName Ref
     } deriving (Eq,Show,Generic)
 makeLenses ''RefState
 instance NFData RefState
-instance Default RefState where def = RefState HM.empty HM.empty Nothing
+instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty
 
 data PactEvent = PactEvent
   { _eventName :: !Text

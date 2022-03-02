@@ -475,7 +475,8 @@ tx t fi as = do
 
   -- reset to repl lib, preserve call stack
   cs <- use evalCallStack
-  put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) $ set evalCallStack cs def
+  put $ set evalCallStack cs def
+  -- put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) $ set evalCallStack cs def
   return $ tStr $ tShow t <> " Tx"
       <> maybeDelim " " tid <> maybeDelim ": " tname
 

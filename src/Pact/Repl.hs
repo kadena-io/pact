@@ -410,11 +410,11 @@ useReplLib = id %= setReplLib
 
 -- | mutate repl state to install lib functions
 setReplLib :: ReplState -> ReplState
-setReplLib = over (rEvalState.evalRefs.rsLoaded) $ HM.union (moduleToMap replDefs)
+setReplLib = over (rEnv.eeRefStore.rsNatives) $ HM.union (moduleToMap replDefs)
 
 -- | mutate repl state to remove lib functions
 unsetReplLib :: ReplState -> ReplState
-unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` (moduleToMap replDefs))
+unsetReplLib = over (rEnv.eeRefStore.rsNatives) (HM.filterWithKey (\k _ -> HM.member k (moduleToMap replDefs)))
 
 -- | evaluate string in repl monad
 evalPact :: String -> Repl (Either String (Term Name))

@@ -38,7 +38,7 @@ import NeatInterpolation (text)
 import System.Directory (removeFile)
 
 
-import qualified Data.HashMap.Strict as HM
+-- import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty  as NEL
 import qualified Pact.Persist.SQLite as PSL
 import qualified Data.Text as T
@@ -201,10 +201,10 @@ setEnv f setup = setEnv'
 defEvalState :: IO EvalState
 defEvalState = do
   stateWithModule <- getLoadedState (accountsModule acctModuleName)
-  let loaded = HM.singleton (Name $ BareName sampleLoadedKeysetName def)
-               (Direct $ TGuard (GKeySet sampleKeyset) def)
+  -- let loaded = HM.singleton sampleLoadedKeysetName
+  --              (Direct $ TGuard (GKeySet sampleKeyset) def)
   return
-      $ set (evalRefs . rsLoaded) loaded
+      -- $ set (evalRefs . rsLoaded) loaded
       $ set evalGas 0 stateWithModule
 
 getLoadedState

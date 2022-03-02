@@ -171,6 +171,7 @@ stripTermInfo = stripTerm' stripNameInfo
     QName qn -> QName $ qn{ _qnInfo = def}
     Name bn -> Name $ bn{ _bnInfo = def}
     DName dn -> DName $ dn {_dynInfo = def}
+    FQName fq -> FQName $ fq { _fqInfo = def}
   stripBindPair f (BindPair arg n) =
     BindPair (stripArgInfo f arg) (stripTerm' f n)
 
