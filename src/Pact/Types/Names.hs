@@ -213,7 +213,6 @@ data FullyQualifiedName
   { _fqName :: !Text
   , _fqModule :: ModuleName
   , _fqModuleHash :: Hash
-  , _fqInfo :: Info
   } deriving (Generic, Eq, Show)
 
 instance NFData FullyQualifiedName
@@ -227,13 +226,10 @@ instance FromJSON FullyQualifiedName where
 instance FromJSONKey FullyQualifiedName
 instance ToJSONKey FullyQualifiedName
 
-instance HasInfo FullyQualifiedName where
-  getInfo = _fqInfo
-
 instance SizeOf FullyQualifiedName
 
 instance Pretty FullyQualifiedName where
-  pretty (FullyQualifiedName fqn fqm _ _) =
+  pretty (FullyQualifiedName fqn fqm _) =
     pretty fqm <> "." <> pretty fqn
 
 instance Hashable FullyQualifiedName where
@@ -241,7 +237,7 @@ instance Hashable FullyQualifiedName where
     s `hashWithSalt` _fqName `hashWithSalt` _fqModule `hashWithSalt` _fqModuleHash
 
 instance Ord FullyQualifiedName where
-  (FullyQualifiedName fq fm fh _) `compare` (FullyQualifiedName fq' fm' fh' _) =
+  (FullyQualifiedName fq fm fh) `compare` (FullyQualifiedName fq' fm' fh') =
     (fq, fm, fh) `compare` (fq', fm', fh')
 
 -- | A named reference from source.

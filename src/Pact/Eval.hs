@@ -44,6 +44,7 @@ module Pact.Eval
     ,toPersistDirect
     ,reduceDynamic
     ,instantiate'
+    ,lookupFreeVar
     ) where
 
 import Bound
@@ -410,7 +411,7 @@ loadModule m bod1 mi g0 = do
         MDModule m' -> Just (m', refs, deps)
         _ -> Nothing
     mkDeps hm (m', refs, deps) =
-      hm `HM.union` (HM.mapKeys (\k -> FullyQualifiedName k (_mName m') (_mhHash $ _mHash m') def) refs) `HM.union` deps
+      hm `HM.union` (HM.mapKeys (\k -> FullyQualifiedName k (_mName m') (_mhHash $ _mHash m')) refs) `HM.union` deps
 
 
 
@@ -637,12 +638,16 @@ _evaluateDefs info mdef defs = do
             $ vs
 
       evalError i $ "Recursion detected: " <> prettyList pl
-  pure $ HM.fromList $ (\(term', dn, _) -> (_fqName dn, Ref (either (Direct . flip TVar def . FQName) id <$> term'))) <$> sortedDefs
+  HM.fromList <$> traverse (runSysOnly . mkAndEvalConsts) sortedDefs
   where
+    mkAndEvalConsts (term', dn, _) = do
+      let t = Ref (either (Direct . flip TVar def . FQName) id <$> term')
+      t' <- evalConstsNonRec t
+      pure (_fqName dn, t')
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
     -- | traverse to find deps and form graph
     traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
-      let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef) def
+      let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
       defTerm' <- forM defTerm $ \(f :: Name) -> do
         dm <- resolveRef'' f f -- lookup ref, don't try modules for barenames
         case (dm, f) of
@@ -651,7 +656,7 @@ _evaluateDefs info mdef defs = do
           (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn allDefs of
               Just _ -> do
-                let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef) def
+                let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
                 return (Left name') -- decl found
               Nothing -> resolveBareModRef f fn memo >>= \r -> case r of
                 Just mr -> return (Right mr) -- mod ref found
@@ -833,7 +838,7 @@ resolveRef' _ i _ = evalError' i $ "resolveRef: do not resolve fully qual names 
 
 -- | Variation of 'resolveRef' that allows nerfing the module ref attempt on bare names.
 resolveRef'' :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
-resolveRef'' i (QName (QualifiedName q@(ModuleName refNs ns) n qi)) = moduleResolver lookupQn i q
+resolveRef'' i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResolver lookupQn i q
   where
     getModuleHash = \case
       MDModule m -> pure (_mhHash $ _mHash m)
@@ -845,7 +850,7 @@ resolveRef'' i (QName (QualifiedName q@(ModuleName refNs ns) n qi)) = moduleReso
           case HM.lookup n (_mdRefMap m') of
             Just (Ref TDef{}) -> do
               h <- getModuleHash (_mdModule m')
-              let name' = FQName (FullyQualifiedName n q h qi)
+              let name' = FQName (FullyQualifiedName n q h)
               return $ Just (Direct (TVar name' def))
             p -> pure p
         (Nothing, Just{}) -> return Nothing
@@ -868,7 +873,7 @@ resolveRef'' _i (DName d@(DynamicName mem _ sigs i)) = do
   case a of
     Nothing -> evalError' i $ "resolveRef: dynamic ref not found: " <> pretty d
     Just r -> return $ Just r
-resolveRef'' i _ = evalError' i $ "resolveRef: do not resolve fully qual names eagerly"
+resolveRef'' i _ = evalError' i $ "resolveRef: do not resolve fully qualfied names eagerly"
 
 
 resolveModRef :: HasInfo i => i -> ModuleName -> Eval e (Maybe Ref)
@@ -935,7 +940,7 @@ evalConstsNonRec rr@(Ref r) = case r of
   TConst {..} -> case _tConstVal of
     CVRaw raw -> do
       v <- reduce raw
-      traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
+      -- traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
       return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
     _ -> return rr
   _ -> return rr
@@ -946,6 +951,12 @@ deref :: Ref -> Eval e (Term Name)
 deref (Direct t@TConst{}) = case _tConstVal t of
   CVEval _ v -> return v
   CVRaw _ -> evalError' t $ "internal error: deref: unevaluated const: " <> pretty t
+deref (Direct (TVar (FQName fq) _)) = do
+  use (evalRefs . rsFQ . at fq) >>= \case
+    Just r -> case r of
+      Direct d -> pure d
+      Ref r' -> reduce r'
+    Nothing -> evalError def "unbound free var"
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 
@@ -995,7 +1006,7 @@ reduceBody t = evalError (_tInfo t) "Expected body forms"
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
   ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
-  typecheck' $ fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
+  -- typecheck' $ fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
   reduceBody (instantiate (resolveArg i (fmap (either id liftTerm . snd) ps')) bod)
 
 -- | Reduction where TDefs and TLams are kept unreduced.
@@ -1066,7 +1077,7 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
   gas <- computeGas (Left (ai, asString fnName)) (GUserApp Defun)
   args <- traverse reduce as
   fty <- traverse reduce funTy
-  typecheckArgs ai fnName fty args
+  -- typecheckArgs ai fnName fty args
   let args' = liftTerm <$> args
   let body = instantiate (resolveArg ai args') fnBody
       fname = asString fnName
@@ -1109,10 +1120,10 @@ computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) (GUser
 
 -- | prepare reduced args and funtype, and typecheck
 prepareUserAppArgs :: Def Ref -> [Term Ref] -> Info -> Eval e ([Term Name], FunType (Term Name))
-prepareUserAppArgs Def{..} args i = do
+prepareUserAppArgs Def{..} args _i = do
   as' <- mapM reduce args
   ty <- traverse reduce _dFunType
-  typecheckArgs i _dDefName ty as'
+  -- typecheckArgs i _dDefName ty as'
   return (as',ty)
 
 guardRecursion :: Text -> Maybe ModuleName -> Eval e b -> Eval e b
@@ -1143,10 +1154,10 @@ evalUserAppBody _d@Def{..} (as',ft') ai g run = guardRecursion fname (Just _dMod
 --   or a fully reduced term (anything else that doesn't pass a scope pretty much).
 --   Both paths typecheck the arg and type, but we defer reducting the argument type until
 --   we know whether the value corresponding to it needs to be typechecked unreduced or not.
-typecheck'
+_typecheck'
   :: [(Arg (Term Ref), Either (Term Ref) (Term Name))]
   -> Eval e ()
-typecheck' ps = foldM_ tvarCheck M.empty ps where
+_typecheck' ps = foldM_ tvarCheck M.empty ps where
   -- This is a bit of a hack, but we cannot reduce lambdas and `TDef`s,
   -- so the strategy is this: If we encounter a term which we cannot reduce, we can typecheck it
   -- against its unreduced arg, then reduce the type once it typechecks.
@@ -1193,12 +1204,16 @@ reduceDirect TNative {..} as ai =
     appCall fa ai as $ _nativeFun _tNativeFun fa as
 #endif
 reduceDirect (TVar (FQName fq) _) args i = do
-  liftIO $ putStrLn "Free var lookup!!!"
   use (evalRefs . rsFQ . at fq) >>= \case
     Just r -> reduceApp (App (TVar r def) args i)
     Nothing -> evalError i "blah"
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
+
+lookupFreeVar :: FullyQualifiedName -> Eval e Ref
+lookupFreeVar fqn = use (evalRefs . rsFQ . at fqn) >>= \case
+  Just r -> pure r
+  Nothing -> evalError def "unbound free variable"
 
 initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
 initPact i app bod = view eePactStep >>= \es -> case es of
@@ -1412,7 +1427,7 @@ installModule updated md = go . maybe allDefs filteredDefs
   where
     updateInternal f = case _mdModule md of
       MDModule m -> do
-        let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m)) def
+        let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
         let hm = HM.mapWithKey (\k _ -> toFQ k) (_mdRefMap md)
         evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty hm)
         evalRefs . rsFQ %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
