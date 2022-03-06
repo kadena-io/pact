@@ -47,7 +47,7 @@ import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 import Test.QuickCheck
-import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
+import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof, alphaNum, between, char)
 
 
 import Pact.Types.Info
@@ -55,15 +55,14 @@ import Pact.Types.Parser
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util
-import Pact.Types.Hash (Hash)
+import Pact.Types.Hash
 
 
-newtype NamespaceName = NamespaceName Text
+newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf)
 
 instance Arbitrary NamespaceName where
   arbitrary = NamespaceName <$> genBareText
-
 
 data ModuleName = ModuleName
   { _mnName      :: Text
@@ -218,10 +217,13 @@ data FullyQualifiedName
 instance NFData FullyQualifiedName
 
 instance ToJSON FullyQualifiedName where
-  toJSON  = lensyToJSON 3
+  toJSON (FullyQualifiedName n (ModuleName m ns) hsh) =
+    toJSON $ maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
 
 instance FromJSON FullyQualifiedName where
-  parseJSON = lensyParseJSON 3
+  parseJSON = withText "FullyQualifiedName" $ \f -> case AP.parseOnly (fullyQualNameParser <* eof) f of
+    Left s  -> fail s
+    Right n -> return n
 
 instance FromJSONKey FullyQualifiedName
 instance ToJSONKey FullyQualifiedName
@@ -288,6 +290,18 @@ instance NFData Name
 parseName :: Info -> Text -> Either String Name
 parseName i = AP.parseOnly (nameParser i <* eof)
 
+fullyQualNameParser :: (TokenParsing m, Monad m) => m FullyQualifiedName
+fullyQualNameParser = do
+  qualifier <- ident style
+  mname <- dot *> ident style
+  oname <- optional (dot *> ident style)
+  h <- dot *> (between (char '{') (char '}') $ some (alphaNum <|> char '-' <|> char '_'))
+  hash' <- either (error "blah") pure $ parseB64UrlUnpaddedText' (T.pack h)
+  case oname of
+    Just nn ->
+      pure (FullyQualifiedName nn (ModuleName mname (Just $ NamespaceName qualifier)) (Hash hash'))
+    Nothing ->
+      pure (FullyQualifiedName mname (ModuleName qualifier Nothing) (Hash hash'))
 
 nameParser :: (TokenParsing m, Monad m) => Info -> m Name
 nameParser i = (QName <$> qualifiedNameParser i <?> "qualifiedName") <|>

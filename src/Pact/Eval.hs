@@ -12,6 +12,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.
@@ -44,7 +45,6 @@ module Pact.Eval
     ,toPersistDirect
     ,reduceDynamic
     ,instantiate'
-    ,lookupFreeVar
     ) where
 
 import Bound
@@ -638,12 +638,19 @@ _evaluateDefs info mdef defs = do
             $ vs
 
       evalError i $ "Recursion detected: " <> prettyList pl
-  HM.fromList <$> traverse (runSysOnly . mkAndEvalConsts) sortedDefs
+  foldlM (mkAndEvalConsts) mempty sortedDefs
   where
-    mkAndEvalConsts (term', dn, _) = do
-      let t = Ref (either (Direct . flip TVar def . FQName) id <$> term')
-      t' <- evalConstsNonRec t
-      pure (_fqName dn, t')
+    -- Inline all but TDefs.
+    replaceL m n = case HM.lookup (_fqName n) m of
+        Just p -> case p of
+          Ref TDef{} -> pure (Direct (TVar (FQName n) def))
+          _ -> pure p
+        Nothing -> evalError' info $ "Unbound local free variable"
+    mkAndEvalConsts m (term', dn, _) = do
+      t <- Ref <$> (traverse (either (replaceL m) pure) term')
+      t' <- runSysOnly $ evalConstsNonRec t
+      evalRefs . rsFQ %= HM.insert dn t'
+      pure $ HM.insert(_fqName dn) t' m
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
     -- | traverse to find deps and form graph
     traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
@@ -865,9 +872,16 @@ resolveRef'' _ nn@(Name (BareName bn _)) = do
   case nm of
     d@Just {} -> return d
     Nothing -> do
-      u <- preuse $ evalRefs . rsLoaded . ix bn
-      pure $ Direct . flip TVar def . FQName <$> u
--- Interfaces have empty TDefs.
+      n <- preuse $ evalRefs . rsLoaded . ix bn
+      case n of
+        Just fqn -> do
+          p <- use (evalRefs . rsLoadedModules . at (_fqModule fqn))
+          return $ do
+            (m, _) <- p
+            HM.lookup bn (_mdRefMap m) >>= \case
+              Ref TDef{} -> pure $ Direct (TVar (FQName fqn) def)
+              u -> pure u
+        Nothing -> return Nothing
 resolveRef'' _i (DName d@(DynamicName mem _ sigs i)) = do
   a <- foldM (resolveDynamic i mem) Nothing sigs
   case a of
@@ -940,7 +954,7 @@ evalConstsNonRec rr@(Ref r) = case r of
   TConst {..} -> case _tConstVal of
     CVRaw raw -> do
       v <- reduce raw
-      -- traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
+      traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
       return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
     _ -> return rr
   _ -> return rr
@@ -956,7 +970,10 @@ deref (Direct (TVar (FQName fq) _)) = do
     Just r -> case r of
       Direct d -> pure d
       Ref r' -> reduce r'
-    Nothing -> evalError def "unbound free var"
+    Nothing -> do
+      fqEnv <- use (evalRefs . rsFQ)
+      liftIO $ putStrLn $ "Vars in env: " <> show (pretty $ HM.keys fqEnv)
+      evalError def $ "unbound free var-1: " <> pretty fq
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 
@@ -1006,7 +1023,7 @@ reduceBody t = evalError (_tInfo t) "Expected body forms"
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
   ps' <- mapM (\(BindPair a t) -> (,) <$> traverse reduce a <*> reduceLam t) ps
-  -- typecheck' $ fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
+  typecheck' $ fmap (\(l, r) -> (fmap liftTerm l, r)) ps'
   reduceBody (instantiate (resolveArg i (fmap (either id liftTerm . snd) ps')) bod)
 
 -- | Reduction where TDefs and TLams are kept unreduced.
@@ -1077,7 +1094,7 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
   gas <- computeGas (Left (ai, asString fnName)) (GUserApp Defun)
   args <- traverse reduce as
   fty <- traverse reduce funTy
-  -- typecheckArgs ai fnName fty args
+  typecheckArgs ai fnName fty args
   let args' = liftTerm <$> args
   let body = instantiate (resolveArg ai args') fnBody
       fname = asString fnName
@@ -1120,10 +1137,10 @@ computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) (GUser
 
 -- | prepare reduced args and funtype, and typecheck
 prepareUserAppArgs :: Def Ref -> [Term Ref] -> Info -> Eval e ([Term Name], FunType (Term Name))
-prepareUserAppArgs Def{..} args _i = do
+prepareUserAppArgs Def{..} args i = do
   as' <- mapM reduce args
   ty <- traverse reduce _dFunType
-  -- typecheckArgs i _dDefName ty as'
+  typecheckArgs i _dDefName ty as'
   return (as',ty)
 
 guardRecursion :: Text -> Maybe ModuleName -> Eval e b -> Eval e b
@@ -1154,10 +1171,10 @@ evalUserAppBody _d@Def{..} (as',ft') ai g run = guardRecursion fname (Just _dMod
 --   or a fully reduced term (anything else that doesn't pass a scope pretty much).
 --   Both paths typecheck the arg and type, but we defer reducting the argument type until
 --   we know whether the value corresponding to it needs to be typechecked unreduced or not.
-_typecheck'
+typecheck'
   :: [(Arg (Term Ref), Either (Term Ref) (Term Name))]
   -> Eval e ()
-_typecheck' ps = foldM_ tvarCheck M.empty ps where
+typecheck' ps = foldM_ tvarCheck M.empty ps where
   -- This is a bit of a hack, but we cannot reduce lambdas and `TDef`s,
   -- so the strategy is this: If we encounter a term which we cannot reduce, we can typecheck it
   -- against its unreduced arg, then reduce the type once it typechecks.
@@ -1209,11 +1226,6 @@ reduceDirect (TVar (FQName fq) _) args i = do
     Nothing -> evalError i "blah"
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
-
-lookupFreeVar :: FullyQualifiedName -> Eval e Ref
-lookupFreeVar fqn = use (evalRefs . rsFQ . at fqn) >>= \case
-  Just r -> pure r
-  Nothing -> evalError def "unbound free variable"
 
 initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
 initPact i app bod = view eePactStep >>= \es -> case es of

@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Repl.Lib
@@ -614,6 +615,13 @@ bench' i as = do
 bench' i _ = evalError' i "Benchmarking not supported in GHCJS"
 #endif
 
+-- | Fully inline all deps.
+inline' :: Ref -> Eval e Ref
+inline' = \case
+  Ref t -> Ref <$> traverse inline' t
+  Direct (TVar (FQName fq) _) -> inline' =<< lookupFreeVar fq
+  e -> pure e
+
 tc :: RNativeFun LibState
 tc i as = case as of
   [TLitString s] -> go s False
@@ -622,9 +630,11 @@ tc i as = case as of
   where
     go modname dbg = do
       md <- getModule i (ModuleName modname Nothing)
+      loadModuleDependencies md
+      fullInlined <- traverse inline' md
       de <- viewLibState _rlsDynEnv
       r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
-        try $ liftIO $ typecheckModule dbg de md
+        try $ liftIO $ typecheckModule dbg de fullInlined
       case r of
         Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> prettyString e)
         Right (_,fails) -> case fails of
@@ -638,6 +648,7 @@ verify i _as@[TLitString modName] = do
 #if defined(ghcjs_HOST_OS)
     -- ghcjs: use remote server
     (md,modules) <- _loadModules
+
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
@@ -658,10 +669,14 @@ verify i _as@[TLitString modName] = do
     tc i _as
 #endif
   where
+    loadVerify m = do
+      loadModuleDependencies m
+      traverse inline' m
     _failureMessage = tStr $ "Verification of " <> modName <> " failed"
-    _loadModules = (,)
-        <$> getModule i (ModuleName modName Nothing)
-        <*> getAllModules i
+    _loadModules =
+      (,)
+        <$> (loadVerify =<< getModule i (ModuleName modName Nothing))
+        <*> (traverse loadVerify =<< getAllModules i)
 verify i as = argsError i as
 
 

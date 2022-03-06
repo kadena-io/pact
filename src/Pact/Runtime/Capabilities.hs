@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Runtime.Capabilities
@@ -132,7 +133,7 @@ evalUserCapability i af scope cap cdef test = go scope
               ManagedCapability cs (_csCap cs) (Left (AutoManagedCap True))
             Just (argName,mgrFunRef) -> case defCapMetaParts cap argName cdef of
               Left e -> evalError' cdef e
-              Right (idx,static,v) -> case mgrFunRef of
+              Right (idx,static,v) -> lookupFVTerm mgrFunRef >>= \case
                 (TVar (Ref (TDef d di)) _) -> case _dDefType d of
                   Defun -> return $!
                     ManagedCapability cs static $

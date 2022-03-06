@@ -74,9 +74,10 @@ instance ToJSON PersistDirect where
 
 instance FromJSON PersistDirect where
   parseJSON v =
+    withObject "PDFreeVar" (\o -> PDFreeVar <$> o .: "pdfv") v <|>
     withObject "PDValue" (\o -> PDValue <$> o .: "pdval") v <|>
-    withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v <|>
-    withObject "PDFreeVar" (\o -> PDNative <$> o .: "pdfv") v
+    withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v
+
 
 instance Pretty PersistDirect where
   pretty (PDValue v) = pretty v

@@ -22,6 +22,9 @@ module Pact.Runtime.Utils
   , emitEvent
   , emitReservedEvent
   , stripTermInfo
+  , lookupFreeVar
+  , lookupFVTerm
+  , loadModuleDependencies
   ) where
 
 import Bound
@@ -195,10 +198,18 @@ lookupModule i mn = do
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
             Right md -> do
               evalRefs . rsLoadedModules %= HM.insert mn (md,False)
+              loadModuleDependencies md
               return $ Just md
-            Left e -> evalError' i $ "Internal error: module restore failed: " <> pretty e
+            Left e ->
+              evalError' i $ "Internal error: module restore failed: " <> pretty e
         Nothing -> return Nothing
 
+loadModuleDependencies :: ModuleData Ref -> Eval e ()
+loadModuleDependencies md = case _mdModule md of
+  MDModule m -> do
+    let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
+    evalRefs . rsFQ %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
+  _ -> pure ()
 
 -- | Search up through call stack apps to find the first `Just a`
 searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
@@ -261,3 +272,15 @@ emitReservedEvent name params mhash = unlessExecutionFlagSet FlagDisablePactEven
 emitEventUnsafe :: QualifiedName -> [PactValue] -> ModuleHash -> Eval e ()
 emitEventUnsafe QualifiedName{..} params mh = do
   evalEvents %= (++ [PactEvent _qnName params _qnQual mh])
+
+
+lookupFreeVar :: FullyQualifiedName -> Eval e Ref
+lookupFreeVar fqn = use (evalRefs . rsFQ . at fqn) >>= \case
+  Just r -> pure r
+  Nothing -> evalError def "unbound free variable"
+
+lookupFVTerm :: Term Ref -> Eval e (Term Ref)
+lookupFVTerm = \case
+  TVar (Direct (TVar (FQName fq) _)) _ ->
+    flip TVar def <$> lookupFreeVar fq
+  e -> pure e
