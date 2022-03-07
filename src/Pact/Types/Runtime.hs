@@ -234,7 +234,7 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Text FullyQualifiedName
+      _rsLoaded :: HM.HashMap Text (Ref, Maybe (ModuleHash))
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace

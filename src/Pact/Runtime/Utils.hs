@@ -24,6 +24,7 @@ module Pact.Runtime.Utils
   , stripTermInfo
   , lookupFreeVar
   , lookupFVTerm
+  , allModuleExports
   , inlineModuleData
   ) where
 
@@ -205,11 +206,15 @@ lookupModule i mn = do
         Nothing -> return Nothing
 
 loadModuleDependencies :: ModuleData Ref -> Eval e ()
-loadModuleDependencies md = case _mdModule md of
-  MDModule m -> do
+loadModuleDependencies md =
+  evalRefs .rsFQ %= HM.union (allModuleExports md)
+
+allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
+allModuleExports md = case _mdModule md of
+  MDModule m -> 
     let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
-    evalRefs . rsFQ %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
-  _ -> pure ()
+    in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
+  _ -> HM.empty
 
 -- | Search up through call stack apps to find the first `Just a`
 searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
@@ -285,14 +290,8 @@ lookupFVTerm = \case
     flip TVar def <$> lookupFreeVar fq
   e -> pure e
 
--- -- | Fully inline all deps.
--- inlineAllDeps :: Ref -> Eval e Ref
--- inlineAllDeps = \case
---   Ref t -> Ref <$> traverse inlineAllDeps t
---   -- Note: this recursive call here
---   Direct (TVar (FQName fq) _) -> inlineAllDeps =<< lookupFreeVar fq
---   e -> pure e
-
+-- Fully inline all deps.
+-- do not use in an evaluation context outside of SPV and static typechecking
 inlineModuleData :: ModuleData Ref -> ModuleData Ref
 inlineModuleData md@(ModuleData m export deps) = case m of
   MDModule m' -> inline' m'

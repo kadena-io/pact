@@ -42,6 +42,7 @@ import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
 import Data.Default
 import Data.Hashable (Hashable)
+import Data.Maybe(fromMaybe)
 import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
@@ -56,7 +57,7 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Type
-import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
+import Pact.Types.Util (AsString(..), tShow)
 
 
 data PersistDirect =
@@ -110,10 +111,16 @@ makeLenses ''ModuleData
 
 instance NFData r => NFData (ModuleData r)
 
-instance (ToJSON r,FromJSON r) =>
-  ToJSON (ModuleData r) where toJSON = lensyToJSON 3
-instance (ToJSON r, FromJSON r) =>
-  FromJSON (ModuleData r) where parseJSON = lensyParseJSON 3
+instance (ToJSON r,FromJSON r) => ToJSON (ModuleData r) where
+  toJSON (ModuleData m rs deps) =
+    object $ [ "module" .= m, "refMap" .= rs] ++ [ "dependencies" .= deps | not (HM.null deps)]
+instance (ToJSON r, FromJSON r) => FromJSON (ModuleData r) where
+  parseJSON =
+    withObject "ModuleData" $ \o ->
+      ModuleData
+      <$> o .: "module"
+      <*> o .: "refMap"
+      <*> (fromMaybe HM.empty <$> o .:? "dependencies")
 
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 

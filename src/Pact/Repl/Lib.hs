@@ -33,6 +33,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.Text (Text, unpack)
@@ -273,6 +274,15 @@ replDefs = ("Repl",
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
+replDefsMap :: HM.HashMap Text (Ref, Maybe ModuleHash)
+replDefsMap =
+  HM.fromList $ (\(k, v) -> (unName k, (v, Nothing))) <$> HM.toList (moduleToMap replDefs)
+  where
+  unName (QName (QualifiedName _ name _)) = name
+  unName (Name (BareName name _)) = name
+  unName (DName (DynamicName name _ _ _)) = name
+  unName (FQName (FullyQualifiedName name _ _)) = name
+
 invokeEnv :: (LibDb -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! (_rlsDb ls)
 {-# INLINE invokeEnv #-}
@@ -476,8 +486,8 @@ tx t fi as = do
 
   -- reset to repl lib, preserve call stack
   cs <- use evalCallStack
-  put $ set evalCallStack cs def
-  -- put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) $ set evalCallStack cs def
+  -- put $ set evalCallStack cs def
+  put $ set (evalRefs.rsLoaded) replDefsMap $ set evalCallStack cs def
   return $ tStr $ tShow t <> " Tx"
       <> maybeDelim " " tid <> maybeDelim ": " tname
 

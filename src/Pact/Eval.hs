@@ -405,18 +405,6 @@ loadModule m bod1 mi g0 = do
   let md = ModuleData mGov solvedDefs deps
   installModule True md Nothing
   return (g1,md)
-  -- where
-  -- allDependencies = do
-  --   allLoaded <- HM.mapMaybe f <$> use (evalRefs . rsLoadedModules)
-  --   pure $ foldl' mkDeps mempty allLoaded
-  --   where
-  --   f (ModuleData d refs deps, _) = case d of
-  --       MDModule m' -> Just (m', refs, deps)
-  --       _ -> Nothing
-  --   mkDeps hm (m', refs, deps) =
-  --     hm `HM.union` (HM.mapKeys (\k -> FullyQualifiedName k (_mName m') (_mhHash $ _mHash m')) refs) `HM.union` deps
-
-
 
 loadInterface
   :: Interface
@@ -643,7 +631,7 @@ fullyQualifyDefs info mdef defs = do
 
       evalError i $ "Recursion detected: " <> prettyList pl
   fDefs <- foldlM (mkAndEvalConsts) mempty sortedDefs
-  deps <- uses (evalRefs . rsFQ) (HM.filterWithKey (\k _ -> Set.member k depNames))
+  deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
   let (Sum totalMemory) = foldMap (Sum . sizeOf) fDefs + foldMap (Sum . sizeOf) deps
   _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
   pure (fDefs, deps)
@@ -661,7 +649,7 @@ fullyQualifyDefs info mdef defs = do
       pure $ HM.insert(_fqName dn) t' m
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
     checkAddDep = \case
-      Direct (TVar (FQName fq) _) -> modify' (Set.insert fq)
+      Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
       _ -> pure ()
     -- | traverse to find deps and form graph
     traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
@@ -839,11 +827,7 @@ resolveRef' disableModRefs i nn@(Name (BareName bn _)) = do
     Nothing -> do
       n <- preuse $ evalRefs . rsLoaded . ix bn
       case n of
-        Just fqn -> do
-          p <- use (evalRefs . rsLoadedModules . at (_fqModule fqn))
-          return $ do
-            (m, _) <- p
-            HM.lookup bn (_mdRefMap m)
+        Just (r, _) -> pure (Just r)
         Nothing
             | disableModRefs -> return Nothing
             | otherwise -> resolveModRef i $ ModuleName bn Nothing
@@ -878,20 +862,19 @@ resolveRef'' i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResol
           -- so it won't re-try like here.
           resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
 -- Natives resolve normally
-resolveRef'' _ nn@(Name (BareName bn _)) = do
+resolveRef'' i nn@(Name (BareName bn _)) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
     Nothing -> do
       n <- preuse $ evalRefs . rsLoaded . ix bn
       case n of
-        Just fqn -> do
-          p <- use (evalRefs . rsLoadedModules . at (_fqModule fqn))
-          return $ do
-            (m, _) <- p
-            HM.lookup bn (_mdRefMap m) >>= \case
-              Ref TDef{} -> pure $ Direct (TVar (FQName fqn) def)
-              u -> pure u
+        Just (ref, mh) -> case ref of
+          Ref (TDef d _) -> do
+            fqn <- FullyQualifiedName (_undefName (_dDefName d)) (_dModule d)
+              <$> maybe (evalError' i "TDef missing accompanying module hash") (pure . _mhHash) mh
+            pure $ Just (Direct (TVar (FQName fqn) def))
+          _ -> pure (Just ref)
         Nothing -> return Nothing
 resolveRef'' _i (DName d@(DynamicName mem _ sigs i)) = do
   a <- foldM (resolveDynamic i mem) Nothing sigs
@@ -1236,7 +1219,8 @@ reduceDirect TNative {..} as ai =
 reduceDirect (TVar (FQName fq) _) args i = do
   use (evalRefs . rsFQ . at fq) >>= \case
     Just r -> reduceApp (App (TVar r def) args i)
-    Nothing -> evalError i "blah"
+    Nothing -> do
+      evalError i $ "unbound free variable: " <> pretty fq
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
@@ -1453,7 +1437,7 @@ installModule updated md = go . maybe allDefs filteredDefs
     updateInternal f = case _mdModule md of
       MDModule m -> do
         let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
-        let hm = HM.mapWithKey (\k _ -> toFQ k) (_mdRefMap md)
+        let hm = HM.map (\v -> (v, Just (_mHash m))) (_mdRefMap md)
         evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty hm)
         evalRefs . rsFQ %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
       _ -> pure ()

@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Repl
@@ -410,11 +411,11 @@ useReplLib = id %= setReplLib
 
 -- | mutate repl state to install lib functions
 setReplLib :: ReplState -> ReplState
-setReplLib = over (rEnv.eeRefStore.rsNatives) $ HM.union (moduleToMap replDefs)
+setReplLib = over (rEvalState.evalRefs.rsLoaded) $ HM.union replDefsMap
 
 -- | mutate repl state to remove lib functions
 unsetReplLib :: ReplState -> ReplState
-unsetReplLib = over (rEnv.eeRefStore.rsNatives) (HM.filterWithKey (\k _ -> HM.member k (moduleToMap replDefs)))
+unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` replDefsMap)
 
 -- | evaluate string in repl monad
 evalPact :: String -> Repl (Either String (Term Name))
