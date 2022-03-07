@@ -52,6 +52,7 @@ import Control.Lens hiding (DefName)
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Data.Monoid (Sum(..))
 import Data.Aeson (Value)
 import Data.Default
 import Data.Foldable
@@ -64,6 +65,7 @@ import Data.Maybe
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
 import qualified Data.Text as T
+import qualified Data.Set as Set
 
 import Pact.Gas
 import Pact.Runtime.Capabilities
@@ -393,25 +395,26 @@ loadModule m bod1 mi g0 = do
     tt@TTable{} -> return $ Just $ asString (_tTableName tt)
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid module member"
-  evaluatedDefs <- _evaluateDefs mi m $
-      mangleDefs (_mName m) <$> mdefs
+  let mangled = mangleDefs (_mName m) <$> mdefs
+  (evaluatedDefs, deps) <-
+    ifExecutionFlagSet FlagDisableFQVars
+      ((,mempty) <$> evaluateDefs mi (MDModule m) mangled)
+      (fullyQualifyDefs mi m mangled)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
-  -- Todo: deps are _definitely_ not properly enumerated
-  deps <- allDependencies
   let md = ModuleData mGov solvedDefs deps
   installModule True md Nothing
   return (g1,md)
-  where
-  allDependencies = do
-    allLoaded <- HM.mapMaybe f <$> use (evalRefs . rsLoadedModules)
-    pure $ foldl' mkDeps mempty allLoaded
-    where
-    f (ModuleData d refs deps, _) = case d of
-        MDModule m' -> Just (m', refs, deps)
-        _ -> Nothing
-    mkDeps hm (m', refs, deps) =
-      hm `HM.union` (HM.mapKeys (\k -> FullyQualifiedName k (_mName m') (_mhHash $ _mHash m')) refs) `HM.union` deps
+  -- where
+  -- allDependencies = do
+  --   allLoaded <- HM.mapMaybe f <$> use (evalRefs . rsLoadedModules)
+  --   pure $ foldl' mkDeps mempty allLoaded
+  --   where
+  --   f (ModuleData d refs deps, _) = case d of
+  --       MDModule m' -> Just (m', refs, deps)
+  --       _ -> Nothing
+  --   mkDeps hm (m', refs, deps) =
+  --     hm `HM.union` (HM.mapKeys (\k -> FullyQualifiedName k (_mName m') (_mhHash $ _mHash m')) refs) `HM.union` deps
 
 
 
@@ -577,7 +580,7 @@ evaluateDefs info mdef defs = do
     False -> do
       hf <- foldlM (dresolveMem info) (HeapFold HM.empty M.empty 0) sortedDefs
       -- Compute, commit and log the final gas after getting the final memory cost.
-      _<- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
+      _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
       pure (_hfAllDefs hf)
   where
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
@@ -619,16 +622,17 @@ evaluateDefs info mdef defs = do
     moduleBareName (MDInterface i) = _mnName $ _interfaceName i
     moduleBareName (MDModule m) = _mnName $ _mName m
 
--- | Definitions are transformed such that all free variables are resolved either to
--- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
--- resolve to a definition in the module ('Left String'). A graph is formed from
--- all 'Left String' entries and enforced as acyclic, proving the definitions
--- to be non-recursive. The graph is walked to unify the Either to
+-- | Definitions are transformed such that all non fully qualified free variables are
+-- resolved to either an "inlineable unit" (A table, schema, or an evaluated const),
+-- or a fully qualified variable, either external (Right Ref) or internal (Left FullyQualifiedName).
+-- A graph is formed from all internal 'Left FullyQualifiedName' entries and enforced as acyclic,
+-- proving the definitions to be non-recursive.
+-- The graph is walked to unify the Either to
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
-_evaluateDefs :: Info -> Module (Term Name) -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
-_evaluateDefs info mdef defs = do
-  cs <- liftIO (newIORef Nothing) >>= traverseGraph defs
+fullyQualifyDefs :: Info -> Module (Term Name) -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref, HM.HashMap FullyQualifiedName Ref)
+fullyQualifyDefs info mdef defs = do
+  (cs, depNames) <- flip runStateT Set.empty $ liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- forM cs $ \c -> case c of
     AcyclicSCC v -> return v
     CyclicSCC vs -> do
@@ -638,7 +642,11 @@ _evaluateDefs info mdef defs = do
             $ vs
 
       evalError i $ "Recursion detected: " <> prettyList pl
-  foldlM (mkAndEvalConsts) mempty sortedDefs
+  fDefs <- foldlM (mkAndEvalConsts) mempty sortedDefs
+  deps <- uses (evalRefs . rsFQ) (HM.filterWithKey (\k _ -> Set.member k depNames))
+  let (Sum totalMemory) = foldMap (Sum . sizeOf) fDefs + foldMap (Sum . sizeOf) deps
+  _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
+  pure (fDefs, deps)
   where
     -- Inline all but TDefs.
     replaceL m n = case HM.lookup (_fqName n) m of
@@ -652,25 +660,28 @@ _evaluateDefs info mdef defs = do
       evalRefs . rsFQ %= HM.insert dn t'
       pure $ HM.insert(_fqName dn) t' m
     mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
+    checkAddDep = \case
+      Direct (TVar (FQName fq) _) -> modify' (Set.insert fq)
+      _ -> pure ()
     -- | traverse to find deps and form graph
     traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
       let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
       defTerm' <- forM defTerm $ \(f :: Name) -> do
-        dm <- resolveRef'' f f -- lookup ref, don't try modules for barenames
+        dm <- lift (resolveRef'' f f) -- lookup ref, don't try modules for barenames
         case (dm, f) of
-          (Just t, _) -> return (Right t) -- ref found
+          (Just t, _) -> checkAddDep t *> return (Right t) -- ref found
           -- for barenames, check decls and finally modules
           (Nothing, Name (BareName fn _)) ->
             case HM.lookup fn allDefs of
               Just _ -> do
                 let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
                 return (Left name') -- decl found
-              Nothing -> resolveBareModRef f fn memo >>= \r -> case r of
+              Nothing -> lift (resolveBareModRef f fn memo) >>= \r -> case r of
                 Just mr -> return (Right mr) -- mod ref found
                 Nothing ->
-                  evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+                  lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
           -- for qualified names, simply fail
-          (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+          (Nothing, _) -> lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
 
       return (defTerm', defName', mapMaybe (either Just (const Nothing)) $ toList defTerm')
 
@@ -971,9 +982,7 @@ deref (Direct (TVar (FQName fq) _)) = do
       Direct d -> pure d
       Ref r' -> reduce r'
     Nothing -> do
-      fqEnv <- use (evalRefs . rsFQ)
-      liftIO $ putStrLn $ "Vars in env: " <> show (pretty $ HM.keys fqEnv)
-      evalError def $ "unbound free var-1: " <> pretty fq
+      evalError def $ "unbound free var:" <> pretty fq
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 
@@ -1015,9 +1024,13 @@ compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
   (renderCompactText t)
 
 reduceBody :: Term Ref -> Eval e (Term Name)
-reduceBody (TList bs _ _) =
+reduceBody (TList bs _ i) =
   -- unsafe but only called in validated body contexts
-  V.last <$> V.mapM reduce bs
+  V.mapM reduce bs >>= \vec -> case vec V.!? (V.length vec - 1) of
+    Just v ->
+      pure v
+    Nothing ->
+      evalError i "Expected non-empty function body"
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)

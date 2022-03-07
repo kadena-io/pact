@@ -24,7 +24,7 @@ module Pact.Runtime.Utils
   , stripTermInfo
   , lookupFreeVar
   , lookupFVTerm
-  , loadModuleDependencies
+  , inlineModuleData
   ) where
 
 import Bound
@@ -284,3 +284,27 @@ lookupFVTerm = \case
   TVar (Direct (TVar (FQName fq) _)) _ ->
     flip TVar def <$> lookupFreeVar fq
   e -> pure e
+
+-- -- | Fully inline all deps.
+-- inlineAllDeps :: Ref -> Eval e Ref
+-- inlineAllDeps = \case
+--   Ref t -> Ref <$> traverse inlineAllDeps t
+--   -- Note: this recursive call here
+--   Direct (TVar (FQName fq) _) -> inlineAllDeps =<< lookupFreeVar fq
+--   e -> pure e
+
+inlineModuleData :: ModuleData Ref -> ModuleData Ref
+inlineModuleData md@(ModuleData m export deps) = case m of
+  MDModule m' -> inline' m'
+  _ -> md
+  where
+  inline' m' =
+    let
+      toFQ n = FullyQualifiedName n (_mName m') (_mhHash $ _mHash m')
+      deps' = HM.mapKeys toFQ export
+      allTL = HM.union deps' deps
+    in ModuleData (MDModule (fmap (resolve allTL) <$> m')) (resolve allTL <$> export) deps
+  resolve m' = \case
+    Ref t -> Ref (resolve m' <$> t)
+    Direct (TVar (FQName fq) _) -> resolve m' (m' HM.! fq)
+    e -> e

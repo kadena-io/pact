@@ -153,10 +153,12 @@ data ExecutionFlag
   | FlagDisablePact40
   -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
   | FlagEnforceKeyFormats
-  -- | Enable Pact 4.2.0 db sorted key guarantees, and row persistence
+  -- | Disable Pact 4.2.0 db sorted key guarantees, and row persistence
   | FlagDisablePact420
-  -- | Enable memory limit check
+  -- | Disable memory limit check
   | FlagDisableInlineMemCheck
+  -- | Disable new non-inlined modules
+  | FlagDisableFQVars
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

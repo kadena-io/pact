@@ -38,7 +38,7 @@ import NeatInterpolation (text)
 import System.Directory (removeFile)
 
 
--- import qualified Data.HashMap.Strict as HM
+import qualified Data.HashMap.Strict as HM
 import qualified Data.List.NonEmpty  as NEL
 import qualified Pact.Persist.SQLite as PSL
 import qualified Data.Text as T
@@ -228,8 +228,11 @@ getLoadedState code = do
 
 defEvalEnv :: PactDbEnv e -> EvalEnv e
 defEvalEnv db =
-  setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-  initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def def
+  let loaded = HM.singleton (Name (BareName sampleLoadedKeysetName def))
+               (Direct $ TGuard (GKeySet sampleKeyset) def)
+  in over (eeRefStore . rsNatives) (HM.union loaded) $
+        setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
+        initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def def
   where entity = Just $ EntityName "entity"
         prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
 

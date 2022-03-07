@@ -58,7 +58,7 @@ spec = do
 goldenModule
   :: String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
 goldenModule tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
-  let ec = mkExecutionConfig [FlagDisableInlineMemCheck]
+  let ec = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisableFQVars]
   (r,s) <- runIO $ execScriptF' Quiet fp (\st -> st & rEnv . eeExecutionConfig .~ ec)
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
@@ -81,7 +81,7 @@ acctsFailureCR :: String -> ReplState -> Spec
 acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> ReplState -> Spec
-eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck]) tn s $
+eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisableFQVars]) tn s $
     "(module events-test G \
     \  (defcap G () true) \
     \  (defcap CAP (name:string amount:decimal) @managed \
@@ -99,8 +99,8 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
     \  (step (resume { 'a:=a } a)))) \
     \(xchain.p 3)"
   where
-    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck]
-    ec False = mkExecutionConfig [FlagDisableInlineMemCheck]
+    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck, FlagDisableFQVars]
+    ec False = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisableFQVars]
 
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = doCRTest' def tn s code

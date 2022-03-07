@@ -1,5 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module TypecheckSpec (spec) where
 
 import Prelude hiding (take)
@@ -20,6 +22,7 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Runtime
 import Pact.Types.Typecheck
+import Pact.Runtime.Utils
 
 import Pact.Types.Pretty
 import qualified Data.Text as T
@@ -83,7 +86,7 @@ verifyModule fp mn = describe (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
     mModules <- replGetModules replState
     checkResult <- case mModules of
       Left err           -> die def (show err)
-      Right (modules, _) -> Check.verifyModule def modules modul
+      Right (modules, _) -> Check.verifyModule def (inlineModuleData <$> modules) (inlineModuleData modul)
     let ros = Check.renderVerifiedModule checkResult
     pure $ if any ((== OutputFailure) . _roType) ros
        then expectationFailure $ T.unpack $
@@ -104,7 +107,7 @@ checkFun fp mn fn = do
 checkFuns :: Spec
 checkFuns = describe "pact typecheck" $ do
   let mn = "tests/pact/tc.repl"
-  (ModuleData _ m _) <- runIO $ loadModule mn "tctest"
+  (ModuleData _ m _) <- runIO $ fmap inlineModuleData $ loadModule mn "tctest"
   forM_ (HM.toList m) $ \(fn,ref) -> do
     let doTc = runIO $ runTC 0 False (typecheckTopLevel ref)
         n = asString mn <> "." <> fn
@@ -137,7 +140,7 @@ loadModule fp mn = do
     Left e -> die def $ "Module not found: " ++ show (fp,mn,e)
 
 loadFun :: FilePath -> ModuleName -> Text -> IO Ref
-loadFun fp mn fn = loadModule fp mn >>= \(ModuleData _ m _) -> case HM.lookup fn m of
+loadFun fp mn fn = loadModule fp mn >>= \(inlineModuleData -> ModuleData _ m _) -> case HM.lookup fn m of
   Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
   Just f -> return f
 
@@ -148,7 +151,7 @@ inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLeve
 
 inferModule :: Bool -> FilePath -> ModuleName -> IO ([TopLevel Node],[Failure])
 inferModule debug fp mn = do
-  md <- loadModule fp mn
+  md <- inlineModuleData <$> loadModule fp mn
   typecheckModule debug def md
 
 

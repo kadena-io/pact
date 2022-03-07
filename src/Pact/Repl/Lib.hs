@@ -615,13 +615,6 @@ bench' i as = do
 bench' i _ = evalError' i "Benchmarking not supported in GHCJS"
 #endif
 
--- | Fully inline all deps.
-inline' :: Ref -> Eval e Ref
-inline' = \case
-  Ref t -> Ref <$> traverse inline' t
-  Direct (TVar (FQName fq) _) -> inline' =<< lookupFreeVar fq
-  e -> pure e
-
 tc :: RNativeFun LibState
 tc i as = case as of
   [TLitString s] -> go s False
@@ -629,12 +622,10 @@ tc i as = case as of
   _ -> argsError i as
   where
     go modname dbg = do
-      md <- getModule i (ModuleName modname Nothing)
-      loadModuleDependencies md
-      fullInlined <- traverse inline' md
+      md <- inlineModuleData <$> getModule i (ModuleName modname Nothing)
       de <- viewLibState _rlsDynEnv
       r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
-        try $ liftIO $ typecheckModule dbg de fullInlined
+        try $ liftIO $ typecheckModule dbg de md
       case r of
         Left (TC.CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " <> prettyString e)
         Right (_,fails) -> case fails of
@@ -669,14 +660,11 @@ verify i _as@[TLitString modName] = do
     tc i _as
 #endif
   where
-    loadVerify m = do
-      loadModuleDependencies m
-      traverse inline' m
-    _failureMessage = tStr $ "Verification of " <> modName <> " failed"
+    _failureMessage = tStr $ "Verificati  on of " <> modName <> " failed"
     _loadModules =
       (,)
-        <$> (loadVerify =<< getModule i (ModuleName modName Nothing))
-        <*> (traverse loadVerify =<< getAllModules i)
+        <$> (inlineModuleData <$> getModule i (ModuleName modName Nothing))
+        <*> (fmap inlineModuleData <$> getAllModules i)
 verify i as = argsError i as
 
 
