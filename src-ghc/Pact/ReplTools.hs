@@ -15,7 +15,7 @@ import Control.Monad.State.Strict
 
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Data.Text (Text, unpack)
+import Data.Text (unpack)
 
 import Text.Trifecta as TF hiding (line)
 import qualified Text.Trifecta.Delta as TF
@@ -43,21 +43,11 @@ completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
     let namesInModules = toListOf (traverse . _1 . mdRefMap . to HM.keys . each) modules
         allNames = concat
           [ namesInModules
-          , nameOfModule <$> HM.keys modules
-          , unName <$> HM.keys nativeDefs
+          , _mnName <$> HM.keys modules
+          , HM.keys nativeDefs
           ]
         matchingNames = filter (str `isPrefixOf`) (unpack <$> allNames)
     pure $ simpleCompletion <$> matchingNames
-
-  where
-    unName :: Name -> Text
-    unName (QName (QualifiedName _ name _)) = name
-    unName (Name (BareName name _)) = name
-    unName (DName (DynamicName name _ _ _)) = name
-    unName (FQName (FullyQualifiedName name _ _)) = name
-
-    nameOfModule :: ModuleName -> Text
-    nameOfModule (ModuleName name _) = name
 
 replSettings :: (MonadIO m, MonadState ReplState m) => Settings m
 replSettings = Settings

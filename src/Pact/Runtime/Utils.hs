@@ -193,7 +193,7 @@ lookupModule i mn = do
             MDModule m -> GPostRead (ReadModule (_mName m) (_mCode m))
             MDInterface int -> GPostRead (ReadInterface (_interfaceName int) (_interfaceCode int))
           natives <- view $ eeRefStore . rsNatives
-          let natLookup (NativeDefName n) = case HM.lookup (Name (BareName n def)) natives of
+          let natLookup (NativeDefName n) = case HM.lookup n natives of
                 Just (Direct t) -> Just t
                 _ -> Nothing
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
@@ -211,7 +211,7 @@ loadModuleDependencies md =
 
 allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
 allModuleExports md = case _mdModule md of
-  MDModule m -> 
+  MDModule m ->
     let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
     in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
   _ -> HM.empty

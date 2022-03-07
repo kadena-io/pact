@@ -201,10 +201,10 @@ setEnv f setup = setEnv'
 defEvalState :: IO EvalState
 defEvalState = do
   stateWithModule <- getLoadedState (accountsModule acctModuleName)
-  -- let loaded = HM.singleton sampleLoadedKeysetName
-  --              (Direct $ TGuard (GKeySet sampleKeyset) def)
+  let loaded = HM.singleton sampleLoadedKeysetName
+               (Direct $ TGuard (GKeySet sampleKeyset) def, Nothing)
   return
-      -- $ set (evalRefs . rsLoaded) loaded
+      $ set (evalRefs . rsLoaded) loaded
       $ set evalGas 0 stateWithModule
 
 getLoadedState
@@ -228,11 +228,8 @@ getLoadedState code = do
 
 defEvalEnv :: PactDbEnv e -> EvalEnv e
 defEvalEnv db =
-  let loaded = HM.singleton (Name (BareName sampleLoadedKeysetName def))
-               (Direct $ TGuard (GKeySet sampleKeyset) def)
-  in over (eeRefStore . rsNatives) (HM.union loaded) $
-        setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-        initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def def
+  setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
+  initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def def
   where entity = Just $ EntityName "entity"
         prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
 

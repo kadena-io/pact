@@ -276,12 +276,7 @@ replDefs = ("Repl",
 
 replDefsMap :: HM.HashMap Text (Ref, Maybe ModuleHash)
 replDefsMap =
-  HM.fromList $ (\(k, v) -> (unName k, (v, Nothing))) <$> HM.toList (moduleToMap replDefs)
-  where
-  unName (QName (QualifiedName _ name _)) = name
-  unName (Name (BareName name _)) = name
-  unName (DName (DynamicName name _ _ _)) = name
-  unName (FQName (FullyQualifiedName name _ _)) = name
+  (,Nothing) <$> moduleToMap replDefs
 
 invokeEnv :: (LibDb -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! (_rlsDb ls)

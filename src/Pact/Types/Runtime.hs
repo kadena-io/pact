@@ -109,7 +109,7 @@ keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [
 
 -- | Storage for natives.
 data RefStore = RefStore {
-      _rsNatives :: HM.HashMap Name Ref
+      _rsNatives :: HM.HashMap Text Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty

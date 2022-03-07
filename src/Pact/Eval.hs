@@ -449,7 +449,7 @@ collectNames g0 args body k = case instantiate' body of
       Nothing -> return (g, ds)
       Just dn -> do
         -- disallow native overlap
-        when (isJust $ HM.lookup (Name (BareName dn def)) ns) $
+        when (isJust $ HM.lookup dn ns) $
           evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
         -- disallow conflicting members
         when (isJust $ HM.lookup dn ds) $
@@ -820,8 +820,8 @@ resolveRef' _ i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
           -- it's fine since we're supplying an ns-qualified module name
           -- so it won't re-try like here.
           resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
-resolveRef' disableModRefs i nn@(Name (BareName bn _)) = do
-  nm <- preview $ eeRefStore . rsNatives . ix nn
+resolveRef' disableModRefs i (Name (BareName bn _)) = do
+  nm <- preview $ eeRefStore . rsNatives . ix bn
   case nm of
     d@Just {} -> return d
     Nothing -> do
@@ -862,8 +862,8 @@ resolveRef'' i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResol
           -- so it won't re-try like here.
           resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
 -- Natives resolve normally
-resolveRef'' i nn@(Name (BareName bn _)) = do
-  nm <- preview $ eeRefStore . rsNatives . ix nn
+resolveRef'' i (Name (BareName bn _)) = do
+  nm <- preview $ eeRefStore . rsNatives . ix bn
   case nm of
     d@Just {} -> return d
     Nothing -> do
