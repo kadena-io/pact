@@ -47,6 +47,7 @@ import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import qualified Data.Set as S
 import Data.Text (Text)
@@ -138,7 +139,15 @@ evalExec runner evalEnv ParsedCode {..} = do
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
-initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
+initStateModules modules =
+  set (evalRefs . rsFQ) (foldMap allModuleExports modules) $ set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
+  where
+  allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
+  allModuleExports md = case _mdModule md of
+    MDModule m ->
+      let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
+      in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
+    _ -> HM.empty
 
 -- | Resume a defpact execution, with optional PactExec.
 evalContinuation :: Interpreter e -> EvalEnv e -> ContMsg -> IO EvalResult

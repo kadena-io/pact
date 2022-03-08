@@ -290,13 +290,15 @@ instance NFData Name
 parseName :: Info -> Text -> Either String Name
 parseName i = AP.parseOnly (nameParser i <* eof)
 
-fullyQualNameParser :: (TokenParsing m, Monad m) => m FullyQualifiedName
+fullyQualNameParser :: AP.Parser FullyQualifiedName
 fullyQualNameParser = do
   qualifier <- ident style
   mname <- dot *> ident style
   oname <- optional (dot *> ident style)
   h <- dot *> (between (char '{') (char '}') $ some (alphaNum <|> char '-' <|> char '_'))
-  hash' <- either (error "blah") pure $ parseB64UrlUnpaddedText' (T.pack h)
+  hash' <- case parseB64UrlUnpaddedText' (T.pack h) of
+    Right hash' -> pure hash'
+    Left _ -> fail "invalid hash encoding"
   case oname of
     Just nn ->
       pure (FullyQualifiedName nn (ModuleName mname (Just $ NamespaceName qualifier)) (Hash hash'))
