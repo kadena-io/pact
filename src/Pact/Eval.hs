@@ -539,6 +539,10 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
     _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
     pure inlined
 
+removeFromLoaded :: Set.Set Text -> Eval e ()
+removeFromLoaded toRemove =
+  evalRefs . rsLoaded %= HM.filterWithKey (\k _ -> Set.notMember k toRemove)
+
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
 -- resolve to a definition in the module ('Left String'). A graph is formed from
@@ -550,7 +554,7 @@ evaluateDefs :: Info -> ModuleDef (Term Name) -> HM.HashMap Text (Term Name) -> 
 evaluateDefs info mdef defs = do
   cs <- liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- enforceAcyclic info cs
-
+  removeFromLoaded (Set.fromList (HM.keys defs))
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
   isExecutionFlagSet FlagDisableInlineMemCheck >>= \case
     True -> do
@@ -564,23 +568,23 @@ evaluateDefs info mdef defs = do
       pure (_hfAllDefs hf)
   where
     -- | traverse to find deps and form graph
-    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
-      defTerm' <- forM defTerm $ \(f :: Name) -> do
-        dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
-        case (dm, f) of
-          (Just t, _) -> return (Right t) -- ref found
-          -- for barenames, check decls and finally modules
-          (Nothing, Name (BareName fn _)) ->
-            case HM.lookup fn allDefs of
-              Just _ -> return (Left fn) -- decl found
-              Nothing -> resolveBareModRef info f fn memo mdef >>= \r -> case r of
-                Just mr -> return (Right mr) -- mod ref found
-                Nothing ->
-                  evalError' f $ "Cannot resolve " <> dquotes (pretty f)
-          -- for qualified names, simply fail
-          (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+    defTerm' <- forM defTerm $ \(f :: Name) -> do
+      dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
+      case (dm, f) of
+        (Just t, _) -> return (Right t) -- ref found
+        -- for barenames, check decls and finally modules
+        (Nothing, Name (BareName fn _)) ->
+          case HM.lookup fn allDefs of
+            Just _ -> return (Left fn) -- decl found
+            Nothing -> resolveBareModRef info f fn memo mdef >>= \r -> case r of
+              Just mr -> return (Right mr) -- mod ref found
+              Nothing ->
+                evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+        -- for qualified names, simply fail
+        (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
 
-      return (defTerm', defName, mapMaybe (either Just (const Nothing)) $ toList defTerm')
+    return (defTerm', defName, mapMaybe (either Just (const Nothing)) $ toList defTerm')
 
 enforceAcyclic
   :: (Ord key, Pretty key, Pretty l, Pretty r)
@@ -605,7 +609,7 @@ resolveBareModRef
   => Info
   -> i
   -> Text
-  -> IORef (Maybe (Ref' (Term Name)))
+  -> IORef (Maybe Ref)
   -> ModuleDef g
   -> Eval e (Maybe Ref)
 resolveBareModRef info f fn memo mdef
@@ -643,6 +647,7 @@ fullyQualifyDefs
 fullyQualifyDefs info mdef defs = do
   (cs, depNames) <- flip runStateT Set.empty $ liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- enforceAcyclic info cs
+  removeFromLoaded (Set.fromList (HM.keys defs))
   fDefs <- foldlM (mkAndEvalConsts) mempty sortedDefs
   deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
   let (Sum totalMemory) = foldMap (Sum . sizeOf) fDefs + foldMap (Sum . sizeOf) deps
