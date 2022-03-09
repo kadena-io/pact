@@ -183,7 +183,8 @@ lookupModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
 lookupModule i mn = do
   loaded <- preuse $ evalRefs . rsLoadedModules . ix mn
   case loaded of
-    Just (m,_) -> return $ Just m
+    Just (m,_) ->
+      return $ Just m
     Nothing -> do
       stored <- readRow (getInfo i) Modules mn
       case stored of
@@ -198,15 +199,11 @@ lookupModule i mn = do
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
             Right md -> do
               evalRefs . rsLoadedModules %= HM.insert mn (md,False)
-              loadModuleDependencies md
+              evalRefs . rsFQ %= HM.union (allModuleExports md)
               return $ Just md
             Left e ->
               evalError' i $ "Internal error: module restore failed: " <> pretty e
         Nothing -> return Nothing
-
-loadModuleDependencies :: ModuleData Ref -> Eval e ()
-loadModuleDependencies md =
-  evalRefs .rsFQ %= HM.union (allModuleExports md)
 
 -- | Search up through call stack apps to find the first `Just a`
 searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)

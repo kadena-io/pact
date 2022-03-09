@@ -1440,7 +1440,12 @@ installModule updated md = go . maybe allDefs filteredDefs
         let hm = HM.map (\v -> (v, Just (_mHash m))) (_mdRefMap md)
         evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty hm)
         evalRefs . rsFQ %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
-      _ -> pure ()
+      MDInterface _ -> do
+        let
+          f' m k v = case v of
+            Ref TDef{} -> m
+            _ -> f m k (v, Nothing)
+        evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f' mempty $ _mdRefMap md)
     go f = do
       -- evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
       updateInternal f

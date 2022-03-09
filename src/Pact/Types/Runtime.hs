@@ -242,6 +242,7 @@ data RefState = RefState {
       -- | Map of all fully qualified names in scope, including transitive dependencies.
     , _rsFQ :: HM.HashMap FullyQualifiedName Ref
     } deriving (Eq,Show,Generic)
+    
 makeLenses ''RefState
 instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty

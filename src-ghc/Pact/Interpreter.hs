@@ -53,7 +53,6 @@ import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import System.Directory
 
-
 import Pact.Compile
 import Pact.Eval
 import Pact.Native (nativeDefs)
