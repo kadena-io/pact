@@ -665,7 +665,7 @@ verify i _as@[TLitString modName] = do
     tc i _as
 #endif
   where
-    _failureMessage = tStr $ "Verificati  on of " <> modName <> " failed"
+    _failureMessage = tStr $ "Verification of " <> modName <> " failed"
     _loadModules =
       (,)
         <$> (inlineModuleData <$> getModule i (ModuleName modName Nothing))
