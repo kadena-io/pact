@@ -32,7 +32,8 @@ module Pact.Types.Persistence
    PersistDirect(..),toPersistDirect,fromPersistDirect,
    ModuleData(..),mdModule,mdRefMap, mdDependencies,
    PersistModuleData,
-   ExecutionMode(..)
+   ExecutionMode(..),
+   allModuleExports
    ) where
 
 import Control.Applicative ((<|>))
@@ -100,6 +101,13 @@ fromPersistDirect _ (PDFreeVar f) = return $ TVar (FQName f) def
 fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
   Just t -> return t
   Nothing -> Left $ "Native lookup failed: " <> tShow nn
+
+allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
+allModuleExports md = case _mdModule md of
+  MDModule m ->
+    let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
+    in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
+  _ -> HM.empty
 
 -- | Module ref store
 data ModuleData r = ModuleData

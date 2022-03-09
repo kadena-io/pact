@@ -239,7 +239,7 @@ data RefState = RefState {
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe (Namespace (Term Name))
-      -- |
+      -- | Map of all fully qualified names in scope, including transitive dependencies.
     , _rsFQ :: HM.HashMap FullyQualifiedName Ref
     } deriving (Eq,Show,Generic)
 makeLenses ''RefState

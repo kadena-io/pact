@@ -24,7 +24,6 @@ module Pact.Runtime.Utils
   , stripTermInfo
   , lookupFreeVar
   , lookupFVTerm
-  , allModuleExports
   , inlineModuleData
   ) where
 
@@ -208,13 +207,6 @@ lookupModule i mn = do
 loadModuleDependencies :: ModuleData Ref -> Eval e ()
 loadModuleDependencies md =
   evalRefs .rsFQ %= HM.union (allModuleExports md)
-
-allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
-allModuleExports md = case _mdModule md of
-  MDModule m ->
-    let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
-    in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
-  _ -> HM.empty
 
 -- | Search up through call stack apps to find the first `Just a`
 searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
