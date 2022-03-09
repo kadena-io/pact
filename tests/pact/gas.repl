@@ -742,5 +742,5 @@ d.G3
   )
 )
 
-(expect "new module with FQVs gas" 60836 (env-gas))
+(expect "new module with FQVs gas" 60764 (env-gas))
 (commit-tx)

@@ -648,17 +648,17 @@ fullyQualifyDefs info mdef defs = do
   (cs, depNames) <- flip runStateT Set.empty $ liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- enforceAcyclic info cs
   removeFromLoaded (Set.fromList (HM.keys defs))
-  fDefs <- foldlM (mkAndEvalConsts) mempty sortedDefs
+  fDefs <- foldlM mkAndEvalConsts mempty sortedDefs
   deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
   let (Sum totalMemory) = foldMap (Sum . sizeOf) fDefs + foldMap (Sum . sizeOf) deps
   _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
   pure (fDefs, deps)
   where
-    -- moduleBareName = _mnName . _mName
     -- Inline all but TDefs.
     replaceL m n = case HM.lookup (_fqName n) m of
         Just p -> case p of
           Ref TDef{} -> pure (Direct (TVar (FQName n) def))
+          Ref (TConst _ _ (CVEval _ v) _ _) -> pure (Ref v)
           _ -> pure p
         Nothing -> evalError' info $ "Unbound local free variable"
     mkAndEvalConsts m (term', dn, _) = do
