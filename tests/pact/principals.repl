@@ -151,7 +151,7 @@
           { "guard": guard
           })
 
-        (yield { "guard" : guard })
+        guard
         ))
 
     (step
@@ -216,7 +216,7 @@
 (expect
  "creating principal pact guards creates p: guards with correct format"
  "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:pact-guard"
- (at 'guard (tester.pact-test)))
+ (tester.pact-test))
 
 (expect
  "validating principal pact guards roundtrips with create-principal"

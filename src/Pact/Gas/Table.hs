@@ -89,6 +89,7 @@ defaultGasTable =
   ,("contains", 2)
   ,("create-module-guard", 1)
   ,("create-pact-guard", 1)
+  ,("create-principal", 1) -- TODO check this
   ,("create-user-guard", 1)
   ,("days", 4)
   ,("decrypt-cc20p1305", 33)
@@ -157,6 +158,7 @@ defaultGasTable =
   ,("typeof", 2)
   ,("distinct", 2)
   ,("validate-keypair", 29)
+  ,("validate-principal", 1) -- TODO check this
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)
   ,("with-capability", 2)
