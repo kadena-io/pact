@@ -1,14 +1,10 @@
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE ExplicitNamespaces   #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE PolyKinds            #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -36,6 +32,7 @@ module Pact.Analyze.Types.ObjUtil
   , sansProof
   ) where
 
+import           Data.Kind                (Type)
 import           Data.Type.Bool           (If)
 import           Data.Type.Equality       (type (==))
 import           Data.Typeable            (Typeable)
@@ -105,7 +102,7 @@ filterV
      (flag :: Flag)
      (p :: Symbol)
      (xs :: [ (Symbol, Ty) ])
-     (f :: Ty -> *).
+     (f :: Ty -> Type).
      Sing flag
   -> Sing p
   -> HList f xs
