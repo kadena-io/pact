@@ -117,7 +117,7 @@ parseModuleName :: Text -> Either String ModuleName
 parseModuleName = AP.parseOnly (moduleNameParser <* eof)
 
 
-newtype DefName = DefName { _undefName :: Text }
+newtype DefName = DefName { _unDefName :: Text }
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
 
 instance SizeOf DefName where

@@ -254,7 +254,7 @@ enforceYield fa y = case _yProvenance y of
 
 -- | Validate App of indicated DefType and return Def
 requireDefApp :: DefType -> App (Term Ref) -> Eval e (Def Ref)
-requireDefApp dt App{..} = lookupFVTerm _appFun >>= \case
+requireDefApp dt App{..} = lookupFullyQualifiedTerm _appFun >>= \case
   (TVar (Direct (TVar (FQName fq) _)) _) ->
     lookupFreeVar fq >>= \ref -> requireDefApp dt (App (TVar ref def) _appArgs _appInfo)
   (TVar (Ref (TDef d@Def{} _)) _) -> matchDefTy d

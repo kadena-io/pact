@@ -23,7 +23,7 @@ module Pact.Runtime.Utils
   , emitReservedEvent
   , stripTermInfo
   , lookupFreeVar
-  , lookupFVTerm
+  , lookupFullyQualifiedTerm
   , inlineModuleData
   ) where
 
@@ -273,14 +273,14 @@ lookupFreeVar fqn = use (evalRefs . rsQualifiedDeps . at fqn) >>= \case
   Just r -> pure r
   Nothing -> evalError def "unbound free variable"
 
-lookupFVTerm :: Term Ref -> Eval e (Term Ref)
-lookupFVTerm = \case
+lookupFullyQualifiedTerm :: Term Ref -> Eval e (Term Ref)
+lookupFullyQualifiedTerm = \case
   TVar (Direct (TVar (FQName fq) _)) _ ->
     flip TVar def <$> lookupFreeVar fq
   e -> pure e
 
--- Fully inline all deps.
--- do not use in an evaluation context outside of SPV and static typechecking
+-- | Fully inline all deps.
+--   do not use in an evaluation context outside of SPV and static typechecking
 inlineModuleData :: ModuleData Ref -> ModuleData Ref
 inlineModuleData md@(ModuleData m export deps) = case m of
   MDModule m' -> inline' m'

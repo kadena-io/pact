@@ -857,7 +857,7 @@ resolveRefFQN i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
             p -> pure p
         (Nothing, Just{}) -> return Nothing
         (Nothing, Nothing) ->
-          -- note that while 'resolveModRef' uses 'moduleResolver' aTgain,
+          -- note that while 'resolveModRef' uses 'moduleResolver' again,
           -- it's fine since we're supplying an ns-qualified module name
           -- so it won't re-try like here.
           resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
@@ -872,7 +872,7 @@ resolveRefFQN i (Name (BareName bn _)) = do
       case n of
         Just (ref, mh) -> case ref of
           Ref (TDef d _) -> do
-            fqn <- FullyQualifiedName (_undefName (_dDefName d)) (_dModule d)
+            fqn <- FullyQualifiedName (_unDefName (_dDefName d)) (_dModule d)
               <$> maybe (evalError' i "TDef missing accompanying module hash") (pure . _mhHash) mh
             pure $ Just (Direct (TVar (FQName fqn) def))
           _ -> pure (Just ref)
@@ -960,13 +960,13 @@ deref :: Ref -> Eval e (Term Name)
 deref (Direct t@TConst{}) = case _tConstVal t of
   CVEval _ v -> return v
   CVRaw _ -> evalError' t $ "internal error: deref: unevaluated const: " <> pretty t
-deref (Direct (TVar (FQName fq) _)) = do
+deref (Direct (TVar (FQName fq) i)) = do
   use (evalRefs . rsQualifiedDeps . at fq) >>= \case
     Just r -> case r of
       Direct d -> pure d
       Ref r' -> reduce r'
     Nothing -> do
-      evalError def $ "unbound free var:" <> pretty fq
+      evalError i $ "unbound free var:" <> pretty fq
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 

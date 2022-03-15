@@ -295,7 +295,7 @@ createUserGuard =
     createUserGuard' :: NativeFun e
     createUserGuard' i [TApp App {..} _] = gasUnreduced i [] $ do
       args <- mapM reduce _appArgs
-      appFun' <- lookupFVTerm _appFun
+      appFun' <- lookupFullyQualifiedTerm _appFun
       fun <- case appFun' of
         (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
           Defun -> return (QName $ QualifiedName _dModule (asString _dDefName) _dInfo)

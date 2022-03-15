@@ -808,7 +808,7 @@ toFun (TDef td i) = resolveDyn td
 toFun (TDynamic ref mem i) = case (ref, mem) of
   (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
   _ -> die i "Malformed mod ref"
-toFun t = die (_tInfo t) $ "Non-var in fun position " <> show t
+toFun t = die (_tInfo t) "Non-var in fun position "
 
 withScopeBodyToFun
   :: Show n
