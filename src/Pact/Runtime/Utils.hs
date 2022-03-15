@@ -268,15 +268,15 @@ emitEventUnsafe QualifiedName{..} params mh = do
   evalEvents %= (++ [PactEvent _qnName params _qnQual mh])
 
 
-lookupFreeVar :: FullyQualifiedName -> Eval e Ref
-lookupFreeVar fqn = use (evalRefs . rsQualifiedDeps . at fqn) >>= \case
+lookupFreeVar :: HasInfo i => i -> FullyQualifiedName -> Eval e Ref
+lookupFreeVar i fqn = use (evalRefs . rsQualifiedDeps . at fqn) >>= \case
   Just r -> pure r
-  Nothing -> evalError def "unbound free variable"
+  Nothing -> evalError' i "unbound free variable"
 
-lookupFullyQualifiedTerm :: Term Ref -> Eval e (Term Ref)
-lookupFullyQualifiedTerm = \case
+lookupFullyQualifiedTerm :: HasInfo i => i -> Term Ref -> Eval e (Term Ref)
+lookupFullyQualifiedTerm i = \case
   TVar (Direct (TVar (FQName fq) _)) _ ->
-    flip TVar def <$> lookupFreeVar fq
+    flip TVar def <$> lookupFreeVar i fq
   e -> pure e
 
 -- | Fully inline all deps.
