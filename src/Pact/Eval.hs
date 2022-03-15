@@ -664,7 +664,7 @@ fullyQualifyDefs info mdef defs = do
     mkAndEvalConsts m (term', dn, _) = do
       t <- Ref <$> (traverse (either (replaceL m) pure) term')
       t' <- runSysOnly $ evalConstsNonRec t
-      evalRefs . rsFQ %= HM.insert dn t'
+      evalRefs . rsQualifiedDeps %= HM.insert dn t'
       pure $ HM.insert(_fqName dn) t' m
 
     checkAddDep = \case
@@ -861,7 +861,8 @@ resolveRefFQN i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
           -- it's fine since we're supplying an ns-qualified module name
           -- so it won't re-try like here.
           resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
--- Natives resolve normally
+-- Barename resolution is kept unchanged in terms of scoping.
+-- However, TDefs now point to Fully Qualified names
 resolveRefFQN i (Name (BareName bn _)) = do
   nm <- preview $ eeRefStore . rsNatives . ix bn
   case nm of
@@ -960,7 +961,7 @@ deref (Direct t@TConst{}) = case _tConstVal t of
   CVEval _ v -> return v
   CVRaw _ -> evalError' t $ "internal error: deref: unevaluated const: " <> pretty t
 deref (Direct (TVar (FQName fq) _)) = do
-  use (evalRefs . rsFQ . at fq) >>= \case
+  use (evalRefs . rsQualifiedDeps . at fq) >>= \case
     Just r -> case r of
       Direct d -> pure d
       Ref r' -> reduce r'
@@ -1217,7 +1218,7 @@ reduceDirect TNative {..} as ai =
     appCall fa ai as $ _nativeFun _tNativeFun fa as
 #endif
 reduceDirect (TVar (FQName fq) _) args i = do
-  use (evalRefs . rsFQ . at fq) >>= \case
+  use (evalRefs . rsQualifiedDeps . at fq) >>= \case
     Just r -> reduceApp (App (TVar r def) args i)
     Nothing -> do
       evalError i $ "unbound free variable: " <> pretty fq
@@ -1439,7 +1440,7 @@ installModule updated md = go . maybe allDefs filteredDefs
         let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
         let hm = HM.map (\v -> (v, Just (_mHash m))) (_mdRefMap md)
         evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty hm)
-        evalRefs . rsFQ %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
+        evalRefs . rsQualifiedDeps %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
       MDInterface _ -> do
         let
           f' m k v = case v of
@@ -1447,7 +1448,6 @@ installModule updated md = go . maybe allDefs filteredDefs
             _ -> f m k (v, Nothing)
         evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f' mempty $ _mdRefMap md)
     go f = do
-      -- evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
       updateInternal f
       when updated $
         evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)

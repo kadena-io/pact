@@ -138,7 +138,7 @@ evalExec runner evalEnv ParsedCode {..} = do
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
 initStateModules modules =
-  set (evalRefs . rsFQ) (foldMap allModuleExports modules) $ set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
+  set (evalRefs . rsQualifiedDeps) (foldMap allModuleExports modules) $ set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 -- | Resume a defpact execution, with optional PactExec.
 evalContinuation :: Interpreter e -> EvalEnv e -> ContMsg -> IO EvalResult

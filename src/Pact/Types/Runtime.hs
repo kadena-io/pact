@@ -28,7 +28,7 @@ module Pact.Types.Runtime
    eeAdvice,
    toPactId,
    Purity(..),
-   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsFQ,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
    evalGas,evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
@@ -240,9 +240,9 @@ data RefState = RefState {
       -- | Current Namespace
     , _rsNamespace :: Maybe (Namespace (Term Name))
       -- | Map of all fully qualified names in scope, including transitive dependencies.
-    , _rsFQ :: HM.HashMap FullyQualifiedName Ref
+    , _rsQualifiedDeps :: HM.HashMap FullyQualifiedName Ref
     } deriving (Eq,Show,Generic)
-    
+
 makeLenses ''RefState
 instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty

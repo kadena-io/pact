@@ -471,7 +471,7 @@ pactState i as = case as of
 
 tx :: Tx -> RNativeFun LibState
 tx t fi as = do
-  rsq <- use (evalRefs . rsFQ)
+  rsq <- use (evalRefs . rsQualifiedDeps)
   (tid,tname) <- case (t,as) of
     (Begin,[TLitString n]) -> doBegin (Just n)
     (Begin,[]) -> doBegin Nothing
@@ -481,7 +481,7 @@ tx t fi as = do
 
   -- reset to repl lib, preserve call stack
   cs <- use evalCallStack
-  put $ over (evalRefs . rsFQ) (<> rsq) $ set (evalRefs.rsLoaded) replDefsMap $ set evalCallStack cs def
+  put $ over (evalRefs . rsQualifiedDeps) (<> rsq) $ set (evalRefs.rsLoaded) replDefsMap $ set evalCallStack cs def
   return $ tStr $ tShow t <> " Tx"
       <> maybeDelim " " tid <> maybeDelim ": " tname
 

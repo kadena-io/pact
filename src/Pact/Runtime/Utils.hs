@@ -199,7 +199,7 @@ lookupModule i mn = do
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
             Right md -> do
               evalRefs . rsLoadedModules %= HM.insert mn (md,False)
-              evalRefs . rsFQ %= HM.union (allModuleExports md)
+              evalRefs . rsQualifiedDeps %= HM.union (allModuleExports md)
               return $ Just md
             Left e ->
               evalError' i $ "Internal error: module restore failed: " <> pretty e
@@ -269,7 +269,7 @@ emitEventUnsafe QualifiedName{..} params mh = do
 
 
 lookupFreeVar :: FullyQualifiedName -> Eval e Ref
-lookupFreeVar fqn = use (evalRefs . rsFQ . at fqn) >>= \case
+lookupFreeVar fqn = use (evalRefs . rsQualifiedDeps . at fqn) >>= \case
   Just r -> pure r
   Nothing -> evalError def "unbound free variable"
 

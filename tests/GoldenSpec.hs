@@ -43,7 +43,7 @@ import Pact.Types.SPV
 spec :: Spec
 spec = do
   describe "goldenAccounts" $
-    goldenModule "accounts-module" "golden/golden.accounts.repl" "accounts"
+    goldenModule [FlagDisableInlineMemCheck, FlagDisableFQVars] "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
     ,("eventCR",eventCR)
@@ -51,14 +51,17 @@ spec = do
     ,("crossChainSendCRBackCompat",crossChainSendCR True)
     ]
   describe "goldenAutoCap" $
-    goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisableFQVars] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
   describe "goldenLambdas" $
-    goldenModule "lambda-module" "golden/golden.lams.repl" "lams-test" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisableFQVars] "lambda-module" "golden/golden.lams.repl" "lams-test" []
+  describe "goldenModuleMemcheck" $
+    goldenModule [FlagDisableFQVars] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
+  describe "goldenFullyQuals" $
+    goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
 
-goldenModule
-  :: String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
-goldenModule tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
-  let ec = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisableFQVars]
+goldenModule :: [ExecutionFlag] -> String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
+goldenModule flags tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
+  let ec = mkExecutionConfig flags
   (r,s) <- runIO $ execScriptF' Quiet fp (\st -> st & rEnv . eeExecutionConfig .~ ec)
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
