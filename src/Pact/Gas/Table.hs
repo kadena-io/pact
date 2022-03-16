@@ -268,7 +268,7 @@ perByteFactor = 1%10
 memoryCost :: (SizeOf a) => a -> Gas -> Gas
 memoryCost val (Gas cost) = Gas totalCost
   where costFrac = realToFrac cost
-        sizeFrac = realToFrac (sizeOf val)
+        sizeFrac = realToFrac (sizeOf SizeOfV0 val)
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
 {-# INLINE memoryCost #-}
 

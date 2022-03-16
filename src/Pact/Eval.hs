@@ -493,7 +493,7 @@ dresolveMem
 dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
   (!unified, (HeapMemState costMemoEnv' totalMem))
       <- runStateT (traverse (replaceMemo allDefs) defTerm)
-                 (HeapMemState costMemoEnv (sizeOf defTerm + currMem))
+                 (HeapMemState costMemoEnv (sizeOf SizeOfV0 defTerm + currMem))
   unified' <- case unified of
     t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
     _ -> pure (Ref unified)
@@ -509,7 +509,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
       Just heapCost -> do
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
       Nothing -> do
-        let !heapCost = sizeOf td
+        let !heapCost = sizeOf SizeOfV0 td
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total + heapCost))
     !currMem' <- gets _hmTotalMem
     _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
@@ -527,7 +527,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
       Just heapCost -> do
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
       Nothing -> do
-        let !heapCost = sizeOf inlined
+        let !heapCost = sizeOf SizeOfV0 inlined
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total + heapCost))
     !currMem' <- gets _hmTotalMem
     _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')

@@ -80,8 +80,8 @@ instance Hashable ModuleName where
     s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
 
 instance SizeOf ModuleName where
-  sizeOf (ModuleName mn namespace) =
-    (constructorCost 2) + (sizeOf mn) + (sizeOf namespace)
+  sizeOf ver (ModuleName mn namespace) =
+    (constructorCost 2) + (sizeOf ver mn) + (sizeOf ver namespace)
 
 instance NFData ModuleName
 
@@ -120,7 +120,7 @@ newtype DefName = DefName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
 
 instance SizeOf DefName where
-  sizeOf (DefName n) = sizeOf n
+  sizeOf ver (DefName n) = sizeOf ver n
 
 data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
@@ -143,8 +143,8 @@ instance NFData QualifiedName
 instance AsString QualifiedName where asString = renderCompactText
 
 instance SizeOf QualifiedName where
-  sizeOf (QualifiedName modName n i) =
-    (constructorCost 3) + (sizeOf modName) + (sizeOf n) + (sizeOf i)
+  sizeOf ver (QualifiedName modName n i) =
+    (constructorCost 3) + (sizeOf ver modName) + (sizeOf ver n) + (sizeOf ver i)
 
 instance ToJSON QualifiedName where
   toJSON = toJSON . renderCompactString
@@ -180,8 +180,8 @@ instance NFData BareName
 instance AsString BareName where asString = renderCompactText
 
 instance SizeOf BareName where
-  sizeOf (BareName n i) =
-    (constructorCost 2) + (sizeOf n) + (sizeOf i)
+  sizeOf ver (BareName n i) =
+    (constructorCost 2) + (sizeOf ver n) + (sizeOf ver i)
 
 data DynamicName = DynamicName
     { _dynMember :: Text
@@ -202,9 +202,9 @@ instance Pretty DynamicName where
   pretty DynamicName{..} = pretty _dynRefArg <> "::" <> pretty _dynMember
 instance AsString DynamicName where asString = renderCompactText
 instance SizeOf DynamicName where
-  sizeOf DynamicName{..} =
-    sizeOf _dynMember + sizeOf _dynRefArg
-    + sizeOf _dynInterfaces + sizeOf _dynInfo
+  sizeOf ver DynamicName{..} =
+    sizeOf ver _dynMember + sizeOf ver _dynRefArg
+    + sizeOf ver _dynInterfaces + sizeOf ver _dynInfo
 
 
 -- | A named reference from source.
@@ -232,9 +232,10 @@ instance Pretty Name where
     DName d -> pretty d
 
 instance SizeOf Name where
-  sizeOf (QName qn) = (constructorCost 1) + sizeOf qn
-  sizeOf (Name bn) = (constructorCost 1) + sizeOf bn
-  sizeOf (DName dn) = (constructorCost 1) + sizeOf dn
+  sizeOf ver  = (+ constructorCost 1) . \case
+    QName qn -> sizeOf ver qn
+    Name bn -> sizeOf ver bn
+    DName dn -> sizeOf ver dn
 
 instance AsString Name where asString = renderCompactText
 
@@ -297,14 +298,14 @@ instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name
 
 instance SizeOf NativeDefName where
-  sizeOf (NativeDefName n) = sizeOf n
+  sizeOf ver (NativeDefName n) = sizeOf ver n
 
 newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,AsString,Hashable,Show,NFData,ToJSON,FromJSON)
 instance Pretty TableName where pretty (TableName s) = pretty s
 
 instance SizeOf TableName where
-  sizeOf (TableName t) = sizeOf t
+  sizeOf ver (TableName t) = sizeOf ver t
 
 makeLenses ''ModuleName
 makeLenses ''DynamicName
