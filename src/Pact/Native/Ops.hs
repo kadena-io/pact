@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Native.Ops
@@ -27,6 +28,7 @@ module Pact.Native.Ops
     ) where
 
 
+import Control.Monad(when)
 import Data.Bits
 import Data.Decimal
 import Data.Default
@@ -112,22 +114,52 @@ divDef = defRNative "/" divide' coerceBinNum
 powDef :: NativeDef
 powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
-    pow :: RNativeFun e
-    pow = binop (\a b -> liftDecF (**) a b)
-                (\a b -> assert (b >= 0) "Integral power must be >= 0" $ liftOp (^) a b)
+  pow :: RNativeFun e
+  pow = binop (\a b -> liftDecF (**) a b)
+              (\a b -> assert (b >= 0) "Integral power must be >= 0" $ liftOp (^) a b)
+
+legalLogArg :: Literal -> Bool
+legalLogArg = \case
+  LInteger i -> i > 0
+  LDecimal i -> i > 0
+  _ -> False
+
+litGt0 :: Literal -> Bool
+litGt0 = \case
+  LInteger i -> i >= 0
+  LDecimal i -> i >= 0
+  _ -> False
 
 logDef :: NativeDef
 logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
-    log' :: RNativeFun e
-    log' = binop (\a b -> liftDecF logBase a b)
-                 (\a b -> liftIntF logBase a b)
+  log' :: RNativeFun e
+  log' fi as@[TLiteral base _,TLiteral v _] = do
+    whenExecutionFlagSet FlagDisableFQVars $
+      when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
+    binop (\a b -> liftDecF logBase a b)
+          (\a b -> liftIntF logBase a b)
+          fi
+          as
+  log' fi as = argsError fi as
 
 sqrtDef :: NativeDef
-sqrtDef = defRNative "sqrt" (unopd sqrt) unopTy ["(sqrt 25)"] "Square root of X."
+sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
+  where
+  sqrt' fi as@[TLiteral a _] = do
+    whenExecutionFlagSet FlagDisableFQVars $
+      when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
+    (unopd sqrt) fi as
+  sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
-lnDef = defRNative "ln" (unopd log) unopTy ["(round (ln 60) 6)"] "Natural log of X."
+lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
+  where
+  ln' fi as@[TLiteral a _] = do
+    whenExecutionFlagSet FlagDisableFQVars $
+      when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
+    (unopd log) fi as
+  ln' fi as = argsError fi as
 
 expDef :: NativeDef
 expDef = defRNative "exp" (unopd exp) unopTy ["(round (exp 3) 6)"] "Exp of X."
@@ -136,10 +168,10 @@ absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
   ["(abs (- 10 23))"] "Absolute value of X."
   where
-    abs' :: RNativeFun e
-    abs' _ [TLitInteger a] = return $ toTerm $ abs a
-    abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
-    abs' i as = argsError i as
+  abs' :: RNativeFun e
+  abs' _ [TLitInteger a] = return $ toTerm $ abs a
+  abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
+  abs' i as = argsError i as
 
 roundDef :: NativeDef
 roundDef = defTrunc "round" "Performs Banker's rounding" round
@@ -369,7 +401,6 @@ binop _ _ fi as = argsError fi as
 assert :: Bool -> String -> Either String a -> Either String a
 assert test msg act | test = act
                     | otherwise = Left msg
-
 
 dec2F :: Decimal -> Double
 dec2F = fromRational . toRational
