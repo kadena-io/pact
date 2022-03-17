@@ -1023,7 +1023,7 @@ applyNestedPact i app (TList steps _a _b) PactStep {..} = do
     let stepCount = length steps
         rollback = isJust $ _sRollback step
     when (stepCount /= _peStepCount) $ evalError' step $ "applyNestedPact: invalid nested defpact length, must match length of parent"
-    when (rollback /= _peStepHasRollback) $ evalError' step $ "applyNestedPact: invalid nested defpact step, must match parent rollback"
+    -- when (rollback /= _peStepHasRollback) $ evalError' step $ "applyNestedPact: invalid nested defpact step, must match parent rollback"
     pure (rollback, stepCount)
 applyNestedPact _ _ t _ = evalError' t "applyNestedPact: invalid defpact body, expected list of steps"
 
@@ -1166,6 +1166,49 @@ resumePact i crossChainContinuation = do
       matchCC _peStepCount "step count" ccExec dbExec
 
       proceed ccExec
+
+-- | Resume a pact with supplied PactExec context.
+resumeNestedPactExec :: Info -> PactStep -> PactExec -> Eval e (Term Name)
+resumeNestedPactExec i req ctx = do
+
+  when (_psPactId req /= _pePactId ctx) $ evalError i $
+    "resumePactExec: request and context pact IDs do not match: " <>
+    pretty (_psPactId req,_pePactId ctx)
+
+  when (_psStep req < 0 || _psStep req >= _peStepCount ctx) $ evalError i $
+    "resumePactExec: invalid step in request: " <> pretty (_psStep req)
+
+  if _psRollback req
+    then when (_psStep req /= _peStep ctx) $ evalError i $
+         "resumePactExec: rollback step mismatch with context: " <> pretty (_psStep req,_peStep ctx)
+    else when (_psStep req /= succ (_peStep ctx)) $ evalError i $
+         "resumePactExec: exec step mismatch with context: " <> pretty (_psStep req,_peStep ctx)
+
+  target <- resolveRef i (_pcDef (_peContinuation ctx)) >>= (`maybe` pure)
+    (evalError i $ "resumePactExec: could not resolve continuation ref: " <>
+     pretty (_pcDef $ _peContinuation ctx))
+
+  def' <- case target of
+    (Ref (TDef d _)) -> do
+      when (_dDefType d /= Defpact) $
+         evalError' d $ "resumePactExec: defpact required"
+      return d
+    t -> evalError' t $ "resumePactExec: defpact ref required"
+
+  let args = map (liftTerm . fromPactValue) (_pcArgs (_peContinuation ctx))
+
+  g <- computeUserAppGas def' i
+  af <- prepareUserAppArgs def' args i
+
+  -- if resume is in step, use that, otherwise get from exec state
+  let resume = case _psResume req of
+        r@Just {} -> r
+        Nothing -> _peYield ctx
+
+  -- run local environment with yield from pact exec
+  local (set eePactStep (Just $ set psResume resume req)) $
+    evalUserAppBody def' af i g $ \bod ->
+      applyPact i (_peContinuation ctx) bod req (_peNested ctx)
 
 
 -- | Resume a pact with supplied PactExec context.

@@ -115,10 +115,8 @@ moduleNameParser = do
 parseModuleName :: Text -> Either String ModuleName
 parseModuleName = AP.parseOnly (moduleNameParser <* eof)
 
-
 newtype DefName = DefName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
-
 
 data QualifiedName = QualifiedName
   { _qnQual :: ModuleName

@@ -1214,3 +1214,34 @@ base64decode = defRNative "base64-decode" go
             <> pretty e
           Right t -> return $ tStr t
       _ -> argsError i as
+
+continueNested :: RNativeFun LibState
+continueNested i as = case as of
+  [TLitInteger step] ->
+
+  _ -> argsError i as
+  where
+    go
+      :: Integer
+      -> Bool
+      -> Maybe Text
+      -> Maybe (ObjectMap (Term Name))
+      -> Eval LibState (Term Name)
+    go step rollback mnpid muserResume = do
+      (npid, y) <- use evalPactExec >>= \case
+        Nothing -> evalError' i
+          "continue-nested-pact: No current pact exec in context"
+        Just pe -> case mnpid of
+          Nothing -> evalError' i
+            "continue-nested-pact: No pact id supplied for nested continuation"
+          Just npid -> do
+            y <- case muserResume of
+              Nothing -> pure $ _peYield pe
+              Just om -> case _peYield pe of
+                Just (Yield _ p _) -> mkSimpleYield p om
+                Nothing -> mkSimpleYield Nothing om
+            pure (npid, y)
+
+      let ps = PactStep (fromIntegral step) rollback (PactId npid) y
+      local (set eePactStep $ Just ps) $ resumePact (_faInfo i) Nothing
+
