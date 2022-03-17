@@ -102,6 +102,12 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+smtConfig :: SBV.SMTConfig
+smtConfig = SBV.z3
+  { SBVI.allowQuantifiedQueries = True
+  , SBVI.verbose = False -- set to True for debugging SMT formulas
+  }
+
 newtype VerificationWarnings = VerificationWarnings [Text]
   deriving (Eq, Show)
 
@@ -436,9 +442,6 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
                  Right pass      -> Right pass
 
   where
-    config :: SBV.SMTConfig
-    config = SBV.z3 { SBVI.allowQuantifiedQueries = True }
-
     -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
       :: IO (Either CheckFailure b)
@@ -447,7 +450,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
       pure $ Left $ CheckFailure funInfo $ SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
-    runSymbolic = SBV.runSMTWith config
+    runSymbolic = SBV.runSMTWith smtConfig
 
 -- | Check that a specific property holds for a function (this is actually used
 -- for defun, defpact, and step)
@@ -536,9 +539,6 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     sequence' (Left a) = [Left a]
     sequence' (Right rs) = rs
 
-    config :: SBV.SMTConfig
-    config = SBV.z3 { SBVI.allowQuantifiedQueries = True }
-
     -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
       :: IO (Either CheckFailure b)
@@ -548,13 +548,13 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
 
     -- Run a 'Symbolic' in sat mode
     runSymbolicSat :: Symbolic a -> IO a
-    runSymbolicSat = SBV.runSMTWith config
+    runSymbolicSat = SBV.runSMTWith smtConfig
 
     -- Run a 'Symbolic' in the mode corresponding to our goal
     runSymbolicGoal :: Symbolic a -> IO a
     runSymbolicGoal = fmap fst
       . SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup
-        (goal == Satisfaction) config)
+        (goal == Satisfaction) smtConfig)
 
 -- | Get the set of tables in the specified modules.
 moduleTables
