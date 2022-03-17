@@ -1,7 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -49,7 +47,7 @@ module Pact.Types.Command
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
-  , cmdToRequestKey, requestKeyToB16Text
+  , cmdToRequestKey
   ) where
 
 
@@ -96,16 +94,25 @@ data Command a = Command
   , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
+
+commandProperties :: ToJSON a => JsonProperties (Command a)
+commandProperties o =
+  [ "hash" .= _cmdHash o
+  , "sigs" .= _cmdSigs o
+  , "cmd" .= _cmdPayload o
+  ]
+{-# INLINE commandProperties #-}
+
 instance (ToJSON a) => ToJSON (Command a) where
-    toJSON (Command payload uSigs hsh) =
-        object [ "cmd" .= payload
-               , "sigs" .= toJSON uSigs
-               , "hash" .= hsh
-               ]
+  toJSON = enableToJSON "Command a" . object . commandProperties
+  toEncoding = pairs . mconcat . commandProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
                 Command <$> (o .: "cmd")
-                        <*> (o .: "sigs" >>= parseJSON)
+                        <*> (o .: "sigs")
                         <*> (o .: "hash")
     {-# INLINE parseJSON #-}
 
@@ -246,18 +253,23 @@ data Signer = Signer
  } deriving (Eq, Ord, Show, Generic)
 
 instance NFData Signer
+
+signerProperties :: JsonMProperties Signer
+signerProperties o = mconcat
+  [ "addr" .?= _siAddress o
+  , "scheme" .?= _siScheme o
+  , "pubKey" .= _siPubKey o
+  , "clist" .?= case _siCapList o of
+    [] -> Nothing
+    l -> Just l
+  ]
+
 instance ToJSON Signer where
-  toJSON Signer{..} = object $
-    consMay "scheme" _siScheme $
-    consMay "addr" _siAddress $
-    consListMay "clist" _siCapList $
-    [ "pubKey" .= _siPubKey ]
-    where
-      consMay f mv ol = maybe ol (consPair f ol) mv
-      consPair f ol v = (f .= v):ol
-      consListMay f cl ol
-        | null cl = ol
-        | otherwise = consPair f ol cl
+  toJSON = enableToJSON "Signer" . A.Object . signerProperties
+  toEncoding = pairs . signerProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON Signer where
   parseJSON = withObject "Signer" $ \o -> Signer
     <$> o .:? "scheme"
@@ -278,7 +290,23 @@ data Payload m c = Payload
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
-instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 2
+
+payloadProperties :: ToJSON m => ToJSON a => JsonProperties (Payload m a)
+payloadProperties o =
+  [ "networkId" .= _pNetworkId o
+  , "payload" .= _pPayload o
+  , "signers" .= _pSigners o
+  , "meta" .= _pMeta o
+  , "nonce" .= _pNonce o
+  ]
+{-# INLINE payloadProperties #-}
+
+instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
+  toJSON = enableToJSON "Payload m a" . lensyToJSON 2
+  toEncoding = pairs . mconcat . payloadProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
 
@@ -288,8 +316,17 @@ newtype UserSig = UserSig { _usSig :: Text }
 
 instance NFData UserSig
 instance Serialize UserSig
+
+userSigProperties :: JsonProperties UserSig
+userSigProperties o = [ "sig" .= _usSig o ]
+{-# INLINE userSigProperties #-}
+
 instance ToJSON UserSig where
-  toJSON UserSig {..} = object [ "sig" .= _usSig ]
+  toJSON = enableToJSON "UserSig" . object . userSigProperties
+  toEncoding = pairs . mconcat . userSigProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
@@ -298,13 +335,21 @@ newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue
   } deriving (Eq, Show, Generic,NFData)
 
+pactResultProperties :: JsonProperties PactResult
+pactResultProperties (PactResult (Right s)) =
+  [ "status" .= ("success" :: String)
+  , "data" .= s
+  ]
+pactResultProperties (PactResult (Left f)) =
+  [ "status" .= ("failure" :: String)
+  , "error" .= f
+  ]
+
 instance ToJSON PactResult where
-  toJSON (PactResult (Right s)) =
-    object [ "status" .= ("success" :: String)
-           , "data" .= s ]
-  toJSON (PactResult (Left f)) =
-    object [ "status" .= ("failure" :: String)
-           , "error" .= f ]
+  toJSON = enableToJSON "PactResult" . object . pactResultProperties
+  toEncoding = pairs . mconcat . pactResultProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON PactResult where
   parseJSON (A.Object o) = PactResult <$>
@@ -332,16 +377,27 @@ data CommandResult l = CommandResult {
   , _crEvents :: [PactEvent]
   } deriving (Eq,Show,Generic)
 
+commandResultProperties :: ToJSON l => JsonMProperties (CommandResult l)
+commandResultProperties o = mconcat
+    [ "gas" .= _crGas o
+    , "result" .= _crResult o
+    , "reqKey" .= _crReqKey o
+    , "logs" .= _crLogs o
+    , "events" .?= case _crEvents o of
+      [] -> Nothing
+      l -> Just l
+    , "metaData" .= _crMetaData o
+    , "continuation" .= _crContinuation o
+    , "txId" .= _crTxId o
+    ]
+{-# INLINE commandResultProperties #-}
+
 instance (ToJSON l) => ToJSON (CommandResult l) where
-  toJSON CommandResult{..} = object $
-      [ "reqKey" .= _crReqKey
-      , "txId" .= _crTxId
-      , "result" .= _crResult
-      , "gas" .= _crGas
-      , "logs" .= _crLogs
-      , "continuation" .= _crContinuation
-      , "metaData" .= _crMetaData ] ++
-      [ "events" .= _crEvents | not (null _crEvents) ]
+  toJSON = enableToJSON "CommandResult l" . A.Object . commandResultProperties
+  toEncoding = pairs . commandResultProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance (FromJSON l) => FromJSON (CommandResult l) where
   parseJSON = withObject "CommandResult" $ \o -> CommandResult
       <$> o .: "reqKey"
@@ -372,12 +428,8 @@ data CommandExecInterface m a l = CommandExecInterface
   }
 
 
-requestKeyToB16Text :: RequestKey -> Text
-requestKeyToB16Text (RequestKey h) = hashToText h
-
-
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, NFData)
+  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, FromJSONKey, NFData)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

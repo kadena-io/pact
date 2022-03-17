@@ -50,7 +50,7 @@ import Data.Word (Word64)
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
-import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
+import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON, JsonProperties, enableToJSON)
 
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.
 newtype EntityName = EntityName Text
@@ -85,7 +85,20 @@ data Address = Address
 
 instance NFData Address
 instance Serialize Address
-instance ToJSON Address where toJSON = lensyToJSON 2
+
+addressProperties :: JsonProperties Address
+addressProperties o =
+  [ "to" .= _aTo o
+  , "from" .= _aFrom o
+  ]
+{-# INLINE addressProperties #-}
+
+instance ToJSON Address where
+  toJSON = enableToJSON "Address" . lensyToJSON 2
+  toEncoding = pairs . mconcat . addressProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON Address where parseJSON = lensyParseJSON 2
 makeLenses ''Address
 
@@ -95,7 +108,17 @@ newtype PrivateMeta = PrivateMeta { _pmAddress :: Maybe Address }
 makeLenses ''PrivateMeta
 
 instance Default PrivateMeta where def = PrivateMeta def
-instance ToJSON PrivateMeta where toJSON = lensyToJSON 3
+
+privateMetaProperties :: JsonProperties PrivateMeta
+privateMetaProperties o = [ "address" .= _pmAddress o ]
+{-# INLINE privateMetaProperties #-}
+
+instance ToJSON PrivateMeta where
+  toJSON = enableToJSON "PrivateMeta" . lensyToJSON 3
+  toEncoding = pairs . mconcat . privateMetaProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
 instance Serialize PrivateMeta
@@ -120,15 +143,22 @@ makeLenses ''PublicMeta
 
 instance Default PublicMeta where def = PublicMeta "" "" 0 0 0 0
 
+publicMetaProperties :: JsonProperties PublicMeta
+publicMetaProperties o =
+  [ "creationTime" .= _pmCreationTime o
+  , "ttl" .= _pmTTL o
+  , "gasLimit" .= _pmGasLimit o
+  , "chainId" .= _pmChainId o
+  , "gasPrice" .= _pmGasPrice o
+  , "sender" .= _pmSender o
+  ]
+{-# INLINE publicMetaProperties #-}
+
 instance ToJSON PublicMeta where
-  toJSON (PublicMeta cid s gl gp ttl ct) = object
-    [ "chainId" .= cid
-    , "sender" .= s
-    , "gasLimit" .= gl
-    , "gasPrice" .= gp
-    , "ttl" .= ttl
-    , "creationTime" .= ct
-    ]
+  toJSON = enableToJSON "PublicMeta" . object . publicMetaProperties
+  toEncoding = pairs . mconcat . publicMetaProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON PublicMeta where
   parseJSON = withObject "PublicMeta" $ \o -> PublicMeta
@@ -173,6 +203,20 @@ data PublicData = PublicData
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData
 
-instance ToJSON PublicData where toJSON = lensyToJSON 3
+publicDataProperties :: JsonProperties PublicData
+publicDataProperties o =
+  [ "publicMeta" .= _pdPublicMeta o
+  , "blockTime" .= _pdBlockTime o
+  , "prevBlockHash" .= _pdPrevBlockHash o
+  , "blockHeight" .= _pdBlockHeight o
+  ]
+{-# INLINE publicDataProperties #-}
+
+instance ToJSON PublicData where
+  toJSON = enableToJSON "PublicData" . lensyToJSON 3
+  toEncoding = pairs. mconcat . publicDataProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
 instance Default PublicData where def = PublicData def def def def

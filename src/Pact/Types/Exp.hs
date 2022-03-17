@@ -1,12 +1,9 @@
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -56,7 +53,7 @@ import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
 import Data.Serialize (Serialize)
-import Data.String (IsString)
+import Data.String (IsString, fromString)
 import Test.QuickCheck
 
 import Pact.Types.Info
@@ -65,7 +62,7 @@ import Pact.Types.SizeOf
 import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime)
 import Pact.Types.Type
 import Pact.Types.Codec
-import Pact.Types.Util (genBareText)
+import Pact.Types.Util (genBareText, JsonProperties, JsonMProperties, enableToJSON, (.?=))
 
 
 
@@ -144,12 +141,20 @@ instance Pretty Literal where
     pretty (LTime t)     = dquotes $ pretty $ formatLTime t
 
 instance ToJSON Literal where
-    toJSON (LString s)  = toJSON s
-    toJSON (LInteger i) = encoder integerCodec i
-    toJSON (LDecimal r) = encoder decimalCodec r
-    toJSON (LBool b)    = toJSON b
-    toJSON (LTime t)    = encoder timeCodec t
+    toJSON (LString s) = enableToJSON "Literal" $ toJSON s
+    toJSON (LInteger i) = enableToJSON "Literal" $ valueEncoder integerCodec i
+    toJSON (LDecimal r) = enableToJSON "Literal" $ valueEncoder decimalCodec r
+    toJSON (LBool b) = enableToJSON "Literal" $ toJSON b
+    toJSON (LTime t) = enableToJSON "Literal" $ valueEncoder timeCodec t
+
+    toEncoding (LString s) = toEncoding s
+    toEncoding (LInteger i) = encoder integerCodec i
+    toEncoding (LDecimal r) = encoder decimalCodec r
+    toEncoding (LBool b) = toEncoding b
+    toEncoding (LTime t) = encoder timeCodec t
+
     {-# INLINE toJSON #-}
+    {-# INLINE toEncoding #-}
 
 instance FromJSON Literal where
   parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
@@ -171,9 +176,17 @@ litToPrim LTime {} = TyTime
 data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
 instance NFData ListDelimiter
 instance ToJSON ListDelimiter where
-  toJSON Parens = "()"
-  toJSON Brackets = "[]"
-  toJSON Braces = "{}"
+  toJSON Parens = enableToJSON "ListDelimiter" $ "()"
+  toJSON Brackets = enableToJSON "ListDelimiter" $ "[]"
+  toJSON Braces = enableToJSON "ListDelimiter" $ "{}"
+
+  toEncoding Parens = toEncoding @String "()"
+  toEncoding Brackets = toEncoding @String "[]"
+  toEncoding Braces = toEncoding @String "{}"
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON ListDelimiter where
   parseJSON = withText "ListDelimiter" $ \t -> case t of
     "()" -> pure Parens
@@ -196,9 +209,12 @@ instance Pretty Separator where
   pretty ColonEquals = ":="
   pretty Comma = ","
 instance ToJSON Separator where
-  toJSON Colon = ":"
-  toJSON ColonEquals = ":="
-  toJSON Comma = ","
+  toJSON Colon = enableToJSON "Separator" $ ":"
+  toJSON ColonEquals = enableToJSON "Separator" $ ":="
+  toJSON Comma = enableToJSON "Separator" $ ","
+  toEncoding Colon = toEncoding @String":"
+  toEncoding ColonEquals = toEncoding @String":="
+  toEncoding Comma = toEncoding @String","
 instance FromJSON Separator where
   parseJSON = withText "Separator" $ \t -> case t of
     ":" -> pure Colon
@@ -206,8 +222,8 @@ instance FromJSON Separator where
     "," -> pure Comma
     _ -> fail "Invalid separator"
 
-expInfoField :: Text
-expInfoField = "i"
+expInfoField :: IsString a => a
+expInfoField = fromString "i"
 
 data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
@@ -216,8 +232,20 @@ data LiteralExp i = LiteralExp
 instance HasInfo (LiteralExp Info) where
   getInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
+
+literalExpProperties :: ToJSON i => JsonProperties (LiteralExp i)
+literalExpProperties o =
+  [ expInfoField .= _litInfo o
+  , "lit" .= _litLiteral o
+  ]
+{-# INLINE literalExpProperties #-}
+
 instance ToJSON i => ToJSON (LiteralExp i) where
-  toJSON (LiteralExp l i) = object [ "lit" .= l, expInfoField .= i ]
+  toJSON = enableToJSON "LiteralExp i" . object . literalExpProperties
+  toEncoding = pairs . mconcat . literalExpProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON i => FromJSON (LiteralExp i) where
   parseJSON = withObject "LiteralExp" $ \o ->
     LiteralExp <$> o .: "lit" <*> o .: expInfoField
@@ -234,10 +262,21 @@ data AtomExp i = AtomExp
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
+
+atomExpProperties :: ToJSON i => JsonMProperties (AtomExp i)
+atomExpProperties o = mconcat
+  [ "atom" .= _atomAtom o
+  , "dyn" .?= if _atomDynamic o then Just True else Nothing
+  , "q" .= _atomQualifiers o
+  , expInfoField .= _atomInfo o
+  ]
+
 instance ToJSON i => ToJSON (AtomExp i) where
-  toJSON (AtomExp l q dyn i) =
-    object $ [ "atom" .= l, "q" .= q, expInfoField .= i ] ++
-    [ "dyn" .= dyn | dyn ]
+  toJSON = enableToJSON "AtomExp i" . Object . atomExpProperties
+  toEncoding = pairs . atomExpProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON i => FromJSON (AtomExp i) where
   parseJSON = withObject "AtomExp" $ \o ->
     AtomExp <$> o .: "atom" <*> o .: "q"
@@ -250,16 +289,28 @@ instance Pretty (AtomExp i) where
     = mconcat $ punctuate (colon <> colon) $ fmap pretty $ qs ++ [atom]
 
 data ListExp i = ListExp
-  { _listList :: ![(Exp i)]
+  { _listList :: ![Exp i]
   , _listDelimiter :: !ListDelimiter
   , _listInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 instance HasInfo (ListExp Info) where
   getInfo = _listInfo
 instance NFData i => NFData (ListExp i)
+
+listExpProperties :: ToJSON i => JsonProperties (ListExp i)
+listExpProperties o =
+  [ "list" .= _listList o
+  , "d" .= _listDelimiter o
+  , expInfoField .= _listInfo o
+  ]
+{-# INLINE listExpProperties #-}
+
 instance ToJSON i => ToJSON (ListExp i) where
-  toJSON (ListExp l d i) =
-    object [ "list" .= l, "d" .= d, expInfoField .= i ]
+  toJSON = enableToJSON "ListExp i" . object . listExpProperties
+  toEncoding = pairs . mconcat . listExpProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON i => FromJSON (ListExp i) where
   parseJSON = withObject "ListExp" $ \o ->
     ListExp <$> o .: "list" <*> o .: "d" <*> o .: expInfoField
@@ -276,8 +327,20 @@ data SeparatorExp i = SeparatorExp
 instance HasInfo (SeparatorExp Info) where
   getInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
+
+separatorExpProperties :: ToJSON i => JsonProperties (SeparatorExp i)
+separatorExpProperties o =
+  [ "sep" .= _sepSeparator o
+  , expInfoField .= _sepInfo o
+  ]
+{-# INLINE separatorExpProperties #-}
+
 instance ToJSON i => ToJSON (SeparatorExp i) where
-  toJSON (SeparatorExp s i) = object [ "sep" .= s, expInfoField .= i ]
+  toJSON = enableToJSON "SeparatorExp i" . object . separatorExpProperties
+  toEncoding = pairs . mconcat . separatorExpProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON i => FromJSON (SeparatorExp i) where
   parseJSON = withObject "SeparatorExp" $ \o ->
     SeparatorExp <$> o .: "sep" <*> o.: expInfoField
@@ -323,10 +386,18 @@ instance HasInfo (Exp Info) where
 instance (SizeOf i) => SizeOf (Exp i)
 
 instance ToJSON i => ToJSON (Exp i) where
-  toJSON (ELiteral a) = toJSON a
-  toJSON (EAtom a) = toJSON a
-  toJSON (EList a) = toJSON a
-  toJSON (ESeparator a) = toJSON a
+  toJSON (ELiteral a) = enableToJSON "Exp i" $ toJSON a
+  toJSON (EAtom a) = enableToJSON "Exp i" $ toJSON a
+  toJSON (EList a) = enableToJSON "Exp i" $ toJSON a
+  toJSON (ESeparator a) = enableToJSON "Exp i" $ toJSON a
+
+  toEncoding (ELiteral a) = toEncoding a
+  toEncoding (EAtom a) = toEncoding a
+  toEncoding (EList a) = toEncoding a
+  toEncoding (ESeparator a) = toEncoding a
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON i => FromJSON (Exp i) where
   parseJSON v =

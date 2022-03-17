@@ -44,6 +44,7 @@ import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
 import Control.Lens (makePrisms,set)
 import Data.Aeson hiding (Value(..))
+import qualified Data.Aeson as A
 import Data.Default (def)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
@@ -58,6 +59,7 @@ import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
+import Pact.Types.Util (JsonMProperties, (.?=), enableToJSON)
 
 -- | Determines how deep a generated PactValue _could_ be.
 -- Restricts how many times a recursive PactValue constructor (i.e. PObject, PList, and PGuard)
@@ -119,16 +121,35 @@ instance Arbitrary PactValue where
 
 instance NFData PactValue
 
+-- This JSON encoding is different from the default encoding in
+-- "Pact.Types.Term"
+--
+pactValueModRefProperties :: JsonMProperties ModRef
+pactValueModRefProperties o = mconcat
+    [ "refSpec" .= _modRefSpec o
+    , "refInfo" .?= if refInfo /= def then Just refInfo else Nothing
+      -- this property is different from the instance Pact.Types.Term.ModRef
+    , "refName" .= _modRefName o
+    ]
+ where
+  refInfo = _modRefInfo o
+{-# INLINE pactValueModRefProperties #-}
+
 instance ToJSON PactValue where
-  toJSON (PLiteral l) = toJSON l
-  toJSON (PObject o) = toJSON o
-  toJSON (PList v) = toJSON v
-  toJSON (PGuard x) = toJSON x
-  toJSON (PModRef (ModRef refName refSpec refInfo)) = object $
-    [ "refName" .= refName
-    , "refSpec" .= refSpec
-    ] ++
-    [ "refInfo" .= refInfo | refInfo /= def ]
+  toJSON (PLiteral l) = enableToJSON "PactValue" $ toJSON l
+  toJSON (PObject o) = enableToJSON "PactValue" $ toJSON o
+  toJSON (PList v) = enableToJSON "PactValue" $ toJSON v
+  toJSON (PGuard x) = enableToJSON "PactValue" $ toJSON x
+  toJSON (PModRef m) = enableToJSON "PactValue" $ A.Object $ pactValueModRefProperties m
+
+  toEncoding (PLiteral l) = toEncoding l
+  toEncoding (PObject o) = toEncoding o
+  toEncoding (PList v) = toEncoding v
+  toEncoding (PGuard x) = toEncoding x
+  toEncoding (PModRef m) = pairs $ pactValueModRefProperties m
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON PactValue where
   parseJSON v =

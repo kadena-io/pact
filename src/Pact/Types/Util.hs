@@ -1,11 +1,11 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -24,13 +24,19 @@ module Pact.Types.Util
   , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
+  , type JsonProperties
+  , type JsonMProperties
+  , enableToJSON
+  , (.?=)
   -- | Base 16 helpers
   , parseB16JSON, parseB16Text, parseB16TextOnly
   , toB16JSON, toB16Text
+  , B16JsonBytes(..)
   -- | Base64Url helpers
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
   , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText'
   , toB64UrlUnpaddedText, fromB64UrlUnpaddedText
+  , B64JsonBytes(..)
   -- | AsString
   , AsString(..), asString'
   -- | MVar-as-state utils
@@ -56,17 +62,18 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Text.Trifecta as Trifecta
 import Data.Char
 import Data.Either (isRight)
+import Data.Hashable (Hashable)
 import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Applicative ((<|>))
 import Control.Concurrent
-import Control.Lens hiding (Empty)
+import Control.Lens hiding (Empty, (.=))
 import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
 
-
+import Debug.Trace
 
 
 class ParseText a where
@@ -86,7 +93,7 @@ fromText' :: ParseText a => Text -> Either String a
 fromText' = resultToEither . fromText
 
 satisfiesRoundtripJSON :: (Eq a, FromJSON a, ToJSON a) => a -> Bool
-satisfiesRoundtripJSON i = case (roundtripJSONToEither i) of
+satisfiesRoundtripJSON i = case roundtripJSONToEither i of
   Left _ -> False
   Right j -> i == j
 
@@ -138,7 +145,7 @@ toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 fromB64UrlUnpaddedText :: ByteString -> Either String Text
 fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
   Right bs' -> case decodeUtf8' bs' of
-    Left _ -> Left $ "Base64URL decode failed: invalid unicode"
+    Left _ -> Left "Base64URL decode failed: invalid unicode"
     Right t -> Right t
   Left e -> Left $ "Base64URL decode failed: " ++ e
 
@@ -165,6 +172,92 @@ maybeToEither :: String -> Maybe a -> Either String a
 maybeToEither err Nothing = Left err
 maybeToEither _ (Just a)  = Right a
 
+-- | Type of JSON properties that can be used efficiently with both 'toJSON' and
+-- 'toEncoding'. Functions of this type should be inlined.
+--
+-- Usage:
+--
+-- @
+-- data MyType = MyType { _mtA :: Int, _mtB :: Int }
+--
+-- myTypeProperties :: JsonProperties MyType
+-- myTypeProperties o = [ "a" .= _mtA o, "b" .= _mtB o ]
+-- {-# INLINE myTypeProperties #-}
+--
+-- instance ToJSON MyType where
+--  toJSON = object . myTypeProperties
+--  toEncoding = pairs . mconcat . myTypeProperties
+--  {-# INLINE toJSON #-}
+--  {-# INLINE toEncoding #-}
+-- @
+--
+type JsonProperties a = forall kv . KeyValue kv => a -> [kv]
+
+-- | A variant of 'JsonProperties' that supports the use of '.?=' in order to
+-- omit 'Nothing' values form the result instead of encoding them as 'null'.
+--
+-- This pattern is protentially less efficient for implementing 'toJSON'. Thus
+-- 'JsonProperties' should be prefered.
+--
+-- In the following example @encode (MyType 0 Nothing)@ will be encoded as
+-- @{ "a": 0 }@.
+--
+-- @
+-- data MyType = MyType { _mtA :: Int, _mtB :: Maybe Int }
+--
+-- myTypeProperties :: JsonMProperties MyType
+-- myTypeProperties o = mconcat [ "a" .= _mtA o, "b" .?= _mtB o ]
+-- {-# INLINE myTypeProperties #-}
+--
+-- instance ToJSON MyType where
+--  toJSON = Object . myTypeProperties -- note the use of upper case 'Object'
+--  toEncoding = pairs . myTypeProperties
+--  {-# INLINE toJSON #-}
+--  {-# INLINE toEncoding #-}
+-- @
+--
+type JsonMProperties a = forall kv . Monoid kv => KeyValue kv => a -> kv
+
+-- | Declare a JSON property where 'Nothing' values are omitted in the result.
+-- To be used along with 'JsonMProperties'.
+--
+(.?=) :: ToJSON v => Monoid kv => KeyValue kv => Text -> Maybe v -> kv
+k .?= v = case v of
+  Nothing -> mempty
+  Just v' -> k .= v'
+{-# INLINE (.?=) #-}
+
+-- Enable to make legacy toJSON available (required for yaml encodings)
+#define ENABLE_TOJSON
+
+-- Enable to make trace calls to toJSON (only for debugging purposes)
+#define ENABLE_TOJSON_WARNING
+
+-- | Support for 'toJSON' is required for YAML encodings, which is required by
+-- most Pact data types.
+--
+-- From verison 1.4 of the hashable package onward, 'toJSON' will result in
+-- encodings that are not backward compatible. Similarly, for aeson >= 2
+-- encodings will change.
+--
+-- The only option to keep the ordering of properties stable with aeson-2 would
+-- be to define a custom type for property names, which would allow to define
+-- backward compatile 'Ord' instances.
+--
+enableToJSON
+    :: String
+    -> Value
+    -> Value
+#ifdef ENABLE_TOJSON
+#ifdef ENABLE_TOJSON_WARNING
+enableToJSON t = trace (t <> ": encoding to generic Data.Aeson.Value is unstable and therefor not supported")
+#else
+enableToJSON _ a = a
+#endif
+#else
+enableToJSON t _ = error $ t <> ": encoding to generic Data.Aeson.Value is unstable and therefor not supported"
+#endif
+{-# INLINE enableToJSON #-}
 
 -- | Utility for unsafe parse of JSON
 unsafeFromJSON :: FromJSON a => Value -> a
@@ -173,6 +266,40 @@ unsafeFromJSON v = case fromJSON v of Success a -> a; Error e -> error ("JSON pa
 -- | Utility for GHCI output of JSON
 outputJSON :: ToJSON a => a -> IO ()
 outputJSON a = BSL8.putStrLn $ encode a
+
+-- | Tagging ByteStrings (and isomorphic types) that are JSON encoded as
+-- Hex strings
+newtype B16JsonBytes = B16JsonBytes { _b16JsonBytes :: B.ByteString }
+    deriving (Show, Eq, Ord, Hashable, Generic)
+instance ToJSON B16JsonBytes where
+    toJSON = toJSON . toB16Text . _b16JsonBytes
+    {-# INLINE toJSON #-}
+instance FromJSON B16JsonBytes where
+    parseJSON = fmap B16JsonBytes . parseB16JSON
+    {-# INLINE parseJSON #-}
+instance ToJSONKey B16JsonBytes where
+    toJSONKey = toJSONKeyText (toB16Text . _b16JsonBytes)
+    {-# INLINE toJSONKey #-}
+instance FromJSONKey B16JsonBytes where
+    fromJSONKey = FromJSONKeyTextParser (fmap B16JsonBytes . parseB16Text)
+    {-# INLINE fromJSONKey #-}
+
+-- | Tagging ByteStrings (and isomorphic types) that are JSON encoded as
+-- Base64Url (without padding) strings
+newtype B64JsonBytes = B64JsonBytes { _b64JsonBytes :: B.ByteString }
+    deriving (Show, Eq, Ord, Hashable, Generic)
+instance ToJSON B64JsonBytes where
+    toJSON = toJSON . toB64UrlUnpaddedText . _b64JsonBytes
+    {-# INLINE toJSON #-}
+instance FromJSON B64JsonBytes where
+    parseJSON = fmap B64JsonBytes . withText "Base64" parseB64UrlUnpaddedText
+    {-# INLINE parseJSON #-}
+instance ToJSONKey B64JsonBytes where
+    toJSONKey = toJSONKeyText (toB64UrlUnpaddedText . _b64JsonBytes)
+    {-# INLINE toJSONKey #-}
+instance FromJSONKey B64JsonBytes where
+    fromJSONKey = FromJSONKeyTextParser (fmap B64JsonBytes . parseB64UrlUnpaddedText)
+    {-# INLINE fromJSONKey #-}
 
 -- | Provide unquoted string representation.
 class AsString a where asString :: a -> Text
@@ -254,14 +381,14 @@ genBareText = genText
         -- Similar parser used with BareName.
         bareStartCharParser :: Text -> Either String Text
         bareStartCharParser = AP.parseOnly $
-          (Trifecta.ident style) <* Trifecta.eof
+          Trifecta.ident style <* Trifecta.eof
 
         -- Checks that Text provided starts with letter,
         -- set of approved symbols, or digits.
         bareRestCharParser :: Text -> Either String Text
         bareRestCharParser = AP.parseOnly $
-          (Trifecta.ident style') <* Trifecta.eof
+          Trifecta.ident style' <* Trifecta.eof
 
         -- Uses same character set for start of text as for rest of it.
         -- Useful when randomly generating texts character by character.
-        style' = style { Trifecta._styleStart = (Trifecta.letter <|> Trifecta.digit <|> symbols) }
+        style' = style { Trifecta._styleStart = Trifecta.letter <|> Trifecta.digit <|> symbols }

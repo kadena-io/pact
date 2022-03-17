@@ -32,6 +32,7 @@ import Data.Serialize (Serialize(..))
 import Pact.Types.Pretty
 import Pact.Types.Util
 import Data.Aeson
+import Data.Aeson.Types
 import GHC.Generics
 import Pact.Types.SizeOf
 import Data.Text (Text)
@@ -76,13 +77,21 @@ instance AsString Hash where
 instance NFData Hash
 
 instance ToJSON Hash where
-  toJSON = String . hashToText
-
-instance ToJSONKey Hash
+  toJSON = enableToJSON "Hash" . String . hashToText
+  toEncoding = toEncoding . hashToText
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
   {-# INLINE parseJSON #-}
+
+instance ToJSONKey Hash where
+    toJSONKey = toJSONKeyText hashToText
+    {-# INLINE toJSONKey #-}
+instance FromJSONKey Hash where
+    fromJSONKey = FromJSONKeyTextParser parseText
+    {-# INLINE fromJSONKey #-}
 
 instance ParseText Hash where
   parseText s = Hash <$> parseB64UrlUnpaddedText s
@@ -133,6 +142,9 @@ instance NFData (TypedHash h)
 
 instance ToJSON (TypedHash h) where
   toJSON = String . typedHashToText
+  toEncoding = toEncoding . typedHashToText
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON (TypedHash h) where
   parseJSON = withText "Hash" parseText

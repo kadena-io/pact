@@ -20,7 +20,7 @@ module Pact.Types.SigData
 import Control.Error
 import Control.Monad.State.Strict
 import Data.Aeson
-import Data.Aeson.Types
+import Data.Bifunctor
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Data.String
@@ -42,6 +42,10 @@ instance ToJSONKey PublicKeyHex
 instance FromJSONKey PublicKeyHex
 instance ToJSON PublicKeyHex where
   toJSON (PublicKeyHex hex) = String hex
+  toEncoding (PublicKeyHex hex) = toEncoding hex
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON PublicKeyHex where
   parseJSON = withText "PublicKeyHex" $ \t -> do
     if T.length t == 64 && isRight (parseB16TextOnly t)
@@ -66,28 +70,30 @@ data SigData a = SigData
   , _sigDataCmd :: Maybe a
   } deriving (Eq,Show,Generic)
 
+sigDataProperties :: ToJSON a => JsonMProperties (SigData a)
+sigDataProperties o = mconcat
+  [ "hash" .= _sigDataHash o
+  , "sigs" .= HM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
+    -- FIXME fix order independently of hashable package
+  , "cmd" .?= _sigDataCmd o
+  ]
+{-# INLINE sigDataProperties #-}
+
 instance ToJSON a => ToJSON (SigData a) where
-  toJSON (SigData h s c) = object $ concat
-    [ ["hash" .= h]
-    , ["sigs" .= object (map (\(k,ms) -> (unPublicKeyHex k, maybe Null (toJSON . _usSig) ms)) s)]
-    , "cmd" .?= c
-    ]
-    where
-      k .?= v = case v of
-        Nothing -> mempty
-        Just v' -> [k .= v']
+  toJSON = enableToJSON "SigData" . Data.Aeson.Object . sigDataProperties
+  toEncoding = pairs . sigDataProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON a => FromJSON (SigData a) where
   parseJSON = withObject "SigData" $ \o -> do
     h <- o .: "hash"
-    s <- withObject "SigData Pairs" f =<< (o .: "sigs")
+    s <- (o .: "sigs") >>= f
     c <- o .:? "cmd"
     pure $ SigData h s c
     where
-      f = mapM g . HM.toList
-      g (k,Null) = pure (PublicKeyHex k, Nothing)
-      g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
-      g (_,v) = typeMismatch "Signature should be String or Null" v
+      f v = flip (withObject "SigData Pairs") v $ \_ ->
+        fmap (bimap PublicKeyHex (fmap UserSig)) . HM.toList <$> parseJSON v
 
 commandToSigData :: Command Text -> Either String (SigData Text)
 commandToSigData c = do

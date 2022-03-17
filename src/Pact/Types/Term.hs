@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -17,7 +16,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -97,7 +96,6 @@ module Pact.Types.Term
 
 import Bound
 import Control.Applicative
-import Control.Arrow ((&&&))
 import Control.DeepSeq
 import Control.Lens hiding ((.=), DefName(..))
 import Control.Monad
@@ -106,13 +104,14 @@ import Data.Aeson hiding (pairs,Object, (<?>))
 #else
 import Data.Aeson hiding (pairs,Object)
 #endif
+import qualified Data.Aeson as A
+import qualified Data.Aeson.Types as A
 import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
 import Data.Functor.Classes (Eq1(..), Show1(..))
 import Data.Function
-import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Data.Hashable
 import Data.Int (Int64)
@@ -163,7 +162,20 @@ prettyModel :: [Exp Info] -> Doc
 prettyModel []    = mempty
 prettyModel props = "@model " <> list (pretty <$> props)
 
-instance ToJSON Meta where toJSON = lensyToJSON 2
+metaProperties :: JsonProperties Meta
+metaProperties o =
+  [ "model" .= _mModel o
+  , "docs" .= _mDocs o
+  ]
+{-# INLINE metaProperties #-}
+
+instance ToJSON Meta where
+  toJSON = enableToJSON "Meta" . lensyToJSON 2
+  toEncoding = A.pairs . mconcat . metaProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+
 instance FromJSON Meta where parseJSON = lensyParseJSON 2
 
 instance Default Meta where def = Meta def def
@@ -208,7 +220,19 @@ instance (SizeOf p) => SizeOf (UserGuard p) where
   sizeOf (UserGuard n arr) =
     (constructorCost 2) + (sizeOf n) + (sizeOf arr)
 
-instance ToJSON a => ToJSON (UserGuard a) where toJSON = lensyToJSON 3
+userGuardProperties :: ToJSON a => JsonProperties (UserGuard a)
+userGuardProperties o =
+  [ "args" .= _ugArgs o
+  , "fun" .= _ugFun o
+  ]
+{-# INLINE userGuardProperties #-}
+
+instance ToJSON a => ToJSON (UserGuard a) where
+  toJSON = enableToJSON "UserGuard" . lensyToJSON 3
+  toEncoding = A.pairs . mconcat . userGuardProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON a => FromJSON (UserGuard a) where parseJSON = lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
@@ -272,6 +296,12 @@ instance ToJSON n => ToJSON (BindType n) where
   toJSON BindLet = "let"
   toJSON (BindSchema s) = object [ "bind" .= s ]
 
+  toEncoding BindLet = toEncoding ("let" :: String)
+  toEncoding (BindSchema s) = A.pairs ("bind" .= s)
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON n => FromJSON (BindType n) where
   parseJSON v =
     withThisText "BindLet" "let" v (pure BindLet) <|>
@@ -297,7 +327,19 @@ instance Pretty n => Pretty (BindPair n) where
 
 instance NFData n => NFData (BindPair n)
 
-instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
+bindPairProperties :: ToJSON n => JsonProperties (BindPair n)
+bindPairProperties o =
+  [ "arg" .= _bpArg o
+  , "val" .= _bpVal o
+  ]
+{-# INLINE bindPairProperties #-}
+
+instance ToJSON n => ToJSON (BindPair n) where
+  toJSON = enableToJSON "BindPair n" . lensyToJSON 3
+  toEncoding = A.pairs . mconcat . bindPairProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
 instance (SizeOf n) => SizeOf (BindPair n)
@@ -313,7 +355,20 @@ data App t = App
 
 instance HasInfo (App t) where getInfo = _appInfo
 
-instance ToJSON t => ToJSON (App t) where toJSON = lensyToJSON 4
+appProperties :: ToJSON t => JsonProperties (App t)
+appProperties o =
+  [ "args" .= _appArgs o
+  , "fun" .= _appFun o
+  , "info" .= _appInfo o
+  ]
+{-# INLINE appProperties #-}
+
+instance ToJSON t => ToJSON (App t) where
+  toJSON = enableToJSON "App t" . lensyToJSON 4
+  toEncoding = A.pairs . mconcat . appProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON t => FromJSON (App t) where parseJSON = lensyParseJSON 4
 
 instance Pretty n => Pretty (App n) where
@@ -336,10 +391,17 @@ instance Pretty g => Pretty (Governance g) where
     Governance (Left  k) -> pretty k
     Governance (Right r) -> pretty r
 
+governanceProperties :: ToJSON g => JsonProperties (Governance g)
+governanceProperties (Governance (Left ks)) = [ "keyset" .= ks ]
+governanceProperties (Governance (Right c)) = [ "capability" .= c ]
+{-# INLINE governanceProperties #-}
+
 instance ToJSON g => ToJSON (Governance g) where
-  toJSON (Governance g) = case g of
-    Left ks -> object [ "keyset" .= ks ]
-    Right c -> object [ "capability" .= c ]
+  toJSON = enableToJSON "Governance g" . object . governanceProperties
+  toEncoding = A.pairs . mconcat . governanceProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON g => FromJSON (Governance g) where
   parseJSON = withObject "Governance" $ \o ->
     Governance <$> (Left <$> o .: "keyset" <|>
@@ -379,14 +441,25 @@ instance Pretty n => Pretty (DefcapMeta n) where
     where
       tag = "@managed"
   pretty DefcapEvent = "@event"
-instance (ToJSON n,FromJSON n) => ToJSON (DefcapMeta n) where
-  toJSON (DefcapManaged (Just (p,f))) = object
-    [ "managerFun" .= f
-    , "managedParam" .= p
-    ]
-  toJSON (DefcapManaged Nothing) = object [ "managerAuto" .= True ]
-  toJSON DefcapEvent = "event"
-instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
+
+defcapMetaManagedProperties :: ToJSON n => JsonProperties (Maybe (Text,n))
+defcapMetaManagedProperties (Just (p,f)) =
+  [ "managedParam" .= p
+  , "managerFun" .= f
+  ]
+defcapMetaManagedProperties Nothing = [ "managerAuto" .= True ]
+{-# INLINE defcapMetaManagedProperties #-}
+
+instance ToJSON n => ToJSON (DefcapMeta n) where
+  toJSON = enableToJSON "DefcapMeta n" . \case
+    (DefcapManaged c) -> object $ defcapMetaManagedProperties c
+    DefcapEvent -> "event"
+  toEncoding (DefcapManaged c) = A.pairs . mconcat $ defcapMetaManagedProperties c
+  toEncoding DefcapEvent = toEncoding ("event" :: String)
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON n => FromJSON (DefcapMeta n) where
   parseJSON v = parseUser v <|> parseAuto v <|> parseEvent v
     where
       parseUser = withObject "DefcapMeta" $ \o -> (DefcapManaged . Just) <$>
@@ -409,9 +482,12 @@ data DefMeta n =
 instance NFData n => NFData (DefMeta n)
 instance Pretty n => Pretty (DefMeta n) where
   pretty (DMDefcap m) = pretty m
-instance (ToJSON n,FromJSON n) => ToJSON (DefMeta n) where
+instance ToJSON n => ToJSON (DefMeta n) where
   toJSON (DMDefcap m) = toJSON m
-instance (ToJSON n,FromJSON n) => FromJSON (DefMeta n) where
+  toEncoding (DMDefcap m) = toEncoding m
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+instance FromJSON n => FromJSON (DefMeta n) where
   parseJSON = fmap DMDefcap . parseJSON
 
 instance (SizeOf a) => SizeOf (DefMeta a)
@@ -427,16 +503,23 @@ data ConstVal n =
 
 instance NFData n => NFData (ConstVal n)
 
+constValProperties :: ToJSON n => JsonProperties (ConstVal n)
+constValProperties (CVRaw n) = [ "raw" .= n ]
+constValProperties (CVEval n m) = [ "raw" .= n, "eval" .= m ]
+{-# INLINE constValProperties #-}
+
 instance ToJSON n => ToJSON (ConstVal n) where
-  toJSON (CVRaw n) = object [ "raw" .= n ]
-  toJSON (CVEval n m) = object [ "raw" .= n, "eval" .= m ]
+  toJSON = enableToJSON "ConstVal n" . object . constValProperties
+  toEncoding = A.pairs . mconcat . constValProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON n => FromJSON (ConstVal n) where
   parseJSON v =
-    (withObject "CVEval"
-     (\o -> CVEval <$> o .: "raw" <*> o .: "eval") v) <|>
-    (withObject "CVRaw"
-     (\o -> CVRaw <$> o .: "raw") v)
+    withObject "CVEval"
+     (\o -> CVEval <$> o .: "raw" <*> o .: "eval") v <|>
+    withObject "CVRaw"
+     (\o -> CVRaw <$> o .: "raw") v
 
 -- | A term from a 'ConstVal', preferring evaluated terms when available.
 constTerm :: ConstVal a -> a
@@ -492,7 +575,22 @@ data Step n = Step
   , _sInfo :: !Info
   } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 instance NFData n => NFData (Step n)
-instance ToJSON n => ToJSON (Step n) where toJSON = lensyToJSON 2
+
+stepProperties :: ToJSON n => JsonProperties (Step n)
+stepProperties o =
+  [ "exec" .= _sExec o
+  , "rollback" .= _sRollback o
+  , "entity" .= _sEntity o
+  , "info" .= _sInfo o
+  ]
+{-# INLINE stepProperties #-}
+
+instance ToJSON n => ToJSON (Step n) where
+  toJSON = enableToJSON "Step n" . lensyToJSON 2
+  toEncoding = A.pairs . mconcat . stepProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON n => FromJSON (Step n) where parseJSON = lensyParseJSON 2
 instance HasInfo (Step n) where getInfo = _sInfo
 instance Pretty n => Pretty (Step n) where
@@ -527,7 +625,23 @@ instance NFData ModRef
 instance HasInfo ModRef where getInfo = _modRefInfo
 instance Pretty ModRef where
   pretty (ModRef mn _sm _i) = pretty mn
-instance ToJSON ModRef where toJSON = lensyToJSON 4
+
+-- Note that this encoding is not used in 'PactValue'.
+--
+modRefProperties :: JsonProperties ModRef
+modRefProperties o =
+  [ "refSpec" .= _modRefSpec o
+  , "refInfo" .= _modRefInfo o
+  , "refName" .= _modRefName o
+  ]
+{-# INLINE modRefProperties #-}
+
+instance ToJSON ModRef where
+  toJSON = enableToJSON "ModRef" . lensyToJSON 4
+  toEncoding = A.pairs . mconcat . modRefProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
   (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
@@ -559,7 +673,19 @@ instance SizeOf ModuleGuard where
   sizeOf (ModuleGuard md n) =
     (constructorCost 2) + (sizeOf md) + (sizeOf n)
 
-instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
+moduleGuardProperties :: JsonProperties ModuleGuard
+moduleGuardProperties o =
+  [ "moduleName" .= _mgModuleName o
+  , "name" .= _mgName o
+  ]
+{-# INLINE moduleGuardProperties #-}
+
+instance ToJSON ModuleGuard where
+  toJSON = enableToJSON "ModuleGuard" . lensyToJSON 3
+  toEncoding = A.pairs . mconcat . moduleGuardProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
@@ -585,7 +711,19 @@ instance SizeOf PactGuard where
   sizeOf (PactGuard pid pn) =
     (constructorCost 2) + (sizeOf pid) + (sizeOf pn)
 
-instance ToJSON PactGuard where toJSON = lensyToJSON 3
+pactGuardProperties :: JsonProperties PactGuard
+pactGuardProperties o =
+  [ "pactId" .= _pgPactId o
+  , "name" .= _pgName o
+  ]
+{-# INLINE pactGuardProperties #-}
+
+instance ToJSON PactGuard where
+  toJSON = enableToJSON "PactGuard" . lensyToJSON 3
+  toEncoding = A.pairs . mconcat . pactGuardProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
@@ -609,14 +747,15 @@ instance Pretty v => Pretty (ObjectMap v) where
   pretty om = annotate Val $ commaBraces $
     objectMapToListWith (\k v -> pretty k <> ": " <> pretty v) om
 
-instance ToJSON v => ToJSON (ObjectMap v)
-  where toJSON om =
-          object $ objectMapToListWith (\k v -> (asString k,toJSON v)) om
+instance ToJSON v => ToJSON (ObjectMap v) where
+  toJSON (ObjectMap om) = toJSON $ M.mapKeys asString om
+  toEncoding (ObjectMap om) = toEncoding $ M.mapKeys asString om
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON v => FromJSON (ObjectMap v)
-  where parseJSON = withObject "ObjectMap" $ \o ->
-          ObjectMap . M.fromList <$>
-            traverse (\(k,v) -> (FieldKey k,) <$> parseJSON v) (HM.toList o)
+  where parseJSON v = flip (withObject "ObjectMap") v $ \_ ->
+          ObjectMap . M.mapKeys FieldKey <$> parseJSON v
 
 instance Default (ObjectMap v) where
   def = ObjectMap M.empty
@@ -638,13 +777,19 @@ instance Pretty Use where
     let args = pretty _uModuleName : maybe [] (\mh -> [pretty mh]) _uModuleHash
     in parensSep $ "use" : args
 
+useProperties :: JsonProperties Use
+useProperties o =
+  [ "hash" .= _uModuleHash o
+  , "imports" .= _uImports o
+  , "module" .= _uModuleName o
+  ,  "i" .= _uInfo o
+  ]
+
 instance ToJSON Use where
-  toJSON Use{..} = object
-    [ "module" .= _uModuleName
-    , "hash" .= _uModuleHash
-    , "imports" .= _uImports
-    ,  "i" .= _uInfo
-    ]
+  toJSON = enableToJSON "Use" . object . useProperties
+  toEncoding = A.pairs . mconcat . useProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON Use where
   parseJSON = withObject "Use" $ \o ->
@@ -692,28 +837,34 @@ instance (SizeOf p) => SizeOf (Guard p) where
   sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
   sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
 
-guardCodec :: (ToJSON a, FromJSON a) => Codec (Guard a)
-guardCodec = Codec enc dec
-  where
-    enc (GKeySet k) = toJSON k
-    enc (GKeySetRef n) = object [ keyNamef .= n ]
-    enc (GPact g) = toJSON g
-    enc (GModule g) = toJSON g
-    enc (GUser g) = toJSON g
-    {-# INLINE enc #-}
-    dec v =
+keyNamef :: Text
+keyNamef = "keysetref"
+
+instance ToJSON a => ToJSON (Guard a) where
+  toJSON (GKeySet k) = enableToJSON "Guard a" $ toJSON k
+  toJSON (GKeySetRef n) = enableToJSON "Guard a" $ object [ keyNamef .= n ]
+  toJSON (GPact g) = enableToJSON "Guard a" $ toJSON g
+  toJSON (GModule g) = enableToJSON "Guard a" $ toJSON g
+  toJSON (GUser g) = enableToJSON "Guard a" $ toJSON g
+
+  toEncoding (GKeySet k) = toEncoding k
+  toEncoding (GKeySetRef n) = A.pairs (keyNamef .= n)
+  toEncoding (GPact g) = toEncoding g
+  toEncoding (GModule g) = toEncoding g
+  toEncoding (GUser g) = toEncoding g
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON a => FromJSON (Guard a) where
+  parseJSON v =
       (GKeySet <$> parseJSON v) <|>
       (withObject "KeySetRef" $ \o ->
           GKeySetRef . KeySetName <$> o .: keyNamef) v <|>
       (GPact <$> parseJSON v) <|>
       (GModule <$> parseJSON v) <|>
       (GUser <$> parseJSON v)
-    {-# INLINE dec #-}
-    keyNamef = "keysetref"
-
-
-instance (FromJSON a,ToJSON a) => ToJSON (Guard a) where toJSON = encoder guardCodec
-instance (FromJSON a,ToJSON a) => FromJSON (Guard a) where parseJSON = decoder guardCodec
+  {-# INLINE parseJSON #-}
 
 -- -------------------------------------------------------------------------- --
 -- Module
@@ -735,7 +886,25 @@ instance Pretty g => Pretty (Module g) where
   pretty Module{..} = parensSep
     [ "module" , pretty _mName , pretty _mGovernance , pretty _mHash ]
 
-instance ToJSON g => ToJSON (Module g) where toJSON = lensyToJSON 2
+moduleProperties :: ToJSON g => JsonProperties (Module g)
+moduleProperties o =
+  [ "hash" .= _mHash o
+  , "blessed" .= _mBlessed o
+  , "interfaces" .= _mInterfaces o
+  , "imports" .= _mImports o
+  , "name" .= _mName o
+  , "code" .= _mCode o
+  , "meta" .= _mMeta o
+  , "governance" .= _mGovernance o
+  ]
+{-# INLINE moduleProperties #-}
+
+instance ToJSON g => ToJSON (Module g) where
+  toJSON = enableToJSON "Module g" . lensyToJSON 2
+  toEncoding = A.pairs . mconcat . moduleProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
 instance (SizeOf g) => SizeOf (Module g)
@@ -752,7 +921,21 @@ data Interface = Interface
 instance Pretty Interface where
   pretty Interface{..} = parensSep [ "interface", pretty _interfaceName ]
 
-instance ToJSON Interface where toJSON = lensyToJSON 10
+interfaceProperties :: JsonProperties Interface
+interfaceProperties o =
+  [ "imports" .= _interfaceImports o
+  , "name" .= _interfaceName o
+  , "code" .= _interfaceCode o
+  , "meta" .= _interfaceMeta o
+  ]
+{-# INLINE interfaceProperties #-}
+
+instance ToJSON Interface where
+  toJSON = enableToJSON "Interface" . lensyToJSON 10
+  toEncoding = A.pairs . mconcat . interfaceProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
 instance NFData Interface
@@ -778,8 +961,21 @@ instance (SizeOf n) => SizeOf (Namespace n) where
   sizeOf (Namespace name ug ag) =
     (constructorCost 3) + (sizeOf name) + (sizeOf ug) + (sizeOf ag)
 
-instance (ToJSON a, FromJSON a) => ToJSON (Namespace a) where toJSON = lensyToJSON 3
-instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
+namespaceProperties :: ToJSON a => JsonProperties (Namespace a)
+namespaceProperties o =
+  [ "admin" .= _nsAdmin o
+  , "user" .= _nsUser o
+  , "name" .= _nsName o
+  ]
+{-# INLINE namespaceProperties #-}
+
+instance ToJSON a => ToJSON (Namespace a) where
+  toJSON = enableToJSON "Namespace a" . lensyToJSON 3
+  toEncoding = A.pairs . mconcat . namespaceProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON a => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
 
 instance (NFData a) => NFData (Namespace a)
 
@@ -799,8 +995,14 @@ instance Pretty g => Pretty (ModuleDef g) where
     MDInterface i -> pretty i
 
 instance ToJSON g => ToJSON (ModuleDef g) where
-  toJSON (MDModule m) = toJSON m
-  toJSON (MDInterface i) = toJSON i
+  toJSON (MDModule m) = enableToJSON "ModuleDef g" $ toJSON m
+  toJSON (MDInterface i) = enableToJSON "ModuleDef g" $ toJSON i
+
+  toEncoding (MDModule m) = toEncoding m
+  toEncoding (MDInterface i) = toEncoding i
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
@@ -835,8 +1037,8 @@ moduleDefMeta (MDInterface m) = _interfaceMeta m
 -- FunApp
 
 -- | Capture function application metadata
-data FunApp = FunApp {
-      _faInfo :: !Info
+data FunApp = FunApp
+    { _faInfo :: !Info
     , _faName :: !Text
     , _faModule :: !(Maybe ModuleName)
     , _faDefType :: !DefType
@@ -847,7 +1049,24 @@ data FunApp = FunApp {
 deriving instance (Show1 Term) => Show FunApp
 deriving instance (Eq1 Term) => Eq FunApp
 instance NFData FunApp
-instance ToJSON FunApp where toJSON = lensyToJSON 3
+
+funAppProperties :: JsonProperties FunApp
+funAppProperties o =
+  [ "defType" .= _faDefType o
+  , "types" .= _faTypes o
+  , "name" .= _faName o
+  , "module" .= _faModule o
+  , "docs" .= _faDocs o
+  , "info" .= _faInfo o
+  ]
+{-# INLINE funAppProperties #-}
+
+instance ToJSON FunApp where
+  toJSON = enableToJSON "FunApp" . lensyToJSON 3
+  toEncoding = A.pairs . mconcat . funAppProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance HasInfo FunApp where getInfo = _faInfo
 
@@ -926,8 +1145,26 @@ instance Pretty (Term n) => Pretty (Def n) where
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
     ++ maybe [] (pure . pretty) _dDefMeta
 
-instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Def n) where toJSON = lensyToJSON 2
-instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Def n) where parseJSON = lensyParseJSON 2
+defProperties :: ToJSON n => JsonProperties (Def n)
+defProperties o =
+  [ "defType" .= _dDefType o
+  , "defMeta" .= _dDefMeta o
+  , "funType" .= _dFunType o
+  , "defName" .= _dDefName o
+  , "defBody" .= _dDefBody o
+  , "module" .= _dModule o
+  , "meta" .= _dMeta o
+  , "info" .= _dInfo o
+  ]
+{-# INLINE defProperties #-}
+
+instance ToJSON n => ToJSON (Def n) where
+  toJSON = enableToJSON "Def n" . lensyToJSON 2
+  toEncoding = A.pairs . mconcat . defProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON n => FromJSON (Def n) where parseJSON = lensyParseJSON 2
 
 derefDef :: Def n -> Name
 derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
@@ -956,8 +1193,25 @@ instance Pretty n => Pretty (Lam n) where
 
 instance NFData n => NFData (Lam n)
 
-instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Lam n) where toJSON = lensyToJSON 2
-instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where parseJSON = lensyParseJSON 2
+-- FIXME Is the prefix correct?
+--
+lamProperties :: ToJSON n => JsonProperties (Lam n)
+lamProperties o =
+  [ "amArg" .= _lamArg o
+  , "amInfo" .= _lamInfo o
+  , "amBindBody" .= _lamBindBody o
+  , "amTy" .= _lamTy o
+  ]
+{-# INLINE lamProperties #-}
+
+instance ToJSON n => ToJSON (Lam n) where
+  toJSON = enableToJSON "Lam n" . lensyToJSON 2
+  toEncoding = A.pairs . mconcat . lamProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON n => FromJSON (Lam n) where
+  parseJSON = lensyParseJSON 2
 
 instance (SizeOf n) => SizeOf (Lam n)
 -- -------------------------------------------------------------------------- --
@@ -987,14 +1241,22 @@ instance Pretty n => Pretty (Object n) where
 
 instance NFData n => NFData (Object n)
 
-instance (ToJSON n, FromJSON n) => ToJSON (Object n) where
-  toJSON Object{..} = object $
-    [ "obj" .= _oObject
-    , "type" .= _oObjectType
-    , "i" .= _oInfo ] ++
-    maybe [] (pure . ("keyorder" .=)) _oKeyOrder
+objectProperties :: ToJSON n => JsonMProperties (Object n)
+objectProperties o = mconcat
+  [ "obj" .= _oObject o
+  , "keyorder" .?= _oKeyOrder o
+  , "type" .= _oObjectType o
+  , "i" .= _oInfo o
+  ]
+{-# INLINE objectProperties #-}
 
-instance (ToJSON n, FromJSON n) => FromJSON (Object n) where
+instance ToJSON n => ToJSON (Object n) where
+  toJSON = enableToJSON "Object n" . A.Object . objectProperties
+  toEncoding = A.pairs . objectProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON n => FromJSON (Object n) where
   parseJSON = withObject "Object" $ \o ->
     Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
 
@@ -1262,110 +1524,238 @@ instance Monad Term where
     TDynamic r m i >>= f = TDynamic (r >>= f) (m >>= f) i
     TModRef mr i >>= _ = TModRef mr i
 
-termCodec :: (ToJSON n, FromJSON n) => Codec (Term n)
-termCodec = Codec enc dec
-  where
-    enc t = case t of
-      TModule d b i -> ob [ moduleDef .= d, body .= b, inf i ]
-      TList ts ty i -> ob [ list' .= ts, type' .= ty, inf i ]
-      TDef d _i -> toJSON d
-      -- TNative intentionally not marshallable
-      TNative n _fn tys _exs d tl i ->
-        ob [ natName .= n, natFun .= Null {- TODO fn -}
-           , natFunTypes .= tys, natExamples .= Null {- TODO exs -},
-             natDocs .= d, natTopLevel .= tl, inf i ]
-      TConst d m c met i ->
-        ob [ constArg .= d, modName .= m, constVal .= c, meta .= met, inf i ]
-      TApp a _i -> toJSON a
-      TVar n i -> ob [ var .= n, inf i ]
-      TBinding bs b c i -> ob [pairs .= bs, body .= b, type' .= c, inf i]
-      TObject o _i -> toJSON o
-      TLiteral l i -> ob [literal .= l, inf i]
-      TLam tlam _i -> toJSON tlam
+-- | JSON Properties Vocabulary for Term
+--
+data TermProperties
+  = TermModuleDef
+  | TermBody
+  | TermMeta
+  | TermList
+  | TermType
+  | TermNatName
+  | TermNatFun
+  | TermNatFunTypes
+  | TermNatExamples
+  | TermNatDocs
+  | TermNatTopLevel
+  | TermConstArg
+  | TermModName
+  | TermConstVal
+  | TermVar
+  | TermPairs
+  | TermLiteral
+  | TermGuard
+  | TermSchemaName
+  | TermFields
+  | TermTblName
+  | TermHash
+  | TermDynRef
+  | TermDynMem
 
-      TGuard k i -> ob [guard' .= k, inf i]
-      TUse u _i -> toJSON u
-      TStep s tmeta i -> ob [body .= s, meta .= tmeta, inf i]
-      TSchema sn smod smeta sfs i ->
-        ob [ schemaName .= sn, modName .= smod, meta .= smeta
-           , fields .= sfs, inf i ]
-      TTable tn tmod th tty tmeta i ->
-        ob [ tblName .= tn, modName .= tmod, hash' .= th, type' .= tty
-           , meta .= tmeta, inf i ]
-      TDynamic r m i ->
-        ob [ dynRef .= r, dynMem .= m, inf i ]
-      TModRef mr _i -> toJSON mr
+prop :: IsString a => TermProperties -> a
+prop TermModuleDef = "module"
+prop TermBody = "body"
+prop TermMeta = "meta"
+prop TermList = "list"
+prop TermType = "type"
+prop TermNatName = "name"
+prop TermNatFun = "fun"
+prop TermNatFunTypes = "types"
+prop TermNatExamples = "examples"
+prop TermNatDocs = "docs"
+prop TermNatTopLevel = "tl"
+prop TermConstArg = "arg"
+prop TermModName = "modname"
+prop TermConstVal = "val"
+prop TermVar = "var"
+prop TermPairs = "pairs"
+prop TermLiteral = "lit"
+prop TermGuard = "guard"
+prop TermSchemaName = "name"
+prop TermFields = "fields"
+prop TermTblName = "name"
+prop TermHash = "hash"
+prop TermDynRef = "dref"
+prop TermDynMem = "dmem"
+{-# INLINE prop #-}
 
-    dec decval =
-      let wo n f = withObject n f decval
-          parseWithInfo f = uncurry f . (id &&& getInfo) <$> parseJSON decval
-      in
-        wo "Module" (\o -> TModule <$> o .: moduleDef <*> o .: body <*> inf' o)
-        <|> wo "List"
-            (\o -> TList <$> o .: list' <*> o .: type' <*> inf' o)
-        <|> parseWithInfo TDef
-      -- TNative intentionally not marshallable
-        <|> wo "Const"
-            (\o -> TConst <$> o .: constArg <*> o .: modName
-              <*> o .: constVal <*> o .: meta <*> inf' o )
-        <|> parseWithInfo TApp
-        <|> wo "Var" (\o -> TVar <$>  o .: var <*> inf' o )
-        <|> wo "Binding"
-            (\o -> TBinding <$> o .: pairs <*> o .: body
-              <*> o .: type' <*> inf' o)
-        <|> parseWithInfo TObject
-        <|> wo "Literal" (\o -> TLiteral <$> o .: literal <*> inf' o)
-        <|> wo "Guard" (\o -> TGuard <$> o .: guard' <*> inf' o)
-        <|> parseWithInfo TUse
-        <|> parseWithInfo TLam
-        <|> wo "Step"
-            (\o -> TStep <$> o .: body <*> o .: meta <*> inf' o)
-       --  parseWithInfo TStep
-        <|> wo "Schema"
-            (\o -> TSchema <$>  o .: schemaName <*> o .: modName
-              <*> o .: meta <*> o .: fields <*> inf' o )
-        <|> wo "Table"
-            (\o -> TTable <$>  o .: tblName <*> o .: modName
-              <*> o .: hash' <*> o .: type'
-              <*> o .: meta <*> inf' o )
-        <|> wo "Dynamic"
-            (\o -> TDynamic <$> o .: dynRef <*> o .: dynMem <*> inf' o)
+instance ToJSON n => ToJSON (Term n) where
+    toJSON = termEnc object toJSON
+    toEncoding = termEnc (A.pairs . mconcat) toEncoding
 
-        <|> parseWithInfo TModRef
+termEnc
+  :: KeyValue kv
+  => ToJSON n
+  => ([kv] -> e)
+  -> (forall a . ToJSON a => a -> e)
+  -> Term n
+  -> e
+termEnc kv val = \case
+  (TModule d b i) -> kv
+    [ p TermModuleDef .= d
+    , p TermBody .= b, inf i
+    ]
+  (TList ts ty i) -> kv
+    [ p TermList .= ts
+    , p TermType .= ty, inf i
+    ]
+  (TDef d _i) -> val d
+  -- TNative intentionally not marshallable
+  (TNative n _fn tys _exs d tl i) -> kv
+    [ p TermNatName .= n
+    , p TermNatFun .= Null {- TODO fn -}
+    , p TermNatFunTypes .= tys
+    , p TermNatExamples .= Null {- TODO exs -}
+    , p TermNatDocs .= d
+    , p TermNatTopLevel .= tl
+    , inf i
+    ]
+  (TConst d m c met i) -> kv
+    [ p TermConstArg .= d
+    , p TermModName .= m
+    , p TermConstVal .= c
+    , p TermMeta .= met, inf i
+    ]
+  (TApp a _i) -> val a
+  (TVar n i) -> kv
+    [ p TermVar .= n
+    , inf i
+    ]
+  (TBinding bs b c i) -> kv
+    [ p TermPairs .= bs
+    , p TermBody .= b
+    , p TermType .= c
+    , inf i
+    ]
+  (TObject o _i) -> val o
+  (TLiteral l i) -> kv
+    [ p TermLiteral .= l
+    , inf i
+    ]
+  (TLam tlam _i) -> val tlam
+  (TGuard k i) -> kv
+    [ p TermGuard .= k
+    , inf i
+    ]
+  (TUse u _i) -> val u
+  (TStep s tmeta i) -> kv
+    [ p TermBody .= s
+    , p TermMeta .= tmeta
+    , inf i
+    ]
+  (TSchema sn smod smeta sfs i) -> kv
+    [ p TermSchemaName .= sn
+    , p TermModName .= smod
+    , p TermMeta .= smeta
+    , p TermFields .= sfs
+    , inf i
+    ]
+  (TTable tn tmod th tty tmeta i) -> kv
+    [ p TermTblName .= tn
+    , p TermModName .= tmod
+    , p TermHash .= th
+    , p TermType .= tty
+    , p TermMeta .= tmeta
+    , inf i
+    ]
+  (TDynamic r m i) -> kv
+   [ p TermDynRef .= r
+   , p TermDynMem .= m
+   , inf i
+   ]
+  (TModRef mr _i) -> val mr
+ where
+  p = prop
+  inf i = "i" .= i
 
-    ob = object
-    moduleDef = "module"
-    body = "body"
-    meta = "meta"
-    inf i = "i" .= i
-    inf' o = o .: "i"
-    list' = "list"
-    type' = "type"
-    natName = "name"
-    natFun = "fun"
-    natFunTypes = "types"
-    natExamples = "examples"
-    natDocs = "docs"
-    natTopLevel = "tl"
-    constArg = "arg"
-    modName = "modname"
-    constVal = "val"
-    var = "var"
-    pairs = "pairs"
-    literal = "lit"
-    guard' = "guard"
-    schemaName = "name"
-    fields = "fields"
-    tblName = "name"
-    hash' = "hash"
-    dynRef = "dref"
-    dynMem = "dmem"
+instance FromJSON n => FromJSON (Term n) where
+  parseJSON v
+    = wo "Module"
+      (\o -> TModule
+        <$> o .: p TermModuleDef
+        <*> o .: p TermBody
+        <*> inf o
+      )
+    <|> wo "List"
+      (\o -> TList
+        <$> o .: p TermList
+        <*> o .: p TermType
+        <*> inf o
+      )
+    <|> parseWithInfo TDef
+    -- TNative intentionally not marshallable
+    <|> wo "Const"
+      (\o -> TConst
+        <$> o .: p TermConstArg
+        <*> o .: p TermModName
+        <*> o .: p TermConstVal
+        <*> o .: p TermMeta
+        <*> inf o
+      )
+    <|> parseWithInfo TApp
+    <|> wo "Var"
+      (\o -> TVar
+        <$>  o .: p TermVar
+        <*> inf o
+      )
+    <|> wo "Binding"
+        (\o -> TBinding
+          <$> o .: p TermPairs
+          <*> o .: p TermBody
+          <*> o .: p TermType
+          <*> inf o
+        )
+    <|> parseWithInfo TObject
+    <|> wo "Literal"
+      (\o -> TLiteral
+        <$> o .: p TermLiteral
+        <*> inf o
+      )
+    <|> wo "Guard"
+      (\o -> TGuard
+        <$> o .: p TermGuard
+        <*> inf o
+      )
+    <|> parseWithInfo TUse
+    <|> parseWithInfo TLam
+    <|> wo "Step"
+        (\o -> TStep
+          <$> o .: p TermBody
+          <*> o .: p TermMeta
+          <*> inf o
+        )
+   --  parseWithInfo TStep
+    <|> wo "Schema"
+        (\o -> TSchema
+          <$>  o .: p TermSchemaName
+          <*> o .: p TermModName
+          <*> o .: p TermMeta
+          <*> o .: p TermFields
+          <*> inf o
+        )
+    <|> wo "Table"
+        (\o -> TTable
+          <$>  o .: p TermTblName
+          <*> o .: p TermModName
+          <*> o .: p TermHash
+          <*> o .: p TermType
+          <*> o .: p TermMeta
+          <*> inf o
+        )
+    <|> wo "Dynamic"
+        (\o -> TDynamic
+          <$> o .: p TermDynRef
+          <*> o .: p TermDynMem
+          <*> inf o
+        )
+    <|> parseWithInfo TModRef
+   where
+    p = prop
+    inf o = o .: "i"
+    wo n f = withObject n f v
 
-instance (ToJSON n, FromJSON n) => FromJSON (Term n) where
-  parseJSON = decoder termCodec
-
-instance (ToJSON n, FromJSON n) => ToJSON (Term n) where
-  toJSON = encoder termCodec
+    parseWithInfo :: HasInfo a => FromJSON a => (a -> Info -> Term n) -> A.Parser (Term n)
+    parseWithInfo f = (\a -> f a $ getInfo a) <$> parseJSON v
 
 -- -------------------------------------------------------------------------- --
 -- ToTerm

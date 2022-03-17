@@ -1,14 +1,6 @@
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -33,6 +25,7 @@ module Pact.Types.Codec
 
 import Control.Applicative
 import qualified Data.Aeson as A
+import qualified Data.Aeson.Encoding as A
 import Data.Aeson hiding (Object)
 import Data.Aeson.Types (Parser,parse)
 import Data.Text (Text,unpack)
@@ -57,18 +50,23 @@ isSafeInteger i = i >= l && i <= h
 
 -- | JSON codec pair.
 data Codec a = Codec {
-  encoder :: a -> Value,
-  decoder :: Value -> Parser a
+  encoder :: a -> Encoding,
+  decoder :: Value -> Parser a,
+  valueEncoder :: a -> Value
   }
 
 -- | Integers encode to an object that uses Number if in reasonable JS bounds or String otherwise.
 integerCodec :: Codec Integer
-integerCodec = Codec encodeInteger decodeInteger
+integerCodec = Codec encodeInteger decodeInteger encodeIntegerToValue
   where
     encodeInteger i
+      | isSafeInteger i = pairs ( field .= i )
+      | otherwise = pairs ( field .= show i )
+    {-# INLINE encodeInteger #-}
+    encodeIntegerToValue i
       | isSafeInteger i = object [ field .= i ]
       | otherwise = object [ field .= show i ]
-    {-# INLINE encodeInteger #-}
+    {-# INLINE encodeIntegerToValue #-}
     decodeInteger = withObject "Integer" $ \o -> do
       s <- o .: field
       case s of
@@ -84,12 +82,16 @@ integerCodec = Codec encodeInteger decodeInteger
 -- if mantissa precision exceeds JS.
 -- TODO fromRational . toRational may not be the speediest.
 decimalCodec :: Codec Decimal
-decimalCodec = Codec enc dec
+decimalCodec = Codec enc dec encValue
   where
     enc d@(Decimal _places mantissa)
+      | isSafeInteger mantissa = A.scientific $ fromRational $ toRational d
+      | otherwise = pairs ( field .= show d )
+    {-# INLINE enc #-}
+    encValue d@(Decimal _places mantissa)
       | isSafeInteger mantissa = Number $ fromRational $ toRational d
       | otherwise = object [ field .= show d ]
-    {-# INLINE enc #-}
+    {-# INLINE encValue #-}
     dec (Number n) = return $ fromRational $ toRational n
     dec (A.Object o) = o .: field >>= \s -> case readMaybe (unpack s) of
       Just d -> return d
@@ -108,15 +110,22 @@ highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
 
 -- | Time uses
 timeCodec :: Codec UTCTime
-timeCodec = Codec enc dec
+timeCodec = Codec enc dec encValue
   where
     enc t
+      | 1 == denom t = pairs ( field .= formatTime pactISO8601Format t )
+      | otherwise = pairs ( highprec .= formatTime highPrecFormat t )
+      where
+            denom :: UTCTime -> Integer
+            denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
+    {-# INLINE enc #-}
+    encValue t
       | 1 == denom t = object [ field .= formatTime pactISO8601Format t ]
       | otherwise = object [ highprec .= formatTime highPrecFormat t ]
       where
             denom :: UTCTime -> Integer
             denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
-    {-# INLINE enc #-}
+    {-# INLINE encValue #-}
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>
       (o .: highprec >>= mkTime highPrecFormat)
@@ -130,17 +139,19 @@ timeCodec = Codec enc dec
     highprec = "timep"
 
 valueCodec :: Codec Value
-valueCodec = Codec enc dec
+valueCodec = Codec enc dec encVal
   where
-    enc v = object [field .= v]
+    enc v = pairs (field .= v)
     {-# INLINE enc #-}
+    encVal v = object [field .= v]
+    {-# INLINE encVal #-}
     dec = withObject "Value" $ \o -> o .: field
     {-# INLINE dec #-}
     field = "_P_val"
 
 
 roundtripCodec :: Codec t -> t -> Result t
-roundtripCodec c t = parse (decoder c) $ encoder c t
+roundtripCodec c t = parse (decoder c) $ valueEncoder c t
 
 withThisText :: String -> Text -> Value -> Parser a -> Parser a
 withThisText s t v p = withText s go v
