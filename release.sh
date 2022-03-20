@@ -4,43 +4,41 @@
 #
 # release.sh: Pact release deploy script
 #
-# Downloads travis builds from s3
-# Prepares zips and tarballs for linux and osx
-# Updates homebrew-pact formula
+# Downloads artifacts from github CI run.
+# Prepares zip files and tarballs for upload to Github release assets.
+# Updates homebrew-pact formula.
 #
 # Instructions:
-# 1. See prerequisites below.
+# 1. Push git tag for release, and locate "Summary" Github actions run ID.
+# Example: if summary link is "https://github.com/kadena-io/pact/actions/runs/1659693228",
+# run ID is 1659693228.
 #
-# 2. Execute with version, travis build, pact-homebrew:
-# Example: `./release.sh 3.0.1 3301 ../homebrew-pact`
-# Version arg $VERSION must also be a tag "v$VERSION" in pact repo.
+# 2. Execute with version, run ID, pact-homebrew dir, and github token:
+# Example: `./release.sh -v 3.0.1 -r 1659693228 -b ../homebrew-pact -g [your-github-token]`
+# Github token must have "public_repo" access.
 #
-# 3. Create git release for tag and upload artifacts to Git.
+# 3. Upload zips and tarball to Github release.
 #
-# 4. Commit/push changes to homebrew-pact.
+# 5. Commit/push changes to homebrew-pact.
 #
 # Prerequisites:
-# - aws client installed
 # - https://github.com/kadena-io/homebrew-pact checked out, master branch
 # - perl
 # - shasum
-# - md5
 # - git
-# - zip, gzip
-# - tar
-#
-# Works on osx, not tested on linux
+# - zip
+# - tar, gzip
+# - jq
 #
 #
 
 set -e
 
-usage='release.sh [-h] -v VERSION -b BREW_DIR [-t TRAVIS_BUILD] [-l LINUX_BUILD -m MAC_BUILD]
-  VERSION: version to release, e.g. "4.0.1"
-  BREW_DIR: dir containing git@github.com:kadena-io/homebrew-pact.git
-  TRAVIS_BUILD: travis build number. If not supplying this, must supply -l and -m
-  LINUX_BUILD: path to linux binary
-  MAC_BUILD: path to mac binary'
+usage='release.sh [-h] -v VERSION -r RUN_ID -g GITHUB_TOKEN -b BREW_DIR
+  VERSION: version tag to release, e.g. "4.0.1"
+  RUN_ID: Github action run ID
+  GITHUB_TOKEN: Github token with public_repo access
+  BREW_DIR: dir containing git@github.com:kadena-io/homebrew-pact.git'
 
 while [ -n "$1" ]; do
     case "$1" in
@@ -52,16 +50,12 @@ while [ -n "$1" ]; do
             brewdir="$2"
             shift
             ;;
-        -t)
-            build="$2"
+        -r)
+            runid="$2"
             shift
             ;;
-        -l)
-            linux_build_path="$2"
-            shift
-            ;;
-        -m)
-            mac_build_path="$2"
+        -g)
+            ghtoken="$2"
             shift
             ;;
         -h)
@@ -77,27 +71,13 @@ while [ -n "$1" ]; do
     shift
 done
 
+if [ -z "$runid" ]; then echo "Missing Github action run ID"; echo "$usage"; exit 1; fi
+
+if [ -z "$ghtoken" ]; then echo "Missing Github auth token"; echo "$usage"; exit 1; fi
+
 if [ -z "$version" ]; then echo "Missing version"; echo "$usage"; exit 1; fi
 
-if [ ! -d "$brewdir" ]; then echo "Missing homebrew-pact dir"; echo $usage; exit 1; fi
-
-if [ -z "$build" ]; then
-    if [ ! -f "$linux_build_path" -o ! -f "$mac_build_path" ]; then
-        echo "Missing travis, or valid mac+linux build path"
-        echo "$usage"
-        exit 1
-    fi
-fi
-
-
-
-home="/tmp/pact-builds"
-vdir="$home/$version"
-ldir="$vdir/linux"
-mdir="$vdir/osx"
-
-linuxid="2"
-osxid="1"
+if [ ! -d "$brewdir" ]; then echo "Missing/invalid homebrew-pact dir"; echo $usage; exit 1; fi
 
 cd $brewdir
 brewdir="$PWD"
@@ -109,62 +89,69 @@ fi
 echo "Updating homebrew-pact"
 git pull
 
+home="/tmp/pact-builds"
+vdir="$home/$version"
 
 if [ -d "$vdir" ]; then rm -r $vdir; fi
-mkdir -p $ldir
-mkdir -p $mdir
+mkdir -p $vdir
+cd $vdir
 
-s3url="s3://pact-builds/kadena-io/pact/$build/$build"
-lurl="$s3url.$linuxid/.stack-work/dist/x86_64-linux/Cabal-3.0.1.0/build/pact/pact"
-murl="$s3url.$osxid/.stack-work/dist/x86_64-osx/Cabal-3.0.1.0/build/pact/pact"
+# Get linux 20.04 artifact ==========================
 
-# linux
+echo "Looking up linux 20.04 artifact ..."
+
+dlurl=`curl -s -H "Authorization: token $ghtoken" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/kadena-io/pact/actions/runs/$runid/artifacts | jq -r '.artifacts[] | select(.name | contains ("8.10.7.ubuntu-20.04")) | .archive_download_url'`
+
+if [ -z "$dlurl" ]; then echo "Linux artifact lookup failed!"; exit 1; fi
+
+echo "Downloading artifact from $dlurl ..."
+
+curl -s -L -H "Authorization: token $ghtoken" -o pact-$version-linux-20.04.zip $dlurl
+
+# Get linux 18.04 artifact ===========================
+
+echo "Looking up linux 18.04 artifact ..."
+
+dlurl=`curl -s -H "Authorization: token $ghtoken" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/kadena-io/pact/actions/runs/$runid/artifacts | jq -r '.artifacts[] | select(.name | contains ("8.10.7.ubuntu-18.04")) | .archive_download_url'`
+
+if [ -z "$dlurl" ]; then echo "Linux artifact lookup failed!"; exit 1; fi
+
+echo "Downloading artifact from $dlurl ..."
+
+curl -s -L -H "Authorization: token $ghtoken" -o pact-$version-linux-18.04.zip $dlurl
+
+# Get osx artifact ===========================
+
+echo "Looking up OSX artifact ..."
+
+dlurl=`curl -s -H "Authorization: token $ghtoken" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/kadena-io/pact/actions/runs/$runid/artifacts | jq -r '.artifacts[] | select(.name | contains ("8.10.7.macOS-latest")) | .archive_download_url'`
+
+if [ -z "$dlurl" ]; then echo "OSX artifact lookup failed!"; exit 1; fi
+
+echo "Downloading artifact from $dlurl ..."
+
+curl -s -L -H "Authorization: token $ghtoken" -o pact-$version-osx.zip $dlurl
 
 
-cd $ldir
+# Prep osx tarball ===========================
 
-if [ -z "$build" ]; then
-    cp $linux_build_path .
-else
-    echo "Downloading linux s3 artifact"
-    aws s3 cp $lurl .
-fi
-
-md5 pact > pact.md5
-
-zip ../pact-$version-linux.zip pact pact.md5
-
-rm pact pact.md5
-
-# osx
-
-
-cd $mdir
-rm -r $ldir
-
-if [ -z "$build" ]; then
-    cp $mac_build_path .
-else
-    echo "Downloading osx s3 artifact"
-    aws s3 cp $murl .
-fi
-md5 pact > pact.md5
-
-zip ../pact-$version-osx.zip pact pact.md5
+mkdir "osx"
+cd osx
+unzip ../pact-$version-osx.zip
 
 brewtgz="pact-$version-osx.tar.gz"
 
 tar czvf ../$brewtgz pact
 
-rm pact pact.md5
+cd ..
+rm -r osx
 
 echo "Updating $brewdir/$brewfile"
 
-sha=`shasum -a 256 ../$brewtgz | cut -d ' ' -f 1`
+sha=`shasum -a 256 $brewtgz | cut -d ' ' -f 1`
 url="https://github.com/kadena-io/pact/releases/download/v$version/$brewtgz"
 
 cd $brewdir
-rm -r $mdir
 
 perl -p -i -e "s|url .*|url \"$url\"|" $brewfile
 perl -p -i -e "s|sha256 .*|sha256 \"$sha\"|" $brewfile
