@@ -19,7 +19,7 @@
 #
 # 3. Upload zips and tarball to Github release.
 #
-# 5. Commit/push changes to homebrew-pact.
+# 4. Commit/push changes to homebrew-pact.
 #
 # Prerequisites:
 # - https://github.com/kadena-io/homebrew-pact checked out, master branch
