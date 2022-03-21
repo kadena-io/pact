@@ -166,6 +166,8 @@ defaultGasTable =
   ,("yield", 2)
   ,("|", 1)
   ,("~", 1)
+  -- Nested defpacts
+  ,("continue",1)
   -- IO
   -- DDL
   ,("create-table", 250)

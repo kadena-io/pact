@@ -747,7 +747,7 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
     ,defNative "continue"  continueNested
-     (funType TyAny [("value", a)]) ["(continue-nested f"] "TODO: fill"
+     (funType TyAny [("value", TyAny)]) ["(continue-nested f"] "TODO: fill"
     ,strToIntDef
     ,strToListDef
     ,concatDef
@@ -1219,17 +1219,23 @@ base64decode = defRNative "base64-decode" go
 
 continueNested :: NativeFun e
 continueNested i as = gasUnreduced i as $ case as of
-  [TDef d _] -> do
+  [unTVar -> TDef d _] -> do
     (,) <$> view eePactStep <*> use evalPactExec >>= \case
       (Just ps, Just pe) -> do
-        Hash parent <- view eeHash
-        let Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText (_dDefName d)
-            newPactId = toPactId (pactHash (parent <> ":" <> name'))
+        let PactId parent = _psPactId ps
+            childName = QName (QualifiedName (_dModule d) (asString (_dDefName d)) def)
+            Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText childName
+            newPactId = toPactId (pactHash (T.encodeUtf8 parent <> ":" <> name'))
             -- note do not carry the previously set yield.
-            newPs = PactStep (_psStep ps) (_psRollback ps) newPactId Nothing
+            newPs = PactStep (_psStep ps) (_psRollback ps) newPactId
         case _peNested pe ^. at newPactId of
-          Just npe -> resumeNestedPactExec (getInfo i) d newPs npe
+          Just npe -> resumeNestedPactExec (getInfo i) d (newPs (_npeYield npe)) npe
           Nothing -> evalError' i $ "Attempting to continue a pact that was not nested: " <> pretty d
         -- applyNestedPact i app bod $ PactStep step b newPactId Nothing
       _ -> evalError' i "Not within pact invocation"
+  [aa] -> liftIO (putStrLn (show aa)) *> argsError' i as
   _ -> argsError' i as
+  where
+  unTVar = \case
+    TVar (Ref d) _ -> unTVar d
+    d -> d

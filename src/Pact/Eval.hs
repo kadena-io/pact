@@ -952,14 +952,13 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 
 initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
 initPact i app bod = view eePactStep >>= \es -> case es of
-  Just v@(PactStep step b _pId _) -> do
+  Just v@(PactStep step b (PactId parent) _) -> do
     whenExecutionFlagSet FlagDisableNestedDefpacts $
       evalError i $ "initPact: internal error: step already in environment: " <> pretty v
     -- todo: turn pactId into Bytestring then use that as parent, as opposed to block hash.
     -- todo: ensure pact continuation being applied is _not_ the parent.
-    Hash parent <- view eeHash
     let Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText (_pcDef app)
-        newPactId = toPactId (pactHash (parent <> ":" <> name'))
+        newPactId = toPactId (pactHash (T.encodeUtf8 parent <> ":" <> name'))
     applyNestedPact i app bod $ PactStep step b newPactId Nothing
   Nothing -> view eeHash >>= \hsh -> do
     let pStep = PactStep 0 False (toPactId hsh) Nothing
@@ -973,7 +972,7 @@ applyNestedPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (T
 applyNestedPact i app (TList steps _a _b) ps@PactStep {..} = do
   -- only one pact state allowed in a transaction
   parentExec <- use evalPactExec >>= \case
-    Nothing -> evalError i "Nested Pact attempted but no pactExec found"
+    Nothing -> evalError i $ "Nested Pact attempted but no pactExec found for:" <> pretty (_pcDef app)
     -- Nested pact execution
     Just pe -> pure pe
 
