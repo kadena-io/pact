@@ -109,12 +109,13 @@ library
     Pact.Types.Typecheck
     Pact.Typechecker
   build-depends:
+
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1
-    , aeson >= 0.11.3.0 && < 1.6
+    , aeson >= 0.11.3.0
     , attoparsec >= 0.13.0.2 && < 0.15
     , base >=4.9.0.0 && < 4.17
-    , base16-bytestring >=0.1.1.6 && < 0.2
+    , base16-bytestring >=0.1.1.6 && <1
     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
         -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
     , bound >= 2 && < 2.1
@@ -129,7 +130,7 @@ library
     , exceptions >= 0.8.3 && < 0.11
     , filepath >= 1.4.1.0 && < 1.5
     , hashable >= 1.2.4.0 && < 1.3.3.0
-    , lens >= 4.14 && < 5.1
+    , lens >= 4.14 && < 5.2
     , lens-aeson >= 1.0.0.5 && < 1.2
     , megaparsec >= 9
     , mtl >= 2.2.1 && < 2.3
@@ -141,10 +142,10 @@ library
     , reflection
     , semigroupoids >= 5.0
     , servant
-    , text >= 1.2.2.1 && < 1.3
-    , transformers >= 0.5.2.0 && < 0.6
+    , text >= 1.2.2.1 && < 2.1
+    , transformers >= 0.5.2.0 && < 0.7
     , trifecta >= 2.1
-    , unordered-containers >= 0.2.7.2 && <= 0.2.15.0
+    , unordered-containers >= 0.2.7.2 && <= 0.3
     , utf8-string >= 1.0.1.1 && < 1.1
     , vector >= 0.11.0.0 && < 0.13
     , vector-algorithms >= 0.7
@@ -162,7 +163,7 @@ library
       , ghcjs-base
       , ghcjs-dom
       , ghcjs-prim
-      , optparse-applicative >= 0.12.1.0 && < 0.16
+      , optparse-applicative >= 0.12.1.0 && < 0.18
 
   -- Normal GHC
   else
@@ -191,7 +192,7 @@ library
       , safe-exceptions >= 0.1.5.0 && < 0.2
       , servant-client
       , servant-client-core
-      , statistics >= 0.13.3 && < 0.16
+      , statistics >= 0.13.3 && < 0.17
       , yaml
     if flag(build-tool)
       hs-source-dirs: src-tool
@@ -247,15 +248,15 @@ library
         Pact.GasModel.Utils
         Pact.GasModel.GasTests
       build-depends:
-        , algebraic-graphs >= 0.2 && < 0.6
+        , algebraic-graphs >= 0.2 && < 0.7
         , async
         , cassava >= 0.5
         , constraints
         , fast-logger
         , haskeline >= 0.7.3 && < 0.9
-        , mmorph >= 1.1 && < 1.2
+        , mmorph >= 1.1 && < 1.3
         , neat-interpolation >= 0.4
-        , optparse-applicative >= 0.12.1.0 && < 0.16
+        , optparse-applicative >= 0.12.1.0 && < 0.18
         , sbv >= 8.8
         , servant-server
         , wai-cors
@@ -374,7 +375,7 @@ test-suite hspec
         , QuickCheck
         , deepseq
         , exceptions
-        , hedgehog >= 1.0.1 && < 1.1
+        , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2
         , http-client
         , hw-hspec-hedgehog == 0.1.*
