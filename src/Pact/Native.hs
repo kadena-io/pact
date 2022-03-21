@@ -746,6 +746,8 @@ langDefs =
      "Lazily ignore arguments IGNORE* and return VALUE."
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
+    ,defNative "continue"  continueNested
+     (funType TyAny [("value", a)]) ["(continue-nested f"] "TODO: fill"
     ,strToIntDef
     ,strToListDef
     ,concatDef
@@ -1215,33 +1217,19 @@ base64decode = defRNative "base64-decode" go
           Right t -> return $ tStr t
       _ -> argsError i as
 
-continueNested :: RNativeFun LibState
-continueNested i as = case as of
-  [TLitInteger step] ->
-
-  _ -> argsError i as
-  where
-    go
-      :: Integer
-      -> Bool
-      -> Maybe Text
-      -> Maybe (ObjectMap (Term Name))
-      -> Eval LibState (Term Name)
-    go step rollback mnpid muserResume = do
-      (npid, y) <- use evalPactExec >>= \case
-        Nothing -> evalError' i
-          "continue-nested-pact: No current pact exec in context"
-        Just pe -> case mnpid of
-          Nothing -> evalError' i
-            "continue-nested-pact: No pact id supplied for nested continuation"
-          Just npid -> do
-            y <- case muserResume of
-              Nothing -> pure $ _peYield pe
-              Just om -> case _peYield pe of
-                Just (Yield _ p _) -> mkSimpleYield p om
-                Nothing -> mkSimpleYield Nothing om
-            pure (npid, y)
-
-      let ps = PactStep (fromIntegral step) rollback (PactId npid) y
-      local (set eePactStep $ Just ps) $ resumePact (_faInfo i) Nothing
-
+continueNested :: NativeFun e
+continueNested i as = gasUnreduced i as $ case as of
+  [TDef d _] -> do
+    (,) <$> view eePactStep <*> use evalPactExec >>= \case
+      (Just ps, Just pe) -> do
+        Hash parent <- view eeHash
+        let Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText (_dDefName d)
+            newPactId = toPactId (pactHash (parent <> ":" <> name'))
+            -- note do not carry the previously set yield.
+            newPs = PactStep (_psStep ps) (_psRollback ps) newPactId Nothing
+        case _peNested pe ^. at newPactId of
+          Just npe -> resumeNestedPactExec (getInfo i) d newPs npe
+          Nothing -> evalError' i $ "Attempting to continue a pact that was not nested: " <> pretty d
+        -- applyNestedPact i app bod $ PactStep step b newPactId Nothing
+      _ -> evalError' i "Not within pact invocation"
+  _ -> argsError' i as
