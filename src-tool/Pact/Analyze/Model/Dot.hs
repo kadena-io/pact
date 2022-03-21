@@ -49,29 +49,16 @@ compileDot m = Alga.export style graph
       (,path) <$> edges
 
     style :: Alga.Style Vertex Text
-    style = Alga.Style
-      { graphName =
-          mempty
-      , preamble =
-          mempty
-      , graphAttributes =
-          []
-      , defaultVertexAttributes =
+    style = (Alga.defaultStyle (tShow . (fromEnum :: Vertex -> Int)))
+      { defaultVertexAttributes =
           [ "shape" := "circle"
           , "style" := "filled"
           ]
-      , defaultEdgeAttributes =
-          []
-      , vertexName =
-          tShow . fromEnum
-      , vertexAttributes =
-          const []
       , edgeAttributes = curry $ \e ->
           [ "color" := "blue"
           | reachable e
           ] ++
           [ "label" := tShow (fromEnum $ _pathTag $ edgePaths Map.! e)
-          | True -- show path id on edge?
           ]
       }
 
