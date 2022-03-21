@@ -257,12 +257,12 @@ enableToJSON
     -> Value
 #ifdef ENABLE_TOJSON
 #ifdef ENABLE_TOJSON_WARNING
-enableToJSON t = trace (t <> ": encoding to generic Data.Aeson.Value is unstable and therefor not supported")
+enableToJSON t = trace (t <> ": called 'toJSON'")
 #else
 enableToJSON _ a = a
 #endif
 #else
-enableToJSON t _ = error $ t <> ": encoding to generic Data.Aeson.Value is unstable and therefor not supported"
+enableToJSON t _ = error $ t <> ": encoding to Data.Aeson.Value is unstable and therefore not supported"
 #endif
 {-# INLINE enableToJSON #-}
 
