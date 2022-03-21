@@ -1,16 +1,15 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -56,7 +55,7 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Type
-import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
+import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON, JsonProperties, enableToJSON)
 
 
 data PersistDirect =
@@ -67,8 +66,15 @@ data PersistDirect =
 instance NFData PersistDirect
 
 instance ToJSON PersistDirect where
-  toJSON (PDValue v) = object [ "pdval" .= v ]
-  toJSON (PDNative n) = object [ "pdnat" .= n ]
+  toJSON = enableToJSON "Pact.Types.Persistence.PersistDirect" . object . \case
+    (PDValue v) -> [ "pdval" .= v ]
+    (PDNative n) -> [ "pdnat" .= n ]
+
+  toEncoding (PDValue v) = pairs $ "pdval" .= v
+  toEncoding (PDNative n) = pairs $ "pdnat" .= n
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON PersistDirect where
   parseJSON v =
@@ -102,16 +108,34 @@ makeLenses ''ModuleData
 
 instance NFData r => NFData (ModuleData r)
 
-instance (ToJSON r,FromJSON r) =>
-  ToJSON (ModuleData r) where toJSON = lensyToJSON 3
+moduleDataProperties :: ToJSON r => JsonProperties (ModuleData r)
+moduleDataProperties o =
+  [ "module" .= _mdModule o
+  , "refMap" .= _mdRefMap o
+  ]
+{-# INLINE moduleDataProperties #-}
+
+instance ToJSON r => ToJSON (ModuleData r) where
+  toJSON = enableToJSON "Pact.Types.Persistence.ModuleData r" . lensyToJSON 3
+  toEncoding = pairs . mconcat . moduleDataProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance (ToJSON r, FromJSON r) =>
   FromJSON (ModuleData r) where parseJSON = lensyParseJSON 3
 
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 
 instance ToJSON (Ref' PersistDirect) where
-  toJSON (Ref t) = object [ "ref" .= t ]
-  toJSON (Direct pd) = object [ "direct" .= pd ]
+  toJSON = enableToJSON "Pact.Types.Persistence.ModuleData r" . object . \case
+    (Ref t) -> [ "ref" .= t ]
+    (Direct pd) -> [ "direct" .= pd ]
+
+  toEncoding (Ref t) = pairs $ "ref" .= t
+  toEncoding (Direct pd) = pairs $ "direct" .= pd
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON (Ref' PersistDirect) where
   parseJSON v =
@@ -155,11 +179,23 @@ data TxLog v =
     } deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
 makeLenses ''TxLog
 instance Hashable v => Hashable (TxLog v)
+
+txLogProperties :: ToJSON v => JsonProperties (TxLog v)
+txLogProperties o =
+  [ "value" .= _txValue o
+  , "key" .= _txKey o
+  , "table" .= _txDomain o
+  ]
+{-# INLINE txLogProperties #-}
+
 instance NFData v => NFData (TxLog v)
 
 instance ToJSON v => ToJSON (TxLog v) where
-    toJSON (TxLog d k v) =
-        object ["table" .= d, "key" .= k, "value" .= v]
+  toJSON = enableToJSON "Pact.Types.Persistence.TxLog v" . object . txLogProperties
+  toEncoding = pairs . mconcat . txLogProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON v => FromJSON (TxLog v) where
     parseJSON = withObject "TxLog" $ \o ->
                 TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"

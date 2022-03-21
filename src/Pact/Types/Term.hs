@@ -68,7 +68,7 @@ module Pact.Types.Term
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
-   ModRef(..),modRefName,modRefSpec,modRefInfo,
+   ModRef(..),modRefName,modRefSpec,modRefInfo,modRefProperties_,
    modRefTy,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
@@ -649,6 +649,25 @@ instance Arbitrary ModRef where
   arbitrary = ModRef <$> arbitrary <*> arbitrary <*> pure def
 instance SizeOf ModRef where
   sizeOf (ModRef n s _) = constructorCost 1 + sizeOf n + sizeOf s
+
+-- | This JSON encoding omits the @refInfo@ property when it is the default Value.
+--
+-- This is different from the encoding of the 'ToJSON' instance of ModRef which
+-- always includes the @refInfo@ property.
+--
+-- The alternative encoding is used by the 'ToJSON' instances of 'PactValue' and
+-- 'OldPactValue'.
+--
+modRefProperties_ :: JsonMProperties ModRef
+modRefProperties_ o = mconcat
+    [ "refSpec" .= _modRefSpec o
+    , "refInfo" .?= if refInfo /= def then Just refInfo else Nothing
+      -- this property is different from the instance Pact.Types.Term.ModRef
+    , "refName" .= _modRefName o
+    ]
+ where
+  refInfo = _modRefInfo o
+{-# INLINE modRefProperties_ #-}
 
 -- -------------------------------------------------------------------------- --
 -- ModuleGuard

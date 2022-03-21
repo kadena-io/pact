@@ -34,7 +34,7 @@ module Pact.Types.Names
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
-import Data.Aeson (ToJSON(..), FromJSON(..), withText)
+import Data.Aeson (ToJSON(..), FromJSON(..), withText, pairs, (.=))
 import qualified Data.Attoparsec.Text as AP
 import Data.Default
 import Data.Hashable
@@ -101,7 +101,19 @@ instance Pretty ModuleName where
   pretty (ModuleName n Nothing)   = pretty n
   pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
 
-instance ToJSON ModuleName where toJSON = lensyToJSON 3
+moduleNameProperties :: JsonProperties ModuleName
+moduleNameProperties o =
+  [ "namespace" .= _mnNamespace o
+  , "name" .= _mnName o
+  ]
+{-# INLINE moduleNameProperties #-}
+
+instance ToJSON ModuleName where
+  toJSON = enableToJSON "Pact.Types.Names.ModuleName" . lensyToJSON 3
+  toEncoding = pairs . mconcat . moduleNameProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
 
 moduleNameParser :: (TokenParsing m, Monad m) => m ModuleName
@@ -147,7 +159,10 @@ instance SizeOf QualifiedName where
     (constructorCost 3) + (sizeOf modName) + (sizeOf n) + (sizeOf i)
 
 instance ToJSON QualifiedName where
-  toJSON = toJSON . renderCompactString
+  toJSON = enableToJSON "Pact.Types.Names.QualifiedName" . toJSON . renderCompactString
+  toEncoding = toEncoding . renderCompactString
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON QualifiedName where
   parseJSON = withText "QualifiedName" $ \t -> case parseQualifiedName def t of
@@ -192,8 +207,22 @@ data DynamicName = DynamicName
 instance NFData DynamicName
 instance Arbitrary DynamicName where
   arbitrary = DynamicName <$> genBareText <*> genBareText <*> arbitrary <*> arbitrary
+
+dynamicNameProperties :: JsonProperties DynamicName
+dynamicNameProperties o =
+  [ "interfaces" .= _dynInterfaces o
+  , "refArg" .= _dynRefArg o
+  , "member" .= _dynMember o
+  , "info" .= _dynInfo o
+  ]
+{-# INLINE dynamicNameProperties #-}
+
 instance ToJSON DynamicName where
-  toJSON = lensyToJSON 4
+  toJSON = enableToJSON "Pact.Types.Names.DynamicName" . lensyToJSON 4
+  toEncoding = pairs . mconcat . dynamicNameProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON DynamicName where
   parseJSON = lensyParseJSON 4
 
@@ -240,6 +269,9 @@ instance AsString Name where asString = renderCompactText
 
 instance ToJSON Name where
   toJSON = toJSON . renderCompactString
+  toEncoding = toEncoding . renderCompactString
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON Name where
   parseJSON = withText "Name" $ \t -> case parseName def t of

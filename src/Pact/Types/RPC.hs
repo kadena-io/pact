@@ -1,7 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -49,11 +46,15 @@ instance FromJSON c => FromJSON (PactRPC c) where
             (Exec <$> o .: "exec") <|> (Continuation <$> o .: "cont")
     {-# INLINE parseJSON #-}
 
+pactRpcProperties :: ToJSON c => JsonProperties (PactRPC c)
+pactRpcProperties (Exec p) = ["exec" .= p]
+pactRpcProperties (Continuation p) = ["cont" .= p]
+
 instance ToJSON c => ToJSON (PactRPC c) where
-    toJSON (Exec p) = object ["exec" .= p]
-    toJSON (Continuation p) = object ["cont" .= p]
-
-
+    toJSON = enableToJSON "Pact.Types.RPC.PactRPC" . object . pactRpcProperties
+    toEncoding = pairs . mconcat . pactRpcProperties
+    {-# INLINE toJSON #-}
+    {-# INLINE toEncoding #-}
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
@@ -67,8 +68,18 @@ instance FromJSON c => FromJSON (ExecMsg c) where
             ExecMsg <$> o .: "code" <*> o .: "data"
     {-# INLINE parseJSON #-}
 
+execMsgProperties :: ToJSON c => JsonProperties (ExecMsg c)
+execMsgProperties o =
+    [ "data" .= _pmData o
+    , "code" .= _pmCode o
+    ]
+{-# INLINE execMsgProperties #-}
+
 instance ToJSON c => ToJSON (ExecMsg c) where
-    toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
+    toJSON = enableToJSON "Pact.Types.RPC.ExecMsg" . object . execMsgProperties
+    toEncoding = pairs . mconcat . execMsgProperties
+    {-# INLINE toJSON #-}
+    {-# INLINE toEncoding #-}
 
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
@@ -86,6 +97,21 @@ instance FromJSON ContMsg where
             <*> o .: "proof"
     {-# INLINE parseJSON #-}
 
+contMsgProperties :: JsonProperties ContMsg
+contMsgProperties o =
+    [ "proof" .= _cmProof o
+    , "data" .= _cmData o
+    , "pactId" .= _cmPactId o
+    , "rollback" .= _cmRollback o
+    , "step" .= _cmStep o
+    ]
+{-# INLINE contMsgProperties #-}
+
 instance ToJSON ContMsg where
-    toJSON ContMsg{..} = object
-      [ "pactId" .= _cmPactId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData, "proof" .= _cmProof]
+    toJSON = enableToJSON "Pact.Types.RPC.ContMsg" . object . contMsgProperties
+    toEncoding = pairs . mconcat . contMsgProperties
+    {-# INLINE toJSON #-}
+    {-# INLINE toEncoding #-}
+
+--
+
