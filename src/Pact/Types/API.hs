@@ -48,7 +48,7 @@ requestKeysProperties o = [ "requestKeys" .= _rkRequestKeys o ]
 {-# INLINE requestKeysProperties #-}
 
 instance ToJSON RequestKeys where
-  toJSON = enableToJSON "RequestKeys" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.API.RequestKeys" . lensyToJSON 3
   toEncoding = pairs . mconcat . requestKeysProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -66,7 +66,7 @@ submitBatchProperties o = [ "cmds" .= _sbCmds o ]
 {-# INLINE submitBatchProperties #-}
 
 instance ToJSON SubmitBatch where
-  toJSON = enableToJSON "SubmitBatch" . object . submitBatchProperties
+  toJSON = enableToJSON "Pact.Types.API.SubmitBatch" . object . submitBatchProperties
   toEncoding = pairs . mconcat . submitBatchProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -83,7 +83,7 @@ pollProperties o = [ "requestKeys" .= _pRequestKeys o ]
 {-# INLINE pollProperties #-}
 
 instance ToJSON Poll where
-  toJSON = enableToJSON "Poll" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.API.Poll" . lensyToJSON 2
   toEncoding = pairs . mconcat . pollProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -96,7 +96,7 @@ newtype PollResponses = PollResponses (HM.HashMap RequestKey (CommandResult Hash
   deriving (Eq, Show, Generic)
 
 instance ToJSON PollResponses where
-  toJSON (PollResponses m) = enableToJSON "PollResponses" $ toJSON m
+  toJSON (PollResponses m) = enableToJSON "Pact.Types.API.PollResponses" $ toJSON m
   toEncoding (PollResponses m) = toEncoding m
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -113,7 +113,7 @@ listenerRequestProperties o = [ "listen" .= _lrListen o ]
 {-# INLINE listenerRequestProperties #-}
 
 instance ToJSON ListenerRequest where
-  toJSON = enableToJSON "ListenerRequest" . object . listenerRequestProperties
+  toJSON = enableToJSON "Pact.Types.API.ListenerRequest" . object . listenerRequestProperties
   toEncoding = pairs . mconcat . listenerRequestProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -137,7 +137,7 @@ listenResponseTimeoutProperties i =
 {-# INLINE listenResponseTimeoutProperties #-}
 
 instance ToJSON ListenResponse where
-  toJSON = enableToJSON "ListenResponse" . \case
+  toJSON = enableToJSON "Pact.Types.API.ListenResponse" . \case
     (ListenResponse r) -> toJSON r
     (ListenTimeout i) -> object $ listenResponseTimeoutProperties i
   toEncoding (ListenResponse r) = toEncoding r

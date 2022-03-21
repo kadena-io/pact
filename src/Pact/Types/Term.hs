@@ -170,7 +170,7 @@ metaProperties o =
 {-# INLINE metaProperties #-}
 
 instance ToJSON Meta where
-  toJSON = enableToJSON "Meta" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Term.Meta" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . metaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -228,7 +228,7 @@ userGuardProperties o =
 {-# INLINE userGuardProperties #-}
 
 instance ToJSON a => ToJSON (UserGuard a) where
-  toJSON = enableToJSON "UserGuard" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Term.UserGuard" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . userGuardProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -335,7 +335,7 @@ bindPairProperties o =
 {-# INLINE bindPairProperties #-}
 
 instance ToJSON n => ToJSON (BindPair n) where
-  toJSON = enableToJSON "BindPair n" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Term.BindPair n" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . bindPairProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -364,7 +364,7 @@ appProperties o =
 {-# INLINE appProperties #-}
 
 instance ToJSON t => ToJSON (App t) where
-  toJSON = enableToJSON "App t" . lensyToJSON 4
+  toJSON = enableToJSON "Pact.Types.Term.App t" . lensyToJSON 4
   toEncoding = A.pairs . mconcat . appProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -397,7 +397,7 @@ governanceProperties (Governance (Right c)) = [ "capability" .= c ]
 {-# INLINE governanceProperties #-}
 
 instance ToJSON g => ToJSON (Governance g) where
-  toJSON = enableToJSON "Governance g" . object . governanceProperties
+  toJSON = enableToJSON "Pact.Types.Term.Governance g" . object . governanceProperties
   toEncoding = A.pairs . mconcat . governanceProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -451,7 +451,7 @@ defcapMetaManagedProperties Nothing = [ "managerAuto" .= True ]
 {-# INLINE defcapMetaManagedProperties #-}
 
 instance ToJSON n => ToJSON (DefcapMeta n) where
-  toJSON = enableToJSON "DefcapMeta n" . \case
+  toJSON = enableToJSON "Pact.Types.Term.DefcapMeta n" . \case
     (DefcapManaged c) -> object $ defcapMetaManagedProperties c
     DefcapEvent -> "event"
   toEncoding (DefcapManaged c) = A.pairs . mconcat $ defcapMetaManagedProperties c
@@ -509,7 +509,7 @@ constValProperties (CVEval n m) = [ "raw" .= n, "eval" .= m ]
 {-# INLINE constValProperties #-}
 
 instance ToJSON n => ToJSON (ConstVal n) where
-  toJSON = enableToJSON "ConstVal n" . object . constValProperties
+  toJSON = enableToJSON "Pact.Types.Term.ConstVal n" . object . constValProperties
   toEncoding = A.pairs . mconcat . constValProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -586,7 +586,7 @@ stepProperties o =
 {-# INLINE stepProperties #-}
 
 instance ToJSON n => ToJSON (Step n) where
-  toJSON = enableToJSON "Step n" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Term.Step n" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . stepProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -637,7 +637,7 @@ modRefProperties o =
 {-# INLINE modRefProperties #-}
 
 instance ToJSON ModRef where
-  toJSON = enableToJSON "ModRef" . lensyToJSON 4
+  toJSON = enableToJSON "Pact.Types.Term.ModRef" . lensyToJSON 4
   toEncoding = A.pairs . mconcat . modRefProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -681,7 +681,7 @@ moduleGuardProperties o =
 {-# INLINE moduleGuardProperties #-}
 
 instance ToJSON ModuleGuard where
-  toJSON = enableToJSON "ModuleGuard" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Term.ModuleGuard" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . moduleGuardProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -719,7 +719,7 @@ pactGuardProperties o =
 {-# INLINE pactGuardProperties #-}
 
 instance ToJSON PactGuard where
-  toJSON = enableToJSON "PactGuard" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Term.PactGuard" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . pactGuardProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -786,7 +786,7 @@ useProperties o =
   ]
 
 instance ToJSON Use where
-  toJSON = enableToJSON "Use" . object . useProperties
+  toJSON = enableToJSON "Pact.Types.Term.Use" . object . useProperties
   toEncoding = A.pairs . mconcat . useProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -841,11 +841,11 @@ keyNamef :: Text
 keyNamef = "keysetref"
 
 instance ToJSON a => ToJSON (Guard a) where
-  toJSON (GKeySet k) = enableToJSON "Guard a" $ toJSON k
-  toJSON (GKeySetRef n) = enableToJSON "Guard a" $ object [ keyNamef .= n ]
-  toJSON (GPact g) = enableToJSON "Guard a" $ toJSON g
-  toJSON (GModule g) = enableToJSON "Guard a" $ toJSON g
-  toJSON (GUser g) = enableToJSON "Guard a" $ toJSON g
+  toJSON (GKeySet k) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON k
+  toJSON (GKeySetRef n) = enableToJSON "Pact.Types.Term.Guard a" $ object [ keyNamef .= n ]
+  toJSON (GPact g) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON g
+  toJSON (GModule g) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON g
+  toJSON (GUser g) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON g
 
   toEncoding (GKeySet k) = toEncoding k
   toEncoding (GKeySetRef n) = A.pairs (keyNamef .= n)
@@ -900,7 +900,7 @@ moduleProperties o =
 {-# INLINE moduleProperties #-}
 
 instance ToJSON g => ToJSON (Module g) where
-  toJSON = enableToJSON "Module g" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Term.Module g" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . moduleProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -931,7 +931,7 @@ interfaceProperties o =
 {-# INLINE interfaceProperties #-}
 
 instance ToJSON Interface where
-  toJSON = enableToJSON "Interface" . lensyToJSON 10
+  toJSON = enableToJSON "Pact.Types.Term.Interface" . lensyToJSON 10
   toEncoding = A.pairs . mconcat . interfaceProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -970,7 +970,7 @@ namespaceProperties o =
 {-# INLINE namespaceProperties #-}
 
 instance ToJSON a => ToJSON (Namespace a) where
-  toJSON = enableToJSON "Namespace a" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Term.Namespace a" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . namespaceProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -995,8 +995,8 @@ instance Pretty g => Pretty (ModuleDef g) where
     MDInterface i -> pretty i
 
 instance ToJSON g => ToJSON (ModuleDef g) where
-  toJSON (MDModule m) = enableToJSON "ModuleDef g" $ toJSON m
-  toJSON (MDInterface i) = enableToJSON "ModuleDef g" $ toJSON i
+  toJSON (MDModule m) = enableToJSON "Pact.Types.Term.ModuleDef g" $ toJSON m
+  toJSON (MDInterface i) = enableToJSON "Pact.Types.Term.ModuleDef g" $ toJSON i
 
   toEncoding (MDModule m) = toEncoding m
   toEncoding (MDInterface i) = toEncoding i
@@ -1062,7 +1062,7 @@ funAppProperties o =
 {-# INLINE funAppProperties #-}
 
 instance ToJSON FunApp where
-  toJSON = enableToJSON "FunApp" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Term.FunApp" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . funAppProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -1159,7 +1159,7 @@ defProperties o =
 {-# INLINE defProperties #-}
 
 instance ToJSON n => ToJSON (Def n) where
-  toJSON = enableToJSON "Def n" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Term.Def n" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . defProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -1205,7 +1205,7 @@ lamProperties o =
 {-# INLINE lamProperties #-}
 
 instance ToJSON n => ToJSON (Lam n) where
-  toJSON = enableToJSON "Lam n" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Term.Lam n" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . lamProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -1251,7 +1251,7 @@ objectProperties o = mconcat
 {-# INLINE objectProperties #-}
 
 instance ToJSON n => ToJSON (Object n) where
-  toJSON = enableToJSON "Object n" . A.Object . objectProperties
+  toJSON = enableToJSON "Pact.Types.Term.Object n" . A.Object . objectProperties
   toEncoding = A.pairs . objectProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

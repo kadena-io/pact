@@ -80,7 +80,7 @@ sigDataProperties o = mconcat
 {-# INLINE sigDataProperties #-}
 
 instance ToJSON a => ToJSON (SigData a) where
-  toJSON = enableToJSON "SigData" . Data.Aeson.Object . sigDataProperties
+  toJSON = enableToJSON "Pact.Types.SigData.SigData" . Data.Aeson.Object . sigDataProperties
   toEncoding = pairs . sigDataProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

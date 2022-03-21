@@ -104,7 +104,7 @@ commandProperties o =
 {-# INLINE commandProperties #-}
 
 instance (ToJSON a) => ToJSON (Command a) where
-  toJSON = enableToJSON "Command a" . object . commandProperties
+  toJSON = enableToJSON "Pact.Types.Command.Command a" . object . commandProperties
   toEncoding = pairs . mconcat . commandProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -265,7 +265,7 @@ signerProperties o = mconcat
   ]
 
 instance ToJSON Signer where
-  toJSON = enableToJSON "Signer" . A.Object . signerProperties
+  toJSON = enableToJSON "Pact.Types.Command.Signer" . A.Object . signerProperties
   toEncoding = pairs . signerProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -302,7 +302,7 @@ payloadProperties o =
 {-# INLINE payloadProperties #-}
 
 instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
-  toJSON = enableToJSON "Payload m a" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Command.Payload m a" . lensyToJSON 2
   toEncoding = pairs . mconcat . payloadProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -322,7 +322,7 @@ userSigProperties o = [ "sig" .= _usSig o ]
 {-# INLINE userSigProperties #-}
 
 instance ToJSON UserSig where
-  toJSON = enableToJSON "UserSig" . object . userSigProperties
+  toJSON = enableToJSON "Pact.Types.Command.UserSig" . object . userSigProperties
   toEncoding = pairs . mconcat . userSigProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -346,7 +346,7 @@ pactResultProperties (PactResult (Left f)) =
   ]
 
 instance ToJSON PactResult where
-  toJSON = enableToJSON "PactResult" . object . pactResultProperties
+  toJSON = enableToJSON "Pact.Types.Command.PactResult" . object . pactResultProperties
   toEncoding = pairs . mconcat . pactResultProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -393,7 +393,7 @@ commandResultProperties o = mconcat
 {-# INLINE commandResultProperties #-}
 
 instance (ToJSON l) => ToJSON (CommandResult l) where
-  toJSON = enableToJSON "CommandResult l" . A.Object . commandResultProperties
+  toJSON = enableToJSON "Pact.Types.Command.CommandResult l" . A.Object . commandResultProperties
   toEncoding = pairs . commandResultProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

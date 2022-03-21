@@ -75,7 +75,7 @@ sigCapabilityProperties o =
 {-# INLINE sigCapabilityProperties #-}
 
 instance ToJSON SigCapability where
-  toJSON = enableToJSON "SigCapability" . object . sigCapabilityProperties
+  toJSON = enableToJSON "Pact.Types.Capability.SigCapability" . object . sigCapabilityProperties
   toEncoding = pairs . mconcat . sigCapabilityProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

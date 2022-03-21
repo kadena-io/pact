@@ -94,7 +94,7 @@ addressProperties o =
 {-# INLINE addressProperties #-}
 
 instance ToJSON Address where
-  toJSON = enableToJSON "Address" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.ChainMeta.Address" . lensyToJSON 2
   toEncoding = pairs . mconcat . addressProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -114,7 +114,7 @@ privateMetaProperties o = [ "address" .= _pmAddress o ]
 {-# INLINE privateMetaProperties #-}
 
 instance ToJSON PrivateMeta where
-  toJSON = enableToJSON "PrivateMeta" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.ChainMeta.PrivateMeta" . lensyToJSON 3
   toEncoding = pairs . mconcat . privateMetaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -155,7 +155,7 @@ publicMetaProperties o =
 {-# INLINE publicMetaProperties #-}
 
 instance ToJSON PublicMeta where
-  toJSON = enableToJSON "PublicMeta" . object . publicMetaProperties
+  toJSON = enableToJSON "Pact.Types.ChainMeta.PublicMeta" . object . publicMetaProperties
   toEncoding = pairs . mconcat . publicMetaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -213,7 +213,7 @@ publicDataProperties o =
 {-# INLINE publicDataProperties #-}
 
 instance ToJSON PublicData where
-  toJSON = enableToJSON "PublicData" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.ChainMeta.PublicData" . lensyToJSON 3
   toEncoding = pairs. mconcat . publicDataProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

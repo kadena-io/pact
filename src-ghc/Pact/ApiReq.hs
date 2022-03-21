@@ -87,7 +87,7 @@ apiKeyPairProperties o =
 {-# INLINE apiKeyPairProperties #-}
 
 instance ToJSON ApiKeyPair where
-  toJSON = enableToJSON "ApiKeyPair" . lensyToJSON 4
+  toJSON = enableToJSON "Pact.ApiReq.ApiKeyPair" . lensyToJSON 4
   toEncoding = pairs . mconcat . apiKeyPairProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -112,7 +112,7 @@ apiSignerProperties o =
 {-# INLINE apiSignerProperties #-}
 
 instance ToJSON ApiSigner where
-  toJSON = enableToJSON "ApiSigner" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.ApiReq.ApiSigner" . lensyToJSON 3
   toEncoding = pairs . mconcat . apiSignerProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -140,7 +140,7 @@ apiPublicMetaProperties o =
 {-# INLINE apiPublicMetaProperties #-}
 
 instance ToJSON ApiPublicMeta where
-  toJSON = enableToJSON "ApiPublicMeta" . Data.Aeson.Object . mconcat . apiPublicMetaProperties
+  toJSON = enableToJSON "Pact.ApiReq.ApiPublicMeta" . Data.Aeson.Object . mconcat . apiPublicMetaProperties
   toEncoding = pairs . mconcat . apiPublicMetaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -193,7 +193,7 @@ apiReqProperties o =
 {-# INLINE apiReqProperties #-}
 
 instance ToJSON ApiReq where
-  toJSON = enableToJSON "ApiReq" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.ApiReq.ApiReq" . lensyToJSON 3
   toEncoding = pairs . mconcat . apiReqProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -213,7 +213,7 @@ signReqProperties o =
 {-# INLINE signReqProperties #-}
 
 instance ToJSON SignReq where
-  toJSON = enableToJSON "SignReq" . object . signReqProperties
+  toJSON = enableToJSON "Pact.ApiReq.SignReq" . object . signReqProperties
   toEncoding = pairs . mconcat . signReqProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -234,7 +234,7 @@ addSigsReqProperties o =
 {-# INLINE addSigsReqProperties #-}
 
 instance ToJSON AddSigsReq where
-  toJSON = enableToJSON "AddSigsReq" . object . addSigsReqProperties
+  toJSON = enableToJSON "Pact.ApiReq.AddSigsReq" . object . addSigsReqProperties
   toEncoding = pairs . mconcat . addSigsReqProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

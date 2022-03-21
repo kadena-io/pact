@@ -80,7 +80,7 @@ provenanceProperties o =
 {-# INLINE provenanceProperties #-}
 
 instance ToJSON Provenance where
-  toJSON = enableToJSON "Provenance" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Continuation.Provenance" . lensyToJSON 2
   toEncoding = pairs . mconcat . provenanceProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -113,7 +113,7 @@ yieldProperties o = mconcat
 {-# INLINE yieldProperties #-}
 
 instance ToJSON Yield where
-  toJSON = enableToJSON "Yield" . Data.Aeson.Object . yieldProperties
+  toJSON = enableToJSON "Pact.Types.Continuation.Yield" . Data.Aeson.Object . yieldProperties
   toEncoding = pairs . yieldProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -163,7 +163,7 @@ pactContinuationProperties o =
 {-# INLINE pactContinuationProperties #-}
 
 instance ToJSON PactContinuation where
-  toJSON = enableToJSON "PactContinuation" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Continuation.PactContinuation" . lensyToJSON 3
   toEncoding = pairs . mconcat . pactContinuationProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -204,7 +204,7 @@ pactExecProperties o =
 {-# INLINE pactExecProperties #-}
 
 instance ToJSON PactExec where
-  toJSON = enableToJSON "PactExec" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Continuation.PactExec" . lensyToJSON 3
   toEncoding = pairs . mconcat . pactExecProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

@@ -77,7 +77,7 @@ instance AsString Hash where
 instance NFData Hash
 
 instance ToJSON Hash where
-  toJSON = enableToJSON "Hash" . String . hashToText
+  toJSON = enableToJSON "Pact.Types.Hash.Hash" . String . hashToText
   toEncoding = toEncoding . hashToText
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}

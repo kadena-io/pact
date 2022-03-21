@@ -141,11 +141,11 @@ instance Pretty Literal where
     pretty (LTime t)     = dquotes $ pretty $ formatLTime t
 
 instance ToJSON Literal where
-    toJSON (LString s) = enableToJSON "Literal" $ toJSON s
-    toJSON (LInteger i) = enableToJSON "Literal" $ valueEncoder integerCodec i
-    toJSON (LDecimal r) = enableToJSON "Literal" $ valueEncoder decimalCodec r
-    toJSON (LBool b) = enableToJSON "Literal" $ toJSON b
-    toJSON (LTime t) = enableToJSON "Literal" $ valueEncoder timeCodec t
+    toJSON (LString s) = enableToJSON "Pact.Types.Exp.Literal" $ toJSON s
+    toJSON (LInteger i) = enableToJSON "Pact.Types.Exp.Literal" $ valueEncoder integerCodec i
+    toJSON (LDecimal r) = enableToJSON "Pact.Types.Exp.Literal" $ valueEncoder decimalCodec r
+    toJSON (LBool b) = enableToJSON "Pact.Types.Exp.Literal" $ toJSON b
+    toJSON (LTime t) = enableToJSON "Pact.Types.Exp.Literal" $ valueEncoder timeCodec t
 
     toEncoding (LString s) = toEncoding s
     toEncoding (LInteger i) = encoder integerCodec i
@@ -176,9 +176,9 @@ litToPrim LTime {} = TyTime
 data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
 instance NFData ListDelimiter
 instance ToJSON ListDelimiter where
-  toJSON Parens = enableToJSON "ListDelimiter" $ "()"
-  toJSON Brackets = enableToJSON "ListDelimiter" $ "[]"
-  toJSON Braces = enableToJSON "ListDelimiter" $ "{}"
+  toJSON Parens = enableToJSON "Pact.Types.Exp.ListDelimiter" $ "()"
+  toJSON Brackets = enableToJSON "Pact.Types.Exp.ListDelimiter" $ "[]"
+  toJSON Braces = enableToJSON "Pact.Types.Exp.ListDelimiter" $ "{}"
 
   toEncoding Parens = toEncoding @String "()"
   toEncoding Brackets = toEncoding @String "[]"
@@ -209,9 +209,9 @@ instance Pretty Separator where
   pretty ColonEquals = ":="
   pretty Comma = ","
 instance ToJSON Separator where
-  toJSON Colon = enableToJSON "Separator" $ ":"
-  toJSON ColonEquals = enableToJSON "Separator" $ ":="
-  toJSON Comma = enableToJSON "Separator" $ ","
+  toJSON Colon = enableToJSON "Pact.Types.Exp.Separator" $ ":"
+  toJSON ColonEquals = enableToJSON "Pact.Types.Exp.Separator" $ ":="
+  toJSON Comma = enableToJSON "Pact.Types.Exp.Separator" $ ","
   toEncoding Colon = toEncoding @String":"
   toEncoding ColonEquals = toEncoding @String":="
   toEncoding Comma = toEncoding @String","
@@ -241,7 +241,7 @@ literalExpProperties o =
 {-# INLINE literalExpProperties #-}
 
 instance ToJSON i => ToJSON (LiteralExp i) where
-  toJSON = enableToJSON "LiteralExp i" . object . literalExpProperties
+  toJSON = enableToJSON "Pact.Types.Exp.LiteralExp i" . object . literalExpProperties
   toEncoding = pairs . mconcat . literalExpProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -272,7 +272,7 @@ atomExpProperties o = mconcat
   ]
 
 instance ToJSON i => ToJSON (AtomExp i) where
-  toJSON = enableToJSON "AtomExp i" . Object . atomExpProperties
+  toJSON = enableToJSON "Pact.Types.Exp.AtomExp i" . Object . atomExpProperties
   toEncoding = pairs . atomExpProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -306,7 +306,7 @@ listExpProperties o =
 {-# INLINE listExpProperties #-}
 
 instance ToJSON i => ToJSON (ListExp i) where
-  toJSON = enableToJSON "ListExp i" . object . listExpProperties
+  toJSON = enableToJSON "Pact.Types.Exp.ListExp i" . object . listExpProperties
   toEncoding = pairs . mconcat . listExpProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -336,7 +336,7 @@ separatorExpProperties o =
 {-# INLINE separatorExpProperties #-}
 
 instance ToJSON i => ToJSON (SeparatorExp i) where
-  toJSON = enableToJSON "SeparatorExp i" . object . separatorExpProperties
+  toJSON = enableToJSON "Pact.Types.Exp.SeparatorExp i" . object . separatorExpProperties
   toEncoding = pairs . mconcat . separatorExpProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -386,10 +386,10 @@ instance HasInfo (Exp Info) where
 instance (SizeOf i) => SizeOf (Exp i)
 
 instance ToJSON i => ToJSON (Exp i) where
-  toJSON (ELiteral a) = enableToJSON "Exp i" $ toJSON a
-  toJSON (EAtom a) = enableToJSON "Exp i" $ toJSON a
-  toJSON (EList a) = enableToJSON "Exp i" $ toJSON a
-  toJSON (ESeparator a) = enableToJSON "Exp i" $ toJSON a
+  toJSON (ELiteral a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
+  toJSON (EAtom a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
+  toJSON (EList a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
+  toJSON (ESeparator a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
 
   toEncoding (ELiteral a) = toEncoding a
   toEncoding (EAtom a) = toEncoding a
