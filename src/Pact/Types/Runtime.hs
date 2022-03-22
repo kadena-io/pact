@@ -158,7 +158,7 @@ data ExecutionFlag
   -- | Disable memory limit check
   | FlagDisableInlineMemCheck
   -- | Disable new non-inlined modules
-  | FlagDisableFQVars
+  | FlagDisablePact43
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

@@ -3,7 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
-(env-exec-config ["DisableInlineMemCheck", "DisableFQVars"])
+(env-exec-config ["DisableInlineMemCheck", "DisablePact43"])
 (env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
@@ -610,7 +610,7 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
-(env-exec-config ["DisableFQVars"])
+(env-exec-config ["DisablePact43"])
 (module basic-module GOV
   (defcap GOV () true)
 

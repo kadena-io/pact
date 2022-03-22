@@ -43,7 +43,7 @@ import Pact.Types.SPV
 spec :: Spec
 spec = do
   describe "goldenAccounts" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisableFQVars] "accounts-module" "golden/golden.accounts.repl" "accounts"
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
     ,("eventCR",eventCR)
@@ -51,11 +51,11 @@ spec = do
     ,("crossChainSendCRBackCompat",crossChainSendCR True)
     ]
   describe "goldenAutoCap" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisableFQVars] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
   describe "goldenLambdas" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisableFQVars] "lambda-module" "golden/golden.lams.repl" "lams-test" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "lambda-module" "golden/golden.lams.repl" "lams-test" []
   describe "goldenModuleMemcheck" $
-    goldenModule [FlagDisableFQVars] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
+    goldenModule [FlagDisablePact43] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
   describe "goldenFullyQuals" $
     goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
 
@@ -84,7 +84,7 @@ acctsFailureCR :: String -> ReplState -> Spec
 acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> ReplState -> Spec
-eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisableFQVars]) tn s $
+eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]) tn s $
     "(module events-test G \
     \  (defcap G () true) \
     \  (defcap CAP (name:string amount:decimal) @managed \
@@ -102,8 +102,8 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
     \  (step (resume { 'a:=a } a)))) \
     \(xchain.p 3)"
   where
-    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck, FlagDisableFQVars]
-    ec False = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisableFQVars]
+    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck, FlagDisablePact43]
+    ec False = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]
 
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = doCRTest' def tn s code

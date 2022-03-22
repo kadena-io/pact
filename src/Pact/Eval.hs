@@ -397,7 +397,7 @@ loadModule m bod1 mi g0 = do
     _ -> evalError' t "Invalid module member"
   let mangled = mangleDefs (_mName m) <$> mdefs
   (evaluatedDefs, deps) <-
-    ifExecutionFlagSet FlagDisableFQVars
+    ifExecutionFlagSet FlagDisablePact43
       ((,mempty) <$> evaluateDefs mi (MDModule m) mangled)
       (fullyQualifyDefs mi m mangled)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs

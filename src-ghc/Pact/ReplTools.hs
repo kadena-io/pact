@@ -16,6 +16,7 @@ import Control.Monad.State.Strict
 import Data.List
 import qualified Data.HashMap.Strict as HM
 import Data.Text (unpack)
+import qualified Data.Set as Set
 
 import Text.Trifecta as TF hiding (line)
 import qualified Text.Trifecta.Delta as TF
@@ -24,6 +25,7 @@ import System.Console.Haskeline
 
 import Pact.Parse
 import Pact.Types.Runtime
+import Pact.Types.Pretty hiding (line)
 import Pact.Native
 import Pact.Repl
 import Pact.Repl.Types
@@ -40,14 +42,21 @@ completeFn :: (MonadIO m, MonadState ReplState m) => CompletionFunc m
 completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') ("\"\'" ++ filenameWordBreakChars) $ \str -> do
     modules <- use (rEvalState . evalRefs . rsLoadedModules)
-    let namesInModules = toListOf (traverse . _1 . mdRefMap . to HM.keys . each) modules
-        allNames = concat
+    allLoaded <- use (rEvalState . evalRefs . rsLoaded)
+    let namesInModules = concat (prefixedNames <$> modules)
+      -- toListOf (traverse . _1 . mdRefMap . to HM.keys . each . to prefixModule) modules
+        allNames = Set.fromList $ fmap unpack $ concat
           [ namesInModules
           , _mnName <$> HM.keys modules
           , HM.keys nativeDefs
+          , HM.keys allLoaded
           ]
-        matchingNames = filter (str `isPrefixOf`) (unpack <$> allNames)
-    pure $ simpleCompletion <$> matchingNames
+        matchingNames = Set.filter (str `isPrefixOf`) allNames
+    pure $ simpleCompletion <$> Set.toList matchingNames
+  where
+  prefixedNames (ModuleData (MDModule m) refMap _, _) =
+    (\k -> renderCompactText (_mName m) <> "." <> k) <$> HM.keys refMap
+  prefixedNames _ = mempty
 
 replSettings :: (MonadIO m, MonadState ReplState m) => Settings m
 replSettings = Settings

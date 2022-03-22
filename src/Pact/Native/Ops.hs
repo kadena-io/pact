@@ -135,7 +135,7 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
   log' :: RNativeFun e
   log' fi as@[TLiteral base _,TLiteral v _] = do
-    whenExecutionFlagSet FlagDisableFQVars $
+    whenExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
     binop (\a b -> liftDecF logBase a b)
           (\a b -> liftIntF logBase a b)
@@ -147,7 +147,7 @@ sqrtDef :: NativeDef
 sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   where
   sqrt' fi as@[TLiteral a _] = do
-    whenExecutionFlagSet FlagDisableFQVars $
+    whenExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
     (unopd sqrt) fi as
   sqrt' fi as = argsError fi as
@@ -156,7 +156,7 @@ lnDef :: NativeDef
 lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   where
   ln' fi as@[TLiteral a _] = do
-    whenExecutionFlagSet FlagDisableFQVars $
+    whenExecutionFlagSet FlagDisablePact43 $
       when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
     (unopd log) fi as
   ln' fi as = argsError fi as
