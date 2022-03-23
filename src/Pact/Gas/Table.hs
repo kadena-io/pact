@@ -285,3 +285,22 @@ moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
 -- | Gas model that charges varible (positive) rate per tracked operation
 defaultGasModel :: GasModel
 defaultGasModel = tableGasModel defaultGasConfig
+
+pact421GasModel :: GasModel
+pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
+  where
+  gasModel = tableGasModel gasConfig
+  gasConfig = defaultGasConfig { _gasCostConfig_primTable = updTable }
+  updTable = Map.union upd defaultGasTable
+  unknownOperationPenalty = 1000000
+  multiRowOperation = 40000
+  upd = Map.fromList
+    [("keys",    multiRowOperation)
+    ,("select",  multiRowOperation)
+    ,("fold-db", multiRowOperation)
+    ]
+  modifiedRunFunction name ga = case ga of
+    GUnreduced _ts -> case Map.lookup name updTable of
+      Just g -> g
+      Nothing -> unknownOperationPenalty
+    _ -> runGasModel defaultGasModel name ga
