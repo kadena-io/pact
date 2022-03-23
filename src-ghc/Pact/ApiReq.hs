@@ -44,7 +44,6 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.Map as Map
 import qualified Data.Set as S
 import Data.Text (Text, pack)
 import Data.Text.Encoding
@@ -57,7 +56,6 @@ import System.Exit hiding (die)
 import System.FilePath
 import System.IO
 
-import Pact.Parse (parsePact)
 import Pact.Types.API
 import Pact.Types.Capability
 import Pact.Types.Command
@@ -214,43 +212,7 @@ addSigToList k s ((pk,pus):ps) =
 addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ByteString
 addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
-  returnSigDataOrCommand outputLocal =<< foldM addSigReq sd keyFiles
-
--- | `returnSigDataOrCommand` will either:
---   - validate partial sig(s) added for a particular SigData, then re-serialize as SigData
---   - validate all signatures if all signatures are provided, and output the resulting `Command`
---   TODO: `IO ByteString` is fairly opaque, low hanging fruit to provide (Either Command SigData)
---   and serialize upstream most likely, but is not of much concern atm.
-returnSigDataOrCommand :: Bool -> SigData Text -> IO ByteString
-returnSigDataOrCommand  outputLocal sd
-  | isPartialSigData = do
-    case verifyPartialSigData sd of
-      Right _ ->
-        pure $ Y.encodeWith yamlOptions sd
-      Left e -> do
-        let msg = unlines ["Command verification failed!", e]
-        hPutStrLn stderr msg >> hFlush stderr >> exitFailure
-  | otherwise = returnCommandIfDone outputLocal sd
-  where
-  isPartialSigData = any (isn't _Just . snd) (_sigDataSigs sd)
-  verifySig hsh (signer, usrSig) = case usrSig of
-    Nothing -> True
-    Just sig -> verifyUserSig hsh sig signer
-  toSignerPair sigMap signer =
-    case Map.lookup (PublicKeyHex $ _siPubKey signer) sigMap of
-      Nothing -> Left $ "Signer in payload does not show up in signatures" <> show (_siPubKey signer)
-      Just v -> pure (signer, v)
-  verifyPartialSigData (SigData h sigs (Just cmd)) = do
-    payload :: Payload Value ParsedCode <- traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 cmd)
-    let sigMap = Map.fromList sigs
-    when (length (_pSigners payload) /= length sigs) $
-      Left "Number of signers in the payload does not match number of signers in the sigData"
-    usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
-    let failedSigs = filter (not . verifySig h) usrSigs
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
-    _ <- verifyHash h (encodeUtf8 cmd)
-    pure ()
-  verifyPartialSigData _ = Left "Cannot reconstruct command"
+  returnCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
 
 
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
