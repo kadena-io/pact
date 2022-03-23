@@ -181,7 +181,8 @@ combineSigDatas sds outputLocal = do
     g (pAccum,sAccum) (p,s) =
       if pAccum /= p
         then error $ unlines [ "Sig mismatch:"
-                             , show pAccum                             , show p
+                             , show pAccum
+                             , show p
                              , "All signatures must be in the same order"
                              ]
         else (pAccum, sAccum <|> s)
