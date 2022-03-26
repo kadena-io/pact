@@ -63,7 +63,6 @@ addDef = defGasRNative "+" plus plusTy
   ]
   "Add numbers, concatenate strings/lists, or merge objects."
   where
-
     plus :: GasRNativeFun e
     plus g fi [TLitString a,TLitString b] = gasConcat g fi (T.length a) (T.length b) $
       (return (tStr $ a <> b))
@@ -103,8 +102,20 @@ subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
     unaryNumTys = unaryTy numA numA
 
 mulDef :: NativeDef
-mulDef = defRNative "*" (binop' (*) (*)) coerceBinNum
+mulDef = defRNative "*" mul' coerceBinNum
   ["(* 0.5 10.0)", "(* 3 5)"] "Multiply X by Y."
+  where
+  mul' :: RNativeFun e
+  mul' i = do
+    binop decMult intMult i
+    where
+    decMult a b = do
+      unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas i (decimalMantissa a) (decimalMantissa b)
+      pure (a * b)
+    intMult a b = do
+      unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas i a b
+      pure (a * b)
+
 
 divDef :: NativeDef
 divDef = defRNative "/" divide' coerceBinNum
@@ -128,24 +139,39 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   pow i as@[TLiteral a _,TLiteral b _] = do
     binop (\a' b' -> liftDecF i (**) a' b') intPow i as
     where
-    intPow :: Integer -> Integer -> Eval e Integer
-    intPow b' e = do
+    oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
-      ifExecutionFlagSet FlagDisablePact43 (liftOp (^) b' e) (intPowGas e *> liftOp (^) b' e)
-    intPowGas e = do
-      GasEnv {..} <- view eeGasEnv
-      g0 <- use evalGas
-      let multCost = runGasModel _geGasModel "*" (GUnreduced (liftTerm <$> as))
-          nopsGas = ceiling (logBase 2 (fromIntegral e) :: Double) * multCost
-          gUsed = g0 + nopsGas
-      evalGas .= gUsed
-      if gUsed > fromIntegral _geGasLimit then
-        throwErr GasError (getInfo i) $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
-        else return ()
-  pow fi as = argsError fi as
-    -- binop (\a b -> liftDecF i (**) a b)
-    --           (\a b -> assert (b >= 0) "Integral power must be >= 0" $ liftOp (^) a b)
-    --           i
+      liftOp (^) b' e
+    -- See: https://hackage.haskell.org/package/base-4.16.1.0/docs/src/GHC-Real.html
+    intPow :: Integer -> Integer -> Eval e Integer
+    intPow b' e =
+      ifExecutionFlagSet FlagDisablePact43 (oldIntPow b' e) (intPow' b' e)
+    intPow' x0 y0
+      | y0 < 0 = evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
+      | y0 == 0 = pure 1
+      | otherwise = evens x0 y0
+    evens x y
+      | even y = twoArgIntOpGas i x x *> evens (x *x) (y `quot` 2)
+      | y == 1 = pure x
+      | otherwise = twoArgIntOpGas i x x *> odds (x * x) (y `quot` 2) x
+    odds x y z
+      | even y = twoArgIntOpGas i x x *> odds (x * x) (y `quot` 2) z
+      | y == 1 = twoArgIntOpGas i x z *> pure (x*z)
+      | otherwise = twoArgIntOpGas i x x *> odds (x * x) (y `quot` 2) (x *z)
+  pow i as = argsError i as
+-- Integers below a threshold do not hit extra gas limits.
+-- TODO: maybe move ot gasmodel?
+
+twoArgIntOpGas :: HasInfo i => i -> Integer -> Integer -> Eval e ()
+twoArgIntOpGas i loperand roperand = do
+  GasEnv {..} <- view eeGasEnv
+  g0 <- use evalGas
+  let !nopsGas = runGasModel _geGasModel "" (GIntegerOpCost loperand roperand)
+      !gUsed = g0 + nopsGas
+  evalGas .= gUsed
+  if gUsed > fromIntegral _geGasLimit then
+    throwErr GasError (getInfo i) $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
+    else return ()
 
 legalLogArg :: Literal -> Bool
 legalLogArg = \case
@@ -164,7 +190,7 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
   log' :: RNativeFun e
   log' fi as@[TLiteral base _,TLiteral v _] = do
-    whenExecutionFlagSet FlagDisablePact43 $
+    unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
     binop (\a b -> liftDecF fi logBase a b)
           (\a b -> liftIntF fi logBase a b)
@@ -176,7 +202,7 @@ sqrtDef :: NativeDef
 sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   where
   sqrt' fi as@[TLiteral a _] = do
-    whenExecutionFlagSet FlagDisablePact43 $
+    unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
     (unopd sqrt) fi as
   sqrt' fi as = argsError fi as
@@ -185,7 +211,7 @@ lnDef :: NativeDef
 lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   where
   ln' fi as@[TLiteral a _] = do
-    whenExecutionFlagSet FlagDisablePact43 $
+    unlessExecutionFlagSet FlagDisablePact43 $
       when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
     (unopd log) fi as
   ln' fi as = argsError fi as
@@ -444,7 +470,7 @@ f2Int = round
 liftDecF :: HasInfo i => i -> (Double -> Double -> Double) -> Decimal -> Decimal -> Eval e Decimal
 liftDecF i f a b = do
   let !out = (dec2F a `f` dec2F b)
-  whenExecutionFlagSet FlagDisablePact43 $
+  unlessExecutionFlagSet FlagDisablePact43 $
     when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
   pure $ f2Dec out
 
@@ -452,7 +478,7 @@ liftDecF i f a b = do
 liftIntF :: HasInfo i => i -> (Double -> Double -> Double) -> Integer -> Integer -> Eval e Integer
 liftIntF i f a b = do
   let !out = (int2F a `f` int2F b)
-  whenExecutionFlagSet FlagDisablePact43 $
+  unlessExecutionFlagSet FlagDisablePact43 $
     when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
   pure $ f2Int out
 

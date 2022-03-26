@@ -37,6 +37,11 @@ flag no-advice
   default:     False
   manual:      True
 
+flag integer-gmp
+  description: Include integer-gmp package (removed after GHC 9)
+  default:     True
+  manual:      True
+
 library
 
   -- common to all configurations:
@@ -270,6 +275,9 @@ library
       build-depends: unix
     if !flag(no-advice)
       cpp-options: -DADVICE
+    if flag(integer-gmp)
+      build-depends:
+        , integer-gmp
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)

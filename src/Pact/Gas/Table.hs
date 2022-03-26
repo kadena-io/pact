@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
 module Pact.Gas.Table where
 
 import Data.Ratio
@@ -7,6 +9,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified GHC.Integer.Logarithms as IntLog
+import GHC.Int(Int(..))
 
 import Pact.Types.Continuation
 import Pact.Types.Gas
@@ -210,6 +214,8 @@ tableGasModel gasConfig =
         GUserApp t -> case t of
           Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
           _ -> _gasCostConfig_functionApplicationCost gasConfig
+        GIntegerOpCost i j ->
+          intCost i + intCost j
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
         GDistinct len -> expLengthPenalty len
@@ -285,3 +291,19 @@ moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
 -- | Gas model that charges varible (positive) rate per tracked operation
 defaultGasModel :: GasModel
 defaultGasModel = tableGasModel defaultGasConfig
+
+intCost :: Integer -> Gas
+intCost !a
+  | a < threshold = 0
+  | otherwise =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in fromIntegral (nbytes * nbytes `quot` 100)
+  where
+  threshold :: Integer
+  threshold = (10 :: Integer) ^ (30 :: Integer)
+
+
+_intCost :: Integer -> Int
+_intCost !a =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in nbytes
