@@ -78,7 +78,8 @@ addDef = defGasRNative "+" plus plusTy
            (if aty == bty then aty else TyAny)
            def
            def)
-    plus g i as = (g,) <$> binop' (+) (+) i as
+    plus g i as =
+      (g,) <$> binop' (+) (+) i as
     {-# INLINE plus #-}
 
     gasConcat g fi aLength bLength = computeGas' g fi (GConcatenation aLength bLength)
@@ -106,15 +107,7 @@ mulDef = defRNative "*" mul' coerceBinNum
   ["(* 0.5 10.0)", "(* 3 5)"] "Multiply X by Y."
   where
   mul' :: RNativeFun e
-  mul' i = do
-    binop decMult intMult i
-    where
-    decMult a b = do
-      unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas i (decimalMantissa a) (decimalMantissa b)
-      pure (a * b)
-    intMult a b = do
-      unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas i a b
-      pure (a * b)
+  mul' = binop' (*) (*)
 
 
 divDef :: NativeDef
@@ -126,8 +119,8 @@ divDef = defRNative "/" divide' coerceBinNum
       binop divDec divInt fi as
       where
       nonZeroDiv b' = when (b' == 0) $ evalError' fi $ "Division by 0" <> ": " <> pretty (a,b)
-      divDec a' b' = nonZeroDiv b' *> liftOp (/) a' b'
-      divInt a' b' = nonZeroDiv b' *> liftOp div a' b'
+      divDec a' b' = nonZeroDiv b' *> liftDecimalOp (/) a' b'
+      divInt a' b' = nonZeroDiv b' *> liftIntegerOp div a' b'
     divide' fi as = argsError fi as
       -- binop (\a b -> assert (b /= 0) "Division by 0" $ liftOp (/) a b)
       --               (\a b -> assert (b /= 0) "Division by 0" $ liftOp div a b)
@@ -141,7 +134,7 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
     where
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
-      liftOp (^) b' e
+      liftIntegerOp (^) b' e
     -- See: https://hackage.haskell.org/package/base-4.16.1.0/docs/src/GHC-Real.html
     intPow :: Integer -> Integer -> Eval e Integer
     intPow b' e =
@@ -151,26 +144,26 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
       | y0 == 0 = pure 1
       | otherwise = evens x0 y0
     evens x y
-      | even y = twoArgIntOpGas i x x *> evens (x *x) (y `quot` 2)
+      | even y = twoArgIntOpGas x x *> evens (x *x) (y `quot` 2)
       | y == 1 = pure x
-      | otherwise = twoArgIntOpGas i x x *> odds (x * x) (y `quot` 2) x
+      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) x
     odds x y z
-      | even y = twoArgIntOpGas i x x *> odds (x * x) (y `quot` 2) z
-      | y == 1 = twoArgIntOpGas i x z *> pure (x*z)
-      | otherwise = twoArgIntOpGas i x x *> odds (x * x) (y `quot` 2) (x *z)
+      | even y = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) z
+      | y == 1 = twoArgIntOpGas x z *> pure (x*z)
+      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x *z)
   pow i as = argsError i as
 -- Integers below a threshold do not hit extra gas limits.
 -- TODO: maybe move ot gasmodel?
 
-twoArgIntOpGas :: HasInfo i => i -> Integer -> Integer -> Eval e ()
-twoArgIntOpGas i loperand roperand = do
+twoArgIntOpGas :: Integer -> Integer -> Eval e ()
+twoArgIntOpGas loperand roperand = do
   GasEnv {..} <- view eeGasEnv
   g0 <- use evalGas
   let !nopsGas = runGasModel _geGasModel "" (GIntegerOpCost loperand roperand)
       !gUsed = g0 + nopsGas
   evalGas .= gUsed
   if gUsed > fromIntegral _geGasLimit then
-    throwErr GasError (getInfo i) $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
+    throwErr GasError def $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
     else return ()
 
 legalLogArg :: Literal -> Bool
@@ -432,11 +425,19 @@ cmp cmpFun fi as = do
   return $ toTerm (cmpFun c)
 {-# INLINE cmp #-}
 
-liftOp :: (a -> a -> a) -> a -> a -> Eval e a
-liftOp f a b = pure (f a b)
+liftIntegerOp :: (Integer -> Integer -> Integer) -> Integer -> Integer -> Eval e Integer
+liftIntegerOp f a b = do
+  unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas a b
+  pure (f a b)
+
+liftDecimalOp :: (Decimal -> Decimal -> Decimal) -> Decimal -> Decimal -> Eval e Decimal
+liftDecimalOp f a b = do
+  unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas (decimalMantissa a) (decimalMantissa b)
+  pure (f a b)
+
 
 binop' :: (Decimal -> Decimal -> Decimal) -> (Integer -> Integer -> Integer) -> RNativeFun e
-binop' dop iop i as = binop (liftOp dop) (liftOp iop) i as
+binop' dop iop i as = binop (liftDecimalOp dop) (liftIntegerOp iop) i as
 
 -- | Perform binary math operator with coercion to Decimal as necessary.
 binop :: (Decimal -> Decimal -> Eval e Decimal) ->
@@ -452,11 +453,6 @@ binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
     _ -> argsError fi as
 binop _ _ fi as = argsError fi as
 {-# INLINE binop #-}
-
--- assert :: Bool -> String -> Either String a -> Either String a
--- assert test msg act
---   | test = act
---   | otherwise = Left msg
 
 dec2F :: Decimal -> Double
 dec2F = fromRational . toRational

@@ -10,6 +10,7 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified GHC.Integer.Logarithms as IntLog
+
 import GHC.Int(Int(..))
 
 import Pact.Types.Continuation
@@ -292,9 +293,10 @@ moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
 defaultGasModel :: GasModel
 defaultGasModel = tableGasModel defaultGasConfig
 
+-- | Costing function for binary integer ops
 intCost :: Integer -> Gas
 intCost !a
-  | a < threshold = 0
+  | (abs a) < threshold = 0
   | otherwise =
     let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
     in fromIntegral (nbytes * nbytes `quot` 100)
