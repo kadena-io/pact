@@ -309,3 +309,22 @@ _intCost :: Integer -> Int
 _intCost !a =
     let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
     in nbytes
+    
+pact421GasModel :: GasModel
+pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
+  where
+  gasModel = tableGasModel gasConfig
+  gasConfig = defaultGasConfig { _gasCostConfig_primTable = updTable }
+  updTable = Map.union upd defaultGasTable
+  unknownOperationPenalty = 1000000
+  multiRowOperation = 40000
+  upd = Map.fromList
+    [("keys",    multiRowOperation)
+    ,("select",  multiRowOperation)
+    ,("fold-db", multiRowOperation)
+    ]
+  modifiedRunFunction name ga = case ga of
+    GUnreduced _ts -> case Map.lookup name updTable of
+      Just g -> g
+      Nothing -> unknownOperationPenalty
+    _ -> runGasModel defaultGasModel name ga

@@ -610,7 +610,12 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
+<<<<<<< HEAD
 (env-exec-config ["DisablePact43"])
+=======
+(env-exec-config [])
+(env-gasmodel "table")
+>>>>>>> master
 (module basic-module GOV
   (defcap GOV () true)
 
@@ -675,7 +680,6 @@ d.G3
 
 (expect "new module gas" 60841 (env-gas))
 (commit-tx)
-
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
@@ -744,3 +748,37 @@ d.G3
 
 (expect "new module with FQVs gas" 60764 (env-gas))
 (commit-tx)
+(begin-tx)
+; setup module
+(module fdb G
+  (defcap G () true)
+  (defschema fdb-test a:integer b:integer)
+  (deftable fdb-tbl:{fdb-test})
+)
+(create-table fdb-tbl)
+(insert fdb-tbl 'b {'a:2, 'b:2})
+(insert fdb-tbl 'd {'a:4, 'b:4})
+(insert fdb-tbl 'c {'a:3, 'b:3})
+(insert fdb-tbl 'a {'a:1, 'b:1})
+
+; select cost
+(env-gas 0)
+(select fdb-tbl (where 'a (> 0)))
+(expect "new select gas" 40025 (env-gas))
+; fold-db cost
+(env-gas 0)
+(let*
+  ((qry (lambda (k o)  (< k "c")))
+   (consume (lambda (k o) [k (at 'a o)]))
+  )
+  (fold-db fdb-tbl (qry) (consume))
+  )
+
+(expect "new fold-db gas" 40027 (env-gas))
+
+(env-gas 0)
+(keys fdb-tbl)
+
+(expect "new keys" 40004 (env-gas))
+(commit-tx)
+

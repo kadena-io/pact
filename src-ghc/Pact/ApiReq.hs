@@ -214,6 +214,7 @@ addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
   returnCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
 
+
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
 returnCommandIfDone outputLocal sd =
   case sigDataToCommand sd of

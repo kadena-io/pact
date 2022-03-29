@@ -27,6 +27,7 @@ import           Control.Lens                 (Lens', at, ifoldl, iso, ix, lens,
 import           Control.Lens.Wrapped
 import           Control.Monad.Except         (MonadError)
 import           Control.Monad.Reader         (MonadReader)
+import qualified Data.Kind                    as K (Type)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
@@ -69,7 +70,7 @@ instance Wrapped SymbolicSuccess where
   _Wrapped' = iso successBool SymbolicSuccess
 
 class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
-  type TermOf m   :: Ty -> *
+  type TermOf m   :: Ty -> K.Type
   eval            :: SingI a => TermOf m a -> m (S (Concrete a))
   throwErrorNoLoc :: AnalyzeFailureNoLoc   -> m a
   getVar          :: VarId                 -> m (Maybe AVal)
