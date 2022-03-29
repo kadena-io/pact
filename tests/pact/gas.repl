@@ -610,12 +610,8 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
-<<<<<<< HEAD
 (env-exec-config ["DisablePact43"])
-=======
-(env-exec-config [])
 (env-gasmodel "table")
->>>>>>> master
 (module basic-module GOV
   (defcap GOV () true)
 
