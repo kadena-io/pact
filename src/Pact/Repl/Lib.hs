@@ -33,6 +33,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.Text (Text, unpack)
@@ -273,6 +274,10 @@ replDefs = ("Repl",
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
+replDefsMap :: HM.HashMap Text (Ref, Maybe ModuleHash)
+replDefsMap =
+  (,Nothing) <$> moduleToMap replDefs
+
 invokeEnv :: (LibDb -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! (_rlsDb ls)
 {-# INLINE invokeEnv #-}
@@ -472,7 +477,7 @@ pactState i as = case as of
 
 tx :: Tx -> RNativeFun LibState
 tx t fi as = do
-
+  rsq <- use (evalRefs . rsQualifiedDeps)
   (tid,tname) <- case (t,as) of
     (Begin,[TLitString n]) -> doBegin (Just n)
     (Begin,[]) -> doBegin Nothing
@@ -482,7 +487,7 @@ tx t fi as = do
 
   -- reset to repl lib, preserve call stack
   cs <- use evalCallStack
-  put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) $ set evalCallStack cs def
+  put $ over (evalRefs . rsQualifiedDeps) (<> rsq) $ set (evalRefs.rsLoaded) replDefsMap $ set evalCallStack cs def
   return $ tStr $ tShow t <> " Tx"
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
@@ -627,7 +632,7 @@ tc i as = case as of
   _ -> argsError i as
   where
     go modname dbg = do
-      md <- getModule i (ModuleName modname Nothing)
+      md <- inlineModuleData <$> getModule i (ModuleName modname Nothing)
       de <- viewLibState _rlsDynEnv
       r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
         try $ liftIO $ typecheckModule dbg de md
@@ -644,6 +649,7 @@ verify i _as@[TLitString modName] = do
 #if defined(ghcjs_HOST_OS)
     -- ghcjs: use remote server
     (md,modules) <- _loadModules
+
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
@@ -665,9 +671,10 @@ verify i _as@[TLitString modName] = do
 #endif
   where
     _failureMessage = tStr $ "Verification of " <> modName <> " failed"
-    _loadModules = (,)
-        <$> getModule i (ModuleName modName Nothing)
-        <*> getAllModules i
+    _loadModules =
+      (,)
+        <$> (inlineModuleData <$> getModule i (ModuleName modName Nothing))
+        <*> (fmap inlineModuleData <$> getAllModules i)
 verify i as = argsError i as
 
 
@@ -694,7 +701,8 @@ setGasLimit _ [TLitInteger l] = do
 setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
-envGas _ [] = use evalGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+envGas _ [] = do
+  use evalGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
 envGas _ [TLitInteger g] = do
   evalGas .= fromIntegral g
   return $ tStr $ "Set gas to " <> tShow g

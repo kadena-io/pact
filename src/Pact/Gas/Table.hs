@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
 module Pact.Gas.Table where
 
 import Data.Ratio
@@ -7,6 +9,9 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified GHC.Integer.Logarithms as IntLog
+
+import GHC.Int(Int(..))
 
 import Pact.Types.Continuation
 import Pact.Types.Gas
@@ -212,6 +217,8 @@ tableGasModel gasConfig =
         GUserApp t -> case t of
           Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
           _ -> _gasCostConfig_functionApplicationCost gasConfig
+        GIntegerOpCost i j ->
+          intCost i + intCost j
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
         GDistinct len -> expLengthPenalty len
@@ -254,6 +261,7 @@ tableGasModel gasConfig =
         GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
+        GModuleMemory i -> moduleMemoryCost i
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
@@ -273,7 +281,33 @@ memoryCost val (Gas cost) = Gas totalCost
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
 {-# INLINE memoryCost #-}
 
+-- Slope to costing function,
+-- sets a 10mb practical limit on module sizes.
+moduleMemFeePerByte :: Rational
+moduleMemFeePerByte = 0.006
+
+-- 0.01x+50000 linear costing funciton
+moduleMemoryCost :: Bytes -> Gas
+moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
+{-# INLINE moduleMemoryCost #-}
 
 -- | Gas model that charges varible (positive) rate per tracked operation
 defaultGasModel :: GasModel
 defaultGasModel = tableGasModel defaultGasConfig
+
+-- | Costing function for binary integer ops
+intCost :: Integer -> Gas
+intCost !a
+  | (abs a) < threshold = 0
+  | otherwise =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in fromIntegral (nbytes * nbytes `quot` 100)
+  where
+  threshold :: Integer
+  threshold = (10 :: Integer) ^ (30 :: Integer)
+
+
+_intCost :: Integer -> Int
+_intCost !a =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in nbytes

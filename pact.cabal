@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.2.0
+version:             4.2.0.1
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -31,6 +31,15 @@ flag build-tool
   description: Include modules and deps for tests + executable
   default:     True
   manual:      True
+
+flag no-advice
+  description: Disable advice in interpreter
+  default:     False
+  manual:      True
+
+flag with-integer-gmp
+  description: Include integer-gmp package (removed after GHC 9)
+  manual:      False
 
 library
 
@@ -78,6 +87,7 @@ library
     Pact.Types.Gas
     Pact.Types.Hash
     Pact.Types.Info
+    Pact.Types.KeySet
     Pact.Types.Lang
     Pact.Types.Logger
     Pact.Types.Names
@@ -102,12 +112,21 @@ library
     Pact.Types.Version
     Pact.Types.Typecheck
     Pact.Typechecker
+  if flag(with-integer-gmp)
+    build-depends:
+        , base >= 4.15.0.0
+  else
+     build-depends:
+        , base >=4.9.0.0 && < 4.15.0.0
+        , integer-gmp
   build-depends:
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1
     , aeson >= 0.11.3.0 && < 1.6
     , attoparsec >= 0.13.0.2 && < 0.15
-    , base >=4.9.0.0 && < 4.16
+    -- note: this is the real constraint, but due to base changes
+    -- we split for compat.
+    -- , base >=4.9.0.0 && < 4.17
     , base16-bytestring >=0.1.1.6 && < 0.2
     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
         -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
@@ -133,7 +152,6 @@ library
     , prettyprinter-ansi-terminal >= 1.1 && < 1.2
     , quickcheck-instances >= 0.3
     , reflection
-    , safe >= 0.3.11 && < 0.4
     , semigroupoids >= 5.0
     , servant
     , text >= 1.2.2.1 && < 1.3
@@ -263,6 +281,8 @@ library
         , ed25519-donna
     if !os(windows)
       build-depends: unix
+    if !flag(no-advice)
+      cpp-options: -DADVICE
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)
@@ -360,6 +380,7 @@ test-suite hspec
         PersistSpec
         RemoteVerifySpec
         TypecheckSpec
+        SizeOfSpec
 
       build-depends:
         , Decimal

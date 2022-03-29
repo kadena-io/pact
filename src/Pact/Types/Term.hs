@@ -99,15 +99,13 @@ import Bound
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.DeepSeq
-import Control.Lens (makeLenses,makePrisms)
+import Control.Lens hiding ((.=), DefName(..))
 import Control.Monad
 #if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
 #else
 import Data.Aeson hiding (pairs,Object)
 #endif
-import qualified Data.ByteString.UTF8 as BS
-import Data.Char (isAlphaNum)
 import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
@@ -121,13 +119,10 @@ import Data.Int (Int64)
 import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
-import Data.Set (Set)
-import qualified Data.Set as S
 import Data.Serialize (Serialize)
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.Encoding
 import Pact.Time (UTCTime)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -141,6 +136,7 @@ import Pact.Types.Codec
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
+import Pact.Types.KeySet
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
@@ -161,6 +157,8 @@ instance Pretty Meta where
 
 instance NFData Meta
 
+instance SizeOf Meta
+
 prettyModel :: [Exp Info] -> Doc
 prettyModel []    = mempty
 prettyModel props = "@model " <> list (pretty <$> props)
@@ -176,81 +174,7 @@ instance Semigroup Meta where
 instance Monoid Meta where
   mempty = Meta Nothing []
 
--- -------------------------------------------------------------------------- --
--- PublicKey
 
-newtype PublicKey = PublicKey { _pubKey :: BS.ByteString }
-  deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
-
-instance Arbitrary PublicKey where
-  arbitrary = PublicKey <$> encodeUtf8 <$> T.pack <$> vectorOf 64 genValidPublicKeyChar
-    where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
-instance Serialize PublicKey
-instance NFData PublicKey
-instance FromJSON PublicKey where
-  parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
-instance ToJSON PublicKey where
-  toJSON = toJSON . decodeUtf8 . _pubKey
-
-instance Pretty PublicKey where
-  pretty (PublicKey s) = prettyString (BS.toString s)
-
--- -------------------------------------------------------------------------- --
--- KeySet
-
--- | KeySet pairs keys with a predicate function name.
-data KeySet = KeySet
-  { _ksKeys :: !(Set PublicKey)
-  , _ksPredFun :: !Name
-  } deriving (Eq,Generic,Show,Ord)
-
-instance NFData KeySet
-
-instance Pretty KeySet where
-  pretty (KeySet ks f) = "KeySet" <+> commaBraces
-    [ "keys: " <> prettyList (toList ks)
-    , "pred: " <> pretty f
-    ]
-
-instance SizeOf KeySet where
-  sizeOf (KeySet pkArr ksPred) =
-    (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
-
-instance Arbitrary KeySet where
-  arbitrary = do
-    pks <- listOf1 arbitrary
-    name <- frequency
-      [ (3, pure "keys-all")
-      , (2, pure "keys-any")
-      , (1, pure "keys-2")
-      , (1, genBareText)
-      ]
-    pure $ mkKeySet pks name
-
--- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
--- | the latter cases defaulting to "keys-all"
-instance FromJSON KeySet where
-    parseJSON v = withObject "KeySet" (\o ->
-                    KeySet <$> o .: "keys" <*>
-                    (fromMaybe defPred <$> o .:? "pred")) v <|>
-                  (KeySet <$> parseJSON v <*> pure defPred)
-      where defPred = Name (BareName "keys-all" def)
-instance ToJSON KeySet where
-    toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
-
-
-mkKeySet :: [PublicKey] -> Text -> KeySet
-mkKeySet pks n = KeySet (S.fromList pks) (Name $ BareName n def)
-
--- -------------------------------------------------------------------------- --
--- KeySetName
-
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)
-
-instance Arbitrary KeySetName where
-  arbitrary = KeySetName <$> genBareText
-instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
 -- -------------------------------------------------------------------------- --
 -- PactId
@@ -299,6 +223,9 @@ data DefType
 instance FromJSON DefType
 instance ToJSON DefType
 instance NFData DefType
+
+instance SizeOf DefType where
+  sizeOf _ = 0
 
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
@@ -352,6 +279,8 @@ instance FromJSON n => FromJSON (BindType n) where
 
 instance NFData n => NFData (BindType n)
 
+instance (SizeOf n) => SizeOf (BindType n)
+
 -- -------------------------------------------------------------------------- --
 -- BindPair
 
@@ -371,6 +300,7 @@ instance NFData n => NFData (BindPair n)
 instance ToJSON n => ToJSON (BindPair n) where toJSON = lensyToJSON 3
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
+instance (SizeOf n) => SizeOf (BindPair n)
 
 -- -------------------------------------------------------------------------- --
 -- App
@@ -391,11 +321,15 @@ instance Pretty n => Pretty (App n) where
 
 instance NFData t => NFData (App t)
 
+instance (SizeOf t) => SizeOf (App t)
+
 -- -------------------------------------------------------------------------- --
 -- Governance
 
 newtype Governance g = Governance { _gGovernance :: Either KeySetName g }
-  deriving (Eq,Ord,Functor,Foldable,Traversable,Show,NFData)
+  deriving (Eq,Ord,Functor,Foldable,Traversable,Show,NFData, Generic)
+
+instance (SizeOf g) => SizeOf (Governance g)
 
 instance Pretty g => Pretty (Governance g) where
   pretty = \case
@@ -436,6 +370,7 @@ data DefcapMeta n =
   DefcapEvent
     -- ^ Eventing defcap.
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
+
 instance NFData n => NFData (DefcapMeta n)
 instance Pretty n => Pretty (DefcapMeta n) where
   pretty (DefcapManaged m) = case m of
@@ -464,6 +399,8 @@ instance (ToJSON n,FromJSON n) => FromJSON (DefcapMeta n) where
         if t == "event" then pure DefcapEvent
         else fail "Expected 'event'"
 
+instance (SizeOf a) => SizeOf (DefcapMeta a)
+
 -- | Def metadata specific to 'DefType'.
 -- Currently only specified for Defcap.
 data DefMeta n =
@@ -476,6 +413,8 @@ instance (ToJSON n,FromJSON n) => ToJSON (DefMeta n) where
   toJSON (DMDefcap m) = toJSON m
 instance (ToJSON n,FromJSON n) => FromJSON (DefMeta n) where
   parseJSON = fmap DMDefcap . parseJSON
+
+instance (SizeOf a) => SizeOf (DefMeta a)
 
 -- -------------------------------------------------------------------------- --
 -- ConstVal
@@ -504,6 +443,8 @@ constTerm :: ConstVal a -> a
 constTerm (CVRaw raw) = raw
 constTerm (CVEval _raw eval) = eval
 
+instance (SizeOf n) => SizeOf (ConstVal n)
+
 -- -------------------------------------------------------------------------- --
 -- Example
 
@@ -526,6 +467,8 @@ instance IsString Example where
   fromString = ExecExample . fromString
 
 instance NFData Example
+
+instance SizeOf Example
 
 -- -------------------------------------------------------------------------- --
 -- FieldKey
@@ -565,6 +508,8 @@ instance Pretty n => Pretty (Step n) where
       [ pretty exec
       , pretty rollback
       ]
+
+instance (SizeOf n) => SizeOf (Step n)
 
 -- -------------------------------------------------------------------------- --
 -- ModRef
@@ -684,7 +629,7 @@ data Use = Use
   , _uModuleHash :: !(Maybe ModuleHash)
   , _uImports :: !(Maybe (Vector Text))
   , _uInfo :: !Info
-  } deriving (Eq, Show, Generic)
+  } deriving (Show, Eq, Generic)
 
 instance HasInfo Use where getInfo = _uInfo
 
@@ -709,6 +654,7 @@ instance FromJSON Use where
         <*> o .: "i"
 
 instance NFData Use
+instance SizeOf Use
 
 -- -------------------------------------------------------------------------- --
 -- Guard
@@ -792,6 +738,8 @@ instance Pretty g => Pretty (Module g) where
 instance ToJSON g => ToJSON (Module g) where toJSON = lensyToJSON 2
 instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
+instance (SizeOf g) => SizeOf (Module g)
+
 -- -------------------------------------------------------------------------- --
 -- Interface
 
@@ -808,6 +756,8 @@ instance ToJSON Interface where toJSON = lensyToJSON 10
 instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
 instance NFData Interface
+
+instance SizeOf Interface
 
 -- -------------------------------------------------------------------------- --
 -- Namespace
@@ -854,6 +804,8 @@ instance ToJSON g => ToJSON (ModuleDef g) where
 
 instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
+
+instance (SizeOf g) => SizeOf (ModuleDef g)
 
 moduleDefName :: ModuleDef g -> ModuleName
 moduleDefName (MDModule m) = _mName m
@@ -925,6 +877,8 @@ instance HasInfo n => HasInfo (Ref' n) where
   getInfo (Direct d) = getInfo d
   getInfo (Ref r) = getInfo r
 
+instance (SizeOf d) => SizeOf (Ref' d)
+
 -- -------------------------------------------------------------------------- --
 -- NativeDFun
 
@@ -978,6 +932,8 @@ instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Def n) where parseJSO
 derefDef :: Def n -> Name
 derefDef Def{..} = QName $ QualifiedName _dModule (asString _dDefName) _dInfo
 
+instance (SizeOf n) => SizeOf (Def n)
+
 -- -------------------------------------------------------------------------- --
 -- Lam
 
@@ -988,7 +944,6 @@ data Lam n
   , _lamBindBody :: !(Scope Int Term n)
   , _lamInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
-
 
 deriving instance (Show1 Term, Show n) => Show (Lam n)
 deriving instance (Eq1 Term, Eq n) => Eq (Lam n)
@@ -1003,6 +958,8 @@ instance NFData n => NFData (Lam n)
 
 instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Lam n) where toJSON = lensyToJSON 2
 instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where parseJSON = lensyParseJSON 2
+
+instance (SizeOf n) => SizeOf (Lam n)
 -- -------------------------------------------------------------------------- --
 -- Object
 
@@ -1040,6 +997,8 @@ instance (ToJSON n, FromJSON n) => ToJSON (Object n) where
 instance (ToJSON n, FromJSON n) => FromJSON (Object n) where
   parseJSON = withObject "Object" $ \o ->
     Object <$> o .: "obj" <*> o .: "type" <*> o .:? "keyorder" <*> o .: "i"
+
+instance (SizeOf n) => SizeOf (Object n)
 
 -- -------------------------------------------------------------------------- --
 -- Term
@@ -1225,6 +1184,51 @@ prettyTypeTerm :: Term n -> SpecialPretty (Term n)
 prettyTypeTerm TSchema{..} = SPSpecial ("{" <> asString _tSchemaName <> "}")
 prettyTypeTerm t = SPNormal t
 
+instance SizeOf1 Term where
+  sizeOf1 = \case
+    TModule defn body info ->
+      constructorCost 3 + sizeOf defn + sizeOf body + sizeOf info
+    TList li typ info ->
+       constructorCost 3 + sizeOf li + sizeOf typ + sizeOf info
+    TDef defn info ->
+      constructorCost 2 + sizeOf defn + sizeOf info
+    -- note: we actually strip docs and examples
+    -- post fork
+    TNative name _defun ftyps examples docs tlo info ->
+      constructorCost 7 + sizeOf name + sizeOf ftyps + sizeOf examples +
+        sizeOf docs + sizeOf tlo + sizeOf info
+    TConst arg mname cval meta info  ->
+      constructorCost 5 + sizeOf arg + sizeOf mname + sizeOf cval + sizeOf meta + sizeOf info
+    TApp app info ->
+      constructorCost 2 + sizeOf app + sizeOf info
+    TVar v info ->
+      constructorCost 2 + sizeOf v + sizeOf info
+    TBinding bps body btyp info ->
+      constructorCost 4 + sizeOf bps + sizeOf body + sizeOf btyp + sizeOf info
+    TLam lam info ->
+      constructorCost 2 + sizeOf lam + sizeOf info
+    TObject obj info ->
+      constructorCost 2 + sizeOf obj + sizeOf info
+    TSchema tn mn meta args info ->
+      constructorCost 5 + sizeOf tn + sizeOf mn + sizeOf meta + sizeOf args + sizeOf info
+    TLiteral lit info ->
+      constructorCost 2 + sizeOf lit + sizeOf info
+    TGuard g info ->
+      constructorCost 2 + sizeOf g + sizeOf info
+    TUse u info->
+      constructorCost 2 + sizeOf u + sizeOf info
+    TStep step meta info ->
+      constructorCost 3 + sizeOf step + sizeOf meta + sizeOf info
+    TModRef mr info ->
+      constructorCost 2 + sizeOf mr + sizeOf info
+    TTable tn mn hs typ meta info ->
+      constructorCost 6 + sizeOf tn + sizeOf mn + sizeOf hs + sizeOf typ
+        + sizeOf meta + sizeOf info
+    TDynamic e1 e2 info ->
+      constructorCost 3 + sizeOf e1 + sizeOf e2 + sizeOf info
+
+instance (SizeOf a) => SizeOf (Term a) where
+  sizeOf t = sizeOf1 t
 
 instance Applicative Term where
     pure = return

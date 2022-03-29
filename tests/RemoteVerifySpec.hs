@@ -91,7 +91,7 @@ testSingleModule = do
   it "loads locally" $ do
     stateModuleData "mod1" replState0 >>= (`shouldSatisfy` isRight)
 
-  (ModuleData mod1 _refs) <- runIO $ either error id <$> stateModuleData "mod1" replState0
+  (ModuleData mod1 _refs _) <- runIO $ either error id <$> stateModuleData "mod1" replState0
 
   resp <- runIO $ serveAndRequest 3000 $ Remote.Request [derefDef <$> mod1] "mod1"
 
@@ -107,8 +107,8 @@ testUnsortedModules = do
     stateModuleData "mod2" replState0 >>= (`shouldSatisfy` isRight)
 
   resp <- runIO . runExceptT $ do
-    ModuleData mod1 _refs <- ExceptT $ stateModuleData "mod1" replState0
-    ModuleData mod2 _refs <- ExceptT $ stateModuleData "mod2" replState0
+    ModuleData mod1 _refs _ <- ExceptT $ stateModuleData "mod1" replState0
+    ModuleData mod2 _refs _ <- ExceptT $ stateModuleData "mod2" replState0
     ExceptT . fmap (first show) . serveAndRequest 3001 $
       Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
 

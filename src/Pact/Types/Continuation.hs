@@ -45,6 +45,7 @@ import Control.Lens hiding ((.=))
 
 import Data.Aeson
 import Data.Map.Strict(Map)
+import Data.Maybe(fromMaybe)
 import qualified Data.Map.Strict as Map
 
 import Test.QuickCheck
@@ -168,13 +169,24 @@ instance ToJSON PactExec where
     [ "executed" .= _peExecuted
     , "pactId" .= _pePactId
     , "stepHasRollback" .= _peStepHasRollback
+    , "step" .= _peStep
     , "yield" .= _peYield
     , "continuation" .= _peContinuation
     , "stepCount" .= _peStepCount
     ] ++ [ "nested" .= _peNested | not (Map.null _peNested)]
 
 instance FromJSON PactExec where
-  parseJSON = lensyParseJSON 3
+  parseJSON = withObject "PactExec" $ \o ->
+    PactExec
+      <$> o .: "stepCount"
+      <*> o .: "yield"
+      <*> o .: "executed"
+      <*> o .: "step"
+      <*> o .: "pactId"
+      <*> o .: "continuation"
+      <*> o .: "stepHasRollback"
+      <*> (fromMaybe mempty <$> o .:? "nested")
+
 instance Pretty PactExec where pretty = viaShow
 
 data NestedPactExec = NestedPactExec
@@ -204,9 +216,25 @@ fromNestedPactExec rollback (NestedPactExec stepCount yield exec step pid cont n
 
 
 instance ToJSON NestedPactExec where
-  toJSON = lensyToJSON 4
+  toJSON NestedPactExec{..} = object $
+    [ "executed" .= _npeExecuted
+    , "pactId" .= _npePactId
+    , "yield" .= _npeYield
+    , "step" .= _npeStep
+    , "continuation" .= _npeContinuation
+    , "stepCount" .= _npeStepCount
+    , "nested" .= _npeNested
+    ]
 instance FromJSON NestedPactExec where
-  parseJSON = lensyParseJSON 4
+  parseJSON = withObject "NestedPactExec" $ \o ->
+    NestedPactExec
+      <$> o .: "stepCount"
+      <*> o .: "yield"
+      <*> o .: "executed"
+      <*> o .: "step"
+      <*> o .: "pactId"
+      <*> o .: "continuation"
+      <*> o .: "nested"
 instance NFData NestedPactExec
 instance Pretty NestedPactExec where pretty = viaShow
 

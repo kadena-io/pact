@@ -92,6 +92,7 @@ import Pact.Native.Ops
 import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
+import Pact.Runtime.Utils(lookupFreeVar)
 import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
@@ -114,11 +115,11 @@ natives = [
 
 
 -- | Production native modules as a dispatch map.
-nativeDefs :: HM.HashMap Name Ref
+nativeDefs :: HM.HashMap Text Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
-moduleToMap :: NativeModule -> HM.HashMap Name Ref
-moduleToMap = HM.fromList . map ((Name . (`BareName` def) . asString) *** Direct) . snd
+moduleToMap :: NativeModule -> HM.HashMap Text Ref
+moduleToMap = HM.fromList . map (asString *** Direct) . snd
 
 
 lengthDef :: NativeDef
@@ -747,7 +748,7 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
     ,defNative "continue"  continueNested
-     (funType TyAny [("value", TyAny)]) ["(continue-nested f"] "TODO: fill"
+     (funType TyAny [("value", TyAny)]) [LitExample "(continue f)"] "TODO: fill"
     ,strToIntDef
     ,strToListDef
     ,concatDef
@@ -1219,7 +1220,7 @@ base64decode = defRNative "base64-decode" go
 
 continueNested :: NativeFun e
 continueNested i as = gasUnreduced i as $ case as of
-  [unTVar -> TDef d _] -> do
+  [t] -> lookup' t >>= \d ->
     (,) <$> view eePactStep <*> use evalPactExec >>= \case
       (Just ps, Just pe) -> do
         let PactId parent = _psPactId ps
@@ -1231,11 +1232,19 @@ continueNested i as = gasUnreduced i as $ case as of
         case _peNested pe ^. at newPactId of
           Just npe -> resumeNestedPactExec (getInfo i) d (newPs (_npeYield npe)) npe
           Nothing -> evalError' i $ "Attempting to continue a pact that was not nested: " <> pretty d
-        -- applyNestedPact i app bod $ PactStep step b newPactId Nothing
       _ -> evalError' i "Not within pact invocation"
-  [aa] -> liftIO (putStrLn (show aa)) *> argsError' i as
   _ -> argsError' i as
   where
+  lookup' (unTVar -> t) = case t of
+    TDef d _ -> pure d
+    TVar (Direct (TVar (FQName fq) _)) _ ->
+      lookupFreeVar i fq >>= \case
+        Ref (TDef d _) -> pure d
+        _ -> evalError' i $ "continue: " <> pretty fq <> " is not a defpact"
+    TDynamic tref tmem ti -> reduceDynamic tref tmem ti >>= \case
+      Right d -> pure d
+      Left _ -> evalError' i $ "continue: dynamic reference did not point to Defpact"
+    _ -> evalError' i $ "continue: argument must be a defpact " <> pretty t
   unTVar = \case
     TVar (Ref d) _ -> unTVar d
     d -> d

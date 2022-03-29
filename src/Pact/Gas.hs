@@ -2,7 +2,15 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
-module Pact.Gas where
+{-# LANGUAGE BangPatterns #-}
+module Pact.Gas
+ ( computeGas
+ , computeGas'
+ , computeGasNonCommit
+ , freeGasEnv
+ , gasUnreduced
+ , constGasModel )
+ where
 
 import Data.Text
 import Pact.Types.Runtime
@@ -27,6 +35,18 @@ computeGas i args = do
     else return gUsed
 {-# INLINABLE computeGas #-}
 
+-- | Performs gas calculation for incremental computations with some caveats:
+--   - Checks the gas calculations against the gas limit
+--   - Does not emit gas logs
+--   - Does not record the gas calculations
+computeGasNonCommit :: Info -> Text -> GasArgs -> Eval e Gas
+computeGasNonCommit info name args = do
+  GasEnv {..} <- view eeGasEnv
+  g0 <- use evalGas
+  let !gUsed = g0 + runGasModel _geGasModel name args
+  if gUsed > fromIntegral _geGasLimit then
+    throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
+    else return gUsed
 
 -- | Pre-compute gas for some application before some action.
 computeGas' :: Gas -> FunApp -> GasArgs -> Eval e a -> Eval e (Gas,a)

@@ -758,7 +758,7 @@ parseModuleModelDecl exps = traverse parseDecl exps where
 
 -- | Organize the module's refs by type
 moduleRefs :: ModuleData Ref -> ModuleRefs
-moduleRefs (ModuleData _ refMap) = foldl' f noRefs (HM.toList refMap)
+moduleRefs (ModuleData _ refMap _) = foldl' f noRefs (HM.toList refMap)
   where
     f accum (name, ref) = case ref of
       Ref (TDef (Def{_dDefType, _dDefBody}) _) ->
@@ -1172,7 +1172,7 @@ verifyModule
   -> HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
-verifyModule de modules moduleData@(ModuleData modDef allRefs) = runExceptT $ do
+verifyModule de modules moduleData@(ModuleData modDef allRefs _) = runExceptT $ do
   let modRefs = moduleRefs moduleData
 
   consts <- getConsts de $ modRefs ^. defconsts
