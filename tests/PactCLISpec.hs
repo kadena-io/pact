@@ -5,19 +5,14 @@ module PactCLISpec(spec) where
 import Test.Hspec
 
 import Control.Lens
-import Control.Exception(catch)
-  import Data.ByteString(ByteString)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Yaml as Y
 import Data.Text(Text)
-import System.Directory
 import System.FilePath
-import System.Exit
 
 import Pact.ApiReq
-import Pact.Types.SigData
 import Pact.Types.Command
 import Pact.Types.API(SubmitBatch)
 
