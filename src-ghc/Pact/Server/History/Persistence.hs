@@ -45,7 +45,7 @@ hashFromField h = case A.eitherDecodeStrict' h of
   Right v -> v
 
 crToField :: CommandResult Hash -> SType
-crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode $ A.toJSON r
+crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode r
 
 crFromField :: ByteString -> CommandResult Hash
 crFromField cr = case A.eitherDecodeStrict' cr of

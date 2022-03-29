@@ -22,6 +22,7 @@ module Pact.Types.RowData
 import Control.Applicative
 import Control.DeepSeq (NFData)
 import Data.Aeson
+import Data.Aeson.Encoding
 import Data.Default
 import Data.Maybe(fromMaybe)
 import Data.Text (Text)
@@ -33,6 +34,7 @@ import Pact.Types.Exp
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Term
+import Pact.Types.Util
 
 data RowDataValue
     = RDLiteral Literal
@@ -45,19 +47,38 @@ instance NFData RowDataValue
 instance Arbitrary RowDataValue where
   arbitrary = pactValueToRowData <$> arbitrary
 
+tag :: ToJSON v => KeyValue kv => Text -> v -> [kv]
+tag t rv =
+  [ "$t" .= t
+  , "$v" .= rv
+  ]
+{-# INLINE tag #-}
+
 instance ToJSON RowDataValue where
-  toJSON rdv = case rdv of
+  toJSON = enableToJSON "Pact.Types.RowData.RowDataValue" . \case
     RDLiteral l -> toJSON l
     RDList l -> toJSON l
-    RDObject o -> tag "o" o
-    RDGuard g -> tag "g" g
-    RDModRef (ModRef refName refSpec _) -> tag "m" $ object
-        [ "refName" .= refName
-        , "refSpec" .= refSpec
-        ]
-    where
-      tag :: ToJSON t => Text -> t -> Value
-      tag t rv = object [ "$t" .= t, "$v" .= rv ]
+    RDObject o -> object $ tag "o" o
+    RDGuard g -> object $ tag "g" g
+    RDModRef (ModRef refName refSpec _) -> object $ tag "m" $ object
+      [ "refSpec" .= refSpec
+      , "refName" .= refName
+      ]
+  {-# INLINE toJSON #-}
+
+  toEncoding rdv = case rdv of
+    RDLiteral l -> toEncoding l
+    RDList l -> toEncoding l
+    RDObject o -> pairs . mconcat $ tag "o" o
+    RDGuard g -> pairs . mconcat $ tag "g" g
+    RDModRef (ModRef refName refSpec _) -> pairs . mconcat $
+      [ "$t" .= ("m" :: Text)
+      , pair "$v" $ pairs $ mconcat
+          [ "refSpec" .= refSpec
+          , "refName" .= refName
+          ]
+      ]
+  {-# INLINE toEncoding #-}
 
 instance FromJSON RowDataValue where
   parseJSON v1 =
@@ -66,9 +87,9 @@ instance FromJSON RowDataValue where
     parseTagged v1
     where
       parseTagged = withObject "tagged RowData" $ \o -> do
-        (tag :: Text) <- o .: "$t"
+        (t :: Text) <- o .: "$t"
         val <- o .: "$v"
-        case tag of
+        case t of
           "o" -> RDObject <$> parseJSON val
           "g" -> RDGuard <$> parseJSON val
           "m" -> RDModRef <$> parseMR val
@@ -84,6 +105,10 @@ data RowDataVersion = RDV0 | RDV1
 instance NFData RowDataVersion
 instance ToJSON RowDataVersion where
   toJSON = toJSON . fromEnum
+  toEncoding = toEncoding . fromEnum
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON RowDataVersion where
   parseJSON = withScientific "RowDataVersion" $ \case
     0 -> pure RDV0
@@ -123,11 +148,22 @@ rowDataToPactValue rdv = case rdv of
 instance Pretty RowDataValue where
   pretty = pretty . rowDataToPactValue
 
+rowDataProperties :: JsonProperties RowData
+rowDataProperties o =
+  [ "$d" .= _rdData o
+  , "$v" .= _rdVersion o
+  ]
+{-# INLINE rowDataProperties #-}
 
 instance ToJSON RowData where
   toJSON (RowData RDV0 m) = toJSON $ fmap rowDataToPactValue m
-  toJSON (RowData v m) = object
-      [ "$v" .= v, "$d" .= m ]
+  toJSON r = object $ rowDataProperties r
+
+  toEncoding (RowData RDV0 m) = toEncoding $ fmap rowDataToPactValue m
+  toEncoding r = pairs $ mconcat $ rowDataProperties r
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 data OldPactValue
   = OldPLiteral Literal
@@ -138,16 +174,24 @@ data OldPactValue
 
 -- Needed for parsing guard
 instance ToJSON OldPactValue where
-  toJSON = \case
+  toJSON = enableToJSON "Pact.Types.RowData.OldPactValue" . \case
     OldPLiteral l -> toJSON l
     OldPObject o -> toJSON o
     OldPList v -> toJSON v
     OldPGuard x -> toJSON x
-    OldPModRef (ModRef refName refSpec refInfo) -> object $
-      [ "refName" .= refName
-      , "refSpec" .= refSpec
-      ] ++
-      [ "refInfo" .= refInfo | refInfo /= def ]
+    OldPModRef m -> Data.Aeson.Object $ modRefProperties_ m
+      -- this uses a non-standard alternative JSON encoding for 'ModRef'
+
+  toEncoding = \case
+    OldPLiteral l -> toEncoding l
+    OldPObject o -> toEncoding o
+    OldPList v -> toEncoding v
+    OldPGuard x -> toEncoding x
+    OldPModRef m -> pairs $ modRefProperties_ m
+      -- this uses a non-standard alternative JSON encoding for 'ModRef'
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON OldPactValue where
   parseJSON v =

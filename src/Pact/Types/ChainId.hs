@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      :  Pact.Types.ChainId
 -- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore

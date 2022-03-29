@@ -95,7 +95,8 @@ parseCode :: T.Text -> IO ParsedCode
 parseCode m = do
   ParsedCode m <$> eitherDie m (parseExprs m)
 
-
+-- TODO: Unused?
+--
 printResult :: Either PactError [Term Name] -> IO ()
 printResult res = case res of
   Left err -> print (show err)
@@ -280,9 +281,11 @@ toPactBinding  m = "{ " <> allKeys <> " }"
     allKeys = T.intercalate ", " $ map bindingFormat (HM.toList m)
     bindingFormat (key, _) = escapeText key <> " := " <> key
 
+-- Only use in testing: Pact.GasModel.GasTests
+--
 toPactKeyset :: T.Text -> T.Text -> Maybe T.Text -> A.Value
 toPactKeyset ksName ksValue predicate =
-  A.object [ksName A..= A.object ["keys" A..= [ksValue], "pred" A..= pred']]
+  toJSON $ HM.fromList [(ksName, A.object ["keys" A..= [ksValue], "pred" A..= pred'])]
   where pred' = maybe ">" id predicate
 
 

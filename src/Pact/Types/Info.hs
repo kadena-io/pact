@@ -34,7 +34,7 @@ import Data.Text (Text,unpack)
 import Data.Text.Encoding
 import qualified Data.Text as T
 import Data.Aeson
-import Data.Aeson.Types as A
+import qualified Data.Aeson.Types as A
 import Data.Attoparsec.Text as AP
 import Data.String
 import Data.Default
@@ -163,13 +163,27 @@ instance ToJSON Info where
   toJSON (Info Nothing) = Null
   toJSON (Info (Just (code,Parsed{..}))) = object
     [ "c" .= code
-    , "d" .= case _pDelta of
-        (Directed a b c d e) -> [pl,toJSON (decodeUtf8 a),toJSON b,toJSON c,toJSON d,toJSON e]
-        (Lines a b c d) -> [pl,toJSON a,toJSON b,toJSON c,toJSON d]
-        (Columns a b) -> [pl,toJSON a,toJSON b]
-        (Tab a b c) -> [pl,toJSON a,toJSON b,toJSON c]
+    , case _pDelta of
+      (Directed a b c d e) -> "d" .= (pl, decodeUtf8 a, b, c, d, e)
+      (Lines a b c d) -> "d" .= (pl, a, b, c, d)
+      (Columns a b) -> "d" .= (pl, a, b)
+      (Tab a b c) -> "d" .= (pl, a, b, c)
+    ]
+   where pl = _pLength
 
-    ] where pl = toJSON _pLength
+  toEncoding (Info Nothing) = toEncoding Null
+  toEncoding (Info (Just (code,Parsed{..}))) = pairs $ mconcat
+    [ "c" .= code
+    , case _pDelta of
+      (Directed a b c d e) -> "d" .= (pl, decodeUtf8 a, b, c, d, e)
+      (Lines a b c d) -> "d" .= (pl, a, b, c, d)
+      (Columns a b) -> "d" .= (pl, a, b)
+      (Tab a b c) -> "d" .= (pl, a, b, c)
+    ]
+   where pl = _pLength
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON Info where
   parseJSON Null = pure $ Info Nothing
