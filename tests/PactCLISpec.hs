@@ -4,10 +4,10 @@ module PactCLISpec(spec) where
 
 import Test.Hspec
 
-import Control.Lens
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
+import Data.Either(isRight)
 import qualified Data.Yaml as Y
 import Data.Text(Text)
 import System.FilePath
@@ -39,26 +39,26 @@ partialSigTests =
       unsigned <- BS.readFile unsignedFile
       sig1 <- Y.decodeEither' <$> addSigsReq [key1] True unsigned
       sig2 <- Y.decodeEither' <$> addSigsReq [key2] True unsigned
-      sig1 `shouldSatisfy` isn't _Left
-      sig2 `shouldSatisfy` isn't _Left
+      sig1 `shouldSatisfy` isRight
+      sig2 `shouldSatisfy` isRight
       let sig1' = either (error "impossible") id sig1
           sig2' = either (error "impossible") id sig2
       -- Works normally for local
       command <- A.eitherDecode @(Command Text) . BSL.fromStrict <$> combineSigDatas [sig1', sig2'] True
-      command `shouldSatisfy` isn't _Left
+      command `shouldSatisfy` isRight
       -- Works as submitBatch
       commandBatch <- A.eitherDecode @SubmitBatch . BSL.fromStrict <$> combineSigDatas [sig1', sig2'] False
-      commandBatch `shouldSatisfy` isn't _Left
+      commandBatch `shouldSatisfy` isRight
     it "validates when command portion is missing as well:" $ do
       unsigned <- BS.readFile unsignedFile2
       sig1 <- Y.decodeEither' @(SigData Text) <$> addSigsReq [key1] True unsigned
       sig2 <- Y.decodeEither' @(SigData Text) <$> addSigsReq [key2] True unsigned
-      sig1 `shouldSatisfy` isn't _Left
-      sig2 `shouldSatisfy` isn't _Left
+      sig1 `shouldSatisfy` isRight
+      sig2 `shouldSatisfy` isRight
     it "does not validate on missing signatures" $ do
       unsigned <- BS.readFile unsignedFile
       sig1 <- Y.decodeEither' <$> addSigsReq [key1] True unsigned
-      sig1 `shouldSatisfy` isn't _Left
+      sig1 `shouldSatisfy` isRight
       let sig1' = either (error "impossible") id sig1
       -- Works normally for local
       combineSigDatas [sig1'] True `shouldThrow` anyException
