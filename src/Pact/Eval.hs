@@ -567,7 +567,7 @@ evaluateDefs info mdef defs = do
       _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
       pure (_hfAllDefs hf)
   where
-    -- | traverse to find deps and form graph
+  -- | traverse to find deps and form graph
   traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
     defTerm' <- forM defTerm $ \(f :: Name) -> do
       dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
