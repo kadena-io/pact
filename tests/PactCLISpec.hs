@@ -15,6 +15,7 @@ import System.FilePath
 import Pact.ApiReq
 import Pact.Types.Command
 import Pact.Types.API(SubmitBatch)
+import Pact.Types.SigData(SigData)
 
 spec :: Spec
 spec = do
@@ -27,6 +28,9 @@ key2 = "tests" </> "add-sig" </> "key2.yaml"
 
 unsignedFile :: FilePath
 unsignedFile = "tests" </> "add-sig" </> "unsigned.yaml"
+
+unsignedFile2 :: FilePath
+unsignedFile2 = "tests" </> "add-sig" </> "unsigned2.yaml"
 
 partialSigTests :: Spec
 partialSigTests =
@@ -45,6 +49,12 @@ partialSigTests =
       -- Works as submitBatch
       commandBatch <- A.eitherDecode @SubmitBatch . BSL.fromStrict <$> combineSigDatas [sig1', sig2'] False
       commandBatch `shouldSatisfy` isn't _Left
+    it "validates when command portion is missing as well:" $ do
+      unsigned <- BS.readFile unsignedFile2
+      sig1 <- Y.decodeEither' @(SigData Text) <$> addSigsReq [key1] True unsigned
+      sig2 <- Y.decodeEither' @(SigData Text) <$> addSigsReq [key2] True unsigned
+      sig1 `shouldSatisfy` isn't _Left
+      sig2 `shouldSatisfy` isn't _Left
     it "does not validate on missing signatures" $ do
       unsigned <- BS.readFile unsignedFile
       sig1 <- Y.decodeEither' <$> addSigsReq [key1] True unsigned
