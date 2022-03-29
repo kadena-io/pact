@@ -1,0 +1,59 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+module PactCLISpec(spec) where
+
+import Test.Hspec
+
+import Control.Lens
+import Control.Exception(catch)
+  import Data.ByteString(ByteString)
+import qualified Data.Aeson as A
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Yaml as Y
+import Data.Text(Text)
+import System.Directory
+import System.FilePath
+import System.Exit
+
+import Pact.ApiReq
+import Pact.Types.SigData
+import Pact.Types.Command
+import Pact.Types.API(SubmitBatch)
+
+spec :: Spec
+spec = do
+  partialSigTests
+
+-- note, generated with `pact -g`
+key1, key2 :: FilePath
+key1 = "tests" </> "add-sig" </> "key1.yaml"
+key2 = "tests" </> "add-sig" </> "key2.yaml"
+
+unsignedFile :: FilePath
+unsignedFile = "tests" </> "add-sig" </> "unsigned.yaml"
+
+partialSigTests :: Spec
+partialSigTests =
+  describe "partial sigs" $ do
+    it "validates and combines two partial sigs" $ do
+      unsigned <- BS.readFile unsignedFile
+      sig1 <- Y.decodeEither' <$> addSigsReq [key1] True unsigned
+      sig2 <- Y.decodeEither' <$> addSigsReq [key2] True unsigned
+      sig1 `shouldSatisfy` isn't _Left
+      sig2 `shouldSatisfy` isn't _Left
+      let sig1' = either (error "impossible") id sig1
+          sig2' = either (error "impossible") id sig2
+      -- Works normally for local
+      command <- A.eitherDecode @(Command Text) . BSL.fromStrict <$> combineSigDatas [sig1', sig2'] True
+      command `shouldSatisfy` isn't _Left
+      -- Works as submitBatch
+      commandBatch <- A.eitherDecode @SubmitBatch . BSL.fromStrict <$> combineSigDatas [sig1', sig2'] False
+      commandBatch `shouldSatisfy` isn't _Left
+    it "does not validate on missing signatures" $ do
+      unsigned <- BS.readFile unsignedFile
+      sig1 <- Y.decodeEither' <$> addSigsReq [key1] True unsigned
+      sig1 `shouldSatisfy` isn't _Left
+      let sig1' = either (error "impossible") id sig1
+      -- Works normally for local
+      combineSigDatas [sig1'] True `shouldThrow` anyException

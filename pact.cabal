@@ -368,6 +368,7 @@ test-suite hspec
         RemoteVerifySpec
         TypecheckSpec
         SizeOfSpec
+        PactCLISpec
 
       build-depends:
         , Decimal
