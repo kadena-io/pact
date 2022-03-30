@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE CPP #-}
 module Pact.Gas.Table where
 
@@ -317,8 +318,8 @@ intCost :: Integer -> Gas
 intCost !a
   | (abs a) < threshold = 0
   | otherwise =
-    let !nbytes = (fromRational (logBase 2 (abs a) :: Integer) + 1) `quot` 8
-    in fromIntegral (nbytes * nbytes `quot` 100)
+    let !nbytes = (ceiling (logBase @Double 2 (fromIntegral (abs a))) + 1) `quot` 8
+    in (nbytes * nbytes) `quot` 100
   where
   threshold :: Integer
   threshold = (10 :: Integer) ^ (30 :: Integer)
