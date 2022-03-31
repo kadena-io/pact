@@ -43,7 +43,7 @@ For additional information, press, and development inquires, please refer to the
 
 ## Tutorials
 
-Extensive tutorials on every facet of the Pact language may be found [here](https://pactlang.org). Additionally, users may find example scripts in Kadena's [pact-examples](https://github.com/kadena-io/pact-examples) repository, in the [examples](https://github.com/kadena-io/pact/tree/master/examples) directory, and in production as part of the [Kadena Public Blockchain](https://github.com/kadena-io/chainweb-node/).
+Extensive tutorials on every facet of the Pact language may be found [on docs.kadena.io](https://docs.kadena.io/learn-pact/intro). Additionally, users may find example scripts in Kadena's [pact-examples](https://github.com/kadena-io/pact-examples) repository, in the [examples](https://github.com/kadena-io/pact/tree/master/examples) directory, and in production as part of the [Kadena Public Blockchain](https://github.com/kadena-io/chainweb-node/).
 
 ## Documentation
 
@@ -54,7 +54,7 @@ Documentation is always in flux, and corrections to out of date documentation ar
 
 ## Quickstart
 
-The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.io), or via the Chainweaver [wallet](https://github.com/kadena-io/chainweaver). Both environments support error and warning highlighting, as well as an in-app REPL environment for you to test out your code immediately. 
+The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.io), or via the Chainweaver [wallet](https://github.com/kadena-io/chainweaver). Both environments support error and warning highlighting, as well as an in-app REPL environment for you to test out your code immediately. The Kadena docs also include a [developer quickstart](https://docs.kadena.io/basics/quickstart). 
 
 ## Installing Pact
 
