@@ -7,6 +7,7 @@ module Pact.Gas
  ( computeGas
  , computeGas'
  , computeGasNonCommit
+ , computeGasCommit
  , freeGasEnv
  , gasUnreduced
  , constGasModel )
@@ -39,14 +40,25 @@ computeGas i args = do
 --   - Checks the gas calculations against the gas limit
 --   - Does not emit gas logs
 --   - Does not record the gas calculations
-computeGasNonCommit :: Info -> Text -> GasArgs -> Eval e Gas
-computeGasNonCommit info name args = do
+computeGasNoLog :: (Gas -> Eval e ()) -> Info -> Text -> GasArgs -> Eval e Gas
+computeGasNoLog commit info name args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- use evalGas
   let !gUsed = g0 + runGasModel _geGasModel name args
+  commit gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
     else return gUsed
+
+-- | Performs gas calculation for incremental computations with some caveats:
+--   - Checks the gas calculations against the gas limit
+--   - Does not emit gas logs
+--   - Does not record the gas calculations
+computeGasNonCommit :: Info -> Text -> GasArgs -> Eval e Gas
+computeGasNonCommit = computeGasNoLog (const (pure ()))
+
+computeGasCommit :: Info -> Text -> GasArgs -> Eval e Gas
+computeGasCommit = computeGasNoLog (evalGas .=)
 
 -- | Pre-compute gas for some application before some action.
 computeGas' :: Gas -> FunApp -> GasArgs -> Eval e a -> Eval e (Gas,a)

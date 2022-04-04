@@ -77,7 +77,7 @@ import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
--- import Control.DeepSeq
+import Control.DeepSeq
 
 #ifdef ADVICE
 import Pact.Types.Advice
@@ -227,7 +227,7 @@ evalNamespace info setter m = do
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
-  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' t) (eval' stripped)
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
   where
   stripped = case t of
     TModule{} -> stripTermInfo t
@@ -486,7 +486,6 @@ data HeapFold
   , _hfMemoEnv :: !(M.Map Name Bytes)
   , _hfTotalMem :: !Bytes
   }
-
 
 -- Inline the defuns according to the set heap limit for modules.
 -- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
@@ -1010,8 +1009,8 @@ compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
 reduceBody :: Term Ref -> Eval e (Term Name)
 reduceBody (TList bs _ i) =
   -- unsafe but only called in validated body contexts
-  V.mapM reduce bs >>= \vec -> case vec V.!? (V.length vec - 1) of
-    Just v ->
+  V.mapM reduce bs >>= \vec -> case V.unsnoc vec of
+    Just (_, v) ->
       pure v
     Nothing ->
       evalError i "Expected non-empty function body"

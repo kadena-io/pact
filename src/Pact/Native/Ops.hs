@@ -30,8 +30,7 @@ module Pact.Native.Ops
     ) where
 
 
-import Control.Lens ((.=), use, view)
-import Control.Monad(when)
+import Control.Monad (when)
 import Data.Bits
 import Data.Decimal
 import Data.Default
@@ -122,8 +121,6 @@ divDef = defRNative "/" divide' coerceBinNum
       divDec a' b' = nonZeroDiv b' *> liftDecimalOp (/) a' b'
       divInt a' b' = nonZeroDiv b' *> liftIntegerOp div a' b'
     divide' fi as = argsError fi as
-      -- binop (\a b -> assert (b /= 0) "Division by 0" $ liftOp (/) a b)
-      --               (\a b -> assert (b /= 0) "Division by 0" $ liftOp div a b)
 
 powDef :: NativeDef
 powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
@@ -152,19 +149,10 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
       | y == 1 = twoArgIntOpGas x z *> pure (x*z)
       | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x *z)
   pow i as = argsError i as
--- Integers below a threshold do not hit extra gas limits.
--- TODO: maybe move ot gasmodel?
 
-twoArgIntOpGas :: Integer -> Integer -> Eval e ()
-twoArgIntOpGas loperand roperand = do
-  GasEnv {..} <- view eeGasEnv
-  g0 <- use evalGas
-  let !nopsGas = runGasModel _geGasModel "" (GIntegerOpCost loperand roperand)
-      !gUsed = g0 + nopsGas
-  evalGas .= gUsed
-  if gUsed > fromIntegral _geGasLimit then
-    throwErr GasError def $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
-    else return ()
+twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
+twoArgIntOpGas loperand roperand =
+  computeGasCommit def "" (GIntegerOpCost loperand roperand)
 
 legalLogArg :: Literal -> Bool
 legalLogArg = \case
@@ -443,8 +431,6 @@ binop' dop iop i as = binop (liftDecimalOp dop) (liftIntegerOp iop) i as
 binop :: (Decimal -> Decimal -> Eval e Decimal) ->
        (Integer -> Integer -> Eval e Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
-  -- let hdl (Right v) = return $ toTerm v
-  --     hdl (Left err) = evalError' fi $ prettyString err <> ": " <> pretty (a,b)
   case (a,b) of
     (LInteger i,LInteger j) -> toTerm <$> (i `iop` j)
     (LDecimal i,LDecimal j) -> toTerm <$> (i `dop` j)
