@@ -1009,8 +1009,8 @@ compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
 reduceBody :: Term Ref -> Eval e (Term Name)
 reduceBody (TList bs _ i) =
   -- unsafe but only called in validated body contexts
-  V.mapM reduce bs >>= \vec -> case V.unsnoc vec of
-    Just (_, v) ->
+  V.mapM reduce bs >>= \vec -> case vec V.!? (V.length vec - 1) of
+    Just v ->
       pure v
     Nothing ->
       evalError i "Expected non-empty function body"
