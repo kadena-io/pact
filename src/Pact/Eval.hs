@@ -1241,8 +1241,6 @@ initPact i app bod = view eePactStep >>= \es -> case es of
 
 -- Nested defpact application, subject to a few conditions:
 -- - If parent step has rollback, this step _Also_ needs to have rollback.
--- - Todo: private pacts
--- - Todo: same argsin continuation.
 applyNestedPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
 applyNestedPact i app (TList steps _a _b) ps@PactStep {..} = do
   -- only one pact state allowed in a transaction
@@ -1460,22 +1458,6 @@ resumeNestedPactExec i def' req ctx = do
 
   when (_psStep req < 0 || _psStep req >= _npeStepCount ctx) $ evalError i $
     "resumeNestedPactExec: invalid step in request: " <> pretty (_psStep req)
-
-  -- if _psRollback req
-  --   then when (_psStep req /= _npeStep ctx) $ evalError i $
-  --        "resumePactExec: rollback step mismatch with context: " <> pretty (_psStep req,_peStep ctx)
-  --   else when (_psStep req /= succ (_npeStep ctx)) $ evalError i $
-  --        "resumePactExec: exec step mismatch with context: " <> pretty (_psStep req,_peStep ctx)
-
-  -- target <- resolveRef i (_pcDef (_peContinuation ctx)) >>= (`maybe` pure)
-  --   (evalError i $ "resumePactExec: could not resolve continuation ref: " <>
-  --    pretty (_pcDef $ _peContinuation ctx))
-
-  -- def' <- case target of
-  --   Ref (TDef d _) -> do
-  --
-  --     return d
-  --   t -> evalError' t $ "resumePactExec: defpact ref required"
 
   let args = map (liftTerm . fromPactValue) (_pcArgs (_npeContinuation ctx))
 

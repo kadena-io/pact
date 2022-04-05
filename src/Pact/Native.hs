@@ -1219,6 +1219,9 @@ base64decode = defRNative "base64-decode" go
           Right t -> return $ tStr t
       _ -> argsError i as
 
+-- | Continue a nested defpact.
+--   We get the PactId of the nested defpact from the resolved TDef as a qualified name concatenated with
+--   the pactId of the parent.
 continueNested :: NativeFun e
 continueNested i as = gasUnreduced i as $ case as of
   [t] -> lookup' t >>= \d ->
