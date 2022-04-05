@@ -757,8 +757,10 @@ setGasModel _ [] = do
   model <- asks (_geGasModel . _eeGasEnv)
   return $ tStr $ "Current gas model is '" <> gasModelName model <> "': " <> gasModelDesc model
 setGasModel _ as = do
+  mset <- isExecutionFlagSet FlagDisableInlineMemCheck
   let mMod = case as of
-        [TLitString "table"] -> Just $ tableGasModel defaultGasConfig
+        [TLitString "table"] ->
+          if mset then Just defaultGasModel else Just pact421GasModel
         [TLitString "fixed", TLitInteger r] -> Just $ constGasModel (fromIntegral r)
         _ -> Nothing
   case mMod of

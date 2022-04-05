@@ -14,6 +14,7 @@ module Pact.Types.Scheme
 
 import GHC.Generics
 import Control.DeepSeq
+import Data.Kind (Type)
 import Data.Serialize
 import Data.Aeson
 
@@ -48,7 +49,7 @@ defPPKScheme = ED25519
 
 -- Run-time witness to PPKScheme kind.
 
-data SPPKScheme :: PPKScheme -> * where
+data SPPKScheme :: PPKScheme -> Type where
   SED25519 :: SPPKScheme 'ED25519
   SETH :: SPPKScheme 'ETH
 instance Show (SPPKScheme a) where

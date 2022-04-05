@@ -79,7 +79,7 @@ import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
--- import Control.DeepSeq
+import Control.DeepSeq
 
 #ifdef ADVICE
 import Pact.Types.Advice
@@ -229,7 +229,7 @@ evalNamespace info setter m = do
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
-  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' t) (eval' stripped)
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
   where
   stripped = case t of
     TModule{} -> stripTermInfo t
@@ -488,7 +488,6 @@ data HeapFold
   , _hfMemoEnv :: !(M.Map Name Bytes)
   , _hfTotalMem :: !Bytes
   }
-
 
 -- Inline the defuns according to the set heap limit for modules.
 -- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
@@ -852,9 +851,9 @@ resolveRefFQN i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
       case (m, ns) of
         (Just m', _) ->
           case HM.lookup n (_mdRefMap m') of
-            Just (Ref TDef{}) -> do
+            Just (Ref (TDef def' _) ) -> do
               h <- getModuleHash (_mdModule m')
-              let name' = FQName (FullyQualifiedName n q h)
+              let name' = FQName (FullyQualifiedName n (_dModule def') h)
               return $ Just (Direct (TVar name' def))
             p -> pure p
         (Nothing, Just{}) -> return Nothing
