@@ -748,7 +748,8 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
     ,defNative "continue"  continueNested
-     (funType TyAny [("value", TyAny)]) [LitExample "(continue f)"] "TODO: fill"
+     (funType TyAny [("value", TyAny)]) [LitExample "(continue f)"]
+     "Continue a previously started nested defpact."
     ,strToIntDef
     ,strToListDef
     ,concatDef

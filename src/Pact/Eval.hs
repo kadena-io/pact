@@ -1232,8 +1232,6 @@ initPact i app bod = view eePactStep >>= \es -> case es of
   Just v@(PactStep step b (PactId parent) _) -> do
     whenExecutionFlagSet FlagDisablePact43 $
       evalError i $ "initPact: internal error: step already in environment: " <> pretty v
-    -- todo: turn pactId into Bytestring then use that as parent, as opposed to block hash.
-    -- todo: ensure pact continuation being applied is _not_ the parent.
     let Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText (_pcDef app)
         newPactId = toPactId (pactHash (T.encodeUtf8 parent <> ":" <> name'))
     applyNestedPact i app bod $ PactStep step b newPactId Nothing
