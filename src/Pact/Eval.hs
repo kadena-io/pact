@@ -849,9 +849,9 @@ resolveRefFQN i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
       case (m, ns) of
         (Just m', _) ->
           case HM.lookup n (_mdRefMap m') of
-            Just (Ref TDef{}) -> do
+            Just (Ref (TDef def' _) ) -> do
               h <- getModuleHash (_mdModule m')
-              let name' = FQName (FullyQualifiedName n q h)
+              let name' = FQName (FullyQualifiedName n (_dModule def') h)
               return $ Just (Direct (TVar name' def))
             p -> pure p
         (Nothing, Just{}) -> return Nothing
