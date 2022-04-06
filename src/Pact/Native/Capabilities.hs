@@ -364,7 +364,7 @@ createPrincipal i = \case
       void $ computeGasCommit i "createPrincipal" (GPrincipal (1 + sizeOf a))
       pure $ "w:" <> asString a <> ":" <> fun
   GKeySetRef (KeySetName n) -> do
-    void $! computeGasCommit i "createPrincipal" (GPrincipal 1)
+    void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
     pure $ "r:" <> n
   GModule (ModuleGuard mn n) -> do
     void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
@@ -390,6 +390,6 @@ validatePrincipalDef =
     validatePrincipal' :: RNativeFun e
     validatePrincipal' i [TGuard g _, TLitString p] = do
       void $ computeGasCommit (getInfo i) "validatePrincipal" (GPrincipal 1)
-      g' <- createPrincipal (getInfo i) g
-      pure $ toTerm $ (p == g')
+      q <- createPrincipal (getInfo i) g
+      pure $ toTerm $ (p == q)
     validatePrincipal' i as = argsError i as
