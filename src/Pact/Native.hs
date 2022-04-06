@@ -114,11 +114,11 @@ natives = [
 
 
 -- | Production native modules as a dispatch map.
-nativeDefs :: HM.HashMap Name Ref
+nativeDefs :: HM.HashMap Text Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
-moduleToMap :: NativeModule -> HM.HashMap Name Ref
-moduleToMap = HM.fromList . map ((Name . (`BareName` def) . asString) *** Direct) . snd
+moduleToMap :: NativeModule -> HM.HashMap Text Ref
+moduleToMap = HM.fromList . map (asString *** Direct) . snd
 
 
 lengthDef :: NativeDef

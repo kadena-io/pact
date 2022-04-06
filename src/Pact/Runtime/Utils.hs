@@ -22,6 +22,9 @@ module Pact.Runtime.Utils
   , emitEvent
   , emitReservedEvent
   , stripTermInfo
+  , lookupFreeVar
+  , lookupFullyQualifiedTerm
+  , inlineModuleData
   ) where
 
 import Bound
@@ -171,6 +174,7 @@ stripTermInfo = stripTerm' stripNameInfo
     QName qn -> QName $ qn{ _qnInfo = def}
     Name bn -> Name $ bn{ _bnInfo = def}
     DName dn -> DName $ dn {_dynInfo = def}
+    FQName fq -> FQName fq
   stripBindPair f (BindPair arg n) =
     BindPair (stripArgInfo f arg) (stripTerm' f n)
 
@@ -179,7 +183,8 @@ lookupModule :: HasInfo i => i -> ModuleName -> Eval e (Maybe (ModuleData Ref))
 lookupModule i mn = do
   loaded <- preuse $ evalRefs . rsLoadedModules . ix mn
   case loaded of
-    Just (m,_) -> return $ Just m
+    Just (m,_) ->
+      return $ Just m
     Nothing -> do
       stored <- readRow (getInfo i) Modules mn
       case stored of
@@ -188,16 +193,17 @@ lookupModule i mn = do
             MDModule m -> GPostRead (ReadModule (_mName m) (_mCode m))
             MDInterface int -> GPostRead (ReadInterface (_interfaceName int) (_interfaceCode int))
           natives <- view $ eeRefStore . rsNatives
-          let natLookup (NativeDefName n) = case HM.lookup (Name (BareName n def)) natives of
+          let natLookup (NativeDefName n) = case HM.lookup n natives of
                 Just (Direct t) -> Just t
                 _ -> Nothing
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
             Right md -> do
               evalRefs . rsLoadedModules %= HM.insert mn (md,False)
+              evalRefs . rsQualifiedDeps %= HM.union (allModuleExports md)
               return $ Just md
-            Left e -> evalError' i $ "Internal error: module restore failed: " <> pretty e
+            Left e ->
+              evalError' i $ "Internal error: module restore failed: " <> pretty e
         Nothing -> return Nothing
-
 
 -- | Search up through call stack apps to find the first `Just a`
 searchCallStackApps :: (FunApp -> Maybe a) -> Eval e (Maybe a)
@@ -260,3 +266,33 @@ emitReservedEvent name params mhash = unlessExecutionFlagSet FlagDisablePactEven
 emitEventUnsafe :: QualifiedName -> [PactValue] -> ModuleHash -> Eval e ()
 emitEventUnsafe QualifiedName{..} params mh = do
   evalEvents %= (++ [PactEvent _qnName params _qnQual mh])
+
+
+lookupFreeVar :: HasInfo i => i -> FullyQualifiedName -> Eval e Ref
+lookupFreeVar i fqn = use (evalRefs . rsQualifiedDeps . at fqn) >>= \case
+  Just r -> pure r
+  Nothing -> evalError' i "unbound free variable"
+
+lookupFullyQualifiedTerm :: HasInfo i => i -> Term Ref -> Eval e (Term Ref)
+lookupFullyQualifiedTerm i = \case
+  TVar (Direct (TVar (FQName fq) _)) _ ->
+    flip TVar def <$> lookupFreeVar i fq
+  e -> pure e
+
+-- | Fully inline all deps.
+--   do not use in an evaluation context outside of SPV and static typechecking
+inlineModuleData :: ModuleData Ref -> ModuleData Ref
+inlineModuleData md@(ModuleData m export deps) = case m of
+  MDModule m' -> inline' m'
+  _ -> md
+  where
+  inline' m' =
+    let
+      toFQ n = FullyQualifiedName n (_mName m') (_mhHash $ _mHash m')
+      deps' = HM.mapKeys toFQ export
+      allTL = HM.union deps' deps
+    in ModuleData (MDModule (fmap (resolve allTL) <$> m')) (resolve allTL <$> export) deps
+  resolve m' = \case
+    Ref t -> Ref (resolve m' <$> t)
+    Direct (TVar (FQName fq) _) -> resolve m' (m' HM.! fq)
+    e -> e

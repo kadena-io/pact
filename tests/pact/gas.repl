@@ -3,7 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
-(env-exec-config ["DisableInlineMemCheck"])
+(env-exec-config ["DisableInlineMemCheck", "DisablePact43"])
 (env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
@@ -610,7 +610,7 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
-(env-exec-config [])
+(env-exec-config ["DisablePact43"])
 (env-gasmodel "table")
 (module basic-module GOV
   (defcap GOV () true)
@@ -675,6 +675,17 @@ d.G3
 )
 
 (expect "new module gas" 60841 (env-gas))
+(commit-tx)
+
+(begin-tx)
+(env-gas 0)
+(env-gaslimit 80000)
+(env-exec-config [])
+
+(load "../../golden/golden.fqns.repl")
+
+(expect "new module with FQVs gas" 60835 (env-gas))
+
 (commit-tx)
 (begin-tx)
 ; setup module

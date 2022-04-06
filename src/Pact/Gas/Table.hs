@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE CPP #-}
 module Pact.Gas.Table where
 
 import Data.Ratio
@@ -7,6 +11,10 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+#if !defined(ghcjs_HOST_OS)
+import qualified GHC.Integer.Logarithms as IntLog
+import GHC.Int(Int(..))
+#endif
 
 import Pact.Types.Continuation
 import Pact.Types.Gas
@@ -210,6 +218,8 @@ tableGasModel gasConfig =
         GUserApp t -> case t of
           Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
           _ -> _gasCostConfig_functionApplicationCost gasConfig
+        GIntegerOpCost i j ->
+          intCost i + intCost j
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
         GDistinct len -> expLengthPenalty len
@@ -285,6 +295,35 @@ moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
 -- | Gas model that charges varible (positive) rate per tracked operation
 defaultGasModel :: GasModel
 defaultGasModel = tableGasModel defaultGasConfig
+
+#if !defined(ghcjs_HOST_OS)
+-- | Costing function for binary integer ops
+intCost :: Integer -> Gas
+intCost !a
+  | (abs a) < threshold = 0
+  | otherwise =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in fromIntegral (nbytes * nbytes `quot` 100)
+  where
+  threshold :: Integer
+  threshold = (10 :: Integer) ^ (30 :: Integer)
+
+
+_intCost :: Integer -> Int
+_intCost !a =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in nbytes
+#else
+intCost :: Integer -> Gas
+intCost !a
+  | (abs a) < threshold = 0
+  | otherwise =
+    let !nbytes = (ceiling (logBase @Double 2 (fromIntegral (abs a))) + 1) `quot` 8
+    in (nbytes * nbytes) `quot` 100
+  where
+  threshold :: Integer
+  threshold = (10 :: Integer) ^ (30 :: Integer)
+#endif
 
 pact421GasModel :: GasModel
 pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
