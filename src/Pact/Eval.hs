@@ -1298,7 +1298,7 @@ applyNestedPact i app (TList steps _a _b) ps@PactStep {..} = do
   verifyParent PactExec{..} step =  do
     let stepCount = length steps
         rollback = isJust $ _sRollback step
-    when (stepCount > _peStepCount) $ evalError' step $ "applyNestedPact: invalid nested defpact length, must match at least length of parent"
+    when (stepCount /= _peStepCount) $ evalError' step $ "applyNestedPact: invalid nested defpact length, must be equal to length of parent"
     when (rollback /= _peStepHasRollback) $ evalError' step $ "applyNestedPact: invalid nested defpact step, must match parent rollback"
     pure (rollback, stepCount)
 applyNestedPact _ _ t _ = evalError' t "applyNestedPact: invalid defpact body, expected list of steps"
