@@ -425,7 +425,7 @@ someStackFrame =
   )
 
 someModuleData :: ModuleData Ref
-someModuleData = ModuleData modDef refMap
+someModuleData = ModuleData modDef refMap mempty
   where refMap = HM.empty
         ref = Direct $ TVar (Name $ BareName "" def) def
         fst' :: Ref -> Maybe Int

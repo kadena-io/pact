@@ -201,8 +201,8 @@ setEnv f setup = setEnv'
 defEvalState :: IO EvalState
 defEvalState = do
   stateWithModule <- getLoadedState (accountsModule acctModuleName)
-  let loaded = HM.singleton (Name $ BareName sampleLoadedKeysetName def)
-               (Direct $ TGuard (GKeySet sampleKeyset) def)
+  let loaded = HM.singleton sampleLoadedKeysetName
+               (Direct $ TGuard (GKeySet sampleKeyset) def, Nothing)
   return
       $ set (evalRefs . rsLoaded) loaded
       $ set evalGas 0 stateWithModule

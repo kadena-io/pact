@@ -1,3 +1,10 @@
+4.2.1
+---
+* Backport chainweb gasmodel (#978)
+* Memory improvements (#964)
+* Force eof in parseExprs (#963)
+* Fix `pact add-sig` (#981)
+
 4.2.0
 ---
 * Language features:

@@ -38,6 +38,7 @@ import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Types.SizeOf
 
 
 capDefs :: NativeModule
@@ -303,7 +304,8 @@ createUserGuard =
     createUserGuard' :: NativeFun e
     createUserGuard' i [TApp App {..} _] = gasUnreduced i [] $ do
       args <- mapM reduce _appArgs
-      fun <- case _appFun of
+      appFun' <- lookupFullyQualifiedTerm _appInfo _appFun
+      fun <- case appFun' of
         (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
           Defun -> return (QName $ QualifiedName _dModule (asString _dDefName) _dInfo)
           _ -> evalError _appInfo $ "User guard closure must be defun, found: " <> pretty _dDefType
@@ -345,32 +347,32 @@ createPrincipalDef =
   where
     createPrincipal' :: RNativeFun e
     createPrincipal' i [TGuard g _] =
-      toTerm <$> createPrincipal i g
+      toTerm <$> createPrincipal (getInfo i) g
     createPrincipal' i as = argsError i as
 
 createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
 createPrincipal i = \case
   GPact (PactGuard pid n) -> do
-    void $! computeGas (Right i) (GPrincipal 1)
+    void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
     pure $ "p:" <> asString pid <> ":" <> n
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> do
-      void $! computeGas (Right i) (GPrincipal 1)
+      void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
       pure $ "k:" <> asString k
     (l,fun) -> do
       let a = toHash $ map _pubKey l
-      void <$!> computeGas (Right i) (GPrincipal (1 + sizeOf a))
+      void $ computeGasCommit i "createPrincipal" (GPrincipal (1 + sizeOf a))
       pure $ "w:" <> asString a <> ":" <> fun
   GKeySetRef (KeySetName n) -> do
-    void $! computeGas (Right i) (GPrincipal 1)
+    void $! computeGasCommit i "createPrincipal" (GPrincipal 1)
     pure $ "r:" <> n
   GModule (ModuleGuard mn n) -> do
-    void <$!> computeGas (Right i) (GPrincipal 1)
+    void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
     pure $ "m:" <> asString mn <> ":" <> n
   GUser (UserGuard uf args) -> do
     let a = toHash $ map toJSONPactValue args
-    void $! computeGas (Right i) (GPrincipal (1 + sizeOf a))
-    pure $ "u:" <> asString uf <> ":" <> a
+    void $ computeGasCommit i "createPrincipal" (GPrincipal (1 + sizeOf a))
+    pure $ "u:" <> asString uf <> ":" <> asString a
   where
     toHash = pactHash . mconcat
     toJSONPactValue = toStrict . encode . toPactValueLenient
@@ -387,6 +389,7 @@ validatePrincipalDef =
   where
     validatePrincipal' :: RNativeFun e
     validatePrincipal' i [TGuard g _, TLitString p] = do
-      void $! computeGas (Left (i, "validatePrincipal")) (GPrincipal 1)
-      pure $ toTerm $ (p == createPrincipal g)
+      void $ computeGasCommit (getInfo i) "validatePrincipal" (GPrincipal 1)
+      g' <- createPrincipal (getInfo i) g
+      pure $ toTerm $ (p == g')
     validatePrincipal' i as = argsError i as
