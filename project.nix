@@ -10,6 +10,47 @@ in {
     kpkgs.rp.project ({ pkgs, hackGet, ... }: with pkgs.haskell.lib; {
       name = "pact";
       overrides = self: super: {
+        hedgehog = doJailbreak super.hedgehog;
+        tasty-hedgehog = doJailbreak super.tasty-hedgehog;
+        retry = doJailbreak super.retry;
+        bifunctors = doJailbreak super.bifunctors;
+        http-media = doJailbreak super.http-media;
+        semigroupoids = doJailbreak super.semigroupoids;
+        dec = doJailbreak super.dec;
+        aeson = doJailbreak super.aeson;
+        attoparsec = doJailbreak super.attoparsec;
+        attoparsec-iso8601 = doJailbreak super.attoparsec-iso8601;
+        singleton-bool = doJailbreak super.singleton-bool;
+        bool = doJailbreak super.bool;
+        quickcheck-instances = doJailbreak super.quickcheck-instances;
+        trifecta = doJailbreak super.trifecta;
+        http-api-data = doJailbreak super.http-api-data;
+        servant = doJailbreak super.servant;
+        servant-client = doJailbreak super.servant-client;
+        servant-client-core = doJailbreak super.servant-client-core;
+        servant-server = doJailbreak super.servant-server;
+        wai-extra = doJailbreak super.wai-extra;
+        wai-app-static = doJailbreak (self.callHackageDirect {
+          pkg = "wai-app-static";
+          ver = "3.1.7.4";
+          sha256 = "1vbblkgdna1cli6nr05fmd2p47xnrnnkbqdb9zxlzxdshxkblsry";
+        } {});
+        these = doJailbreak (self.callHackageDirect {
+          pkg = "these";
+          ver = "1.1.1.1";
+          sha256 = "1i1nfh41vflvqxi8w8n2s35ymx2z9119dg5zmd2r23ya7vwvaka1";
+        } {});
+        http2 = doJailbreak (self.callHackageDirect {
+          pkg = "http2";
+          ver = "2.0.6";
+          sha256 = "05f9hrgs0v3h99pqv948xaysvndxccb5m6mm2mayn0yv8djryhqi";
+        } {});
+        time-compat = doJailbreak (self.callHackageDirect {
+          pkg = "time-compat";
+          ver = "1.9.6.1";
+          sha256 = "0ika8xx9zff8rwaabs17q5c30c1b9ii89jhbvahi5nk7rs0cd5fs";
+        } {});
+
         direct-sqlite = dontCheck (self.callHackageDirect {
           pkg = "direct-sqlite";
           ver = "2.3.26";

@@ -114,7 +114,7 @@ library
     , aeson >= 0.11.3.0 && < 1.6
     , attoparsec >= 0.13.0.2 && < 0.15
     , base >=4.9.0.0 && < 4.17
-    , base16-bytestring >=0.1.1.6 && < 0.2
+    , base16-bytestring >=0.1.1.6 && < 1.1
     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
         -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
     , bound >= 2 && < 2.1
@@ -162,7 +162,7 @@ library
       , ghcjs-base
       , ghcjs-dom
       , ghcjs-prim
-      , optparse-applicative >= 0.12.1.0 && < 0.16
+      , optparse-applicative >= 0.12.1.0 && < 0.18
 
   -- Normal GHC
   else
@@ -255,7 +255,7 @@ library
         , haskeline >= 0.7.3 && < 0.9
         , mmorph >= 1.1 && < 1.2
         , neat-interpolation >= 0.4
-        , optparse-applicative >= 0.12.1.0 && < 0.16
+        , optparse-applicative >= 0.12.1.0 && < 0.18
         , sbv >= 8.8
         , servant-server
         , wai-cors
