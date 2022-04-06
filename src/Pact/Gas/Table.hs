@@ -257,7 +257,7 @@ tableGasModel gasConfig =
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
         GModuleMemory i -> moduleMemoryCost i
-        GPrincipal b -> memoryCost b $ _gasCostConfig_principalCost gasConfig
+        GPrincipal g -> fromIntegral g + expLengthPenalty g
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"

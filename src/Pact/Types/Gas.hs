@@ -144,6 +144,7 @@ data GasArgs
   | GModuleMemory Bytes
   -- ^ The cost of the in-memory representation of the module
   | GPrincipal Bytes
+  -- ^ the cost of principal creation and validation
 
 instance Pretty GasArgs where
   pretty g = case g of

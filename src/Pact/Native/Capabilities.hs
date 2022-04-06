@@ -344,28 +344,35 @@ createPrincipalDef =
   "Create a principal which unambiguously identifies GUARD."
   where
     createPrincipal' :: RNativeFun e
-    createPrincipal' _i [TGuard g _] =
-      pure $! toTerm $ createPrincipal g
+    createPrincipal' i [TGuard g _] =
+      toTerm <$> createPrincipal i g
     createPrincipal' i as = argsError i as
 
-createPrincipal :: Guard (Term Name) -> Text
-createPrincipal = \case
-  GPact (PactGuard pid n) ->
-    "p:" <> asString pid <> ":" <> n
+createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
+createPrincipal i = \case
+  GPact (PactGuard pid n) -> do
+    void $! computeGas (Right i) (GPrincipal 1)
+    pure $ "p:" <> asString pid <> ":" <> n
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
-    ([k],"keys-all") ->
-      "k:" <> asString k
-    (l,fun) ->
-      "w:" <> toHash (map _pubKey l) <> ":" <> fun
-  GKeySetRef (KeySetName n) ->
-    "r:" <> n
-  GModule (ModuleGuard mn n) ->
-    "m:" <> asString mn <> ":" <> n
-  GUser (UserGuard uf args) ->
-    "u:" <> asString uf <> ":" <> toHash (map toJSONPactValue args)
-
+    ([k],"keys-all") -> do
+      void $! computeGas (Right i) (GPrincipal 1)
+      pure $ "k:" <> asString k
+    (l,fun) -> do
+      let a = toHash $ map _pubKey l
+      void <$!> computeGas (Right i) (GPrincipal (1 + sizeOf a))
+      pure $ "w:" <> asString a <> ":" <> fun
+  GKeySetRef (KeySetName n) -> do
+    void $! computeGas (Right i) (GPrincipal 1)
+    pure $ "r:" <> n
+  GModule (ModuleGuard mn n) -> do
+    void <$!> computeGas (Right i) (GPrincipal 1)
+    pure $ "m:" <> asString mn <> ":" <> n
+  GUser (UserGuard uf args) -> do
+    let a = toHash $ map toJSONPactValue args
+    void $! computeGas (Right i) (GPrincipal (1 + sizeOf a))
+    pure $ "u:" <> asString uf <> ":" <> a
   where
-    toHash = asString . pactHash . mconcat
+    toHash = pactHash . mconcat
     toJSONPactValue = toStrict . encode . toPactValueLenient
 
 validatePrincipalDef :: NativeDef
@@ -379,6 +386,7 @@ validatePrincipalDef =
   "Validate that PRINCIPAL unambiguously identifies GUARD."
   where
     validatePrincipal' :: RNativeFun e
-    validatePrincipal' _i [TGuard g _, TLitString p] =
-      pure $! toTerm $ (p == createPrincipal g)
+    validatePrincipal' i [TGuard g _, TLitString p] = do
+      void $! computeGas (Left (i, "validatePrincipal")) (GPrincipal 1)
+      pure $ toTerm $ (p == createPrincipal g)
     validatePrincipal' i as = argsError i as
