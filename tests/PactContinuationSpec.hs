@@ -54,9 +54,11 @@ spec = describe "pacts in dev server" $ do
   describe "testPactRollback" $ testPactRollback mgr
   describe "testPactYield" $ testPactYield mgr
   describe "testTwoPartyEscrow" $ testTwoPartyEscrow mgr
-  describe "testNestedPacts" $ testNestedPacts mgr
+  describe "testOldNestedPacts" $ testOldNestedPacts mgr
   describe "testManagedCaps" $ testManagedCaps mgr
   describe "testElideModRefEvents" $ testElideModRefEvents mgr
+  describe "testNestedPactContinuation" $ testNestedPactContinuation mgr
+  describe "testNestedPactYield" $ testNestedPactYield mgr
 
 _runOne :: (HTTP.Manager -> Spec) -> Spec
 _runOne test = do
@@ -142,8 +144,8 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
 _runArgs :: String -> IO ()
 _runArgs args = withArgs (words args) $ hspec spec
 
-testNestedPacts :: HTTP.Manager -> Spec
-testNestedPacts mgr = before_ flushDb $ after_ flushDb $
+testOldNestedPacts :: HTTP.Manager -> Spec
+testOldNestedPacts mgr = before_ flushDb $ after_ flushDb $
   it "throws error when multiple defpact executions occur in same transaction" $ do
     adminKeys <- genKeys
     let makeExecCmdWith = makeExecCmd adminKeys
@@ -168,20 +170,50 @@ testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
     (_crResult <$> cr)`shouldBe` Just cmdData
 
   context "when provided with correct next step" $
-    it "executes the next step and updates pact's state" $
-      testCorrectNextStep mgr
+    it "executes the next step and updates pact's state" $ do
+      let mname1 = "testCorrectNextStep"
+      testCorrectNextStep mgr (threeStepPactCode mname1) ("(" <> mname1 <> ".tester)") testConfigFilePath
 
   context "when provided with incorrect next step" $
-    it "throws error and does not update pact's state" $
-      testIncorrectNextStep mgr
+    it "throws error and does not update pact's state" $ do
+      let mname2 = "testIncorrectNextStep"
+      testIncorrectNextStep mgr (threeStepPactCode mname2) ("(" <> mname2 <> ".tester)") testConfigFilePath
 
   context "when last step of a pact executed" $
-    it "deletes pact from the state" $
-      testLastStep mgr
+    it "deletes pact from the state" $ do
+      let mname3 = "testLastStep"
+      testLastStep mgr (threeStepPactCode mname3) ("(" <> mname3 <> ".tester)") testConfigFilePath
 
   context "when error occurs when executing pact step" $
-    it "throws error and does not update pact's state" $
-      testErrStep mgr
+    it "throws error and does not update pact's state" $ do
+      let mname4 = "testErrStep"
+      testErrStep mgr (errorStepPactCode mname4) ("(" <> mname4 <> ".tester)") testConfigFilePath
+
+testNestedPactContinuation :: HTTP.Manager -> Spec
+testNestedPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
+  it "sends (+ 1 2) command to locally running dev server" $ do
+    let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
+    cr <- testSimpleServerCmd mgr
+    (_crResult <$> cr)`shouldBe` Just cmdData
+
+  context "when provided with correct next step" $
+    it "executes the next step and updates nested pact's state" $ do
+    let mname1 = "testCorrectNextNestedStep"
+    testCorrectNextStep mgr (threeStepNestedPactCode mname1) ("(" <> mname1 <> "-nested.nestedTester " <> mname1 <> "-2)") testConfigNDPFilePath
+
+  context "when provided with incorrect next step" $
+    it "throws error and does not update nested pact's state" $ do
+      let mname2 = "testIncorrectNextNestedStep"
+      testIncorrectNextStep mgr (threeStepNestedPactCode mname2) ("(" <> mname2 <> "-nested.nestedTester " <> mname2 <> "-2)") testConfigNDPFilePath
+  context "when last step of a pact executed" $
+    it "deletes pact from the state" $ do
+      let mname3 = "testNestedLastStep"
+      testLastStep mgr (threeStepNestedPactCode mname3) ("(" <> mname3 <> "-nested.nestedTester " <> mname3 <> "-2)") testConfigNDPFilePath
+
+  context "when error occurs when executing pact step" $
+    it "throws error and does not update pact's state" $ do
+      let mname4 = "testNestedErrStep"
+      testErrStep mgr (errorStepNestedPactCode mname4) ("(" <> mname4 <> "-nested.nestedTester)") testConfigNDPFilePath
 
 testSimpleServerCmd :: HTTP.Manager -> IO (Maybe (CommandResult Hash))
 testSimpleServerCmd mgr = do
@@ -191,18 +223,17 @@ testSimpleServerCmd mgr = do
   return $ HM.lookup (cmdToRequestKey cmd) allResults
 
 
-testCorrectNextStep :: HTTP.Manager -> Expectation
-testCorrectNextStep mgr = do
-  let moduleName = "testCorrectNextStep"
+testCorrectNextStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
+testCorrectNextStep mgr code command cfg = do
   adminKeys <- genKeys
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd       <- makeExecCmdWith (threeStepPactCode moduleName)
-  executePactCmd  <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
+  moduleCmd       <- makeExecCmdWith code
+  executePactCmd  <- makeExecCmdWith command
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contNextStepCmd <- makeContCmdWith 1 "test3"
   checkStateCmd   <- makeContCmdWith 1 "test4"
-  allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
+  allResults      <- runAll' mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -220,22 +251,77 @@ threeStepPactCode moduleName =
                 (step "step 1")
                 (step "step 2"))) |]
 
+threeStepNestedPactCode :: T.Text -> T.Text
+threeStepNestedPactCode moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (interface iface
+
+              (defpact ndp:string ())
+             )
+             (module $moduleName 'k
+              (defpact tester ()
+                (step "step 0")
+                (step "step 1")
+                (step "step 2")))
+              (module $moduleName-2 'k
+              (implements iface)
+              (defpact ndp:string ()
+                (step
+                  (let
+                    ((unused 1))
+                    ($moduleName.tester)
+                    "step 0")
+                )
+                (step
+                  (let
+                    ((unused 1))
+                    (continue $moduleName.tester)
+                    "step 1")
+                )
+                (step
+                  (let
+                    ((unused 1))
+                    (continue $moduleName.tester)
+                    "step 2")
+                ))
+                )
+
+              (module $moduleName-nested 'k
+                (defpact nestedTester (m:module{iface})
+                  (step
+                  (let
+                    ((unused 1))
+                    (m::ndp)
+                    "step 0")
+                )
+                (step
+                  (let
+                    ((unused 1))
+                    (continue m::ndp)
+                    "step 1")
+                )
+                (step
+                  (let
+                    ((unused 1))
+                    (continue m::ndp)
+                    "step 2")
+                )
+                ))
+                |]
 
 
-
-testIncorrectNextStep :: HTTP.Manager -> Expectation
-testIncorrectNextStep mgr = do
-  let moduleName = "testIncorrectNextStep"
+testIncorrectNextStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
+testIncorrectNextStep mgr code command cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd         <- makeExecCmdWith (threeStepPactCode moduleName)
-  executePactCmd    <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
+  moduleCmd         <- makeExecCmdWith code
+  executePactCmd    <- makeExecCmdWith command
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   incorrectStepCmd  <- makeContCmdWith 2 "test3"
   checkStateCmd     <- makeContCmdWith 1 "test4"
-  allResults        <- runAll mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
+  allResults        <- runAll' mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -244,21 +330,20 @@ testIncorrectNextStep mgr = do
     checkStateCmd `succeedsWith` textVal "step 1"
 
 
-testLastStep :: HTTP.Manager -> Expectation
-testLastStep mgr = do
-  let moduleName = "testLastStep"
+testLastStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
+testLastStep mgr code command cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (threeStepPactCode moduleName)
-  executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
+  moduleCmd        <- makeExecCmdWith code
+  executePactCmd   <- makeExecCmdWith command
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contNextStep1Cmd <- makeContCmdWith 1 "test3"
   contNextStep2Cmd <- makeContCmdWith 2 "test4"
   checkStateCmd    <- makeContCmdWith 3 "test5"
-  allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
-                              contNextStep2Cmd, checkStateCmd]
+  allResults       <- runAll' mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
+                              contNextStep2Cmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -270,19 +355,18 @@ testLastStep mgr = do
 
 
 
-testErrStep :: HTTP.Manager -> Expectation
-testErrStep mgr = do
-  let moduleName = "testErrStep"
+testErrStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
+testErrStep mgr code command cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (errorStepPactCode moduleName)
-  executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
+  moduleCmd        <- makeExecCmdWith code
+  executePactCmd   <- makeExecCmdWith command
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contErrStepCmd   <- makeContCmdWith 1 "test3"
   checkStateCmd    <- makeContCmdWith 2 "test4"
-  allResults       <- runAll mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
+  allResults       <- runAll' mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -299,6 +383,38 @@ errorStepPactCode moduleName =
                  (step "step 0")
                  (step (+ "will throw error in step 1"))
              (step "step 2")))|]
+
+errorStepNestedPactCode :: T.Text -> T.Text
+errorStepNestedPactCode moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module $moduleName 'k
+              (defpact tester ()
+                (step "step 0")
+                (step (+ "will throw error in step 1"))
+                (step "step 2")))
+              (module $moduleName-nested 'k
+                (defpact nestedTester ()
+                  (step
+                  (let
+                    ((unused 1))
+                    ($moduleName.tester)
+                    "step 0")
+                )
+                (step
+                  (let
+                    ((unused 1))
+                    (continue $moduleName.tester)
+                    "step 1")
+                )
+                (step
+                  (let
+                    ((unused 1))
+                    (continue $moduleName.tester)
+                    "step 2")
+                )
+                ))
+                |]
+
 
 -- ROLLBACK TESTS
 
@@ -450,15 +566,18 @@ testNoRollbackFunc mgr = do
 testPactYield :: HTTP.Manager -> Spec
 testPactYield mgr = before_ flushDb $ after_ flushDb $ do
   context "when previous step yields value" $
-    it "resumes value" $
-      testValidYield mgr
+    it "resumes value" $ do
+      let mname1 = "testValidYield"
+      testValidYield mname1 mgr pactWithYield testConfigFilePath
 
   context "when previous step does not yield value" $
-    it "throws error when trying to resume, and does not delete pact from state" $
-      testNoYield mgr
+    it "throws error when trying to resume, and does not delete pact from state" $ do
+      let mname2 = "testNoYield"
+      testNoYield mname2 mgr pactWithYieldErr testConfigFilePath
 
-  it "resets yielded values after each step" $
-    testResetYield mgr
+  it "resets yielded values after each step" $ do
+    let mname3 = "testResetYield"
+    testResetYield mname3 mgr pactWithSameNameYield testConfigFilePath
 
   it "testCrossChainYield:succeeds with same module" $
       testCrossChainYield mgr "" True False
@@ -473,13 +592,30 @@ testPactYield mgr = before_ flushDb $ after_ flushDb $ do
       testCrossChainYield mgr "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True False
 
 
-testValidYield :: HTTP.Manager -> Expectation
-testValidYield mgr = do
-  let moduleName = "testValidYield"
+testNestedPactYield :: HTTP.Manager -> Spec
+testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
+  context "when previous step yields value" $
+    it "resumes value" $ do
+      let mname1 = "testNestedValidYield"
+      testValidYield mname1 mgr nestedPactWithYield testConfigNDPFilePath
+
+  context "when previous step does not yield value" $
+    it "throws error when trying to resume, and does not delete pact from state" $ do
+      let mname2 = "testNestedNoYield"
+      testNoYield mname2 mgr nestedPactWithYieldErr testConfigNDPFilePath
+
+  it "resets yielded values after each step" $ do
+    let mname3 = "testNestedResetYield"
+    testResetYield mname3 mgr nestedPactWithSameNameYield testConfigNDPFilePath
+
+
+
+testValidYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
+testValidYield moduleName mgr mkCode cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd          <- makeExecCmdWith (pactWithYield moduleName)
+  moduleCmd          <- makeExecCmdWith (mkCode moduleName)
   executePactCmd     <- makeExecCmdWith ("(" <> moduleName <> ".tester \"testing\")")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
@@ -487,8 +623,8 @@ testValidYield mgr = do
   resumeAndYieldCmd  <- makeContCmdWith 1 "test3"
   resumeOnlyCmd      <- makeContCmdWith 2 "test4"
   checkStateCmd      <- makeContCmdWith 3 "test5"
-  allResults         <- runAll mgr [moduleCmd, executePactCmd, resumeAndYieldCmd,
-                                resumeOnlyCmd, checkStateCmd]
+  allResults         <- runAll' mgr [moduleCmd, executePactCmd, resumeAndYieldCmd,
+                                resumeOnlyCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -517,22 +653,59 @@ pactWithYield moduleName =
                    (resume { "step1-result" := res1 }
                       (+ res1 "->Step2")))))|]
 
+nestedPactWithYield :: T.Text -> T.Text
+nestedPactWithYield moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module nested-$moduleName 'k
+               (defpact tester (name)
+                 (step
+                   (let ((result0 (+ name "->Step0")))
+                     (yield { "step0-result": result0})
+                     result0))
+                 (step
+                   (resume {"step0-result" := res0 }
+                   (let ((result1 (+ res0 "->Step1")))
+                     (yield {"step1-result": result1})
+                     result1)))
+                 (step
+                   (resume { "step1-result" := res1 }
+                      (+ res1 "->Step2")))))
+              (module $moduleName 'k
+               (defpact tester (name)
+                 (step
+                   (let ((result0 (+ name "->Step0")))
+                     (nested-$moduleName.tester name)
+                     (yield { "step0-result": result0})
+                     result0))
+                 (step
+                   (resume {"step0-result" := res0 }
+                   (let ((result1 (+ res0 "->Step1")))
+                     (continue nested-$moduleName.tester)
+                     (yield {"step1-result": result1})
+                     result1)))
+                 (step
+                   (resume { "step1-result" := res1 }
+                      (continue nested-$moduleName.tester)
+                      (+ res1 "->Step2")))))
+                      |]
 
-testNoYield :: HTTP.Manager -> Expectation
-testNoYield mgr = do
-  let moduleName = "testNoYield"
+
+
+testNoYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
+testNoYield moduleName mgr mkCode cfg = do
+  -- let moduleName = "testNoYield"
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd      <- makeExecCmdWith (pactWithYieldErr moduleName)
+  moduleCmd      <- makeExecCmdWith (mkCode moduleName)
   executePactCmd <- makeExecCmdWith ("(" <> moduleName <> ".tester \"testing\")") -- pact takes an input
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   noYieldStepCmd <- makeContCmdWith 1 "test3"
   resumeErrCmd   <- makeContCmdWith 2 "test3"
   checkStateCmd  <- makeContCmdWith 1 "test5"
-  allResults     <- runAll mgr [moduleCmd, executePactCmd, noYieldStepCmd,
-                           resumeErrCmd, checkStateCmd]
+  allResults     <- runAll' mgr [moduleCmd, executePactCmd, noYieldStepCmd,
+                           resumeErrCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -556,22 +729,53 @@ pactWithYieldErr moduleName =
                    (resume { "step0-result" := res0 }
                       (+ res0 "->Step2")))))|]
 
+nestedPactWithYieldErr :: T.Text -> T.Text
+nestedPactWithYieldErr moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module nested-$moduleName 'k
+               (defpact tester (name)
+                 (step
+                   (let ((result0 (+ name "->Step0")))
+                    (yield { "step0-result": result0 })
+                    result0))
+                 (step "step 1 has no yield")
+                 (step
+                   (resume { "step0-result" := res0 }
+                      (+ res0 "->Step2")))))
+              (module $moduleName 'k
+               (defpact tester (name)
+                 (step
+                   (let ((result0 (+ name "->Step0")))
+                    (nested-$moduleName.tester name)
+                    (yield { "step0-result": result0 })
+                    result0))
+                 (step
+                 (let ((unused 1))
+                 (continue nested-$moduleName.tester)
+                 "step 1 has no yield"
+                 ))
+                 (step
+                   (resume { "step0-result" := res0 }
+                      (continue nested-$moduleName.tester)
+                      (+ res0 "->Step2")))))
+                      |]
 
-testResetYield :: HTTP.Manager -> Expectation
-testResetYield mgr = do
-  let moduleName = "testResetYield"
+
+testResetYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
+testResetYield moduleName mgr mkCode cfg = do
+  -- let moduleName = "testResetYield"
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
-  moduleCmd        <- makeExecCmdWith (pactWithSameNameYield moduleName)
+  moduleCmd        <- makeExecCmdWith (mkCode moduleName)
   executePactCmd   <- makeExecCmdWith ("(" <> moduleName <> ".tester)")
 
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   yieldSameKeyCmd  <- makeContCmdWith 1 "test3"
   resumeStepCmd    <- makeContCmdWith 2 "test4"
   checkStateCmd    <- makeContCmdWith 3 "test5"
-  allResults       <- runAll mgr [moduleCmd, executePactCmd, yieldSameKeyCmd,
-                              resumeStepCmd, checkStateCmd]
+  allResults       <- runAll' mgr [moduleCmd, executePactCmd, yieldSameKeyCmd,
+                              resumeStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -599,6 +803,41 @@ pactWithSameNameYield moduleName =
                  (step
                    (resume { "result" := res }
                      res))))|]
+
+
+nestedPactWithSameNameYield :: T.Text -> T.Text
+nestedPactWithSameNameYield moduleName =
+  [text| (define-keyset 'k (read-keyset "admin-keyset"))
+             (module nested-$moduleName 'k
+               (defpact tester ()
+                 (step
+                   (let ((result0 "step 0"))
+                    (yield { "result": result0 })
+                    result0))
+                 (step
+                   (let ((result1 "step 1"))
+                    (yield { "result": result1 })
+                    result1))
+                 (step
+                   (resume { "result" := res }
+                     res))))
+              (module $moduleName 'k
+               (defpact tester ()
+                 (step
+                   (let ((result0 "step 0"))
+                    (nested-$moduleName.tester)
+                    (yield { "result": result0 })
+                    result0))
+                 (step
+                   (let ((result1 "step 1"))
+                    (continue nested-$moduleName.tester)
+                    (yield { "result": result1 })
+                    result1))
+                 (step
+                   (resume { "result" := res }
+                     (enforce (= (continue nested-$moduleName.tester) "step 1") "failure")
+                     res))))
+                     |]
 
 
 testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Bool -> Expectation
@@ -906,6 +1145,9 @@ testConfigFilePath = testDir ++ "test-config.yaml"
 
 backCompatConfig :: FilePath
 backCompatConfig = testDir ++ "test-config-disable40.yaml"
+
+testConfigNDPFilePath :: FilePath
+testConfigNDPFilePath = testDir ++ "test-config-nested-defpacts.yaml"
 
 
 shouldMatch

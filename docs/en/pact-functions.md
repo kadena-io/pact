@@ -146,7 +146,7 @@ true
 *value*&nbsp;`*` *&rarr;*&nbsp;`*`
 
 
-TODO: fill
+Continue a previously started nested defpact.
 ```lisp
 (continue f)
 ```
