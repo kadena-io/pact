@@ -148,3 +148,45 @@
 (env-chain-data { "chain-id" : "1" })
 (expect "step 1 executes on correct chain with new yield value" "someRandomStr->B"
 	(continue-pact 1 false (hash "emily-pact-id") {"a-result": "someRandomStr"}))
+
+; Nested defpacts test
+(module yieldtest 'k
+
+  "Define two tests: 'tester' executes a single-chain pact and ensures rollbacks \
+  \and 'cross-chain' executes a cross-chain pact and step behavior works         \
+  \properly."
+
+  (defschema schema-a a-result:string)
+
+  (defpact tester (name)
+    (step-with-rollback
+     "A"
+     (let*
+         ((nameA (+ name "->A"))
+          (r:object{schema-a} { "a-result": nameA }))
+
+       (yield r)
+       nameA)
+
+     "rollback-a")
+
+    (step "B"
+      (resume { "a-result" := ar }
+          (+ ar "->B")))
+    )
+
+
+  (defpact cross-chain (name)
+    (step
+     (let*
+         ((nameA (+ name "->A"))
+          (r:object{schema-a} { "a-result": nameA }))
+
+       (yield r "1")
+       nameA))
+
+    (step
+     (resume { "a-result" := ar }
+             (+ ar "->B")))
+    )
+)
