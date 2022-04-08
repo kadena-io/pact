@@ -7,13 +7,18 @@
 (namespace 'free)
 (module modA G
   (defcap G () true)
-  (defun func (x) (+ 1 x)))
+  (defun func (x) (+ 1 x))
+  (defconst test:string "hi")
+  )
 (commit-tx)
 (begin-tx)
 (namespace 'free)
 (module modB G
   (defcap G () true)
-  (defun chain () (modA.func 10)))
+  (defun chain () (modA.func 10))
+  (defconst test:string "hello")
+  (defun get-test() test)
+  )
 (commit-tx)
 
 (expect "ns-scoped module call works fully qualified" (free.modB.chain) 11)
@@ -21,3 +26,5 @@
 (namespace 'free)
 
 (expect "ns-scoped module call works within namespace scope" (modB.chain) 11)
+
+(expect "selects correct test" (modB.get-test) "hello")
