@@ -353,27 +353,28 @@ createPrincipalDef =
 createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
 createPrincipal i = \case
   GPact (PactGuard pid n) -> do
-    void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
+    chargeGas 1
     pure $ "p:" <> asString pid <> ":" <> n
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> do
-      void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
+      chargeGas 1
       pure $ "k:" <> asString k
     (l,fun) -> do
       let a = toHash $ map _pubKey l
-      void $ computeGasCommit i "createPrincipal" (GPrincipal (1 + sizeOf a))
+      chargeGas (1 + sizeOf a)
       pure $ "w:" <> asString a <> ":" <> fun
   GKeySetRef (KeySetName n) -> do
-    void $! computeGasCommit i "createPrincipal" (GPrincipal 1)
+    chargeGas 1
     pure $ "r:" <> n
   GModule (ModuleGuard mn n) -> do
-    void $ computeGasCommit i "createPrincipal" (GPrincipal 1)
+    chargeGas 1
     pure $ "m:" <> asString mn <> ":" <> n
   GUser (UserGuard uf args) -> do
     let a = toHash $ map toJSONPactValue args
-    void $ computeGasCommit i "createPrincipal" (GPrincipal (1 + sizeOf a))
+    chargeGas (1 + sizeOf a)
     pure $ "u:" <> asString uf <> ":" <> asString a
   where
+    chargeGas amt = void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
     toHash = pactHash . mconcat
     toJSONPactValue = toStrict . encode . toPactValueLenient
 
