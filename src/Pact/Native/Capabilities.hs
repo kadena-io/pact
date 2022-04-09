@@ -391,6 +391,6 @@ validatePrincipalDef =
     validatePrincipal' :: RNativeFun e
     validatePrincipal' i [TGuard g _, TLitString p] = do
       void $ computeGasCommit (getInfo i) "validatePrincipal" (GPrincipal 1)
-      g' <- createPrincipal (getInfo i) g
-      pure $ toTerm $ (p == g')
+      q <- createPrincipal (getInfo i) g
+      pure $ toTerm $ (p == q)
     validatePrincipal' i as = argsError i as
