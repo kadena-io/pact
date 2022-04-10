@@ -64,7 +64,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_functionApplicationCost = 1
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   , _gasCostConfig_foldDBCost = 1
-  , _gasCostConfig_principalCost = 1
+  , _gasCostConfig_principalCost = 5 -- matches 'hash' cost
   }
 
 defaultGasTable :: Map Text Gas
@@ -267,7 +267,7 @@ tableGasModel gasConfig =
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
         GModuleMemory i -> moduleMemoryCost i
-        GPrincipal g -> fromIntegral g + expLengthPenalty g
+        GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"

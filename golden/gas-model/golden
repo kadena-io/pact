@@ -662,32 +662,32 @@
     (validate-principal
       (read-keyset 'ks1)
       (create-principal (read-keyset 'ks1)))
-  - 10
+  - 14
 - - |-
     (validate-principal
       (read-keyset 'ks2)
       (create-principal (read-keyset 'ks2)))
-  - 212
+  - 34
 - - |-
     (validate-principal
       (create-pact-guard "test")
       (create-principal (create-pact-guard "test")))
-  - 10
+  - 14
 - - |-
     (validate-principal
       (keyset-ref-guard "some-loaded-keyset")
       (create-principal (keyset-ref-guard "some-loaded-keyset")))
-  - 22
+  - 26
 - - |-
     (validate-principal
       (create-user-guard (accounts.enforce-true))
       (create-principal (create-user-guard (accounts.enforce-true))))
-  - 214
+  - 14
 - - |-
     (validate-principal
       (create-module-guard "test")
       (create-principal (create-module-guard "test")))
-  - 10
+  - 14
 - - (fold (constantly 0) 1 longNumberList)
   - 10003
 - - (fold (constantly 0) 1 medNumberList)
@@ -927,17 +927,17 @@
 - - (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
   - 6
 - - (create-principal (read-keyset 'ks1))
-  - 4
+  - 7
 - - (create-principal (read-keyset 'ks2))
-  - 105
+  - 17
 - - (create-principal (create-pact-guard "test"))
-  - 4
+  - 7
 - - (create-principal (keyset-ref-guard "some-loaded-keyset"))
-  - 10
+  - 13
 - - (create-principal (create-user-guard (accounts.enforce-true)))
-  - 106
+  - 7
 - - (create-principal (create-module-guard "test"))
-  - 4
+  - 7
 - - (>= longNumber longNumber)
   - 2
 - - (>= medNumber medNumber)

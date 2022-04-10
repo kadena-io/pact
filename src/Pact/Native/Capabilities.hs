@@ -22,6 +22,7 @@ module Pact.Native.Capabilities
 import Control.Lens
 import Control.Monad
 import Data.Aeson (encode)
+import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import Data.Foldable
@@ -38,7 +39,6 @@ import Pact.Types.Hash
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Pact.Types.SizeOf
 
 
 capDefs :: NativeModule
@@ -360,8 +360,7 @@ createPrincipal i = \case
       chargeGas 1
       pure $ "k:" <> asString k
     (l,fun) -> do
-      let a = toHash $ map _pubKey l
-      chargeGas (1 + sizeOf a)
+      a <- mkHash $ map _pubKey l
       pure $ "w:" <> asString a <> ":" <> fun
   GKeySetRef (KeySetName n) -> do
     chargeGas 1
@@ -370,12 +369,14 @@ createPrincipal i = \case
     chargeGas 1
     pure $ "m:" <> asString mn <> ":" <> n
   GUser (UserGuard uf args) -> do
-    let a = toHash $ map toJSONPactValue args
-    chargeGas (1 + sizeOf a)
+    a <- mkHash $ map toJSONPactValue args
     pure $ "u:" <> asString uf <> ":" <> asString a
   where
     chargeGas amt = void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
-    toHash = pactHash . mconcat
+    mkHash bss = do
+      let bs = mconcat bss
+      chargeGas $ 1 + (BS.length bs `div` 64) -- charge for 64 bytes of hashing
+      return $ pactHash bs
     toJSONPactValue = toStrict . encode . toPactValueLenient
 
 validatePrincipalDef :: NativeDef
@@ -390,7 +391,6 @@ validatePrincipalDef =
   where
     validatePrincipal' :: RNativeFun e
     validatePrincipal' i [TGuard g _, TLitString p] = do
-      void $ computeGasCommit (getInfo i) "validatePrincipal" (GPrincipal 1)
       q <- createPrincipal (getInfo i) g
       pure $ toTerm $ (p == q)
     validatePrincipal' i as = argsError i as

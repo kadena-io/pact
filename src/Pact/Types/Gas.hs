@@ -143,7 +143,7 @@ data GasArgs
   -- ^ Cost of the fold-db call
   | GModuleMemory Bytes
   -- ^ The cost of the in-memory representation of the module
-  | GPrincipal Bytes
+  | GPrincipal !Int
   -- ^ the cost of principal creation and validation
   | GIntegerOpCost !Integer Integer
   -- ^ Integer costs

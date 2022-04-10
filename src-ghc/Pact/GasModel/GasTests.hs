@@ -1929,13 +1929,13 @@ createPrincipalTests = createGasUnitTests
 
     updateEnv = setEnv $ set eeMsgBody $ A.object
       [ "ks1" A..= A.object
-        [ "keys" A..= ["keys1" :: T.Text]
+        [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
         , "pred" A..= ("keys-all" :: T.Text)
         ]
       , "ks2" A..= A.object
         [ "keys" A..=
-          [ "keys1" :: T.Text
-          , "keys2" :: T.Text
+          [ "76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text
+          , "011b1bb033d77f0ef7fe0c09f7b10ed91c7f432f6fdc1ba68acdc776fa53d99c" :: T.Text
           ]
         , "pred" A..= ("keys-all" :: T.Text)
         ]
@@ -2003,13 +2003,13 @@ validatePrincipalTests = createGasUnitTests
 
     updateEnv = setEnv $ set eeMsgBody $ A.object
       [ "ks1" A..= A.object
-        [ "keys" A..= ["keys1" :: T.Text]
+        [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
         , "pred" A..= ("keys-all" :: T.Text)
         ]
       , "ks2" A..= A.object
         [ "keys" A..=
-          [ "keys1" :: T.Text
-          , "keys2" :: T.Text
+          [ "76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text
+          , "011b1bb033d77f0ef7fe0c09f7b10ed91c7f432f6fdc1ba68acdc776fa53d99c" :: T.Text
           ]
         , "pred" A..= ("keys-all" :: T.Text)
         ]
