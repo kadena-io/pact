@@ -375,7 +375,7 @@ createPrincipal i = \case
     chargeGas amt = void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
     mkHash bss = do
       let bs = mconcat bss
-      chargeGas $ 1 + (BS.length bs `div` 64) -- charge for 64 bytes of hashing
+      chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
       return $ pactHash bs
     toJSONPactValue = toStrict . encode . toPactValueLenient
 
