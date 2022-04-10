@@ -45,6 +45,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_functionApplicationCost :: Gas
   , _gasCostConfig_defPactCost :: Gas
   , _gasCostConfig_foldDBCost :: Gas
+  , _gasCostConfig_principalCost :: Gas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -63,6 +64,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_functionApplicationCost = 1
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   , _gasCostConfig_foldDBCost = 1
+  , _gasCostConfig_principalCost = 5 -- matches 'hash' cost
   }
 
 defaultGasTable :: Map Text Gas
@@ -97,6 +99,7 @@ defaultGasTable =
   ,("contains", 2)
   ,("create-module-guard", 1)
   ,("create-pact-guard", 1)
+  ,("create-principal", 1)
   ,("create-user-guard", 1)
   ,("days", 4)
   ,("decrypt-cc20p1305", 33)
@@ -165,6 +168,7 @@ defaultGasTable =
   ,("typeof", 2)
   ,("distinct", 2)
   ,("validate-keypair", 29)
+  ,("validate-principal", 1)
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)
   ,("with-capability", 2)
@@ -263,6 +267,7 @@ tableGasModel gasConfig =
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
         GModuleMemory i -> moduleMemoryCost i
+        GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
