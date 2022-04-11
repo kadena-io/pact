@@ -608,6 +608,93 @@ testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
     let mname3 = "testNestedResetYield"
     testResetYield mname3 mgr nestedPactWithSameNameYield testConfigNDPFilePath
 
+  it "testCrossChainYield:succeeds with same module" $
+      testNestedCrossChainYield
+  where
+  testNestedCrossChainYield = step0
+    where
+    -- STEP 0: runs on server for "chain0results"
+    -- note we're not changing server ID, just starting with
+    -- a fresh server to prove that a new pact coming through
+    -- SPV can start from step 1.
+    step0 = do
+      adminKeys <- genKeys
+
+      let makeExecCmdWith = makeExecCmd' (Just "xchain") adminKeys
+      moduleCmd        <- makeExecCmdWith nestedPactCrossChainYield
+      executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"jose\")"
+
+      chain0Results <-
+        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport testConfigNDPFilePath
+
+      mhash <- mkModuleHash "mGbCL-I0xXho_dxYfYAVmHfSfj3o43gbJ3ZgLHpaq14"
+
+      runResults chain0Results $ do
+        moduleCmd `succeedsWith`  Nothing
+        executePactCmd `succeedsWith'`
+            Just (textVal' "jose->A",
+                    [PactEvent
+                     "X_YIELD"
+                     [ textVal' ""
+                     , textVal' "cross-chain-tester.cross-chain"
+                     , PList $ V.fromList [ textVal' "jose" ]]
+                     "pact"
+                     mhash])
+        shouldMatch executePactCmd $ ExpectResult $ \cr ->
+          preview (crContinuation . _Just . peYield . _Just . ySourceChain . _Just) cr
+          `shouldBe`
+          (Just (ChainId ""))
+
+      let rk = cmdToRequestKey executePactCmd
+
+      case HM.lookup rk chain0Results of
+        Nothing -> expectationFailure $
+          "Could not find result " ++ show rk ++ ": " ++ show chain0Results
+        Just cr -> case _crContinuation cr of
+          Nothing -> expectationFailure $
+            "No continuation in result: " ++ show rk
+          Just pe -> do
+            step1 adminKeys executePactCmd moduleCmd pe mhash
+
+    -- STEP 1: found the pact exec from step 0; return this
+    -- from the SPV operation. Run a fresh server, reload
+    -- the module, and run the step.
+    step1 adminKeys executePactCmd moduleCmd pe mhash = do
+
+      let proof = (ContProof "hi there")
+          makeContCmdWith = makeContCmd' (Just proof) adminKeys False Null executePactCmd
+          spv = noSPVSupport {
+            _spvVerifyContinuation = \cp ->
+                if cp == proof then
+                  return $ Right $ pe
+                else
+                  return $ Left $ "Invalid proof"
+            }
+
+      chain1Cont <- makeContCmdWith 1 "chain1Cont"
+      chain1ContDupe <- makeContCmdWith 1 "chain1ContDupe"
+
+      -- flush db to ensure runAll' runs with fresh state
+
+      flushDb
+
+      chain1Results <-
+        runAll' mgr [moduleCmd, chain1Cont,chain1ContDupe] spv testConfigFilePath
+      let completedPactMsg =
+            "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
+
+      runResults chain1Results $ do
+        moduleCmd `succeedsWith`  Nothing
+        chain1Cont `succeedsWith'`
+          Just (textVal' "jose->A->B",
+                  [PactEvent
+                    "X_RESUME"
+                    [ textVal' ""
+                    , textVal' "cross-chain-tester.cross-chain"
+                    , PList $ V.fromList [ textVal' "jose" ]]
+                    "pact"
+                    mhash])
+        chain1ContDupe `failsWith` Just completedPactMsg
 
 
 testValidYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
@@ -961,6 +1048,43 @@ pactCrossChainYield blessExpr =
         ))
   |]
 
+nestedPactCrossChainYield :: T.Text
+nestedPactCrossChainYield =
+  [text|
+    (module nested-tester GOV
+      (defcap GOV () true)
+      (defschema schema-a a-result:string)
+      (defpact cross-chain (name)
+        (step
+          (let*
+            ((nameA (+ name "->A"))
+             (r:object{schema-a} { "a-result": nameA }))
+
+            (yield r "")
+            nameA))
+
+        (step
+          (resume { "a-result" := ar }
+                  (+ ar "->B")))
+        ))
+    (module cross-chain-tester GOV
+      (defcap GOV () true)
+      (defschema schema-a a-result:string)
+      (defpact cross-chain (name)
+        (step
+          (let*
+            ((nameA (+ name "->A"))
+             (r:object{schema-a} { "a-result": nameA }))
+            (nested-tester.cross-chain name)
+            (yield r "")
+            nameA))
+
+        (step
+          (resume { "a-result" := ar }
+          (continue (nested-tester.cross-chain name))
+                  (+ ar "->B")))
+        ))
+  |]
 
 
 -- TWO PARTY ESCROW TESTS
