@@ -1224,21 +1224,21 @@ base64decode = defRNative "base64-decode" go
 --   the pactId of the parent.
 continueNested :: NativeFun e
 continueNested i as = gasUnreduced i as $ case as of
-  [t] -> lookup' t >>= \d ->
+  [TApp (App t args _) _] -> lookup' t >>= \d ->
     (,) <$> view eePactStep <*> use evalPactExec >>= \case
       (Just ps, Just pe) -> do
-        let PactId parent = _psPactId ps
-            childName = QName (QualifiedName (_dModule d) (asString (_dDefName d)) def)
-            Hash name' = pactHash $ T.encodeUtf8 $ renderCompactText childName
-            newPactId = toPactId (pactHash (T.encodeUtf8 parent <> ":" <> name'))
-            -- note do not carry the previously set yield.
-            newPs = PactStep (_psStep ps) (_psRollback ps) newPactId
+        contArgs <- traverse reduce args >>= enforcePactValue'
+        let childName = QName (QualifiedName (_dModule d) (asString (_dDefName d)) def)
+            cont = PactContinuation childName contArgs
+        newPactId <- createNestedPactId i cont (_psPactId ps)
+        let newPs = PactStep (_psStep ps) (_psRollback ps) newPactId
         case _peNested pe ^. at newPactId of
           Just npe -> resumeNestedPactExec (getInfo i) d (newPs (_npeYield npe)) npe
           Nothing -> evalError' i $ "Attempting to continue a pact that was not nested: " <> pretty d
       _ -> evalError' i "Not within pact invocation"
   _ -> argsError' i as
   where
+
   lookup' (unTVar -> t) = case t of
     TDef d _ -> pure d
     TVar (Direct (TVar (FQName fq) _)) _ ->

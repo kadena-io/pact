@@ -275,13 +275,13 @@ threeStepNestedPactCode moduleName =
                 (step
                   (let
                     ((unused 1))
-                    (continue $moduleName.tester)
+                    (continue ($moduleName.tester))
                     "step 1")
                 )
                 (step
                   (let
                     ((unused 1))
-                    (continue $moduleName.tester)
+                    (continue ($moduleName.tester))
                     "step 2")
                 ))
                 )
@@ -297,13 +297,13 @@ threeStepNestedPactCode moduleName =
                 (step
                   (let
                     ((unused 1))
-                    (continue m::ndp)
+                    (continue (m::ndp))
                     "step 1")
                 )
                 (step
                   (let
                     ((unused 1))
-                    (continue m::ndp)
+                    (continue (m::ndp))
                     "step 2")
                 )
                 ))
@@ -403,13 +403,13 @@ errorStepNestedPactCode moduleName =
                 (step
                   (let
                     ((unused 1))
-                    (continue $moduleName.tester)
+                    (continue ($moduleName.tester))
                     "step 1")
                 )
                 (step
                   (let
                     ((unused 1))
-                    (continue $moduleName.tester)
+                    (continue ($moduleName.tester))
                     "step 2")
                 )
                 ))
@@ -680,12 +680,12 @@ nestedPactWithYield moduleName =
                  (step
                    (resume {"step0-result" := res0 }
                    (let ((result1 (+ res0 "->Step1")))
-                     (continue nested-$moduleName.tester)
+                     (continue (nested-$moduleName.tester name))
                      (yield {"step1-result": result1})
                      result1)))
                  (step
                    (resume { "step1-result" := res1 }
-                      (continue nested-$moduleName.tester)
+                      (continue (nested-$moduleName.tester name))
                       (+ res1 "->Step2")))))
                       |]
 
@@ -748,15 +748,15 @@ nestedPactWithYieldErr moduleName =
                    (let ((result0 (+ name "->Step0")))
                     (nested-$moduleName.tester name)
                     (yield { "step0-result": result0 })
-                    result0))
+                      result0))
                  (step
                  (let ((unused 1))
-                 (continue nested-$moduleName.tester)
+                 (continue (nested-$moduleName.tester name))
                  "step 1 has no yield"
                  ))
                  (step
                    (resume { "step0-result" := res0 }
-                      (continue nested-$moduleName.tester)
+                      (continue (nested-$moduleName.tester name))
                       (+ res0 "->Step2")))))
                       |]
 
@@ -830,12 +830,12 @@ nestedPactWithSameNameYield moduleName =
                     result0))
                  (step
                    (let ((result1 "step 1"))
-                    (continue nested-$moduleName.tester)
+                    (continue (nested-$moduleName.tester))
                     (yield { "result": result1 })
                     result1))
                  (step
                    (resume { "result" := res }
-                     (enforce (= (continue nested-$moduleName.tester) "step 1") "failure")
+                     (enforce (= (continue (nested-$moduleName.tester)) "step 1") "failure")
                      res))))
                      |]
 

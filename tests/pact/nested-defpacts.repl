@@ -1,0 +1,316 @@
+
+; non-namespaced
+(env-data {"keyset": { "keys": ["bob"], "pred": "keys-any" }})
+(env-keys ["bob"])
+(begin-tx)
+(define-namespace 'free (read-keyset 'keyset) (read-keyset 'keyset))
+(commit-tx)
+; [Nested defpact structures/test cases]
+; We aim to test nested defpacts with this structure
+;               parent  -- top level
+;               /     \
+;            child1   child2 -- layer 1
+;            /          \
+;          child1-1    child2-2  -- layer 2
+; With the following cases:
+;  1. All children in lockstep, all is good + name resolution works in fully qualified, namespaced setting
+;  2. top level parent does not continue one defpact
+;  3. layer 1 child does not continue one defpact
+;  4. layer 1 child has one defpact of incorrect length (gt or lt parent)
+;  5. layer 2 child has one defpact of incorrect length (gt or lt parent)
+;  6. nested defpact resolves the right module reference (for two module references;  implementing the same interface)
+
+(begin-tx)
+(namespace 'free)
+(interface iface
+  (defpact good:string ())
+  )
+
+
+(module nested1-1 G
+  (defcap G () true)
+  (implements iface)
+  (defpact good:string ()
+    (step
+      "hello1"
+      )
+    (step
+      "hello2"
+      )
+    (step
+      "hello3"
+      )
+  )
+  (defpact bad:string ()
+    (step
+      "hello1"
+      )
+    (step
+      "hello2"
+      )
+  ))
+
+(module nested2-1 G
+  (defcap G () true)
+  (implements iface)
+  (defpact good:string ()
+    (step
+      "hello1"
+      )
+    (step
+      "hello2"
+      )
+    (step
+      "hello3"
+      )
+  ))
+
+(module nested2 G
+    (defcap G () true)
+    ; case 1: all good
+    (defpact good:string ()
+      (step
+        (+ (nested2-1.good) "-nested")
+        )
+      (step
+        (+ (continue (nested2-1.good)) "-nested")
+        )
+      (step
+        (+ (continue (nested2-1.good)) "-nested")
+        )
+    ))
+
+(module nested1 G
+  (defcap G () true)
+  ; case 1: all good
+  (defpact good:string ()
+    (step
+      (+ (nested1-1.good) "-nested")
+      )
+    (step
+      (+ (continue (nested1-1.good)) "-nested")
+      )
+    (step
+      (+ (continue (nested1-1.good)) "-nested")
+      )
+  )
+  ; case 1: all good + module reference
+  (defpact good2:string (m1:module{iface})
+    (step
+      (+ (m1::good) "-nested")
+      )
+    (step
+      (+ (continue (m1::good)) "-nested")
+      )
+    (step
+      (+ (continue (m1::good)) "-nested")
+      )
+  )
+
+  (defpact good3:string (arg:string)
+    (step
+      (+ (+ (nested1-1.good) "-nested") arg)
+      )
+    (step
+      (+ (+ (continue (nested1-1.good)) "-nested") arg)
+      )
+    (step
+      (+ (+ (continue (nested1-1.good)) "-nested") arg)
+      )
+  )
+  ; case 3: layer 1 child does not continue a defpact
+  (defpact bad1:string ()
+    (step
+      (+ (nested1-1.good) "-nested")
+      )
+    (step
+      "-nested"
+      )
+    (step
+      (+ (continue (nested1-1.good)) "-nested")
+      ))
+  ; case 4: layer 1 child has length lt parent
+  (defpact bad2:string ()
+    (step
+      "hello1"
+      )
+    (step
+      "hello2"
+      ))
+  ; case 5 layer 2 child has length lt parent.
+  (defpact bad3:string ()
+    (step
+      (+ (nested1-1.bad) "-nested")
+      )
+    (step
+      (+ (continue (nested1-1.bad)) "-nested")
+      )
+    (step
+      (+ (continue (nested1-1.bad)) "-nested")
+      )
+  )
+  ; case 6, module resolution using the right qualified name
+  (defpact bad4:string (m1:module{iface} m2:module{iface})
+    (step
+      (+ (m1::good) "-nested")
+      )
+    (step
+      (+ (continue (m2::good)) "-nested")
+      )
+    (step
+      (+ (continue (m1::good)) "-nested")
+      )
+  )
+  )
+
+(module parent G
+  (defcap G () true)
+  ; case 1: all good
+  (defpact good:[string] ()
+    (step
+      [(free.nested1.good) (nested2.good) "hello1"]
+      )
+    (step
+      [(continue (nested1.good)) (continue (nested2.good)) "hello2"]
+      )
+    (step
+      [(continue (free.nested1.good)) (continue (nested2.good)) "hello3"]
+      )
+  )
+
+  (defpact good2:[string] ()
+    (step
+      [(free.nested1.good2 nested1-1) (nested2.good) "hello1"]
+      )
+    (step
+      [(continue (nested1.good2 nested1-1)) (continue (nested2.good)) "hello2"]
+      )
+    (step
+      [(continue (nested1.good2 nested1-1)) (continue (nested2.good)) "hello3"]
+      )
+  )
+
+  (defpact good3:[string] ()
+    (step
+      [(free.nested1.good3 "a") (free.nested1.good3 "b") (nested2.good) "hello1"]
+      )
+    (step
+      [(continue (nested1.good3 "a")) (continue (nested1.good3 "b")) (continue (nested2.good)) "hello2"]
+      )
+    (step
+      [(continue (nested1.good3 "a")) (continue (nested1.good3 "b")) (continue (nested2.good)) "hello3"]
+      )
+  )
+
+  ; case 2: parent does not continue a defpact
+  (defpact bad-parent:[string] ()
+    (step
+      [(nested1.good) (nested2.good) "hello1"]
+      )
+    (step
+      ["hello2"]
+      )
+    (step
+      [(continue (nested1.good)) (continue (nested2.good)) "hello3"]
+      )
+  )
+  ; case 3
+  (defpact bad1:[string] ()
+    (step
+      [(nested1.bad1) (nested2.good) "hello1"]
+      )
+    (step
+      [(continue (nested1.bad1)) (continue (nested2.good)) "hello2"]
+      )
+    (step
+      [(continue (nested1.bad1)) (continue (nested2.good)) "hello3"]
+      )
+  )
+  ;case 4
+  (defpact bad2:[string] ()
+    (step
+      [(nested1.bad2) (nested2.good) "hello1"]
+      )
+    (step
+      [(continue (nested1.bad2)) (continue (nested2.good)) "hello2"]
+      )
+    (step
+      [(continue (nested1.bad2)) (continue (nested2.good)) "hello3"]
+      )
+  )
+  ; case 5
+  (defpact bad3:[string] ()
+    (step
+      [(nested1.bad3) (nested2.good) "hello1"]
+      )
+    (step
+      [(continue (nested1.bad3)) (continue (nested2.good)) "hello2"]
+      )
+    (step
+      [(continue (nested1.bad3)) (continue (nested2.good)) "hello3"]
+      )
+  )
+  ; case
+  (defpact bad4:[string] ()
+    (step
+      [(nested1.bad4 nested1-1 nested2-1) (nested2.good) "hello1"]
+      )
+    (step
+      [(continue (nested1.bad4 nested1-1 nested2-1)) (continue (nested2.good)) "hello2"]
+      )
+    (step
+      [(continue (nested1.bad4 nested1-1 nested2-1)) (continue (nested2.good)) "hello3"]
+      )
+  )
+  )
+(commit-tx)
+
+; Case 1 test: normal
+(begin-tx)
+(expect "All is good for successful case 1: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.good))
+(expect "All is good for successful case 1: step 1" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for successful case 1: step 2" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
+
+
+; Case 1 test: module references
+(begin-tx)
+(expect "All is good for successful case 1: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.good2))
+(expect "All is good for successful case 1: step 1" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for successful case 1: step 2" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
+
+;  Case 1 test: different args
+(begin-tx)
+(expect "All is good for successful case 2: step 0" ["hello1-nesteda" "hello1-nestedb" "hello1-nested" "hello1"] (free.parent.good3))
+(expect "All is good for successful case 2: step 1" ["hello2-nesteda" "hello2-nestedb" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for successful case 2: step 2" ["hello3-nesteda" "hello3-nestedb" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
+
+; Case 2 test
+(begin-tx)
+(expect "Case 2: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.bad-parent))
+(expect-failure "Case 2: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
+(commit-tx)
+
+; Case 3 test
+(begin-tx)
+(expect "Case 3: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.bad1))
+(expect-failure "Case 3: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
+(commit-tx)
+
+; Case 4 test
+(begin-tx)
+(expect-failure "Case 4: step 0" "applyNestedPact: invalid nested defpact length, must be equal to length of parent" (free.parent.bad2))
+(commit-tx)
+
+; Case 5 test
+(begin-tx)
+(expect-failure "Case 5: step 0" "applyNestedPact: invalid nested defpact length, must be equal to length of parent" (free.parent.bad3))
+(commit-tx)
+
+; Case 6 test
+(begin-tx)
+(expect "Case 6: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.bad4))
+(expect-failure "Case 6: step 1" "Attempting to continue a pact that was not nested" (continue-pact 1))
+(commit-tx)
