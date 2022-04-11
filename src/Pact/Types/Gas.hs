@@ -143,6 +143,8 @@ data GasArgs
   -- ^ Cost of the fold-db call
   | GModuleMemory Bytes
   -- ^ The cost of the in-memory representation of the module
+  | GPrincipal !Int
+  -- ^ the cost of principal creation and validation
   | GIntegerOpCost !Integer Integer
   -- ^ Integer costs
 
@@ -164,6 +166,7 @@ instance Pretty GasArgs where
     GDistinct i -> "GDistinct:" <> pretty i
     GFoldDB -> "GFoldDB"
     GModuleMemory i -> "GModuleMemory: " <> pretty i
+    GPrincipal i -> "GPrincipal: " <> pretty i
     GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
 
 newtype GasLimit = GasLimit ParsedInteger

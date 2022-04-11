@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.2.0.1
+version:             4.2.1
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -383,6 +383,7 @@ test-suite hspec
         RemoteVerifySpec
         TypecheckSpec
         SizeOfSpec
+        PactCLISpec
 
       build-depends:
         , Decimal
