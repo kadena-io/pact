@@ -41,6 +41,17 @@
       "hello3"
       )
   )
+  (defpact good-rollback:string ()
+    (step-with-rollback
+      "hello1" "hello1rollback"
+      )
+    (step-with-rollback
+      "hello2" "hello2rollback"
+      )
+    (step
+      "hello3"
+      )
+  )
   (defpact bad:string ()
     (step
       "hello1"
@@ -63,7 +74,19 @@
     (step
       "hello3"
       )
-  ))
+  )
+  (defpact good-rollback:string ()
+    (step-with-rollback
+      "hello1" "hello1rollback"
+      )
+    (step-with-rollback
+      "hello2" "hello2rollback"
+      )
+    (step
+      "hello3"
+      )
+  )
+  )
 
 (module nested2 G
     (defcap G () true)
@@ -78,7 +101,19 @@
       (step
         (+ (continue (nested2-1.good)) "-nested")
         )
-    ))
+    )
+    (defpact good-rollback:string ()
+      (step-with-rollback
+        (+ (nested2-1.good-rollback) "-nested") (+ (nested2-1.good-rollback) "-nested")
+        )
+      (step-with-rollback
+        (+ (continue (nested2-1.good-rollback)) "-nested") (+ (continue (nested2-1.good-rollback)) "-nested")
+        )
+      (step
+        (+ (continue (nested2-1.good-rollback)) "-nested")
+        )
+    )
+    )
 
 (module nested1 G
   (defcap G () true)
@@ -94,6 +129,17 @@
       (+ (continue (nested1-1.good)) "-nested")
       )
   )
+  (defpact good-rollback:string ()
+      (step-with-rollback
+        (+ (nested1-1.good-rollback) "-nested") (+ (nested1-1.good-rollback) "-nested")
+        )
+      (step-with-rollback
+        (+ (continue (nested1-1.good-rollback)) "-nested") (+ (continue (nested1-1.good-rollback)) "-nested")
+        )
+      (step
+        (+ (continue (nested1-1.good-rollback)) "-nested")
+        )
+    )
   ; case 1: all good + module reference
   (defpact good2:string (m1:module{iface})
     (step
@@ -202,6 +248,19 @@
       )
   )
 
+  (defpact good-rollback:[string] ()
+    (step-with-rollback
+      [(free.nested1.good-rollback) (nested2.good-rollback) "hello1"] [(free.nested1.good-rollback) (nested2.good-rollback) "hello1"]
+      )
+    (step-with-rollback
+      [(continue (nested1.good-rollback)) (continue (nested2.good-rollback)) "hello2"] [(continue (nested1.good-rollback)) (continue (nested2.good-rollback)) "hello2"]
+      )
+    (step
+      [(continue (free.nested1.good-rollback)) (continue (nested2.good-rollback)) "hello3"]
+      )
+  )
+
+
   ; case 2: parent does not continue a defpact
   (defpact bad-parent:[string] ()
     (step
@@ -285,6 +344,26 @@
 (expect "All is good for successful case 2: step 0" ["hello1-nesteda" "hello1-nestedb" "hello1-nested" "hello1"] (free.parent.good3))
 (expect "All is good for successful case 2: step 1" ["hello2-nesteda" "hello2-nestedb" "hello2-nested" "hello2"] (continue-pact 1))
 (expect "All is good for successful case 2: step 2" ["hello3-nesteda" "hello3-nestedb" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
+
+; Case 1 test: good rollback
+(begin-tx)
+(expect "All is good for rollback success case" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.good-rollback))
+(expect "All is good for rollback success case" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for rollback success case" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
+
+; Case 1 test: good rollback
+(begin-tx)
+(expect "All is good for rollback: step 0 executes before rollback" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.good-rollback))
+(expect "All is good for rollback: step 0 rolls back" ["hello1rollback-nested" "hello1rollback-nested" "hello1"] (continue-pact 0 true))
+(commit-tx)
+
+; Case 1 test: good rollback
+(begin-tx)
+(expect "All is good for rollback step 1 case: step 0 executes" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.good-rollback))
+(expect "All is good for rollback step 1 case: step 1 executes" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for rollback step 1 case: step 1 rollbacks"  ["hello2rollback-nested" "hello2rollback-nested" "hello2"] (continue-pact 1 true))
 (commit-tx)
 
 ; Case 2 test
