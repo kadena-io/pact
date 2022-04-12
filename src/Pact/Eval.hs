@@ -1271,7 +1271,7 @@ applyNestedPact i app (TList steps _a _b) ps@PactStep {..} = do
       if _psStep == 0 then pure (PactExec stepCount Nothing Nothing _psStep _psPactId app rollback mempty)
       else evalError' step $ "Nested pact executing same nested pact twice"
     Just pe
-      | _psStep > 0 && (rollback && _npeStep pe == _psStep) ->
+      | _psStep >= 0 && (rollback && _npeStep pe == _psStep) ->
         pure $ fromNestedPactExec rollback $ pe
       | _psStep > 0 && (_npeStep pe + 1 == _psStep) ->
         pure $ fromNestedPactExec rollback $ over npeStep (+ 1) pe
