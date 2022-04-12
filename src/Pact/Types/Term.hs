@@ -60,7 +60,7 @@ module Pact.Types.Term
    Use(..),
    App(..),appFun,appArgs,appInfo,
    Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,dDefMeta,
-   Lam(..), lamArg, lamBindBody, lamTy, lamInfo,
+   Lam(..), lamArg, lamBindBody, lamTy, lamInfo,lamModule,
    DefMeta(..),
    DefcapMeta(..),
    Example(..),
@@ -941,6 +941,7 @@ data Lam n
   = Lam
   { _lamArg :: !Text
   , _lamTy  :: !(FunType (Term n))
+  , _lamModule :: Maybe ModuleName
   , _lamBindBody :: !(Scope Int Term n)
   , _lamInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
@@ -951,13 +952,26 @@ deriving instance (Eq1 Term, Eq n) => Eq (Lam n)
 instance HasInfo (Lam n) where getInfo = _lamInfo
 
 instance Pretty n => Pretty (Lam n) where
-  pretty (Lam arg ty _ _) =
+  pretty (Lam arg ty _ _ _) =
     pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> (parensSep $ pretty <$> _ftArgs ty) <+> "..."
 
 instance NFData n => NFData (Lam n)
 
-instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Lam n) where toJSON = lensyToJSON 2
-instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where parseJSON = lensyParseJSON 2
+instance (ToJSON (Term n), FromJSON (Term n)) => ToJSON (Lam n) where
+  toJSON (Lam arg ty mmod bind info) =
+    object $
+      [ "amArg" .= arg
+      , "amInfo" .= info
+      , "amBindBody" .= bind
+      , "amTy" .= ty] ++ [ "amModule" .= mod' | Just mod' <- [mmod]]
+
+instance (ToJSON (Term n), FromJSON (Term n)) => FromJSON (Lam n) where
+  parseJSON = withObject "Lam" $ \o -> Lam
+    <$> o .: "amArg"
+    <*> o .: "amTy"
+    <*> o .:? "amModule"
+    <*> o .: "amBindBody"
+    <*> o .: "amInfo"
 
 instance (SizeOf n) => SizeOf (Lam n)
 -- -------------------------------------------------------------------------- --
@@ -1246,8 +1260,8 @@ instance Monad Term where
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f =
       TBinding (map (fmap (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
-    TLam (Lam arg ty b i) i' >>= f =
-      TLam (Lam arg (fmap (>>= f) ty) (b >>>= f) i) i'
+    TLam (Lam arg ty mod_ b i) i' >>= f =
+      TLam (Lam arg (fmap (>>= f) ty) mod_ (b >>>= f) i) i'
     TObject (Object bs t kf oi) i >>= f =
       TObject (Object (fmap (>>= f) bs) (fmap (>>= f) t) kf oi) i
     TLiteral l i >>= _ = TLiteral l i

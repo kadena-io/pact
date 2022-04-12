@@ -10,9 +10,6 @@
   (defun func (x) (+ 1 x))
   (defconst test:string "hi")
   )
-(commit-tx)
-(begin-tx)
-(namespace 'free)
 (module modB G
   (defcap G () true)
   (defun chain () (modA.func 10))
@@ -20,7 +17,6 @@
   (defun get-test() test)
   )
 (commit-tx)
-
 (expect "ns-scoped module call works fully qualified" (free.modB.chain) 11)
 
 (namespace 'free)

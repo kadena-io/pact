@@ -47,7 +47,7 @@ import Data.List
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromMaybe)
 import Data.Set (Set, isSubsetOf)
 import qualified Data.Set as S
 import qualified Data.Set as Set
@@ -792,10 +792,10 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
   return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
-toFun (TLam (Lam name ty body _) i) = do
+toFun (TLam (Lam name ty mmod body _) i) = do
   TcId _ _ newIx <- freshId i "%anonlam"
   let mn = ModuleName ("%anonlam_" <> pack (show newIx)) Nothing
-  withScopeBodyToFun name mn ty body Defun i
+  withScopeBodyToFun name (fromMaybe mn mmod) ty body Defun i
 toFun (TDef td i) = resolveDyn td
   where
     resolveDyn Def{..} = use tcDynEnv >>= \de -> case M.lookup _dModule de of

@@ -161,9 +161,10 @@ stripTermInfo = stripTerm' stripNameInfo
       (stripMetaInfo meta)
       (fmap (stripTerm' f) <$> dmeta)
       def
-  stripLamInfo f (Lam arg ty body _info) =
+  stripLamInfo f (Lam arg ty mmod body _info) =
     Lam arg
       (stripFunTypeInfo f ty)
+      mmod
       (stripScopeInfo f body)
       def
   stripObjectInfo f (Object obj typ ko _info) =
