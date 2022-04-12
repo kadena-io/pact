@@ -369,7 +369,8 @@ createPrincipal i = \case
     chargeGas 1
     pure $ "m:" <> asString mn <> ":" <> n
   GUser (UserGuard uf args) -> do
-    a <- mkHash $ map toJSONPactValue args
+    args' <- enforcePactValue' args
+    a <- mkHash $ map toJSONPactValue args'
     pure $ "u:" <> asString uf <> ":" <> asString a
   where
     chargeGas amt = void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
@@ -377,7 +378,7 @@ createPrincipal i = \case
       let bs = mconcat bss
       chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
       return $ pactHash bs
-    toJSONPactValue = toStrict . encode . toPactValueLenient
+    toJSONPactValue = toStrict . encode
 
 validatePrincipalDef :: NativeDef
 validatePrincipalDef =

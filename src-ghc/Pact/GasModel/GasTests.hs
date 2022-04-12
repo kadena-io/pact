@@ -307,6 +307,7 @@ createPactGuardTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
     updateWithPactExec = setState (set evalPactExec mockPactExec)
 
     tests =
@@ -1286,6 +1287,7 @@ pactIdTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
     updateState = setState (set evalPactExec mockPactExec)
 
     tests =
@@ -1302,6 +1304,7 @@ yieldTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
 
     mockModules = HM.fromList [(someModuleName, someModuleData)]
     mockStackframe = [someStackFrame]
@@ -1926,6 +1929,7 @@ createPrincipalTests = createGasUnitTests
       PactExec 2 Nothing Nothing 0 (PactId "somePactId")
       (PactContinuation (Name $ BareName "some-defpact-func" def) [])
       False
+      mempty
 
     updateEnv = setEnv $ set eeMsgBody $ A.object
       [ "ks1" A..= A.object
@@ -2000,6 +2004,7 @@ validatePrincipalTests = createGasUnitTests
       PactExec 2 Nothing Nothing 0 (PactId "somePactId")
       (PactContinuation (Name $ BareName "some-defpact-func" def) [])
       False
+      mempty
 
     updateEnv = setEnv $ set eeMsgBody $ A.object
       [ "ks1" A..= A.object

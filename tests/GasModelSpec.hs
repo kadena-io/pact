@@ -57,6 +57,7 @@ untestedNativesCheck = do
      , "verify-spv"
      , "public-chain-data"
      , "list"
+     , "continue"
      ])
 
 allGasTestsAndGoldenShouldPass :: Spec

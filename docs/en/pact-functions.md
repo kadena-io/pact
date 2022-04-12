@@ -141,6 +141,17 @@ true
 ```
 
 
+### continue {#continue}
+
+*value*&nbsp;`*` *&rarr;*&nbsp;`*`
+
+
+Continue a previously started nested defpact.
+```lisp
+(continue f)
+```
+
+
 ### define-namespace {#define-namespace}
 
 *namespace*&nbsp;`string` *user-guard*&nbsp;`guard` *admin-guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
