@@ -384,6 +384,61 @@ mangleDefs mn term = modifyMn term
       TTable{}  -> set tModuleName mn
       _         -> id
 
+-- | Note:
+-- In `mangleDefsAndLams`, we have an invariant that this is
+-- called before any sort of inlining transform.
+-- As such in recursive calls, there should never be any "top level"
+-- terms that show up, such as consts, defs and defpacts.
+-- The only time any lambda may show up recursively, is directly in a callsite
+-- (e.g a TApp within anything) or in a bind body. As such we only need to traverse the
+-- terms that may contain other "body" style recursive terms
+mangleDefsAndLams :: ModuleName -> Term Name -> Term Name
+mangleDefsAndLams mn term = modifyMn term
+  where
+    modifyMn = case term of
+      TDef{} ->
+        mangleLams id "" . set (tDef . dModule) mn
+      TConst{}  ->
+        mangleLams id "" . set tModule (Just mn)
+      TSchema{} -> set tModule $ Just mn
+      TTable{}  -> set tModuleName mn
+      _         -> id
+    mangleLams :: (n -> n) -> Text -> Term n -> Term n
+    mangleLams f n = \case
+      TLam l i -> TLam (mangleLam f n l) i
+      TApp (App fun args appi) i ->
+        TApp (App (mangleLams f n fun) (mangleLams f n <$> args) appi) i
+      TBinding bps body bt i ->
+        TBinding (mangleBP f n <$> bps) (mangleScope f n body) bt i
+      TList v t i -> TList (mangleLams f n <$> v) t i
+      TConst arg m cv meta i ->
+        let n' = _aName arg
+        in TConst arg m (mangleLams f n' <$> cv) meta i
+      TObject o i ->
+        TObject (over (oObject.mapped) (mangleLams f n) o) i
+      TStep s m i ->
+        TStep (mangleLams f n <$> s) m i
+      TVar v i ->
+        TVar (f v) i
+      TDef d i ->
+        let (DefName n') = _dDefName d
+        in TDef (over dDefBody (mangleScope f n') d) i
+      a -> a
+    mangleLam :: (n -> n) -> Text -> Lam n -> Lam n
+    mangleLam f n (Lam arg ty _ bindBody i) =
+      Lam (arg <> "_" <> n) ty (Just mn) (mangleScope f n bindBody) i
+    mangleBP :: (n -> n) -> Text -> BindPair (Term n) -> BindPair (Term n)
+    mangleBP f n (BindPair arg v) =
+      BindPair arg (mangleLams f n v)
+    mangleScope :: (a -> a) -> Text -> Scope b Term a -> Scope b Term a
+    mangleScope f n s = Scope $ mangleLams mangleVars n (unscope s)
+      where
+      mangleVars = \case
+        F a -> F (mangleLams f n a)
+        B b -> B b
+
+
+
 -- | Make table of module definitions for storage in namespace/RefStore.
 loadModule
   :: Module (Term Name)
@@ -400,7 +455,10 @@ loadModule m bod1 mi g0 = do
     tt@TTable{} -> return $ Just $ asString (_tTableName tt)
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid module member"
-  let mangled = mangleDefs (_mName m) <$> mdefs
+  mangled <-
+   ifExecutionFlagSet' FlagDisablePact43
+     (mangleDefs (_mName m) <$> mdefs)
+     (mangleDefsAndLams (_mName m) <$> mdefs)
   (evaluatedDefs, deps) <-
     ifExecutionFlagSet FlagDisablePact43
       ((,mempty) <$> evaluateDefs mi (MDModule m) mangled)
@@ -1071,8 +1129,8 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
           <$> enforcePactValue' (fst af)
         initPact ai continuation bod'
     Defcap -> computeUserAppGas d ai *> evalError ai "Cannot directly evaluate defcap"
-reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) =
-  functionApp (DefName lamName) funTy Nothing as body Nothing ai
+reduceApp (App (TLam (Lam lamName funTy mmod body _) _) as ai) =
+  functionApp (DefName lamName) funTy mmod as body Nothing ai
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ pretty errMsg
 reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of

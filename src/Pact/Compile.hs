@@ -565,7 +565,7 @@ lam = do
   args <- withList' Parens $ many arg
   let funTy = FunType args tv
   info <- contextInfo
-  lamValue <- Lam name funTy <$> abstractBody valueLevel args <*> pure info
+  lamValue <- Lam name funTy Nothing <$> abstractBody valueLevel args <*> pure info
   pure (TLam lamValue info)
 
 letBindings :: Compile [BindPair (Term Name)]

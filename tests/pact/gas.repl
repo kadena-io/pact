@@ -684,7 +684,7 @@ d.G3
 
 (load "../../golden/golden.fqns.repl")
 
-(expect "new module with FQVs gas" 60835 (env-gas))
+(expect "new module with FQVs gas" 60836 (env-gas))
 
 (commit-tx)
 (begin-tx)
