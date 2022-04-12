@@ -1,0 +1,223 @@
+(begin-tx)
+
+;; k: account validation
+(env-data
+  { 'ks1: ["584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"],
+    'ks2:
+      [ "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+      , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+      ]
+  , 'ks3: ["keys3"]
+  })
+
+(env-keys
+  [ "584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+  , "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+  , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+  , "keys3"
+  ])
+
+(expect
+ "creating principals using keysets creates k: accounts"
+ "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+ (create-principal (read-keyset 'ks1)))
+
+(expect
+ "validating principals using created principal keysets passes validation"
+ true
+ (validate-principal
+  (read-keyset 'ks1)
+  "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+  ))
+
+(expect
+ "validating principal keysets roundtrips for all created principals"
+ true
+ (validate-principal
+  (read-keyset 'ks1)
+  (create-principal (read-keyset 'ks1))
+  ))
+
+;; w: account validation
+
+(expect
+ "creating principal keysets with more than 1 key creates w: accounts"
+ "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_ew:keys-all"
+ (create-principal (read-keyset 'ks2)))
+
+(expect
+ "validation for w: account creation validates passes"
+ true
+ (validate-principal
+   (read-keyset 'ks2)
+   "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_ew:keys-all"
+   ))
+
+(expect
+ "validation for w: account creation roundtrips with create-principal"
+ true
+ (validate-principal
+   (read-keyset 'ks2)
+   (create-principal (read-keyset 'ks2))
+   ))
+
+;; r: reference validation
+
+(define-keyset 'ks3)
+
+(expect
+ "creating principals using keyset references creates r: accounts"
+ "r:ks3"
+ (create-principal (keyset-ref-guard 'ks3)))
+
+(expect
+ "validating principals using created principal keyset refs passes"
+ true
+ (validate-principal
+  (keyset-ref-guard 'ks3)
+  "r:ks3"
+  ))
+
+(expect
+ "validating principal keyset refs roundtrips for all created principals"
+ true
+ (validate-principal
+  (keyset-ref-guard 'ks3)
+  (create-principal (keyset-ref-guard 'ks3))
+  ))
+
+(commit-tx)
+(begin-tx)
+
+(module tester G
+  (defcap G ()
+    true)
+
+  (defschema test-schema
+    "test schema"
+    guard:string)
+
+  (deftable test-table:{test-schema})
+
+  (defun f:string ()
+    (insert test-table "admin"
+      { "guard":
+          (create-principal (create-module-guard 'tester))
+      }))
+
+  (defun g ()
+    (at 'guard (read test-table "admin")))
+
+  (defun both-guard (ks1 ks2)
+    (enforce-keyset ks1)
+    (enforce-keyset ks2))
+
+  (defun h ()
+    (insert test-table "user"
+      { "guard":
+          (create-principal
+            (create-user-guard
+             (both-guard
+               (read-keyset 'ks1)
+               (read-keyset 'ks2)
+              )))
+      }))
+
+  (defun j ()
+    (at 'guard (read test-table "user")))
+
+  (defun k ()
+    (validate-principal
+     (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2)))
+     (create-principal
+      (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2))))
+     ))
+
+  (defpact pact-test ()
+    (step
+      (let*
+        ((guard
+           (create-principal
+           (create-pact-guard "pact-guard"))))
+
+        (update test-table "user"
+          { "guard": guard
+          })
+
+        guard
+        ))
+
+    (step
+       (validate-principal
+         (create-pact-guard "pact-guard")
+         (at 'guard (read test-table "user"))
+       )))
+)
+
+(module tester2 G
+  (defcap G ()
+    true)
+
+  (defun f:string ()
+    (create-principal (create-module-guard 'tester)))
+
+  (defun g:bool ()
+    (validate-principal
+     (create-module-guard 'tester)
+     (create-principal (create-module-guard 'tester))))
+)
+
+(create-table tester.test-table)
+(tester.f)
+(tester.h)
+
+(commit-tx)
+(begin-tx)
+
+;; m: guard validation
+
+(expect
+ "creating principals for autonomous module guards creates m: guards with same name"
+ "m:tester:tester"
+ (tester.g))
+
+(expect
+ "creating principal module guards for other modules creates m: guards that show provenance"
+ "m:tester2:tester"
+ (tester2.f))
+
+(expect
+ "validating principal module guards roundtrips with create-principal"
+ true
+ (tester2.g))
+
+;; u: guard validation
+
+(expect
+ "creating principal user guards creates u: guards with correct format"
+ "u:tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDI"
+ (tester.j))
+
+
+(expect
+ "validating principal user guards roundtrips with create-principal"
+ true
+ (tester.k))
+
+;; p: guard validation
+
+(expect
+ "creating principal pact guards creates p: guards with correct format"
+ "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:pact-guard"
+ (tester.pact-test))
+
+(expect
+ "validating principal pact guards roundtrips with create-principal"
+ true
+ (continue-pact 1))

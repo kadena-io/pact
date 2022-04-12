@@ -141,6 +141,17 @@ true
 ```
 
 
+### continue {#continue}
+
+*value*&nbsp;`*` *&rarr;*&nbsp;`*`
+
+
+Continue a previously started nested defpact.
+```lisp
+(continue f)
+```
+
+
 ### define-namespace {#define-namespace}
 
 *namespace*&nbsp;`string` *user-guard*&nbsp;`guard` *admin-guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
@@ -437,7 +448,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.2.0.1"
+"4.2.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1535,6 +1546,17 @@ Defines a guard by NAME that enforces the current module admin predicate.
 Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
 
 
+### create-principal {#create-principal}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
+
+
+Create a principal which unambiguously identifies GUARD.
+```lisp
+(create-principal (read-keyset 'keyset))
+```
+
+
 ### create-user-guard {#create-user-guard}
 
 *closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
@@ -1595,6 +1617,17 @@ Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Co
 Specifies and tests for existing grant of CAPABILITY, failing if not found in environment.
 ```lisp
 (require-capability (TRANSFER src dest))
+```
+
+
+### validate-principal {#validate-principal}
+
+*guard*&nbsp;`guard` *principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Validate that PRINCIPAL unambiguously identifies GUARD.
+```lisp
+(enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 ```
 
 
@@ -1786,7 +1819,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

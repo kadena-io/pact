@@ -33,7 +33,8 @@ import           Test.Hspec
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
 import           Pact.Repl.Types              (ReplMode (StringEval))
-import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref, ModuleName)
+import           Pact.Types.Runtime           (Exp, Info, ModuleData(..), Ref, ModuleName)
+import           Pact.Runtime.Utils
 import           Pact.Types.Pretty
 import           Pact.Types.Util              (tShow)
 
@@ -119,6 +120,7 @@ renderTestFailure = \case
 -- TODO: use ExceptT
 --
 
+
 compile' :: ModuleName -> Text -> IO (Either TestFailure (ModuleData Ref))
 compile' modName code = do
   replState0 <- initReplState StringEval Nothing
@@ -129,7 +131,7 @@ compile' modName code = do
       moduleM <- replLookupModule replState modName
       pure $ case moduleM of
         Left err -> Left $ ReplError (show err)
-        Right m -> Right m
+        Right m -> Right (inlineModuleData m)
 
 compile :: Text -> IO (Either TestFailure (ModuleData Ref))
 compile = compile' "test"

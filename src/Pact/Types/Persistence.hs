@@ -30,9 +30,10 @@ module Pact.Types.Persistence
    PactDb(..),
    TxId(..),
    PersistDirect(..),toPersistDirect,fromPersistDirect,
-   ModuleData(..),mdModule,mdRefMap,
+   ModuleData(..),mdModule,mdRefMap, mdDependencies,
    PersistModuleData,
-   ExecutionMode(..)
+   ExecutionMode(..),
+   allModuleExports
    ) where
 
 import Control.Applicative ((<|>))
@@ -42,6 +43,7 @@ import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
 import Data.Default
 import Data.Hashable (Hashable)
+import Data.Maybe(fromMaybe)
 import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
@@ -56,12 +58,13 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Type
-import Pact.Types.Util (AsString(..), tShow, lensyToJSON, lensyParseJSON)
+import Pact.Types.Util (AsString(..), tShow)
 
 
 data PersistDirect =
     PDValue PactValue
   | PDNative NativeDefName
+  | PDFreeVar FullyQualifiedName
   deriving (Eq,Show,Generic)
 
 instance NFData PersistDirect
@@ -69,43 +72,63 @@ instance NFData PersistDirect
 instance ToJSON PersistDirect where
   toJSON (PDValue v) = object [ "pdval" .= v ]
   toJSON (PDNative n) = object [ "pdnat" .= n ]
+  toJSON (PDFreeVar n) = object [ "pdfv" .= n]
 
 instance FromJSON PersistDirect where
   parseJSON v =
+    withObject "PDFreeVar" (\o -> PDFreeVar <$> o .: "pdfv") v <|>
     withObject "PDValue" (\o -> PDValue <$> o .: "pdval") v <|>
     withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v
+
 
 instance Pretty PersistDirect where
   pretty (PDValue v) = pretty v
   pretty (PDNative n) = pretty $ "<native>" <> asString n
+  pretty (PDFreeVar f) = pretty f
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
 toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
 toPersistDirect (TSchema n Nothing _ _ _) = pure $ PDNative (NativeDefName (asString n))
 toPersistDirect (TConst carg Nothing _ _ _) = pure $ PDNative (NativeDefName $ _aName carg)
+toPersistDirect (TVar (FQName f) _) = pure $ PDFreeVar f
 toPersistDirect t = case toPactValue t of
   Right v -> pure $ PDValue v
   Left e -> Left e
 
 fromPersistDirect :: (NativeDefName -> Maybe (Term Name)) -> PersistDirect -> Either Text (Term Name)
 fromPersistDirect _ (PDValue v) = return $ fromPactValue v
+fromPersistDirect _ (PDFreeVar f) = return $ TVar (FQName f) def
 fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
   Just t -> return t
   Nothing -> Left $ "Native lookup failed: " <> tShow nn
+
+allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
+allModuleExports md = case _mdModule md of
+  MDModule m ->
+    let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
+    in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
+  _ -> HM.empty
 
 -- | Module ref store
 data ModuleData r = ModuleData
   { _mdModule :: ModuleDef (Def r)
   , _mdRefMap :: HM.HashMap Text r
+  , _mdDependencies :: HM.HashMap FullyQualifiedName r
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
 
 instance NFData r => NFData (ModuleData r)
 
-instance (ToJSON r,FromJSON r) =>
-  ToJSON (ModuleData r) where toJSON = lensyToJSON 3
-instance (ToJSON r, FromJSON r) =>
-  FromJSON (ModuleData r) where parseJSON = lensyParseJSON 3
+instance (ToJSON r,FromJSON r) => ToJSON (ModuleData r) where
+  toJSON (ModuleData m rs deps) =
+    object $ [ "module" .= m, "refMap" .= rs] ++ [ "dependencies" .= deps | not (HM.null deps)]
+instance (ToJSON r, FromJSON r) => FromJSON (ModuleData r) where
+  parseJSON =
+    withObject "ModuleData" $ \o ->
+      ModuleData
+      <$> o .: "module"
+      <*> o .: "refMap"
+      <*> (fromMaybe HM.empty <$> o .:? "dependencies")
 
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 

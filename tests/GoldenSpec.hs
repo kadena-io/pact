@@ -43,7 +43,7 @@ import Pact.Types.SPV
 spec :: Spec
 spec = do
   describe "goldenAccounts" $
-    goldenModule "accounts-module" "golden/golden.accounts.repl" "accounts"
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
     ,("eventCR",eventCR)
@@ -51,14 +51,17 @@ spec = do
     ,("crossChainSendCRBackCompat",crossChainSendCR True)
     ]
   describe "goldenAutoCap" $
-    goldenModule "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
   describe "goldenLambdas" $
-    goldenModule "lambda-module" "golden/golden.lams.repl" "lams-test" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "lambda-module" "golden/golden.lams.repl" "lams-test" []
+  describe "goldenModuleMemcheck" $
+    goldenModule [FlagDisablePact43] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
+  describe "goldenFullyQuals" $
+    goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
 
-goldenModule
-  :: String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
-goldenModule tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
-  let ec = mkExecutionConfig [FlagDisableInlineMemCheck]
+goldenModule :: [ExecutionFlag] -> String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
+goldenModule flags tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
+  let ec = mkExecutionConfig flags
   (r,s) <- runIO $ execScriptF' Quiet fp (\st -> st & rEnv . eeExecutionConfig .~ ec)
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
@@ -81,7 +84,7 @@ acctsFailureCR :: String -> ReplState -> Spec
 acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> ReplState -> Spec
-eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck]) tn s $
+eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]) tn s $
     "(module events-test G \
     \  (defcap G () true) \
     \  (defcap CAP (name:string amount:decimal) @managed \
@@ -99,8 +102,8 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
     \  (step (resume { 'a:=a } a)))) \
     \(xchain.p 3)"
   where
-    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck]
-    ec False = mkExecutionConfig [FlagDisableInlineMemCheck]
+    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck, FlagDisablePact43]
+    ec False = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]
 
 doCRTest :: String -> ReplState -> Text -> Spec
 doCRTest tn s code = doCRTest' def tn s code

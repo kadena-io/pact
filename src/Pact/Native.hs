@@ -92,6 +92,7 @@ import Pact.Native.Ops
 import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
+import Pact.Runtime.Utils(lookupFreeVar)
 import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
@@ -114,11 +115,11 @@ natives = [
 
 
 -- | Production native modules as a dispatch map.
-nativeDefs :: HM.HashMap Name Ref
+nativeDefs :: HM.HashMap Text Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
-moduleToMap :: NativeModule -> HM.HashMap Name Ref
-moduleToMap = HM.fromList . map ((Name . (`BareName` def) . asString) *** Direct) . snd
+moduleToMap :: NativeModule -> HM.HashMap Text Ref
+moduleToMap = HM.fromList . map (asString *** Direct) . snd
 
 
 lengthDef :: NativeDef
@@ -746,6 +747,9 @@ langDefs =
      "Lazily ignore arguments IGNORE* and return VALUE."
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
+    ,defNative "continue"  continueNested
+     (funType TyAny [("value", TyAny)]) [LitExample "(continue f)"]
+     "Continue a previously started nested defpact."
     ,strToIntDef
     ,strToListDef
     ,concatDef
@@ -1214,3 +1218,37 @@ base64decode = defRNative "base64-decode" go
             <> pretty e
           Right t -> return $ tStr t
       _ -> argsError i as
+
+-- | Continue a nested defpact.
+--   We get the PactId of the nested defpact from the resolved TDef as a qualified name concatenated with
+--   the pactId of the parent.
+continueNested :: NativeFun e
+continueNested i as = gasUnreduced i as $ case as of
+  [TApp (App t args _) _] -> lookup' t >>= \d ->
+    (,) <$> view eePactStep <*> use evalPactExec >>= \case
+      (Just ps, Just pe) -> do
+        contArgs <- traverse reduce args >>= enforcePactValue'
+        let childName = QName (QualifiedName (_dModule d) (asString (_dDefName d)) def)
+            cont = PactContinuation childName contArgs
+        newPactId <- createNestedPactId i cont (_psPactId ps)
+        let newPs = PactStep (_psStep ps) (_psRollback ps) newPactId
+        case _peNested pe ^. at newPactId of
+          Just npe -> resumeNestedPactExec (getInfo i) d (newPs (_npeYield npe)) npe
+          Nothing -> evalError' i $ "Attempting to continue a pact that was not nested: " <> pretty d
+      _ -> evalError' i "Not within pact invocation"
+  _ -> argsError' i as
+  where
+
+  lookup' (unTVar -> t) = case t of
+    TDef d _ -> pure d
+    TVar (Direct (TVar (FQName fq) _)) _ ->
+      lookupFreeVar i fq >>= \case
+        Ref (TDef d _) -> pure d
+        _ -> evalError' i $ "continue: " <> pretty fq <> " is not a defpact"
+    TDynamic tref tmem ti -> reduceDynamic tref tmem ti >>= \case
+      Right d -> pure d
+      Left _ -> evalError' i $ "continue: dynamic reference did not point to Defpact"
+    _ -> evalError' i $ "continue: argument must be a defpact " <> pretty t
+  unTVar = \case
+    TVar (Ref d) _ -> unTVar d
+    d -> d

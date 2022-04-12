@@ -35,7 +35,7 @@ in {
             ./Setup bench
           '';
           doHaddock = false;
-          doCheck = true;
+          doCheck = false;
         });
       };
       packages = {
