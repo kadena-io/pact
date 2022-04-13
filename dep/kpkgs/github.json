@@ -1,7 +1,7 @@
 {
   "owner": "kadena-io",
   "repo": "kpkgs",
-  "branch": "jam/bump-for-pact",
+  "branch": "master",
   "private": false,
   "rev": "905ac27a05db959db3ce27c4f258310746a9f12b",
   "sha256": "0mw6zsxkc93pqravvjmjiaq3bhydfabkvh12wbndj2jgv3i4z3qx"
