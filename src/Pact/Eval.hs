@@ -556,7 +556,6 @@ removeFromLoaded toRemove =
 -- the table itself: the topological sort of the graph ensures the reference will be there.
 evaluateDefs :: Info -> ModuleDef (Term Name) -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
 evaluateDefs info mdef defs = do
-  removeFromLoaded (Set.fromList (HM.keys defs))
   cs <- liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- enforceAcyclic info cs
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
