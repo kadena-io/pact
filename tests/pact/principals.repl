@@ -89,6 +89,25 @@
 (commit-tx)
 (begin-tx)
 
+(env-data
+  { 'ks1: ["584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"],
+    'ks2:
+      [ "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+      , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+      ]
+  , 'ks3: ["keys3"]
+  })
+
+(env-keys
+  [ "584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+  , "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+  , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+  , "keys3"
+  ])
+
+(define-namespace 'test-ns (read-keyset 'ks1) (read-keyset 'ks1))
+(namespace 'test-ns)
+
 (module tester G
   (defcap G ()
     true)
@@ -184,38 +203,38 @@
 
 (expect
  "creating principals for autonomous module guards creates m: guards with same name"
- "m:tester:tester"
- (tester.g))
+ "m:test-ns.tester:tester"
+ (test-ns.tester.g))
 
 (expect
  "creating principal module guards for other modules creates m: guards that show provenance"
- "m:tester2:tester"
- (tester2.f))
+ "m:test-ns.tester2:tester"
+ (test-ns.tester2.f))
 
 (expect
  "validating principal module guards roundtrips with create-principal"
  true
- (tester2.g))
+ (test-ns.tester2.g))
 
 ;; u: guard validation
 
 (expect
  "creating principal user guards creates u: guards with correct format"
- "u:tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDI"
- (tester.j))
+ "u:test-ns.tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDI"
+ (test-ns.tester.j))
 
 
 (expect
  "validating principal user guards roundtrips with create-principal"
  true
- (tester.k))
+ (test-ns.tester.k))
 
 ;; p: guard validation
 
 (expect
  "creating principal pact guards creates p: guards with correct format"
  "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:pact-guard"
- (tester.pact-test))
+ (test-ns.tester.pact-test))
 
 (expect
  "validating principal pact guards roundtrips with create-principal"
