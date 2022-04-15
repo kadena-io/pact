@@ -1966,6 +1966,52 @@ or "private" (with entity indicator). With private steps, failures result in a r
     (credit payee amount)))
 ```
 
+Public defpacts may be nested (though the recursion restrictions apply, so it must be a different defpact). They may be kicked off
+like a regular function call within a defpact, but are continued after the first step by calling `continue` with the same arguments.
+
+Nested defpacts are dispatched on tht
+
+ with the following restrictions:
+- The number of steps of the child must match the number of steps of the parent.
+- Child steps must have the same rollback as parent (If a parent defpact has the rollback field, so must the child). If parent steps roll back, so do child steps.
+- `continue` must be called with the same continuation arguments as the defpact originally dispatched,
+ to support multiple nested defpacts of the same function but with different arguments.
+
+```
+(defpact payment (payer payee amount)
+  (step-with-rollback
+    (debit payer amount)
+    (credit payer amount))
+  (step payee-entity
+    (credit payee amount)))
+
+...
+(defpact split-payment (payer payee1 payee2 amount ratio)
+  (step-with-rollback
+    (let
+      ((payment1 (payment payer payee1 (* amount ratio)))
+      (payment2 (payment payer payee2 (* amount (- 1 ratio))))
+      )
+      "step 0 complete"
+    )
+    (let
+      ((payment1 (continue (payment payer payee1 (* amount ratio))))
+       (payment2 (continue (payment payer payee2 (* amount (- 1 ratio)))))
+      )
+      "step 0 rolled back"
+    )
+  )
+  (step
+    (let
+      ((payment1 (continue (payment payer payee1 (* amount ratio))))
+       (payment2 (continue (payment payer payee2 (* amount (- 1 ratio)))))
+      )
+      "step 1 complete"
+    )
+  )
+)
+```
+
 ### defschema {#defschema}
 
 ```
