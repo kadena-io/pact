@@ -1,4 +1,4 @@
-|image1|
+.. image:: img/kadena-logo-210px.png
 
 Pact 스마트 컨트랙트 언어 레퍼런스
 ==================================
@@ -2205,8 +2205,8 @@ enforce-pact-version
 *min-version* ``string`` *max-version* ``string`` *→* ``bool``
 
 MIN-VERSION 이상 또는 MAX-VERSION 이하로 런타임 Pact 버전을 적용합니다.
-버전 값은 왼쪽부터 숫자가 매칭됩니다(예를 들어 ‘2’, ‘2.2’ 및 ‘2.2.3’에서
-모두 ‘2.2.3’이 지원).
+버전 값은 왼쪽부터 숫자가 매칭됩니다(예를 들어 ‘2’, ‘2.2’ 및 ’2.2.3’에서
+모두 ’2.2.3’이 지원).
 
 .. code:: lisp
 
@@ -2537,7 +2537,7 @@ where
 *field* ``string`` *app* ``(x:<a> -> bool)`` *value* ``object:<{row}>``
 *→* ``bool``
 
-‘filter’ 및 ‘select’에서 사용되는 유틸리티로서 VALUE 의 FIELD 에 APP 을
+‘filter’ 및 ’select’에서 사용되는 유틸리티로서 VALUE 의 FIELD 에 APP 을
 적용합니다.
 
 .. code:: lisp
@@ -2550,7 +2550,7 @@ yield
 
 *OBJECT* ``object:<{y}>`` *→* ``object:<{y}>``
 
-후속 Pact 스텝에서 ‘resume’와 함께 사용할 OBJECT를 양도합니다. 이 객체는
+후속 Pact 스텝에서 ’resume’와 함께 사용할 OBJECT를 양도합니다. 이 객체는
 상위 수준만 ’resume’으로 바인딩이 가능한 점에서 데이터베이스 행 객체와
 유사합니다. 중첩된 객체들은 오파크(opaque) 타입의 JSON 값으로
 변환됩니다.
@@ -2786,7 +2786,7 @@ days
 
 *n* ``integer`` *→* ``decimal``
 
-N 일, ‘add-time’과 함께 사용됩니다.
+N 일, ’add-time’과 함께 사용됩니다.
 
 .. code:: lisp
 
@@ -2825,7 +2825,7 @@ hours
 
 *n* ``integer`` *→* ``decimal``
 
-N 시간, ‘add-time’과 함께 사용됩니다
+N 시간, ’add-time’과 함께 사용됩니다
 
 .. code:: lisp
 
@@ -2839,7 +2839,7 @@ minutes
 
 *n* ``integer`` *→* ``decimal``
 
-N 분, ‘add-time’과 함께 사용됩니다
+N 분, ’add-time’과 함께 사용됩니다
 
 .. code:: lisp
 
@@ -3526,7 +3526,7 @@ env-step
 
 Pact 스텝의 상태를 설정합니다. 인수가 없는 경우 스텝의 설정을
 취소합니다. STEP-IDX 를 통해 실행한 스텝 인덱스를 설정합니다. ROLLBACK
-은 롤백 표현식이 있는 경우 실행을 명령합니다. RESUME 는 ‘resume’를 통해
+은 롤백 표현식이 있는 경우 실행을 명령합니다. RESUME 는 ’resume’를 통해
 읽어들일 값을 설정합니다. 이전의 모든 Pact 실행 상태를 해제합니다.
 
 .. code:: lisp
@@ -3621,7 +3621,7 @@ sig-keyset
 
 *→* ``keyset``
 
-편리한 함수로 ‘keys-all’을 predicate으로 사용하여 메시지 시그니처에
+편리한 함수로 ’keys-all’을 predicate으로 사용하여 메시지 시그니처에
 존재하는 키로부터 키셋을 구성합니다.
 
 typecheck
@@ -3640,7 +3640,7 @@ verify
 
 MODULE 을 검증하여 모든 속성들이 유지되는지 검사합니다.
 
-|image2|
+.. image:: img/kadena-logo-210px.png
 
 Pact 속성 검사 시스템
 =====================
@@ -5149,6 +5149,3 @@ row-enforced
 지정된 행의 키셋이 함수에서 enforce 되는지의 여부.
 
 속성에서만 지원됩니다.
-
-.. |image1| image:: img/kadena-logo-210px.png
-.. |image2| image:: img/kadena-logo-210px.png
