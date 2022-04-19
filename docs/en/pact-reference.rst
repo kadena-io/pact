@@ -2535,6 +2535,9 @@ same continuation arguments as the defpact originally dispatched, to
 support multiple nested defpacts of the same function but with different
 arguments.
 
+The following example shows well-formed defpacts with equal number of
+steps, nested rollbacks and continue:
+
 ::
 
    (defpact payment (payer payee amount)
