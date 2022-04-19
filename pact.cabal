@@ -41,6 +41,50 @@ flag with-integer-gmp
   description: Include integer-gmp package (removed after GHC 9)
   manual:      False
 
+common pact-common
+  build-depends:
+    , Decimal >= 0.4.2 && < 0.6
+    , QuickCheck >= 2.12.6.1
+    , aeson >= 0.11.3.0 && < 1.6
+    , attoparsec >= 0.13.0.2 && < 0.15
+    , base >=4.9.0.0 && < 4.16
+    , base16-bytestring >=0.1.1.6 && < 0.2
+    , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
+        -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
+    , bound >= 2 && < 2.1
+    , bytestring >=0.10.8.1 && < 0.12
+    , cereal >=0.5.4.0 && < 0.6
+    , containers >= 0.5.7 && < 0.7
+    , data-default >= 0.7.1.1 && < 0.8
+    , deepseq >= 1.4.2.0 && < 1.5
+    , deriving-compat >= 0.5.1
+    , directory >= 1.2.6.2 && < 1.4
+    , errors >= 2.3
+    , exceptions >= 0.8.3 && < 0.11
+    , filepath >= 1.4.1.0 && < 1.5
+    , hashable >= 1.2.4.0 && < 1.3.3.0
+    , lens >= 4.14 && < 5.1
+    , lens-aeson >= 1.0.0.5 && < 1.2
+    , megaparsec >= 9
+    , mtl >= 2.2.1 && < 2.3
+    , pact-time >= 0.2
+    , parsers >= 0.12.4 && < 0.13
+    , prettyprinter >= 1.2 && < 1.6.1
+    , prettyprinter-ansi-terminal >= 1.1 && < 1.2
+    , quickcheck-instances >= 0.3
+    , reflection
+    , safe >= 0.3.11 && < 0.4
+    , semigroupoids >= 5.0
+    , servant
+    , text >= 1.2.2.1 && < 1.3
+    , transformers >= 0.5.2.0 && < 0.6
+    , trifecta >= 2.1
+    , unordered-containers >= 0.2.7.2 && <= 0.2.15.0
+    , utf8-string >= 1.0.1.1 && < 1.1
+    , vector >= 0.11.0.0 && < 0.13
+    , vector-algorithms >= 0.7
+    , vector-space >= 0.10.4 && < 0.17
+
 library
 
   -- common to all configurations:
@@ -285,6 +329,34 @@ library
       build-depends: unix
     if !flag(no-advice)
       cpp-options: -DADVICE
+
+library pact-core
+  import:  pact-common
+  hs-source-dirs: pact-core
+  build-depends:
+    , pact
+    , criterion >= 1.1.4 && < 1.6
+    , cryptonite
+    , direct-sqlite == 2.3.26
+    , http-client
+    , memory
+    , safe-exceptions >= 0.1.5.0 && < 0.2
+    , servant-client
+    , servant-client-core
+    , statistics >= 0.13.3 && < 0.16
+    , yaml
+  ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+  exposed-modules:
+    Pact.Core.Builtin
+    Pact.Core.Names
+    Pact.Core.Type
+    Pact.Core.Typed.Typecheck
+    Pact.Core.Typed.Term
+    Pact.Core.IR.Term
+    Pact.Core.IR.Typecheck
+
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)
