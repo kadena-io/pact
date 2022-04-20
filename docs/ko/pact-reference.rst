@@ -2074,9 +2074,9 @@ JSON 행 값은 사용자 데이터 테이블에서 확인한 것과 같은 인�
 at
 ~~
 
-*idx* ``integer`` *list* ``[<l>]`` *→* ``<a>``
+*idx* ``integer`` *list* ``[<l>]`` *→* ``<a>``
 
-*idx* ``string`` *object* ``object:<{o}>`` *→* ``<a>``
+*idx* ``string`` *object* ``object:<{o}>`` *→* ``<a>``
 
 IDX 에서 LIST 를 인덱싱하거나 OBJECT 에서 키 IDX 를 통해 값을 얻습니다
 
@@ -2090,7 +2090,7 @@ IDX 에서 LIST 를 인덱싱하거나 OBJECT 에서 키 IDX 를 통해 값을 �
 bind
 ~~~~
 
-*src* ``object:<{row}>`` *binding* ``binding:<{row}>`` *→* ``<a>``
+*src* ``object:<{row}>`` *binding* ``binding:<{row}>`` *→* ``<a>``
 
 특수 양식이 후속 바디 문에 BINDINGS 를 통해 바인딩 된 객체로 SRC 를
 평가합니다.
@@ -2103,8 +2103,8 @@ bind
 compose
 ~~~~~~~
 
-*x* ``(x:<a> -> <b>)`` *y* ``(x:<b> -> <c>)`` *value* ``<a>``
-*→* ``<c>``
+*x* ``(x:<a> -> <b>)`` *y* ``(x:<b> -> <c>)`` *value* ``<a>``
+*→* ``<c>``
 
 X 는 VALUE 에서, Y 는 X 의 결과에서 작동하도록 X 와 Y 를 작성합니다.
 
@@ -2116,12 +2116,12 @@ X 는 VALUE 에서, Y 는 X 의 결과에서 작동하도록 X 와 Y 를 작성�
 constantly
 ~~~~~~~~~~
 
-*value* ``<a>`` *ignore1* ``<b>`` *→* ``<a>``
+*value* ``<a>`` *ignore1* ``<b>`` *→* ``<a>``
 
-*value* ``<a>`` *ignore1* ``<b>`` *ignore2* ``<c>`` *→* ``<a>``
+*value* ``<a>`` *ignore1* ``<b>`` *ignore2* ``<c>`` *→* ``<a>``
 
-*value* ``<a>`` *ignore1* ``<b>`` *ignore2* ``<c>`` *ignore3* ``<d>``
-*→* ``<a>``
+*value* ``<a>`` *ignore1* ``<b>`` *ignore2* ``<c>`` *ignore3* ``<d>``
+*→* ``<a>``
 
 나태하게(Lazily) 인수 IGNORE\* 을 무시하고 VALUE 를 반환합니다.
 
@@ -2133,11 +2133,11 @@ constantly
 contains
 ~~~~~~~~
 
-*value* ``<a>`` *list* ``[<a>]`` *→* ``bool``
+*value* ``<a>`` *list* ``[<a>]`` *→* ``bool``
 
-*key* ``<a>`` *object* ``object:<{o}>`` *→* ``bool``
+*key* ``<a>`` *object* ``object:<{o}>`` *→* ``bool``
 
-*value* ``string`` *string* ``string`` *→* ``bool``
+*value* ``string`` *string* ``string`` *→* ``bool``
 
 LIST 또는 STRING 에 VALUE 가 포함되어 있는지, 또는 OBJECT 에 KEY 항목이
 있는지 테스트합니다.
@@ -2154,10 +2154,10 @@ LIST 또는 STRING 에 VALUE 가 포함되어 있는지, 또는 OBJECT 에 KEY �
 drop
 ~~~~
 
-*count* ``integer`` *list* ``<a[[<l>],string]>``
-*→* ``<a[[<l>],string]>``
+*count* ``integer`` *list* ``<a[[<l>],string]>``
+*→* ``<a[[<l>],string]>``
 
-*keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
+*keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
 
 LIST(또는 문자열)에서 COUNT 값을, OBJECT 에서 KEYS 에 키를 가지고 있는
 항목들을 삭제합니다. COUNT 가 음수인 경우 끝에서부터 삭제합니다.
@@ -2174,7 +2174,7 @@ LIST(또는 문자열)에서 COUNT 값을, OBJECT 에서 KEYS 에 키를 가지�
 enforce
 ~~~~~~~
 
-*test* ``bool`` *msg* ``string`` *→* ``bool``
+*test* ``bool`` *msg* ``string`` *→* ``bool``
 
 순수 함수 TEST 가 false 를 반환할 경우 MSG 와 함께 트랜잭션을
 실패시킵니다. 그 외의 경우에는 true 를 반환합니다.
@@ -2187,7 +2187,7 @@ enforce
 enforce-one
 ~~~~~~~~~~~
 
-*msg* ``string`` *tests* ``[bool]`` *→* ``bool``
+*msg* ``string`` *tests* ``[bool]`` *→* ``bool``
 
 순서대로 TESTS 를 실행합니다(순수한 맥락, 키셋 적용). 모두 실패하면
 트랜잭션이 실패합니다. 첫 번째 성공 시 쇼트 서킷이 이루어집니다.
@@ -2200,9 +2200,9 @@ enforce-one
 enforce-pact-version
 ~~~~~~~~~~~~~~~~~~~~
 
-*min-version* ``string`` *→* ``bool``
+*min-version* ``string`` *→* ``bool``
 
-*min-version* ``string`` *max-version* ``string`` *→* ``bool``
+*min-version* ``string`` *max-version* ``string`` *→* ``bool``
 
 MIN-VERSION 이상 또는 MAX-VERSION 이하로 런타임 Pact 버전을 적용합니다.
 버전 값은 왼쪽부터 숫자가 매칭됩니다(예를 들어 ‘2’, ‘2.2’ 및 ‘2.2.3’에서
@@ -2218,7 +2218,7 @@ MIN-VERSION 이상 또는 MAX-VERSION 이하로 런타임 Pact 버전을 적용�
 filter
 ~~~~~~
 
-*app* ``(x:<a> -> bool)`` *list* ``[<a>]`` *→* ``[<a>]``
+*app* ``(x:<a> -> bool)`` *list* ``[<a>]`` *→* ``[<a>]``
 
 각 요소에 APP 를 적용하여 LIST 를 필터링합니다. True 가 반환되는 요소는
 보관됩니다.
@@ -2231,8 +2231,8 @@ filter
 fold
 ~~~~
 
-*app* ``(x:<a> y:<b> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
-*→* ``<a>``
+*app* ``(x:<a> y:<b> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
+*→* ``<a>``
 
 INIT 를 시작으로 마지막 결과 와 요소에 APP 을 적용하여 LIST 를
 반복적으로 reduce 합니다.
@@ -2245,7 +2245,7 @@ INIT 를 시작으로 마지막 결과 와 요소에 APP 을 적용하여 LIST �
 format
 ~~~~~~
 
-*template* ``string`` *vars* ``list`` *→* ``string``
+*template* ``string`` *vars* ``list`` *→* ``string``
 
 {}를 사용해 TEMPLATE 에 VARS 를 삽입합니다.
 
@@ -2257,7 +2257,7 @@ format
 hash
 ~~~~
 
-*value* ``<a>`` *→* ``string``
+*value* ``<a>`` *→* ``string``
 
 VALUE 의 BLAKE2b 512-비트 해시를 계산합니다. 문자열은 직접 변환이
 되지만, 다른 값들은 JSON 표현식을 사용해 변환됩니다.
@@ -2272,7 +2272,7 @@ VALUE 의 BLAKE2b 512-비트 해시를 계산합니다. 문자열은 직접 변�
 identity
 ~~~~~~~~
 
-*value* ``<a>`` *→* ``<a>``
+*value* ``<a>`` *→* ``<a>``
 
 제공된 값을 반환합니다.
 
@@ -2284,7 +2284,7 @@ identity
 if
 ~~
 
-*cond* ``bool`` *then* ``<a>`` *else* ``<a>`` *→* ``<a>``
+*cond* ``bool`` *then* ``<a>`` *else* ``<a>`` *→* ``<a>``
 
 COND 를 테스트해서 true 이면 THEN 을 평가하고 그렇지 않으면 ELSE 를
 평가합니다.
@@ -2297,7 +2297,7 @@ COND 를 테스트해서 true 이면 THEN 을 평가하고 그렇지 않으면 E
 length
 ~~~~~~
 
-*x* ``<a[[<l>],string,object:<{o}>]>`` *→* ``integer``
+*x* ``<a[[<l>],string,object:<{o}>]>`` *→* ``integer``
 
 X(리스트, 문자열 또는 객체 타입)의 길이를 계산합니다.
 
@@ -2313,7 +2313,7 @@ X(리스트, 문자열 또는 객체 타입)의 길이를 계산합니다.
 list
 ~~~~
 
-*elems* ``*`` *→* ``list``
+*elems* ``*`` *→* ``list``
 
 ELEMS 에서 리스트를 생성합니다. Pact 2.1.1 에서는 사용이 중단되었고
 대신에 리터럴 리스트가 지원됩니다.
@@ -2326,7 +2326,7 @@ ELEMS 에서 리스트를 생성합니다. Pact 2.1.1 에서는 사용이 중단
 list-modules
 ~~~~~~~~~~~~
 
-*→* ``[string]``
+*→* ``[string]``
 
 로딩에 사용할 수 있는 모듈을 나열합니다.
 
@@ -2335,7 +2335,7 @@ list-modules
 make-list
 ~~~~~~~~~
 
-*length* ``integer`` *value* ``<a>`` *→* ``[<a>]``
+*length* ``integer`` *value* ``<a>`` *→* ``[<a>]``
 
 VALUE 를 LENGTH 만큼 반복하여 리스트를 생성합니다.
 
@@ -2347,7 +2347,7 @@ VALUE 를 LENGTH 만큼 반복하여 리스트를 생성합니다.
 map
 ~~~
 
-*app* ``(x:<b> -> <a>)`` *list* ``[<b>]`` *→* ``[<a>]``
+*app* ``(x:<b> -> <a>)`` *list* ``[<b>]`` *→* ``[<a>]``
 
 LIST 의 각 요소에 APP 을 적용하여 결과 리스트를 반환합니다.
 
@@ -2359,7 +2359,7 @@ LIST 의 각 요소에 APP 을 적용하여 결과 리스트를 반환합니다.
 pact-id
 ~~~~~~~
 
-*→* ``integer``
+*→* ``integer``
 
 현재 Pact 실행 중에 호출된 경우에는 ID 가 반환되고, 그렇지 않은 경우에는
 실패합니다.
@@ -2367,7 +2367,7 @@ pact-id
 pact-version
 ~~~~~~~~~~~~
 
-*→* ``string``
+*→* ``string``
 
 현재 Pact의 빌드 버전을 획득합니다.
 
@@ -2381,7 +2381,7 @@ pact-version
 read-decimal
 ~~~~~~~~~~~~
 
-*key* ``string`` *→* ``decimal``
+*key* ``string`` *→* ``decimal``
 
 메시지 데이터 바디의 상위 수준부터 KEY 문자열 또는 숫자 값을 10진수
 형태로 파싱합니다.
@@ -2394,7 +2394,7 @@ read-decimal
 read-integer
 ~~~~~~~~~~~~
 
-*key* ``string`` *→* ``integer``
+*key* ``string`` *→* ``integer``
 
 메시지 데이터 바디의 상위 수준부터 KEY 문자열 또는 숫자 값을 정수 형태로
 파싱합니다.
@@ -2406,9 +2406,9 @@ read-integer
 read-msg
 ~~~~~~~~
 
-*→* ``<a>``
+*→* ``<a>``
 
-*key* ``string`` *→* ``<a>``
+*key* ``string`` *→* ``<a>``
 
 메시지 데이터 바디 또는 데이터 바디 자체(메시지가 제공되지 않는 경우)의
 상위 수준부터 KEY 를 읽어들입니다. Pact 타입에 대한 값을 강제
@@ -2424,7 +2424,7 @@ read-msg
 remove
 ~~~~~~
 
-*key* ``string`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
+*key* ``string`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
 
 OBJECT 에서 KEY 에 대한 항목을 제거합니다.
 
@@ -2436,14 +2436,14 @@ OBJECT 에서 KEY 에 대한 항목을 제거합니다.
 resume
 ~~~~~~
 
-*binding* ``binding:<{y}>`` *body* ``*`` *→* ``<a>``
+*binding* ``binding:<{y}>`` *body* ``*`` *→* ``<a>``
 
 특수 형식이 pact의 이전 스텝 실행에서 yield 된 객체 값에 바인딩됩니다.
 
 reverse
 ~~~~~~~
 
-*list* ``[<a>]`` *→* ``[<a>]``
+*list* ``[<a>]`` *→* ``[<a>]``
 
 리스트를 반대로 뒤집습니다.
 
@@ -2455,9 +2455,9 @@ reverse
 sort
 ~~~~
 
-*values* ``[<a>]`` *→* ``[<a>]``
+*values* ``[<a>]`` *→* ``[<a>]``
 
-*fields* ``[string]`` *values* ``[object:<{o}>]`` *→* ``[object:<{o}>]``
+*fields* ``[string]`` *values* ``[object:<{o}>]`` *→* ``[object:<{o}>]``
 
 모노타입 리스트를 원시 VALUES 로 정렬하거나 제공되는 FIELDS 리스트를
 통해 객체를 정렬합니다.
@@ -2472,9 +2472,9 @@ sort
 str-to-int
 ~~~~~~~~~~
 
-*str-val* ``string`` *→* ``integer``
+*str-val* ``string`` *→* ``integer``
 
-*base* ``integer`` *str-val* ``string`` *→* ``integer``
+*base* ``integer`` *str-val* ``string`` *→* ``integer``
 
 STR_VAL 의 정수 값을 명시되지 않았다면 10진수, 명시되었다면 BASE의
 진법으로 계산합니다. STR-VAL 는 <= 128 chars의 길이여야하며 BASE 는 2
@@ -2490,10 +2490,10 @@ STR_VAL 의 정수 값을 명시되지 않았다면 10진수, 명시되었다면
 take
 ~~~~
 
-*count* ``integer`` *list* ``<a[[<l>],string]>``
-*→* ``<a[[<l>],string]>``
+*count* ``integer`` *list* ``<a[[<l>],string]>``
+*→* ``<a[[<l>],string]>``
 
-*keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
+*keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
 
 LIST(또는 문자열)에서 COUNT 값을, OBJECT 에서 KEYS 에 키를 가지고 있는
 항목들을 가져옵니다. COUNT 가 음수면 끝에서부터 가져옵니다.
@@ -2510,7 +2510,7 @@ LIST(또는 문자열)에서 COUNT 값을, OBJECT 에서 KEYS 에 키를 가지�
 tx-hash
 ~~~~~~~
 
-*→* ``string``
+*→* ``string``
 
 현재 트랜잭션의 해시를 문자열로 형태로 획득합니다.
 
@@ -2522,7 +2522,7 @@ tx-hash
 typeof
 ~~~~~~
 
-*x* ``<a>`` *→* ``string``
+*x* ``<a>`` *→* ``string``
 
 X 의 타입을 문자열 형태로 반환합니다.
 
@@ -2534,8 +2534,8 @@ X 의 타입을 문자열 형태로 반환합니다.
 where
 ~~~~~
 
-*field* ``string`` *app* ``(x:<a> -> bool)`` *value* ``object:<{row}>``
-*→* ``bool``
+*field* ``string`` *app* ``(x:<a> -> bool)`` *value* ``object:<{row}>``
+*→* ``bool``
 
 ‘filter’ 및 ‘select’에서 사용되는 유틸리티로서 VALUE 의 FIELD 에 APP 을
 적용합니다.
@@ -2548,7 +2548,7 @@ where
 yield
 ~~~~~
 
-*OBJECT* ``object:<{y}>`` *→* ``object:<{y}>``
+*OBJECT* ``object:<{y}>`` *→* ``object:<{y}>``
 
 후속 Pact 스텝에서 ‘resume’와 함께 사용할 OBJECT를 양도합니다. 이 객체는
 상위 수준만 ’resume’으로 바인딩이 가능한 점에서 데이터베이스 행 객체와
@@ -2567,7 +2567,7 @@ Database
 create-table
 ~~~~~~~~~~~~
 
-*table* ``table:<{row}>`` *→* ``string``
+*table* ``table:<{row}>`` *→* ``string``
 
 테이블 TABLE 을 생성합니다.
 
@@ -2580,7 +2580,7 @@ create-table
 describe-keyset
 ~~~~~~~~~~~~~~~
 
-*keyset* ``string`` *→* ``value``
+*keyset* ``string`` *→* ``value``
 
 KEYSET 를 위한 메타데이터를 얻습니다.
 
@@ -2589,7 +2589,7 @@ KEYSET 를 위한 메타데이터를 얻습니다.
 describe-module
 ~~~~~~~~~~~~~~~
 
-*module* ``string`` *→* ``value``
+*module* ``string`` *→* ``value``
 
 MODULE 을 위한 메타데이터를 얻습니다. ‘name’, ‘hash’, ‘blessed’, ‘code’
 및 ‘keyset’ 필드가 있는 객체를 반환합니다.
@@ -2603,7 +2603,7 @@ MODULE 을 위한 메타데이터를 얻습니다. ‘name’, ‘hash’, ‘bl
 describe-table
 ~~~~~~~~~~~~~~
 
-*table* ``table:<{row}>`` *→* ``value``
+*table* ``table:<{row}>`` *→* ``value``
 
 TABLE 을 위한 메타데이터를 얻습니다. ‘name’, ‘hash’, ‘blessed’, ‘code’
 및 ‘keyset’ 필드가 있는 객체를 반환합니다.
@@ -2617,8 +2617,8 @@ TABLE 을 위한 메타데이터를 얻습니다. ‘name’, ‘hash’, ‘ble
 insert
 ~~~~~~
 
-*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
-*→* ``string``
+*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
+*→* ``string``
 
 TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 이미
 데이터가 존재하는 경우에는 실패합니다.
@@ -2630,8 +2630,8 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 �
 keylog
 ~~~~~~
 
-*table* ``table:<{row}>`` *key* ``string`` *txid* ``integer``
-*→* ``[object]``
+*table* ``table:<{row}>`` *key* ``string`` *txid* ``integer``
+*→* ``[object]``
 
 txid 로 인덱싱된 객체 리스트에서 TXID 당시 또는 이후의 트랜잭션의 KEY 에
 대한 TABLE 업데이트를 반환합니다.
@@ -2643,7 +2643,7 @@ txid 로 인덱싱된 객체 리스트에서 TXID 당시 또는 이후의 트랜
 keys
 ~~~~
 
-*table* ``table:<{row}>`` *→* ``[string]``
+*table* ``table:<{row}>`` *→* ``[string]``
 
 TABLE 에서 모든 키를 반환합니다.
 
@@ -2654,10 +2654,10 @@ TABLE 에서 모든 키를 반환합니다.
 read
 ~~~~
 
-*table* ``table:<{row}>`` *key* ``string`` *→* ``object:<{row}>``
+*table* ``table:<{row}>`` *key* ``string`` *→* ``object:<{row}>``
 
-*table* ``table:<{row}>`` *key* ``string`` *columns* ``[string]``
-*→* ``object:<{row}>``
+*table* ``table:<{row}>`` *key* ``string`` *columns* ``[string]``
+*→* ``object:<{row}>``
 
 TABLE 에서 KEY 의 행을 읽어 데이터베이스 레코드 객체를 반환하거나,
 COLUMNS 가 지정된 경우에 지정된 열만 포함한 행을 읽어들입니다.
@@ -2669,11 +2669,11 @@ COLUMNS 가 지정된 경우에 지정된 열만 포함한 행을 읽어들입�
 select
 ~~~~~~
 
-*table* ``table:<{row}>`` *where* ``(row:object:<{row}> -> bool)``
-*→* ``[object:<{row}>]``
+*table* ``table:<{row}>`` *where* ``(row:object:<{row}> -> bool)``
+*→* ``[object:<{row}>]``
 
-*table* ``table:<{row}>`` *columns* ``[string]``
-*where* ``(row:object:<{row}> -> bool)`` *→* ``[object:<{row}>]``
+*table* ``table:<{row}>`` *columns* ``[string]``
+*where* ``(row:object:<{row}> -> bool)`` *→* ``[object:<{row}>]``
 
 테이블에서 WHERE 을 적용하여 전체 행 또는 COLUMNS 를 포함 여부를 부울
 값으로 결정하여 select 합니다.
@@ -2686,7 +2686,7 @@ select
 txids
 ~~~~~
 
-*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[integer]``
+*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[integer]``
 
 TABLE 에서 TXID 값보다 크거나 같은 모든 txid 값을 반환합니다
 
@@ -2697,7 +2697,7 @@ TABLE 에서 TXID 값보다 크거나 같은 모든 txid 값을 반환합니다
 txlog
 ~~~~~
 
-*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[value]``
+*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[value]``
 
 트랜잭션 TXID 에서 수행된 TABLE 에 대한 모든 업데이트를 반환합니다.
 
@@ -2708,8 +2708,8 @@ txlog
 update
 ~~~~~~
 
-*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
-*→* ``string``
+*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
+*→* ``string``
 
 TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 이미
 데이터가 존재하는 경우에는 실패합니다.
@@ -2721,8 +2721,8 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 �
 with-default-read
 ~~~~~~~~~~~~~~~~~
 
-*table* ``table:<{row}>`` *key* ``string`` *defaults* ``object:<{row}>``
-*bindings* ``binding:<{row}>`` *→* ``<a>``
+*table* ``table:<{row}>`` *key* ``string`` *defaults* ``object:<{row}>``
+*bindings* ``binding:<{row}>`` *→* ``<a>``
 
 TABLE 에서 KEY 에 대한 행을 읽어들이고 후속 바디 문에 대해 BINDING 별로
 열을 바인딩하기 위한 특수한 형식입니다. 행이 발견되지 않으면 일치하는 키
@@ -2736,8 +2736,8 @@ TABLE 에서 KEY 에 대한 행을 읽어들이고 후속 바디 문에 대해 B
 with-read
 ~~~~~~~~~
 
-*table* ``table:<{row}>`` *key* ``string``
-*bindings* ``binding:<{row}>`` *→* ``<a>``
+*table* ``table:<{row}>`` *key* ``string``
+*bindings* ``binding:<{row}>`` *→* ``<a>``
 
 TABLE 에서 KEY 에 대한 행을 읽어들이고 후속 바디 문에 대해 BINDING 별로
 열을 바인딩하기 위한 특수 타입입니다.
@@ -2750,8 +2750,8 @@ TABLE 에서 KEY 에 대한 행을 읽어들이고 후속 바디 문에 대해 B
 write
 ~~~~~
 
-*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
-*→* ``string``
+*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
+*→* ``string``
 
 TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다.
 
@@ -2767,9 +2767,9 @@ Time
 add-time
 ~~~~~~~~
 
-*time* ``time`` *seconds* ``decimal`` *→* ``time``
+*time* ``time`` *seconds* ``decimal`` *→* ``time``
 
-*time* ``time`` *seconds* ``integer`` *→* ``time``
+*time* ``time`` *seconds* ``integer`` *→* ``time``
 
 TIME 에 SECONDS 를 추가합니다. SECONDS 는 정수 또는 10진수일 수
 있습니다.
@@ -2782,9 +2782,9 @@ TIME 에 SECONDS 를 추가합니다. SECONDS 는 정수 또는 10진수일 수
 days
 ~~~~
 
-*n* ``decimal`` *→* ``decimal``
+*n* ``decimal`` *→* ``decimal``
 
-*n* ``integer`` *→* ``decimal``
+*n* ``integer`` *→* ``decimal``
 
 N 일, ‘add-time’과 함께 사용됩니다.
 
@@ -2796,7 +2796,7 @@ N 일, ‘add-time’과 함께 사용됩니다.
 diff-time
 ~~~~~~~~~
 
-*time1* ``time`` *time2* ``time`` *→* ``decimal``
+*time1* ``time`` *time2* ``time`` *→* ``decimal``
 
 TIME1 과 TIME2 간의 차이(초)를 계산합니다.
 
@@ -2808,7 +2808,7 @@ TIME1 과 TIME2 간의 차이(초)를 계산합니다.
 format-time
 ~~~~~~~~~~~
 
-*format* ``string`` *time* ``time`` *→* ``string``
+*format* ``string`` *time* ``time`` *→* ``string``
 
 FORMAT 을 사용해 TIME 을 포맷팅합니다. 지원되는 형식은 `“시간 형식”
 문서 <#time-formats>`__\ 를 참조하세요.
@@ -2821,9 +2821,9 @@ FORMAT 을 사용해 TIME 을 포맷팅합니다. 지원되는 형식은 `“시
 hours
 ~~~~~
 
-*n* ``decimal`` *→* ``decimal``
+*n* ``decimal`` *→* ``decimal``
 
-*n* ``integer`` *→* ``decimal``
+*n* ``integer`` *→* ``decimal``
 
 N 시간, ‘add-time’과 함께 사용됩니다
 
@@ -2835,9 +2835,9 @@ N 시간, ‘add-time’과 함께 사용됩니다
 minutes
 ~~~~~~~
 
-*n* ``decimal`` *→* ``decimal``
+*n* ``decimal`` *→* ``decimal``
 
-*n* ``integer`` *→* ``decimal``
+*n* ``integer`` *→* ``decimal``
 
 N 분, ‘add-time’과 함께 사용됩니다
 
@@ -2849,7 +2849,7 @@ N 분, ‘add-time’과 함께 사용됩니다
 parse-time
 ~~~~~~~~~~
 
-*format* ``string`` *utcval* ``string`` *→* ``time``
+*format* ``string`` *utcval* ``string`` *→* ``time``
 
 FORMAT 을 사용해 UTCVAL 의 시간을 구성합니다. 지원되는 형식은 `“시간
 형식” 문서 <#time-formats>`__\ 를 참조하세요.
@@ -2862,7 +2862,7 @@ FORMAT 을 사용해 UTCVAL 의 시간을 구성합니다. 지원되는 형식�
 time
 ~~~~
 
-*utcval* ``string`` *→* ``time``
+*utcval* ``string`` *→* ``time``
 
 ISO8601 타입(%Y-%m-%dT%H:%M:%SZ)을 사용해 UTCVAL 의 시간을 구성합니다.
 
@@ -2881,9 +2881,9 @@ ISO8601 타입(%Y-%m-%dT%H:%M:%SZ)을 사용해 UTCVAL 의 시간을 구성합�
 !=
 ~~
 
-*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
-*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
-*→* ``bool``
+*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*→* ``bool``
 
 X 가 Y 와 같지 않으면 true 입니다.
 
@@ -2897,11 +2897,11 @@ X 가 Y 와 같지 않으면 true 입니다.
 \*
 ~~
 
-*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
-*→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
-*→* ``decimal``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
+*→* ``decimal``
 
 X 와 Y 를 곱합니다.
 
@@ -2917,15 +2917,15 @@ X 와 Y 를 곱합니다.
 \+
 ~~
 
-*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
-*→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
-*→* ``decimal``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
+*→* ``decimal``
 
-*x* ``<a[string,[<l>],object:<{o}>]>``
-*y* ``<a[string,[<l>],object:<{o}>]>``
-*→* ``<a[string,[<l>],object:<{o}>]>``
+*x* ``<a[string,[<l>],object:<{o}>]>``
+*y* ``<a[string,[<l>],object:<{o}>]>``
+*→* ``<a[string,[<l>],object:<{o}>]>``
 
 숫자를 추가하거나, 문자열/리스트를 결합하거나 객체를 병합합니다.
 
@@ -2947,13 +2947,13 @@ X 와 Y 를 곱합니다.
 \-
 ~~
 
-*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
-*→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
-*→* ``decimal``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
+*→* ``decimal``
 
-*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 X 를 부정하거나 X 에서 Y 를 뺍니다.
 
@@ -2969,11 +2969,11 @@ X 를 부정하거나 X 에서 Y 를 뺍니다.
 /
 ~
 
-*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
-*→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
-*→* ``decimal``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
+*→* ``decimal``
 
 X 를 Y 로 나눕니다.
 
@@ -2989,8 +2989,8 @@ X 를 Y 로 나눕니다.
 <
 ~
 
-*x* ``<a[integer,decimal,string,time]>``
-*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 X 가 Y 보다 작을 경우 true 입니다.
 
@@ -3008,8 +3008,8 @@ X 가 Y 보다 작을 경우 true 입니다.
 <=
 ~~
 
-*x* ``<a[integer,decimal,string,time]>``
-*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 X 가 Y 보다 작거나 같을 경우 true 입니다.
 
@@ -3027,9 +3027,9 @@ X 가 Y 보다 작거나 같을 경우 true 입니다.
 =
 ~
 
-*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
-*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
-*→* ``bool``
+*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*→* ``bool``
 
 X 가 Y 와 같을 경우 true 입니다.
 
@@ -3047,8 +3047,8 @@ X 가 Y 와 같을 경우 true 입니다.
 >
 ~
 
-*x* ``<a[integer,decimal,string,time]>``
-*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 X 가 Y 보다 클 경우 true 입니다.
 
@@ -3066,8 +3066,8 @@ X 가 Y 보다 클 경우 true 입니다.
 >=
 ~~
 
-*x* ``<a[integer,decimal,string,time]>``
-*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 X 가 Y 와 크거나 같을 경우 true 입니다.
 
@@ -3085,11 +3085,11 @@ X 가 Y 와 크거나 같을 경우 true 입니다.
 ^
 ~
 
-*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
-*→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
-*→* ``decimal``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
+*→* ``decimal``
 
 X 의 Y 승을 구합니다.
 
@@ -3101,9 +3101,9 @@ X 의 Y 승을 구합니다.
 abs
 ~~~
 
-*x* ``decimal`` *→* ``decimal``
+*x* ``decimal`` *→* ``decimal``
 
-*x* ``integer`` *→* ``integer``
+*x* ``integer`` *→* ``integer``
 
 X 의 절대 값입니다.
 
@@ -3115,7 +3115,7 @@ X 의 절대 값입니다.
 and
 ~~~
 
-*x* ``bool`` *y* ``bool`` *→* ``bool``
+*x* ``bool`` *y* ``bool`` *→* ``bool``
 
 쇼트 서킷이 지원되는 부울 로직입니다.
 
@@ -3127,8 +3127,8 @@ and
 and? {#and?}
 ~~~~~~~~~~~~
 
-*a* ``(x:<r> -> bool)`` *b* ``(x:<r> -> bool)`` *value* ``<r>``
-*→* ``bool``
+*a* ``(x:<r> -> bool)`` *b* ``(x:<r> -> bool)`` *value* ``<r>``
+*→* ``bool``
 
 A 와 B 에 VALUE 를 적용한 결과에 논리식 ’and’를 적용합니다. 쇼트 서킷을
 지원합니다
@@ -3141,9 +3141,9 @@ A 와 B 에 VALUE 를 적용한 결과에 논리식 ’and’를 적용합니다
 ceiling
 ~~~~~~~
 
-*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
+*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
 
-*x* ``decimal`` *→* ``integer``
+*x* ``decimal`` *→* ``integer``
 
 10진수 X 의 값을 정수로 반올림하거나 10진수 형태의 PREC 정밀도로
 반올림합니다.
@@ -3158,7 +3158,7 @@ ceiling
 exp
 ~~~
 
-*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 X 의 거듭제곱입니다.
 
@@ -3170,9 +3170,9 @@ X 의 거듭제곱입니다.
 floor
 ~~~~~
 
-*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
+*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
 
-*x* ``decimal`` *→* ``integer``
+*x* ``decimal`` *→* ``integer``
 
 10진수 X 의 값을 정수로 반내림하거나 10진수 형태의 PREC 정밀도로
 반내림합니다.
@@ -3187,7 +3187,7 @@ floor
 ln
 ~~
 
-*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 X 의 자연 로그입니다.
 
@@ -3199,11 +3199,11 @@ X 의 자연 로그입니다.
 log
 ~~~
 
-*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
-*→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
-*→* ``decimal``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
+*→* ``decimal``
 
 밑이 X 인 Y 의 로그입니다.
 
@@ -3215,7 +3215,7 @@ log
 mod
 ~~~
 
-*x* ``integer`` *y* ``integer`` *→* ``integer``
+*x* ``integer`` *y* ``integer`` *→* ``integer``
 
 X 모듈로 Y 입니다.
 
@@ -3227,7 +3227,7 @@ X 모듈로 Y 입니다.
 not
 ~~~
 
-*x* ``bool`` *→* ``bool``
+*x* ``bool`` *→* ``bool``
 
 부울 로직입니다.
 
@@ -3239,7 +3239,7 @@ not
 not? {#not?}
 ~~~~~~~~~~~~
 
-*app* ``(x:<r> -> bool)`` *value* ``<r>`` *→* ``bool``
+*app* ``(x:<r> -> bool)`` *value* ``<r>`` *→* ``bool``
 
 APP 에 VALUE 를 적용한 결과에 논리식 ’not’을 적용합니다.
 
@@ -3251,7 +3251,7 @@ APP 에 VALUE 를 적용한 결과에 논리식 ’not’을 적용합니다.
 or
 ~~
 
-*x* ``bool`` *y* ``bool`` *→* ``bool``
+*x* ``bool`` *y* ``bool`` *→* ``bool``
 
 쇼트 서킷이 지원되는 부울 로직입니다.
 
@@ -3263,8 +3263,8 @@ or
 or? {#or?}
 ~~~~~~~~~~
 
-*a* ``(x:<r> -> bool)`` *b* ``(x:<r> -> bool)`` *value* ``<r>``
-*→* ``bool``
+*a* ``(x:<r> -> bool)`` *b* ``(x:<r> -> bool)`` *value* ``<r>``
+*→* ``bool``
 
 A 와 B 에 VALUE 를 적용한 결과에 논리식 ’or’을 적용합니다. 쇼트 서킷을
 지원합니다.
@@ -3277,9 +3277,9 @@ A 와 B 에 VALUE 를 적용한 결과에 논리식 ’or’을 적용합니다.
 round
 ~~~~~
 
-*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
+*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
 
-*x* ``decimal`` *→* ``integer``
+*x* ``decimal`` *→* ``integer``
 
 뱅커 라운딩(Banker’s rounding) 기법으로 10진수 X 의 값을 정수로
 반올림하거나 10진수 형태의 PREC 정밀도로 반올림합니다.
@@ -3294,7 +3294,7 @@ round
 sqrt
 ~~~~
 
-*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 X 의 제곱근입니다.
 
@@ -3311,7 +3311,7 @@ Keysets
 define-keyset
 ~~~~~~~~~~~~~
 
-*name* ``string`` *keyset* ``string`` *→* ``string``
+*name* ``string`` *keyset* ``string`` *→* ``string``
 
 KEYSET 에서 키셋을 NAME 으로 정의합니다. 키셋 NAME 이 이미 존재하는 경우
 새 값으로 업데이트하기 전에 키셋이 enforce 됩니다.
@@ -3325,7 +3325,7 @@ KEYSET 에서 키셋을 NAME 으로 정의합니다. 키셋 NAME 이 이미 존�
 enforce-keyset
 ~~~~~~~~~~~~~~
 
-*keyset-or-name* ``<k[string,keyset]>`` *→* ``bool``
+*keyset-or-name* ``<k[string,keyset]>`` *→* ``bool``
 
 BODY 를 실행하기 전에 메시지 키에 대해 KEYSET-OR-NAME 을 enforce 하기
 위한 특수 형식입니다. KEYSET-OR-NAME 는 키셋 이름 또는 키셋 객체의
@@ -3339,7 +3339,7 @@ BODY 를 실행하기 전에 메시지 키에 대해 KEYSET-OR-NAME 을 enforce 
 keys-2
 ~~~~~~
 
-*count* ``integer`` *matched* ``integer`` *→* ``bool``
+*count* ``integer`` *matched* ``integer`` *→* ``bool``
 
 키셋 Predicate 함수로서 키셋의 키와 적어도 2 개가 일치해야 합니다.
 
@@ -3351,7 +3351,7 @@ keys-2
 keys-all
 ~~~~~~~~
 
-*count* ``integer`` *matched* ``integer`` *→* ``bool``
+*count* ``integer`` *matched* ``integer`` *→* ``bool``
 
 키셋 Predicate 함수로서 키셋의 모든 키와 일치해야 합니다.
 
@@ -3363,7 +3363,7 @@ keys-all
 keys-any
 ~~~~~~~~
 
-*count* ``integer`` *matched* ``integer`` *→* ``bool``
+*count* ``integer`` *matched* ``integer`` *→* ``bool``
 
 키셋 Predicate 함수로서 키셋의 키와 적어도 1 개가 일치해야 합니다.
 
@@ -3375,7 +3375,7 @@ keys-any
 read-keyset
 ~~~~~~~~~~~
 
-*key* ``string`` *→* ``keyset``
+*key* ``string`` *→* ``keyset``
 
 키셋 형태({ “keys”: KEYLIST, “pred”: PREDFUN })의 메시지 데이터 바디에서
 KEY 를 읽어들입니다. PREDFUN 은 키 predicate으로 귀결되어야 합니다.
@@ -3396,9 +3396,9 @@ REPL-only functions
 begin-tx
 ~~~~~~~~
 
-*→* ``string``
+*→* ``string``
 
-*name* ``string`` *→* ``string``
+*name* ``string`` *→* ``string``
 
 선택적인 NAME 과 함께 트랜잭션을 시작합니다.
 
@@ -3409,7 +3409,7 @@ begin-tx
 bench
 ~~~~~
 
-*exprs* ``*`` *→* ``string``
+*exprs* ``*`` *→* ``string``
 
 EXPRS 의 실행을 벤치마킹합니다.
 
@@ -3420,7 +3420,7 @@ EXPRS 의 실행을 벤치마킹합니다.
 commit-tx
 ~~~~~~~~~
 
-*→* ``string``
+*→* ``string``
 
 트랜잭션을 수행합니다.
 
@@ -3431,8 +3431,8 @@ commit-tx
 env-data
 ~~~~~~~~
 
-*json* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,value]>``
-*→* ``string``
+*json* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,value]>``
+*→* ``string``
 
 트랜잭션 JSON 데이터를 설정합니다(인코딩된 문자열 형태 또는 JSON 으로
 강제 변환된 Pact 타입).
@@ -3445,9 +3445,9 @@ env-data
 env-entity
 ~~~~~~~~~~
 
-*→* ``string``
+*→* ``string``
 
-*entity* ``string`` *→* ``string``
+*entity* ``string`` *→* ``string``
 
 환경 기밀 ENTITY ID 를 설정하거나 인수가 없는 경우에는 설정을
 취소합니다. 이전의 모든 Pact 실행 상태를 해제합니다.
@@ -3460,37 +3460,37 @@ env-entity
 env-gas
 ~~~~~~~
 
-*→* ``integer``
+*→* ``integer``
 
-*gas* ``integer`` *→* ``string``
+*gas* ``integer`` *→* ``string``
 
 가스 상태를 쿼리하거나 GAS 로 이를 설정합니다.
 
 env-gaslimit
 ~~~~~~~~~~~~
 
-*limit* ``integer`` *→* ``string``
+*limit* ``integer`` *→* ``string``
 
 환경의 가스 한도를 LIMIT 으로 설정합니다.
 
 env-gasprice
 ~~~~~~~~~~~~
 
-*price* ``decimal`` *→* ``string``
+*price* ``decimal`` *→* ``string``
 
 환경의 가스 가격을 PRICE 로 설정합니다.
 
 env-gasrate
 ~~~~~~~~~~~
 
-*rate* ``integer`` *→* ``string``
+*rate* ``integer`` *→* ``string``
 
 일정한 RATE 를 청구하도록 가스 모델을 업데이트합니다.
 
 env-hash
 ~~~~~~~~
 
-*hash* ``string`` *→* ``string``
+*hash* ``string`` *→* ``string``
 
 현재 트랜잭션 해시를 설정합니다. HASH 는 유효한 BLAKE2b 512-비트
 해시여야 합니다.
@@ -3503,7 +3503,7 @@ env-hash
 env-keys
 ~~~~~~~~
 
-*keys* ``[string]`` *→* ``string``
+*keys* ``[string]`` *→* ``string``
 
 트랜잭션 시그니처 KEYS 를 설정합니다.
 
@@ -3515,14 +3515,14 @@ env-keys
 env-step
 ~~~~~~~~
 
-*→* ``string``
+*→* ``string``
 
-*step-idx* ``integer`` *→* ``string``
+*step-idx* ``integer`` *→* ``string``
 
-*step-idx* ``integer`` *rollback* ``bool`` *→* ``string``
+*step-idx* ``integer`` *rollback* ``bool`` *→* ``string``
 
-*step-idx* ``integer`` *rollback* ``bool`` *resume* ``object:<{y}>``
-*→* ``string``
+*step-idx* ``integer`` *rollback* ``bool`` *resume* ``object:<{y}>``
+*→* ``string``
 
 Pact 스텝의 상태를 설정합니다. 인수가 없는 경우 스텝의 설정을
 취소합니다. STEP-IDX 를 통해 실행한 스텝 인덱스를 설정합니다. ROLLBACK
@@ -3537,7 +3537,7 @@ Pact 스텝의 상태를 설정합니다. 인수가 없는 경우 스텝의 설�
 expect
 ~~~~~~
 
-*doc* ``string`` *expected* ``<a>`` *actual* ``<a>`` *→* ``string``
+*doc* ``string`` *expected* ``<a>`` *actual* ``<a>`` *→* ``string``
 
 ACTUAL 을 평가하고 EXPECTED 와 동일한지 검증합니다.
 
@@ -3549,7 +3549,7 @@ ACTUAL 을 평가하고 EXPECTED 와 동일한지 검증합니다.
 expect-failure
 ~~~~~~~~~~~~~~
 
-*doc* ``string`` *exp* ``<a>`` *→* ``string``
+*doc* ``string`` *exp* ``<a>`` *→* ``string``
 
 EXP 를 평가하고 오류가 발생한 경우에만 계속 진행합니다.
 
@@ -3561,7 +3561,7 @@ EXP 를 평가하고 오류가 발생한 경우에만 계속 진행합니다.
 json
 ~~~~
 
-*exp* ``<a>`` *→* ``value``
+*exp* ``<a>`` *→* ``value``
 
 Pact 표현식 EXP 를 JSON 값으로 인코딩합니다. Pact 값은 API 출력시
 자동으로 JSON 로 표현되기 때문에 이 값은 테스트에서만 필요합니다.
@@ -3574,9 +3574,9 @@ Pact 표현식 EXP 를 JSON 값으로 인코딩합니다. Pact 값은 API 출력
 load
 ~~~~
 
-*file* ``string`` *→* ``string``
+*file* ``string`` *→* ``string``
 
-*file* ``string`` *reset* ``bool`` *→* ``string``
+*file* ``string`` *reset* ``bool`` *→* ``string``
 
 FILE 을 로드 및 평가하며 선택적인 RESET 값이 true 인 경우 미리 REPL
 상태를 재설정합니다.
@@ -3588,7 +3588,7 @@ FILE 을 로드 및 평가하며 선택적인 RESET 값이 true 인 경우 미�
 pact-state
 ~~~~~~~~~~
 
-*→* ``object``
+*→* ``object``
 
 이전의 Pact 실행의 상태를 검사합니다. ‘yield’(양도 값), ‘false’(결과
 없음), ‘step’(실행된 스텝), ‘executed’(엔터티가 일치하지 않아서 스텝을
@@ -3601,14 +3601,14 @@ pact-state
 print
 ~~~~~
 
-*value* ``<a>`` *→* ``string``
+*value* ``<a>`` *→* ``string``
 
 VALUE 를 터미널에 quote 없이, 이스케이핑되지 않은 상태로 출력합니다.
 
 rollback-tx
 ~~~~~~~~~~~
 
-*→* ``string``
+*→* ``string``
 
 트랜잭션을 롤백합니다.
 
@@ -3619,7 +3619,7 @@ rollback-tx
 sig-keyset
 ~~~~~~~~~~
 
-*→* ``keyset``
+*→* ``keyset``
 
 편리한 함수로 ‘keys-all’을 predicate으로 사용하여 메시지 시그니처에
 존재하는 키로부터 키셋을 구성합니다.
@@ -3627,16 +3627,16 @@ sig-keyset
 typecheck
 ~~~~~~~~~
 
-*module* ``string`` *→* ``string``
+*module* ``string`` *→* ``string``
 
-*module* ``string`` *debug* ``bool`` *→* ``string``
+*module* ``string`` *debug* ``bool`` *→* ``string``
 
 MODULE 을 타입체킹하고 선택적으로 DEBUG 출력을 활성화합니다.
 
 verify
 ~~~~~~
 
-*module* ``string`` *→* ``string``
+*module* ``string`` *→* ``string``
 
 MODULE 을 검증하여 모든 속성들이 유지되는지 검사합니다.
 
