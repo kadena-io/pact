@@ -21,15 +21,15 @@
 module Pact.Core.IR.Typecheck where
 
 import Control.Lens
+import Control.Monad.Except
+import Control.Monad.Reader
 import Data.Set(Set)
 import Data.Foldable(fold)
 import Data.Map(Map)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
-import Control.Monad.Except
-import Control.Monad.Reader
--- import Control.Monad.State.Strict
+import qualified Data.Vector as V
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.IR.Term
@@ -136,6 +136,10 @@ instance Ord n => Substitutable (Type n) n where
     TyFun l r -> TyFun (subst s l) (subst s r)
     TyInterface n -> TyInterface n
     TyModule n -> TyModule n
+    TyTable n row ->
+      TyTable n (subst s row)
+    TyCap n ->
+      TyCap n
     TyForall ns rs ty ->
       let tys' = Map.fromList [(n', TyVar n') | n' <- ns] `Map.union` tys
           rows' = Map.fromList [(r', RowVar r') | r' <- rs] `Map.union` rows
@@ -167,6 +171,8 @@ instance Ord tyname => FTV (Type tyname) tyname where
     TyList t -> ftv t
     TyInterface _ -> mempty
     TyModule _ -> mempty
+    TyTable _ row -> ftv row
+    TyCap _ -> mempty
     TyForall ns rs typ ->
       let (FreeTyVars fts frs) = ftv typ
       in FreeTyVars (fts `Set.difference` Set.fromList ns) (frs `Set.difference` Set.fromList rs)
@@ -181,7 +187,6 @@ instance Ord tyname => FTV (TyScheme tyname) tyname where
   ftv (TyScheme ns rs typ) =
     let (FreeTyVars tys rows) = ftv typ
     in FreeTyVars (tys `Set.difference` Set.fromList ns) (rows `Set.difference` Set.fromList rs)
-
 
 ----------------------------
 -- Core Inference.
@@ -380,6 +385,22 @@ inferTerm = \case
     pure
       ( Sequence e1' e2' (i, termTy e2')
       , cs1 ++ cs2 )
+  ListLit terms i -> do
+    tv <- TyVar <$> freshVar
+    joined <- traverse (listInfer tv) terms
+    let (terms', cs) = V.unzip joined
+    pure (ListLit terms' (i, TyList tv), fold cs)
+    where
+    listInfer tv t = do
+      (t', cs) <- inferTerm t
+      pure (t', cs ++ [EqConst (termTy t') tv])
+  ObjectLit objMap i -> do
+    rv <- freshVar
+    objMapCs <- traverse inferTerm objMap
+    let cs = foldMap snd objMapCs
+        objMap' = fst <$> objMapCs
+        outTy = TyRow (RowTy (termTy <$> objMap') (Just rv))
+    pure (ObjectLit objMap' (i, outTy), cs)
   -- Errors are just `forall a. a`.
   Error e i -> do
     tv <- TyVar <$> freshVar

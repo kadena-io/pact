@@ -97,9 +97,17 @@ typecheck' = \case
     pure t
   -- b : t ∈ B                (where B = { b : t | for b in Builtins, t in T})
   -- ------------------------ (T-Builtin)
-  -- Γ ⊢ b : t1
+  -- Γ ⊢ b : t
   Builtin b _ ->
     views tcBuiltin ($ b)
+  -- a_1, ..., a_n : t
+  -- ------------------------ (T-Builtin)
+  -- Γ ⊢ [a_1, ..., a_n] @ t : List t
+  ListLit ty ts _ -> do
+    tys <- traverse typecheck' ts
+    if any (/= ty) tys then throwError "List literal type element mismatch"
+    else pure ty
+  ObjectLit _ _ _ -> throwError "todo"
   -- k : p ∈ K                (where K = builtin types, constants)
   -- ------------------------ (T-Const)
   -- Γ ⊢ k : Prim p

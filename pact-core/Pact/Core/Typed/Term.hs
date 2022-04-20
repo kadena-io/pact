@@ -4,10 +4,10 @@ module Pact.Core.Typed.Term where
 
 import Control.Lens
 import Data.Map(Map)
-import qualified Data.Map.Strict as M
-import Data.Text(Text)
+-- import qualified Data.Map.Strict as M
+-- import Data.Text(Text)
 import Data.Vector (Vector)
-import qualified Data.Vector as V
+-- import qualified Data.Vector as V
 
 
 import Pact.Core.Names
@@ -35,8 +35,8 @@ termInfo f = \case
   App t1 t2 i -> App t1 t2 <$> f i
   TyApp term ty i -> TyApp term ty <$> f i
   TyAbs ty term i -> TyAbs ty term <$> f i
-  ObjectLit row obj info -> ObjectLit row obj <$> f i
-  ListLit ty v i -> ListLit ty v <$> i
+  ObjectLit row obj i -> ObjectLit row obj <$> f i
+  ListLit ty v i -> ListLit ty v <$> f i
   Error s ty i -> Error s ty <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
@@ -48,6 +48,10 @@ instance Plated (Term name tyname builtin info) where
     App t1 t2 i -> App <$> f t1 <*> f t2 <*> pure i
     TyApp term ty i -> TyApp <$> f term <*> pure ty <*> pure i
     TyAbs ty term i -> TyAbs ty <$> f term <*> pure i
+    ObjectLit ty tm i ->
+      ObjectLit ty <$> traverse f tm <*> pure i
+    ListLit ty ts i ->
+      ListLit ty <$> traverse f ts <*> pure i
     Error s ty i -> pure (Error s ty i)
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
