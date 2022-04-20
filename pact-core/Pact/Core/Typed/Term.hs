@@ -9,7 +9,6 @@ import Data.Map(Map)
 import Data.Vector (Vector)
 -- import qualified Data.Vector as V
 
-
 import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Types.Exp (Literal)

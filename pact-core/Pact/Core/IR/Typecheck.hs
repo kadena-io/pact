@@ -54,7 +54,6 @@ data TCEnv name tyname builtin
   , _tcBuiltin :: Map.Map builtin (TyScheme tyname)
   -- ^ builtin type schemes.
   }
-
 makeLenses ''TCEnv
 
 freshVar :: (MonadIO m, MonadReader (TCEnv name tyname builtin) m) => m tyname
@@ -78,7 +77,6 @@ inTcEnvNonGen name tv typ =
 data Constraint n
   = EqConst (Type n) (Type n)
   deriving (Eq, Show)
-
 
 data Subst n
   = Subst
@@ -288,6 +286,8 @@ unifies (TyFun l r) (TyFun l' r') = do
   s2 <- unifies (subst s1 r) (subst s1 r')
   pure (s2 `compose` s1)
 unifies (TyList l) (TyList r) = unifies l r
+unifies (TyTable l) (TyTable r) = unifyRows l r
+unifies (TyCap l) (TyCap r) | l == r = pure mempty
 unifies (TyRow l) (TyRow r) = unifyRows l r
 unifies (TyInterface n) (TyModule m) = unifyIfaceModule n m
 unifies (TyModule m) (TyInterface n) = unifyIfaceModule n m
@@ -299,7 +299,7 @@ generalize :: Ord tyname => FreeTyVars tyname -> Type tyname -> TyScheme tyname
 generalize (FreeTyVars freetys freerows) t  = TyScheme as rs t
   where
   (FreeTyVars ftys frows) = ftv t
-  as = Set.toList $ ftys`Set.difference` freetys
+  as = Set.toList $ ftys `Set.difference` freetys
   rs = Set.toList $ frows `Set.difference` freerows
 
 instantiate :: (MonadIO m, MonadReader (TCEnv name tyname builtin) m, Ord tyname) => TyScheme tyname -> m (Type tyname)
