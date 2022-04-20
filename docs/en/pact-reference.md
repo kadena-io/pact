@@ -1753,6 +1753,8 @@ They are used in [with-read](pact-functions.html#with-read), [with-default-read]
 ```
 
 ### Lambdas {#lambdas}
+Lambdas, or "anonymous functions", allow defining functions to be applied in local scope, as opposed to defining functions at top-level with `defun.`
+
 Lambdas are supported in `let`, `let*`, and as inline arguments to built-in function applications.
 
 ```lisp

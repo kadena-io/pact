@@ -2279,6 +2279,10 @@ columns in a row, or values in an object.
 Lambdas
 ~~~~~~~
 
+Lambdas, or “anonymous functions”, allow defining functions to be
+applied in local scope, as opposed to defining functions at top-level
+with ``defun.``
+
 Lambdas are supported in ``let``, ``let*``, and as inline arguments to
 built-in function applications.
 

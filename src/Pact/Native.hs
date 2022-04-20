@@ -748,7 +748,7 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      ["(map (identity) [1 2 3])"] "Return provided value."
     ,defNative "continue"  continueNested
-     (funType TyAny [("value", TyAny)]) [LitExample "(continue f)"]
+     (funType TyAny [("value", TyAny)]) [LitExample "(continue (coin.transfer-crosschain \"bob\" \"alice\" 10.0)"]
      "Continue a previously started nested defpact."
     ,strToIntDef
     ,strToListDef
