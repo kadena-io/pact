@@ -148,7 +148,7 @@ true
 
 Continue a previously started nested defpact.
 ```lisp
-(continue f)
+(continue (coin.transfer-crosschain "bob" "alice" 10.0))
 ```
 
 
@@ -448,7 +448,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.2.1"
+"4.3"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -690,6 +690,8 @@ pact> (zip (-) [1 2 3 4] [4 5 6])
 [-3 -3 -3]
 pact> (zip (+) [1 2 3] [4 5 6 7])
 [5 7 9]
+pact> (zip (lambda (x y) { 'x: x, 'y: y }) [1 2 3 4] [4 5 6 7])
+[{"x": 1,"y": 4} {"x": 2,"y": 5} {"x": 3,"y": 6} {"x": 4,"y": 7}]
 ```
 
 ## Database {#Database}
@@ -1554,6 +1556,10 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 Create a principal which unambiguously identifies GUARD.
 ```lisp
 (create-principal (read-keyset 'keyset))
+(create-principal (keyset-ref-guard 'keyset))
+(create-principal (create-module-guard 'module-guard))
+(create-principal (create-user-guard 'user-guard))
+(create-principal (create-pact-guard 'pact-guard))
 ```
 
 

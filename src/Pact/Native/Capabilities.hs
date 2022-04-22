@@ -342,7 +342,7 @@ createPrincipalDef =
   defRNative "create-principal" createPrincipal'
   (funType tTyString
     [ ("guard", tTyGuard Nothing) ] )
-  [LitExample "(create-principal (read-keyset 'keyset))"]
+  [ LitExample "(create-principal (read-keyset 'keyset))"]
   "Create a principal which unambiguously identifies GUARD."
   where
     createPrincipal' :: RNativeFun e

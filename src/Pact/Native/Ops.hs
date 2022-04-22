@@ -141,13 +141,13 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
       | y0 == 0 = pure 1
       | otherwise = evens x0 y0
     evens x y
-      | even y = twoArgIntOpGas x x *> evens (x *x) (y `quot` 2)
+      | even y = twoArgIntOpGas x x *> evens (x * x) (y `quot` 2)
       | y == 1 = pure x
       | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) x
     odds x y z
       | even y = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) z
-      | y == 1 = twoArgIntOpGas x z *> pure (x*z)
-      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x *z)
+      | y == 1 = twoArgIntOpGas x z *> pure (x * z)
+      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
   pow i as = argsError i as
 
 twoArgIntOpGas :: Integer -> Integer -> Eval e Gas

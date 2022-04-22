@@ -1753,6 +1753,8 @@ They are used in [with-read](pact-functions.html#with-read), [with-default-read]
 ```
 
 ### Lambdas {#lambdas}
+Lambdas, or "anonymous functions", allow defining functions to be applied in local scope, as opposed to defining functions at top-level with `defun.`
+
 Lambdas are supported in `let`, `let*`, and as inline arguments to built-in function applications.
 
 ```lisp
@@ -1964,6 +1966,52 @@ or "private" (with entity indicator). With private steps, failures result in a r
     (credit payer amount))
   (step payee-entity
     (credit payee amount)))
+```
+
+Public defpacts may be nested (though the recursion restrictions apply, so it must be a different defpact). They may be kicked off
+like a regular function call within a defpact, but are continued after the first step by calling `continue` with the same arguments.
+
+As such, they have the following restrictions:
+- The number of steps of the child must match the number of steps of the parent.
+- If a parent defpact step has the rollback field, so must the child. If parent steps roll back, so do child steps.
+- `continue` must be called with the same continuation arguments as the defpact originally dispatched,
+ to support multiple nested defpacts of the same function but with different arguments.
+
+ The following example shows well-formed defpacts with equal number of steps, nested rollbacks and continue:
+
+```
+(defpact payment (payer payee amount)
+  (step-with-rollback
+    (debit payer amount)
+    (credit payer amount))
+  (step payee-entity
+    (credit payee amount)))
+
+...
+(defpact split-payment (payer payee1 payee2 amount ratio)
+  (step-with-rollback
+    (let
+      ((payment1 (payment payer payee1 (* amount ratio)))
+      (payment2 (payment payer payee2 (* amount (- 1 ratio))))
+      )
+      "step 0 complete"
+    )
+    (let
+      ((payment1 (continue (payment payer payee1 (* amount ratio))))
+       (payment2 (continue (payment payer payee2 (* amount (- 1 ratio)))))
+      )
+      "step 0 rolled back"
+    )
+  )
+  (step
+    (let
+      ((payment1 (continue (payment payer payee1 (* amount ratio))))
+       (payment2 (continue (payment payer payee2 (* amount (- 1 ratio)))))
+      )
+      "step 1 complete"
+    )
+  )
+)
 ```
 
 ### defschema {#defschema}
