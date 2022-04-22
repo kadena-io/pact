@@ -167,7 +167,7 @@ Continue a previously started nested defpact.
 
 .. code:: lisp
 
-   (continue (coin.transfer-crosschain "bob" "alice" 10.0)
+   (continue f)
 
 define-namespace
 ~~~~~~~~~~~~~~~~
@@ -1740,10 +1740,6 @@ Create a principal which unambiguously identifies GUARD.
 .. code:: lisp
 
    (create-principal (read-keyset 'keyset))
-   (create-principal (keyset-ref-guard 'keyset))
-   (create-principal (create-module-guard 'module-guard))
-   (create-principal (create-user-guard 'user-guard))
-   (create-principal (create-pact-guard 'pact-guard))
 
 create-user-guard
 ~~~~~~~~~~~~~~~~~

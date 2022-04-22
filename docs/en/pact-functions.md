@@ -148,7 +148,7 @@ true
 
 Continue a previously started nested defpact.
 ```lisp
-(continue (coin.transfer-crosschain "bob" "alice" 10.0)
+(continue f)
 ```
 
 
@@ -1554,10 +1554,6 @@ Defines a guard predicate by NAME that captures the results of 'pact-id'. At enf
 Create a principal which unambiguously identifies GUARD.
 ```lisp
 (create-principal (read-keyset 'keyset))
-(create-principal (keyset-ref-guard 'keyset))
-(create-principal (create-module-guard 'module-guard))
-(create-principal (create-user-guard 'user-guard))
-(create-principal (create-pact-guard 'pact-guard))
 ```
 
 
