@@ -167,7 +167,7 @@ Continue a previously started nested defpact.
 
 .. code:: lisp
 
-   (continue f)
+   (continue (coin.transfer-crosschain "bob" "alice" 10.0))
 
 define-namespace
 ~~~~~~~~~~~~~~~~
@@ -762,6 +762,8 @@ which is the length of the shortest list.
    [-3 -3 -3]
    pact> (zip (+) [1 2 3] [4 5 6 7])
    [5 7 9]
+   pact> (zip (lambda (x y) { 'x: x, 'y: y }) [1 2 3 4] [4 5 6 7])
+   [{"x": 1,"y": 4} {"x": 2,"y": 5} {"x": 3,"y": 6} {"x": 4,"y": 7}]
 
 .. _Database:
 
@@ -1740,6 +1742,10 @@ Create a principal which unambiguously identifies GUARD.
 .. code:: lisp
 
    (create-principal (read-keyset 'keyset))
+   (create-principal (keyset-ref-guard 'keyset))
+   (create-principal (create-module-guard 'module-guard))
+   (create-principal (create-user-guard 'user-guard))
+   (create-principal (create-pact-guard 'pact-guard))
 
 create-user-guard
 ~~~~~~~~~~~~~~~~~
