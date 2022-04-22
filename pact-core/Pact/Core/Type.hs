@@ -57,9 +57,9 @@ data Type n
   -- ^ Row objects
   | TyList (Type n)
   -- ^ List aka [a]
-  | TyTable n (Row n)
+  | TyTable (Row n)
   -- ^ Named tables.
-  | TyCap n
+  | TyCap
   -- ^ Capabilities
   -- Atm, until we have a proper constraint system,
   -- caps will simply be enforced @ runtime.
@@ -88,8 +88,8 @@ instance Plated (Type n) where
     TyFun l r -> TyFun <$> f l <*> f r
     TyRow rows -> TyRow <$> traverseRowTy f rows
     TyList t -> TyList <$> f t
-    TyTable n r -> TyTable n <$> traverseRowTy f r
-    TyCap n -> pure (TyCap n)
+    TyTable r -> TyTable <$> traverseRowTy f r
+    TyCap -> pure TyCap
     TyInterface n ->
       pure $ TyInterface n
     TyModule n -> pure $ TyModule n

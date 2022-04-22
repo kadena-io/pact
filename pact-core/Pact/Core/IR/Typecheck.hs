@@ -134,10 +134,10 @@ instance Ord n => Substitutable (Type n) n where
     TyFun l r -> TyFun (subst s l) (subst s r)
     TyInterface n -> TyInterface n
     TyModule n -> TyModule n
-    TyTable n row ->
-      TyTable n (subst s row)
-    TyCap n ->
-      TyCap n
+    TyTable row ->
+      TyTable (subst s row)
+    TyCap ->
+      TyCap 
     TyForall ns rs ty ->
       let tys' = Map.fromList [(n', TyVar n') | n' <- ns] `Map.union` tys
           rows' = Map.fromList [(r', RowVar r') | r' <- rs] `Map.union` rows
@@ -169,8 +169,8 @@ instance Ord tyname => FTV (Type tyname) tyname where
     TyList t -> ftv t
     TyInterface _ -> mempty
     TyModule _ -> mempty
-    TyTable _ row -> ftv row
-    TyCap _ -> mempty
+    TyTable row -> ftv row
+    TyCap -> mempty
     TyForall ns rs typ ->
       let (FreeTyVars fts frs) = ftv typ
       in FreeTyVars (fts `Set.difference` Set.fromList ns) (frs `Set.difference` Set.fromList rs)
@@ -287,7 +287,7 @@ unifies (TyFun l r) (TyFun l' r') = do
   pure (s2 `compose` s1)
 unifies (TyList l) (TyList r) = unifies l r
 unifies (TyTable l) (TyTable r) = unifyRows l r
-unifies (TyCap l) (TyCap r) | l == r = pure mempty
+unifies TyCap TyCap = pure mempty
 unifies (TyRow l) (TyRow r) = unifyRows l r
 unifies (TyInterface n) (TyModule m) = unifyIfaceModule n m
 unifies (TyModule m) (TyInterface n) = unifyIfaceModule n m

@@ -348,14 +348,19 @@ library pact-core
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
+
+
   exposed-modules:
     Pact.Core.Builtin
     Pact.Core.Names
     Pact.Core.Type
     Pact.Core.Typed.Typecheck
     Pact.Core.Typed.Term
+    Pact.Core.Typed.Eval.CEK
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck
+    Pact.Core.Guards
+    Pact.Core.Pacts.Types
 
 
 executable pact

@@ -1,6 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Pact.Core.Typed.Term where
+module Pact.Core.Typed.Term
+( Term(..)
+, Literal(..)
+, termInfo
+)
+ where
 
 import Control.Lens
 import Data.Map(Map)
@@ -11,7 +16,7 @@ import Data.Vector (Vector)
 
 import Pact.Core.Names
 import Pact.Core.Type
-import Pact.Types.Exp (Literal)
+import Pact.Types.Exp (Literal(..))
 
 -- | Typed pact core terms
 data Term name tyname builtin info
