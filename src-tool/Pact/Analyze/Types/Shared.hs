@@ -429,10 +429,10 @@ instance SDivisible (S Integer) where
 type PredicateS = Symbolic (S Bool)
 
 instance MProvable IO PredicateS where
-  forAll_   = fmap _sSbv
-  forAll _  = fmap _sSbv
-  forSome_  = fmap _sSbv
-  forSome _ = fmap _sSbv
+  universal_  = fmap _sSbv
+  universal _ = fmap _sSbv
+  existential_  = fmap _sSbv
+  existential _ = fmap _sSbv
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S Str -> S Str -> S Str

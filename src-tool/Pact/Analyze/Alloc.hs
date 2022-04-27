@@ -78,6 +78,6 @@ newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)
 
 instance MonadAlloc Alloc where
-  singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.forall name
-  singExists name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.exists name
+  singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvForall name
+  singExists name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvExists name
   singFree   name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free   name
