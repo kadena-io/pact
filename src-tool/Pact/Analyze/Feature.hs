@@ -158,6 +158,7 @@ data Feature
   -- Other
   | FWhere
   | FTypeof
+  | FContinue
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -1651,6 +1652,20 @@ doc FTypeof = Doc
         (TyCon str)
   ]
 
+doc FContinue = Doc
+    "continue"
+    CFunction
+    InvAndProp
+    "continue a nested defpact"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(continue a)"
+      Map.empty
+      $ Fun Nothing
+        [ ("a", a) ]
+        a
+  ]
+
 allFeatures :: Set Feature
 allFeatures = Set.fromList $ enumFrom minBound
 
@@ -1761,6 +1776,7 @@ PAT(SRowEnforced, FRowEnforced)
 PAT(SIdentity, FIdentity)
 PAT(SConstantly, FConstantly)
 PAT(SCompose, FCompose)
+PAT(SContinue, FContinue)
 PAT(SWhere, FWhere)
 PAT(STypeof, FTypeof)
 

@@ -43,9 +43,9 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
-pattern AST_InlinedApp :: Lang.ModuleName -> Text -> [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_InlinedApp modName funName bindings body <-
-  App _ (FDefun _ modName funName _ _ _ [Binding _ bindings body AstBindInlinedCallArgs] _) _args
+pattern AST_InlinedApp :: Lang.ModuleName -> Text -> Lang.DefType -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_InlinedApp modName funName deftype bindings body <-
+  App _ (FDefun _ modName funName deftype _ _ [Binding _ bindings body AstBindInlinedCallArgs] _) _args
 
 pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
@@ -297,3 +297,6 @@ pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback 
 
 pattern AST_ModRef :: a -> Lang.ModuleName -> Maybe [Lang.ModuleName] -> AST a
 pattern AST_ModRef node refName refSpec <- ModRef node refName refSpec
+
+-- pattern AST_Continue
+-- pattern AST_Continue node nested <- App node (NativeFunc SContinue) [nested]
