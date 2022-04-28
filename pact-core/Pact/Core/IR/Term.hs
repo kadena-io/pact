@@ -10,22 +10,27 @@
 -- Our Core IR, which supports let-bound terms for type inference
 --
 
-module Pact.Core.IR.Term where
+module Pact.Core.IR.Term
+(
+) where
 
 import Control.Lens
 import Data.Map(Map)
 -- import qualified Data.Map.Strict as M
 import Data.Text(Text)
 import Data.Vector (Vector)
+import qualified Data.Set as Set
 -- import qualified Data.Vector as V
 
 
 
 import Pact.Types.Hash (Hash)
 import Pact.Types.Exp (Literal)
+import Pact.Types.Term (ModuleHash(..), Governance(..))
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Builtin
+import Pact.Core.Guards
 import qualified Pact.Types.Names as PNames
 
 
@@ -55,6 +60,13 @@ data DefConst name tyname builtin info
   , _dcTermType :: Maybe (Type tyname)
   } deriving Show
 
+data DefCap name tyname builtin info
+  = DefCap
+  { _dcapName :: name
+  , _dcapTerm :: Term name tyname builtin info
+  , _dcapTermType :: Maybe (Type tyname)
+  } deriving Show
+
 -- Todo :: probably need a special form
 -- either structurally, or these typecheck different.
 data DefPact name tyname builtin info
@@ -74,9 +86,11 @@ data Def name tyname builtin info
 -- Support module guard
 data Module name tyname builtin info
   = Module
-  { _modName :: name
-  , _modDefs :: [Def name tyname builtin info]
-  , _modHash :: Hash
+  { _mName :: ModuleName
+  , _mGovernance :: Governance (DefCap name tyname builtin info)
+  , _mDefs :: [Def name tyname builtin info]
+  , _mBlessed :: !(Set.Set ModuleHash)
+  , _mHash :: ModuleHash
   } deriving Show
 
 data Interface name tyname builtin info
@@ -108,7 +122,7 @@ type TermP = Term PNames.Name Text RawBuiltin
 type DefP = Def PNames.Name Text RawBuiltin
 type ModuleP = Module PNames.Name Text RawBuiltin
 type TopLevelP = TopLevel PNames.Name Text RawBuiltin
-type CoreProgramP info = [TopLevelP info]
+type CoreIRProgramP info = [TopLevelP info]
 
 -- | Core IR
 data Term name tyname builtin info

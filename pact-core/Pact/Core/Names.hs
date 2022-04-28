@@ -4,14 +4,22 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 
-
-
-module Pact.Core.Names where
+module Pact.Core.Names
+ ( ModuleName(..)
+ , NamespaceName(..)
+ , Field(..)
+ , NameKind(..)
+ , Name(..)
+ , TypeVar(..)
+ , Unique(..)
+ ) where
 
 import Control.Lens
 import Data.Text(Text)
 import Data.IntMap.Strict(IntMap)
 import Data.IORef (IORef, atomicModifyIORef')
+
+import Pact.Types.Names(ModuleName(..), NamespaceName(..))
 
 
 newtype Field = Field Text

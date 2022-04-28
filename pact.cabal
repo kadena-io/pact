@@ -360,6 +360,7 @@ library pact-core
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck
     Pact.Core.Guards
+    Pact.Core.Imports
     Pact.Core.Pacts.Types
 
 

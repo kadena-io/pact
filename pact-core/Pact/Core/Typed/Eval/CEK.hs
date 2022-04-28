@@ -24,7 +24,12 @@ import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Typed.Term
 
-type Eval name b = ReaderT (CEKRuntime name b) IO
+type Eval name b = ReaderT (CEKRuntime name b) (StateT IO CEKState IO)
+
+-- data CEKState
+--   = CEKState
+--   { _cekLoaded ::
+--   }
 
 type CEKEnv name b = Map name (CEKValue name b)
 type BuiltinFn name b = [CEKValue name b] -> Eval name b (CEKValue name b)
@@ -37,6 +42,7 @@ data CEKValue name b
   | VPartialNative b Int [CEKValue name b]
   | VGuard (Guard name (CEKValue name b))
   | VCap name
+  | VModRef
   | VError Text
   deriving (Show)
 
