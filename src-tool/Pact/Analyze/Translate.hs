@@ -1656,6 +1656,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ inject @(Numerical Term) $
       BitwiseOp op args'
 
+  AST_Continue node _ ->
+    -- translate and move on from nested defpact
+    shimNative astNode node "continue" []
+
   AST_NFun node fn@"install-capability" [_] -> do
     -- current system does not grok managed caps yet, so
     -- not translating argument
@@ -1678,6 +1682,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr _ -> shimNative' node fn [b] "format string" a'
     _ -> unexpectedNode astNode
 
+  AST_NFun node fn@"create-principal" [a] -> translateNode a >>= \case
+    -- assuming we have a guard as input, yield an empty string
+    Some SGuard _ -> shimNative astNode node fn []
+    _ -> unexpectedNode astNode
+
+  AST_NFun node fn@"validate-principal" [a, b] -> translateNode a >>= \case
+    -- term check inputs and produce an empty string
+    Some SGuard _ -> translateNode b >>= \case
+      Some SStr _ -> shimNative astNode node fn []
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_NFun node fn as -> shimNative astNode node fn as
 

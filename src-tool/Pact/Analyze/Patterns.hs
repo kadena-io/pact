@@ -2,6 +2,8 @@
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE ViewPatterns      #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 
 -- | Pattern synonym definitions for translation from typechecked 'AST' to
 -- 'Term'.
@@ -243,6 +245,9 @@ pattern AST_RequireCapability node app <-
 pattern AST_ComposeCapability :: AST Node -> AST Node
 pattern AST_ComposeCapability app <-
   App _node (NativeFunc "compose-capability") [app]
+
+pattern AST_Continue :: Node -> AST Node -> AST Node
+pattern AST_Continue node body <- App node (NativeFunc "continue") [body]
 
 -- pattern RawTableName :: Text -> AST Node
 -- pattern RawTableName t <- Table (Node (TcId _ t _) _) _
