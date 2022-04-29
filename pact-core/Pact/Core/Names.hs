@@ -12,6 +12,15 @@ module Pact.Core.Names
  , Name(..)
  , TypeVar(..)
  , Unique(..)
+ , nameRaw
+ , nameUnique
+ , nameKind
+ , tyVarName
+ , tyVarUnique
+ , tyname
+ , tynameUnique
+ , newUnique
+ , Supply(..)
  ) where
 
 import Control.Lens
@@ -66,10 +75,10 @@ newUnique (Supply ref) =
     let z = x+1 in (z,Unique z)
 
 data NameKind
-  = TopLevelName -- Script top level names, not bound to any module
-  | ModuleName
-  | DefName
-  | LocallyBoundName
+  = TopLevelNameKind -- Script top level names, not bound to any module
+  | ModuleNameKind
+  | DefNameKind
+  | LocallyBoundNameKind
   deriving (Show, Eq)
 
 data Name

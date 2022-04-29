@@ -15,6 +15,7 @@
 module Pact.Core.Typed.Eval.CEK where
 
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Vector(Vector)
@@ -24,12 +25,21 @@ import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Typed.Term
 
-type Eval name b = ReaderT (CEKRuntime name b) (StateT IO CEKState IO)
+import Pact.Types.Gas
 
--- data CEKState
---   = CEKState
---   { _cekLoaded ::
---   }
+
+data CEKState name b
+  = CEKState
+  { _cekLoaded :: CEKEnv name b
+  , _cekGas :: Gas
+  -- , _cekPactExec :: Maybe
+  , _cekEvalLog :: Maybe []
+  }
+
+newtype Eval e name b =
+  Eval { unEval :: ReaderT (CEKRuntime name b) (StateT IO CEKState IO) }
+  deriving
+
 
 type CEKEnv name b = Map name (CEKValue name b)
 type BuiltinFn name b = [CEKValue name b] -> Eval name b (CEKValue name b)

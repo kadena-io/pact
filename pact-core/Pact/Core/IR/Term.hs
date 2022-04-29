@@ -10,9 +10,7 @@
 -- Our Core IR, which supports let-bound terms for type inference
 --
 
-module Pact.Core.IR.Term
-(
-) where
+module Pact.Core.IR.Term where
 
 import Control.Lens
 import Data.Map(Map)
@@ -30,7 +28,6 @@ import Pact.Types.Term (ModuleHash(..), Governance(..))
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Builtin
-import Pact.Core.Guards
 import qualified Pact.Types.Names as PNames
 
 

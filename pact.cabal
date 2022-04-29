@@ -362,6 +362,7 @@ library pact-core
     Pact.Core.Guards
     Pact.Core.Imports
     Pact.Core.Pacts.Types
+    Pact.Core.Hash
 
 
 executable pact
