@@ -267,7 +267,7 @@ library
         , mmorph >= 1.1 && < 1.2
         , neat-interpolation >= 0.4
         , optparse-applicative >= 0.12.1.0 && < 0.16
-        , sbv >= 8.8
+        , sbv >= 8.8 && <9.0
         , servant-server
         , wai-cors
         , warp

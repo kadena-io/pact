@@ -141,17 +141,17 @@
         )
     )
   ; case 1: all good + module reference
-  ;  (defpact good2:string (m1:module{iface})
-  ;    (step
-  ;      (+ (m1::good) "-nested")
-  ;      )
-  ;    (step
-  ;      (+ (continue (m1::good)) "-nested")
-  ;      )
-  ;    (step
-  ;      (+ (continue (m1::good)) "-nested")
-  ;      )
-  ;  )
+   (defpact good2:string (m1:module{iface})
+     (step
+       (+ (m1::good) "-nested")
+       )
+     (step
+       (+ (continue (m1::good)) "-nested")
+       )
+     (step
+       (+ (continue (m1::good)) "-nested")
+       )
+   )
 
   (defpact good3:string (arg:string)
     (step
@@ -224,17 +224,17 @@
       )
   )
 
-  ;  (defpact good2:[string] ()
-  ;    (step
-  ;      [(free.nested1.good2 nested1-1) (nested2.good) "hello1"]
-  ;      )
-  ;    (step
-  ;      [(continue (nested1.good2 nested1-1)) (continue (nested2.good)) "hello2"]
-  ;      )
-  ;    (step
-  ;      [(continue (nested1.good2 nested1-1)) (continue (nested2.good)) "hello3"]
-  ;      )
-  ;  )
+   (defpact good2:[string] ()
+     (step
+       [(free.nested1.good2 nested1-1) (nested2.good) "hello1"]
+       )
+     (step
+       [(continue (nested1.good2 nested1-1)) (continue (nested2.good)) "hello2"]
+       )
+     (step
+       [(continue (nested1.good2 nested1-1)) (continue (nested2.good)) "hello3"]
+       )
+   )
 
   (defpact good3:[string] ()
     (step
@@ -334,9 +334,9 @@
 
 ; Case 1 test: module references
 (begin-tx)
-;  (expect "All is good for successful case 1: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.good2))
-;  (expect "All is good for successful case 1: step 1" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
-;  (expect "All is good for successful case 1: step 2" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
+ (expect "All is good for successful case 1: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.good2))
+ (expect "All is good for successful case 1: step 1" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+ (expect "All is good for successful case 1: step 2" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
 (commit-tx)
 
 ;  Case 1 test: different args

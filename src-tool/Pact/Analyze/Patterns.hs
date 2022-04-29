@@ -297,6 +297,3 @@ pattern AST_Step node entity exec rollback yr <- Step node entity exec rollback 
 
 pattern AST_ModRef :: a -> Lang.ModuleName -> Maybe [Lang.ModuleName] -> AST a
 pattern AST_ModRef node refName refSpec <- ModRef node refName refSpec
-
--- pattern AST_Continue
--- pattern AST_Continue node nested <- App node (NativeFunc SContinue) [nested]
