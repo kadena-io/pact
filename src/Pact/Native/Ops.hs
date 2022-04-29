@@ -4,6 +4,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- |
 -- Module      :  Pact.Native.Ops
@@ -27,6 +30,7 @@ module Pact.Native.Ops
     ) where
 
 
+import Control.Monad (when)
 import Data.Bits
 import Data.Decimal
 import Data.Default
@@ -58,7 +62,6 @@ addDef = defGasRNative "+" plus plusTy
   ]
   "Add numbers, concatenate strings/lists, or merge objects."
   where
-
     plus :: GasRNativeFun e
     plus g fi [TLitString a,TLitString b] = gasConcat g fi (T.length a) (T.length b) $
       (return (tStr $ a <> b))
@@ -74,7 +77,8 @@ addDef = defGasRNative "+" plus plusTy
            (if aty == bty then aty else TyAny)
            def
            def)
-    plus g i as = (g,) <$> binop' (+) (+) i as
+    plus g i as =
+      (g,) <$> binop' (+) (+) i as
     {-# INLINE plus #-}
 
     gasConcat g fi aLength bLength = computeGas' g fi (GConcatenation aLength bLength)
@@ -98,36 +102,100 @@ subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
     unaryNumTys = unaryTy numA numA
 
 mulDef :: NativeDef
-mulDef = defRNative "*" (binop' (*) (*)) coerceBinNum
+mulDef = defRNative "*" mul' coerceBinNum
   ["(* 0.5 10.0)", "(* 3 5)"] "Multiply X by Y."
+  where
+  mul' :: RNativeFun e
+  mul' = binop' (*) (*)
+
 
 divDef :: NativeDef
 divDef = defRNative "/" divide' coerceBinNum
   ["(/ 10.0 2.0)", "(/ 8 3)"] "Divide X by Y."
   where
     divide' :: RNativeFun e
-    divide' = binop (\a b -> assert (b /= 0) "Division by 0" $ liftOp (/) a b)
-                    (\a b -> assert (b /= 0) "Division by 0" $ liftOp div a b)
+    divide' fi as@[TLiteral a _,TLiteral b _] =
+      binop divDec divInt fi as
+      where
+      nonZeroDiv b' = when (b' == 0) $ evalError' fi $ "Division by 0" <> ": " <> pretty (a,b)
+      divDec a' b' = nonZeroDiv b' *> liftDecimalOp (/) a' b'
+      divInt a' b' = nonZeroDiv b' *> liftIntegerOp div a' b'
+    divide' fi as = argsError fi as
 
 powDef :: NativeDef
 powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
-    pow :: RNativeFun e
-    pow = binop (\a b -> liftDecF (**) a b)
-                (\a b -> assert (b >= 0) "Integral power must be >= 0" $ liftOp (^) a b)
+  pow :: RNativeFun e
+  pow i as@[TLiteral a _,TLiteral b _] = do
+    binop (\a' b' -> liftDecF i (**) a' b') intPow i as
+    where
+    oldIntPow  b' e = do
+      when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
+      liftIntegerOp (^) b' e
+    -- See: https://hackage.haskell.org/package/base-4.16.1.0/docs/src/GHC-Real.html
+    intPow :: Integer -> Integer -> Eval e Integer
+    intPow b' e =
+      ifExecutionFlagSet FlagDisablePact43 (oldIntPow b' e) (intPow' b' e)
+    intPow' x0 y0
+      | y0 < 0 = evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
+      | y0 == 0 = pure 1
+      | otherwise = evens x0 y0
+    evens x y
+      | even y = twoArgIntOpGas x x *> evens (x * x) (y `quot` 2)
+      | y == 1 = pure x
+      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) x
+    odds x y z
+      | even y = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) z
+      | y == 1 = twoArgIntOpGas x z *> pure (x * z)
+      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
+  pow i as = argsError i as
+
+twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
+twoArgIntOpGas loperand roperand =
+  computeGasCommit def "" (GIntegerOpCost loperand roperand)
+
+legalLogArg :: Literal -> Bool
+legalLogArg = \case
+  LInteger i -> i > 0
+  LDecimal i -> i > 0
+  _ -> False
+
+litGt0 :: Literal -> Bool
+litGt0 = \case
+  LInteger i -> i >= 0
+  LDecimal i -> i >= 0
+  _ -> False
 
 logDef :: NativeDef
 logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
-    log' :: RNativeFun e
-    log' = binop (\a b -> liftDecF logBase a b)
-                 (\a b -> liftIntF logBase a b)
+  log' :: RNativeFun e
+  log' fi as@[TLiteral base _,TLiteral v _] = do
+    unlessExecutionFlagSet FlagDisablePact43 $
+      when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
+    binop (\a b -> liftDecF fi logBase a b)
+          (\a b -> liftIntF fi logBase a b)
+          fi
+          as
+  log' fi as = argsError fi as
 
 sqrtDef :: NativeDef
-sqrtDef = defRNative "sqrt" (unopd sqrt) unopTy ["(sqrt 25)"] "Square root of X."
+sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
+  where
+  sqrt' fi as@[TLiteral a _] = do
+    unlessExecutionFlagSet FlagDisablePact43 $
+      when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
+    (unopd sqrt) fi as
+  sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
-lnDef = defRNative "ln" (unopd log) unopTy ["(round (ln 60) 6)"] "Natural log of X."
+lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
+  where
+  ln' fi as@[TLiteral a _] = do
+    unlessExecutionFlagSet FlagDisablePact43 $
+      when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
+    (unopd log) fi as
+  ln' fi as = argsError fi as
 
 expDef :: NativeDef
 expDef = defRNative "exp" (unopd exp) unopTy ["(round (exp 3) 6)"] "Exp of X."
@@ -136,10 +204,10 @@ absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
   ["(abs (- 10 23))"] "Absolute value of X."
   where
-    abs' :: RNativeFun e
-    abs' _ [TLitInteger a] = return $ toTerm $ abs a
-    abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
-    abs' i as = argsError i as
+  abs' :: RNativeFun e
+  abs' _ [TLitInteger a] = return $ toTerm $ abs a
+  abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
+  abs' i as = argsError i as
 
 roundDef :: NativeDef
 roundDef = defTrunc "round" "Performs Banker's rounding" round
@@ -345,31 +413,32 @@ cmp cmpFun fi as = do
   return $ toTerm (cmpFun c)
 {-# INLINE cmp #-}
 
-liftOp :: (a -> a -> a) -> a -> a -> Either b a
-liftOp f a b = Right (f a b)
+liftIntegerOp :: (Integer -> Integer -> Integer) -> Integer -> Integer -> Eval e Integer
+liftIntegerOp f a b = do
+  unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas a b
+  pure (f a b)
+
+liftDecimalOp :: (Decimal -> Decimal -> Decimal) -> Decimal -> Decimal -> Eval e Decimal
+liftDecimalOp f a b = do
+  unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas (decimalMantissa a) (decimalMantissa b)
+  pure (f a b)
+
 
 binop' :: (Decimal -> Decimal -> Decimal) -> (Integer -> Integer -> Integer) -> RNativeFun e
-binop' dop iop i as = binop (liftOp dop) (liftOp iop) i as
+binop' dop iop i as = binop (liftDecimalOp dop) (liftIntegerOp iop) i as
 
 -- | Perform binary math operator with coercion to Decimal as necessary.
-binop :: (Decimal -> Decimal -> Either String Decimal) ->
-       (Integer -> Integer -> Either String Integer) -> RNativeFun e
+binop :: (Decimal -> Decimal -> Eval e Decimal) ->
+       (Integer -> Integer -> Eval e Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
-  let hdl (Right v) = return $ toTerm v
-      hdl (Left err) = evalError' fi $ prettyString err <> ": " <> pretty (a,b)
   case (a,b) of
-    (LInteger i,LInteger j) -> hdl (i `iop` j)
-    (LDecimal i,LDecimal j) -> hdl (i `dop` j)
-    (LInteger i,LDecimal j) -> hdl (fromIntegral i `dop` j)
-    (LDecimal i,LInteger j) -> hdl (i `dop` fromIntegral j)
+    (LInteger i,LInteger j) -> toTerm <$> (i `iop` j)
+    (LDecimal i,LDecimal j) -> toTerm <$> (i `dop` j)
+    (LInteger i,LDecimal j) -> toTerm <$> (fromIntegral i `dop` j)
+    (LDecimal i,LInteger j) -> toTerm <$> (i `dop` fromIntegral j)
     _ -> argsError fi as
 binop _ _ fi as = argsError fi as
 {-# INLINE binop #-}
-
-assert :: Bool -> String -> Either String a -> Either String a
-assert test msg act | test = act
-                    | otherwise = Left msg
-
 
 dec2F :: Decimal -> Double
 dec2F = fromRational . toRational
@@ -379,10 +448,21 @@ int2F :: Integer -> Double
 int2F = fromIntegral
 f2Int :: Double -> Integer
 f2Int = round
-liftDecF :: (Double -> Double -> Double) -> Decimal -> Decimal -> Either String Decimal
-liftDecF f a b = Right $ f2Dec (dec2F a `f` dec2F b)
-liftIntF :: (Double -> Double -> Double) -> Integer -> Integer -> Either String Integer
-liftIntF f a b = Right $ f2Int (int2F a `f` int2F b)
+
+liftDecF :: HasInfo i => i -> (Double -> Double -> Double) -> Decimal -> Decimal -> Eval e Decimal
+liftDecF i f a b = do
+  let !out = (dec2F a `f` dec2F b)
+  unlessExecutionFlagSet FlagDisablePact43 $
+    when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
+  pure $ f2Dec out
+
+  -- Right $ f2Dec (dec2F a `f` dec2F b)
+liftIntF :: HasInfo i => i -> (Double -> Double -> Double) -> Integer -> Integer -> Eval e Integer
+liftIntF i f a b = do
+  let !out = (int2F a `f` int2F b)
+  unlessExecutionFlagSet FlagDisablePact43 $
+    when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
+  pure $ f2Int out
 
 unopd :: (Double -> Double) -> RNativeFun e
 unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i

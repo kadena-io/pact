@@ -28,7 +28,7 @@ module Pact.Types.Runtime
    eeAdvice,
    toPactId,
    Purity(..),
-   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
    evalGas,evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
@@ -109,7 +109,7 @@ keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [
 
 -- | Storage for natives.
 data RefStore = RefStore {
-      _rsNatives :: HM.HashMap Name Ref
+      _rsNatives :: HM.HashMap Text Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty
@@ -153,10 +153,12 @@ data ExecutionFlag
   | FlagDisablePact40
   -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
   | FlagEnforceKeyFormats
-  -- | Enable Pact 4.2.0 db sorted key guarantees, and row persistence
+  -- | Disable Pact 4.2.0 db sorted key guarantees, and row persistence
   | FlagDisablePact420
-  -- | Enable memory limit check
+  -- | Disable memory limit check
   | FlagDisableInlineMemCheck
+  -- | Disable new non-inlined modules
+  | FlagDisablePact43
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -232,15 +234,18 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Name Ref
+      _rsLoaded :: HM.HashMap Text (Ref, Maybe (ModuleHash))
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe (Namespace (Term Name))
+      -- | Map of all fully qualified names in scope, including transitive dependencies.
+    , _rsQualifiedDeps :: HM.HashMap FullyQualifiedName Ref
     } deriving (Eq,Show,Generic)
+
 makeLenses ''RefState
 instance NFData RefState
-instance Default RefState where def = RefState HM.empty HM.empty Nothing
+instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty
 
 data PactEvent = PactEvent
   { _eventName :: !Text

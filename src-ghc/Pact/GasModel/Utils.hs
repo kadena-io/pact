@@ -42,9 +42,12 @@ module Pact.GasModel.Utils
   , acctRow
 
   , sampleLoadedKeysetName
+  , sampleLoadedMultisigKeysetName
   , sampleKeyset
   , samplePubKeys
   , samplePubKeysWithCaps
+  , sampleMultiPubKeys
+  , sampleMultiSigKeyset
 
   , sampleNamespaceName
   , sampleNamespace
@@ -377,14 +380,26 @@ acctRow = RowData RDV0 $ ObjectMap $ M.fromList
 sampleLoadedKeysetName :: T.Text
 sampleLoadedKeysetName = "some-loaded-keyset"
 
+sampleLoadedMultisigKeysetName :: T.Text
+sampleLoadedMultisigKeysetName = "some-loaded-multisig-keyset"
+
 samplePubKeys :: [PublicKey]
 samplePubKeys = [PublicKey "something"]
+
+sampleMultiPubKeys :: [PublicKey]
+sampleMultiPubKeys =
+  [ PublicKey "key1"
+  , PublicKey "key2"
+  ]
 
 samplePubKeysWithCaps :: [(PublicKey, S.Set SigCapability)]
 samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
 
 sampleKeyset :: KeySet
 sampleKeyset = mkKeySet samplePubKeys "keys-all"
+
+sampleMultiSigKeyset :: KeySet
+sampleMultiSigKeyset = mkKeySet sampleMultiPubKeys "keys-all"
 
 sampleNamespaceName :: T.Text
 sampleNamespaceName = "my-namespace"
@@ -410,7 +425,7 @@ someStackFrame =
   )
 
 someModuleData :: ModuleData Ref
-someModuleData = ModuleData modDef refMap
+someModuleData = ModuleData modDef refMap mempty
   where refMap = HM.empty
         ref = Direct $ TVar (Name $ BareName "" def) def
         fst' :: Ref -> Maybe Int

@@ -6,7 +6,6 @@
 )
 (commit-tx)
 (begin-tx)
-
 ;; Show that empty imports work when hashes are
 ;; supplied. For a negative test, see: ./bad/bad-import-emptylist.pact
 (module n H
@@ -31,3 +30,38 @@
   (defcap J () true)
   (defun i () true)
 )
+(commit-tx)
+
+(begin-tx)
+(interface iface
+
+  (defschema p
+    flag:bool
+    other-field:string)
+
+  (defconst pushin:object{p} {'flag:true, 'other-field:"future"})
+  )
+(commit-tx)
+(begin-tx)
+
+(module m g
+
+  (use iface)
+  (defcap g () true)
+
+  (defun get-pushin:object{p} () pushin)
+  (defconst obj2:object{p} {'flag:false, 'other-field:"yt"})
+  )
+
+(commit-tx)
+;; Explicit imports
+(begin-tx)
+(module m g
+
+  (use iface [p])
+  (defcap g () true)
+
+  (defconst obj2:object{p} {'flag:false, 'other-field:"yt"})
+  )
+
+(commit-tx)

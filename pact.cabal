@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.2.0.1
+version:             4.3
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -36,6 +36,10 @@ flag no-advice
   description: Disable advice in interpreter
   default:     False
   manual:      True
+
+flag with-integer-gmp
+  description: Include integer-gmp package (removed after GHC 9)
+  manual:      False
 
 library
 
@@ -108,12 +112,23 @@ library
     Pact.Types.Version
     Pact.Types.Typecheck
     Pact.Typechecker
+  if flag(with-integer-gmp)
+    build-depends:
+        , base >= 4.15.0.0
+  else
+    build-depends:
+      , base >=4.9.0.0 && < 4.15.0.0
+    if !impl(ghcjs)
+      build-depends:
+        , integer-gmp
   build-depends:
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1
     , aeson >= 0.11.3.0 && < 1.6
     , attoparsec >= 0.13.0.2 && < 0.15
-    , base >=4.9.0.0 && < 4.17
+    -- note: this is the real constraint, but due to base changes
+    -- we split for compat.
+    -- , base >=4.9.0.0 && < 4.17
     , base16-bytestring >=0.1.1.6 && < 0.2
     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
         -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
@@ -368,6 +383,7 @@ test-suite hspec
         RemoteVerifySpec
         TypecheckSpec
         SizeOfSpec
+        PactCLISpec
 
       build-depends:
         , Decimal

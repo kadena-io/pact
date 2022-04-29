@@ -808,7 +808,7 @@ toFun (TDef td i) = resolveDyn td
 toFun (TDynamic ref mem i) = case (ref, mem) of
   (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
   _ -> die i "Malformed mod ref"
-toFun t = die (_tInfo t) "Non-var in fun position"
+toFun t = die (_tInfo t) "Non-var in fun position "
 
 withScopeBodyToFun
   :: Show n
@@ -1236,10 +1236,10 @@ typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abb
 
 -- | Typecheck all productions in a module.
 typecheckModule :: Bool -> DynEnv -> ModuleData Ref -> IO ([TopLevel Node],[Failure])
-typecheckModule dbg dynEnv (ModuleData (MDModule m) rm) = do
+typecheckModule dbg dynEnv (ModuleData (MDModule m) rm _) = do
   debug' dbg $ "Typechecking module " ++ show (_mName m)
   let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTCState (mkTcState sup dbg dynEnv) (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
   fst <$> foldM tc (([],[]),0) (HM.elems rm)
-typecheckModule _ _ (ModuleData MDInterface{} _) = return mempty
+typecheckModule _ _ (ModuleData MDInterface{} _ _) = return mempty
