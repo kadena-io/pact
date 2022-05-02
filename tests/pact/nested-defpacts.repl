@@ -392,10 +392,3 @@
 (begin-tx)
 (expect "Case 6: step 0" ["hello1-nested" "hello1-nested" "hello1"] (free.parent.bad4))
 (expect-failure "Case 6: step 1" "Attempting to continue a pact that was not nested" (continue-pact 1))
-(commit-tx)
-
-; Verify test
-(begin-tx)
-(verify "free.parent")
-(verify "free.nested1")
-(verify "free.nested2")

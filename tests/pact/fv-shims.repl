@@ -4,6 +4,9 @@
 (interface iface
   (defun op:integer ()))
 
+(interface iface2
+  (defpact good:string ()))
+
 (module impl g
   (implements iface)
   (defcap g () true)
@@ -26,9 +29,60 @@
 
   (deftable tbl:{sch})
 
+  (defschema test-schema
+    "test schema"
+    guard:string)
+
+  (deftable test-table:{test-schema})
+
   (defcap CAP () @event true)
 
   (defun alist:[integer] () [ 1 2 ])
+
+  ;; make sure verification works for
+  ;; module references
+  (defpact nested-modref-pact-1:string (m1:module{iface2})
+    (step
+      (+ (m1::good) "-nested")
+      )
+    (step
+      (+ (continue (m1::good)) "-nested")
+      )
+    (step
+      (+ (continue (m1::good)) "-nested")
+      )
+  )
+
+  ;; test principal create/validate for
+  ;; coverage
+  (defun both-guard (ks1 ks2)
+    (enforce-keyset ks1)
+    (enforce-keyset ks2))
+
+  (defun create-principal-test ()
+    (insert test-table "user"
+      { "guard":
+          (create-principal
+            (create-user-guard
+             (both-guard
+               (read-keyset 'ks1)
+               (read-keyset 'ks2)
+              )))
+      }))
+
+  (defun validate-principal-test ()
+    (validate-principal
+     (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2)))
+     (create-principal
+      (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2))))
+     ))
+
 
   (defun fun (m:module{iface})
     @doc "Exercise FV shims and coercions. Modref arg coerced to string."
