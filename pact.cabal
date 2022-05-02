@@ -164,10 +164,6 @@ library
     , vector >= 0.11.0.0 && < 0.13
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
-  if flag(ghc-flags)
-    build-tool-depends: hsinspect:hsinspect
-    ghc-options: -fplugin GhcFlags.Plugin
-    build-depends: ghcflags
 
   -- GHCJS
   if impl(ghcjs)
@@ -271,7 +267,7 @@ library
         , mmorph >= 1.1 && < 1.2
         , neat-interpolation >= 0.4
         , optparse-applicative >= 0.12.1.0 && < 0.16
-        , sbv >= 8.8
+        , sbv >= 8.8 && <9.0
         , servant-server
         , wai-cors
         , warp
