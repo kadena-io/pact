@@ -392,12 +392,3 @@
  "validating principal pact guards roundtrips with create-principal"
  true
  (continue-pact 1))
-
-(commit-tx)
-
-; Verify test
-(begin-tx)
-(verify "tester")
-(verify "tester2")
-(verify "test-ns.tester")
-(verify "test-ns.tester2")
