@@ -356,6 +356,7 @@ library pact-core
     Pact.Core.Type
     Pact.Core.Typed.Typecheck
     Pact.Core.Typed.Term
+    Pact.Core.Typed.Eval.Runtime
     Pact.Core.Typed.Eval.CEK
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck

@@ -22,8 +22,10 @@ data PrimType =
   TyUnit
   deriving (Eq,Ord,Show)
 
+type RowObject n = Map.Map Field (Type n)
+
 data Row n
-  = RowTy (Map.Map Field (Type n)) (Maybe n)
+  = RowTy (RowObject n) (Maybe n)
   | RowVar n
   | EmptyRow
   deriving (Eq, Show)

@@ -14,13 +14,9 @@ module Pact.Core.IR.Term where
 
 import Control.Lens
 import Data.Map(Map)
--- import qualified Data.Map.Strict as M
 import Data.Text(Text)
 import Data.Vector (Vector)
 import qualified Data.Set as Set
--- import qualified Data.Vector as V
-
-
 
 import Pact.Types.Hash (Hash)
 import Pact.Types.Exp (Literal)
@@ -28,6 +24,7 @@ import Pact.Types.Term (ModuleHash(..), Governance(..))
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Builtin
+import Pact.Core.Imports
 import qualified Pact.Types.Names as PNames
 
 
@@ -36,12 +33,12 @@ import qualified Pact.Types.Names as PNames
 -- type in interfaces.
 -- might just be useful to provide a lens into
 -- `Def` bodies.
--- data DefType
---   = DefCap
---   | Defun
---   | DefPact
---   | DefConst
---   deriving Show
+data DefType
+  = DTDefCap
+  | DTDefun
+  | DTDefPact
+  | DTDefConst
+  deriving Show
 
 data Defun name tyname builtin info
   = Defun
@@ -87,6 +84,7 @@ data Module name tyname builtin info
   , _mGovernance :: Governance (DefCap name tyname builtin info)
   , _mDefs :: [Def name tyname builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
+  , _mImports :: [Import]
   , _mHash :: ModuleHash
   } deriving Show
 
@@ -126,7 +124,7 @@ data Term name tyname builtin info
   = Var name info
   -- ^ single variables e.g x
   | Lam name (Maybe (Type tyname)) (Term name tyname builtin info) info
-  -- ^ \x.e
+  -- ^ $f \x.e
   | Let name (Maybe (Type tyname)) (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ let x = e1 in e2
   | App (Term name tyname builtin info) (Term name tyname builtin info) info

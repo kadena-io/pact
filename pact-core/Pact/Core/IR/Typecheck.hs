@@ -137,7 +137,7 @@ instance Ord n => Substitutable (Type n) n where
     TyTable row ->
       TyTable (subst s row)
     TyCap ->
-      TyCap 
+      TyCap
     TyForall ns rs ty ->
       let tys' = Map.fromList [(n', TyVar n') | n' <- ns] `Map.union` tys
           rows' = Map.fromList [(r', RowVar r') | r' <- rs] `Map.union` rows
