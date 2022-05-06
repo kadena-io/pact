@@ -15,6 +15,7 @@ module Pact.Core.Typed.Term
 , IfDef(..)
 , Literal(..)
 , DefType(..)
+, TyVarType(..)
 , termInfo
 , fromIR
 )
@@ -251,12 +252,10 @@ tyAppUnify (TyRow lrow) (TyRow rrow) = rowUnifies lrow rrow
   rowUnifies (RowTy obj (Just r)) (RowTy obj' r') =
     let notInL = Map.difference obj' obj
     in Map.singleton r (TyRow (RowTy notInL r'), RowVarType)
-  rowUnifies (RowTy obj (Just r)) EmptyRow =
-    let notInL = Map.difference obj' obj
-    in Map.singleton r (TyRow EmptyRow)
-  rowUnifies (RowTy obj (Just r)) rv =
-    let notInL = Map.difference obj' obj
-    in Map.singleton r rv
+  rowUnifies (RowTy _ (Just r)) EmptyRow =
+    Map.singleton r (TyRow EmptyRow, RowVarType)
+  rowUnifies (RowTy _ (Just r)) rv =
+    Map.singleton r (TyRow rv, RowVarType)
   rowUnifies _ _ = Map.empty
 tyAppUnify _ _ = Map.empty
 
