@@ -8,13 +8,13 @@ module Pact.Core.Names
  ( ModuleName(..)
  , NamespaceName(..)
  , Field(..)
- , NameKind(..)
+--  , NameKind(..)
  , Name(..)
  , TypeVar(..)
  , Unique(..)
- , nameRaw
- , nameUnique
- , nameKind
+--  , nameRaw
+--  , nameUnique
+--  , nameKind
  , tyVarName
  , tyVarUnique
  , tyname
@@ -26,9 +26,11 @@ module Pact.Core.Names
 import Control.Lens
 import Data.Text(Text)
 import Data.IntMap.Strict(IntMap)
+import Data.Int(Int32)
 import Data.IORef (IORef, atomicModifyIORef')
 
 import Pact.Types.Names(ModuleName(..), NamespaceName(..))
+import Pact.Core.Hash
 
 
 newtype Field = Field Text
@@ -58,7 +60,6 @@ newtype UniqueMap a
   deriving stock (Show, Eq)
   deriving (Semigroup, Monoid) via (IntMap a)
 
-
 type instance Index (UniqueMap a) = Unique
 type instance IxValue (UniqueMap a) = a
 
@@ -74,18 +75,22 @@ newUnique (Supply ref) =
   atomicModifyIORef' ref $ \x ->
     let z = x+1 in (z,Unique z)
 
-data NameKind
-  = TopLevelNameKind -- Script top level names, not bound to any module
-  | ModuleNameKind
-  | DefNameKind
-  | LocallyBoundNameKind
-  deriving (Show, Eq)
+data NamedDeBruijn
+  = NamedDeBruijn
+  { _ndIndex :: Int32
+  , _ndName :: Text }
+  deriving (Show, Eq, Ord)
+
+data TopLevelName
+  = TopLevelName
+  { _tlnName :: Text
+  , _tlnModule :: ModuleName
+  , _tlnHash :: ModuleHash
+  } deriving (Show, Eq)
 
 data Name
-  = Name
-  { _nameRaw :: !Text
-  , _nameUnique :: !Unique
-  , _nameKind :: NameKind }
+  = TLN TopLevelName
+  | DB NamedDeBruijn
   deriving (Show, Eq)
 
 data TypeVar
@@ -103,12 +108,8 @@ data TypeName
   , _tynameUnique :: !Unique }
   deriving (Show, Eq)
 
-makeLenses ''Name
 makeLenses ''TypeVar
 makeLenses ''TypeName
-
-instance HasUnique Name where
-  unique = nameUnique
 
 instance HasUnique TypeVar where
   unique f = \case

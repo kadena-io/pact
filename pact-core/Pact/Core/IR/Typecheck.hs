@@ -28,6 +28,7 @@ import Data.Foldable(fold)
 import Data.Map(Map)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 import qualified Data.Vector as V
 import Pact.Core.Type
@@ -333,25 +334,42 @@ inferTerm = \case
   Var n i -> do
     ty <- instantiate =<< lookupTyEnv n
     pure (Var (n, ty) (i, ty), [])
-  Lam n mty body i -> do
-    rawTv <- freshVar
-    let tv = TyVar rawTv
-    -- If we see a type ann,
-    -- unify with the type variable and emit a constraint.
-    -- todo: It does mean we unify the constraint twice,
-    -- probably unnecessary
-    (csig, s) <- case mty of
-      Nothing -> pure (mempty, mempty)
-      Just ty -> ([EqConst ty tv],) <$> unifies ty tv
-    let nty = TyScheme [] [] (subst s tv)
-    -- if mty is present then probably `rawTv` is unnecessary.
-    (body', cs) <- inTcEnvNonGen n rawTv nty $ inferTerm body
-    let t = termTy body'
-        lamArgTy = subst s tv
-        outTy = TyFun lamArgTy t
-    pure
-      ( Lam (n, lamArgTy) mty body' (i, outTy)
-      , csig++cs )
+  Lam _name names anntys body i -> do
+    rawTvs <- traverse (const freshVar) names
+    (csigs, substs) <- NE.unzip <$> traverse (uncurry withAnnotation) (NE.zip rawTvs anntys)
+    let csig = concat csigs
+        s0 = fold substs
+    (body', cs) <- local (inEnv rawTvs s0) $ inferTerm body
+    let retTy = termTy body'
+        tvSubsts = subst s0 . TyVar <$> rawTvs
+        ty = foldr (\arg ret -> TyFun (subst s0 arg) ret) retTy tvSubsts
+        names' = NE.zip names tvSubsts
+    pure (Lam (_name, ty) names' anntys body' (i, ty), csig++cs)
+    where
+    withAnnotation rawTv (Just annTy) =
+      ([EqConst annTy (TyVar rawTv)],) <$> unifies annTy (TyVar rawTv)
+    withAnnotation _ _ = pure ([], mempty)
+    inEnv rawTvs s0 =
+      let entries = Map.fromList $ NE.toList $ NE.zip names (TyScheme [] [] . subst s0 . TyVar <$> rawTvs)
+      in over tcNonGen (Set.union (Set.fromList (NE.toList rawTvs))) . over tcEnv (Map.union entries)
+    -- rawTv <- freshVar
+    -- let tv = TyVar rawTv
+    -- -- If we see a type ann,
+    -- -- unify with the type variable and emit a constraint.
+    -- -- todo: It does mean we unify the constraint twice,
+    -- -- probably unnecessary
+    -- (csig, s) <- case mty of
+    --   Nothing -> pure (mempty, mempty)
+    --   Just ty -> ([EqConst ty tv],) <$> unifies ty tv
+    -- let nty = TyScheme [] [] (subst s tv)
+    -- -- if mty is present then probably `rawTv` is unnecessary.
+    -- (body', cs) <- inTcEnvNonGen n rawTv nty $ inferTerm body
+    -- let t = termTy body'
+    --     lamArgTy = subst s tv
+    --     outTy = TyFun lamArgTy t
+    -- pure
+    --   ( Lam (n, lamArgTy) mty body' (i, outTy)
+    --   , csig++cs )
   Let n mty e1 e2 i -> do
     (e1', c1) <- inferTerm e1
     let t1 = termTy e1'
@@ -375,16 +393,17 @@ inferTerm = \case
     pure
       ( App e1' e2' (i, tv)
       , cs1 ++ cs2 ++ [EqConst (termTy e1') (TyFun (termTy e2') tv)] )
-  Sequence e1 e2 i -> do
+  Block terms i -> do
     -- Will we require that the lhs of sequenced statements be unit?
     -- likely yes, it doesn't make sense to otherwise discard value results without binding them in a clause.
     -- for now, no.
     -- We might emit a constraint `t1 ~ ()` here  eventually tho.
-    (e1', cs1) <- inferTerm e1
-    (e2', cs2) <- inferTerm e2
+    (terms', csli) <- NE.unzip <$> traverse inferTerm terms
+    let retTy = termTy (NE.last terms')
+        constraints = concat csli
     pure
-      ( Sequence e1' e2' (i, termTy e2')
-      , cs1 ++ cs2 )
+      ( Block terms' (i, retTy)
+      , constraints )
   ListLit terms i -> do
     tv <- TyVar <$> freshVar
     joined <- traverse (listInfer tv) terms

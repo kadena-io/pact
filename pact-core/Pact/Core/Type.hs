@@ -7,7 +7,6 @@
 module Pact.Core.Type where
 
 import Control.Lens
--- import Data.Maybe(fromMaybe)
 import qualified Data.Map.Strict as Map
 import Pact.Types.Exp (Literal(..))
 import Pact.Core.Names
@@ -75,6 +74,14 @@ data Type n
   -- constructor since system F
   -- Todo: probably want `NonEmpty a` here since TyForall [] [] t = t
   deriving (Show, Eq)
+
+tyFunToArgList :: Type n -> Maybe ([Type n], Type n)
+tyFunToArgList (TyFun l r) =
+  unFun [l] r
+  where
+  unFun args (TyFun l' r') = unFun (l':args) r'
+  unFun args ret = Just (reverse args, ret)
+tyFunToArgList _ = Nothing
 
 traverseRowTy :: Traversal' (Row n) (Type n)
 traverseRowTy f = \case

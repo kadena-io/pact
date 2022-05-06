@@ -17,6 +17,7 @@ module Pact.Core.Typed.Typecheck where
 import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.Except
+import Data.Maybe(catMaybes)
 import Data.Foldable(foldl', foldlM)
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
@@ -33,7 +34,7 @@ data TCEnv name tyname builtin = TCEnv
 
 makeLenses ''TCEnv
 
-applyFunctionType :: (Ord n, MonadError String f) => Type n -> Type n -> f (Type n)
+applyFunctionType :: (Ord n, MonadError String f) => Type n -> (Type n, TyVarType) -> f (Type n)
 applyFunctionType (TyFun l r) l'
   | l == l' = pure r
   | otherwise  = throwError "function type mismatch"
@@ -42,15 +43,28 @@ applyFunctionType _ _ =
 
 -- tyApp :: (MonadError String m, Ord n, Show n) => Type n -> Type n -> m (Type n)
 tyApp :: (MonadError String m, Show n, Show a1) => Type n -> a1 -> m a2
-tyApp (TyForall l r _tfty) _ty = case (l, r) of
-  ([], []) -> undefined
-  (_, _) -> undefined
-    -- case ns of
-    -- [] -> pure $ substInTy (Map.singleton n ty) tfty
-    -- _ -> pure $ TyForall ns $ substInTy (Map.singleton n ty) tfty
+tyApp (TyForall tvs rvs tfty) (ty, TyVarType) = case tvs of
+  [] -> throwError $ "No tyapps left to apply"
+  n:ns -> pure $ substInTy (Map.singleton n ty) $ tfty
+tyApp (TyForall tvs r tfty) (ty, RowVarType) = case rvs of
+  [] -> throwError $ "No tyapps left to apply"
+  n:ns -> pure $ TyForall tvs ns $ substInTy (Map.singleton n ty) tfty
 tyApp t1 tyr =
   throwError $ "Cannot apply: " <> show t1 <> " to: " <> show tyr
 
+substInTy s (TyVar n) =
+  case Map.lookup n s of
+    Just ty -> ty
+    Nothing -> TyVar n
+substInTy s (TyFun l r) =
+  TyFun (substInTy s l) (substInTy s r)
+substInTy s (TyRow r) = TyRow (substInRow r)
+  where
+    substInRow (RowVar rv) =
+      case Map.lookup rv s of
+        Just (TyRow r) -> r
+        _ -> RowVar rv
+    substInRow (RowTy obj rv)
 
 typecheck'
   :: (MonadReader (TCEnv name tyname builtin) m,
@@ -69,13 +83,13 @@ typecheck' = \case
   -- Γ, x:t1 ⊢ e:t2
   -- ------------------- (T-Abs)
   -- Γ ⊢ (λx:t1.e):t1→t2
-  Lam n t term _ -> do
-    let args = NE.zip n t
+  Lam n ns ts term _ -> do
+    let args = NE.zip ns ts
         inEnv e = foldl' (\m (n', t') -> Map.insert n' t' m) e args
     ret <- locally tcVarEnv inEnv (typecheck' term)
-    pure $ foldr TyFun ret t
+    pure $ foldr TyFun ret ts
   -- Γ ⊢ x:t1→t2     Γ ⊢ y:t1
-  -- ------------------------ (T-Abs)
+  -- ------------------------ (T-App  )
   -- Γ ⊢ (x y):t2
   App app term _ -> do
     tf <- typecheck' app
@@ -85,15 +99,17 @@ typecheck' = \case
   -- ------------------------ (T-TApp)
   -- Γ ⊢ x[τ]:[X→τ]t1
   TyApp term ty _ ->
-    flip tyApp ty =<< typecheck' term
+    foldlM tyApp ty =<< typecheck' term
   -- Γ,X ⊢ x:t1
   -- ------------------------ (T-TAbs)
   -- Γ ⊢ ΛX.x:∀X.t1
   -- BIG TODO: ROW APPS
-  TyAbs tn term _ ->
-    locally tcTypeEnv (set (at tn) (Just (TyVar tn))) (typecheck' term) >>= \case
-      TyForall xs rs ty -> pure $ TyForall (tn:xs) rs ty
-      t -> pure $ TyForall [tn] [] t
+  TyAbs tn term _ -> do
+    typ <- typecheck' term
+    let (tvms, rvms) = NE.unzip (tvAbs <$> ttn)
+        tvs = catMaybes (NE.toList tvms)
+        rvs = catMaybes (NE.toList rvms)
+    pure (TyForall tvs rvs typ)
   -- ------------------------ (T-Error)
   -- Γ ⊢ (error msg t1) : t1
   Error _ t _ ->
@@ -118,4 +134,6 @@ typecheck' = \case
     pure (typeOfLit l)
 
 
-
+tvAbs (tv, tvt) = case tvt of
+  TyVarType -> (Just tv, Nothing)
+  RowVarType -> (Nothing, Just tv)

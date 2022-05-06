@@ -16,6 +16,7 @@ import Control.Lens
 import Data.Map(Map)
 import Data.Text(Text)
 import Data.Vector (Vector)
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Set as Set
 
 import Pact.Types.Hash (Hash)
@@ -119,17 +120,27 @@ type ModuleP = Module PNames.Name Text RawBuiltin
 type TopLevelP = TopLevel PNames.Name Text RawBuiltin
 type CoreIRProgramP info = [TopLevelP info]
 
+-- data Lam name tyname builtin info
+--   = Lam
+--   { _lamName :: name
+--   , _lamType :: DefType
+--   , _lamArgs :: NonEmpty name
+--   , _lamTyArgs :: NonEmpty (Maybe (Type tyname))
+--   , _lamBody :: (Term tyname builtin info)
+--   } deriving Show
+
 -- | Core IR
 data Term name tyname builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam name (Maybe (Type tyname)) (Term name tyname builtin info) info
-  -- ^ $f \x.e
+  | Lam name (NonEmpty name) (NonEmpty (Maybe (Type tyname))) (Term name tyname builtin info) info
+  -- ^ $f = \x.e
+  -- Lambdas are named for the sake of the callstack.
   | Let name (Maybe (Type tyname)) (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ let x = e1 in e2
   | App (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ (e1 e2)
-  | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
+  | Block (NonEmpty (Term name tyname builtin info)) info
   -- ^ (e1) (e2)
   | Error String info
   -- ^ error term , error "blah"
@@ -149,27 +160,27 @@ termInfo f = \case
   Var n i -> Var n <$> f i
   Let n mty t1 t2 i ->
     Let n mty t1 t2 <$> f i
-  Lam n mty term i -> Lam n mty term <$> f i
+  Lam n ns mty term i -> Lam n ns mty term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Error s i -> Error s <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
-  Sequence l r i -> Sequence l r <$> f i
   DynAccess n1 n2 i -> DynAccess n1 n2 <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
+  Block terms i -> Block terms <$> f i
   ListLit l i  -> ListLit l <$> f i
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam n mty term i -> Lam n mty <$> f term <*> pure i
+    Lam n ns mty term i -> Lam n ns mty <$> f term <*> pure i
     Let n mty t1 t2 i -> Let n mty <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> f t2 <*> pure i
     Error s i -> pure (Error s i)
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
-    Sequence l r i -> Sequence <$> f l <*> f r <*> pure i
     DynAccess n1 n2 i -> pure (DynAccess n1 n2 i)
     ObjectLit m i -> ObjectLit <$> traverse f m <*> pure i
+    Block terms i -> Block <$> traverse f terms <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
 
