@@ -238,8 +238,6 @@ fromIR mkName = \case
   mkTyApp l appArgs i =
     App <$> fromIR mkName l <*> traverse (fromIR mkName) appArgs <*> pure i
 
-
-
 -- Left biased unification.
 -- It is only to generate type/row applications
 tyAppUnify :: (Ord n) => Type n -> Type n -> Map n (Type n, TyVarType)

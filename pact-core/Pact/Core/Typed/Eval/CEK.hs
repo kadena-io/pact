@@ -162,3 +162,17 @@ eval = evalCEK
   applyArgs _lamn [] (_args:_args') _env _body _cont =
     error "too many arguments in fn application"
     -- evalCEK body (Map.insert n arg env) cont
+
+
+-- rowAddField :: Field -> [CEKValue name b] -> Eval name b (CEKValue name b)
+-- rowAddField field [VObject obj, newValue] =
+--   pure (VObject (Map.insert field newValue obj))
+-- rowAddField _ _ = error "invalid Object"
+
+
+-- rowAccessField :: Field -> [CEKValue name b] -> Eval name b (CEKValue name b)
+-- rowAccessField field [VObject obj] =
+--   case Map.lookup field obj of
+--     Just v -> pure v
+--     Nothing -> error "invalid object lookup"
+-- rowAddField _ _ = error "invalid Object"

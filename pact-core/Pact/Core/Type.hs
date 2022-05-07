@@ -2,9 +2,26 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 
-module Pact.Core.Type where
+module Pact.Core.Type
+ ( PrimType(..)
+ , Type(..)
+ , RowObject
+ , Row(..)
+ , InterfaceType(..)
+ , ModuleType(..)
+ , pattern TyInt
+ , pattern TyDecimal
+ , pattern TyTime
+ , pattern TyBool
+ , pattern TyString
+ , pattern TyUnit
+ , tyFunToArgList
+ , traverseRowTy
+ , typeOfLit
+ ) where
 
 import Control.Lens
 import qualified Data.Map.Strict as Map
@@ -13,12 +30,12 @@ import Pact.Core.Names
 
 
 data PrimType =
-  TyInt |
-  TyDecimal |
-  TyTime |
-  TyBool |
-  TyString |
-  TyUnit
+  PrimInt |
+  PrimDecimal |
+  PrimTime |
+  PrimBool |
+  PrimString |
+  PrimUnit
   deriving (Eq,Ord,Show)
 
 type RowObject n = Map.Map Field (Type n)
@@ -75,6 +92,24 @@ data Type n
   -- Todo: probably want `NonEmpty a` here since TyForall [] [] t = t
   deriving (Show, Eq)
 
+pattern TyInt :: Type n
+pattern TyInt = TyPrim PrimInt
+
+pattern TyDecimal :: Type n
+pattern TyDecimal = TyPrim PrimDecimal
+
+pattern TyTime :: Type n
+pattern TyTime = TyPrim PrimTime
+
+pattern TyBool :: Type n
+pattern TyBool = TyPrim PrimBool
+
+pattern TyString :: Type n
+pattern TyString = TyPrim PrimString
+
+pattern TyUnit :: Type n
+pattern TyUnit = TyPrim PrimUnit
+
 tyFunToArgList :: Type n -> Maybe ([Type n], Type n)
 tyFunToArgList (TyFun l r) =
   unFun [l] r
@@ -108,8 +143,8 @@ instance Plated (Type n) where
 
 typeOfLit :: Literal -> Type n
 typeOfLit = TyPrim . \case
-  LString{} -> TyString
-  LInteger{} -> TyInt
-  LDecimal{} -> TyDecimal
-  LBool{} -> TyBool
-  LTime{} -> TyTime
+  LString{} -> PrimString
+  LInteger{} -> PrimInt
+  LDecimal{} -> PrimDecimal
+  LBool{} -> PrimBool
+  LTime{} -> PrimTime
