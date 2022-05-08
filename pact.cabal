@@ -344,6 +344,7 @@ library pact-core
     , servant-client
     , servant-client-core
     , statistics >= 0.13.3 && < 0.16
+    , parser-combinators
     , yaml
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -353,12 +354,16 @@ library pact-core
   exposed-modules:
     Pact.Core.Builtin
     Pact.Core.Names
+    Pact.Core.Literal
     Pact.Core.Type
     Pact.Core.Typed.Typecheck
     Pact.Core.Typed.Term
     Pact.Core.Typed.Overload
     Pact.Core.Typed.Eval.Runtime
     Pact.Core.Typed.Eval.CEK
+    Pact.Core.IR.Parse
+    Pact.Core.IR.ParseAtto
+    Pact.Core.IR.ParseTree
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck
     Pact.Core.Guards

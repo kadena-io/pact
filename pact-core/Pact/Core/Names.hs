@@ -10,6 +10,8 @@ module Pact.Core.Names
  , Field(..)
 --  , NameKind(..)
  , Name(..)
+ , BareName(..)
+ , QualifiedName(..)
  , TypeVar(..)
  , Unique(..)
 --  , nameRaw
@@ -32,6 +34,16 @@ import Data.IORef (IORef, atomicModifyIORef')
 import Pact.Types.Names(ModuleName(..), NamespaceName(..))
 import Pact.Core.Hash
 
+newtype BareName
+  = BareName
+  { _bnName :: Text }
+  deriving (Show, Eq, Ord)
+
+data QualifiedName =
+  QualifiedName
+  { _qnName :: Text
+  , _qnModName :: ModuleName
+  } deriving (Show, Eq, Ord)
 
 newtype Field = Field Text
   deriving (Eq, Ord, Show)
