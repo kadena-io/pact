@@ -3,13 +3,17 @@
 
 module Pact.Core.IR.Parse where
 
-import Data.Char(isAlphaNum)
+import Data.Char(isAlphaNum, isLower)
 import Control.Monad.Combinators
 import Control.Monad.Combinators.Expr
+import Data.Foldable(foldl')
+import Data.List.NonEmpty(NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 import Data.Text(Text)
 import qualified Data.Text as T
-import Data.List.NonEmpty(NonEmpty(..))
 import Data.Void(Void)
+
 import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Text.Megaparsec.Char as C
@@ -17,6 +21,7 @@ import qualified Text.Megaparsec.Char as C
 import Pact.Core.IR.ParseTree
 import Pact.Core.Literal
 import Pact.Core.Names
+import Pact.Core.Type(PrimType(..))
 
 data ParseError = ParseError Text deriving Show
 
@@ -37,11 +42,11 @@ spaceConsumerNL = L.space C.space1 lineComment empty
 symbol :: Text -> Parser Text
 symbol = L.symbol spaceConsumer
 
-lexeme :: Parser Text -> Parser Text
+lexeme :: Parser a -> Parser a
 lexeme = L.lexeme spaceConsumer
 
 variable :: Parser Text
-variable = do
+variable = lexeme $ do
   c <- C.lowerChar
   rest <- takeWhileP Nothing (\c' -> isAlphaNum c' || c' == '-')
   pure (T.cons c rest)
@@ -64,28 +69,105 @@ parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
 intLiteral :: Parser Literal
-intLiteral = LInteger <$> L.decimal
+intLiteral = LInteger <$> lexeme L.decimal
+
+boolLiteral :: Parser Literal
+boolLiteral =
+  (LBool True <$ symbol "True") <|>
+  (LBool False <$ symbol "False")
+
+unitLiteral :: Parser Literal
+unitLiteral =
+  LUnit <$ symbol "()"
+
+stringLiteral :: Parser Literal
+stringLiteral = undefined
 
 statement :: Parser (Expr ParsedName ())
 statement =
-  (letExpr <?> "let") <|>
-  (lamExpr <?> "lam") <|>
-  (term <?> "term")
+  (letStatement <?> "let") <|>
+  (ifStatement <?> "if") <|>
+  (expr <?> "expr")
+
 
 typeExpr :: Parser ParsedType
-typeExpr = undefined
+typeExpr = do
+  typ <- typeExpr'
+  typs <- many (symbol "->" *> typeExpr')
+  case NE.reverse (typ :| typs) of
+    n :| ns -> pure $ foldl' (flip TyFun) n ns
+  where
+  objectBraces = between (symbol "{") (symbol "}")
+  rawVar = lexeme $ takeWhile1P Nothing isLower
+  typeExpr' =
+    parens typeExpr
+    <|> primType
+    <|> listType
+    <|> objectType
+    <|> varType
+  -- todo: repeated types
+  -- todo: optimize this. Parser can be made without `try` unambiguously branching on `{`
+  objectType =
+    (TyObject mempty Nothing <$ symbol "{}") <|>
+    ((TyObject mempty . Just) <$> (try $ objectBraces rawVar)) <|>
+    objectType'
+  varType = do
+    _ <- C.char '\''
+    TyVar <$> rawVar
+  objectType' = objectBraces $ do
+    t <- objField
+    ts <- many (symbol "," *> objField)
+    o <- optional (symbol "|" *> rawVar)
+    pure (TyObject (Map.fromList (t:ts)) o)
+    where
+    objField = do
+      f <- rawVar
+      _ <- symbol ":"
+      t <- typeExpr
+      pure (Field f, t)
+  listType = do
+    _ <- symbol "List"
+    typ <- (parens typeExpr <|> primType <|> objectType <|> varType)
+    pure (TyList typ)
+  primType = fmap TyPrim $
+    (PrimInt <$ symbol "Int")
+    <|> (PrimDecimal <$ symbol "Decimal")
+    <|> (PrimString <$ symbol "String")
+    <|> (PrimTime <$ symbol "Time")
+    <|> (PrimBool <$ symbol "Bool")
+    <|> (PrimUnit <$ symbol "Unit")
 
-block :: Parser (Expr ParsedName ())
-block = undefined
+pactIndent :: Pos -> Maybe Pos
+pactIndent i = Just (mkPos (unPos i + 2))
 
-letExpr :: Parser (Expr ParsedName ())
-letExpr = do
-  _ <- try (keyword "let")
-  v <- lexeme variable
+-- todo: document tricky case :^)
+ifStatement :: Parser (Expr ParsedName ())
+ifStatement = do
+  i <- L.indentLevel
+  ifStatement' i
+  where
+  ifStatement' i = L.indentBlock spaceConsumerNL $ do
+    condE <- between (symbol "if") (symbol "then") expr
+    (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE . (Block (NE.fromList bloc) (),) <$> thenElseStmt) statement)) <|> (thenElseExpr condE)
+    where
+    mkIf condE (b1, b2) = If condE b1 b2 ()
+    thenElseStmt = L.indentBlock spaceConsumerNL $ do
+      _ <- singleChar '}' *> symbol "else"
+      (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> Block (NE.fromList bloc) () <$ singleChar '}') statement)) <|> (L.IndentNone <$> expr)
+    thenElseExpr condE = do
+      e <- expr
+      _ <- symbol "else"
+      (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE (e, Block (NE.fromList bloc) ()) <$ singleChar '}') statement)) <|> (L.IndentNone . mkIf condE . (e,) <$> expr)
+
+letStatement :: Parser (Expr ParsedName ())
+letStatement = do
+  _ <- keyword "let"
+  v <- variable
   ty <- optional (singleChar ':' *> typeExpr)
   _ <- singleChar '='
-  t <- term
+  t <- expr
   pure $ Let (pure $ (BN (BareName v), ty)) t ()
+
 
 singleChar :: Char -> Parser Text
 singleChar c = lexeme (T.singleton <$> C.char c)
@@ -93,13 +175,34 @@ singleChar c = lexeme (T.singleton <$> C.char c)
 keyword :: Text -> Parser Text
 keyword kw = lexeme (C.string kw)
 
+lamStatement :: Parser (Expr ParsedName ())
+lamStatement = do
+  currIndent <- L.indentLevel
+  lamStatement' currIndent
+  where
+  lamStatement' currIndent = L.indentBlock spaceConsumerNL $ do
+    _ <- keyword "lambda"
+    arg <- lamArg
+    args <- many lamArg
+    _ <- lexeme (C.string "->")
+    let mkLam e = Lam (BN (BareName "#")) (arg :| args) e ()
+    (try (singleChar '{') *> pure (L.IndentSome (pactIndent currIndent) (\b -> mkLam (Block (NE.fromList b) ()) <$ singleChar '}') statement) ) <|> (L.IndentNone . mkLam <$> expr)
+  bareVariable = BN . BareName <$> variable
+  lamArg =
+    typed <|> ((,Nothing) <$> bareVariable)
+  typed = parens $ do
+    v <- bareVariable
+    _ <- singleChar ':'
+    t <- typeExpr
+    pure (v, Just t)
+
 lamExpr :: Parser (Expr ParsedName ())
 lamExpr = do
-  _ <- try (keyword "fn")
+  _ <- keyword "lambda"
   arg <- lamArg
-  args <- some lamArg
+  args <- many lamArg
   _ <- lexeme (C.string "->")
-  t <- block <|> term
+  t <- expr
   pure $ Lam (BN (BareName "#")) (arg :| args) t ()
   where
   bareVariable = BN . BareName <$> variable
@@ -111,8 +214,57 @@ lamExpr = do
     t <- typeExpr
     pure (v, Just t)
 
-term :: Parser (Expr ParsedName ())
-term = undefined
-  -- [ parens (operatorSection <|> expr)
-  -- , lambdaExpr
-  -- , appExpr ]
+operatorTable :: [[Operator Parser (Expr ParsedName ())]]
+operatorTable =
+  [ [ prefix "~" FlipBitsOp
+    , prefix "-" NegateOp]
+  , [ binary "*" MultOp
+    , binary "/" DivOp
+    , binary "&" BitAndOp
+    , binary "|" BitOrOp ]
+  , [ binary "+" AddOp
+    , binary "-" SubOp]
+  , [ binary "==" EQOp
+    , binary "!=" NEQOp
+    , binary ">=" GTEQOp
+    , binary ">" GTOp
+    , binary "<=" LTEQOp
+    , binary "<" LTOp]
+  ]
+
+binary :: Text -> BinaryOp -> Operator Parser (Expr ParsedName ())
+binary name op = InfixL ((\a b -> BinaryOp op a b ()) <$ symbol name)
+
+prefix :: Text -> UnaryOp -> Operator Parser (Expr ParsedName ())
+prefix name op = Prefix (flip (UnaryOp op) () <$ symbol name)
+
+varExpr :: Parser (Expr ParsedName ())
+varExpr = flip Var () . BN . BareName <$> variable
+
+constantExpr :: Parser (Expr name ())
+constantExpr = fmap (flip Constant ()) $
+  intLiteral
+  <|> boolLiteral
+  <|> unitLiteral
+  <|> stringLiteral
+
+expr' :: Parser (Expr ParsedName ())
+expr' = do
+  b <- atom
+  applications b <|> pure b
+  where
+  applications b = do
+    bs <- some app
+    pure $ foldl' (\e apps -> App e apps ()) b bs
+  app = parens $ do
+    arg1 <- expr
+    args <- many (singleChar ',' *> expr)
+    pure (arg1 :| args)
+  atom = varExpr <|> constantExpr <|> parens expr
+
+expr :: Parser (Expr ParsedName ())
+expr = makeExprParser expr' operatorTable
+
+_topLevel :: Parser (Expr ParsedName ())
+_topLevel = L.nonIndented spaceConsumerNL (lamStatement <|> statement <|> expr) <* eof
+

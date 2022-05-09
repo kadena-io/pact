@@ -9,6 +9,6 @@ data Literal
   | LInteger !Integer
   | LDecimal !Decimal
   | LUnit
-  | Bool !Bool
+  | LBool !Bool
   | LTime !UTCTime
   deriving Show

@@ -20,7 +20,6 @@ data BinaryOp
   | SubOp
   | MultOp
   | DivOp
-  | ExpOp
   | GTOp
   | GTEQOp
   | LTOp
@@ -37,6 +36,7 @@ data ParsedType
   | TyVar Text
   | TyFun ParsedType ParsedType
   | TyList ParsedType
+  -- | TyCtor (NonEmpty ParsedType)
   | TyObject (Map Field ParsedType) (Maybe Text)
   | TyCap
   deriving Show
@@ -45,6 +45,7 @@ data Expr name i
   = Var name i
   | Let (NonEmpty (name, Maybe ParsedType)) (Expr name i) i
   | Lam name (NonEmpty (name, (Maybe ParsedType))) (Expr name i) i
+  | If (Expr name i) (Expr name i) (Expr name i) i
   | App (Expr name i) (NonEmpty (Expr name i)) i
   | Block (NonEmpty (Expr name i)) i
   | Object (Map Field (Expr name i)) i
