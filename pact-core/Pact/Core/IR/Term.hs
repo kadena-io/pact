@@ -20,8 +20,8 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Set as Set
 
 import Pact.Types.Hash (Hash)
-import Pact.Types.Exp (Literal)
 import Pact.Types.Term (ModuleHash(..), Governance(..))
+import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Builtin
@@ -120,15 +120,6 @@ type ModuleP = Module PNames.Name Text RawBuiltin
 type TopLevelP = TopLevel PNames.Name Text RawBuiltin
 type CoreIRProgramP info = [TopLevelP info]
 
--- data Lam name tyname builtin info
---   = Lam
---   { _lamName :: name
---   , _lamType :: DefType
---   , _lamArgs :: NonEmpty name
---   , _lamTyArgs :: NonEmpty (Maybe (Type tyname))
---   , _lamBody :: (Term tyname builtin info)
---   } deriving Show
-
 -- | Core IR
 data Term name tyname builtin info
   = Var name info
@@ -138,11 +129,11 @@ data Term name tyname builtin info
   -- Lambdas are named for the sake of the callstack.
   | Let name (Maybe (Type tyname)) (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ let x = e1 in e2
-  | App (Term name tyname builtin info) (Term name tyname builtin info) info
+  | App (Term name tyname builtin info) (NonEmpty (Term name tyname builtin info)) info
   -- ^ (e1 e2)
   | Block (NonEmpty (Term name tyname builtin info)) info
   -- ^ (e1) (e2)
-  | Error String info
+  | Error Text info
   -- ^ error term , error "blah"
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
@@ -175,7 +166,7 @@ instance Plated (Term name tyname builtin info) where
     Var n i -> pure (Var n i)
     Lam n ns mty term i -> Lam n ns mty <$> f term <*> pure i
     Let n mty t1 t2 i -> Let n mty <$> f t1 <*> f t2 <*> pure i
-    App t1 t2 i -> App <$> f t1 <*> f t2 <*> pure i
+    App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Error s i -> pure (Error s i)
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)

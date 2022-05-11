@@ -3,12 +3,15 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Names
  ( ModuleName(..)
  , NamespaceName(..)
  , Field(..)
 --  , NameKind(..)
+ , ParsedName(..)
  , Name(..)
  , BareName(..)
  , QualifiedName(..)
@@ -31,13 +34,32 @@ import Data.IntMap.Strict(IntMap)
 import Data.Int(Int32)
 import Data.IORef (IORef, atomicModifyIORef')
 
-import Pact.Types.Names(ModuleName(..), NamespaceName(..))
 import Pact.Core.Hash
+
+import Data.Text.Prettyprint.Doc(Pretty(..))
+
+newtype NamespaceName = NamespaceName { _namespaceName :: Text }
+  deriving (Eq, Ord, Show)
+
+instance Pretty NamespaceName where
+  pretty (NamespaceName n) = pretty n
+
+data ModuleName = ModuleName
+  { _mnName      :: Text
+  , _mnNamespace :: Maybe NamespaceName
+  } deriving (Eq, Ord, Show)
+
+instance Pretty ModuleName where
+  pretty (ModuleName m mn) =
+    maybe mempty (\b -> pretty b <> ".") mn <> pretty m
 
 newtype BareName
   = BareName
   { _bnName :: Text }
   deriving (Show, Eq, Ord)
+
+instance Pretty BareName where
+  pretty (BareName b) = pretty b
 
 data QualifiedName =
   QualifiedName
@@ -45,8 +67,25 @@ data QualifiedName =
   , _qnModName :: ModuleName
   } deriving (Show, Eq, Ord)
 
+instance Pretty QualifiedName where
+  pretty (QualifiedName n m) =
+    pretty m <> "." <> pretty n
+
+data ParsedName
+  = QN QualifiedName
+  | BN BareName
+  deriving Show
+
+instance Pretty ParsedName where
+  pretty = \case
+    QN qn -> pretty qn
+    BN n -> pretty n
+
 newtype Field = Field Text
   deriving (Eq, Ord, Show)
+
+instance Pretty Field where
+  pretty (Field f) = pretty f
 
 newtype Unique = Unique Int deriving (Show, Eq, Ord)
 
@@ -85,7 +124,7 @@ instance At (UniqueMap a) where
 newUnique :: Supply -> IO Unique
 newUnique (Supply ref) =
   atomicModifyIORef' ref $ \x ->
-    let z = x+1 in (z,Unique z)
+    let !z = x+1 in (z,Unique z)
 
 data NamedDeBruijn
   = NamedDeBruijn

@@ -23,6 +23,14 @@ import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type(PrimType(..))
 
+import Data.Text.Prettyprint.Doc(Pretty(..))
+
+newtype ViaPretty a = ViaPretty a
+
+instance (Show a, Pretty a) => Show (ViaPretty a) where
+  show (ViaPretty a) =
+    show $ pretty a
+
 data ParseError = ParseError Text deriving Show
 
 type Parser = Parsec Void Text
@@ -80,8 +88,11 @@ unitLiteral :: Parser Literal
 unitLiteral =
   LUnit <$ symbol "()"
 
+-- Todo: improve on this. this is not efficient. Alternatively, use something like
+-- the string parser in parsers
 stringLiteral :: Parser Literal
-stringLiteral = undefined
+stringLiteral = fmap (LString . T.pack) $
+  C.char '"' *> manyTill L.charLiteral (C.char '"')
 
 statement :: Parser (Expr ParsedName ())
 statement =
@@ -89,8 +100,7 @@ statement =
   (ifStatement <?> "if") <|>
   (expr <?> "expr")
 
-
-typeExpr :: Parser ParsedType
+typeExpr :: Parser Type
 typeExpr = do
   typ <- typeExpr'
   typs <- many (symbol "->" *> typeExpr')
@@ -148,16 +158,17 @@ ifStatement = do
   where
   ifStatement' i = L.indentBlock spaceConsumerNL $ do
     condE <- between (symbol "if") (symbol "then") expr
-    (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE . (Block (NE.fromList bloc) (),) <$> thenElseStmt) statement)) <|> (thenElseExpr condE)
+    (thenElseExpr condE) <|> (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE . (Block (NE.fromList bloc) (),) <$> thenElseStmt) statement))
     where
     mkIf condE (b1, b2) = If condE b1 b2 ()
     thenElseStmt = L.indentBlock spaceConsumerNL $ do
       _ <- singleChar '}' *> symbol "else"
-      (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> Block (NE.fromList bloc) () <$ singleChar '}') statement)) <|> (L.IndentNone <$> expr)
+      (L.IndentNone <$> expr) <|> (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> Block (NE.fromList bloc) () <$ singleChar '}') statement))
     thenElseExpr condE = do
       e <- expr
       _ <- symbol "else"
-      (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE (e, Block (NE.fromList bloc) ()) <$ singleChar '}') statement)) <|> (L.IndentNone . mkIf condE . (e,) <$> expr)
+      (L.IndentNone . mkIf condE . (e,) <$> expr)
+        <|> (singleChar '{' *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE (e, Block (NE.fromList bloc) ()) <$ singleChar '}') statement))
 
 letStatement :: Parser (Expr ParsedName ())
 letStatement = do
@@ -166,7 +177,7 @@ letStatement = do
   ty <- optional (singleChar ':' *> typeExpr)
   _ <- singleChar '='
   t <- expr
-  pure $ Let (pure $ (BN (BareName v), ty)) t ()
+  pure $ Let (BN (BareName v)) ty t ()
 
 
 singleChar :: Char -> Parser Text
@@ -184,9 +195,9 @@ lamStatement = do
     _ <- keyword "lambda"
     arg <- lamArg
     args <- many lamArg
-    _ <- lexeme (C.string "->")
+    _ <- lexeme (C.string "=>")
     let mkLam e = Lam (BN (BareName "#")) (arg :| args) e ()
-    (try (singleChar '{') *> pure (L.IndentSome (pactIndent currIndent) (\b -> mkLam (Block (NE.fromList b) ()) <$ singleChar '}') statement) ) <|> (L.IndentNone . mkLam <$> expr)
+    (L.IndentNone . mkLam <$> expr) <|> (singleChar '{' *> pure (L.IndentSome (pactIndent currIndent) (\b -> mkLam (Block (NE.fromList b) ()) <$ singleChar '}') statement))
   bareVariable = BN . BareName <$> variable
   lamArg =
     typed <|> ((,Nothing) <$> bareVariable)
@@ -201,7 +212,7 @@ lamExpr = do
   _ <- keyword "lambda"
   arg <- lamArg
   args <- many lamArg
-  _ <- lexeme (C.string "->")
+  _ <- lexeme (C.string "=>")
   t <- expr
   pure $ Lam (BN (BareName "#")) (arg :| args) t ()
   where
@@ -226,9 +237,9 @@ operatorTable =
     , binary "-" SubOp]
   , [ binary "==" EQOp
     , binary "!=" NEQOp
-    , binary ">=" GTEQOp
+    , binary ">=" GEQOp
     , binary ">" GTOp
-    , binary "<=" LTEQOp
+    , binary "<=" LEQOp
     , binary "<" LTOp]
   ]
 
@@ -239,7 +250,8 @@ prefix :: Text -> UnaryOp -> Operator Parser (Expr ParsedName ())
 prefix name op = Prefix (flip (UnaryOp op) () <$ symbol name)
 
 varExpr :: Parser (Expr ParsedName ())
-varExpr = flip Var () . BN . BareName <$> variable
+varExpr =
+  flip Var () . BN . BareName <$> variable
 
 constantExpr :: Parser (Expr name ())
 constantExpr = fmap (flip Constant ()) $
@@ -254,17 +266,37 @@ expr' = do
   applications b <|> pure b
   where
   applications b = do
-    bs <- some app
+    bs <- many app
     pure $ foldl' (\e apps -> App e apps ()) b bs
-  app = parens $ do
+  app = parens $ (appWithArgs <|> pure [])
+  appWithArgs = do
     arg1 <- expr
     args <- many (singleChar ',' *> expr)
-    pure (arg1 :| args)
-  atom = varExpr <|> constantExpr <|> parens expr
+    pure (arg1 : args)
+  obj =
+    between (singleChar '{') (singleChar '}') (objWithFields <|> emptyObject)
+  objWithFields = do
+    f1 <- objField
+    rest <- many (singleChar ',' *> objField)
+    let o = Object (Map.fromList (f1:rest)) ()
+    pure o
+  emptyObject = pure (Object mempty ())
+  objField = do
+    f <- variable
+    _ <- singleChar ':'
+    e <- expr
+    pure (Field f, e)
+  list = between (singleChar '[') (singleChar ']') (listElems <|> emptyList)
+  listElems = do
+    e <- expr
+    es <- many (singleChar ',' *> expr)
+    pure (List (e:es) ())
+  emptyList =  pure (List [] ())
+  atom = varExpr <|> constantExpr <|> parens expr <|> try obj <|> list
 
 expr :: Parser (Expr ParsedName ())
 expr = makeExprParser expr' operatorTable
 
 _topLevel :: Parser (Expr ParsedName ())
-_topLevel = L.nonIndented spaceConsumerNL (lamStatement <|> statement <|> expr) <* eof
+_topLevel = L.nonIndented spaceConsumerNL (lamStatement <|> statement <|> expr)
 

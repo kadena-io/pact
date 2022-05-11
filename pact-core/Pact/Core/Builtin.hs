@@ -9,6 +9,7 @@ data RawBuiltin
   | RawSub
   | RawMultiply
   | RawDivide
+  | RawNegate
   -- Boolean Ops
   | RawAnd
   | RawOr
@@ -19,7 +20,7 @@ data RawBuiltin
   | RawGT
   | RawGEQ
   | RawLT
-  | RawLTEQ
+  | RawLEQ
   -- Bitwise Ops
   | RawBitwiseAnd
   | RawBitwiseOr

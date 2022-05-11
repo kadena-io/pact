@@ -24,8 +24,9 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Set(Set)
-import Data.Foldable(fold)
+import Data.Foldable(fold, foldlM)
 import Data.Map(Map)
+import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
@@ -386,13 +387,22 @@ inferTerm = \case
       ( Let (n, tsToTyForall ntyp) mty e1' e2' (i, t2)
       , c1 ++ csig ++ c2 )
 
-  App e1 e2 i -> do
+  App e1 (e2 :| es) i -> do
     tv <- TyVar <$> freshVar
     (e1', cs1) <- inferTerm e1
     (e2', cs2) <- inferTerm e2
+    let cs = cs1 ++ cs2 ++ [EqConst (termTy e1') (TyFun (termTy e2') tv)]
+    (ret, es', cs') <- foldlM inferApps (tv, [], []) es
     pure
-      ( App e1' e2' (i, tv)
-      , cs1 ++ cs2 ++ [EqConst (termTy e1') (TyFun (termTy e2') tv)] )
+      ( App e1' (e2':|reverse es') (i, ret)
+      , cs ++ cs')
+    where
+    -- Todo: redo as fold
+    inferApps (ty, xs, ccs) x = do
+      tv <- TyVar <$> freshVar
+      (x', cs) <- inferTerm x
+      let cs' = cs ++ [EqConst ty (TyFun (termTy x') tv)]
+      pure (tv, x':xs, ccs ++ cs')
   Block terms i -> do
     -- Will we require that the lhs of sequenced statements be unit?
     -- likely yes, it doesn't make sense to otherwise discard value results without binding them in a clause.

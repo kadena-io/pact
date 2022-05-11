@@ -3,6 +3,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 
 -- |
@@ -178,7 +179,7 @@ fromIR mkName = \case
     pure (mkAbsLam i ty t)
   -- Todo: type apps here.
   IR.App l r (i, _) ->
-    collectApps l (pure r) i
+    mkTyApp l r i
   IR.Let (n, typ) _ e1 e2 (i, _) ->
     collectLets e2 (pure (n, typ)) (pure e1) i
   IR.Constant l (i, _) -> pure (Constant l i)
@@ -214,11 +215,6 @@ fromIR mkName = \case
     appArgs' <- traverse (fromIR mkName) appArgs
     let lamAppArgs = uncurry (mkAbsLam i) <$> NE.zip tys appArgs'
     pure (App lamT lamAppArgs i)
-  collectApps (IR.App l r _) rs i =
-    collectApps l (NE.cons r rs) i
-  collectApps t collected i =
-    mkTyApp t collected i
-    -- App <$> fromIR mkName t <*> traverse (formIR mkName) collected <*> pure i
   mkTyApp l@(IR.Lam (_, ty) _ _ _ _) appArgs i = case ty of
     TyForall [] [] _ ->
       App <$> fromIR mkName l <*> traverse (fromIR mkName) appArgs <*> pure i

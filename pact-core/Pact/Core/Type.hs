@@ -3,6 +3,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 
 
 module Pact.Core.Type
@@ -25,9 +27,10 @@ module Pact.Core.Type
 
 import Control.Lens
 import qualified Data.Map.Strict as Map
-import Pact.Types.Exp (Literal(..))
-import Pact.Core.Names
+import Data.Text.Prettyprint.Doc(Pretty(..))
 
+import Pact.Core.Names
+import Pact.Core.Literal
 
 data PrimType =
   PrimInt |
@@ -37,6 +40,15 @@ data PrimType =
   PrimString |
   PrimUnit
   deriving (Eq,Ord,Show)
+
+instance Pretty PrimType where
+  pretty = \case
+    PrimInt -> "Int"
+    PrimDecimal -> "Decimal"
+    PrimTime -> "Time"
+    PrimBool -> "Bool"
+    PrimString -> "String"
+    PrimUnit -> "Unit"
 
 type RowObject n = Map.Map Field (Type n)
 
@@ -148,3 +160,4 @@ typeOfLit = TyPrim . \case
   LDecimal{} -> PrimDecimal
   LBool{} -> PrimBool
   LTime{} -> PrimTime
+  LUnit -> PrimUnit
