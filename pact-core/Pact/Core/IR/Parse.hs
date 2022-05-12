@@ -55,13 +55,19 @@ lexeme = L.lexeme spaceConsumer
 
 variable :: Parser Text
 variable = lexeme $ do
-  c <- C.lowerChar
+  c <- C.letterChar
+  rest <- takeWhileP Nothing (\c' -> isAlphaNum c' || c' == '-')
+  pure (T.cons c rest)
+
+rawVariable :: Parser Text
+rawVariable = do
+  c <- C.letterChar
   rest <- takeWhileP Nothing (\c' -> isAlphaNum c' || c' == '-')
   pure (T.cons c rest)
 
 moduleDeclName :: Parser Text
 moduleDeclName = do
-  c <- C.upperChar
+  c <- C.letterChar
   rest <- takeWhileP Nothing isAlphaNum
   pure (T.cons c rest)
 
@@ -72,6 +78,15 @@ moduleName = do
   case b of
     Nothing -> return (ModuleName a Nothing) <?> "module name"
     Just b' -> return (ModuleName b' (Just . NamespaceName $ a)) <?> "namespaced module name"
+
+qualifiedName :: Parser QualifiedName
+qualifiedName = do
+  a <- moduleDeclName
+  b <- dot *> moduleDeclName
+  c <- optional (dot *> rawVariable)
+  case c of
+    Nothing -> return (QualifiedName b (ModuleName a Nothing) ) <?> "qualified name"
+    Just c' -> return (QualifiedName c' (ModuleName b (Just . NamespaceName $ a))) <?> "namespaced qualified name"
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
@@ -151,6 +166,7 @@ pactIndent :: Pos -> Maybe Pos
 pactIndent i = Just (mkPos (unPos i + 2))
 
 -- todo: document tricky case :^)
+-- Clean this up ++
 ifStatement :: Parser (Expr ParsedName ())
 ifStatement = do
   i <- L.indentLevel
@@ -250,8 +266,9 @@ prefix :: Text -> UnaryOp -> Operator Parser (Expr ParsedName ())
 prefix name op = Prefix (flip (UnaryOp op) () <$ symbol name)
 
 varExpr :: Parser (Expr ParsedName ())
-varExpr =
-  flip Var () . BN . BareName <$> variable
+varExpr = fmap (flip Var ()) $
+  (QN <$> qualifiedName)
+  <|> (BN . BareName <$> variable)
 
 constantExpr :: Parser (Expr name ())
 constantExpr = fmap (flip Constant ()) $
@@ -297,6 +314,6 @@ expr' = do
 expr :: Parser (Expr ParsedName ())
 expr = makeExprParser expr' operatorTable
 
-_topLevel :: Parser (Expr ParsedName ())
-_topLevel = L.nonIndented spaceConsumerNL (lamStatement <|> statement <|> expr)
+topLevel :: Parser (Expr ParsedName ())
+topLevel = L.nonIndented spaceConsumerNL (lamStatement <|> statement <|> expr)
 

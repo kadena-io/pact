@@ -513,11 +513,29 @@ inferDefun
   -> m (Defun (name, Type tyname) tyname builtin (i, Type tyname))
 inferDefun (Defun dn term typ) = do
   (term', _) <- inferTerm term
-  let rty = generalize mempty $ termTy term'
+  let rty = tsToTyForall $ generalize mempty $ termTy term'
   case typ of
     Just ty -> do
       fty <- instantiate $ generalize mempty ty
       _ <- unifies fty (termTy term')
-      pure (Defun (dn, tsToTyForall rty) term' typ)
-    Nothing -> pure (Defun (dn, tsToTyForall rty) term' typ)
+      pure (Defun (dn, rty) term' typ)
+    Nothing ->
+      pure (Defun (dn, rty) term' (Just rty))
 
+inferDefConst
+  :: MonadIO m
+  => MonadError String m
+  => MonadReader (TCEnv name tyname builtin) m
+  => Ord tyname
+  => Ord name
+  => Ord builtin
+  => DefConst name tyname builtin i
+  -> m (DefConst (name, Type tyname) tyname builtin (i, Type tyname))
+inferDefConst (DefConst name term typ) = do
+  (term', _) <- inferTerm term
+  case typ of
+    Just ty -> do
+      _ <- unifies ty (termTy term')
+      pure (DefConst (name, ty) term' (Just ty))
+    Nothing ->
+      pure (DefConst (name, termTy term') term' (Just (termTy term')))

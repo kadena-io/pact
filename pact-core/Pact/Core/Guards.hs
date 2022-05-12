@@ -2,12 +2,23 @@ module Pact.Core.Guards
 ( PublicKey(..)
 , KeySetName(..)
 , Guard(..)
+, Governance(..)
 )
 where
 
 import Data.Text(Text)
-import Pact.Types.KeySet(PublicKey(..), KeySetName(..))
+import Data.ByteString(ByteString)
 import qualified Data.Set as S
+
+newtype PublicKey = PublicKey { _pubKey :: ByteString }
+  deriving (Eq,Ord,Show)
+
+newtype KeySetName = KeySetName Text
+    deriving (Eq,Ord,Show)
+
+newtype Governance a=
+  Governance { _governance :: Either KeySetName a }
+  deriving (Eq, Show)
 
 data KSPredicate name
   = KeysAll

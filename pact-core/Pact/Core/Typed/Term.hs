@@ -45,21 +45,21 @@ data Defun name tyname builtin info
   = Defun
   { _dfunName :: name
   , _dfunTerm :: Term name tyname builtin info
-  , _dfunTermType :: Maybe (Type tyname)
+  , _dfunTermType :: Type tyname
   } deriving Show
 
 data DefConst name tyname builtin info
   = DefConst
   { _dcName :: name
   , _dcTerm :: Term name tyname builtin info
-  , _dcTermType :: Maybe (Type tyname)
+  , _dcTermType :: Type tyname
   } deriving Show
 
 data DefCap name tyname builtin info
   = DefCap
   { _dcapName :: name
   , _dcapTerm :: Term name tyname builtin info
-  , _dcapTermType :: Maybe (Type tyname)
+  , _dcapTermType :: Type tyname
   } deriving Show
 
 -- Todo :: probably need a special form
@@ -68,7 +68,7 @@ data DefPact name tyname builtin info
   = DefPact
   { _dpName :: name
   , _dpTerm :: Term name tyname builtin info
-  , _dpTermType :: Maybe (Type tyname)
+  , _dpTermType :: Type tyname
   } deriving Show
 
 data DefSchema name tyname info
@@ -86,6 +86,7 @@ data DefTable name tyname info
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
+  | DCap (DefCap name tyname builtin info)
   | DPact (DefPact name tyname builtin info)
   | DSchema (DefSchema name tyname info)
   | DTable (DefTable name tyname info)

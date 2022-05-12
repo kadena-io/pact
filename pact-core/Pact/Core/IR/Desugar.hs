@@ -37,11 +37,9 @@ desugarTerm = \case
     in Lam name ns (fmap desugarType <$> ts) (desugarTerm body) i
   PT.If cond e1 e2 i ->
     App (Builtin RawIf i) (desugarTerm cond :| [suspend e1, suspend e2]) i
-  -- f() <=> (f ())
   PT.App e [] i ->
     App (desugarTerm e) (Constant LUnit i :| []) i
   PT.App e (h:hs) i ->
-    -- Todo:: Core IR as multi-arg
     App (desugarTerm e) (desugarTerm h :| fmap desugarTerm hs) i
   PT.BinaryOp bop e1 e2 i ->
     App (Builtin (desugarBinary bop) i) (desugarTerm e1 :| [desugarTerm e2]) i
@@ -76,7 +74,15 @@ desugarTerm = \case
     [] -> desugarTerm other
 desugarType :: PT.Type -> Type Text
 desugarType = \case
-  _ -> undefined
+  PT.TyVar v -> TyVar v
+  PT.TyPrim p -> TyPrim p
+  PT.TyFun l r ->
+    TyFun (desugarType l) (desugarType r)
+  PT.TyObject o mt ->
+    TyRow (RowTy (desugarType <$> o) mt)
+  PT.TyList t ->
+    TyList (desugarType t)
+  PT.TyCap -> TyCap
 
 desugarUnary :: PT.UnaryOp -> RawBuiltin
 desugarUnary = \case
@@ -97,6 +103,4 @@ desugarBinary = \case
   PT.NEQOp -> RawNeq
   PT.BitAndOp -> RawBitwiseAnd
   PT.BitOrOp -> RawBitwiseOr
-
-
 

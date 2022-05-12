@@ -29,7 +29,6 @@ import qualified Data.List.NonEmpty as NE
 import Pact.Core.Typed.Term
 import Pact.Core.Type
 import qualified Pact.Core.IR.Term as IR
--- import Pact.Core.Names
 
 
 data TCEnv name tyname builtin = TCEnv

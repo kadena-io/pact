@@ -366,6 +366,7 @@ library pact-core
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck
     Pact.Core.IR.Desugar
+    Pact.Core.IR.Renamer
     -- Typed core modules
     Pact.Core.Typed.Typecheck
     Pact.Core.Typed.Term

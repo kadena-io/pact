@@ -10,7 +10,7 @@ module Pact.Core.Names
  ( ModuleName(..)
  , NamespaceName(..)
  , Field(..)
---  , NameKind(..)
+ , IRNameKind(..)
  , ParsedName(..)
  , Name(..)
  , BareName(..)
@@ -87,6 +87,22 @@ newtype Field = Field Text
 instance Pretty Field where
   pretty (Field f) = pretty f
 
+
+-- Todo:
+data IRNameKind
+  = IRLocallyBoundName
+  | IRTopLevelName ModuleName
+  | IRModuleName
+  deriving Show
+
+data IRName
+  = IRName
+  { _irName :: !Text
+  , _irNameKind :: IRNameKind
+  , _irUnique :: Unique
+  } deriving Show
+
+-- Uniques
 newtype Unique = Unique Int deriving (Show, Eq, Ord)
 
 newtype Supply = Supply (IORef Int)

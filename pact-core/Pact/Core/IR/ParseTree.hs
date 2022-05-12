@@ -16,8 +16,65 @@ import Data.List(intersperse)
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Literal
 import Pact.Core.Names
+import Pact.Core.Guards
+import Pact.Core.Imports
 
 import Data.Text.Prettyprint.Doc
+
+data Defun name i
+  = Defun
+  { _dfunName :: Text
+  , _dfunArgs :: [(Text, Maybe Type)]
+  , _dfunTerm :: Expr name i
+  , _dfunTermType :: Maybe Type
+  } deriving Show
+
+data DefConst name i
+  = DefConst
+  { _dcName :: Text
+  , _dcType :: Maybe Type
+  , _dcTerm :: Expr name i
+  } deriving Show
+
+data DefCap name i
+  = DefCap
+  { _dcapName :: Text
+  , _dcapArgs :: [(Text, Maybe Type)]
+  , _dcapTerm :: Expr name i
+  } deriving Show
+
+data Def name i
+  = Dfun (Defun name i)
+  | DConst (DefConst name i)
+  | DCap (DefCap name i)
+  deriving Show
+
+data Module name i
+  = Module
+  { _mName :: ModuleName
+  , _mGovernance :: Governance Text
+  , _mDefs :: (NonEmpty (Def name i))
+  , _mBlessed :: ![Text]
+  , _mImports :: [Import]
+  } deriving Show
+
+data Interface name i
+  = Interface
+  { _ifName :: Text
+  , _ifDefns :: [IfDef name i]
+  } deriving Show
+
+data IfDefun i
+  = IfDefun
+  { _ifdName :: Text
+  , _ifdType :: Type
+  , _ifdInfo :: i
+  } deriving Show
+
+data IfDef name i
+  = IfDfun (IfDefun i)
+  | IFDConst (DefConst name i)
+  deriving Show
 
 data UnaryOp
   = NegateOp
@@ -125,7 +182,6 @@ termInfo f = \case
   List nel i -> List nel <$> f i
   Constant l i -> Constant l <$> f i
   Error e i -> Error e <$> f i
-
 
 prettyCommaSepNE :: Pretty a => NonEmpty a -> Doc ann
 prettyCommaSepNE = fold . NE.intersperse ", " . fmap pretty
