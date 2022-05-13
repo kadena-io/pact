@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Pact.Core.IR.Desugar where
 
 
@@ -19,21 +20,49 @@ import Pact.Core.Literal
 import Pact.Core.IR.Term as Term
 import qualified Pact.Core.IR.ParseTree as PT
 
-type DesugarT = ReaderT Supply IO
+type DesugarT = ReaderT DesugarState IO
+
+data DesugarState
+  = DesugarState
+  { _dsBinds :: Map Text (Unique, IRNameKind)
+  , _dsModuleBinds :: Map QualifiedName Unique
+  , _dsTyBinds :: Map Text Unique
+  , _dsSupply :: Supply
+  } deriving Show
+
+makeLenses ''RenamerState
+
+toIRName :: Unique -> ParsedName -> IRName
+toIRName u = \case
+  BN (BareName bn) -> IRName bn IRLocallyBoundName u
+  QN (QualifiedName bn qual) -> IRName bn (IRTopLevelName qual) u
 
 newUnique' :: DesugarT Unique
-newUnique' = ask >>= liftIO . newUnique
+newUnique' = view dsSupply >>= liftIO . newUnique
 
-desugarTerm :: PT.Expr ParsedName i -> Term ParsedName Text RawBuiltin i
+resolveUnique :: ParsedName -> DesugarT (Maybe (Unique, IRNameKind))
+resolveUnique = \case
+  BN (BareName bn) ->
+    views dsBinds (Map.lookup bn)
+  QN qn ->
+    views dsModuleBinds $ Map.lookup qn
+
+desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term IRName Text RawBuiltin i)
 desugarTerm = \case
   PT.Var n i ->
     Var n i
   PT.Block (h :| hs) _ ->
     unLetBlock h hs
-  PT.Let name mt expr i ->
-    Let name (desugarType <$> mt) (desugarTerm expr) (Constant LUnit i) i
-  PT.Lam name nsts body i ->
-    let (ns, ts) = NE.unzip nsts
+  -- Names will always come out are barenames from the parser
+  PT.Let name mt expr i -> do
+    u <- newUnique'
+    let name' = toIRName u name
+    expr' <- desugarTerm expr
+    mt' <- traverse desugarTypeA mt
+    pure (Let name' mt' expr' (Constant LUnit i) i)
+  PT.Lam name nsts body i -> do
+    let (ns, ts) = NE.unzip nsts'
+    ru <- resolveUnique
     in Lam name ns (fmap desugarType <$> ts) (desugarTerm body) i
   PT.If cond e1 e2 i ->
     App (Builtin RawIf i) (desugarTerm cond :| [suspend e1, suspend e2]) i
@@ -72,17 +101,19 @@ desugarTerm = \case
             Block (NE.cons other' nel') i'
           t -> Block (other' :| [t]) (other ^. PT.termInfo)
     [] -> desugarTerm other
-desugarType :: PT.Type -> Type Text
+
+desugarType :: PT.Type -> DesugarT (Type Text)
 desugarType = \case
-  PT.TyVar v -> TyVar v
-  PT.TyPrim p -> TyPrim p
-  PT.TyFun l r ->
-    TyFun (desugarType l) (desugarType r)
-  PT.TyObject o mt ->
-    TyRow (RowTy (desugarType <$> o) mt)
-  PT.TyList t ->
-    TyList (desugarType t)
-  PT.TyCap -> TyCap
+  _ -> undefined
+  -- PT.TyVar v -> TyVar v
+  -- PT.TyPrim p -> TyPrim p
+  -- PT.TyFun l r ->
+  --   TyFun (desugarType l) (desugarType r)
+  -- PT.TyObject o mt ->
+  --   TyRow (RowTy (desugarType <$> o) mt)
+  -- PT.TyList t ->
+  --   TyList (desugarType t)
+  -- PT.TyCap -> TyCap
 
 desugarUnary :: PT.UnaryOp -> RawBuiltin
 desugarUnary = \case
