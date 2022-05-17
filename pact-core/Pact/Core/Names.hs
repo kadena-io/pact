@@ -14,6 +14,7 @@ module Pact.Core.Names
  , ParsedName(..)
  , Name(..)
  , BareName(..)
+ , IRName(..)
  , QualifiedName(..)
  , TypeVar(..)
  , Unique(..)
