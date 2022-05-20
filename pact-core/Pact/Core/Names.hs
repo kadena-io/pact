@@ -13,14 +13,15 @@ module Pact.Core.Names
  , IRNameKind(..)
  , ParsedName(..)
  , Name(..)
+ , NameKind(..)
  , BareName(..)
  , IRName(..)
+ , irName
+ , irNameKind
+ , irUnique
  , QualifiedName(..)
  , TypeVar(..)
  , Unique(..)
---  , nameRaw
---  , nameUnique
---  , nameKind
  , tyVarName
  , tyVarUnique
  , tyname
@@ -89,22 +90,9 @@ instance Pretty Field where
   pretty (Field f) = pretty f
 
 
--- Todo:
-data IRNameKind
-  = IRLocallyBoundName
-  | IRTopLevelName ModuleName
-  | IRModuleName
-  deriving Show
-
-data IRName
-  = IRName
-  { _irName :: !Text
-  , _irNameKind :: IRNameKind
-  , _irUnique :: Unique
-  } deriving Show
-
 -- Uniques
-newtype Unique = Unique Int deriving (Show, Eq, Ord)
+newtype Unique =
+  Unique { _unique :: Int } deriving (Show, Eq, Ord)
 
 newtype Supply = Supply (IORef Int)
 
@@ -121,6 +109,8 @@ instance (HasUnique a) => Eq (ByUnique a) where
 
 instance (HasUnique a) => Ord (ByUnique a) where
   (ByUnique l) <= (ByUnique r) = view unique l <= view unique r
+
+
 
 -- Unique Map
 newtype UniqueMap a
@@ -143,22 +133,59 @@ newUnique (Supply ref) =
   atomicModifyIORef' ref $ \x ->
     let !z = x+1 in (z,Unique z)
 
+
+-- Todo:
+data IRNameKind
+  = IRLocallyBoundName
+  | IRTopLevelName ModuleName
+  | IRModuleName
+  deriving (Show)
+
+data IRName
+  = IRName
+  { _irName :: !Text
+  , _irNameKind :: IRNameKind
+  , _irUnique :: Unique
+  } deriving (Show)
+
+makeLenses ''IRName
+
+instance Eq IRName where
+  l == r = _irUnique l == _irUnique r
+
+instance Ord IRName where
+  l <= r =_irUnique l <= _irUnique r
+
+instance HasUnique IRName where
+  unique = irUnique
+
 data NamedDeBruijn
   = NamedDeBruijn
   { _ndIndex :: Int32
   , _ndName :: Text }
+  deriving (Show, Eq)
+
+newtype DeBruijn
+  = DeBruijn Int32
   deriving (Show, Eq, Ord)
 
-data TopLevelName
-  = TopLevelName
-  { _tlnName :: Text
-  , _tlnModule :: ModuleName
-  , _tlnHash :: ModuleHash
-  } deriving (Show, Eq)
+-- data TopLevelName
+--   = TopLevelName
+--   { _tlnName :: Text
+--   , _tlnModule :: ModuleName
+--   , _tlnHash :: ModuleHash
+--   } deriving (Show, Eq)
 
 data Name
-  = TLN TopLevelName
-  | DB NamedDeBruijn
+  = Name
+  { _nName :: !Text
+  , _nKind :: NameKind
+  }
+  deriving (Show, Eq)
+
+data NameKind
+  = LocallyBoundName DeBruijn
+  | TopLevelName ModuleName ModuleHash
   deriving (Show, Eq)
 
 data TypeVar
@@ -168,7 +195,13 @@ data TypeVar
   | UnificationVar
   { _tyVarName :: !Text
   , _tyVarUnique :: !Unique }
-  deriving (Show, Eq)
+  deriving (Show)
+
+instance Eq TypeVar where
+  l == r = _tyVarUnique l == _tyVarUnique r
+
+instance Ord TypeVar where
+  l <= r = _tyVarUnique l <= _tyVarUnique r
 
 data TypeName
   = TypeName

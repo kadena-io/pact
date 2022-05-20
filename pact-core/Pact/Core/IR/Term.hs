@@ -161,6 +161,23 @@ termInfo f = \case
   Block terms i -> Block terms <$> f i
   ListLit l i  -> ListLit l <$> f i
 
+-- termNames :: Traversal (Term name tyname builtin info) (Term name' tyname builtin info) name name'
+-- termNames f = \case
+--   Var n i -> Var <$> f n <$> pure i
+--   Let n mty t1 t2 i ->
+--     Let <$> f n <*> pure mty <*> termNames f t1 <*> termNames f t2 <$> pure i
+--   Lam n ns mty term i ->
+--     Lam <$> f n
+--      Lam n ns mty term <$> f i
+--   App t1 t2 i -> App t1 t2 <$> f i
+--   Error s i -> Error s <$> f i
+--   Builtin b i -> Builtin b <$> f i
+--   Constant l i -> Constant l <$> f i
+--   DynAccess n1 n2 i -> DynAccess n1 n2 <$> f i
+--   ObjectLit m i -> ObjectLit m <$> f i
+--   Block terms i -> Block terms <$> f i
+--   ListLit l i  -> ListLit l <$> f i
+
 instance Plated (Term name tyname builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)

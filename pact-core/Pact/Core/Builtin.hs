@@ -1,6 +1,12 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Pact.Core.Builtin where
 
+import Data.Text(Text)
+import Data.Map.Strict(Map)
+
+import qualified Data.Map.Strict as Map
 
 data RawBuiltin
   -- Operators
@@ -47,24 +53,128 @@ data RawBuiltin
   | RawDrop
   | RawLength
   | RawDistinct
-  deriving (Eq, Show, Ord)
+  | RawEnforce
+  | RawEnforceOne
+  | RawEnumerate
+  | RawEnumerateStepN
+  deriving (Eq, Show, Ord, Bounded, Enum)
+
+rawBuiltinToText :: RawBuiltin -> Text
+rawBuiltinToText = \case
+  RawAdd -> "+"
+  RawSub -> "-"
+  RawMultiply -> "*"
+  RawDivide -> "/"
+  RawNegate -> "-"
+  RawAnd -> "&&"
+  RawOr -> "||"
+  RawNot -> "not"
+  RawEq -> "=="
+  RawNeq -> "!="
+  RawGT -> ">"
+  RawGEQ -> ">="
+  RawLT -> "<"
+  RawLEQ -> "<="
+  RawBitwiseAnd -> "&"
+  RawBitwiseOr -> "|"
+  RawBitwiseXor -> "xor"
+  RawBitwiseFlip -> "~"
+  RawBitShift -> "shift"
+  RawAbs -> "abs"
+  RawRound -> "round"
+  RawCeiling -> "ceiling"
+  RawExp -> "exp"
+  RawFloor -> "floor"
+  RawLn -> "ln"
+  RawLogBase -> "logBase"
+  RawMod -> "mod"
+  RawMap -> "map"
+  RawFilter -> "filter"
+  RawIf -> "if"
+  RawIntToStr -> "int-to-str"
+  RawConcat -> "concat"
+  RawStrToInt -> "str-to-int"
+  RawTake -> "take"
+  RawDrop -> "drop"
+  RawLength -> "length"
+  RawDistinct -> "distinct"
+  RawEnforce -> "enforce"
+  RawEnforceOne -> "enforce-one"
+  RawEnumerate -> "enumerate"
+  RawEnumerateStepN -> "enumerate-step"
+
+rawBuiltinNames :: [Text]
+rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
+
+rawBuiltinMap :: Map Text RawBuiltin
+rawBuiltinMap = Map.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 -- monomorphised builtin operations
-data ResolvedBuiltin
+-- TODO: TIME
+data CoreBuiltin
+  -- IntOps
   = AddInt
   | SubInt
   | DivInt
-  | AddDecimal
-  | SubDecimal
-  | AddStr
+  | MulInt
+  | NegateInt
+  | AbsInt
+  | LogBaseInt
+  | ModInt
+  -- If
+  | IfElse
+  -- Decimal ops
+  | AddDec
+  | SubDec
+  | DivDec
+  | MulDec
+  | Negat
+  | AbsDec
+  | RoundDec
+  | CielingDec
+  | ExpDec
+  | FloorDec
+  | LnDec
+  | LogBaseDec
+  -- Bool Comparisons
+  | AndBool
+  | OrBool
+  | NotBool
+  -- Int Equality
   | EqInt
+  | NeqInt
+  | GTInt
+  | GEQInt
+  | LTInt
+  | LEQInt
+  -- Decimal Equality
+  | EqDec
+  | NeqDec
+  | GTDec
+  | GEQDec
+  | LTDec
+  | LEQDec
+  -- String Equality
   | EqString
-  | EqDecimal
+  | NeqString
+  | GTString
+  | GEQString
+  | LTString
+  | LEQString
+  -- String AOps
+  | AddStr
   | ConcatStr
   | DropStr
-  | DropObj
+  | TakeStr
+  | ListLength
+  -- ListOps
+  | Distinct
+  | TakeList
+  | DropList
+  | LengthList
+  | FilterList
   | Enforce
   | EnforceOne
   | Enumerate
   | EnumerateStepN
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Bounded, Enum)

@@ -15,7 +15,6 @@ import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as V
-import qualified Data.Text as T
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -64,8 +63,10 @@ nameInEnv irn = case _irNameKind irn of
 localName :: IRName -> DesugarT a -> DesugarT a
 localName irn = local (nameInEnv irn)
 
-desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term IRName Text RawBuiltin i)
+desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term IRName TypeVar RawBuiltin i)
 desugarTerm = \case
+  PT.Var (BN n) i | isReservedNative (_bnName n) ->
+    pure (Builtin (rawBuiltinMap Map.! _bnName n) i)
   PT.Var n i ->
     resolveUnique n >>= \case
       Just (u, irnk) -> pure $ Var (toIRName u irnk n) i
@@ -77,18 +78,19 @@ desugarTerm = \case
     u <- newUnique'
     let name' = toIRName u IRLocallyBoundName name
     expr' <- desugarTerm expr
-    let mt' = desugarType <$> mt
+    mt' <- traverse desugarType mt
     pure (Let name' mt' expr' (Constant LUnit i) i)
   PT.Lam name nsts body i -> do
     let (ns, ts) = NE.unzip nsts
     name' <- resolveLamName name
     ns' <- traverse resolveLamArgName ns
     term' <- lamsArgsInEnv ns' $ desugarTerm body
-    pure $ Lam name' ns' (fmap desugarType <$> ts) term' i
+    ts' <- (traverse.traverse) desugarType ts
+    pure $ Lam name' ns' ts' term' i
   PT.If cond e1 e2 i -> do
     cond' <- desugarTerm cond
-    e1' <- suspend e1
-    e2' <- suspend e2
+    e1' <- desugarTerm e1
+    e2' <- desugarTerm e2
     pure $ App (Builtin RawIf i) (cond' :| [e1', e2']) i
   PT.App e [] i ->
     App <$> desugarTerm e <*> pure (Constant LUnit i :| []) <*> pure i
@@ -113,6 +115,8 @@ desugarTerm = \case
   PT.Error text i ->
     pure $ Error text i
   where
+  isReservedNative n =
+    elem n rawBuiltinNames
   resolveLamName n = resolveUnique n >>= \case
     Just (u, irnk) -> pure $ toIRName u irnk n
     Nothing -> do
@@ -125,18 +129,12 @@ desugarTerm = \case
       u <- newUnique'
       pure $ toIRName u IRLocallyBoundName b
     _ -> error "lambda argument is qualified: impossible"
-  suspend t = do
-    u1@(Unique i1) <- newUnique'
-    u2@(Unique i2) <- newUnique'
-    let ln = IRName ("#ifb_" <> T.pack (show i1)) IRLocallyBoundName u1
-        argn = IRName ("#uarg_" <> T.pack (show i2)) IRLocallyBoundName u2
-    term' <- desugarTerm t
-    pure $ Lam ln (pure argn) (pure $ Just (TyPrim PrimUnit)) term' (t ^. PT.termInfo)
   unLetBlock (PT.Let name mt expr i) (h:hs) = do
     u <- newUnique'
     let name' = toIRName u IRLocallyBoundName name
     expr' <- desugarTerm expr
-    Let name' (desugarType <$> mt) expr' <$> localName name' (unLetBlock h hs) <*> pure i
+    mt' <- traverse desugarType mt
+    Let name' mt' expr' <$> localName name' (unLetBlock h hs) <*> pure i
   unLetBlock other l = case l of
     h:hs -> do
       other' <- desugarTerm other
@@ -146,17 +144,27 @@ desugarTerm = \case
         t -> pure $ Block (other' :| [t]) (other ^. PT.termInfo)
     [] -> desugarTerm other
 
-desugarType :: PT.Type -> Type Text
+desugarType :: PT.Type -> DesugarT (Type TypeVar)
 desugarType = \case
-  PT.TyVar v -> TyVar v
-  PT.TyPrim p -> TyPrim p
+  PT.TyVar v ->
+    TyVar <$> lookupTyVar v
+  PT.TyPrim p -> pure $ TyPrim p
   PT.TyFun l r ->
-    TyFun (desugarType l) (desugarType r)
-  PT.TyObject o mt ->
-    TyRow (RowTy (desugarType <$> o) mt)
+    TyFun <$> desugarType l <*> desugarType r
+  PT.TyObject o mt -> do
+    o' <- traverse desugarType o
+    mt' <- traverse lookupTyVar mt
+    pure (TyRow (RowTy o' mt'))
   PT.TyList t ->
-    TyList (desugarType t)
-  PT.TyCap -> TyCap
+    TyList <$> desugarType t
+  PT.TyCap -> pure $ TyCap
+  where
+  lookupTyVar v = views dsTyBinds (Map.lookup v) >>= \case
+    Just u ->
+      pure $ TypeVar v u
+    Nothing -> do
+      u <- newUnique'
+      pure $ TypeVar v u
 
 desugarUnary :: PT.UnaryOp -> RawBuiltin
 desugarUnary = \case

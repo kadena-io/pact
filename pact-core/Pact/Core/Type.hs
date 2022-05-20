@@ -20,6 +20,7 @@ module Pact.Core.Type
  , pattern TyBool
  , pattern TyString
  , pattern TyUnit
+ , pattern (:~>)
  , tyFunToArgList
  , traverseRowTy
  , typeOfLit
@@ -121,6 +122,11 @@ pattern TyString = TyPrim PrimString
 
 pattern TyUnit :: Type n
 pattern TyUnit = TyPrim PrimUnit
+
+pattern (:~>) :: Type n -> Type n -> Type n
+pattern l :~> r  = TyFun l r
+
+infixr 5 :~>
 
 tyFunToArgList :: Type n -> Maybe ([Type n], Type n)
 tyFunToArgList (TyFun l r) =
