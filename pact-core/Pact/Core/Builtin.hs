@@ -121,6 +121,8 @@ data CoreBuiltin
   | AbsInt
   | LogBaseInt
   | ModInt
+  | ExpInt
+  | LnInt
   -- If
   | IfElse
   -- Decimal ops
@@ -128,7 +130,7 @@ data CoreBuiltin
   | SubDec
   | DivDec
   | MulDec
-  | Negat
+  | NegateDec
   | AbsDec
   | RoundDec
   | CielingDec
@@ -155,20 +157,27 @@ data CoreBuiltin
   | LTDec
   | LEQDec
   -- String Equality
-  | EqString
-  | NeqString
-  | GTString
-  | GEQString
-  | LTString
-  | LEQString
-  -- String AOps
+  | EqStr
+  | NeqStr
+  | GTStr
+  | GEQStr
+  | LTStr
+  | LEQStr
+  -- Object equality
+  | EqObj
+  | NeqObj
+  -- List Equaliry
+  | EqList
+  -- String Ops
   | AddStr
   | ConcatStr
   | DropStr
   | TakeStr
-  | ListLength
+  | LengthStr
   -- ListOps
-  | Distinct
+  | AddList
+  | ListLength
+  | DistinctList
   | TakeList
   | DropList
   | LengthList

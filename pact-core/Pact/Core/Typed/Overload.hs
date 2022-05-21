@@ -51,7 +51,68 @@ resolveOverload = \case
     pure (Error t1 t2 i)
   where
   solveNonOverloaded = undefined
-  resolveBuiltin RawAdd (Single (TypeApp TyInt)) = pure AddInt
-  resolveBuiltin _ _ = undefined
-
-
+  resolveBuiltin RawAdd ts = case ts of
+    Single (TypeApp TyInt) -> pure AddInt
+    Single (TypeApp TyDecimal) -> pure AddDec
+    Single (TypeApp TyString) -> pure AddStr
+    Single (TypeApp (TyList _t)) -> pure AddList
+    _ -> error "unable to resolve add"
+  resolveBuiltin RawSub ts = case ts of
+    Single (TypeApp TyInt) -> pure SubInt
+    Single (TypeApp TyDecimal) -> pure SubDec
+    _ -> error "unable to resolve sub"
+  resolveBuiltin RawMultiply ts = case ts of
+    Single (TypeApp TyInt) -> pure MulInt
+    Single (TypeApp TyDecimal) -> pure MulDec
+    _ -> error "unable to resolve multiply"
+  resolveBuiltin RawDivide ts = case ts of
+    Single (TypeApp TyInt) -> pure MulInt
+    Single (TypeApp TyDecimal) -> pure MulDec
+    _ -> error "unable to resolve divide"
+  resolveBuiltin RawNegate ts = case ts of
+    Single (TypeApp TyInt) -> pure NegateInt
+    Single (TypeApp TyDecimal) -> pure NegateDec
+    _ -> error "unable to resolve negate"
+  resolveBuiltin RawAbs ts = case ts of
+    Single (TypeApp TyInt) -> pure AbsInt
+    Single (TypeApp TyDecimal) -> pure AbsDec
+    _ -> error "unable to resolve negate"
+  resolveBuiltin RawEq ts = case ts of
+    Single (TypeApp TyInt) -> pure EqInt
+    Single (TypeApp TyDecimal) -> pure EqDec
+    Single (TypeApp TyString) -> pure EqStr
+    Single (TypeApp (TyList _)) -> pure EqList
+    Single (TypeApp (TyRow _)) -> pure EqObj
+    _ -> error "unable to resolve eq"
+  resolveBuiltin RawGT ts = case ts of
+    Single (TypeApp TyInt) -> pure GTInt
+    Single (TypeApp TyDecimal) -> pure GTDec
+    Single (TypeApp TyString) -> pure GTStr
+    _ -> error "unable to resolve gt"
+  resolveBuiltin RawGEQ ts = case ts of
+    Single (TypeApp TyInt) -> pure GEQInt
+    Single (TypeApp TyDecimal) -> pure GEQDec
+    Single (TypeApp TyString) -> pure GEQStr
+    _ -> error "unable to resolve geq"
+  resolveBuiltin RawLT ts = case ts of
+    Single (TypeApp TyInt) -> pure LTInt
+    Single (TypeApp TyDecimal) -> pure LTDec
+    Single (TypeApp TyString) -> pure LTStr
+    _ -> error "unable to resolve lt"
+  resolveBuiltin RawLEQ ts = case ts of
+    Single (TypeApp TyInt) -> pure LEQInt
+    Single (TypeApp TyDecimal) -> pure LEQDec
+    Single (TypeApp TyString) -> pure LEQStr
+    _ -> error "unable to resolve leq"
+  resolveBuiltin RawLn ts = case ts of
+    Single (TypeApp TyInt) -> pure LnInt
+    Single (TypeApp TyDecimal) -> pure LnDec
+    _ -> error "unable to resolve ln"
+  resolveBuiltin RawExp ts = case ts of
+    Single (TypeApp TyInt) -> pure ExpInt
+    Single (TypeApp TyDecimal) -> pure ExpDec
+    _ -> error "unable to resolve ln"
+  resolveBuiltin RawLength ts = case ts of
+    Single (TypeApp TyString) -> pure LengthStr
+    Single (TypeApp (TyList _t)) -> pure LengthList
+    _ -> error "unable to resolve lengthj"

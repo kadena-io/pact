@@ -599,11 +599,16 @@ rawBuiltinType = \case
   RawBitShift -> binaryIntOp
     -- Other Numerics
   RawAbs -> unaryNumeric
-  RawRound -> unaryNumeric
-  RawCeiling -> unaryNumeric
-  RawExp -> unaryNumeric
-  RawFloor -> unaryNumeric
-  RawLn -> unaryNumeric
+  RawRound ->
+    TyScheme [] [] (TyDecimal :~> TyInt)
+  RawCeiling ->
+    TyScheme [] [] (TyDecimal :~> TyInt)
+  RawExp ->
+    TyScheme ["a"] [] (TyVar "a" :~> Double)
+  RawFloor ->
+    TyScheme [] [] (TyDecimal :~> TyInt)
+  RawLn ->
+    TyScheme ["a"] [] (TyVar "a" :~> Double)
   RawLogBase -> sameArgBinop
   RawMod -> binaryIntOp
   -- General
