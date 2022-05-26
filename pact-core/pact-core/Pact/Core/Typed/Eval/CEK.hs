@@ -78,17 +78,6 @@ data Cont b
   | Mt
   deriving Show
 
--- data CEKRuntime  b
-  -- = CEKRuntime
-  -- { cekLoaded :: CEKTLEnv b
-  -- , cekBuiltins :: Map b (BuiltinFn name b)
-  -- , cekCallStack :: [StackFrame Name]
-  -- }
-
--- addFrame :: StackFrame name -> CEKRuntime name b -> CEKRuntime name b
--- addFrame frame (CEKRuntime bins callstack) =
---   CEKRuntime bins (frame:callstack)
-
 -- Todo: exception handling? do we want labels
 -- Todo: `traverse` usage should be perf tested.
 -- It might be worth making `Arg` frames incremental, as opposed to a traverse call

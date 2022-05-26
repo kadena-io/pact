@@ -18,8 +18,8 @@ import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Imports
+import Pact.Core.Pretty
 
-import Data.Text.Prettyprint.Doc
 
 data Defun name i
   = Defun

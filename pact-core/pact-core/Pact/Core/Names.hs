@@ -41,8 +41,8 @@ import Data.IORef
 import Control.Monad.IO.Class(MonadIO(..))
 
 import Pact.Core.Hash
+import Pact.Core.Pretty(Pretty(..))
 
-import Data.Text.Prettyprint.Doc(Pretty(..))
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show)

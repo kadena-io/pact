@@ -7,7 +7,7 @@ import Data.Text(Text)
 import Pact.Time(UTCTime)
 import Data.Decimal
 
-import Data.Text.Prettyprint.Doc
+import Pact.Core.Pretty
 
 data Literal
   = LString !Text

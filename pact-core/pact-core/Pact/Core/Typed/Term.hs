@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -28,13 +29,19 @@ import Data.Map.Strict(Map)
 import Data.List.NonEmpty(NonEmpty)
 import Data.Vector (Vector)
 import qualified Data.Set as Set
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Vector as V
+import qualified Data.Map.Strict as Map
 
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
+import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 import Pact.Types.Term (Governance(..))
+
+import qualified Pact.Core.Pretty as Pretty
 
 data DefType
   = DTDefCap
@@ -164,6 +171,39 @@ data Term name tyname builtin info
   deriving (Show)
 
 type ETerm b = Term Name NamedDeBruijn b ()
+
+instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
+  pretty = \case
+    Var n _ -> pretty n
+    Lam _ (NE.toList -> ns) body _ ->
+      "λ" <> Pretty.hsep (fmap (\(n, t) -> Pretty.parens (pretty n <> ":" <+> pretty t)) ns) <+> "->" <+> pretty body
+    App l (NE.toList -> nel) _ ->
+      pretty l <> Pretty.parens (Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> nel)))
+    Let n e1 e2 _ ->
+      "let" <+> pretty n <+> "=" <+> pretty e1 <+> prettyFollowing e2
+      where
+      prettyFollowing e@(Let _ _ _ _) = Pretty.hardline <> pretty e
+      prettyFollowing (Block nel _) = Pretty.nest 2 $
+        "in {" <> Pretty.hardline <> prettyBlock nel <> "}"
+      prettyFollowing e = Pretty.hardline <> "in" <+> pretty e
+    TyApp t (NE.toList -> apps) _ ->
+      pretty t <+> Pretty.hsep (fmap (prettyTyApp . fst) apps)
+    TyAbs (NE.toList -> tyabs) t _ ->
+      "Λ" <> Pretty.hsep (pretty . fst <$> tyabs) <+> "->" <+> pretty t
+    Block nel _ -> Pretty.nest 2 $
+      "{" <> Pretty.hardline <> prettyBlock nel <> "}"
+    ObjectLit (Map.toList -> obj) _ ->
+      Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
+    ListLit ty (V.toList -> li) _ ->
+      (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> prettyTyApp ty
+    Error e ty _ ->
+      "error" <> prettyTyApp ty <> Pretty.dquotes (pretty e)
+    Builtin b _ -> pretty b
+    Constant l _ -> pretty l
+    where
+    prettyTyApp ty = "@(" <> pretty ty <> ")"
+    prettyBlock (NE.toList -> nel) =
+      Pretty.vsep (pretty <$> nel)
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case

@@ -361,6 +361,7 @@ library pact-core
     Pact.Core.Pacts.Types
     Pact.Core.Hash
     Pact.Core.Type
+    Pact.Core.Pretty
     -- Core IR modules
     Pact.Core.IR.Parse
     Pact.Core.IR.ParseAtto
@@ -370,6 +371,7 @@ library pact-core
     Pact.Core.IR.Desugar
     Pact.Core.IR.Compile
     -- Typed core modules
+    Pact.Core.Typed.Renamer
     Pact.Core.Typed.Typecheck
     Pact.Core.Typed.Term
     Pact.Core.Typed.Overload

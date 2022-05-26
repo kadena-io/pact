@@ -22,8 +22,8 @@ import Pact.Core.IR.ParseTree
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type(PrimType(..))
+import Pact.Core.Pretty(Pretty(..))
 
-import Data.Text.Prettyprint.Doc(Pretty(..))
 
 newtype ViaPretty a = ViaPretty a
 

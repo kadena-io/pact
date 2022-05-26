@@ -163,7 +163,7 @@ instance Substitutable (Type TypeVar) where
     TyRow r -> TyRow $ subst s r
     TyFun l r -> TyFun (subst s l) (subst s r)
     TyInterface n -> TyInterface n
-    TyModule n -> TyModule n
+    -- TyModule n -> TyModule n
     TyTable row ->
       TyTable (subst s row)
     TyCap ->
@@ -198,7 +198,7 @@ instance FTV (Type TypeVar) where
     TyRow rows -> ftv rows
     TyList t -> ftv t
     TyInterface _ -> mempty
-    TyModule _ -> mempty
+    -- TyModule _ -> mempty
     TyTable row -> ftv row
     TyCap -> mempty
     TyForall ns rs typ ->
@@ -292,11 +292,11 @@ unifyRows EmptyRow EmptyRow = pure mempty
 unifyRows r1 r2 = throwError (RowUnificationError r1 r2)
 
 --
-unifyIfaceModule
-  :: InterfaceType TypeVar -> ModuleType TypeVar -> InferT b Subst
-unifyIfaceModule (InterfaceType n) (ModuleType _ ns) =
-  if elem n ns then pure mempty
-  else throwError (InterfaceUnificationError "cannot unify interface/module")
+-- unifyIfaceModule
+--   :: InterfaceType TypeVar -> ModuleType TypeVar -> InferT b Subst
+-- unifyIfaceModule (InterfaceType n) (ModuleType _ ns) =
+--   if elem n ns then pure mempty
+--   else throwError (InterfaceUnificationError "cannot unify interface/module")
 
 -- note: For IR we currently don't unify against
 -- `TyForall` unless strucurally equal.
@@ -317,10 +317,10 @@ unifies (TyList l) (TyList r) = unifies l r
 unifies (TyTable l) (TyTable r) = unifyRows l r
 unifies TyCap TyCap = pure mempty
 unifies (TyRow l) (TyRow r) = unifyRows l r
-unifies (TyInterface n) (TyModule m) = unifyIfaceModule n m
-unifies (TyModule m) (TyInterface n) = unifyIfaceModule n m
+-- unifies (TyInterface n) (TyModule m) = unifyIfaceModule n m
+-- unifies (TyModule m) (TyInterface n) = unifyIfaceModule n m
 unifies (TyInterface n) (TyInterface n') | n == n' = pure mempty
-unifies (TyModule m) (TyModule m') | m == m' = pure mempty
+-- unifies (TyModule m) (TyModule m') | m == m' = pure mempty
 unifies _ _ = error "reee"
 
 generalize :: FreeTyVars -> Type TypeVar -> (TyScheme TypeVar)

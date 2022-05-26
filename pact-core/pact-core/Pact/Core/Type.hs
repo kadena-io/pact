@@ -28,10 +28,12 @@ module Pact.Core.Type
 
 import Control.Lens
 import qualified Data.Map.Strict as Map
-import Data.Text.Prettyprint.Doc(Pretty(..))
 
 import Pact.Core.Names
 import Pact.Core.Literal
+import Pact.Core.Pretty(Pretty(..), (<+>))
+
+import qualified Pact.Core.Pretty as Pretty
 
 data PrimType =
   PrimInt |
@@ -97,7 +99,7 @@ data Type n
   -- Later on, however, it makes sense to have the set of nominally defined caps in the constraints of a function.
   | TyInterface (InterfaceType n)
    -- ^ interfaces, which are nominal
-  | TyModule (ModuleType n)
+  -- | TyModule (ModuleType n)
   -- ^ module type being the name of the module + implemented interfaces.
   | TyForall [n] [n] (Type n)
   -- ^ Universally quantified types, which have to be part of the type
@@ -154,7 +156,7 @@ instance Plated (Type n) where
     TyCap -> pure TyCap
     TyInterface n ->
       pure $ TyInterface n
-    TyModule n -> pure $ TyModule n
+    -- TyModule n -> pure $ TyModule n
     TyForall ns rs ty ->
       TyForall ns rs <$> f ty
 
@@ -167,3 +169,45 @@ typeOfLit = TyPrim . \case
   LBool{} -> PrimBool
   LTime{} -> PrimTime
   LUnit -> PrimUnit
+
+instance Pretty n => Pretty (InterfaceType n) where
+  pretty (InterfaceType n) = pretty n
+
+instance Pretty n => Pretty (Row n) where
+  pretty = \case
+    EmptyRow -> "{}"
+    RowVar rv -> Pretty.braces (pretty rv)
+    RowTy obj n ->
+      Pretty.braces $ renderObj (Map.toList obj) <+> renderRv n
+      where
+      renderObj li =
+        Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, t) -> pretty f <> ":" <+> pretty t) li
+      renderRv = \case
+        Just v -> "|" <+> pretty v
+        Nothing -> mempty
+
+instance Pretty n => Pretty (Type n) where
+  pretty = \case
+    TyVar n -> pretty n
+    TyPrim p -> pretty p
+    TyFun l r -> fnParens l <+> "->" <+> pretty r
+      where
+        fnParens t@TyFun{} = Pretty.parens (pretty t)
+        fnParens t@TyForall{} = Pretty.parens (pretty t)
+        fnParens t = pretty t
+    TyList l -> "list" <+> liParens l
+      where
+      liParens t@TyVar{} = pretty t
+      liParens t@TyPrim{} = pretty t
+      liParens t@TyCap = pretty t
+      liParens t = Pretty.parens (pretty t)
+    TyRow r -> pretty r
+    TyTable t -> "table" <+> Pretty.parens (pretty t)
+    TyCap -> "capability"
+    TyInterface i -> "module" <> Pretty.angles (pretty i)
+    TyForall as rs ty ->
+      "∀" <> render as "TYPE" <+> render rs "ROW"  <> "." <> pretty ty
+      where
+      render xs suffix =
+        Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
+

@@ -52,7 +52,7 @@ typeUnifies (TyRow r) (TyRow r') = rowUnifies r r'
   rowUnifies _ _ = False
 typeUnifies TyCap TyCap = True
 typeUnifies (TyInterface n) (TyInterface n') = n == n'
-typeUnifies (TyModule mt) (TyModule mt') = mt == mt'
+-- typeUnifies (TyModule mt) (TyModule mt') = mt == mt'
 typeUnifies (TyForall as rs ty) (TyForall as' rs' ty') =
   let tys = zip as (TyVar <$>  as')
       rvs = zip rs (TyRow . RowVar <$> rs')
