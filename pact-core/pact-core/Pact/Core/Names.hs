@@ -1,7 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -32,6 +30,7 @@ module Pact.Core.Names
  , DeclName(..)
  , NamedDeBruijn(..)
  , DeBruijn(..)
+ , TypeName(..)
  ) where
 
 import Control.Lens
@@ -142,6 +141,7 @@ data NamedDeBruijn
 newtype DeBruijn
   = DeBruijn { _debruijn :: Word64 }
   deriving (Show, Eq, Ord)
+  deriving (Num, Bounded, Enum) via Word64
 
 data DeclName
   = DeclName
