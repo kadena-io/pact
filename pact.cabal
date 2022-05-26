@@ -332,7 +332,7 @@ library
 
 library pact-core
   import:  pact-common
-  hs-source-dirs: pact-core
+  hs-source-dirs: pact-core/pact-core
   build-depends:
     , pact
     , criterion >= 1.1.4 && < 1.6
@@ -346,6 +346,8 @@ library pact-core
     , statistics >= 0.13.3 && < 0.16
     , parser-combinators
     , yaml
+    , ralist
+    , primitive
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010

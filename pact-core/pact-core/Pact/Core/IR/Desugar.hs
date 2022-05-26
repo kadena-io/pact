@@ -43,7 +43,7 @@ toIRName u irnk = \case
   QN (QualifiedName bn qual) -> IRName bn (IRTopLevelName qual) u
 
 newUnique' :: DesugarT Unique
-newUnique' = view dsSupply >>= liftIO . newUnique
+newUnique' = view dsSupply >>= newUnique
 
 resolveUnique :: ParsedName -> DesugarT (Maybe (Unique, IRNameKind))
 resolveUnique = \case
@@ -86,7 +86,7 @@ desugarTerm = \case
     ns' <- traverse resolveLamArgName ns
     term' <- lamsArgsInEnv ns' $ desugarTerm body
     ts' <- (traverse.traverse) desugarType ts
-    pure $ Lam name' ns' ts' term' i
+    pure $ Lam name' (NE.zip ns' ts') term' i
   PT.If cond e1 e2 i -> do
     cond' <- desugarTerm cond
     e1' <- desugarTerm e1

@@ -124,7 +124,7 @@ type CoreIRProgramP info = [TopLevelP info]
 data Term name tyname builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam name (NonEmpty name) (NonEmpty (Maybe (Type tyname))) (Term name tyname builtin info) info
+  | Lam name (NonEmpty (name, Maybe (Type tyname))) (Term name tyname builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
   | Let name (Maybe (Type tyname)) (Term name tyname builtin info) (Term name tyname builtin info) info
@@ -144,14 +144,14 @@ data Term name tyname builtin info
   | ObjectLit (Map Field (Term name tyname builtin info)) info
   -- ^ Object literals
   | ListLit (Vector (Term name tyname builtin info)) info
-  deriving (Show, Functor, Eq)
+  deriving (Show, Functor)
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
   Var n i -> Var n <$> f i
   Let n mty t1 t2 i ->
     Let n mty t1 t2 <$> f i
-  Lam n ns mty term i -> Lam n ns mty term <$> f i
+  Lam n ns term i -> Lam n ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Error s i -> Error s <$> f i
   Builtin b i -> Builtin b <$> f i
@@ -181,7 +181,7 @@ termInfo f = \case
 instance Plated (Term name tyname builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam n ns mty term i -> Lam n ns mty <$> f term <*> pure i
+    Lam n ns term i -> Lam n ns <$> f term <*> pure i
     Let n mty t1 t2 i -> Let n mty <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Error s i -> pure (Error s i)

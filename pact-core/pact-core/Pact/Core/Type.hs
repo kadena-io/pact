@@ -57,7 +57,7 @@ data Row n
   = RowTy (RowObject n) (Maybe n)
   | RowVar n
   | EmptyRow
-  deriving (Eq, Show)
+  deriving (Show)
 
 newtype InterfaceType n
   = InterfaceType n
@@ -103,7 +103,7 @@ data Type n
   -- ^ Universally quantified types, which have to be part of the type
   -- constructor since system F
   -- Todo: probably want `NonEmpty a` here since TyForall [] [] t = t
-  deriving (Show, Eq)
+  deriving (Show)
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt

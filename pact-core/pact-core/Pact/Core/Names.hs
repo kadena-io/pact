@@ -26,15 +26,19 @@ module Pact.Core.Names
  , tyVarUnique
  , tyname
  , tynameUnique
- , newUnique
  , Supply(..)
+ , newSupply
+ , newUnique
+ , DeclName(..)
+ , NamedDeBruijn(..)
+ , DeBruijn(..)
  ) where
 
 import Control.Lens
 import Data.Text(Text)
-import Data.IntMap.Strict(IntMap)
-import Data.Int(Int32)
-import Data.IORef (IORef, atomicModifyIORef')
+import Data.Word(Word64)
+import Data.IORef
+import Control.Monad.IO.Class(MonadIO(..))
 
 import Pact.Core.Hash
 
@@ -92,47 +96,20 @@ instance Pretty Field where
 
 -- Uniques
 newtype Unique =
-  Unique { _unique :: Int } deriving (Show, Eq, Ord)
+  Unique { _unique :: Int }
+  deriving (Show, Eq, Ord)
+  deriving Num via Int
 
 newtype Supply = Supply (IORef Int)
 
-newtype ByUnique a = ByUnique a deriving (Show)
+newSupply :: MonadIO m => m Supply
+newSupply = liftIO (Supply <$> newIORef 0)
 
-class HasUnique a where
-  unique :: Lens' a Unique
-
-instance HasUnique Unique where
-  unique f u = f u
-
-instance (HasUnique a) => Eq (ByUnique a) where
-  (ByUnique l) == (ByUnique r) = view unique l == view unique r
-
-instance (HasUnique a) => Ord (ByUnique a) where
-  (ByUnique l) <= (ByUnique r) = view unique l <= view unique r
-
-
-
--- Unique Map
-newtype UniqueMap a
-  = UniqueMap (IntMap a)
-  deriving stock (Show, Eq)
-  deriving (Semigroup, Monoid) via (IntMap a)
-
-type instance Index (UniqueMap a) = Unique
-type instance IxValue (UniqueMap a) = a
-
-instance Ixed (UniqueMap a) where
-  ix (Unique i) f (UniqueMap m)= UniqueMap <$> ix i f m
-
-instance At (UniqueMap a) where
-  at (Unique i) f (UniqueMap m) =
-    UniqueMap <$> at i f m
-
-newUnique :: Supply -> IO Unique
-newUnique (Supply ref) =
-  atomicModifyIORef' ref $ \x ->
-    let !z = x+1 in (z,Unique z)
-
+newUnique :: MonadIO m => Supply -> m Unique
+newUnique (Supply ref) = liftIO $ do
+  i <- readIORef ref
+  modifyIORef ref (+ 1)
+  pure (Unique i)
 
 -- Todo:
 data IRNameKind
@@ -156,31 +133,29 @@ instance Eq IRName where
 instance Ord IRName where
   l <= r =_irUnique l <= _irUnique r
 
-instance HasUnique IRName where
-  unique = irUnique
-
 data NamedDeBruijn
   = NamedDeBruijn
-  { _ndIndex :: Int32
+  { _ndIndex :: !DeBruijn
   , _ndName :: Text }
   deriving (Show, Eq)
 
 newtype DeBruijn
-  = DeBruijn Int32
+  = DeBruijn { _debruijn :: Word64 }
   deriving (Show, Eq, Ord)
 
--- data TopLevelName
---   = TopLevelName
---   { _tlnName :: Text
---   , _tlnModule :: ModuleName
---   , _tlnHash :: ModuleHash
---   } deriving (Show, Eq)
+data DeclName
+  = DeclName
+  { _tlnHash :: ModuleHash
+  , _tlnName :: !Text
+  , _tlnModule :: !ModuleName
+  }
+  deriving (Show, Eq, Ord)
 
+-- Name representing locally nameless representations
 data Name
   = Name
   { _nName :: !Text
-  , _nKind :: NameKind
-  }
+  , _nKind :: NameKind }
   deriving (Show, Eq)
 
 data NameKind
@@ -211,11 +186,3 @@ data TypeName
 
 makeLenses ''TypeVar
 makeLenses ''TypeName
-
-instance HasUnique TypeVar where
-  unique f = \case
-    TypeVar a u -> TypeVar a <$> f u
-    UnificationVar a u -> UnificationVar a <$> f u
-
-instance HasUnique TypeName where
-  unique = tynameUnique

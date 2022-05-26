@@ -17,6 +17,8 @@ module Pact.Core.Typed.Term
 , DefType(..)
 , TyVarType(..)
 , termInfo
+, traverseTermType
+, ETerm
 )
  where
 
@@ -136,10 +138,12 @@ data TyVarType
 data Term name tyname builtin info
   = Var name info
   -- ^ single variables, e.g the term `x`
-  | Lam name (NonEmpty name) (NonEmpty (Type tyname)) (Term name tyname builtin info) info
+  | Lam name (NonEmpty (name, Type tyname)) (Term name tyname builtin info) info
   -- ^ f = \a b c -> e
   -- All lambdas, even anonymous ones, are named, for the sake of them adding a stack frame
   | App (Term name tyname builtin info) (NonEmpty (Term name tyname builtin info)) info
+  -- let n = e1 in e2
+  | Let name (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ (e_1 e_2 .. e_n)
   | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname, TyVarType)) info
   -- ^ (e_1 @t)
@@ -147,7 +151,7 @@ data Term name tyname builtin info
   -- ^ ΛX.e
   | Block (NonEmpty (Term name tyname builtin info)) info
   -- ^ ΛX.e
-  | ObjectLit (Row tyname) (Map Field (Term name tyname builtin info)) info
+  | ObjectLit (Map Field (Term name tyname builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
   | ListLit (Type tyname) (Vector (Term name tyname builtin info)) info
   -- ^ [e_1, e_2, .., e_n]
@@ -159,30 +163,59 @@ data Term name tyname builtin info
   -- ^ Constant/Literal values
   deriving (Show)
 
+type ETerm b = Term Name NamedDeBruijn b ()
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
   Var n i -> Var n <$> f i
-  Lam n ns ty term i -> Lam n ns ty term <$> f i
+  Lam n ns term i -> Lam n ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
+  Let n e1 e2 i ->
+    Let n e1 e2 <$> f i
   TyApp term ty i -> TyApp term ty <$> f i
   TyAbs ty term i -> TyAbs ty term <$> f i
   Block terms i -> Block terms <$> f i
-  ObjectLit row obj i -> ObjectLit row obj <$> f i
+  ObjectLit obj i -> ObjectLit obj <$> f i
   ListLit ty v i -> ListLit ty v <$> f i
   Error s ty i -> Error s ty <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
 
+traverseTermType :: Traversal' (Term name tyname builtin info) (Type tyname)
+traverseTermType f = \case
+  Var n i -> pure (Var n i)
+  Lam n ns body i ->
+    Lam n <$> (traversed._2) f ns <*> traverseTermType f body <*> pure i
+  App l r i ->
+    App <$> traverseTermType f l <*> traverse (traverseTermType f) r <*> pure i
+  Let n e1 e2 i ->
+    Let n <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
+  TyApp l tyapps i ->
+    TyApp <$> traverseTermType f l <*> (traversed._1) f tyapps <*> pure i
+  TyAbs tyabs body i ->
+    TyAbs tyabs <$> traverseTermType f body <*> pure i
+  Block nel i ->
+    Block <$> traverse (traverseTermType f) nel <*> pure i
+  ObjectLit obj i ->
+    ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
+  ListLit ty v i ->
+    ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
+  Error e ty i ->
+    Error e <$> f ty <*> pure i
+  Constant l i -> pure (Constant l i)
+  Builtin b i -> pure (Builtin b i)
+
 instance Plated (Term name tyname builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam n ns ty term i -> Lam n ns ty <$> f term <*> pure i
+    Lam n ns term i -> Lam n ns <$> f term <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
+    Let n e1 e2 i ->
+      Let n <$> f e1 <*> f e2 <*> pure i
     TyApp term ty i -> TyApp <$> f term <*> pure ty <*> pure i
     TyAbs ty term i -> TyAbs ty <$> f term <*> pure i
-    ObjectLit ty tm i ->
-      ObjectLit ty <$> traverse f tm <*> pure i
+    ObjectLit tm i ->
+      ObjectLit <$> traverse f tm <*> pure i
     ListLit ty ts i ->
       ListLit ty <$> traverse f ts <*> pure i
     Block terms i -> Block <$> traverse f terms <*> pure i
