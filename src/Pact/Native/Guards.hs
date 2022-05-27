@@ -15,17 +15,25 @@ module Pact.Native.Guards
 ( guardDefs
 ) where
 
-import Control.Monad
+
+import Control.Applicative hiding (some)
+
 import Data.Aeson (encode)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.Foldable
+import Data.Functor (($>), void)
 import Data.Text (Text)
+import Data.Void
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Hash
 import Pact.Types.Runtime
+
+import Text.Megaparsec
+import Text.Megaparsec.Char
+
 
 
 guardDefs :: NativeModule
@@ -94,7 +102,7 @@ validatePrincipalDef =
     validatePrincipal' :: RNativeFun e
     validatePrincipal' i [TGuard g _, TLitString p] = do
       q <- createPrincipal (getInfo i) g
-      pure $ toTerm $ (p == q)
+      pure $ toTerm (p == q)
     validatePrincipal' i as = argsError i as
 
 isPrincipleDef :: NativeDef
@@ -108,7 +116,9 @@ isPrincipleDef = defRNative "is-principal" isPrincipal
   where
     isPrincipal :: RNativeFun e
     isPrincipal i as = case as of
-      [TLitString _p] -> undefined
+      [TLitString p] -> case parseMaybe principalParser p of
+        Nothing -> pure $ toTerm False
+        Just {} -> pure $ toTerm True
       _ -> argsError i as
 
 typeOfPrincipalDef :: NativeDef
@@ -119,4 +129,54 @@ typeOfPrincipalDef = defRNative "typeof-principal" typeOfPrincipal
   "Return the protocol type of a given PRINCIPAL value."
   where
     typeOfPrincipal :: RNativeFun e
-    typeOfPrincipal = undefined
+    typeOfPrincipal i as = case as of
+      [TLitString p] -> case parseMaybe principalParser p of
+        Nothing -> pure $ tStr ""
+        Just ty -> pure $ tStr ty
+      _ -> argsError i as
+
+principalParser :: Parsec Void Text Text
+principalParser = (kParser $> "k:")
+  <|> (wParser $> "w:")
+  <|> (rParser $> "r:")
+  <|> (pParser $> "p:")
+  <|> (mParser $> "m:")
+  <|> (uParser $> "u:")
+  where
+    kParser = char 'k'
+      *> char ':'
+      *> count 64 hexDigitChar
+      *> eof
+
+    wParser = char 'w'
+      *> char ':'
+      *> count 43 alphaNumChar
+      *> char ':'
+      *> some latin1Char
+      *> eof
+
+    pParser = char 'p'
+      *> char ':'
+      *> count 43 alphaNumChar
+      *> char ':'
+      *> some latin1Char
+      *> eof
+
+    rParser = char 'r'
+      *> char ':'
+      *> some latin1Char
+      *> eof
+
+    mParser = char 'm'
+      *> char ':'
+      *> some latin1Char
+      *> char ':'
+      *> some latin1Char
+      *> eof
+
+    uParser = char 'u'
+      *> char ':'
+      *> some latin1Char
+      *> char ':'
+      *> count 43 alphaNumChar
+      *> eof
