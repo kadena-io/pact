@@ -97,7 +97,7 @@ data Type n
   -- Atm, until we have a proper constraint system,
   -- caps will simply be enforced @ runtime.
   -- Later on, however, it makes sense to have the set of nominally defined caps in the constraints of a function.
-  | TyInterface (InterfaceType n)
+  -- | TyInterface (InterfaceType n)
    -- ^ interfaces, which are nominal
   -- | TyModule (ModuleType n)
   -- ^ module type being the name of the module + implemented interfaces.
@@ -154,8 +154,8 @@ instance Plated (Type n) where
     TyList t -> TyList <$> f t
     TyTable r -> TyTable <$> traverseRowTy f r
     TyCap -> pure TyCap
-    TyInterface n ->
-      pure $ TyInterface n
+    -- TyInterface n ->
+    --   pure $ TyInterface n
     -- TyModule n -> pure $ TyModule n
     TyForall ns rs ty ->
       TyForall ns rs <$> f ty
@@ -204,7 +204,7 @@ instance Pretty n => Pretty (Type n) where
     TyRow r -> pretty r
     TyTable t -> "table" <+> Pretty.parens (pretty t)
     TyCap -> "capability"
-    TyInterface i -> "module" <> Pretty.angles (pretty i)
+    -- TyInterface i -> "module" <> Pretty.angles (pretty i)
     TyForall as rs ty ->
       "∀" <> render as "TYPE" <+> render rs "ROW"  <> "." <> pretty ty
       where

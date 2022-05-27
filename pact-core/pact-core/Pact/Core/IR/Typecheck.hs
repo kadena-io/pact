@@ -162,7 +162,7 @@ instance Substitutable (Type TypeVar) where
     TyList ty -> TyList (subst s ty)
     TyRow r -> TyRow $ subst s r
     TyFun l r -> TyFun (subst s l) (subst s r)
-    TyInterface n -> TyInterface n
+    -- TyInterface n -> TyInterface n
     -- TyModule n -> TyModule n
     TyTable row ->
       TyTable (subst s row)
@@ -197,7 +197,7 @@ instance FTV (Type TypeVar) where
     TyFun l r -> ftv l <> ftv r
     TyRow rows -> ftv rows
     TyList t -> ftv t
-    TyInterface _ -> mempty
+    -- TyInterface _ -> mempty
     -- TyModule _ -> mempty
     TyTable row -> ftv row
     TyCap -> mempty
@@ -319,7 +319,7 @@ unifies TyCap TyCap = pure mempty
 unifies (TyRow l) (TyRow r) = unifyRows l r
 -- unifies (TyInterface n) (TyModule m) = unifyIfaceModule n m
 -- unifies (TyModule m) (TyInterface n) = unifyIfaceModule n m
-unifies (TyInterface n) (TyInterface n') | n == n' = pure mempty
+-- unifies (TyInterface n) (TyInterface n') | n == n' = pure mempty
 -- unifies (TyModule m) (TyModule m') | m == m' = pure mempty
 unifies _ _ = error "reee"
 
@@ -588,7 +588,7 @@ renameTypeScheme sup (TyScheme ts rs ty) = do
       let env' = Map.fromList (zip tts tts' ++ zip rrs rrs')
       tty' <- local (Map.union env') $ renameType tty
       pure $ TyForall tts' rrs' tty'
-    _ -> error "todo: modules/interfaces"
+    -- _ -> error "todo: modules/interfaces"
   lookupRowVar n =
     asks (Map.lookup n) >>= \case
       Just n' -> pure n'

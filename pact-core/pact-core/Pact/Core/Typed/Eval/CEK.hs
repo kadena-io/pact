@@ -57,7 +57,9 @@ data CEKState b
 
 newtype EvalT b a =
   EvalT { unEval :: StateT (CEKState b) IO a }
-  deriving (Functor,Applicative,Monad,MonadState (CEKState b), MonadIO) via (StateT (CEKState b) IO)
+  deriving ( Functor, Applicative, Monad
+           , MonadState (CEKState b), MonadIO)
+           via (StateT (CEKState b) IO)
 
 data CEKValue b
   = VLiteral Literal
