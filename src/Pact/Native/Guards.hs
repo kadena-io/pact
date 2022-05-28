@@ -144,6 +144,13 @@ principalParser = (kParser $> "k:")
   <|> (mParser $> "m:")
   <|> (uParser $> "u:")
   where
+    base64UrlUnpaddedAlphabet :: String
+    base64UrlUnpaddedAlphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+    base64UrlHashParser = count 43 (satisfy f) where
+      f c = c `elem` base64UrlUnpaddedAlphabet
+
     kParser = char 'k'
       *> char ':'
       *> count 64 hexDigitChar
@@ -151,14 +158,14 @@ principalParser = (kParser $> "k:")
 
     wParser = char 'w'
       *> char ':'
-      *> count 43 latin1Char
+      *> base64UrlHashParser
       *> char ':'
       *> some latin1Char
       *> eof
 
     pParser = char 'p'
       *> char ':'
-      *> count 43 latin1Char
+      *> base64UrlHashParser
       *> char ':'
       *> some latin1Char
       *> eof
@@ -179,5 +186,5 @@ principalParser = (kParser $> "k:")
       *> char ':'
       *> some latin1Char
       *> char ':'
-      *> count 43 latin1Char
+      *> base64UrlHashParser
       *> eof
