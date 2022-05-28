@@ -1,6 +1,7 @@
 (begin-tx)
 
 ;; k: account validation
+
 (env-data
   { 'ks1: ["584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"],
     'ks2:
@@ -38,6 +39,31 @@
   (create-principal (read-keyset 'ks1))
   ))
 
+(expect
+  "is-principal returns true for k: accounts"
+  true
+  (is-principal (create-principal (read-keyset 'ks1))))
+
+(expect
+  "is-principal should be false for improper k: accounts"
+  false
+  (is-principal "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c687"))
+
+(expect
+  "typeof-principal should return k: for k accounts"
+  "k:"
+  (typeof-principal (create-principal (read-keyset 'ks1))))
+
+(expect
+  "typeof-principal should fail for k: accounts: improper keylength - too big"
+  ""
+  (typeof-principal "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c687"))
+
+(expect
+  "typeof-principal should fail for k: accounts: improper keylength - too small"
+  ""
+  (typeof-principal "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c6"))
+
 ;; w: account validation
 
 (expect
@@ -60,6 +86,37 @@
    (read-keyset 'ks2)
    (create-principal (read-keyset 'ks2))
    ))
+
+(expect
+  "is-principal returns true for w: accounts"
+  true
+  (is-principal (create-principal (read-keyset 'ks2))))
+
+(expect
+  "is-principal should be false for improper w: accounts"
+  false
+  (is-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_:keys-all"))
+
+(expect
+  "typeof-principal should return 'w:' for w: accounts"
+  "w:"
+  (typeof-principal (create-principal (read-keyset 'ks2))))
+
+(expect
+  "typeof-principal should fail for w accounts: improper hash length - too big"
+  ""
+  (typeof-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_ewe:keys-all"))
+
+(expect
+  "typeof-principal should fail for w accounts: improper hash length - too small"
+  ""
+  (typeof-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_:keys-all"))
+
+(expect
+  "typeof-principal should fail for w accounts: empty predicate"
+  ""
+  (typeof-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_:"))
+
 
 ;; r: reference validation
 
@@ -85,6 +142,27 @@
   (keyset-ref-guard 'ks3)
   (create-principal (keyset-ref-guard 'ks3))
   ))
+
+(expect
+  "is-principal returns true for r: accounts"
+  true
+  (is-principal (create-principal (keyset-ref-guard 'ks3)))
+  )
+
+(expect
+  "is-principal should be false for improper r: accounts"
+  false
+  (is-principal "r:"))
+
+(expect
+  "typeof-principal should return r: for r accounts"
+  "r:"
+  (typeof-principal (create-principal (keyset-ref-guard 'ks3))))
+
+(expect
+  "typeof-principal should fail for r: accounts: improper keylength - empty"
+  ""
+  (typeof-principal "r:"))
 
 (commit-tx)
 (begin-tx)
@@ -215,6 +293,37 @@
  "validating principal module guards roundtrips with create-principal"
  true
  (test-ns.tester2.g))
+
+(expect
+  "is-principal returns true for m: guards"
+  true
+  (is-principal (test-ns.tester.g)))
+
+(expect
+  "is-principal should be false for improper m: guards - empty module name"
+  false
+  (is-principal "m::tester"))
+
+(expect
+  "is-principal should be false for improper m: guards - empty func name"
+  false
+  (is-principal "m:test-ns.tester:"))
+
+(expect
+  "typeof-principal should return m: for m guards"
+  "m:"
+  (typeof-principal (test-ns.tester.g)))
+
+(expect
+  "typeof-principal should fail for m: accounts: empty module name"
+  ""
+  (typeof-principal "m::tester"))
+
+(expect
+  "typeof-principal should fail for m: accounts: empty module name"
+  ""
+  (typeof-principal "m:test-ns.tester:"))
+
 
 ;; u: guard validation
 

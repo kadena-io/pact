@@ -126,7 +126,8 @@ typeOfPrincipalDef = defRNative "typeof-principal" typeOfPrincipal
   (funType tTyString [("principal", tTyString)])
     [LitExample
      "(typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)"]
-  "Return the protocol type of a given PRINCIPAL value."
+  "Return the protocol type of a given PRINCIPAL value. If input value is not a principal type, \
+  \then the empty string is returned."
   where
     typeOfPrincipal :: RNativeFun e
     typeOfPrincipal i as = case as of
@@ -150,14 +151,14 @@ principalParser = (kParser $> "k:")
 
     wParser = char 'w'
       *> char ':'
-      *> count 43 alphaNumChar
+      *> count 43 latin1Char
       *> char ':'
       *> some latin1Char
       *> eof
 
     pParser = char 'p'
       *> char ':'
-      *> count 43 alphaNumChar
+      *> count 43 latin1Char
       *> char ':'
       *> some latin1Char
       *> eof
@@ -178,5 +179,5 @@ principalParser = (kParser $> "k:")
       *> char ':'
       *> some latin1Char
       *> char ':'
-      *> count 43 alphaNumChar
+      *> count 43 latin1Char
       *> eof
