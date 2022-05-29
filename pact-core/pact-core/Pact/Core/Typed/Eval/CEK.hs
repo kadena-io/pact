@@ -1,7 +1,5 @@
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -18,10 +16,15 @@
 module Pact.Core.Typed.Eval.CEK
  ( CEKTLEnv
  , CEKEnv
+ , CEKValue(..)
  , BuiltinFn(..)
+ , CEKState(..)
  , CEKRuntime
  , eval
+ , runEvalT
  , EvalT(..)
+ , Cont(..)
+ , ETerm
  ) where
 
 import Control.Monad.Reader
@@ -58,17 +61,21 @@ data CEKState b
 newtype EvalT b a =
   EvalT { unEval :: StateT (CEKState b) IO a }
   deriving ( Functor, Applicative, Monad
-           , MonadState (CEKState b), MonadIO)
+           , MonadState (CEKState b), MonadIO
+           , MonadFail)
            via (StateT (CEKState b) IO)
 
+runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
+runEvalT s (EvalT action) = runStateT action s
+
 data CEKValue b
-  = VLiteral Literal
-  | VObject (Map Field (CEKValue b))
-  | VList (Vector (CEKValue b))
+  = VLiteral !Literal
+  | VObject !(Map Field (CEKValue b))
+  | VList !(Vector (CEKValue b))
   | VClosure !Name (NonEmpty Name) (ETerm b) !(CEKEnv b)
-  | VNative b
-  | VGuard (Guard Name (CEKValue b))
-  | VCap Name
+  | VNative !b
+  | VGuard !(Guard Name (CEKValue b))
+  | VCap !Name
   | VModRef
   | VError Text
   deriving (Show)
@@ -85,11 +92,10 @@ data Cont b
 -- It might be worth making `Arg` frames incremental, as opposed to a traverse call
 eval
   :: forall b. CEKRuntime b
-  => Cont b
-  -> CEKEnv b
+  => CEKEnv b
   -> ETerm b
   -> EvalT b (CEKValue b)
-eval = evalCEK
+eval = evalCEK Mt
   where
   evalCEK
     :: Cont b
@@ -162,4 +168,3 @@ eval = evalCEK
     returnCEK cont (VClosure lamn (n :| ns') body env)
   applyArgs _lamn [] (_args:_args') _env _body _cont =
     error "too many arguments in fn application"
-    -- evalCEK body (Map.insert n arg env) cont

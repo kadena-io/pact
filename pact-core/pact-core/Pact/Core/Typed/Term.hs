@@ -38,8 +38,8 @@ import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
+import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
-import Pact.Types.Term (Governance(..))
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -152,9 +152,9 @@ data Term name tyname builtin info
   -- let n = e1 in e2
   | Let name (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ (e_1 e_2 .. e_n)
-  | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname, TyVarType)) info
+  | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname)) info
   -- ^ (e_1 @t)
-  | TyAbs (NonEmpty (tyname, TyVarType)) (Term name tyname builtin info) info
+  | TyAbs (NonEmpty tyname) (Term name tyname builtin info) info
   -- ^ ΛX.e
   | Block (NonEmpty (Term name tyname builtin info)) info
   -- ^ ΛX.e
@@ -187,15 +187,15 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
         "in {" <> Pretty.hardline <> prettyBlock nel <> "}"
       prettyFollowing e = Pretty.hardline <> "in" <+> pretty e
     TyApp t (NE.toList -> apps) _ ->
-      pretty t <+> Pretty.hsep (fmap (prettyTyApp . fst) apps)
+      pretty t <+> Pretty.hsep (fmap (prettyTyApp) apps)
     TyAbs (NE.toList -> tyabs) t _ ->
-      "Λ" <> Pretty.hsep (pretty . fst <$> tyabs) <+> "->" <+> pretty t
+      "Λ" <> Pretty.hsep (pretty <$> tyabs) <+> "->" <+> pretty t
     Block nel _ -> Pretty.nest 2 $
       "{" <> Pretty.hardline <> prettyBlock nel <> "}"
     ObjectLit (Map.toList -> obj) _ ->
       Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
     ListLit ty (V.toList -> li) _ ->
-      (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> prettyTyApp ty
+      (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Error e ty _ ->
       "error" <> prettyTyApp ty <> Pretty.dquotes (pretty e)
     Builtin b _ -> pretty b
@@ -231,7 +231,7 @@ traverseTermType f = \case
   Let n e1 e2 i ->
     Let n <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
   TyApp l tyapps i ->
-    TyApp <$> traverseTermType f l <*> (traversed._1) f tyapps <*> pure i
+    TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
   TyAbs tyabs body i ->
     TyAbs tyabs <$> traverseTermType f body <*> pure i
   Block nel i ->

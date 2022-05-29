@@ -20,8 +20,8 @@ module Pact.Core.Typed.Typecheck where
 import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.Except
-import Data.Maybe(catMaybes)
 import Data.Foldable(foldlM)
+import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 
@@ -53,10 +53,9 @@ typeUnifies (TyRow r) (TyRow r') = rowUnifies r r'
 typeUnifies TyCap TyCap = True
 -- typeUnifies (TyInterface n) (TyInterface n') = n == n'
 -- typeUnifies (TyModule mt) (TyModule mt') = mt == mt'
-typeUnifies (TyForall as rs ty) (TyForall as' rs' ty') =
-  let tys = zip as (TyVar <$>  as')
-      rvs = zip rs (TyRow . RowVar <$> rs')
-      env = Map.fromList (tys ++ rvs)
+typeUnifies (TyForall as ty) (TyForall as' ty') =
+  let tys = NE.zip as (TyVar <$>  as')
+      env = Map.fromList (NE.toList tys)
   in typeUnifies (substInTy env ty) ty'
 typeUnifies _ _ = False
 
@@ -67,13 +66,10 @@ applyFunctionType (TyFun l r) l'
 applyFunctionType _ _ =
   throwError "term application to non-function"
 
-applyType :: (MonadError String m, Ord n, Show n) => Type n -> (Type n, TyVarType) -> m (Type n)
-applyType (TyForall tvs rvs tfty) (ty, TyVarType) = case tvs of
-  [] -> throwError $ "No tyapps left to apply"
-  t:ts -> pure $ TyForall ts rvs $ substInTy (Map.singleton t ty) $ tfty
-applyType (TyForall tvs rvs tfty) (ty, RowVarType) = case rvs of
-  [] -> throwError $ "No tyapps left to apply"
-  r:rs -> pure $ TyForall tvs rs $ substInTy (Map.singleton r ty) tfty
+applyType :: (MonadError String m, Ord n, Show n) => Type n -> Type n -> m (Type n)
+applyType (TyForall (t:|ts) tfty) ty = case ts of
+  [] -> pure $ substInTy (Map.singleton t ty) tfty
+  t':ts' -> pure $ TyForall (t':|ts') $ substInTy (Map.singleton t ty) tfty
 applyType t1 tyr =
   throwError $ "Cannot apply: " <> show t1 <> " to: " <> show tyr
 
@@ -89,6 +85,7 @@ substInTy s (TyRow row) = TyRow (substInRow row)
     substInRow (RowVar rv) =
       case Map.lookup rv s of
         Just (TyRow r) -> r
+        Just (TyVar tv) -> RowVar tv
         _ -> row
     substInRow (RowTy obj (Just rv)) =
       case Map.lookup rv s of
@@ -147,15 +144,8 @@ typecheck' = \case
   -- BIG TODO: ROW APPS
   TyAbs tn term _ -> do
     typ <- typecheck' term
-    let (tvms, rvms) = NE.unzip (tvAbs <$> tn)
-        tvs = catMaybes (NE.toList tvms)
-        rvs = catMaybes (NE.toList rvms)
-    pure (TyForall tvs rvs typ)
-    where
-    tvAbs (tv, tvt) = case tvt of
-      TyVarType -> (Just tv, Nothing)
-      RowVarType -> (Nothing, Just tv)
-
+    pure (TyForall tn typ)
+  
   -- ------------------------ (T-Error)
   -- Γ ⊢ (error msg t1) : t1
   Error _ t _ ->

@@ -27,12 +27,14 @@ module Pact.Core.Type
  ) where
 
 import Control.Lens
+import Data.List.NonEmpty(NonEmpty)
 import qualified Data.Map.Strict as Map
 
 import Pact.Core.Names
 import Pact.Core.Literal
 import Pact.Core.Pretty(Pretty(..), (<+>))
 
+import qualified Data.List.NonEmpty as NE
 import qualified Pact.Core.Pretty as Pretty
 
 data PrimType =
@@ -46,12 +48,12 @@ data PrimType =
 
 instance Pretty PrimType where
   pretty = \case
-    PrimInt -> "Int"
-    PrimDecimal -> "Decimal"
-    PrimTime -> "Time"
-    PrimBool -> "Bool"
-    PrimString -> "String"
-    PrimUnit -> "Unit"
+    PrimInt -> "integer"
+    PrimDecimal -> "decimal"
+    PrimTime -> "time"
+    PrimBool -> "bool"
+    PrimString -> "string"
+    PrimUnit -> "unit"
 
 type RowObject n = Map.Map Field (Type n)
 
@@ -59,7 +61,7 @@ data Row n
   = RowTy (RowObject n) (Maybe n)
   | RowVar n
   | EmptyRow
-  deriving (Show)
+  deriving (Eq, Show)
 
 newtype InterfaceType n
   = InterfaceType n
@@ -101,11 +103,11 @@ data Type n
    -- ^ interfaces, which are nominal
   -- | TyModule (ModuleType n)
   -- ^ module type being the name of the module + implemented interfaces.
-  | TyForall [n] [n] (Type n)
+  | TyForall (NonEmpty n) (Type n)
   -- ^ Universally quantified types, which have to be part of the type
   -- constructor since system F
-  -- Todo: probably want `NonEmpty a` here since TyForall [] [] t = t
-  deriving (Show)
+  -- If we allow impredicative polymorphism later, it also works.
+  deriving (Eq, Show)
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -157,8 +159,8 @@ instance Plated (Type n) where
     -- TyInterface n ->
     --   pure $ TyInterface n
     -- TyModule n -> pure $ TyModule n
-    TyForall ns rs ty ->
-      TyForall ns rs <$> f ty
+    TyForall ns ty ->
+      TyForall ns <$> f ty
 
 
 typeOfLit :: Literal -> Type n
@@ -205,8 +207,8 @@ instance Pretty n => Pretty (Type n) where
     TyTable t -> "table" <+> Pretty.parens (pretty t)
     TyCap -> "capability"
     -- TyInterface i -> "module" <> Pretty.angles (pretty i)
-    TyForall as rs ty ->
-      "∀" <> render as "TYPE" <+> render rs "ROW"  <> "." <> pretty ty
+    TyForall as ty ->
+      "∀" <> render (NE.toList as) "TYPE"  <> "." <> pretty ty
       where
       render xs suffix =
         Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs

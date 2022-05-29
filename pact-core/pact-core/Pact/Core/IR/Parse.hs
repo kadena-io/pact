@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
-module Pact.Core.IR.Parse where
+module Pact.Core.IR.Parse(parseExpr) where
 
 import Data.Char(isAlphaNum, isLower)
 import Control.Monad.Combinators
@@ -71,13 +71,13 @@ moduleDeclName = do
   rest <- takeWhileP Nothing isAlphaNum
   pure (T.cons c rest)
 
-moduleName :: Parser ModuleName
-moduleName = do
-  a <- moduleDeclName
-  b <- optional (dot *> moduleDeclName)
-  case b of
-    Nothing -> return (ModuleName a Nothing) <?> "module name"
-    Just b' -> return (ModuleName b' (Just . NamespaceName $ a)) <?> "namespaced module name"
+-- moduleName :: Parser ModuleName
+-- moduleName = do
+--   a <- moduleDeclName
+--   b <- optional (dot *> moduleDeclName)
+--   case b of
+--     Nothing -> return (ModuleName a Nothing) <?> "module name"
+--     Just b' -> return (ModuleName b' (Just . NamespaceName $ a)) <?> "namespaced module name"
 
 qualifiedName :: Parser QualifiedName
 qualifiedName = do
@@ -96,8 +96,8 @@ intLiteral = LInteger <$> lexeme L.decimal
 
 boolLiteral :: Parser Literal
 boolLiteral =
-  (LBool True <$ symbol "True") <|>
-  (LBool False <$ symbol "False")
+  (LBool True <$ symbol "true") <|>
+  (LBool False <$ symbol "false")
 
 unitLiteral :: Parser Literal
 unitLiteral =
@@ -151,16 +151,16 @@ typeExpr = do
       t <- typeExpr
       pure (Field f, t)
   listType = do
-    _ <- symbol "List"
+    _ <- symbol "list"
     typ <- (parens typeExpr <|> primType <|> objectType <|> varType)
     pure (TyList typ)
   primType = fmap TyPrim $
-    (PrimInt <$ symbol "Int")
-    <|> (PrimDecimal <$ symbol "Decimal")
-    <|> (PrimString <$ symbol "String")
-    <|> (PrimTime <$ symbol "Time")
-    <|> (PrimBool <$ symbol "Bool")
-    <|> (PrimUnit <$ symbol "Unit")
+    (PrimInt <$ symbol "integer")
+    <|> (PrimDecimal <$ symbol "decimal")
+    <|> (PrimString <$ symbol "string")
+    <|> (PrimTime <$ symbol "time")
+    <|> (PrimBool <$ symbol "bool")
+    <|> (PrimUnit <$ symbol "unit")
 
 pactIndent :: Pos -> Maybe Pos
 pactIndent i = Just (mkPos (unPos i + 2))
@@ -193,14 +193,14 @@ letStatement = do
   ty <- optional (singleChar ':' *> typeExpr)
   _ <- singleChar '='
   t <- expr
-  pure $ Let (BN (BareName v)) ty t ()
+  pure $ Let v ty t ()
 
 
 singleChar :: Char -> Parser Text
 singleChar c = lexeme (T.singleton <$> C.char c)
 
 keyword :: Text -> Parser Text
-keyword kw = lexeme (C.string kw)
+keyword = symbol
 
 lamStatement :: Parser (Expr ParsedName ())
 lamStatement = do
@@ -214,11 +214,10 @@ lamStatement = do
     _ <- lexeme (C.string "=>")
     let mkLam e = Lam (BN (BareName "#")) (arg :| args) e ()
     (L.IndentNone . mkLam <$> expr) <|> (singleChar '{' *> pure (L.IndentSome (pactIndent currIndent) (\b -> mkLam (Block (NE.fromList b) ()) <$ singleChar '}') statement))
-  bareVariable = BN . BareName <$> variable
   lamArg =
-    typed <|> ((,Nothing) <$> bareVariable)
+    typed <|> ((,Nothing) <$> variable)
   typed = parens $ do
-    v <- bareVariable
+    v <- variable
     _ <- singleChar ':'
     t <- typeExpr
     pure (v, Just t)
@@ -230,13 +229,12 @@ lamExpr = do
   args <- many lamArg
   _ <- lexeme (C.string "=>")
   t <- expr
-  pure $ Lam (BN (BareName "#")) (arg :| args) t ()
+  pure $ Lam (BN (BareName "#lam")) (arg :| args) t ()
   where
-  bareVariable = BN . BareName <$> variable
   lamArg =
-    typed <|> ((,Nothing) <$> bareVariable)
+    typed <|> ((,Nothing) <$> variable)
   typed = parens $ do
-    v <- bareVariable
+    v <- variable
     _ <- singleChar ':'
     t <- typeExpr
     pure (v, Just t)
@@ -250,14 +248,15 @@ operatorTable =
     , binary "&" BitAndOp
     , binary "|" BitOrOp ]
   , [ binary "+" AddOp
-    , binary "-" SubOp]
-  , [ binary "==" EQOp
-    , binary "!=" NEQOp
-    , binary ">=" GEQOp
+    , binary "-" SubOp ]
+  , [ binary ">=" GEQOp
     , binary ">" GTOp
     , binary "<=" LEQOp
-    , binary "<" LTOp]
-  ]
+    , binary "<" LTOp ]
+  , [ binary "==" EQOp
+    , binary "!=" NEQOp ]
+  , [ binary "&&" AndOp
+    , binary "||" OrOp ]]
 
 binary :: Text -> BinaryOp -> Operator Parser (Expr ParsedName ())
 binary name op = InfixL ((\a b -> BinaryOp op a b ()) <$ symbol name)
@@ -267,7 +266,7 @@ prefix name op = Prefix (flip (UnaryOp op) () <$ symbol name)
 
 varExpr :: Parser (Expr ParsedName ())
 varExpr = fmap (flip Var ()) $
-  (QN <$> qualifiedName)
+  (QN <$> try qualifiedName)
   <|> (BN . BareName <$> variable)
 
 constantExpr :: Parser (Expr name ())
@@ -309,7 +308,7 @@ expr' = do
     es <- many (singleChar ',' *> expr)
     pure (List (e:es) ())
   emptyList =  pure (List [] ())
-  atom = varExpr <|> constantExpr <|> parens expr <|> try obj <|> list
+  atom = constantExpr <|> lamExpr <|> varExpr <|> parens expr <|> try obj <|> list
 
 expr :: Parser (Expr ParsedName ())
 expr = makeExprParser expr' operatorTable
@@ -317,3 +316,5 @@ expr = makeExprParser expr' operatorTable
 topLevel :: Parser (Expr ParsedName ())
 topLevel = L.nonIndented spaceConsumerNL (lamStatement <|> statement <|> expr)
 
+parseExpr :: String -> Text -> Expr ParsedName ()
+parseExpr file = either (error . show) id . runParser topLevel file

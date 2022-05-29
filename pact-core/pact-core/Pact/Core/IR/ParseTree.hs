@@ -98,6 +98,8 @@ data BinaryOp
   | NEQOp
   | BitAndOp
   | BitOrOp
+  | AndOp
+  | OrOp
   deriving Show
 
 instance Pretty BinaryOp where
@@ -114,6 +116,8 @@ instance Pretty BinaryOp where
     NEQOp -> "!="
     BitAndOp -> "&"
     BitOrOp -> "|"
+    AndOp -> "&&"
+    OrOp -> "||"
 
 -- Todo: type constructors aren't 1-1 atm.
 data Type
@@ -151,8 +155,8 @@ instance Pretty Type where
 
 data Expr name i
   = Var name i
-  | Let name (Maybe Type) (Expr name i) i
-  | Lam name (NonEmpty (name, (Maybe Type))) (Expr name i) i
+  | Let Text (Maybe Type) (Expr name i) i
+  | Lam name (NonEmpty (Text, Maybe Type)) (Expr name i) i
   | If (Expr name i) (Expr name i) (Expr name i) i
   -- | If (Expr name i) (Expr name i) i
   -- | Else (Expr name i) i

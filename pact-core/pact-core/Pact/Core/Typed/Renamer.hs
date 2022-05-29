@@ -37,6 +37,7 @@ lamNameToDebruijn dix (IRName n nk _) = Name n $ case nk of
 tnToDebruijn :: DeBruijn -> TypeName -> NamedDeBruijn
 tnToDebruijn dix tn = NamedDeBruijn dix (_tyname tn)
 
+-- NOTE: we must start from (-1) for this renamer.
 renameTerm :: Monad m => Term IRName TypeName b i -> RenamerT m (Term Name NamedDeBruijn b i)
 renameTerm = \case
   Var n i -> case _irNameKind n of
@@ -70,16 +71,16 @@ renameTerm = \case
     pure (Let n0 e1' e2' i)
   TyApp e tyapps i -> do
     e' <- renameTerm e
-    tyapps' <- (traversed._1) renameType tyapps
+    tyapps' <- traverse renameType tyapps
     pure (TyApp e' tyapps' i)
   TyAbs tyabs e i -> do
     depth <- view rnTyDepth
-    let tynames = _tynameUnique . fst <$> tyabs
+    let tynames = _tynameUnique <$> tyabs
         len = fromIntegral $ NE.length tynames
         newDepth = depth + len
         ixs = NE.fromList [depth + 1 .. newDepth]
         m = Map.fromList $ NE.toList $ NE.zip tynames ixs
-        tyabs' = NE.zipWith (\o ix -> over _1 (tnToDebruijn (newDepth - ix)) o) tyabs ixs
+        tyabs' = NE.zipWith (\o ix -> tnToDebruijn (newDepth - ix) o) tyabs ixs
     e' <- tyVarsInEnv m newDepth $ renameTerm e
     pure (TyAbs tyabs' e' i)
   Block nel i ->
@@ -114,16 +115,15 @@ renameType = \case
   TyList t -> TyList <$> renameType t
   TyTable t -> TyTable <$> renameRow t
   TyCap -> pure TyCap
-  TyForall ts rs ty -> do
+  TyForall ts ty -> do
     depth <- view rnTyDepth
-    let newDepth = depth + fromIntegral (length ts) + fromIntegral (length rs)
-        ixs = [depth + 1 .. newDepth]
-        m = Map.fromList $ zip (_tynameUnique <$> (ts ++ rs)) ixs
+    let newDepth = depth + fromIntegral (NE.length ts)
+        ixs = NE.fromList [depth + 1 .. newDepth]
+        m = Map.fromList $ NE.toList $ NE.zip (_tynameUnique <$> ts) ixs
         dbTy tn ix = tnToDebruijn (newDepth - ix) tn
-        ts' = zipWith dbTy ts ixs
-        rs' = zipWith dbTy rs (drop (length ts) ixs)
+        ts' = NE.zipWith dbTy ts ixs
     ty' <- locally rnTyBinds (Map.union m) $ local (set rnTyDepth newDepth) $ renameType ty
-    pure (TyForall ts' rs' ty')
+    pure (TyForall ts' ty')
   where
   renameRow EmptyRow = pure EmptyRow
   renameRow (RowVar n) = do
@@ -138,4 +138,3 @@ renameType = \case
       Nothing -> error "found unbound type var"
   renameRow (RowTy obj Nothing) =
     RowTy <$> traverse renameType obj <*> pure Nothing
-

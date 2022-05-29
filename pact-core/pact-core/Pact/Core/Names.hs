@@ -24,20 +24,19 @@ module Pact.Core.Names
  , tyVarUnique
  , tyname
  , tynameUnique
- , Supply(..)
- , newSupply
- , newUnique
+ , Supply
  , DeclName(..)
  , NamedDeBruijn(..)
+ , ndIndex
+ , ndName
  , DeBruijn(..)
  , TypeName(..)
+ , rawParsedName
  ) where
 
 import Control.Lens
 import Data.Text(Text)
 import Data.Word(Word64)
-import Data.IORef
-import Control.Monad.IO.Class(MonadIO(..))
 
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
@@ -81,6 +80,10 @@ data ParsedName
   | BN BareName
   deriving Show
 
+rawParsedName :: ParsedName -> Text
+rawParsedName (BN (BareName n)) = n
+rawParsedName (QN qn) = _qnName qn
+
 instance Pretty ParsedName where
   pretty = \case
     QN qn -> pretty qn
@@ -97,18 +100,9 @@ instance Pretty Field where
 newtype Unique =
   Unique { _unique :: Int }
   deriving (Show, Eq, Ord)
-  deriving Num via Int
+  deriving (Num, Enum) via Int
 
-newtype Supply = Supply (IORef Int)
-
-newSupply :: MonadIO m => m Supply
-newSupply = liftIO (Supply <$> newIORef 0)
-
-newUnique :: MonadIO m => Supply -> m Unique
-newUnique (Supply ref) = liftIO $ do
-  i <- readIORef ref
-  modifyIORef ref (+ 1)
-  pure (Unique i)
+type Supply = Unique
 
 -- Todo:
 data IRNameKind
@@ -156,12 +150,12 @@ data Name
   = Name
   { _nName :: !Text
   , _nKind :: NameKind }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data NameKind
   = LocallyBoundName DeBruijn
   | TopLevelName ModuleName ModuleHash
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data TypeVar
   = TypeVar
@@ -186,3 +180,14 @@ data TypeName
 
 makeLenses ''TypeVar
 makeLenses ''TypeName
+makeLenses ''NamedDeBruijn
+
+instance Pretty Name where
+  pretty (Name n nk) = case nk of
+    LocallyBoundName _ ->
+      pretty n
+    _ -> undefined
+
+instance Pretty NamedDeBruijn where
+  pretty (NamedDeBruijn _ n) =
+    pretty n

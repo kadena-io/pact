@@ -8,10 +8,11 @@ module Pact.Core.IR.Desugar where
 
 
 import Control.Monad.Reader
-import Control.Lens hiding (List)
+import Control.Lens hiding (List,ix)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.IORef
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as V
@@ -28,10 +29,11 @@ type DesugarT = ReaderT DesugarState IO
 
 data DesugarState
   = DesugarState
-  { _dsBinds :: Map Text (Unique, IRNameKind)
-  , _dsModuleBinds :: Map QualifiedName Unique
+  { _dsBinds :: Map Text NameKind
+  , _dsModuleBinds :: Map QualifiedName NameKind
   , _dsTyBinds :: Map Text Unique
-  , _dsSupply :: Supply
+  , _dsSupply :: IORef Supply
+  , _dsDepth :: DeBruijn
   }
 
 makeLenses ''DesugarState
@@ -43,54 +45,54 @@ toIRName u irnk = \case
   QN (QualifiedName bn qual) -> IRName bn (IRTopLevelName qual) u
 
 newUnique' :: DesugarT Unique
-newUnique' = view dsSupply >>= newUnique
+newUnique' = do
+  sup <- view dsSupply
+  u <- lift (readIORef sup)
+  lift (modifyIORef' sup (+ 1))
+  pure u
 
-resolveUnique :: ParsedName -> DesugarT (Maybe (Unique, IRNameKind))
-resolveUnique = \case
+resolve :: ParsedName -> DesugarT (Maybe NameKind)
+resolve = \case
   BN (BareName bn) ->
     views dsBinds (Map.lookup bn)
   QN qn ->
-    fmap (,IRTopLevelName (_qnModName qn)) <$> views dsModuleBinds (Map.lookup qn)
+    views dsModuleBinds (Map.lookup qn)
 
-nameInEnv :: IRName -> DesugarState -> DesugarState
-nameInEnv irn = case _irNameKind irn of
-  IRLocallyBoundName ->
-    over dsBinds $ Map.insert (_irName irn) (_irUnique irn, IRLocallyBoundName)
-  IRTopLevelName qn ->
-    over dsModuleBinds $ Map.insert (QualifiedName (_irName irn) qn) (_irUnique irn)
-  _ -> error "todo: unsupported name kind"
-
-localName :: IRName -> DesugarT a -> DesugarT a
-localName irn = local (nameInEnv irn)
-
-desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term IRName TypeVar RawBuiltin i)
+desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term Name TypeVar RawBuiltin i)
 desugarTerm = \case
   PT.Var (BN n) i | isReservedNative (_bnName n) ->
     pure (Builtin (rawBuiltinMap Map.! _bnName n) i)
-  PT.Var n i ->
-    resolveUnique n >>= \case
-      Just (u, irnk) -> pure $ Var (toIRName u irnk n) i
-      Nothing -> error "unbound variable"
+  PT.Var n i -> do
+    depth <- view dsDepth
+    resolve n >>= \case
+      Just nk -> case nk of
+        LocallyBoundName d -> pure $ Var (Name (rawParsedName n) (LocallyBoundName (depth - d - 1))) i
+        _ -> pure $ Var (Name (rawParsedName n) nk) i
+      Nothing -> error ("unbound variable " <> show n)
   PT.Block (h :| hs) _ ->
     unLetBlock h hs
   -- Names will always come out are barenames from the parser
   PT.Let name mt expr i -> do
-    u <- newUnique'
-    let name' = toIRName u IRLocallyBoundName name
+    let name' = Name name (LocallyBoundName 0)
     expr' <- desugarTerm expr
     mt' <- traverse desugarType mt
     pure (Let name' mt' expr' (Constant LUnit i) i)
   PT.Lam name nsts body i -> do
+    depth <- view dsDepth
     let (ns, ts) = NE.unzip nsts
+        len = fromIntegral (NE.length nsts)
+        newDepth = depth + len
+        ixs = NE.fromList [depth .. newDepth - 1]
+        ns' = NE.zipWith (\n ix -> Name n (LocallyBoundName (newDepth - ix - 1))) ns ixs
+        m = Map.fromList $ NE.toList $ NE.zip ns (LocallyBoundName <$> ixs)
     name' <- resolveLamName name
-    ns' <- traverse resolveLamArgName ns
-    term' <- lamsArgsInEnv ns' $ desugarTerm body
+    term' <- lamArgsInEnv m newDepth $ desugarTerm body
     ts' <- (traverse.traverse) desugarType ts
     pure $ Lam name' (NE.zip ns' ts') term' i
   PT.If cond e1 e2 i -> do
     cond' <- desugarTerm cond
-    e1' <- desugarTerm e1
-    e2' <- desugarTerm e2
+    e1' <- suspend i e1
+    e2' <- suspend i e2
     pure $ App (Builtin RawIf i) (cond' :| [e1', e2']) i
   PT.App e [] i ->
     App <$> desugarTerm e <*> pure (Constant LUnit i :| []) <*> pure i
@@ -115,26 +117,25 @@ desugarTerm = \case
   PT.Error text i ->
     pure $ Error text i
   where
+  suspend i e = do
+    let name = Name "#ifArg" (LocallyBoundName 0)
+    e' <- locally dsDepth succ $ desugarTerm e
+    pure (Lam name ((name, Nothing) :| []) e' i)
   isReservedNative n =
     elem n rawBuiltinNames
-  resolveLamName n = resolveUnique n >>= \case
-    Just (u, irnk) -> pure $ toIRName u irnk n
-    Nothing -> do
-      u <- newUnique'
-      pure $ toIRName u IRLocallyBoundName n
-  lamsArgsInEnv irns = do
-    locally dsBinds $ Map.union $ Map.fromList $ NE.toList $ fmap (\(IRName n k u) -> (n, (u, k))) irns
-  resolveLamArgName = \case
-    b@(BN _) -> do
-      u <- newUnique'
-      pure $ toIRName u IRLocallyBoundName b
-    _ -> error "lambda argument is qualified: impossible"
+  resolveLamName n = resolve n >>= \case
+    Just nk -> pure $ Name (rawParsedName n) nk
+    Nothing -> pure $ Name (rawParsedName n) (LocallyBoundName 0)
+  lamArgsInEnv m newDepth =
+    local (over dsBinds (Map.union m) . set dsDepth newDepth)
   unLetBlock (PT.Let name mt expr i) (h:hs) = do
-    u <- newUnique'
-    let name' = toIRName u IRLocallyBoundName name
+    depth <- view dsDepth
+    let name' = Name name (LocallyBoundName 0)
     expr' <- desugarTerm expr
     mt' <- traverse desugarType mt
-    Let name' mt' expr' <$> localName name' (unLetBlock h hs) <*> pure i
+    let inEnv = over dsBinds (Map.insert name (LocallyBoundName depth)) . over dsDepth (+ 1)
+    e2 <- local inEnv $ unLetBlock h hs
+    pure (Let name' mt' expr' e2 i)
   unLetBlock other l = case l of
     h:hs -> do
       other' <- desugarTerm other
@@ -185,4 +186,13 @@ desugarBinary = \case
   PT.NEQOp -> RawNeq
   PT.BitAndOp -> RawBitwiseAnd
   PT.BitOrOp -> RawBitwiseOr
+  PT.AndOp -> RawAnd
+  PT.OrOp -> RawOr
 
+runDesugarTerm :: PT.Expr ParsedName i -> IO (Term Name TypeVar RawBuiltin i, Supply)
+runDesugarTerm e = do
+  ref <- newIORef 0
+  let depth = 0
+      dstate = DesugarState mempty mempty mempty ref depth
+  lastSupply <- readIORef ref
+  (,lastSupply) <$> runReaderT (desugarTerm e) dstate
