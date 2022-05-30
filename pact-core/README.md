@@ -3,32 +3,29 @@
 ## Essential
 
 ### Source -> Typed
-- [x] Core Parsing new syntax (Expr)
-- [x] Core Names (Locally nameless + uniques)
-- [ ] Core Renamer
+- [x] Parsing new syntax (Term)
+- [x] Renamer to locally nameless for terms
+- [x] Type inference for Term
 - [ ] Core IR Modules (Parsing, Tc)
 - [ ] Core IR Type inference support
+- [x] IR to Typed Core in typechecker
+- [ ] Typeclass overload resolution
+
+#### Optional
+- [ ] Interpreter for IR
 
 
 ## Typed
 - [x] Core Typed IR
 - [x] Core Type language (Note: potentially `Type` should be 2 different types, for IR and Core)
 - [x] Renaming to locally nameless
+- [x] Type checking for typed Core
+- [x] CEK Interpreter for Typed corew
 
 ## Untyped
 
-- [x] Uniques renamer
-- [ ] Debruijn transform
-- [x] Type inference for term
-- [ ] Type inference for modules/defuns (Partally complete)
-- [x] Type checking for typed Core
-- [ ] Core IIR -> Core Typed IR
-- [ ] Core Term Inlining
-
-## Evaluation
-- [ ] CEK for Inference IR
-- [x] CEK for Typed IR
-- [ ] CEK for Untyped IR
+- [ ] CEK for untyped core
+- [ ] Optimizations/Jit
 
 # Features
 - [ ] Capabilities Support

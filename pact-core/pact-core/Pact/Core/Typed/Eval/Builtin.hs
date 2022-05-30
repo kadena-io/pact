@@ -11,6 +11,7 @@
 
 module Pact.Core.Typed.Eval.Builtin(coreBuiltinRuntime) where
 
+import Data.Text(Text)
 import Data.Decimal(roundTo', Decimal)
 import Data.Bits
 import Data.List.NonEmpty(NonEmpty(..))
@@ -18,6 +19,7 @@ import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.RAList as RAList
 import qualified Data.Vector as V
 import qualified Data.Primitive.Array as Array
+import qualified Data.Text as T
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -116,6 +118,10 @@ leqInt = compareIntFn (<=)
 asBool :: CEKValue b -> EvalT b Bool
 asBool (VLiteral (LBool b)) = pure b
 asBool _ = fail "impossible"
+
+asString :: CEKValue b -> EvalT b Text
+asString (VLiteral (LString b)) = pure b
+asString _ = fail "impossible"
 
 coreMap :: BuiltinFn b
 coreMap = BuiltinFn \case
@@ -223,6 +229,13 @@ coreEnumerateStepN = BuiltinFn \case
     | from == to && step == 0 = pure $ toVecList $ V.singleton from
     | otherwise = fail "enumerate outside interval bounds"
 
+coreConcat :: BuiltinFn b
+coreConcat = BuiltinFn \case
+  VList li :| [] -> do
+    li' <- traverse asString li
+    pure (VLiteral (LString (T.concat (V.toList li'))))
+  _ -> fail "impossible"
+
 unimplemented :: BuiltinFn b
 unimplemented = BuiltinFn \case
   _ -> fail "unimplemented"
@@ -282,7 +295,7 @@ coreBuiltinFn = \case
   NeqObj -> unimplemented
   EqList -> unimplemented
   AddStr -> unimplemented
-  ConcatStr -> unimplemented
+  ConcatStr -> coreConcat
   DropStr -> unimplemented
   TakeStr -> unimplemented
   LengthStr -> unimplemented
@@ -298,6 +311,7 @@ coreBuiltinFn = \case
   EnforceOne -> unimplemented
   Enumerate -> coreEnumerate
   EnumerateStepN -> coreEnumerateStepN
+  Dummy -> unimplemented
 
 coreBuiltinRuntime :: Array.Array (BuiltinFn CoreBuiltin)
 coreBuiltinRuntime = Array.arrayFromList (coreBuiltinFn <$> [minBound .. maxBound])

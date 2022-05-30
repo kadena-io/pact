@@ -235,4 +235,3 @@ instance Pretty name => Pretty (Expr name i) where
       Nothing -> pretty n
       Just t -> parens $ pretty n <+> ":" <+> pretty t
     renderLamTypes = fold . NE.intersperse " " . fmap renderLamPair
-

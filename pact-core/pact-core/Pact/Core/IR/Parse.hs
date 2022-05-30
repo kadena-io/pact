@@ -19,6 +19,7 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Text.Megaparsec.Char as C
 
 import Pact.Core.IR.ParseTree
+import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type(PrimType(..))
@@ -90,6 +91,12 @@ qualifiedName = do
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
+
+braces :: Parser a -> Parser a
+braces = between (symbol "{") (symbol "}")
+
+comma :: Parser Text
+comma = singleChar ','
 
 intLiteral :: Parser Literal
 intLiteral = LInteger <$> lexeme L.decimal
@@ -241,7 +248,10 @@ lamExpr = do
 
 operatorTable :: [[Operator Parser (Expr ParsedName ())]]
 operatorTable =
-  [ [ prefix "~" FlipBitsOp
+  [ [ postfix "@" ObjectAccess
+    , postfix "#" ObjectRemove
+    , objUpdate ]
+  , [ prefix "~" FlipBitsOp
     , prefix "-" NegateOp]
   , [ binary "*" MultOp
     , binary "/" DivOp
@@ -263,6 +273,27 @@ binary name op = InfixL ((\a b -> BinaryOp op a b ()) <$ symbol name)
 
 prefix :: Text -> UnaryOp -> Operator Parser (Expr ParsedName ())
 prefix name op = Prefix (flip (UnaryOp op) () <$ symbol name)
+
+postfix :: Text -> (Field -> (Expr ParsedName ()) -> ObjectOp (Expr ParsedName ())) -> Operator Parser (Expr ParsedName ())
+postfix sym obj = Postfix $ do
+  _ <- symbol sym
+  f <- Field <$> variable
+  let fn = \o -> ObjectOp (obj f o) ()
+  pure fn
+
+objUpdate ::  Operator Parser (Expr ParsedName ())
+objUpdate = Postfix $ braces $ do
+  x <- bind
+  xs <- many (comma *> bind)
+  let fn o = foldl' (\oop (f, e) -> ObjectOp (ObjectUpdate f e oop) ()) o (x:xs)
+  pure fn
+  where
+  bind = do
+    f <- Field <$> variable
+    _ <- symbol ":="
+    e <- expr
+    pure (f, e)
+
 
 varExpr :: Parser (Expr ParsedName ())
 varExpr = fmap (flip Var ()) $

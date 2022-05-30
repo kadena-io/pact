@@ -20,7 +20,7 @@ data Literal
 
 instance Pretty Literal where
   pretty = \case
-    LString t -> pretty t
+    LString t -> dquotes (pretty t)
     LInteger i -> pretty i
     -- TODO: SUS
     LDecimal _d -> "<TODO:DECIMAL>"

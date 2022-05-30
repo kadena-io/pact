@@ -174,7 +174,7 @@ data Term name tyname builtin info
   -- Object access, update and remove
   | Error Text (Type tyname) info
   -- ^ error terms + their inferred type
-  deriving (Show)
+  deriving (Show, Functor)
 
 type ETerm b = Term Name NamedDeBruijn b ()
 

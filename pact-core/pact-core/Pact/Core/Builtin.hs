@@ -70,6 +70,7 @@ data RawBuiltin
   | RawEnforceOne
   | RawEnumerate
   | RawEnumerateStepN
+  | RawDummy
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
@@ -116,6 +117,7 @@ rawBuiltinToText = \case
   RawEnforceOne -> "enforce-one"
   RawEnumerate -> "enumerate"
   RawEnumerateStepN -> "enumerate-step"
+  RawDummy -> "dummy"
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
@@ -206,6 +208,7 @@ data CoreBuiltin
   | EnforceOne
   | Enumerate
   | EnumerateStepN
+  | Dummy
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 coreBuiltinToText :: CoreBuiltin -> Text
@@ -279,6 +282,7 @@ coreBuiltinToText = \case
   EnforceOne -> "enforce-one"
   Enumerate -> "enumerate"
   EnumerateStepN -> "enumerateStepN"
+  Dummy -> "dummy"
 
 instance Pretty RawBuiltin where
   pretty b = pretty (rawBuiltinToText b)

@@ -338,16 +338,15 @@ library pact-core
     , criterion >= 1.1.4 && < 1.6
     , cryptonite
     , direct-sqlite == 2.3.26
-    , http-client
     , memory
     , safe-exceptions >= 0.1.5.0 && < 0.2
-    , servant-client
-    , servant-client-core
     , statistics >= 0.13.3 && < 0.16
     , parser-combinators
     , yaml
     , ralist
     , primitive
+    , haskeline
+    , exceptions
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
@@ -364,6 +363,7 @@ library pact-core
     Pact.Core.Pretty
     Pact.Core.Compile
     Pact.Core.Runtime
+    -- Pact.Core.Repl
     -- Core IR modules
     Pact.Core.IR.Parse
     Pact.Core.IR.ParseAtto
@@ -380,6 +380,30 @@ library pact-core
     Pact.Core.Typed.Eval.Runtime
     Pact.Core.Typed.Eval.CEK
     Pact.Core.Typed.Eval.Builtin
+
+executable pact-core-repl
+  import: pact-common
+
+  main-is: pact-core/pact-core/Pact/Core/Repl.hs
+
+  build-depends:
+    , pact-core
+    , criterion >= 1.1.4 && < 1.6
+    , cryptonite
+    , direct-sqlite == 2.3.26
+    , memory
+    , safe-exceptions >= 0.1.5.0 && < 0.2
+    , statistics >= 0.13.3 && < 0.16
+    , parser-combinators
+    , yaml
+    , ralist
+    , primitive
+    , haskeline
+    , exceptions
+
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
 
 
 executable pact

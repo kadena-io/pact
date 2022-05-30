@@ -45,6 +45,7 @@ type TypedTerm b i = Typed.Term Name NamedDeBruijn b i
 -- Display purposes
 data TypeScheme tv =
   TypeScheme [tv] (Type tv)
+  deriving Show
 
 data Tv s
   = Unbound !Text !Unique !Level
@@ -75,6 +76,17 @@ makeLenses ''TCState
 
 type InferT s b a = ReaderT (TCState s b) (ST s) a
 
+_dbgTypeScheme :: TypeScheme (TvRef s) -> InferT s b (TypeScheme String)
+_dbgTypeScheme (TypeScheme tvs ty) = do
+  tvs' <- traverse rv tvs
+  ty' <- _dbgType ty
+  pure (TypeScheme tvs' ty')
+  where
+  rv n = readTvRef n >>= \case
+    Unbound u l _ -> pure ("unbound" <> show (u, l))
+    Bound u l -> pure ("bound" <> show (u, l))
+    Link _ -> pure "linktv"
+
 _dbgType :: TCType s -> InferT s b (Type String)
 _dbgType = \case
   TyVar tv -> readTvRef tv >>= \case
@@ -89,7 +101,57 @@ _dbgType = \case
   TyCap -> pure TyCap
   TyForall {} -> fail "impredicative"
   where
-  _dbgRow = undefined
+  _dbgRow = \case
+    RowVar tv -> readTvRef tv >>= \case
+      Unbound u l l' -> pure (RowVar ("unboundrow" <> show (u, l, l')))
+      Bound u l -> pure (RowVar ("boundrow" <> show (u, l)))
+      Link ty -> _dbgType ty >>= \case
+        TyRow r -> pure r
+        _ -> fail "impossible"
+    EmptyRow -> pure EmptyRow
+    RowTy obj mrv -> do
+      obj' <- traverse _dbgType obj
+      case mrv of
+        Just tv -> readTvRef tv >>= \case
+          Unbound u l l' -> pure (RowTy obj' (Just ("unboundrow" <> show (u, l, l'))))
+          Bound u l -> pure (RowTy obj' (Just ("boundrow" <> show (u, l))))
+          Link ty -> _dbgType ty >>= \case
+            TyRow (RowVar v) -> pure (RowTy obj' (Just v))
+            TyRow EmptyRow -> pure (RowTy obj' Nothing)
+            TyRow (RowTy obj'' mrv') -> pure (RowTy (Map.union obj' obj'') mrv')
+            _ -> fail "impossible"
+        Nothing -> pure (RowTy obj' Nothing)
+
+_dbgTypedTerm :: TypedTCTerm s b info -> InferT s b (Typed.Term Name String b info)
+
+_dbgTypedTerm = \case
+  Typed.Var n i -> pure (Typed.Var n i)
+  Typed.Lam n nel t i -> do
+    nel' <- (traversed._2) _dbgType nel
+    t' <- _dbgTypedTerm t
+    pure (Typed.Lam n nel' t' i)
+  Typed.App l nel i ->
+    Typed.App <$> _dbgTypedTerm l <*> traverse _dbgTypedTerm nel <*> pure i
+  Typed.TyAbs nel t i ->
+    Typed.TyAbs <$> traverse rv nel <*> _dbgTypedTerm t <*> pure i
+  Typed.TyApp t nel i ->
+    Typed.TyApp <$> _dbgTypedTerm t <*> traverse _dbgType nel <*> pure i
+  Typed.ObjectOp oop i -> fmap (`Typed.ObjectOp` i) $ case oop of
+    Typed.TObjectAccess f ts o ->
+      (Typed.TObjectAccess f <$> traverse _dbgType ts <*> _dbgTypedTerm o)
+    Typed.TObjectRemove f ts o ->
+      (Typed.TObjectRemove f <$> traverse _dbgType ts <*> _dbgTypedTerm o)
+    Typed.TObjectUpdate f ts v o ->
+      (Typed.TObjectUpdate f <$> traverse _dbgType ts <*> _dbgTypedTerm v <*> _dbgTypedTerm o)
+  Typed.Builtin b i -> pure (Typed.Builtin b i)
+  Typed.Constant l i -> pure (Typed.Constant l i)
+  _ -> undefined
+  where
+  rv n = readTvRef n >>= \case
+    Unbound u l _ -> pure ("unbound" <> show (u, l))
+    Bound u l -> pure ("bound" <> show (u, l))
+    Link _ -> pure "linktv"
+
 
 enterLevel :: InferT s b ()
 enterLevel = do
@@ -310,14 +372,18 @@ unifyRow (RowTy objL lrv) (RowTy objR rrv') =
   case (lrv, rrv') of
     -- Two open rows, we unify them back into open rows
     -- with each other's fields that are missing
+    -- with a fresh row variable, which indicates that they are indeed the same row
     (Just tvl, Just tvr) -> do
       traverse_ (uncurry unify) (Map.intersectionWith (,) objL objR)
-      leftRv <- newTvRef
-      rightRv <- newTvRef
-      let notInR = Map.difference objL objR
-          notInL = Map.difference objR objL
-      unifyTyVar tvl (TyRow (RowTy notInL (Just leftRv)))
-      unifyTyVar tvr (TyRow (RowTy notInR (Just rightRv)))
+      if Map.keys objL == Map.keys objR
+        then do
+          unifyTyVar tvl (TyRow (RowVar tvr))
+        else do
+          newRv <- newTvRef
+          let notInL = Map.difference objR objL
+              notInR = Map.difference objL objR
+          unifyTyVar tvl (TyRow (RowTy notInL (Just newRv)))
+          unifyTyVar tvr (TyRow (RowTy notInR (Just newRv)))
     -- note: the NOTHING branch here means a closed row,
     -- therefore the open row's fields must be a subset.
     (Just tv, Nothing) -> unifyWithClosed tv objL objR
@@ -644,34 +710,32 @@ dbjRow
 dbjRow env depth = \case
   RowVar rv -> case lookup rv env of
     Just v -> pure (RowVar v)
-    Nothing -> fail "unbound row var"
+    Nothing ->  readTvRef rv >>= \case
+      Unbound {} -> fail "unbound row var"
+      Bound{} -> fail "impossible"
+      Link ty -> dbjTyp env depth ty >>= \case
+        TyRow r -> pure r
+        _ -> fail "invalid substitution in sanity check"
   EmptyRow -> pure EmptyRow
   RowTy obj mrv -> do
     obj' <- traverse (dbjTyp env depth) obj
     case mrv of
       Just rv -> case lookup rv env of
         Just v -> pure (RowTy obj' (Just v))
-        Nothing -> fail "unbound row var"
+        Nothing -> readTvRef rv >>= \case
+          Unbound _ u l -> fail $ "unbound row type" <> show (u, l)
+          Bound{} -> fail "impossible"
+          Link ty -> dbjTyp env depth ty >>= \case
+            TyRow (RowVar rv') -> pure (RowTy obj' (Just rv'))
+            TyRow (RowTy obj2 mrv2) -> pure (RowTy (Map.union obj' obj2) mrv2)
+            TyRow EmptyRow -> pure (RowTy obj' Nothing)
+            _ -> fail "invalid substitution in sanity check"
       Nothing -> pure (RowTy obj' Nothing)
 
 tsToTyForall :: TypeScheme t -> Type t
 tsToTyForall (TypeScheme ts t) = case ts of
   [] -> t
   (x:xs) -> TyForall (x:|xs) t
-
-runInferTerm :: Supply -> (b -> Type NamedDeBruijn) -> IRTerm b i -> (Type NamedDeBruijn, TypedTerm b i)
-runInferTerm u bfn term0 = runST $ do
-  uref <- newSTRef u
-  lref <- newSTRef 1
-  let tcs = TCState uref mempty bfn lref
-  flip runReaderT tcs $ do
-    enterLevel
-    (ty, term1) <- inferTerm term0
-    leaveLevel
-    (tys, term2) <- generalizeWithTerm ty term1
-    ts <- debruijnizeTypeScheme tys
-    term3 <- debruijnizeTermTypes term2
-    pure (ts, term3)
 
 -----------------------------------------
 --- Built-in type wiring
@@ -755,6 +819,9 @@ rawBuiltinType = \case
     TyInt :~> TyInt :~> TyList TyInt
   RawEnumerateStepN ->
     TyInt :~> TyInt :~> TyInt :~> TyList TyInt
+  RawDummy ->
+    let aVar = nd "a" 0
+    in TyForall (aVar :| []) (TyRow (RowVar aVar) :~> TyRow (RowVar aVar) :~> TyUnit)
   where
   nd b a = NamedDeBruijn a b
   unaryInt = TyInt :~> TyInt
@@ -773,16 +840,25 @@ objectAccessType f =
       rowTy = TyRow (RowTy (Map.singleton f a) (Just rVar))
   in TyForall (aVar :| [rVar]) (rowTy :~> a)
 
+-- objectUpdateType :: Field -> Type NamedDeBruijn
+-- objectUpdateType f =
+--   let aVar = NamedDeBruijn 2 "a"
+--       bVar = NamedDeBruijn 1 "b"
+--       rVar = NamedDeBruijn 0 "r"
+--       a = TyVar aVar
+--       b = TyVar bVar
+--       rowTy0 = TyRow (RowTy (Map.singleton f b) (Just rVar))
+--       rowTy1 = TyRow (RowTy (Map.singleton f a) (Just rVar))
+--   in TyForall (aVar :| [bVar, rVar]) (a :~> rowTy0 :~> rowTy1)
+
 objectUpdateType :: Field -> Type NamedDeBruijn
 objectUpdateType f =
-  let aVar = NamedDeBruijn 2 "a"
-      bVar = NamedDeBruijn 1 "b"
+  let aVar = NamedDeBruijn 1 "a"
       rVar = NamedDeBruijn 0 "r"
       a = TyVar aVar
-      b = TyVar bVar
-      rowTy0 = TyRow (RowTy (Map.singleton f b) (Just rVar))
+      rowTy0 = TyRow (RowVar rVar)
       rowTy1 = TyRow (RowTy (Map.singleton f a) (Just rVar))
-  in TyForall (aVar :| [bVar, rVar]) (a :~> rowTy0 :~> rowTy1)
+  in TyForall (aVar :| [rVar]) (a :~> rowTy0 :~> rowTy1)
 
 objectRemoveType :: Field -> Type NamedDeBruijn
 objectRemoveType f =
@@ -793,3 +869,16 @@ objectRemoveType f =
       rowTy1 = TyRow (RowVar rVar)
   in TyForall (aVar :| [rVar]) (rowTy0 :~> rowTy1)
 
+runInferTerm :: Supply -> (b -> Type NamedDeBruijn) -> IRTerm b i -> (Type NamedDeBruijn, TypedTerm b i)
+runInferTerm u bfn term0 = runST $ do
+  uref <- newSTRef u
+  lref <- newSTRef 1
+  let tcs = TCState uref mempty bfn lref
+  flip runReaderT tcs $ do
+    enterLevel
+    (ty, term1) <- inferTerm term0
+    leaveLevel
+    (tys, term2) <- generalizeWithTerm ty term1
+    ts <- debruijnizeTypeScheme tys
+    term3 <- debruijnizeTermTypes term2
+    pure (ts, term3)

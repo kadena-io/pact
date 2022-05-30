@@ -39,12 +39,14 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.RAList as RAList
+import qualified Data.Vector as V
 
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Typed.Term
-
+import Pact.Core.Pretty(Pretty(..), (<+>))
 import Pact.Types.Gas
+import qualified Pact.Core.Pretty as P
 
 type CEKTLEnv b = Map DeclName (CEKValue b)
 type CEKEnv b = RAList (CEKValue b)
@@ -139,7 +141,7 @@ eval = evalCEK Mt
       o' <- evalCEK Mt env o
       v' <- objRemove f o'
       returnCEK cont v'
-    TObjectUpdate f _ o v -> do
+    TObjectUpdate f _ v o -> do
       o' <- evalCEK Mt env o
       v' <- evalCEK Mt env v
       out <- objUpdate f o' v'
@@ -188,3 +190,21 @@ eval = evalCEK Mt
   objRemove _ _ = error "fail"
   objUpdate f v (VObject o) = pure (VObject (Map.insert f v o))
   objUpdate _ _ _ = error "fail"
+
+
+instance Pretty b => Pretty (CEKValue b) where
+  pretty = \case
+    VLiteral i -> pretty i
+    VObject o ->
+      let toBind (k, e) = pretty k <> ":" <> pretty e
+      in P.braces $ P.hsep (P.punctuate P.comma (toBind <$> (Map.toList o)))
+    VList v ->
+      P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
+    VClosure n _ _ _ ->
+      P.angles $ "closure" <+> pretty n
+    VNative b ->
+      P.angles $ "native" <+> pretty b
+    VGuard _ -> error "undefined"
+    VCap _ -> P.angles "capability"
+    VModRef -> "modref"
+    VError e -> "Error:" <+> pretty e

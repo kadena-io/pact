@@ -82,3 +82,4 @@ resolveOverload = \case
     RawEnforceOne -> EnforceOne
     RawEnumerate -> Enumerate
     RawEnumerateStepN -> EnumerateStepN
+    RawDummy -> Dummy
