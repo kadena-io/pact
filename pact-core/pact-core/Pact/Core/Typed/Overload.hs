@@ -34,6 +34,8 @@ resolveOverload = \case
     pure (Constant lit i)
   Builtin b i ->
     Builtin <$> pure (solveOverload b) <*> pure i
+  ObjectOp o i ->
+    ObjectOp <$> traverse resolveOverload o <*> pure i
   Error t1 t2 i ->
     pure (Error t1 t2 i)
   where

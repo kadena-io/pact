@@ -145,7 +145,7 @@ typecheck' = \case
   TyAbs tn term _ -> do
     typ <- typecheck' term
     pure (TyForall tn typ)
-  
+
   -- ------------------------ (T-Error)
   -- Γ ⊢ (error msg t1) : t1
   Error _ t _ ->
@@ -169,6 +169,7 @@ typecheck' = \case
   ObjectLit fields _ -> do
     fields' <- traverse typecheck' fields
     pure $ TyRow (RowTy fields' Nothing)
+  ObjectOp _ _ -> error "unimplemented"
 
   -- e_1:t_1, ... , e_n : t_n
   -- ------------------------ (T-Builtin)

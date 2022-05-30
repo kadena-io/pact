@@ -114,6 +114,8 @@ desugarTerm = \case
     pure $ Constant l i
   PT.Object objs i ->
     ObjectLit <$> traverse desugarTerm objs <*> pure i
+  PT.ObjectOp o i ->
+    ObjectOp <$> traverse desugarTerm o <*> pure i
   PT.Error text i ->
     pure $ Error text i
   where

@@ -2,6 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.Typed.Term
 ( Defun(..)
@@ -20,6 +23,7 @@ module Pact.Core.Typed.Term
 , termInfo
 , traverseTermType
 , ETerm
+, TObjectOp(..)
 )
  where
 
@@ -152,6 +156,10 @@ data Term name tyname builtin info
   -- let n = e1 in e2
   | Let name (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ (e_1 e_2 .. e_n)
+  | Builtin builtin info
+  -- ^ Built-in functions (or natives)
+  | Constant Literal info
+  -- ^ Constant/Literal values
   | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname)) info
   -- ^ (e_1 @t)
   | TyAbs (NonEmpty tyname) (Term name tyname builtin info) info
@@ -162,15 +170,19 @@ data Term name tyname builtin info
   -- ^ {f_1:e_1, .., f_n:e_n}
   | ListLit (Type tyname) (Vector (Term name tyname builtin info)) info
   -- ^ [e_1, e_2, .., e_n]
+  | ObjectOp (TObjectOp tyname (Term name tyname builtin info)) info
+  -- Object access, update and remove
   | Error Text (Type tyname) info
   -- ^ error terms + their inferred type
-  | Builtin builtin info
-  -- ^ Built-in functions (or natives)
-  | Constant Literal info
-  -- ^ Constant/Literal values
   deriving (Show)
 
 type ETerm b = Term Name NamedDeBruijn b ()
+
+data TObjectOp tyname o
+  = TObjectAccess Field [Type tyname] o
+  | TObjectRemove Field [Type tyname] o
+  | TObjectUpdate Field [Type tyname] o o
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
   pretty = \case
@@ -194,6 +206,13 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       "{" <> Pretty.hardline <> prettyBlock nel <> "}"
     ObjectLit (Map.toList -> obj) _ ->
       Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
+    ObjectOp oop _ -> case oop of
+      TObjectAccess f _ o ->
+        "accessObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
+      TObjectRemove f _ o ->
+        "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
+      TObjectUpdate f _ v o ->
+        "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
     ListLit ty (V.toList -> li) _ ->
       (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Error e ty _ ->
@@ -216,6 +235,7 @@ termInfo f = \case
   TyAbs ty term i -> TyAbs ty term <$> f i
   Block terms i -> Block terms <$> f i
   ObjectLit obj i -> ObjectLit obj <$> f i
+  ObjectOp o i -> ObjectOp o <$> f i
   ListLit ty v i -> ListLit ty v <$> f i
   Error s ty i -> Error s ty <$> f i
   Builtin b i -> Builtin b <$> f i
@@ -238,6 +258,8 @@ traverseTermType f = \case
     Block <$> traverse (traverseTermType f) nel <*> pure i
   ObjectLit obj i ->
     ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
+  ObjectOp oop i ->
+    ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
   ListLit ty v i ->
     ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
   Error e ty i ->
@@ -258,6 +280,8 @@ instance Plated (Term name tyname builtin info) where
       ObjectLit <$> traverse f tm <*> pure i
     ListLit ty ts i ->
       ListLit ty <$> traverse f ts <*> pure i
+    ObjectOp oop i ->
+      ObjectOp <$> traverse f oop <*> pure i
     Block terms i -> Block <$> traverse f terms <*> pure i
     Error s ty i -> pure (Error s ty i)
     Builtin b i -> pure (Builtin b i)

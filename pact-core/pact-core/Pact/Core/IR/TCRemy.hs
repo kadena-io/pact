@@ -501,6 +501,32 @@ inferTerm = \case
     let obj' = snd <$> objTup
         objTy = TyRow (RowTy (fst <$> objTup) Nothing)
     pure (objTy, Typed.ObjectLit obj' i)
+  IR.ObjectOp oop i -> case oop of
+    ObjectAccess f o -> do
+      tv <- TyVar <$> newTvRef
+      (objTyp, o') <- inferTerm o
+      let ty = objectAccessType f
+      (tyInst, tvs) <- instantiateImported ty
+      unify tyInst (TyFun objTyp tv)
+      let term' = Typed.ObjectOp (Typed.TObjectAccess f (TyVar <$> tvs) o') i
+      pure (tv, term')
+    ObjectRemove f o -> do
+      tv <- TyVar <$> newTvRef
+      (objTyp, o') <- inferTerm o
+      let ty = objectRemoveType f
+      (tyInst, tvs) <- instantiateImported ty
+      unify tyInst (TyFun objTyp tv)
+      let term' = Typed.ObjectOp (Typed.TObjectRemove f (TyVar <$> tvs) o') i
+      pure (tv, term')
+    ObjectUpdate f v obj -> do
+      tv <- TyVar <$> newTvRef
+      (vTyp, v') <- inferTerm v
+      (objTyp, o') <- inferTerm obj
+      let ty = objectUpdateType f
+      (tyInst, tvs) <- instantiateImported ty
+      unify tyInst (TyFun vTyp (TyFun objTyp tv))
+      let term' = Typed.ObjectOp (Typed.TObjectUpdate f (TyVar <$> tvs) o' v') i
+      pure (tv, term')
   IR.ListLit li i -> do
     tv <- TyVar <$> newTvRef
     liTup <- traverse inferTerm li
@@ -555,6 +581,20 @@ debruijnizeTermTypes = dbj [] 0
       Typed.Block <$> traverse (dbj env depth) nel <*> pure i
     Typed.ObjectLit obj i ->
       Typed.ObjectLit <$> traverse (dbj env depth) obj <*> pure i
+    Typed.ObjectOp oop i -> fmap (`Typed.ObjectOp` i) $ case oop of
+      Typed.TObjectAccess f tvs o -> do
+        tvs' <- traverse (dbjTyp env depth) tvs
+        o' <- dbj env depth o
+        pure (Typed.TObjectAccess f tvs' o')
+      Typed.TObjectRemove f tvs o -> do
+        tvs' <- traverse (dbjTyp env depth) tvs
+        o' <- dbj env depth o
+        pure (Typed.TObjectRemove f tvs' o')
+      Typed.TObjectUpdate f tvs v o -> do
+        tvs' <- traverse (dbjTyp env depth) tvs
+        v' <- dbj env depth v
+        o' <- dbj env depth o
+        pure (Typed.TObjectUpdate f tvs' v' o')
     Typed.ListLit ty v i ->
       Typed.ListLit <$> dbjTyp env depth ty <*> traverse (dbj env depth) v <*> pure i
     Typed.Error e t i ->
@@ -724,3 +764,32 @@ rawBuiltinType = \case
   roundingFn = TyDecimal :~> TyInt
   binaryIntComp = TyInt :~> TyInt :~> TyBool
   binaryBool = TyBool :~> TyBool :~> TyBool
+
+objectAccessType :: Field -> Type NamedDeBruijn
+objectAccessType f =
+  let aVar = NamedDeBruijn 1 "a"
+      rVar = NamedDeBruijn 0 "r"
+      a = TyVar aVar
+      rowTy = TyRow (RowTy (Map.singleton f a) (Just rVar))
+  in TyForall (aVar :| [rVar]) (rowTy :~> a)
+
+objectUpdateType :: Field -> Type NamedDeBruijn
+objectUpdateType f =
+  let aVar = NamedDeBruijn 2 "a"
+      bVar = NamedDeBruijn 1 "b"
+      rVar = NamedDeBruijn 0 "r"
+      a = TyVar aVar
+      b = TyVar bVar
+      rowTy0 = TyRow (RowTy (Map.singleton f b) (Just rVar))
+      rowTy1 = TyRow (RowTy (Map.singleton f a) (Just rVar))
+  in TyForall (aVar :| [bVar, rVar]) (a :~> rowTy0 :~> rowTy1)
+
+objectRemoveType :: Field -> Type NamedDeBruijn
+objectRemoveType f =
+  let aVar = NamedDeBruijn 1 "a"
+      rVar = NamedDeBruijn 0 "r"
+      a = TyVar aVar
+      rowTy0 = TyRow (RowTy (Map.singleton f a) (Just rVar))
+      rowTy1 = TyRow (RowVar rVar)
+  in TyForall (aVar :| [rVar]) (rowTy0 :~> rowTy1)
+

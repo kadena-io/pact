@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.Builtin where
 
@@ -8,7 +10,15 @@ import Data.Map.Strict(Map)
 
 import qualified Data.Map.Strict as Map
 
+import Pact.Core.Names
 import Pact.Core.Pretty(Pretty(..))
+
+data ObjectOp o
+  = ObjectAccess Field o
+  | ObjectRemove Field o
+  | ObjectUpdate Field o o
+  deriving (Show, Eq, Functor, Foldable, Traversable)
+
 
 data RawBuiltin
   -- Operators

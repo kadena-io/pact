@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Pact.Core.IR.ParseTree where
 
-import Control.Lens hiding (List)
+import Control.Lens hiding (List, op)
 import Data.Foldable(fold)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
@@ -12,7 +12,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import Data.List(intersperse)
 
-
+import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -167,6 +167,7 @@ data Expr name i
   | BinaryOp BinaryOp (Expr name i) (Expr name i) i
   | List [Expr name i] i
   | Constant Literal i
+  | ObjectOp (ObjectOp (Expr name i)) i
   | Error Text i
   deriving Show
 
@@ -184,6 +185,7 @@ termInfo f = \case
   UnaryOp _op e i -> UnaryOp _op e <$> f i
   BinaryOp _op e1 e2 i -> BinaryOp _op e1 e2 <$> f i
   List nel i -> List nel <$> f i
+  ObjectOp o i -> ObjectOp o <$> f i
   Constant l i -> Constant l <$> f i
   Error e i -> Error e <$> f i
 
@@ -216,6 +218,13 @@ instance Pretty name => Pretty (Expr name i) where
       pretty l
     List nel _ ->
       "[" <> prettyCommaSep nel <> "]"
+    ObjectOp op _ -> case op of
+      ObjectAccess f o ->
+        pretty o <> "->" <> pretty f
+      ObjectRemove f o ->
+        pretty o <> "#" <> pretty f
+      ObjectUpdate f u o ->
+        pretty o <> braces (pretty f <> ":=" <> pretty u)
     -- Todo: fix errors
     Error e _ ->
       "throw" <+> dquotes (pretty e)

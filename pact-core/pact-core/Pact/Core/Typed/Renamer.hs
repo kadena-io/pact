@@ -87,6 +87,7 @@ renameTerm = \case
     Block <$> traverse renameTerm nel <*> pure i
   ObjectLit obj i ->
     ObjectLit <$> traverse renameTerm obj <*> pure i
+  ObjectOp _ _ -> error "unimplemented"
   ListLit t li i ->
     ListLit <$> renameType t <*> traverse renameTerm li <*> pure i
   Error e t i ->

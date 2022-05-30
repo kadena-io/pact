@@ -126,11 +126,25 @@ eval = evalCEK Mt
   evalCEK cont env (ListLit _ ts _) = do
     ts' <- traverse (evalCEK Mt env) ts
     returnCEK cont (VList ts')
-  evalCEK _cont _env (Error s _ _) = error (T.unpack s) -- todo: proper error continuations, we actually have `try`
   evalCEK cont env (TyApp t _ _) =
     evalCEK cont env t
   evalCEK cont env (TyAbs _ t _) =
     evalCEK cont env t
+  evalCEK cont env (ObjectOp op _) = case op of
+    TObjectAccess f _ o -> do
+      o' <- evalCEK Mt env o
+      v' <- objAccess f o'
+      returnCEK cont v'
+    TObjectRemove f _ o -> do
+      o' <- evalCEK Mt env o
+      v' <- objRemove f o'
+      returnCEK cont v'
+    TObjectUpdate f _ o v -> do
+      o' <- evalCEK Mt env o
+      v' <- evalCEK Mt env v
+      out <- objUpdate f o' v'
+      returnCEK cont out
+  evalCEK _cont _env (Error s _ _) = error (T.unpack s) -- todo: proper error continuations, we actually have `try`
   returnCEK
     :: Cont b
     -> CEKValue b
@@ -168,3 +182,9 @@ eval = evalCEK Mt
     returnCEK cont (VClosure lamn (n :| ns') body env)
   applyArgs _lamn [] (_args:_args') _env _body _cont =
     error "too many arguments in fn application"
+  objAccess f (VObject o) = pure (o Map.! f)
+  objAccess _ _ = error "fail"
+  objRemove f (VObject o) = pure (VObject (Map.delete f o))
+  objRemove _ _ = error "fail"
+  objUpdate f v (VObject o) = pure (VObject (Map.insert f v o))
+  objUpdate _ _ _ = error "fail"

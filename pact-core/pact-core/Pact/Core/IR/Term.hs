@@ -144,7 +144,10 @@ data Term name tyname builtin info
   | ObjectLit (Map Field (Term name tyname builtin info)) info
   -- ^ Object literals
   | ListLit (Vector (Term name tyname builtin info)) info
+  -- List Literals ^
+  | ObjectOp (ObjectOp (Term name tyname builtin info)) info
   deriving (Show, Functor)
+  
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
@@ -158,25 +161,9 @@ termInfo f = \case
   Constant l i -> Constant l <$> f i
   DynAccess n1 n2 i -> DynAccess n1 n2 <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
+  ObjectOp o i -> ObjectOp o <$> f i
   Block terms i -> Block terms <$> f i
   ListLit l i  -> ListLit l <$> f i
-
--- termNames :: Traversal (Term name tyname builtin info) (Term name' tyname builtin info) name name'
--- termNames f = \case
---   Var n i -> Var <$> f n <$> pure i
---   Let n mty t1 t2 i ->
---     Let <$> f n <*> pure mty <*> termNames f t1 <*> termNames f t2 <$> pure i
---   Lam n ns mty term i ->
---     Lam <$> f n
---      Lam n ns mty term <$> f i
---   App t1 t2 i -> App t1 t2 <$> f i
---   Error s i -> Error s <$> f i
---   Builtin b i -> Builtin b <$> f i
---   Constant l i -> Constant l <$> f i
---   DynAccess n1 n2 i -> DynAccess n1 n2 <$> f i
---   ObjectLit m i -> ObjectLit m <$> f i
---   Block terms i -> Block terms <$> f i
---   ListLit l i  -> ListLit l <$> f i
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case
@@ -189,6 +176,7 @@ instance Plated (Term name tyname builtin info) where
     Constant l i -> pure (Constant l i)
     DynAccess n1 n2 i -> pure (DynAccess n1 n2 i)
     ObjectLit m i -> ObjectLit <$> traverse f m <*> pure i
+    ObjectOp o i -> ObjectOp <$> traverse f o <*> pure i
     Block terms i -> Block <$> traverse f terms <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
 
