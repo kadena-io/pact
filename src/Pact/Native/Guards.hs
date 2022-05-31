@@ -151,7 +151,6 @@ principalParser = (kParser $> "k:")
     base64UrlHashParser = count 43 (satisfy f) where
       f c = c `elem` base64UrlUnpaddedAlphabet
 
-    latin1Chars = some $ satisfy isLatin1
     hexKey = count 64 $ satisfy isHexDigit
 
     kParser = char 'k'
@@ -163,7 +162,7 @@ principalParser = (kParser $> "k:")
       *> char ':'
       *> base64UrlHashParser
       *> char ':'
-      *> latin1Chars
+      *> nameParser def
       *> eof
 
     pParser = char 'p'
@@ -175,7 +174,7 @@ principalParser = (kParser $> "k:")
 
     rParser = char 'r'
       *> char ':'
-      *> latin1Chars
+      *> nameParser def
       *> eof
 
     mParser = char 'm'
