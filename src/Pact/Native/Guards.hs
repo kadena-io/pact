@@ -16,24 +16,24 @@ module Pact.Native.Guards
 ) where
 
 
-import Control.Applicative hiding (some)
+import Control.Applicative
 
 import Data.Aeson (encode)
+import Data.Attoparsec.Text
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
+import Data.Default (def)
 import Data.Foldable
 import Data.Functor (($>), void)
 import Data.Text (Text)
-import Data.Void
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Hash
 import Pact.Types.Runtime
 
-import Text.Megaparsec
-import Text.Megaparsec.Char
-
+import Text.Parser.Combinators (eof)
+import Data.Char (isLatin1, isHexDigit)
 
 
 guardDefs :: NativeModule
@@ -116,9 +116,9 @@ isPrincipleDef = defRNative "is-principal" isPrincipal
   where
     isPrincipal :: RNativeFun e
     isPrincipal i as = case as of
-      [TLitString p] -> case parseMaybe principalParser p of
-        Nothing -> pure $ toTerm False
-        Just {} -> pure $ toTerm True
+      [TLitString p] -> case parseOnly principalParser p of
+        Left{} -> pure $ toTerm False
+        Right{} -> pure $ toTerm True
       _ -> argsError i as
 
 typeOfPrincipalDef :: NativeDef
@@ -131,12 +131,12 @@ typeOfPrincipalDef = defRNative "typeof-principal" typeOfPrincipal
   where
     typeOfPrincipal :: RNativeFun e
     typeOfPrincipal i as = case as of
-      [TLitString p] -> case parseMaybe principalParser p of
-        Nothing -> pure $ tStr ""
-        Just ty -> pure $ tStr ty
+      [TLitString p] -> case parseOnly principalParser p of
+        Left{} -> pure $ tStr ""
+        Right ty -> pure $ tStr ty
       _ -> argsError i as
 
-principalParser :: Parsec Void Text Text
+principalParser :: Parser Text
 principalParser = (kParser $> "k:")
   <|> (wParser $> "w:")
   <|> (rParser $> "r:")
@@ -151,40 +151,43 @@ principalParser = (kParser $> "k:")
     base64UrlHashParser = count 43 (satisfy f) where
       f c = c `elem` base64UrlUnpaddedAlphabet
 
+    latin1Chars = some $ satisfy isLatin1
+    hexKey = count 64 $ satisfy isHexDigit
+
     kParser = char 'k'
       *> char ':'
-      *> count 64 hexDigitChar
+      *> hexKey
       *> eof
 
     wParser = char 'w'
       *> char ':'
       *> base64UrlHashParser
       *> char ':'
-      *> some latin1Char
+      *> latin1Chars
       *> eof
 
     pParser = char 'p'
       *> char ':'
       *> base64UrlHashParser
       *> char ':'
-      *> some latin1Char
+      *> nameParser def
       *> eof
 
     rParser = char 'r'
       *> char ':'
-      *> some latin1Char
+      *> latin1Chars
       *> eof
 
     mParser = char 'm'
       *> char ':'
-      *> some latin1Char
+      *> moduleNameParser
       *> char ':'
-      *> some latin1Char
+      *> nameParser def
       *> eof
 
     uParser = char 'u'
       *> char ':'
-      *> some latin1Char
+      *> nameParser def
       *> char ':'
       *> base64UrlHashParser
       *> eof

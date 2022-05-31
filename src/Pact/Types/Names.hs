@@ -23,6 +23,8 @@ module Pact.Types.Names
   , DefName(..)
   , TableName(..)
   , ModuleName(..), mnName, mnNamespace, parseModuleName
+  , moduleNameParser
+  , nameParser
   , Name(..), parseName
   , QualifiedName(..), parseQualifiedName
   , DynamicName(..)
