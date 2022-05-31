@@ -123,7 +123,7 @@
 (define-keyset 'ks3)
 
 (expect
- "creating principals using keyset references creates r: accounts"
+ "creating principals using keyset references creates r: guards"
  "r:ks3"
  (create-principal (keyset-ref-guard 'ks3)))
 
@@ -144,23 +144,23 @@
   ))
 
 (expect
-  "is-principal returns true for r: accounts"
+  "is-principal returns true for r: guards"
   true
   (is-principal (create-principal (keyset-ref-guard 'ks3)))
   )
 
 (expect
-  "is-principal should be false for improper r: accounts"
+  "is-principal should be false for improper r: guards"
   false
   (is-principal "r:"))
 
 (expect
-  "typeof-principal should return r: for r accounts"
+  "typeof-principal should return r: for r guards"
   "r:"
   (typeof-principal (create-principal (keyset-ref-guard 'ks3))))
 
 (expect
-  "typeof-principal should fail for r: accounts: improper keylength - empty"
+  "typeof-principal should fail for r: guards: improper keylength - empty"
   ""
   (typeof-principal "r:"))
 
@@ -320,7 +320,7 @@
   (typeof-principal "m::tester"))
 
 (expect
-  "typeof-principal should fail for m: accounts: empty module name"
+  "typeof-principal should fail for m: accounts: empty func name"
   ""
   (typeof-principal "m:test-ns.tester:"))
 
@@ -338,6 +338,46 @@
  true
  (test-ns.tester.k))
 
+(expect
+  "is-principal returns true for u: guards"
+  true
+  (is-principal (test-ns.tester.j)))
+
+(expect
+  "is-principal should be false for improper u: guards - empty fqn"
+  false
+  (is-principal "u::tester"))
+
+(expect
+  "is-principal should be false for improper u: guards - empty hash"
+  false
+  (is-principal "u:test-ns.tester.both-guard:"))
+
+(expect
+  "typeof-principal should return u: for u guards"
+  "u:"
+  (typeof-principal (test-ns.tester.j)))
+
+(expect
+  "typeof-principal should fail for u: accounts: empty fqn"
+  ""
+  (typeof-principal "u::aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDI"))
+
+(expect
+  "typeof-principal should fail for u: accounts: empty hash"
+  ""
+  (typeof-principal "u:test-ns.tester.both-guard:"))
+
+(expect
+  "typeof-principal should fail for u: accounts: hash too big"
+  ""
+  (typeof-principal "u:test-ns.tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDIs"))
+
+(expect
+  "typeof-principal should fail for u: accounts: hash too small"
+  ""
+  (typeof-principal "u:test-ns.tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQD"))
+
 ;; p: guard validation
 
 (expect
@@ -349,6 +389,52 @@
  "validating principal pact guards roundtrips with create-principal"
  true
  (continue-pact 1))
+
+;; clear env
+(pact-state true)
+
+(expect
+  "is-principal returns true for p: guards"
+  true
+  (is-principal (test-ns.tester.pact-test)))
+
+(expect
+  "is-principal should be false for improper p: guards - empty hash"
+  false
+  (is-principal "p::pact-guard"))
+
+(expect
+  "is-principal should be false for improper p: guards - empty name"
+  false
+  (is-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:"))
+
+;; clear env
+(pact-state true)
+
+(expect
+  "typeof-principal should return p: for pact guards"
+  "p:"
+  (typeof-principal (test-ns.tester.pact-test)))
+
+(expect
+  "typeof-principal should fail for p: accounts: empty fqn"
+  ""
+  (typeof-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:"))
+
+(expect
+  "typeof-principal should fail for p: accounts: empty hash"
+  ""
+  (typeof-principal "p::pact-guard"))
+
+(expect
+  "typeof-principal should fail for p: accounts: hash too big"
+  ""
+  (typeof-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46gg:pact-guard"))
+
+(expect
+  "typeof-principal should fail for p: accounts: hash too small"
+  ""
+  (typeof-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46:pact-guard"))
 
 (commit-tx)
 (begin-tx)

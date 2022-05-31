@@ -33,7 +33,7 @@ import Pact.Types.Hash
 import Pact.Types.Runtime
 
 import Text.Parser.Combinators (eof)
-import Data.Char (isLatin1, isHexDigit)
+import Data.Char (isHexDigit)
 
 
 guardDefs :: NativeModule
@@ -140,9 +140,9 @@ principalParser :: Parser Text
 principalParser = (kParser $> "k:")
   <|> (wParser $> "w:")
   <|> (rParser $> "r:")
-  <|> (pParser $> "p:")
-  <|> (mParser $> "m:")
   <|> (uParser $> "u:")
+  <|> (mParser $> "m:")
+  <|> (pParser $> "p:")
   where
     base64UrlUnpaddedAlphabet :: String
     base64UrlUnpaddedAlphabet =
@@ -151,11 +151,11 @@ principalParser = (kParser $> "k:")
     base64UrlHashParser = count 43 (satisfy f) where
       f c = c `elem` base64UrlUnpaddedAlphabet
 
-    hexKey = count 64 $ satisfy isHexDigit
+    hexKeyFormat = count 64 $ satisfy isHexDigit
 
     kParser = char 'k'
       *> char ':'
-      *> hexKey
+      *> hexKeyFormat
       *> eof
 
     wParser = char 'w'
