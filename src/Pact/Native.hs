@@ -201,7 +201,7 @@ pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
 
 pactVersion' :: RNativeFun e
 pactVersion' i _ = do
-  whenExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
+  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
   pure (toTerm pactVersion)
 
 formatDef :: NativeDef
@@ -1072,7 +1072,7 @@ sort' _ i as = argsError i as
 
 enforceVersion :: RNativeFun e
 enforceVersion i as = do
-  whenExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
+  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
   case as of
     [TLitString minVersion] -> doMin minVersion >> return (toTerm True)
     [TLitString minVersion,TLitString maxVersion] ->
