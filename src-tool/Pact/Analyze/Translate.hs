@@ -1711,9 +1711,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr _ -> shimNative astNode node fn []
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"typeof-principal" [a] -> translateNode a >>= \case
+  AST_NFun node fn@"typeof-principal" [a] -> translateNode a >>= \a' -> case a' of
     -- assuming we have a principal string as input, yield empty string
-    Some SStr _ -> shimNative astNode node fn []
+    Some SStr _ -> shimNative' node fn [] "principal" a'
     _ -> unexpectedNode astNode
 
   AST_NFun node fn as -> shimNative astNode node fn as
