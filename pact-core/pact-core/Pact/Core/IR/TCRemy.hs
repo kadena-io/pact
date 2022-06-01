@@ -186,51 +186,6 @@ newTvRef = do
 -- Instantiations
 ---------------------------------------------------------------
 
--- Todo: unsafe map access
--- instantiate :: TypeScheme (TvRef s) -> InferT s b (TCType s)
--- instantiate (TypeScheme ts ty) = do
---   nts <- fmap TyVar <$> traverse (const newTvRef) ts
---   let m = IntMap.fromList $ zip (_unique . snd <$> ts) nts
---   instBound m ty
---   where
---   instBound m = \case
---     t@(TyVar tv) -> readTvRef tv >>= \case
---       Bound _ (Unique u) -> pure (m IntMap.! u)
---       Link lt -> instBound m lt
---       _ -> pure t
---     TyPrim p -> pure (TyPrim p)
---     TyFun l r ->
---       TyFun <$> instBound m l <*> instBound m r
---     TyRow r -> TyRow <$> instBoundRow m r
---     TyList t -> TyList <$> instBound m t
---     TyTable r -> TyTable <$> instBoundRow m r
---     t -> pure t
---   instBoundRow _m EmptyRow = pure EmptyRow
---   instBoundRow m t@(RowVar rv) = readTvRef rv >>= \case
---     Bound _ (Unique b) -> case (m IntMap.! b) of
---       TyVar rv' -> pure (RowVar rv')
---       _ -> pure t
---     Link lt -> instBound m lt >>= \case
---       TyRow r' -> pure r'
---       TyVar rv' -> pure (RowVar rv')
---       _ -> fail "impossible?"
---     _ -> pure t
---   instBoundRow m t@(RowTy o mrv) = do
---     obj <- traverse (instBound m) o
---     case mrv of
---       Just rv -> readTvRef rv >>= \case
---         Bound _ (Unique b) -> case (m IntMap.! b) of
---           TyVar rv' -> pure (RowTy obj (Just rv'))
---           _ -> pure t
---         Link lt -> instBound m lt >>= \case
---           TyRow (RowTy obj' r) -> pure (RowTy (Map.union obj obj') r)
---           TyRow EmptyRow -> pure (RowTy obj Nothing)
---           TyRow (RowVar rv') -> pure (RowTy obj (Just rv'))
---           TyVar rv' -> pure (RowTy obj (Just rv'))
---           _ -> fail "impossible?"
---         _ -> pure t
---       Nothing -> pure (RowTy obj Nothing)
-
 instantiateWithTerm
   :: TypeScheme (TvRef s)
   -> TypedTCTerm s b i
@@ -839,17 +794,6 @@ objectAccessType f =
       a = TyVar aVar
       rowTy = TyRow (RowTy (Map.singleton f a) (Just rVar))
   in TyForall (aVar :| [rVar]) (rowTy :~> a)
-
--- objectUpdateType :: Field -> Type NamedDeBruijn
--- objectUpdateType f =
---   let aVar = NamedDeBruijn 2 "a"
---       bVar = NamedDeBruijn 1 "b"
---       rVar = NamedDeBruijn 0 "r"
---       a = TyVar aVar
---       b = TyVar bVar
---       rowTy0 = TyRow (RowTy (Map.singleton f b) (Just rVar))
---       rowTy1 = TyRow (RowTy (Map.singleton f a) (Just rVar))
---   in TyForall (aVar :| [bVar, rVar]) (a :~> rowTy0 :~> rowTy1)
 
 objectUpdateType :: Field -> Type NamedDeBruijn
 objectUpdateType f =

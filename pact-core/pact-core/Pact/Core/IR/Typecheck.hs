@@ -24,666 +24,861 @@
 --
 module Pact.Core.IR.Typecheck where
 
--- import Control.Lens
--- import Control.Monad.Except
--- import Control.Monad.Reader
--- import Data.List.NonEmpty(NonEmpty(..))
--- import Data.Foldable(fold, foldlM)
--- import Data.Map(Map)
--- import Data.Maybe (fromMaybe)
--- import Data.Set(Set)
--- import Data.Text(Text)
+import Control.Lens hiding (Level)
+import Control.Monad.Reader
+import Control.Monad.ST
+import Data.Foldable(traverse_)
+import Data.List.NonEmpty(NonEmpty(..))
+import Data.STRef
+import Data.Text(Text)
 
--- import qualified Data.Set as Set
--- import qualified Data.Map.Strict as Map
--- import qualified Data.List.NonEmpty as NE
--- import qualified Data.Vector as V
--- import qualified Data.Text as T
+import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Text as T
+import qualified Data.RAList as RAList
 
--- import Pact.Core.Builtin
--- import Pact.Core.Type
--- import Pact.Core.Names
--- import qualified Pact.Core.IR.Term as IR
--- import qualified Pact.Core.Typed.Term as Typed
+import Pact.Core.Builtin
+import Pact.Core.Type
+import Pact.Core.Names
+import qualified Pact.Core.IR.Term as IR
+import qualified Pact.Core.Typed.Term as Typed
 
--- data TypecheckError tn
---   = InfiniteType tn (Type tn)
---   | InfiniteRow tn (Row tn)
---   | UnificationError (Type tn) (Type tn)
---   | RowUnificationError (Row tn) (Row tn)
---   | InterfaceUnificationError Text
---   | DynamicAccessError Text
---   deriving Show
+-- inference based on https://okmij.org/ftp/ML/generalization.html
+-- Note: Type inference levels in the types
+-- a-la sound-lazy might be worth implementing later on.
+-- The eager implementation is simpler to maintain and extend to typeclasses.
 
--- data TyScheme tn
---   = TyScheme [tn] [tn] (Type tn)
---   deriving Show
+type UniqueSupply s = STRef s Unique
+type Level = Int
+type TCType s = Type (TvRef s)
+type IRTerm b i = IR.Term Name TypeVar b i
+type TypedTCTerm s b i = Typed.Term Name (TvRef s) b i
+type TypedTerm b i = Typed.Term Name NamedDeBruijn b i
 
--- data Constraint
---   = EqConst (Type TypeVar) (Type TypeVar)
---   deriving Show
+-- note, we will debruijnize, so this is purely for
+-- Display purposes
 
--- data Subst
---   = Subst
---   { _stypes :: Map TypeVar (Type TypeVar)
---   , _srows :: Map TypeVar (Row TypeVar)
---   } deriving Show
+data Tv s
+  = Unbound !Text !Unique !Level
+  | Bound !Text !Unique
+  | Link !(Type (TvRef s))
+  deriving Eq
 
--- data FreeTyVars
---   = FreeTyVars
---   { _ftvTy :: Set TypeVar
---   , _ftvRow :: Set TypeVar
---   } deriving Show
+-- Note: TyVar equality
+-- is reference equality
+newtype TvRef s =
+  TvRef (STRef s (Tv s))
+  deriving Eq
+-- Note, no superclasses, for now
+data Pred tv
+  = Eq (Type tv)
+  | Ord (Type tv)
+  | Show (Type tv)
+  | WithoutField Field (Type tv)
+  | Add (Type tv)
+  | Num (Type tv)
+  | Serializable (Type tv)
+  deriving Show
 
--- makeLenses ''Subst
--- makeLenses ''FreeTyVars
+data Instance tv
+  = Instance [Pred tv] (Pred tv)
+  deriving Show
 
+data TypeScheme tv =
+  TypeScheme [tv] [Pred tv]  (Type tv)
+  deriving Show
 
--- data TCEnv builtin
---   = TCEnv
---   { _tcSupply :: Supply
---   -- ^ Fresh name supply
---   , _tcEnv :: Map.Map IRName (TyScheme TypeVar)
---   -- ^ Typescheme environment
---   , _tcNonGen :: Set.Set TypeVar
---   -- ^ Monomorphic set to not generalize
---   , _tcIface :: Map TypeVar (Map IRName (TyScheme TypeVar))
---   -- ^ Map of iface name -> iface fields -> field types
---   -- Necessary since the best we can do for dynamic module
---   -- references is typecheck them nominally.
---   , _tcBuiltin :: Map.Map builtin (TyScheme TypeVar)
---   -- ^ builtin type schemes.
---   }
--- makeLenses ''TCEnv
+data TCState s b
+  = TCState
+  { _tcSupply :: UniqueSupply s
+  -- ^ Supply for fresh variables.
+  , _tcVarEnv :: RAList.RAList (TypeScheme (TvRef s))
+  -- Variable environment for locally bound and top level names
+  , _tcBuiltins :: b -> Type NamedDeBruijn
+  -- ^ Builtins map, that uses the enum instance
+  , _tcLevel :: STRef s Level
+  -- Type Variable "Region"
+  }
 
--- newtype InferT builtin a =
---   InferT { _runInferT :: ReaderT (TCEnv builtin) (ExceptT (TypecheckError TypeVar) IO) a }
---   deriving ( Functor, Applicative, Monad, MonadReader (TCEnv builtin)
---            , MonadError (TypecheckError TypeVar), MonadIO )
---   via (ReaderT (TCEnv builtin) (ExceptT (TypecheckError TypeVar) IO))
+makeLenses ''TCState
 
--- freshVar :: InferT b TypeVar
--- freshVar = do
---   s <- view tcSupply
---   u <- liftIO (newUnique s)
---   let tv = T.pack ("_unif" <> show (_unique u))
---   pure $ UnificationVar tv u
+type InferT s b a = ReaderT (TCState s b) (ST s) a
 
--- lookupTyEnv :: IRName -> InferT b (TyScheme TypeVar)
--- lookupTyEnv n = do
---   m <- view tcEnv
---   pure $ m Map.! n
-
--- inTcEnv :: IRName -> (TyScheme TypeVar) -> InferT b a -> InferT b a
--- inTcEnv name typ =
---   locally tcEnv (Map.insert name typ)
-
--- inTcEnvNonGen ::IRName -> TypeVar -> (TyScheme TypeVar) -> InferT b a -> InferT b a
--- inTcEnvNonGen name tv typ =
---   local $ \env -> env & tcNonGen %~ Set.insert tv & tcEnv %~ Map.insert name typ
-
-
--- ftvIntersection :: FreeTyVars -> FreeTyVars -> FreeTyVars
--- ftvIntersection (FreeTyVars l r) (FreeTyVars l' r') =
---   FreeTyVars (Set.intersection l l') (Set.intersection r r')
-
--- instance Semigroup Subst where
---   (Subst l r) <> (Subst l' r') = Subst (l <> l') (r <> r')
-
--- instance Monoid Subst where
---   mempty = Subst mempty mempty
-
--- instance Semigroup FreeTyVars where
---   (FreeTyVars l r) <> (FreeTyVars l' r') = FreeTyVars (l <> l') (r <> r')
-
--- instance Monoid FreeTyVars where
---   mempty = FreeTyVars mempty mempty
-
--- class Substitutable p where
---   subst :: Subst -> p -> p
-
--- instance Substitutable (Row TypeVar) where
---   subst s@(Subst _ rows) = \case
---     RowVar r -> fromMaybe (RowVar r) $ rows ^. at r
---     EmptyRow -> EmptyRow
---     RowTy fields mv ->
---       case mv of
---         Nothing -> RowTy (subst s <$> fields) Nothing
---         Just rv -> case rows ^. at rv of
---           Just (RowVar rv') -> subst s (RowTy fields (Just rv'))
---           Just (RowTy fields' rv') -> subst s (RowTy (Map.union fields fields') rv')
---           Just EmptyRow -> RowTy (subst s <$> fields) Nothing
---           _ -> RowTy (subst s <$> fields) mv
-
--- instance Substitutable (Type TypeVar) where
---   subst s@(Subst tys rows) = \case
---     TyVar n -> fromMaybe (TyVar n) $ tys ^. at n
---     TyPrim p -> TyPrim p
---     TyList ty -> TyList (subst s ty)
---     TyRow r -> TyRow $ subst s r
---     TyFun l r -> TyFun (subst s l) (subst s r)
---     -- TyInterface n -> TyInterface n
---     -- TyModule n -> TyModule n
---     TyTable row ->
---       TyTable (subst s row)
---     TyCap ->
---       TyCap
---     TyForall ns rs ty ->
---       let tys' = Map.fromList [(n', TyVar n') | n' <- ns] `Map.union` tys
---           rows' = Map.fromList [(r', RowVar r') | r' <- rs] `Map.union` rows
---       in TyForall ns rs (subst (Subst tys' rows') ty)
-
--- instance Substitutable (TyScheme TypeVar) where
---   subst m (TyScheme ns rs ty) =
---     let m' = m  <> Subst (Map.fromList [(n', TyVar n') | n' <- ns]) (Map.fromList [(r', RowVar r') | r' <- rs])
---     in TyScheme ns rs (subst m' ty)
-
--- instance Substitutable Constraint where
---    subst s (EqConst t1 t2) = EqConst (subst s t1) (subst s t2)
-
--- instance Substitutable p => Substitutable (Map k p) where
---   subst s = fmap (subst s)
-
--- class FTV p where
---   ftv :: p -> FreeTyVars
-
--- instance FTV (Map.Map k (Type TypeVar)) where
---   ftv = foldMap ftv
-
--- instance FTV (Type TypeVar) where
---   ftv = \case
---     TyVar n -> FreeTyVars (Set.singleton n) mempty
---     TyPrim _ -> mempty
---     TyFun l r -> ftv l <> ftv r
---     TyRow rows -> ftv rows
---     TyList t -> ftv t
---     -- TyInterface _ -> mempty
---     -- TyModule _ -> mempty
---     TyTable row -> ftv row
---     TyCap -> mempty
---     TyForall ns rs typ ->
---       let (FreeTyVars fts frs) = ftv typ
---       in FreeTyVars (fts `Set.difference` Set.fromList ns) (frs `Set.difference` Set.fromList rs)
-
--- instance FTV (Row TypeVar) where
---   ftv = \case
---     RowTy m n -> ftv m <> maybe mempty (FreeTyVars mempty . Set.singleton) n
---     RowVar n -> FreeTyVars mempty (Set.singleton n)
---     EmptyRow -> mempty
-
--- instance FTV (TyScheme TypeVar) where
---   ftv (TyScheme ns rs typ) =
---     let (FreeTyVars tys rows) = ftv typ
---     in FreeTyVars (tys `Set.difference` Set.fromList ns) (rows `Set.difference` Set.fromList rs)
-
--- ----------------------------
--- -- Core Inference.
--- ----------------------------
-
--- compose :: Subst -> Subst -> Subst
--- compose m1 m2 =
---   let m2' = m2 & stypes . mapped %~ subst m1 & srows . mapped %~ subst m1
---   in m2' <> m1
-
--- -- Occurs checking
--- bind :: TypeVar -> Type TypeVar -> InferT b Subst
--- bind n t | isSameTyVar t = pure mempty
---          | occursCheck n t = throwError (InfiniteType n t)
---          | otherwise = pure $ Subst (Map.singleton n t) mempty
+-- _dbgTypeScheme :: TypeScheme (TvRef s) -> InferT s b (TypeScheme String)
+-- _dbgTypeScheme (TypeScheme tvs ty) = do
+--   tvs' <- traverse rv tvs
+--   ty' <- _dbgType ty
+--   pure (TypeScheme tvs' ty')
 --   where
---   isSameTyVar = \case
---     TyVar n' -> n == n'
---     _ -> False
+--   rv n = readTvRef n >>= \case
+--     Unbound u l _ -> pure ("unbound" <> show (u, l))
+--     Bound u l -> pure ("bound" <> show (u, l))
+--     Link _ -> pure "linktv"
 
--- -- todo: occurs check for rows.
--- bindRow :: TypeVar -> Row TypeVar -> InferT b Subst
--- bindRow n t | isSameRowVar t = pure mempty
---             | otherwise = pure $ Subst mempty (Map.singleton n t)
---   where
---   isSameRowVar = \case
---     RowVar n' -> n == n'
---     _ -> False
+_dbgType :: TCType s -> InferT s b (Type String)
+_dbgType = \case
+  TyVar tv -> readTvRef tv >>= \case
+    Unbound u l _ -> pure (TyVar ("unbound" <> show (u, l)))
+    Bound u l -> pure (TyVar ("bound" <> show (u, l)))
+    Link ty -> _dbgType ty
+  TyFun l r -> TyFun <$> _dbgType l <*> _dbgType r
+  TyRow r -> TyRow <$> _dbgRow r
+  TyTable r -> TyTable <$> _dbgRow r
+  TyList t -> TyList <$> _dbgType t
+  TyPrim p -> pure (TyPrim p)
+  TyCap -> pure TyCap
+  TyForall {} -> fail "impredicative"
+  where
+  _dbgRow = \case
+    RowVar tv -> readTvRef tv >>= \case
+      Unbound u l l' -> pure (RowVar ("unboundrow" <> show (u, l, l')))
+      Bound u l -> pure (RowVar ("boundrow" <> show (u, l)))
+      Link ty -> _dbgType ty >>= \case
+        TyRow r -> pure r
+        _ -> fail "impossible"
+    EmptyRow -> pure EmptyRow
+    RowTy obj mrv -> do
+      obj' <- traverse _dbgType obj
+      case mrv of
+        Just tv -> readTvRef tv >>= \case
+          Unbound u l l' -> pure (RowTy obj' (Just ("unboundrow" <> show (u, l, l'))))
+          Bound u l -> pure (RowTy obj' (Just ("boundrow" <> show (u, l))))
+          Link ty -> _dbgType ty >>= \case
+            TyRow (RowVar v) -> pure (RowTy obj' (Just v))
+            TyRow EmptyRow -> pure (RowTy obj' Nothing)
+            TyRow (RowTy obj'' mrv') -> pure (RowTy (Map.union obj' obj'') mrv')
+            _ -> fail "impossible"
+        Nothing -> pure (RowTy obj' Nothing)
 
--- occursCheck :: FTV p => TypeVar -> p -> Bool
--- occursCheck n t = Set.member n $ _ftvTy (ftv t)
+_dbgTypedTerm :: TypedTCTerm s b info -> InferT s b (Typed.Term Name String b info)
+_dbgTypedTerm = \case
+  Typed.Var n i -> pure (Typed.Var n i)
+  Typed.Lam n nel t i -> do
+    nel' <- (traversed._2) _dbgType nel
+    t' <- _dbgTypedTerm t
+    pure (Typed.Lam n nel' t' i)
+  Typed.App l nel i ->
+    Typed.App <$> _dbgTypedTerm l <*> traverse _dbgTypedTerm nel <*> pure i
+  Typed.TyAbs nel t i ->
+    Typed.TyAbs <$> traverse rv nel <*> _dbgTypedTerm t <*> pure i
+  Typed.TyApp t nel i ->
+    Typed.TyApp <$> _dbgTypedTerm t <*> traverse _dbgType nel <*> pure i
+  Typed.ObjectOp oop i -> fmap (`Typed.ObjectOp` i) $ case oop of
+    Typed.TObjectAccess f ts o ->
+      (Typed.TObjectAccess f <$> traverse _dbgType ts <*> _dbgTypedTerm o)
+    Typed.TObjectRemove f ts o ->
+      (Typed.TObjectRemove f <$> traverse _dbgType ts <*> _dbgTypedTerm o)
+    Typed.TObjectUpdate f ts v o ->
+      (Typed.TObjectUpdate f <$> traverse _dbgType ts <*> _dbgTypedTerm v <*> _dbgTypedTerm o)
+  Typed.Builtin b i -> pure (Typed.Builtin b i)
+  Typed.Constant l i -> pure (Typed.Constant l i)
+  _ -> undefined
+  where
+  rv n = readTvRef n >>= \case
+    Unbound u l _ -> pure ("unbound" <> show (u, l))
+    Bound u l -> pure ("bound" <> show (u, l))
+    Link _ -> pure "linktv"
 
--- unifyRows
---   :: Row TypeVar
---   -> Row TypeVar
---   -> InferT b Subst
--- unifyRows (RowVar n) t =  n `bindRow` t
--- unifyRows t (RowVar n) =  n `bindRow` t
--- -- Unify labels present in both m and m'
--- -- Labels not present: unify with row variable.
--- unifyRows r1@(RowTy m mrv) r2@(RowTy m' mrv') =
---   case (mrv, mrv') of
---     -- Two open rows
---     (Just rv, Just rv') -> do
---       unif <- fold <$> traverse (uncurry unifies) (Map.intersectionWith (,) m m')
---       leftVar <- freshVar
---       rightVar <- freshVar
---       let notInR = Map.difference m m'
---           notInRSubst = (rv,) $ if Map.null notInR then RowVar leftVar else RowTy notInR (Just leftVar)
---           notInL = Map.difference m' m
---           notInLSubst = (rv',) $ if Map.null notInL then RowVar rightVar else RowTy notInR (Just rightVar)
---       pure $ unif <> Subst mempty (Map.fromList [notInRSubst, notInLSubst])
---     -- Right closed
---     -- Means Keys(l) <= Keys(r)
---     (Just rv, Nothing) -> do
---       if all (`Map.member` m') (Map.keys m) then do
---         unif <- fold <$> traverse (uncurry unifies) (Map.intersectionWith (,) m m')
---         let diff = Map.difference m' m
---             s = if Map.null diff then EmptyRow else RowTy diff Nothing
---         pure $ unif <> Subst mempty (Map.singleton rv s)
---       else throwError (RowUnificationError r1 r2)
---     -- Left closed
---     (Nothing, Just rv) -> do
---       if all (`Map.member` m) (Map.keys m') then do
---         unif <- fold <$> traverse (uncurry unifies) (Map.intersectionWith (,) m m')
---         let diff = Map.difference m m'
---             s = if Map.null diff then EmptyRow else RowTy diff Nothing
---         pure $ unif <> Subst mempty (Map.singleton rv s)
---       else throwError (RowUnificationError r1 r2)
---     (Nothing, Nothing) ->
---       if Map.keys m == Map.keys m' then
---         fold <$> traverse (uncurry unifies) (Map.intersectionWith (,) m m')
---       else throwError (RowUnificationError r1 r2)
--- unifyRows EmptyRow EmptyRow = pure mempty
--- unifyRows r1 r2 = throwError (RowUnificationError r1 r2)
 
--- --
--- -- unifyIfaceModule
--- --   :: InterfaceType TypeVar -> ModuleType TypeVar -> InferT b Subst
--- -- unifyIfaceModule (InterfaceType n) (ModuleType _ ns) =
--- --   if elem n ns then pure mempty
--- --   else throwError (InterfaceUnificationError "cannot unify interface/module")
+enterLevel :: InferT s b ()
+enterLevel = do
+  lref <- asks _tcLevel
+  lift (modifySTRef' lref succ)
 
--- -- note: For IR we currently don't unify against
--- -- `TyForall` unless strucurally equal.
--- -- We don't allow rankN despite it showing up in
--- -- our type language.
--- unifies
---   :: Type TypeVar
---   -> Type TypeVar
---   -> InferT b Subst
--- unifies (TyPrim t1) (TyPrim t2) | t1 == t2 = pure mempty
--- unifies (TyVar n) t2 = n `bind` t2
--- unifies t1 (TyVar n) = n `bind` t1
--- unifies (TyFun l r) (TyFun l' r') = do
---   s1 <- unifies l l'
---   s2 <- unifies (subst s1 r) (subst s1 r')
---   pure (s2 `compose` s1)
--- unifies (TyList l) (TyList r) = unifies l r
--- unifies (TyTable l) (TyTable r) = unifyRows l r
--- unifies TyCap TyCap = pure mempty
--- unifies (TyRow l) (TyRow r) = unifyRows l r
--- -- unifies (TyInterface n) (TyModule m) = unifyIfaceModule n m
--- -- unifies (TyModule m) (TyInterface n) = unifyIfaceModule n m
--- -- unifies (TyInterface n) (TyInterface n') | n == n' = pure mempty
--- -- unifies (TyModule m) (TyModule m') | m == m' = pure mempty
--- unifies _ _ = error "reee"
+leaveLevel :: InferT s b ()
+leaveLevel = do
+  lref <- asks _tcLevel
+  lift (modifySTRef' lref pred)
 
--- generalize :: FreeTyVars -> Type TypeVar -> (TyScheme TypeVar)
--- generalize (FreeTyVars freetys freerows) t  = TyScheme as rs t
---   where
---   toTypeVarName n = TypeVar (_tyVarName n) (_tyVarUnique n)
---   (FreeTyVars ftys frows) = ftv t
---   as = fmap toTypeVarName $ Set.toList $ ftys `Set.difference` freetys
---   rs = fmap toTypeVarName $ Set.toList $ frows `Set.difference` freerows
+currentLevel :: InferT s b Level
+currentLevel =
+  asks _tcLevel >>= lift . readSTRef
 
--- generalizeWithTerm :: FreeTyVars -> Type TypeVar -> Typed.Term IRName TypeVar b info -> (TyScheme TypeVar, Typed.Term IRName TypeVar b info)
--- generalizeWithTerm (FreeTyVars freetys freerows) t e  =
---   case ((,Typed.TyVarType) <$> as) ++ ((,Typed.RowVarType) <$> rs) of
---     [] -> (TyScheme [] [] t, e)
---     x:xs -> (TyScheme as rs t, Typed.TyAbs (x :| xs) e (e ^. Typed.termInfo))
---   where
---   toTypeVarName n = TypeVar (_tyVarName n) (_tyVarUnique n)
---   (FreeTyVars ftys frows) = ftv t
---   as = fmap toTypeVarName $ Set.toList $ ftys `Set.difference` freetys
---   rs = fmap toTypeVarName $ Set.toList $ frows `Set.difference` freerows
+readTvRef :: TvRef s -> InferT s b (Tv s)
+readTvRef (TvRef tv) = lift (readSTRef tv)
 
--- instantiate :: TyScheme TypeVar -> InferT b (Type TypeVar)
--- instantiate (TyScheme as rs t) = do
---     as' <- traverse (const freshVar) as
---     rs' <- traverse (const freshVar) rs
---     let tyS = Map.fromList $ zip as (TyVar <$> as')
---         rowS = Map.fromList $ zip rs (RowVar <$> rs')
---     return $ subst (Subst tyS rowS) t
+writeTvRef :: TvRef s -> Tv s -> InferT s b ()
+writeTvRef (TvRef tv) t = lift (writeSTRef tv t)
+
+newTvRef :: InferT s b (TvRef s)
+newTvRef = do
+  uref <- asks _tcSupply
+  u <- lift (readSTRef uref)
+  let tvName = "'a_" <> T.pack (show (_unique u))
+  l <- currentLevel
+  lift (modifySTRef' uref (+ 1))
+  TvRef <$> lift (newSTRef (Unbound tvName u l))
+
+---------------------------------------------------------------
+-- -- Instantiations
+-- ---------------------------------------------------------------
 
 -- instantiateWithTerm
---   :: TyScheme TypeVar
---   -> Typed.Term IRName TypeVar b info
---   -> InferT b (Typed.Term IRName TypeVar b info, Type TypeVar)
--- instantiateWithTerm (TyScheme as rs t) wrap = do
---     as' <- traverse (const freshVar) as
---     rs' <- traverse (const freshVar) rs
---     let tyS = Map.fromList $ zip as (TyVar <$> as')
---         rowS = Map.fromList $ zip rs (RowVar <$> rs')
---         ty' = subst (Subst tyS rowS) t
---         tyApps = ((, Typed.TyVarType) . TyVar <$> as')
---         rsApps = ((, Typed.RowVarType) . TyVar <$> rs')
---     case tyApps ++ rsApps of
---       x:xs ->
---         return (Typed.TyApp wrap (x:|xs) (wrap ^. Typed.termInfo), ty')
---       [] ->
---         return (wrap, ty')
-
--- neunzip3 :: NonEmpty (a, b, c) -> (NonEmpty a, NonEmpty b, NonEmpty c)
--- neunzip3 ((a, b, c) :| rest) =
---   let (as, bs, cs) = unzip3 rest
---   in (a :| as, b :| bs, c :| cs)
-
--- -- todo: propagate infos for better errors.
--- -- todo: quadratic appends. Optimize with `Seq`.
--- -- | Infer the type of a term, and annotate the node with the generated type
--- --   and all names with their respective type. In the case of let-binds
--- --   universally quantified types get paired with the name, as well as
--- --   for modref dynamic members.
--- inferTerm
---   :: Ord b
---   => IR.Term IRName TypeVar b info
---   -> InferT b (Typed.Term IRName TypeVar b info, Type TypeVar, [Constraint])
--- inferTerm = \case
---   IR.Constant l i -> do
---     let ty = typeOfLit l
---     pure (Typed.Constant l i, ty, [])
---   IR.Var n i -> do
---     ts <- lookupTyEnv n
---     let out = Typed.Var n i
---     (out', ty) <- instantiateWithTerm ts out
---     pure (out', ty, [])
---   IR.Lam _name nts body i -> do
---     let (names, mtys) = NE.unzip nts
---     rawTvs <- traverse (const freshVar) nts
---     (csigs, substs) <- NE.unzip <$> traverse (uncurry withAnnotation) (NE.zip rawTvs mtys)
---     let csig = concat csigs
---         s0 = fold substs
---     (body', retTy, cs) <- local (inEnv rawTvs s0) $ inferTerm body
---     let tvSubsts = subst s0 . TyVar <$> rawTvs
---         ty = foldr (\arg ret -> TyFun (subst s0 arg) ret) retTy tvSubsts
---         nts' = NE.zip names tvSubsts
---     pure (Typed.Lam _name nts' body' i, ty, csig++cs)
---     where
---     withAnnotation rawTv (Just annTy) =
---       ([EqConst annTy (TyVar rawTv)],) <$> unifies annTy (TyVar rawTv)
---     withAnnotation _ _ = pure ([], mempty)
---     inEnv rawTvs s0 =
---       let entries = Map.fromList $ NE.toList $ NE.zip (fst <$> nts) (TyScheme [] [] . subst s0 . TyVar <$> rawTvs)
---           nonGen = Set.fromList (NE.toList rawTvs)
---       in over tcNonGen (Set.union nonGen) . over tcEnv (Map.union entries)
---   IR.Let n mty e1 e2 i -> do
---     (e1', t1, c1) <- inferTerm e1
---     csig <- case mty of
---       Nothing -> pure mempty
---       Just ty -> pure [EqConst ty t1]
---     s <- solve (c1 ++ csig)
---     ftvs <- ftvSubstNonGen s <$> view tcNonGen
---     -- todo: we're CBV, so we need value restriction.
---     let (ntyp, e1'') = generalizeWithTerm ftvs (subst s t1) (over Typed.traverseTermType (subst s) e1')
---     (e2', ty, c2) <- locally tcEnv (subst s) $ inTcEnv n ntyp $ inferTerm e2
---     let argTy = tsToTyForall ntyp
---     let out = Typed.App (Typed.Lam n (pure (n, argTy)) e2' i) (pure e1'') i
---     pure (out, ty, c1 ++ csig ++ c2 )
-
---   IR.App e1 (e2 :| es) i -> do
---     tv <- TyVar <$> freshVar
---     (e1', e1ty, cs1) <- inferTerm e1
---     (e2', e2ty, cs2) <- inferTerm e2
---     let cs = cs1 ++ cs2 ++ [EqConst e1ty (TyFun e2ty tv)]
---     (ret, es', cs') <- foldlM inferApps (tv, [], []) es
---     pure
---       ( Typed.App e1' (e2':| reverse es') i, ret, cs ++ cs')
---     where
---     -- Todo: redo as fold
---     inferApps (ty, xs, ccs) x = do
---       tv <- TyVar <$> freshVar
---       (x', tx, cs) <- inferTerm x
---       let cs' = cs ++ [EqConst ty (TyFun tx tv)]
---       pure (tv, x':xs, ccs ++ cs')
---   IR.Block terms i -> do
---     -- Will we require that the lhs of sequenced statements be unit?
---     -- likely yes, it doesn't make sense to otherwise discard value results without binding them in a clause.
---     -- for now, no.
---     -- We might emit a constraint `t1 ~ ()` here  eventually though
---     (terms', tys, csli) <- neunzip3 <$> traverse inferTerm terms
---     let retTy = NE.last tys
---         constraints = concat csli
---     pure (Typed.Block terms' i, retTy, constraints )
---   IR.ListLit terms i -> do
---     tv <- TyVar <$> freshVar
---     joined <- traverse (listInfer tv) terms
---     let (terms', cs) = V.unzip joined
---     pure (Typed.ListLit (TyList tv) terms' i, TyList tv, fold cs)
---     where
---     listInfer tv t = do
---       (t', ty', cs) <- inferTerm t
---       pure (t', cs ++ [EqConst ty' tv])
---   IR.ObjectLit objMap i -> do
---     rv <- freshVar
---     objMapCs <- traverse inferTerm objMap
---     let cs = foldMap (view _3) objMapCs
---         objMap' = view _1 <$> objMapCs
---         outTy = TyRow (RowTy (view _2 <$> objMapCs) (Just rv))
---     pure (Typed.ObjectLit objMap' i, outTy, cs)
---   -- Errors are just `forall a. a`.
---   IR.Error e i -> do
---     tv <- TyVar <$> freshVar
---     pure (Typed.Error e tv i, tv, [])
---   -- m::f
---   -- moduleref in core.
---   IR.DynAccess _modref _mem _i -> undefined
---     -- ty <- lookupTyEnv modref
---     -- case ty of
---     --   TyScheme [] [] (TyInterface (InterfaceType iface)) -> do
---     --     ifaces <- view tcIface
---     --     case ifaces ^? at iface . _Just . at mem . _Just of
---     --       Just fn -> do
---     --         typ <- instantiate fn
---     --         let ifTyp = TyInterface (InterfaceType iface)
---     --             fTyp = tsToTyForall fn
---     --         pure (DynAccess (modref, ifTyp) (mem, fTyp) (i, typ), [])
---     --       Nothing -> throwError (DynamicAccessError "Function not in interface")
---     --   _ -> throwError (DynamicAccessError "Not An Interface")
---   IR.Builtin b i -> do
---     benv <- view tcBuiltin
---     (out, bty) <- instantiateWithTerm (benv Map.! b) (Typed.Builtin b i)
---     pure (out, bty, [])
+--   :: TypeScheme (TvRef s)
+--   -> TypedTCTerm s b i
+--   -> InferT s b (TCType s, TypedTCTerm s b i)
+-- instantiateWithTerm (TypeScheme ts ty) term = do
+--   nts <- fmap TyVar <$> traverse (const newTvRef) ts
+--   let m = zip ts nts
+--   ty' <- instBound m ty
+--   case nts of
+--     x:xs -> pure (ty', Typed.TyApp term (x:|xs) (term ^. Typed.termInfo))
+--     [] -> pure (ty', term)
 --   where
---   ftvSubstNonGen unif nonGen = foldMap ftv $ subst unif . TyVar <$> Set.toList nonGen
-
--- tsToTyForall :: (TyScheme TypeVar) -> Type TypeVar
--- tsToTyForall (TyScheme [] [] ty) = ty
--- tsToTyForall (TyScheme as rs ty) = TyForall as rs ty
-
--- termTy :: Typed.Term name tyname builtin (info, Type tyname) -> Type tyname
--- termTy = view (Typed.termInfo._2)
-
--- ----------------------------
--- -- Constraint solving
--- ----------------------------
-
--- solve :: [Constraint] -> InferT b Subst
--- solve = solve' mempty
-
--- solve'
---   :: Subst
---   -> [Constraint]
---   -> InferT b Subst
--- solve' s0 = \case
---   [] -> return s0
---   (EqConst t1 t2) : xs -> do
---     s1 <- unifies t1 t2
---     let s2 = s1 `compose` s2
---     solve' s2 (fmap (subst s2) xs)
-
--- ----------------------------
--- -- Running the typechecker
--- ----------------------------
-
--- inferAndSolve
---   :: Ord b
---   => IR.Term IRName TypeVar b info
---   -> InferT b (Typed.Term IRName TypeVar b info, Type TypeVar, Subst)
--- inferAndSolve term = do
---   (term', ty, cs) <- inferTerm term
---   s <- solve cs
---   pure (over Typed.traverseTermType (subst s) term', subst s ty, s)
-
-
--- -- inferDefun
--- --   :: Ord b
--- --   => Defun IRName TypeVar b i
--- --   -> InferT b (Defun (IRName, Type TypeVar) TypeVar b (i, Type TypeVar))
--- -- inferDefun (Defun dn term typ) = do
--- --   (term', _) <- inferTerm term
--- --   let rty = tsToTyForall $ generalize mempty $ termTy term'
--- --   case typ of
--- --     Just ty -> do
--- --       fty <- instantiate $ generalize mempty ty
--- --       _ <- unifies fty (termTy term')
--- --       pure (Defun (dn, rty) term' typ)
--- --     Nothing ->
--- --       pure (Defun (dn, rty) term' (Just rty))
-
--- -- inferDefConst
--- --   :: Ord b
--- --   => DefConst IRName TypeVar b i
--- --   -> InferT b (DefConst (IRName, Type TypeVar) TypeVar b (i, Type TypeVar))
--- -- inferDefConst (DefConst name term typ) = do
--- --   (term', _) <- inferTerm term
--- --   case typ of
--- --     Just ty -> do
--- --       _ <- unifies ty (termTy term')
--- --       pure (DefConst (name, ty) term' (Just ty))
--- --     Nothing ->
--- --       pure (DefConst (name, termTy term') term' (Just (termTy term')))
-
-
--- renameTypeScheme :: MonadIO m => Supply -> TyScheme Text -> m (TyScheme TypeVar)
--- renameTypeScheme sup (TyScheme ts rs ty) = do
---   ts' <- traverse mkTypeName ts
---   rs' <- traverse mkTypeName rs
---   ty' <- flip runReaderT (Map.fromList (zip ts ts' ++ zip rs rs')) $ renameType ty
---   pure (TyScheme ts' rs' ty')
---   where
---   mkTypeName :: MonadIO f => Text -> f TypeVar
---   mkTypeName n = do
---     u <- liftIO (newUnique sup)
---     pure (TypeVar n u)
---   renameType = \case
---     TyVar n ->
---       asks (Map.lookup n) >>= \case
---         Just n' -> pure $ TyVar n'
---         Nothing -> error $ "Unbound free type variable found in type renaming: " ++ show n
+--   instBound m = \case
+--     t@(TyVar tv) -> readTvRef tv >>= \case
+--       Bound{} -> case lookup tv m of
+--         Just t' -> pure t'
+--         Nothing -> pure t
+--       Link lt -> instBound m lt
+--       _ -> pure t
 --     TyPrim p -> pure (TyPrim p)
 --     TyFun l r ->
---       TyFun <$> renameType l <*> renameType r
---     TyRow r -> TyRow <$> renameRow r
---     TyList l -> TyList <$> renameType l
---     TyTable t -> TyTable <$> renameRow t
---     TyCap -> pure TyCap
---     TyForall tts rrs tty -> do
---       tts' <- traverse mkTypeName tts
---       rrs' <- traverse mkTypeName rrs
---       let env' = Map.fromList (zip tts tts' ++ zip rrs rrs')
---       tty' <- local (Map.union env') $ renameType tty
---       pure $ TyForall tts' rrs' tty'
---     -- _ -> error "todo: modules/interfaces"
---   lookupRowVar n =
---     asks (Map.lookup n) >>= \case
---       Just n' -> pure n'
---       Nothing -> error $ "Unbound free row variable found in type renaming: " ++ show n
---   renameRow EmptyRow = pure EmptyRow
---   renameRow (RowVar n) =
---     RowVar <$> lookupRowVar n
---   renameRow (RowTy obj n) = do
---     obj' <- traverse renameType obj
---     n' <- traverse lookupRowVar n
---     pure (RowTy obj' n')
+--       TyFun <$> instBound m l <*> instBound m r
+--     TyRow r -> TyRow <$> instBoundRow m r
+--     TyList t -> TyList <$> instBound m t
+--     TyTable r -> TyTable <$> instBoundRow m r
+--     t -> pure t
+--   instBoundRow _m EmptyRow = pure EmptyRow
+--   instBoundRow m t@(RowVar rv) = readTvRef rv >>= \case
+--     Bound{} -> case lookup rv m of
+--       Just (TyVar rv') -> pure (RowVar rv')
+--       _ -> pure t
+--     Link lt -> instBound m lt >>= \case
+--       TyRow r' -> pure r'
+--       TyVar rv' -> pure (RowVar rv')
+--       _ -> fail "impossible?"
+--     _ -> pure t
+--   instBoundRow m t@(RowTy o mrv) = do
+--     obj <- traverse (instBound m) o
+--     case mrv of
+--       Just rv -> readTvRef rv >>= \case
+--         Bound{} -> case lookup rv m of
+--           Just (TyVar rv') -> pure (RowTy obj (Just rv'))
+--           _ -> pure t
+--         Link lt -> instBound m lt >>= \case
+--           TyRow (RowTy obj' r) -> pure (RowTy (Map.union obj obj') r)
+--           TyRow EmptyRow -> pure (RowTy obj Nothing)
+--           TyRow (RowVar rv') -> pure (RowTy obj (Just rv'))
+--           TyVar rv' -> pure (RowTy obj (Just rv'))
+--           _ -> fail "impossible?"
+--         _ -> pure t
+--       Nothing -> pure (RowTy obj Nothing)
 
--- rawBuiltinType :: RawBuiltin -> TyScheme Text
--- rawBuiltinType = \case
---   RawAdd -> sameArgBinop
---   RawSub -> sameArgBinop
---   RawMultiply -> sameArgBinop
---   RawDivide -> sameArgBinop
---   RawNegate -> sameArgBinop
---   -- Boolean Ops
---   RawAnd -> binaryBoolOp
---   RawOr -> binaryBoolOp
---   RawNot -> TyScheme [] [] (TyBool :~> TyBool)
---   -- Equality and Comparisons
---   RawEq -> comparisonBinop
---   RawNeq -> comparisonBinop
---   RawGT -> comparisonBinop
---   RawGEQ -> comparisonBinop
---   RawLT -> comparisonBinop
---   RawLEQ -> comparisonBinop
---   -- Bitwise Ops
---   RawBitwiseAnd -> binaryIntOp
---   RawBitwiseOr -> binaryIntOp
---   RawBitwiseXor -> binaryIntOp
---   RawBitwiseFlip -> unaryIntOp
---   RawBitShift -> binaryIntOp
---     -- Other Numerics
---   RawAbs -> unaryNumeric
---   RawRound ->
---     TyScheme [] [] (TyDecimal :~> TyInt)
---   RawCeiling ->
---     TyScheme [] [] (TyDecimal :~> TyInt)
---   RawExp ->
---     TyScheme ["a"] [] (TyVar "a" :~> TyDecimal)
---   RawFloor ->
---     TyScheme [] [] (TyDecimal :~> TyInt)
---   RawLn ->
---     TyScheme ["a"] [] (TyVar "a" :~> TyDecimal)
---   RawLogBase -> sameArgBinop
---   RawMod -> binaryIntOp
---   -- General
---   RawMap ->
---     TyScheme ["a", "b"] [] ((TyVar "a" :~> TyVar "b") :~> TyList (TyVar "a") :~> TyList (TyVar "b"))
---   RawFilter ->
---     TyScheme ["a"] [] ((TyVar "a" :~> TyBool) :~> TyList (TyVar "a") :~> TyList (TyVar "a"))
---   RawIf ->
---     let tv = TyVar "a"
---     in TyScheme ["a"] [] (TyBool :~> tv :~> tv :~> TyVar "a")
---   RawIntToStr ->
---     TyScheme [] [] (TyInt :~> TyInt :~> TyString)
---   RawConcat ->
---     TyScheme [] [] (TyList TyString :~> TyString)
---   RawStrToInt ->
---     TyScheme [] [] (TyString :~> TyInt)
---   RawTake ->
---     TyScheme ["a"] [] (TyInt :~> TyVar "a" :~> TyVar "a")
---   RawDrop ->
---     TyScheme ["a"] [] (TyInt :~> TyVar "a" :~> TyVar "a")
---   RawLength ->
---     TyScheme ["a"] [] (TyVar "a" :~> TyInt)
---   RawDistinct ->
---     TyScheme ["a"] [] (TyList (TyVar "a") :~> TyList (TyVar "a"))
---   RawEnforce ->
---     TyScheme [] [] (TyBool :~> TyString :~> TyBool)
---   RawEnforceOne ->
---     TyScheme [] [] (TyList TyBool :~> TyString :~> TyBool)
---   RawEnumerate ->
---     TyScheme [] [] (TyInt :~> TyInt :~> TyList TyInt)
---   RawEnumerateStepN ->
---     TyScheme [] [] (TyInt :~> TyInt :~> TyInt :~> TyList TyInt)
+-- instantiateImported :: Type NamedDeBruijn -> InferT s b (TCType s, [TvRef s])
+-- instantiateImported = \case
+--   TyForall tvs ty -> do
+--     ntvs <- traverse (const newTvRef) tvs
+--     let rl = RAList.fromList (reverse (NE.toList ntvs))
+--     (, NE.toList ntvs) <$> inst rl ty
+--   ty -> (, []) <$> inst mempty ty
 --   where
---   unaryIntOp =
---     TyScheme [] [] (TyInt :~> TyInt)
---   unaryNumeric =
---     TyScheme ["a"] [] (TyVar "a" :~> TyVar "a")
---   sameArgBinop =
---     TyScheme ["a"] [] (TyVar "a" :~> TyVar "a" :~> TyVar "a")
---   comparisonBinop =
---     TyScheme ["a"] [] (TyVar "a" :~> TyVar "a" :~> TyBool)
---   binaryBoolOp =
---     TyScheme [] [] (TyBool :~> TyBool :~> TyBool)
---   binaryIntOp =
---     TyScheme [] [] (TyInt :~> TyInt :~> TyInt)
+--   inst rl = \case
+--     TyVar (NamedDeBruijn (DeBruijn i) _) -> pure (TyVar (rl RAList.!! i))
+--     TyPrim p -> pure (TyPrim p)
+--     TyFun l r -> TyFun <$> inst rl l <*> inst rl r
+--     TyRow r -> TyRow <$> instRow rl r
+--     TyList t -> TyList <$> inst rl t
+--     TyTable t -> TyTable <$> instRow rl t
+--     TyCap -> pure TyCap
+--     -- Impredicative type might work
+--     -- If we change unification.
+--     TyForall _ _ -> fail "unsupported impredicative polymorphism"
+--   instRow rl (RowVar (NamedDeBruijn (DeBruijn i) _)) = pure (RowVar (rl RAList.!! i))
+--   instRow _rl EmptyRow = pure EmptyRow
+--   instRow rl (RowTy obj mrv) = do
+--     obj' <- traverse (inst rl) obj
+--     case mrv of
+--       Just (NamedDeBruijn (DeBruijn i) _) -> pure (RowTy obj' (Just (rl RAList.!! i)))
+--       Nothing -> pure (RowTy obj' Nothing)
 
--- rawBuiltinTypes :: MonadIO m => Supply -> m (Map RawBuiltin (TyScheme TypeVar))
--- rawBuiltinTypes sup = do
---   let mkts b = (b,) <$> renameTypeScheme sup (rawBuiltinType b)
---   Map.fromList <$> traverse mkts [minBound .. maxBound]
+-- todo: factor copy pasted sections
+occurs :: TvRef s -> TCType s -> InferT s b ()
+occurs tv = \case
+  TyVar tv' | tv == tv' -> fail "occurs check failed"
+  TyVar tv' -> bindRef tv'
+  TyFun l r -> occurs tv l *> occurs tv r
+  TyRow r -> occursRow r
+  TyList l -> occurs tv l
+  TyTable r -> occursRow r
+  _ -> pure ()
+  where
+  bindRef tv' = readTvRef tv' >>= \case
+    Unbound n u l' -> do
+      ml <- minLevel
+      writeTvRef tv' (Unbound n u ml)
+      where
+      minLevel = readTvRef tv >>= \case
+        Unbound _ _ l -> pure (min l l')
+        _ -> pure l'
+    Link ty -> occurs tv ty
+    _ -> pure ()
+  occursRow (RowVar tv') = do
+    when (tv == tv') $ fail "occurs check failed for row variable"
+    bindRef tv'
+  occursRow EmptyRow = pure ()
+  occursRow (RowTy obj mtv) = do
+    when (Just tv == mtv) $ fail "occurs check failed for row variable"
+    traverse_ (occurs tv) obj
+    case mtv of
+      Just tv' -> bindRef tv'
+      Nothing -> pure ()
+
+unifyTyVar :: TvRef s -> TCType s -> InferT s b ()
+unifyTyVar tv t1 = readTvRef tv >>= \case
+  Unbound{} -> do
+    occurs tv t1
+    writeTvRef tv (Link t1)
+  Link t2 -> unify t2 t1
+  _ -> pure ()
+
+unify :: TCType s -> TCType s -> InferT s b ()
+unify t1 t2 | t1 == t2 = pure ()
+unify (TyVar tv) t = unifyTyVar tv t
+unify t (TyVar tv) = unifyTyVar tv t
+unify (TyFun l r) (TyFun l' r') = unify l l' *> unify r r'
+unify (TyRow r) (TyRow r') = unifyRow r r'
+unify (TyList t) (TyList t') = unify t t'
+unify (TyTable r) (TyTable r') = unifyRow r r'
+unify (TyPrim p) (TyPrim p') | p == p' = pure ()
+unify TyCap TyCap = pure ()
+unify _ _ = fail "types do not unify"
+
+unifyRow :: Row (TvRef s) -> Row (TvRef s) -> InferT s b ()
+unifyRow (RowVar n) t = unifyTyVar n (TyRow t)
+unifyRow t (RowVar n) = unifyTyVar n (TyRow t)
+unifyRow EmptyRow EmptyRow = pure ()
+unifyRow (RowTy _ (Just rv)) EmptyRow = unifyTyVar rv (TyRow EmptyRow)
+unifyRow EmptyRow (RowTy _ (Just rv)) = unifyTyVar rv (TyRow EmptyRow)
+unifyRow (RowTy objL lrv) (RowTy objR rrv') =
+  case (lrv, rrv') of
+    -- Two open rows, we unify them back into open rows
+    -- with each other's fields that are missing
+    -- with a fresh row variable, which indicates that they are indeed the same row
+    (Just tvl, Just tvr) -> do
+      traverse_ (uncurry unify) (Map.intersectionWith (,) objL objR)
+      if Map.keys objL == Map.keys objR
+        then do
+          unifyTyVar tvl (TyRow (RowVar tvr))
+        else do
+          newRv <- newTvRef
+          let notInL = Map.difference objR objL
+              notInR = Map.difference objL objR
+          unifyTyVar tvl (TyRow (RowTy notInL (Just newRv)))
+          unifyTyVar tvr (TyRow (RowTy notInR (Just newRv)))
+    -- note: the NOTHING branch here means a closed row,
+    -- therefore the open row's fields must be a subset.
+    (Just tv, Nothing) -> unifyWithClosed tv objL objR
+    (Nothing, Just tv) -> unifyWithClosed tv objR objL
+    (Nothing, Nothing) -> do
+      when (Map.keys objL /= Map.keys objR) $ fail "closed rows do not unify"
+      traverse_ (uncurry unify) (Map.intersectionWith (,) objL objR)
+    where
+    unifyWithClosed tv m m' = do
+      when (not $ Map.isSubmapOfBy (\_ _ -> True) m m') $ fail "Closed rows submap check"
+      traverse_ (uncurry unify) (Map.intersectionWith (,) m m')
+      -- members not in submap
+      let diff = Map.difference m' m
+      unifyTyVar tv (TyRow (RowTy diff Nothing))
+unifyRow _ _ = fail "row unification failed"
+
+match :: TCType s -> TCType s -> InferT s b ()
+match (TyFun l r) (TyFun l' r') = match l l' *> match r r'
+match (TyVar t) ty = unifyTyVar t ty
+match (TyPrim p) (TyPrim p') | p == p' = pure ()
+match TyCap TyCap = pure ()
+match (TyList t) (TyList t') = match t t'
+match (TyTable _) (TyTable _) = pure ()
+match (TyRow _) (TyRow _) = pure ()
+match _ _ = fail "match failed"
+
+
+matchPred :: Pred (TvRef s) -> Pred (TvRef s) -> InferT s b ()
+matchPred (Eq t) (Eq t') = match t t'
+matchPred (Ord t) (Ord t') = match t t'
+matchPred (Show t) (Show t') = match t t'
+matchPred (Add t) (Add t') = match t t'
+matchPred (Num t) (Num t') = match t t'
+matchPred (Serializable t) (Serializable t') = match t t'
+matchPred _ _ = fail "pred match failed"
+
+-- unifyPred :: Pred (TvRef s) -> Pred (TvRef s) -> InferT s b ()
+-- unifyPred (Eq t) (Eq t') = unify t t'
+-- unifyPred (Ord t) (Ord t') = unify t t'
+-- unifyPred (Show t) (Show t') = unify t t'
+-- unifyPred (Add t) (Add t') = unify t t'
+-- unifyPred (Num t) (Num t') = unify t t'
+-- unifyPred (Serializable t) (Serializable t') = unify t t'
+
+-- generalizeWithTerm
+--   :: TCType s
+--   -> TypedTCTerm s b i
+--   -> InferT s b (TypeScheme (TvRef s), TypedTCTerm s b i)
+-- generalizeWithTerm ty term = do
+--   sts <- lift (newSTRef Set.empty)
+--   (ftvs, ty') <- gen' sts ty
+--   case ftvs of
+--     [] -> pure (TypeScheme [] ty', term)
+--     (x:xs) -> pure (TypeScheme ftvs ty', Typed.TyAbs (x:|xs) term (term ^. Typed.termInfo))
+--   where
+--   gen' sts (TyVar tv) = readTvRef tv >>= \case
+--     Unbound n u l -> do
+--       cl <- currentLevel
+--       if l > cl then do
+--         s <- lift (readSTRef sts)
+--         writeTvRef tv (Bound n u)
+--         if Set.member u s then pure ([], TyVar tv)
+--         else lift (writeSTRef sts (Set.insert u s)) *> pure ([tv], TyVar tv)
+--       else pure ([], TyVar tv)
+--     Link t' -> gen' sts t'
+--     Bound _ _ -> pure ([], TyVar tv)
+--   gen' sts (TyFun l r) = do
+--     (ftvl, l') <- gen' sts l
+--     (ftvr, r') <- gen' sts r
+--     pure (ftvl ++ ftvr,TyFun l' r')
+--   gen' _ t@TyPrim{} = pure ([], t)
+--   gen' sts (TyRow r) = over _2 TyRow <$> genRow sts r
+--   gen' sts (TyList t) = over _2 TyList <$> gen' sts t
+--   gen' sts (TyTable t) = over _2 TyTable <$> genRow sts t
+--   gen' _sts TyCap = pure ([], TyCap)
+--   gen' _sts t@TyForall{} = pure ([], t)
+--   genRow _sts EmptyRow = pure ([], EmptyRow)
+--   genRow sts (RowVar rv) = readTvRef rv >>= \case
+--     Unbound n u l -> do
+--       cl <- currentLevel
+--       if l > cl then do
+--         s <- lift (readSTRef sts)
+--         writeTvRef rv (Bound n u)
+--         if Set.member u s then pure ([], RowVar rv)
+--         else lift (writeSTRef sts (Set.insert u s)) *> pure ([rv], RowVar rv)
+--       else pure ([], RowVar rv)
+--     Link t' -> gen' sts t' >>= \case
+--       (l, TyRow r) -> pure (l, r)
+--       _ -> fail "found row variable instantiate to top level type"
+--     Bound _ _ -> pure ([], RowVar rv)
+--   genRow sts (RowTy obj mrv) = do
+--     objTup <- traverse (gen' sts) obj
+--     let obj' = snd <$> objTup
+--         ftvs = concat $ fmap fst $ Map.elems objTup
+--     case mrv of
+--       Just tv -> readTvRef tv >>= \case
+--         Unbound n u l -> do
+--           cl <- currentLevel
+--           if l > cl then do
+--             s <- lift (readSTRef sts)
+--             writeTvRef tv (Bound n u)
+--             if Set.member u s then pure (ftvs, RowTy obj' mrv)
+--             else lift (writeSTRef sts (Set.insert u s)) *> pure (ftvs ++ [tv], RowTy obj' mrv)
+--           else pure ([], RowTy obj' mrv)
+--         Link t' -> gen' sts t' >>= \case
+--           (l, TyRow (RowVar v')) -> pure (ftvs ++ l, RowTy obj' (Just v'))
+--           (l, TyRow EmptyRow) -> pure (ftvs ++ l, RowTy obj' Nothing)
+--           (l, TyRow (RowTy objr rvr)) -> pure (ftvs ++ l, RowTy (Map.union obj' objr) rvr)
+--           _ -> fail "Row variable linked to non-row"
+--         Bound _ _ -> pure (ftvs, RowTy obj' mrv)
+--       Nothing -> pure (ftvs, RowTy obj' Nothing)
+
+-- liftTypeVar :: Type TypeVar -> InferT s b (TCType s)
+-- liftTypeVar = \case
+--   TyVar tyv -> TyVar <$> liftRef tyv
+--   TyPrim p -> pure (TyPrim p)
+--   TyFun l r ->
+--     TyFun <$> liftTypeVar l <*> liftTypeVar r
+--   TyRow r -> TyRow <$> liftTVRow r
+--   TyTable r -> TyTable <$> liftTVRow r
+--   TyList l -> TyList <$> liftTypeVar l
+--   TyCap -> pure TyCap
+--   TyForall _ _ -> fail "impossible"
+--   where
+--   -- BIG TODO: placeholder impl, DEFINITELY
+--   -- unsound in the presence of type anns (vars that should not be generalized)
+--   -- would get a level higher than where they were declared.
+--   -- Type anns need to be indexed @ their declared binder
+--   liftRef tyv = do
+--     level <- currentLevel
+--     let name = _tyVarName tyv
+--         u = _tyVarUnique tyv
+--     TvRef <$> lift (newSTRef (Unbound name u level))
+--   liftTVRow = \case
+--     EmptyRow -> pure EmptyRow
+--     RowVar v -> RowVar <$> liftRef v
+--     RowTy obj mrv -> do
+--       obj' <- traverse liftTypeVar obj
+--       mrv' <- traverse liftRef mrv
+--       pure (RowTy obj' mrv')
+
+-- -- Todo: bidirectionality
+-- inferTerm :: IRTerm b i -> InferT s b (TCType s, TypedTCTerm s b i)
+-- inferTerm = \case
+--   IR.Var n@(Name _ (LocallyBoundName di)) i -> do
+--     views tcVarEnv (`RAList.lookup` (_debruijn di)) >>= \case
+--       Just ts -> do
+--         let v' = Typed.Var n i
+--         instantiateWithTerm ts v'
+--       Nothing -> fail ("unbound variable in term infer" <> show n)
+--   IR.Var _ _ -> fail "unsupported top level"
+--   IR.Lam n nts e i -> do
+--     let names = fst <$> nts
+--     ntys <- fmap TyVar <$> traverse (const newTvRef) names
+--     -- Todo: bidirectionality
+--     -- nts' <- (mapped._1.traversed) liftTypeVar nts
+--     let m = RAList.fromList (NE.toList (NE.reverse (TypeScheme [] <$> ntys)))
+--     (ty, e') <- locally tcVarEnv (m RAList.++) $ inferTerm e
+--     let nts' = NE.zip names ntys
+--         rty = foldr TyFun ty ntys
+--     pure (rty, Typed.Lam n nts' e' i)
+--   IR.App e (arg :| args) i -> do
+--     tv1 <- TyVar <$> newTvRef
+--     (te, e') <- inferTerm e
+--     (targ, arg') <- inferTerm arg
+--     unify te (TyFun targ tv1)
+--     (ret, args') <- inferArgs tv1 args
+--     pure (ret, Typed.App e' (arg' :| args') i)
+--     where
+--     inferArgs tfun (x:xs) = do
+--       tout <- TyVar <$> newTvRef
+--       (tx, x') <- inferTerm x
+--       unify tfun (TyFun tx tout)
+--       (outf, xs') <- inferArgs tout xs
+--       pure (outf, x':xs')
+--     inferArgs tout [] = pure (tout, [])
+--   -- Todo: bidirectionaliry
+--   IR.Let n _ e1 e2 i -> do
+--     enterLevel
+--     (te1, e1Unqual) <- inferTerm e1
+--     leaveLevel
+--     (ts, e1Qual) <- generalizeWithTerm te1 e1Unqual
+--     (te2, e2') <- locally tcVarEnv (RAList.cons ts) $ inferTerm e2
+--     pure (te2, Typed.Let n e1Qual e2' i)
+--   IR.Block nel i -> do
+--     nelTup <- traverse inferTerm nel
+--     let nel' = snd <$> nelTup
+--         outTy = fst (NE.last nelTup)
+--     pure (outTy, Typed.Block nel' i)
+--   IR.Error e i -> do
+--     tv <- TyVar <$> newTvRef
+--     pure (tv, Typed.Error e tv i)
+--   -- Todo: Here, convert to dictionary
+--   IR.Builtin b i -> do
+--     tyImported <- views tcBuiltins ($ b)
+--     (ty, tvs) <- instantiateImported tyImported
+--     let tvs' = TyVar <$> tvs
+--     let term' = Typed.Builtin b i
+--     case tvs' of
+--       x:xs -> pure (ty, Typed.TyApp term' (x:|xs) i)
+--       [] -> pure (ty, term')
+--   -- TODO: note,
+--   -- for this to work, we have to have proper bidirectionality working, including scoped type variables working fine
+--   IR.DynAccess {} -> error "todo: Dyn access"
+--   IR.Constant l i -> pure (typeOfLit l, Typed.Constant l i)
+--   -- note: object literals are closed rows.
+--   IR.ObjectLit obj i -> do
+--     objTup <- traverse inferTerm obj
+--     let obj' = snd <$> objTup
+--         objTy = TyRow (RowTy (fst <$> objTup) Nothing)
+--     pure (objTy, Typed.ObjectLit obj' i)
+--   IR.ObjectOp oop i -> case oop of
+--     ObjectAccess f o -> do
+--       tv <- TyVar <$> newTvRef
+--       (objTyp, o') <- inferTerm o
+--       let ty = objectAccessType f
+--       (tyInst, tvs) <- instantiateImported ty
+--       unify tyInst (TyFun objTyp tv)
+--       let term' = Typed.ObjectOp (Typed.TObjectAccess f (TyVar <$> tvs) o') i
+--       pure (tv, term')
+--     ObjectRemove f o -> do
+--       tv <- TyVar <$> newTvRef
+--       (objTyp, o') <- inferTerm o
+--       let ty = objectRemoveType f
+--       (tyInst, tvs) <- instantiateImported ty
+--       unify tyInst (TyFun objTyp tv)
+--       let term' = Typed.ObjectOp (Typed.TObjectRemove f (TyVar <$> tvs) o') i
+--       pure (tv, term')
+--     ObjectUpdate f v obj -> do
+--       tv <- TyVar <$> newTvRef
+--       (vTyp, v') <- inferTerm v
+--       (objTyp, o') <- inferTerm obj
+--       let ty = objectUpdateType f
+--       (tyInst, tvs) <- instantiateImported ty
+--       unify tyInst (TyFun vTyp (TyFun objTyp tv))
+--       let term' = Typed.ObjectOp (Typed.TObjectUpdate f (TyVar <$> tvs) o' v') i
+--       pure (tv, term')
+--   IR.ListLit li i -> do
+--     tv <- TyVar <$> newTvRef
+--     liTup <- traverse inferTerm li
+--     _ <- traverse (unify tv . view _1) liTup
+--     pure (TyList tv, Typed.ListLit tv (snd <$> liTup) i)
+
+
+-- -- | Transform types into their debruijn-indexed version
+-- -- Essentially: Start at depth 0:
+-- --  rename : (Term, Γ, Int) -> IxTerm
+-- --  rename (ΛX.e, tyEnv, DEPTH) = Λ. (rename (e, tyEnv[depth/X], DEPTH+1))
+-- --  .. other cases are simply renaming recursively and calling `renameType`
+-- --  on occurences of Type
+-- --
+-- --  NOTE: the passed in DEPTH is 1 higher than the highest binder.
+-- --
+-- --  renameType : (Type, Γ, Int) -> IxType
+-- --  renameType (a, env, DEPTH) = DEPTH - env(a) - 1
+-- --  .. other recursive cases are straightforward
+-- --
+-- --  Quip: when we debruijnize types, we expect no impredicative polymorphism atm,
+-- --  thus we will fail on universially quantified types found in application and
+-- --  var binding sites.
+-- --  The typechecker does not spit out impredicative polymorphism, but while
+-- --  it would be trivial to support their renaming here, I'd rather fail
+-- --  for now as the typechecker does not support it and it functions as a sanity check
+-- debruijnizeTermTypes :: TypedTCTerm s b i -> InferT s b (TypedTerm b i)
+-- debruijnizeTermTypes = dbj [] 0
+--   where
+--   dbj :: [(TvRef s, NamedDeBruijn)] -> DeBruijn -> TypedTCTerm s b i -> InferT s b (TypedTerm b i)
+--   dbj env depth = \case
+--     Typed.Var n i -> pure (Typed.Var n i)
+--     Typed.Lam n nts e i -> do
+--       nts' <- (traversed._2) (dbjTyp env depth) nts
+--       e' <- dbj env depth e
+--       pure (Typed.Lam n nts' e' i)
+--     Typed.App l r i ->
+--       Typed.App <$> dbj env depth l <*> traverse (dbj env depth) r <*> pure i
+--     Typed.Let n e1 e2 i ->
+--       Typed.Let n <$> dbj env depth e1 <*> dbj env depth e2 <*> pure i
+--     Typed.TyApp e args i -> do
+--       e' <- dbj env depth e
+--       args' <- traverse (dbjTyp env depth) args
+--       pure (Typed.TyApp e' args' i)
+--     Typed.TyAbs ntys e i -> do
+--       let len = fromIntegral (NE.length ntys)
+--           ixs = NE.fromList [depth .. depth + len - 1]
+--       names <- traverse (nameTvs (depth + len)) (NE.zip ntys ixs)
+--       let env' = NE.toList $ NE.zip ntys names
+--       Typed.TyAbs names <$> dbj (env' ++ env) (depth + len) e <*> pure i
+--     Typed.Block nel i ->
+--       Typed.Block <$> traverse (dbj env depth) nel <*> pure i
+--     Typed.ObjectLit obj i ->
+--       Typed.ObjectLit <$> traverse (dbj env depth) obj <*> pure i
+--     Typed.ObjectOp oop i -> fmap (`Typed.ObjectOp` i) $ case oop of
+--       Typed.TObjectAccess f tvs o -> do
+--         tvs' <- traverse (dbjTyp env depth) tvs
+--         o' <- dbj env depth o
+--         pure (Typed.TObjectAccess f tvs' o')
+--       Typed.TObjectRemove f tvs o -> do
+--         tvs' <- traverse (dbjTyp env depth) tvs
+--         o' <- dbj env depth o
+--         pure (Typed.TObjectRemove f tvs' o')
+--       Typed.TObjectUpdate f tvs v o -> do
+--         tvs' <- traverse (dbjTyp env depth) tvs
+--         v' <- dbj env depth v
+--         o' <- dbj env depth o
+--         pure (Typed.TObjectUpdate f tvs' v' o')
+--     Typed.ListLit ty v i ->
+--       Typed.ListLit <$> dbjTyp env depth ty <*> traverse (dbj env depth) v <*> pure i
+--     Typed.Error e t i ->
+--       Typed.Error e <$> dbjTyp env depth t <*> pure i
+--     Typed.Builtin b i -> pure (Typed.Builtin b i)
+--     Typed.Constant l i -> pure (Typed.Constant l i)
+
+-- nameTvs :: DeBruijn -> (TvRef s, DeBruijn) -> InferT s b NamedDeBruijn
+-- nameTvs depth (nt, i) = readTvRef nt >>= \case
+--   Bound n _ -> pure (NamedDeBruijn (depth - i - 1) n)
+--   _ -> fail "found unbound variable"
+
+-- debruijnizeTypeScheme :: TypeScheme (TvRef s) -> InferT s b (Type NamedDeBruijn)
+-- debruijnizeTypeScheme (TypeScheme tvs t) = case tvs of
+--   x:xs -> do
+--     let len = fromIntegral (length tvs)
+--     let ixs = NE.fromList [0.. len - 1]
+--     names <- traverse (nameTvs len) (NE.zip (x:|xs) ixs)
+--     TyForall names <$> dbjTyp (zip tvs (NE.toList names)) len t
+--   [] -> dbjTyp [] 0 t
+
+-- dbjTyp
+--   :: [(TvRef s, NamedDeBruijn)]
+--   -> DeBruijn
+--   -> TCType s
+--   -> InferT s b (Type NamedDeBruijn)
+-- dbjTyp env depth = \case
+--   TyVar n -> case lookup n env of
+--     Just v -> pure (TyVar v)
+--     Nothing -> readTvRef n >>= \case
+--       Unbound {} -> fail "unbound type"
+--       Bound{} -> fail "impossible"
+--       Link ty -> dbjTyp env depth ty
+--   TyPrim p -> pure (TyPrim p)
+--   TyFun l r -> TyFun <$> dbjTyp env depth l <*> dbjTyp env depth r
+--   TyRow r -> TyRow <$> dbjRow env depth r
+--   TyList l -> TyList <$> dbjTyp env depth l
+--   TyTable r -> TyTable <$> dbjRow env depth r
+--   TyCap -> pure TyCap
+--   _ -> fail "impredicative"
+
+-- dbjRow
+--   :: [(TvRef s, NamedDeBruijn)]
+--   -> DeBruijn
+--   -> Row (TvRef s)
+--   -> InferT s b (Row NamedDeBruijn)
+-- dbjRow env depth = \case
+--   RowVar rv -> case lookup rv env of
+--     Just v -> pure (RowVar v)
+--     Nothing ->  readTvRef rv >>= \case
+--       Unbound {} -> fail "unbound row var"
+--       Bound{} -> fail "impossible"
+--       Link ty -> dbjTyp env depth ty >>= \case
+--         TyRow r -> pure r
+--         _ -> fail "invalid substitution in sanity check"
+--   EmptyRow -> pure EmptyRow
+--   RowTy obj mrv -> do
+--     obj' <- traverse (dbjTyp env depth) obj
+--     case mrv of
+--       Just rv -> case lookup rv env of
+--         Just v -> pure (RowTy obj' (Just v))
+--         Nothing -> readTvRef rv >>= \case
+--           Unbound _ u l -> fail $ "unbound row type" <> show (u, l)
+--           Bound{} -> fail "impossible"
+--           Link ty -> dbjTyp env depth ty >>= \case
+--             TyRow (RowVar rv') -> pure (RowTy obj' (Just rv'))
+--             TyRow (RowTy obj2 mrv2) -> pure (RowTy (Map.union obj' obj2) mrv2)
+--             TyRow EmptyRow -> pure (RowTy obj' Nothing)
+--             _ -> fail "invalid substitution in sanity check"
+--       Nothing -> pure (RowTy obj' Nothing)
+
+-- tsToTyForall :: TypeScheme t -> Type t
+-- tsToTyForall (TypeScheme ts t) = case ts of
+--   [] -> t
+--   (x:xs) -> TyForall (x:|xs) t
+
+-- -----------------------------------------
+-- --- Built-in type wiring
+-- ------------------------------------------
+-- -- todo: overloading
+
+-- -- todo: debruijnize automatically
+-- rawBuiltinType :: RawBuiltin -> Type NamedDeBruijn
+-- rawBuiltinType = \case
+--   RawAdd -> binaryInt
+--   RawSub -> binaryInt
+--   RawMultiply -> binaryInt
+--   RawDivide -> binaryInt
+--   RawNegate -> unaryInt
+--   RawAnd -> binaryBool
+--   RawOr -> binaryBool
+--   RawNot -> TyBool :~> TyBool
+--   RawEq -> binaryIntComp
+--   RawNeq -> binaryIntComp
+--   RawGT -> binaryIntComp
+--   RawGEQ -> binaryIntComp
+--   RawLT -> binaryIntComp
+--   RawLEQ -> binaryIntComp
+--   RawBitwiseAnd -> binaryInt
+--   RawBitwiseOr -> binaryInt
+--   RawBitwiseXor -> binaryInt
+--   RawBitwiseFlip -> TyInt :~> TyInt
+--   RawBitShift -> unaryInt
+--   RawAbs -> unaryInt
+--   RawRound -> roundingFn
+--   RawCeiling -> roundingFn
+--   RawExp -> unaryDecimal
+--   RawFloor -> roundingFn
+--   RawLn -> unaryDecimal
+--   RawLogBase -> binaryDecimal
+--   RawMod -> binaryInt
+--   RawMap ->
+--     let aVar = nd "a" 1
+--         bVar = nd "b" 0
+--         a = TyVar aVar
+--         b = TyVar bVar
+--     in TyForall (aVar :| [bVar]) ((a :~> b) :~> TyList a :~> TyList b)
+--   RawFold ->
+--     let aVar = nd "a" 1
+--         bVar = nd "b" 0
+--         a = TyVar aVar
+--         b = TyVar bVar
+--     in TyForall (aVar :| [bVar]) ((a :~> b :~> a) :~> a :~> TyList b :~> a)
+--   RawFilter ->
+--     let aVar = nd "a" 0
+--         a = TyVar aVar
+--     in TyForall (aVar :| []) ((a :~> TyBool) :~> TyList a :~> TyList a)
+--   RawIf ->
+--     let aVar = nd "a" 0
+--         a = TyVar aVar
+--     in TyForall (aVar :| []) (TyBool :~> (TyUnit :~> a) :~> (TyUnit :~> a) :~> a)
+--   RawIntToStr ->
+--     TyInt :~> TyString
+--   RawConcat ->
+--     TyList TyString :~> TyString
+--   RawStrToInt ->
+--     TyString :~> TyInt
+--   RawTake ->
+--     let aVar = nd "a" 0
+--         a = TyVar aVar
+--     in TyForall (aVar :| []) (TyInt :~> TyList a :~> TyList a)
+--   RawDrop ->
+--     let aVar = nd "a" 0
+--         a = TyVar aVar
+--     in TyForall (aVar :| []) (TyInt :~> TyList a :~> TyList a)
+--   RawLength ->
+--     let aVar = nd "a" 0
+--         a = TyVar aVar
+--     in TyForall (aVar :| []) (TyList a :~> TyInt)
+--   RawDistinct ->
+--     TyList TyInt :~> TyList TyInt
+--   RawEnforce ->
+--     TyBool :~> TyString :~> TyUnit
+--   RawEnforceOne -> error "todo"
+--   RawEnumerate ->
+--     TyInt :~> TyInt :~> TyList TyInt
+--   RawEnumerateStepN ->
+--     TyInt :~> TyInt :~> TyInt :~> TyList TyInt
+--   RawDummy ->
+--     let aVar = nd "a" 0
+--     in TyForall (aVar :| []) (TyRow (RowVar aVar) :~> TyRow (RowVar aVar) :~> TyUnit)
+--   where
+--   nd b a = NamedDeBruijn a b
+--   unaryInt = TyInt :~> TyInt
+--   binaryInt = TyInt :~> TyInt :~> TyInt
+--   unaryDecimal = TyDecimal :~> TyDecimal
+--   binaryDecimal = TyDecimal :~> TyDecimal :~> TyDecimal
+--   roundingFn = TyDecimal :~> TyInt
+--   binaryIntComp = TyInt :~> TyInt :~> TyBool
+--   binaryBool = TyBool :~> TyBool :~> TyBool
+
+-- objectAccessType :: Field -> Type NamedDeBruijn
+-- objectAccessType f =
+--   let aVar = NamedDeBruijn 1 "a"
+--       rVar = NamedDeBruijn 0 "r"
+--       a = TyVar aVar
+--       rowTy = TyRow (RowTy (Map.singleton f a) (Just rVar))
+--   in TyForall (aVar :| [rVar]) (rowTy :~> a)
+
+-- objectUpdateType :: Field -> Type NamedDeBruijn
+-- objectUpdateType f =
+--   let aVar = NamedDeBruijn 1 "a"
+--       rVar = NamedDeBruijn 0 "r"
+--       a = TyVar aVar
+--       rowTy0 = TyRow (RowVar rVar)
+--       rowTy1 = TyRow (RowTy (Map.singleton f a) (Just rVar))
+--   in TyForall (aVar :| [rVar]) (a :~> rowTy0 :~> rowTy1)
+
+-- objectRemoveType :: Field -> Type NamedDeBruijn
+-- objectRemoveType f =
+--   let aVar = NamedDeBruijn 1 "a"
+--       rVar = NamedDeBruijn 0 "r"
+--       a = TyVar aVar
+--       rowTy0 = TyRow (RowTy (Map.singleton f a) (Just rVar))
+--       rowTy1 = TyRow (RowVar rVar)
+--   in TyForall (aVar :| [rVar]) (rowTy0 :~> rowTy1)
+
+-- runInferTerm :: Supply -> (b -> Type NamedDeBruijn) -> IRTerm b i -> (Type NamedDeBruijn, TypedTerm b i)
+-- runInferTerm u bfn term0 = runST $ do
+--   uref <- newSTRef u
+--   lref <- newSTRef 1
+--   let tcs = TCState uref mempty bfn lref
+--   flip runReaderT tcs $ do
+--     enterLevel
+--     (ty, term1) <- inferTerm term0
+--     leaveLevel
+--     (tys, term2) <- generalizeWithTerm ty term1
+--     ts <- debruijnizeTypeScheme tys
+--     term3 <- debruijnizeTermTypes term2
+--     pure (ts, term3)
