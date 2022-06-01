@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
 -- |
 -- Module      :  Pact.Native.Guards
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -22,7 +23,6 @@ import Data.Aeson (encode)
 import Data.Attoparsec.Text
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
-import Data.Default (def)
 import Data.Foldable
 import Data.Functor (($>), void)
 import Data.Text (Text)
@@ -116,7 +116,7 @@ isPrincipleDef = defRNative "is-principal" isPrincipal
   where
     isPrincipal :: RNativeFun e
     isPrincipal i as = case as of
-      [TLitString p] -> case parseOnly principalParser p of
+      [TLitString p] -> case parseOnly (principalParser i) p of
         Left{} -> pure $ toTerm False
         Right{} -> pure $ toTerm True
       _ -> argsError i as
@@ -131,13 +131,13 @@ typeOfPrincipalDef = defRNative "typeof-principal" typeOfPrincipal
   where
     typeOfPrincipal :: RNativeFun e
     typeOfPrincipal i as = case as of
-      [TLitString p] -> case parseOnly principalParser p of
+      [TLitString p] -> case parseOnly (principalParser i) p of
         Left{} -> pure $ tStr ""
         Right ty -> pure $ tStr ty
       _ -> argsError i as
 
-principalParser :: Parser Text
-principalParser = (kParser $> "k:")
+principalParser :: HasInfo i => i -> Parser Text
+principalParser (getInfo -> i) = (kParser $> "k:")
   <|> (wParser $> "w:")
   <|> (rParser $> "r:")
   <|> (uParser $> "u:")
@@ -162,31 +162,31 @@ principalParser = (kParser $> "k:")
       *> char ':'
       *> base64UrlHashParser
       *> char ':'
-      *> nameParser def
+      *> nameParser i
       *> eof
 
     pParser = char 'p'
       *> char ':'
       *> base64UrlHashParser
       *> char ':'
-      *> nameParser def
+      *> nameParser i
       *> eof
 
     rParser = char 'r'
       *> char ':'
-      *> nameParser def
+      *> nameParser i
       *> eof
 
     mParser = char 'm'
       *> char ':'
       *> moduleNameParser
       *> char ':'
-      *> nameParser def
+      *> nameParser i
       *> eof
 
     uParser = char 'u'
       *> char ':'
-      *> nameParser def
+      *> nameParser i
       *> char ':'
       *> base64UrlHashParser
       *> eof
