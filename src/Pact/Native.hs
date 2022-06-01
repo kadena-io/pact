@@ -7,8 +7,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-
-
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -86,6 +84,7 @@ import Pact.Eval
 import Pact.Native.Capabilities
 import Pact.Native.Db
 import Pact.Native.Decrypt
+import Pact.Native.Guards
 import Pact.Native.Internal
 import Pact.Native.Keysets
 import Pact.Native.Ops
@@ -103,15 +102,17 @@ import Pact.Types.Version
 
 -- | All production native modules.
 natives :: [NativeModule]
-natives = [
-  langDefs,
-  dbDefs,
-  timeDefs,
-  opDefs,
-  keyDefs,
-  capDefs,
-  spvDefs,
-  decryptDefs]
+natives =
+  [ langDefs
+  , dbDefs
+  , timeDefs
+  , opDefs
+  , keyDefs
+  , capDefs
+  , spvDefs
+  , decryptDefs
+  , guardDefs
+  ]
 
 
 -- | Production native modules as a dispatch map.
@@ -193,11 +194,16 @@ tryDef =
 
 pactVersionDef :: NativeDef
 pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
-  (\_ _ -> return $ toTerm pactVersion)
+  pactVersion'
   (funType tTyString [])
   ["(pact-version)"]
   "Obtain current pact build version."
 
+
+pactVersion' :: RNativeFun e
+pactVersion' i _ = do
+  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
+  pure (toTerm pactVersion)
 
 formatDef :: NativeDef
 formatDef =
@@ -1066,11 +1072,13 @@ sort' _ i as = argsError i as
 
 
 enforceVersion :: RNativeFun e
-enforceVersion i as = case as of
-  [TLitString minVersion] -> doMin minVersion >> return (toTerm True)
-  [TLitString minVersion,TLitString maxVersion] ->
-    doMin minVersion >> doMax maxVersion >> return (toTerm True)
-  _ -> argsError i as
+enforceVersion i as = do
+  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
+  case as of
+    [TLitString minVersion] -> doMin minVersion >> return (toTerm True)
+    [TLitString minVersion,TLitString maxVersion] ->
+      doMin minVersion >> doMax maxVersion >> return (toTerm True)
+    _ -> argsError i as
   where
     doMin = doMatch "minimum" (>) (<)
     doMax = doMatch "maximum" (<) (>)

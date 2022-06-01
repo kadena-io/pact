@@ -13,7 +13,7 @@ import           Control.Monad.Except     (runExcept)
 import           Control.Monad.IO.Class   (liftIO)
 import           Control.Monad.Reader     (ReaderT (runReaderT))
 import           Control.Monad.RWS.Strict (runRWST)
-import           Data.Aeson               (Value (Object), toJSON)
+import           Data.Aeson               (toJSON)
 import qualified Data.Default             as Default
 import qualified Data.HashMap.Strict      as HM
 import           Data.List                (isPrefixOf)
@@ -193,5 +193,5 @@ mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts txStrs) = do
       txStrs' = HM.fromList
         $ fmap (\(k, Str v) -> (T.pack k, toJSON v))
         $ Map.toList txStrs
-      body = Object $ HM.unions [registryKSs', txKSs', txDecs', txInts', txStrs']
+      body = toJSON $ HM.unions [registryKSs', txKSs', txDecs', txInts', txStrs']
   pure $ evalEnv & eeMsgBody .~ body
