@@ -1548,21 +1548,6 @@ Defines a guard by NAME that enforces the current module admin predicate.
 Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
 
 
-### create-principal {#create-principal}
-
-*guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
-
-
-Create a principal which unambiguously identifies GUARD.
-```lisp
-(create-principal (read-keyset 'keyset))
-(create-principal (keyset-ref-guard 'keyset))
-(create-principal (create-module-guard 'module-guard))
-(create-principal (create-user-guard 'user-guard))
-(create-principal (create-pact-guard 'pact-guard))
-```
-
-
 ### create-user-guard {#create-user-guard}
 
 *closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
@@ -1626,17 +1611,6 @@ Specifies and tests for existing grant of CAPABILITY, failing if not found in en
 ```
 
 
-### validate-principal {#validate-principal}
-
-*guard*&nbsp;`guard` *principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
-
-
-Validate that PRINCIPAL unambiguously identifies GUARD.
-```lisp
-(enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
-```
-
-
 ### with-capability {#with-capability}
 
 *capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
@@ -1680,6 +1654,55 @@ Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encry
 Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are base-16 strings of length 32.
 ```lisp
 (validate-keypair pubkey privkey)
+```
+
+## Guards {#Guards}
+
+### create-principal {#create-principal}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
+
+
+Create a principal which unambiguously identifies GUARD.
+```lisp
+(create-principal (read-keyset 'keyset))
+(create-principal (keyset-ref-guard 'keyset))
+(create-principal (create-module-guard 'module-guard))
+(create-principal (create-user-guard 'user-guard))
+(create-principal (create-pact-guard 'pact-guard))
+```
+
+
+### is-principal {#is-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Tell whether PRINCIPAL string conforms to the principal format without proving validity.
+```lisp
+(enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+```
+
+
+### typeof-principal {#typeof-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Return the protocol type of a given PRINCIPAL value. If input value is not a principal type, then the empty string is returned.
+```lisp
+(typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
+```
+
+
+### validate-principal {#validate-principal}
+
+*guard*&nbsp;`guard` *principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Validate that PRINCIPAL unambiguously identifies GUARD.
+```lisp
+(enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 ```
 
 ## REPL-only functions {#repl-lib}

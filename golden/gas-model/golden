@@ -549,6 +549,18 @@
   - 1
 - - (mod smallNumber 2)
   - 1
+- - (typeof-principal (create-principal (read-keyset 'ks1)))
+  - 8
+- - (typeof-principal (create-principal (read-keyset 'ks2)))
+  - 18
+- - (typeof-principal (create-principal (create-pact-guard "test")))
+  - 8
+- - (typeof-principal (create-principal (keyset-ref-guard "some-loaded-keyset")))
+  - 14
+- - (typeof-principal (create-principal (create-user-guard (accounts.enforce-true))))
+  - 8
+- - (typeof-principal (create-principal (create-module-guard "test")))
+  - 8
 - - (> longNumber longNumber)
   - 2
 - - (> medNumber medNumber)
@@ -867,6 +879,18 @@
   - 1351
 - - (yield smallOjectMap "some-chain-id")
   - 136
+- - (is-principal (create-principal (read-keyset 'ks1)))
+  - 8
+- - (is-principal (create-principal (read-keyset 'ks2)))
+  - 18
+- - (is-principal (create-principal (create-pact-guard "test")))
+  - 8
+- - (is-principal (create-principal (keyset-ref-guard "some-loaded-keyset")))
+  - 14
+- - (is-principal (create-principal (create-user-guard (accounts.enforce-true))))
+  - 8
+- - (is-principal (create-principal (create-module-guard "test")))
+  - 8
 - - (minutes longNumber)
   - 4
 - - (minutes medNumber)

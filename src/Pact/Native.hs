@@ -7,8 +7,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-
-
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -86,6 +84,7 @@ import Pact.Eval
 import Pact.Native.Capabilities
 import Pact.Native.Db
 import Pact.Native.Decrypt
+import Pact.Native.Guards
 import Pact.Native.Internal
 import Pact.Native.Keysets
 import Pact.Native.Ops
@@ -103,15 +102,17 @@ import Pact.Types.Version
 
 -- | All production native modules.
 natives :: [NativeModule]
-natives = [
-  langDefs,
-  dbDefs,
-  timeDefs,
-  opDefs,
-  keyDefs,
-  capDefs,
-  spvDefs,
-  decryptDefs]
+natives =
+  [ langDefs
+  , dbDefs
+  , timeDefs
+  , opDefs
+  , keyDefs
+  , capDefs
+  , spvDefs
+  , decryptDefs
+  , guardDefs
+  ]
 
 
 -- | Production native modules as a dispatch map.
