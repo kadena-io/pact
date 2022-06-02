@@ -31,7 +31,7 @@ in {
         sbv = self.callHackageDirect {
           pkg = "sbv";
           ver = "9.0";
-          sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7m0";
+          sha256 = "14g2qax1vc7q4g78fa562dviqvcd0l52kd5jmgv90g3g3ci15bnl";
         } {};
 
         pact-do-benchmark = overrideCabal (doBenchmark (dontCheck super.pact)) (oldDrv: {
