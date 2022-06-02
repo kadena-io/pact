@@ -28,6 +28,13 @@ in {
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
+        # sbv requires this even though it is not used in the build (and the hash is invalid)
+        tasty-bench = dontCheck (self.callHackageDirect {
+          pkg = "tasty-bench";
+          ver = "0.3.1";
+          sha256 = "0000000000000000000000000000000000000000000000000000";
+        } {});
+
         libBF = doJailbreak (dontCheck (self.callHackageDirect {
           pkg = "libBF";
           ver = "0.6.3";
