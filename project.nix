@@ -16,6 +16,12 @@ in {
           sha256 = "1kdkisj534nv5r0m3gmxy2iqgsn6y1dd881x77a87ynkx1glxfva";
         } {});
 
+        hashable = dontCheck (self.callHackageDirect {
+          pkg = "hashable";
+          ver = "1.3.2.0";
+          sha256 = "0bd55lqn0a19v68ybx2w8a7z7alzkbasdpg5wyb48wl3ddlsl5z5";
+        } {});
+
         # The z3 dependency needs to be conditional so pact can be a
         # dependency of ghcjs apps.
         pact = dontCheck (if self.ghc.isGhcjs or false
@@ -37,7 +43,7 @@ in {
         libBF = dontCheck (self.callHackageDirect {
           pkg = "libBF";
           ver = "0.6.3";
-          sha256 = "14g2qax1vc7q4g78fa562dviqvcd0l52kd5jmgv90g3g3ci15bn0";
+          sha256 = "0j0i39jb389rnrkkw2xqz10471afxys79nf31hhlqr4fk6ddhjf7";
         } {});
 
         sbv = dontCheck (self.callHackageDirect {
