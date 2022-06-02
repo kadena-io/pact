@@ -28,6 +28,12 @@ in {
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
+        tasty-bench = dontCheck (self.callHackageDirect {
+          pkg = "tasty-bench";
+          ver = "0.3.1";
+          sha256 = "14g2qax1vc7q4g78fa562dviqvcd0l52kd5jmgv90g3g3ci15b44";
+        } {});
+
         libBF = dontCheck (self.callHackageDirect {
           pkg = "libBF";
           ver = "0.6.3";
