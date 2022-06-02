@@ -27,7 +27,7 @@ module Pact.Core.IR.Typecheck where
 import Control.Lens hiding (Level)
 import Control.Monad.Reader
 import Control.Monad.ST
-import Data.Foldable(traverse_)
+import Data.Foldable(traverse_, toList)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.STRef
 import Data.Text(Text)
@@ -59,6 +59,10 @@ type TypedTerm b i = Typed.Term Name NamedDeBruijn b i
 -- note, we will debruijnize, so this is purely for
 -- Display purposes
 
+data TypeScheme tv =
+  TypeScheme [tv] [Pred tv]  (Type tv)
+  deriving Show
+
 data Tv s
   = Unbound !Text !Unique !Level
   | Bound !Text !Unique
@@ -70,24 +74,6 @@ data Tv s
 newtype TvRef s =
   TvRef (STRef s (Tv s))
   deriving Eq
--- Note, no superclasses, for now
-data Pred tv
-  = Eq (Type tv)
-  | Ord (Type tv)
-  | Show (Type tv)
-  | WithoutField Field (Type tv)
-  | Add (Type tv)
-  | Num (Type tv)
-  | Serializable (Type tv)
-  deriving Show
-
-data Instance tv
-  = Instance [Pred tv] (Pred tv)
-  deriving Show
-
-data TypeScheme tv =
-  TypeScheme [tv] [Pred tv]  (Type tv)
-  deriving Show
 
 data TCState s b
   = TCState
@@ -209,6 +195,114 @@ newTvRef = do
   l <- currentLevel
   lift (modifySTRef' uref (+ 1))
   TvRef <$> lift (newSTRef (Unbound tvName u l))
+---------------------------------------------------------------
+-- Type class instances,
+-- entailment, context reduction.
+-- ---------------------------------------------------------------
+
+-- eqClass :: Class Text
+-- eqClass = Class Eq [] eqInstances
+--   where
+--   eqInstances =
+--     [ Instance [] (Pred Eq TyInt)
+--     , Instance [] (Pred Eq TyDecimal)
+--     , Instance [] (Pred Eq TyString)
+--     , Instance [] (Pred Eq TyTime)
+--     , Instance [] (Pred Eq TyBool)
+--     , Instance [] (Pred Eq TyUnit)
+--     , Instance [Eq "a"] (Eq (TyList (TyVar "a")))
+--     ]
+
+byInst :: Pred (TvRef s) -> InferT s b (Maybe [Pred (TvRef s)])
+byInst (Pred p ty) = case p of
+  Eq -> eqInst ty
+  _ -> undefined
+
+eqInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
+eqInst = \case
+  TyVar tv -> readTvRef tv >>= \case
+    Link ty -> eqInst ty
+    _ -> pure Nothing
+  -- All prims have an EQ instance
+  TyPrim _ -> pure (Just [])
+  TyList t -> pure (Just [Pred Eq t])
+  TyRow t -> case t of
+    EmptyRow -> pure (Just [])
+    RowTy m Nothing -> pure (Just (Pred Eq <$> Map.elems m))
+    _ -> pure Nothing
+  _ -> pure Nothing
+
+entail :: [Pred (TvRef s)] -> Pred (TvRef s) -> InferT s b Bool
+entail ps p = byInst p >>= \case
+  Nothing -> pure False
+  Just qs -> and <$> traverse (entail ps) qs
+
+isHnf :: Pred (TvRef s) -> InferT s b Bool
+isHnf (Pred c t) = case t of
+  TyVar tv -> readTvRef tv >>= \case
+    Link ty -> isHnf (Pred c ty)
+    _ -> pure True
+  _ -> pure False
+
+toHnf :: Pred (TvRef s) -> InferT s b [Pred (TvRef s)]
+toHnf p = isHnf p >>= \case
+  True -> pure [p]
+  False -> byInst p >>= \case
+    Nothing -> fail "context reduction failure"
+    Just ps -> toHnfs ps
+
+toHnfs :: [Pred (TvRef s)] -> InferT s b [Pred (TvRef s)]
+toHnfs ps = do
+  pss <- traverse toHnf ps
+  pure (concat pss)
+
+simplify :: [Pred (TvRef s)] -> InferT s b [Pred (TvRef s)]
+
+simplify = loop []
+  where
+  loop rs [] = pure rs
+  loop rs (p:ps) = entail (rs ++ rs) p >>= \cond ->
+    if cond then loop rs ps else loop (p:rs) ps
+
+reduce :: [Pred (TvRef s)]-> InferT s b [Pred (TvRef s)]
+reduce ps = toHnfs ps >>= simplify
+
+split :: [Pred (TvRef s)] -> InferT s b ([Pred (TvRef s)], [Pred (TvRef s)])
+split ps = do
+  ps' <- reduce ps
+  partition' ([], []) ps'
+  where
+  liftRes p ma =
+    if p then pure p else ma
+  partition' (ds, rs) (p@(Pred _ ty) : xs) = do
+    cond <- hasUnbound ty
+    if cond then partition' (p:ds, rs) xs
+    else partition' (ds, p:rs) xs
+  partition' (ds, rs) [] =
+    pure (reverse ds, reverse rs)
+  varUnbound ref = readTvRef ref >>= \case
+    Unbound{} -> pure True
+    Link ty -> hasUnbound ty
+    Bound {} -> pure False
+  hasUnbound = \case
+    TyVar n -> varUnbound n
+    TyPrim _ -> pure False
+    TyList t -> hasUnbound t
+    TyFun l r -> do
+      l' <- hasUnbound l
+      liftRes l' (hasUnbound r)
+    TyRow r -> case r of
+      RowVar rv -> varUnbound rv
+      RowTy m o -> do
+        p <- hasUnbound' (Map.elems m)
+        liftRes p (maybe (pure False) varUnbound o)
+      _ -> pure False
+    TyCap -> pure False
+    _ -> pure False
+  hasUnbound' [] = pure False
+  hasUnbound' (x:xs) = do
+    p' <- hasUnbound x
+    liftRes p' (hasUnbound' xs)
 
 ---------------------------------------------------------------
 -- -- Instantiations
@@ -383,33 +477,20 @@ unifyRow (RowTy objL lrv) (RowTy objR rrv') =
       unifyTyVar tv (TyRow (RowTy diff Nothing))
 unifyRow _ _ = fail "row unification failed"
 
-match :: TCType s -> TCType s -> InferT s b ()
-match (TyFun l r) (TyFun l' r') = match l l' *> match r r'
-match (TyVar t) ty = unifyTyVar t ty
-match (TyPrim p) (TyPrim p') | p == p' = pure ()
-match TyCap TyCap = pure ()
-match (TyList t) (TyList t') = match t t'
-match (TyTable _) (TyTable _) = pure ()
-match (TyRow _) (TyRow _) = pure ()
-match _ _ = fail "match failed"
+-- match :: TCType s -> TCType s -> InferT s b ()
+-- match (TyFun l r) (TyFun l' r') = match l l' *> match r r'
+-- match (TyVar t) ty = unifyTyVar t ty
+-- match (TyPrim p) (TyPrim p') | p == p' = pure ()
+-- match TyCap TyCap = pure ()
+-- match (TyList t) (TyList t') = match t t'
+-- match (TyTable _) (TyTable _) = pure ()
+-- match (TyRow _) (TyRow _) = pure ()
+-- match _ _ = fail "match failed"
 
 
-matchPred :: Pred (TvRef s) -> Pred (TvRef s) -> InferT s b ()
-matchPred (Eq t) (Eq t') = match t t'
-matchPred (Ord t) (Ord t') = match t t'
-matchPred (Show t) (Show t') = match t t'
-matchPred (Add t) (Add t') = match t t'
-matchPred (Num t) (Num t') = match t t'
-matchPred (Serializable t) (Serializable t') = match t t'
-matchPred _ _ = fail "pred match failed"
-
--- unifyPred :: Pred (TvRef s) -> Pred (TvRef s) -> InferT s b ()
--- unifyPred (Eq t) (Eq t') = unify t t'
--- unifyPred (Ord t) (Ord t') = unify t t'
--- unifyPred (Show t) (Show t') = unify t t'
--- unifyPred (Add t) (Add t') = unify t t'
--- unifyPred (Num t) (Num t') = unify t t'
--- unifyPred (Serializable t) (Serializable t') = unify t t'
+-- matchPred :: Pred (TvRef s) -> Pred (TvRef s) -> InferT s b ()
+-- matchPred (Pred t i) (Pred t' i') | t == t' = match i i'
+-- matchPred _ _ = fail "pred match failed"
 
 -- generalizeWithTerm
 --   :: TCType s

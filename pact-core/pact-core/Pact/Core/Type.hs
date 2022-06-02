@@ -4,6 +4,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 
 
@@ -24,6 +27,10 @@ module Pact.Core.Type
  , tyFunToArgList
  , traverseRowTy
  , typeOfLit
+ , BuiltinTC(..)
+ , Pred(..)
+ , Instance(..)
+ , Class(..)
  ) where
 
 import Control.Lens
@@ -61,7 +68,7 @@ data Row n
   = RowTy (RowObject n) (Maybe n)
   | RowVar n
   | EmptyRow
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 newtype InterfaceType n
   = InterfaceType n
@@ -107,7 +114,7 @@ data Type n
   -- ^ Universally quantified types, which have to be part of the type
   -- constructor since system F
   -- If we allow impredicative polymorphism later, it also works.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -131,6 +138,33 @@ pattern (:~>) :: Type n -> Type n -> Type n
 pattern l :~> r  = TyFun l r
 
 infixr 5 :~>
+
+-- Built in typeclasses
+data BuiltinTC
+  = Eq
+  | Ord
+  | Show
+  | WithoutField Field
+  | Add
+  | Num
+  deriving (Show, Eq, Ord)
+
+-- Note, no superclasses, for now
+data Pred tv
+  = Pred BuiltinTC (Type tv)
+  deriving Show
+
+data Instance tv
+  = Instance [Pred tv] (Pred tv)
+  deriving Show
+
+data Class tv
+  = Class
+  { _cName :: BuiltinTC
+  , _cSuper :: [BuiltinTC]
+  , _cInstances :: [Instance tv]
+  } deriving Show
+
 
 tyFunToArgList :: Type n -> Maybe ([Type n], Type n)
 tyFunToArgList (TyFun l r) =

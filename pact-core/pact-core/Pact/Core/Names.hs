@@ -32,6 +32,8 @@ module Pact.Core.Names
  , DeBruijn(..)
  , TypeName(..)
  , rawParsedName
+ , ONameKind
+ , OverloadedName
  ) where
 
 import Control.Lens
@@ -144,6 +146,18 @@ data DeclName
   , _tlnModule :: !ModuleName
   }
   deriving (Show, Eq, Ord)
+
+data ONameKind b
+  = OBound DeBruijn
+  | OTopLevel ModuleName ModuleHash
+  | OBuiltinDict b
+  deriving (Show, Eq)
+
+data OverloadedName b
+  = OverloadedName
+  { _olName :: !Text
+  , _olNameKind :: ONameKind b }
+  deriving (Show, Eq)
 
 -- Name representing locally nameless representations
 data Name
