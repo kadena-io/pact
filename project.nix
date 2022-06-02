@@ -19,7 +19,7 @@ in {
         hashable = dontCheck (self.callHackageDirect {
           pkg = "hashable";
           ver = "1.3.2.0";
-          sha256 = "0bd55lqn0a19v68ybx2w8a7z7alzkbasdpg5wyb48wl3ddlsl5z5";
+          sha256 = "1njk809laavfw8cb45azin83ir8f34fzdgf5p3fykgd4vi04vjv8";
         } {});
 
         # The z3 dependency needs to be conditional so pact can be a
