@@ -28,6 +28,12 @@ in {
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
+        libBF = dontCheck (self.callHackageDirect {
+          pkg = "libBF";
+          ver = "0.6.3";
+          sha256 = "14g2qax1vc7q4g78fa562dviqvcd0l52kd5jmgv90g3g3ci15bn0";
+        } {});
+
         sbv = dontCheck (self.callHackageDirect {
           pkg = "sbv";
           ver = "9.0";
