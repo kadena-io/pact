@@ -34,11 +34,11 @@ in {
           sha256 = "14g2qax1vc7q4g78fa562dviqvcd0l52kd5jmgv90g3g3ci15b44";
         } {});
 
-        libBF = dontCheck (self.callHackageDirect {
+        libBF = doJailbreak (dontCheck (self.callHackageDirect {
           pkg = "libBF";
           ver = "0.6.3";
           sha256 = "0j0i39jb389rnrkkw2xqz10471afxys79nf31hhlqr4fk6ddhjf7";
-        } {});
+        } {}));
 
         sbv = dontCheck (self.callHackageDirect {
           pkg = "sbv";
