@@ -28,6 +28,12 @@ in {
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
+        sbv = self.callHackageDirect {
+          pkg = "sbv";
+          ver = "9.0";
+          sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7m0";
+        } {};
+
         pact-do-benchmark = overrideCabal (doBenchmark (dontCheck super.pact)) (oldDrv: {
           benchmarkSystemDepends = [ pkgs.z3 ];
           postBuild = ''
