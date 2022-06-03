@@ -67,6 +67,7 @@ import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
+import Data.Functor(($>))
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -198,12 +199,21 @@ pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
   (funType tTyString [])
   ["(pact-version)"]
   "Obtain current pact build version."
+  where
+  -- note the 4.2.1 hardcode is
+  -- for compat across versions since it was previously set
+  -- by the cabal macro.
+  -- After pact 4.3.1, this is a local-only call and thus
+  -- we can use the cabal-generated version.
+  pactVersion' :: RNativeFun e
+  pactVersion' i _ = do
+    cond <- isExecutionFlagSet FlagDisablePact431
+    if cond then pure (toTerm compatVersion)
+    else checkNonLocalAllowed i *> pure (toTerm pactVersion)
+    where
+    compatVersion :: Text
+    compatVersion = "4.2.1"
 
-
-pactVersion' :: RNativeFun e
-pactVersion' i _ = do
-  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
-  pure (toTerm pactVersion)
 
 formatDef :: NativeDef
 formatDef =
@@ -1071,29 +1081,35 @@ sort' g0 fa [TList fields _ fi,l@(TList vs lty _)]
 sort' _ i as = argsError i as
 
 
+-- See: note in pact-version native
+-- about the value
 enforceVersion :: RNativeFun e
 enforceVersion i as = do
-  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
+  cond <- isExecutionFlagSet FlagDisablePact431
+  pactVersion'
+    <- if cond then pure compatVersion else checkNonLocalAllowed i $> pactVersion
   case as of
-    [TLitString minVersion] -> doMin minVersion >> return (toTerm True)
+    [TLitString minVersion] -> doMin minVersion pactVersion' >> return (toTerm True)
     [TLitString minVersion,TLitString maxVersion] ->
-      doMin minVersion >> doMax maxVersion >> return (toTerm True)
+      doMin minVersion pactVersion' >> doMax maxVersion pactVersion' >> return (toTerm True)
     _ -> argsError i as
   where
+    compatVersion :: Text
+    compatVersion = "4.2.1"
     doMin = doMatch "minimum" (>) (<)
     doMax = doMatch "maximum" (<) (>)
-    doMatch msg failCmp succCmp fullV =
-      foldM_ matchPart False $ zip (T.splitOn "." pactVersion) (T.splitOn "." fullV)
+    doMatch msg failCmp succCmp fullV pactVersion' =
+      foldM_ matchPart False $ zip (T.splitOn "." pactVersion') (T.splitOn "." fullV)
       where
         parseNum orgV s = case AP.parseOnly (AP.many1 AP.digit) s of
           Left _ -> evalError' i $ "Invalid version component: " <> pretty (orgV,s)
           Right v -> return v
         matchPart True _ = return True
         matchPart _ (pv,mv)  = do
-          pv' <- parseNum pactVersion pv
+          pv' <- parseNum pactVersion' pv
           mv' <- parseNum fullV mv
           when (mv' `failCmp` pv') $ evalError' i $
-            "Invalid pact version " <> pretty pactVersion <>
+            "Invalid pact version " <> pretty pactVersion' <>
             ", " <> msg <> " allowed: " <> pretty fullV
           return (mv' `succCmp` pv')
 
