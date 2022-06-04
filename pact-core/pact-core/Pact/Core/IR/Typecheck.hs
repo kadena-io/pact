@@ -25,7 +25,7 @@ module Pact.Core.IR.Typecheck where
 import Control.Lens hiding (Level)
 import Control.Monad.Reader
 import Control.Monad.ST
-import Data.Foldable(traverse_, sequence)
+import Data.Foldable(traverse_)
 import Data.List(nub)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.STRef
@@ -100,7 +100,7 @@ _dbgTypeScheme (TypeScheme tvs preds ty) = do
   pure (TypeScheme tvs' preds' ty')
   where
   rv n = readTvRef n >>= \case
-    Unbound u l _ -> pure ("unbound" <> show (u, l))
+  Unbound u l _ -> pure ("unbound" <> show (u, l))
     Bound u l -> pure ("bound" <> show (u, l))
     Link _ -> pure "linktv"
 
@@ -217,8 +217,11 @@ newSupplyIx = do
 byInst :: Pred (TvRef s) -> InferT s b (Maybe [Pred (TvRef s)])
 byInst (Pred p ty) = case p of
   Eq -> eqInst ty
+  Add -> addInst ty
+  Num -> numInst ty
+  Ord -> ordInst ty
+  Show -> showInst ty
   WithoutField f -> withoutFieldInst f ty
-  _ -> undefined
 
 eqInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
 eqInst = \case
@@ -250,10 +253,11 @@ ordInst = \case
   TyList t -> pure (Just [Pred Ord t])
   _ -> pure Nothing
 
+
 addInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
 addInst = \case
   TyVar tv -> readTvRef tv >>= \case
-    Link ty -> eqInst ty
+    Link ty -> addInst ty
     _ -> pure Nothing
   -- All prims have an EQ instance
   TyPrim p -> pure $ case p of
@@ -262,6 +266,18 @@ addInst = \case
     PrimDecimal -> Just []
     _ -> Nothing
   TyList _ -> pure (Just [])
+  _ -> pure Nothing
+
+numInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
+numInst = \case
+  TyVar tv -> readTvRef tv >>= \case
+    Link ty -> numInst ty
+    _ -> pure Nothing
+  -- All prims have an EQ instance
+  TyPrim p -> pure $ case p of
+    PrimInt -> Just []
+    PrimDecimal -> Just []
+    _ -> Nothing
   _ -> pure Nothing
 
 withoutFieldInst :: Field -> TCType s -> InferT s b (Maybe [Pred (TvRef s)])
@@ -278,6 +294,15 @@ withoutFieldInst f = \case
         Just r -> pure $ Just [Pred Eq (TyRow (RowVar r))]
   _ -> pure Nothing
 
+showInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
+showInst = \case
+  TyVar tv -> readTvRef tv >>= \case
+    Link ty -> showInst ty
+    _ -> pure Nothing
+  -- All prims have an EQ instance
+  TyPrim _p -> pure (Just [])
+  TyList t -> pure (Just [Pred Show t])
+  _ -> pure Nothing
 
 entail :: [Pred (TvRef s)] -> Pred (TvRef s) -> InferT s b Bool
 entail ps p = byInst p >>= \case
@@ -947,11 +972,6 @@ dbjRow env depth = \case
             _ -> fail "invalid substitution in sanity check"
       Nothing -> pure (RowTy obj' Nothing)
 
--- tsToTyForall :: TypeScheme t -> Type t
--- tsToTyForall (TypeScheme ts t) = case ts of
---   [] -> t
---   (x:xs) -> TyForall (x:|xs) t
-
 -- -----------------------------------------
 -- --- Built-in type wiring
 -- ------------------------------------------
@@ -1026,7 +1046,9 @@ rawBuiltinType = \case
         a = TyVar aVar
     in TypeScheme [aVar] [] (TyList a :~> TyInt)
   RawDistinct ->
-    TypeScheme [] [] (TyList TyInt :~> TyList TyInt)
+    let aVar  = nd "a" 0
+        a = TyVar aVar
+    in TypeScheme [aVar] [Pred Eq a] (TyList a :~> TyList a)
   RawEnforce ->
     TypeScheme [] [] (TyBool :~> TyString :~> TyUnit)
   RawEnforceOne -> error "todo"

@@ -71,6 +71,7 @@ data RawBuiltin
   | RawEnumerate
   | RawEnumerateStepN
   | RawDummy
+  | RawShow
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
@@ -117,6 +118,7 @@ rawBuiltinToText = \case
   RawEnforceOne -> "enforce-one"
   RawEnumerate -> "enumerate"
   RawEnumerateStepN -> "enumerate-step"
+  RawShow -> "show"
   RawDummy -> "dummy"
 
 rawBuiltinNames :: [Text]
@@ -144,6 +146,7 @@ data CoreBuiltin
   | BitXorInt
   | BitShiftInt
   | BitComplementInt
+  | ShowInt
   -- If
   | IfElse
   -- Decimal ops
@@ -159,6 +162,7 @@ data CoreBuiltin
   | FloorDec
   | LnDec
   | LogBaseDec
+  | ShowDec
   -- Bool Comparisons
   | AndBool
   | OrBool
@@ -187,14 +191,20 @@ data CoreBuiltin
   -- Object equality
   | EqObj
   | NeqObj
-  -- List Equaliry
+  -- List Equality
   | EqList
+  | ShowList
   -- String Ops
   | AddStr
   | ConcatStr
   | DropStr
   | TakeStr
   | LengthStr
+  | ShowStr
+  -- Unit ops
+  | EqUnit
+  | ShowUnit
+  | GTLTUnit
   -- ListOps
   | AddList
   | DistinctList
@@ -213,6 +223,7 @@ data CoreBuiltin
 
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
+-- IntOps
   AddInt -> "addInt"
   SubInt -> "subInt"
   DivInt -> "divInt"
@@ -228,7 +239,10 @@ coreBuiltinToText = \case
   BitXorInt -> "bitXorInt"
   BitShiftInt -> "bitShiftInt"
   BitComplementInt -> "bitFlipInt"
+  ShowInt -> "showInt"
+ -- If
   IfElse -> "if"
+  -- Decimal ops
   AddDec -> "addDec"
   SubDec -> "subDec"
   DivDec -> "divDec"
@@ -241,35 +255,50 @@ coreBuiltinToText = \case
   FloorDec -> "floorDec"
   LnDec -> "lnDec"
   LogBaseDec -> "logBaseDec"
+  ShowDec -> "showDec"
+  -- Bool Comparisons
   AndBool -> "andBool"
   OrBool -> "orBool"
   NotBool -> "notBool"
+  -- Int Equality
   EqInt -> "eqInt"
   NeqInt -> "neqInt"
   GTInt -> "gtInt"
   GEQInt -> "geqInt"
   LTInt -> "ltInt"
   LEQInt -> "leqInt"
+  -- Decimal Equality
   EqDec -> "eqInt"
   NeqDec -> "neqDec"
   GTDec -> "gtDec"
   GEQDec -> "geqDec"
   LTDec -> "ltDec"
   LEQDec -> "leqDec"
+  -- String Equality
   EqStr -> "eqStr"
   NeqStr -> "neqStr"
   GTStr -> "gtStr"
   GEQStr -> "geqStr"
   LTStr -> "ltStr"
   LEQStr -> "leqStr"
+  -- Object equality
   EqObj -> "eqObj"
   NeqObj -> "neqObj"
+  -- List Equality
   EqList -> "eqList"
+  ShowList -> "showList"
+  -- String Ops
   AddStr -> "addStr"
   ConcatStr -> "concatStr"
   DropStr -> "dropStr"
   TakeStr -> "takeStr"
   LengthStr -> "lengthStr"
+  ShowStr -> "showStr"
+  -- Unit ops
+  EqUnit -> "eqUnit"
+  ShowUnit -> "showUnit"
+  GTLTUnit -> "gtltUnit"
+  -- Unit ops
   AddList -> "addList"
   DistinctList -> "distinctList"
   TakeList -> "takeList"
