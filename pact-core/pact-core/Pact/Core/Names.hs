@@ -32,8 +32,8 @@ module Pact.Core.Names
  , DeBruijn(..)
  , TypeName(..)
  , rawParsedName
- , ONameKind
- , OverloadedName
+ , ONameKind(..)
+ , OverloadedName(..)
  ) where
 
 import Control.Lens
@@ -195,6 +195,12 @@ data TypeName
 makeLenses ''TypeVar
 makeLenses ''TypeName
 makeLenses ''NamedDeBruijn
+
+instance (Pretty b) => Pretty (OverloadedName b) where
+  pretty (OverloadedName n nk) = case nk of
+    OBound _ -> pretty n
+    OBuiltinDict b -> "DICT<" <> pretty b <> ">"
+    _ -> undefined
 
 instance Pretty Name where
   pretty (Name n nk) = case nk of

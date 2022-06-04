@@ -99,6 +99,8 @@ _dbgType = \case
   TyList t -> TyList <$> _dbgType t
   TyPrim p -> pure (TyPrim p)
   TyCap -> pure TyCap
+  TCTyCon b tv ->
+    TCTyCon b <$> _dbgType tv
   TyForall {} -> fail "impredicative"
   where
   _dbgRow = \case
@@ -254,6 +256,7 @@ instantiateImported = \case
     TyList t -> TyList <$> inst rl t
     TyTable t -> TyTable <$> instRow rl t
     TyCap -> pure TyCap
+    TCTyCon _ _ -> fail "impossible"
     -- Impredicative type might work
     -- If we change unification.
     TyForall _ _ -> fail "unsupported impredicative polymorphism"
@@ -386,7 +389,8 @@ generalizeWithTerm ty term = do
   gen' sts (TyList t) = over _2 TyList <$> gen' sts t
   gen' sts (TyTable t) = over _2 TyTable <$> genRow sts t
   gen' _sts TyCap = pure ([], TyCap)
-  gen' _sts t@TyForall{} = pure ([], t)
+  gen' _sts TCTyCon{} = fail "impossible"
+  gen' _sts TyForall{} = fail "impossible"
   genRow _sts EmptyRow = pure ([], EmptyRow)
   genRow sts (RowVar rv) = readTvRef rv >>= \case
     Unbound n u l -> do
@@ -433,6 +437,7 @@ liftTypeVar = \case
   TyTable r -> TyTable <$> liftTVRow r
   TyList l -> TyList <$> liftTypeVar l
   TyCap -> pure TyCap
+  TCTyCon _ _ -> fail "impossible"
   TyForall _ _ -> fail "impossible"
   where
   -- BIG TODO: placeholder impl, DEFINITELY

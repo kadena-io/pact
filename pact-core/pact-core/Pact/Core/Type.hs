@@ -109,6 +109,7 @@ data Type n
   -- | TyInterface (InterfaceType n)
    -- ^ interfaces, which are nominal
   -- | TyModule (ModuleType n)
+  | TCTyCon BuiltinTC (Type n)
   -- ^ module type being the name of the module + implemented interfaces.
   | TyForall (NonEmpty n) (Type n)
   -- ^ Universally quantified types, which have to be part of the type
@@ -149,10 +150,20 @@ data BuiltinTC
   | Num
   deriving (Show, Eq, Ord)
 
+instance Pretty BuiltinTC where
+  pretty = \case
+    Eq -> "Eq"
+    Ord -> "Ord"
+    Show -> "Show"
+    WithoutField _ -> "<>"
+    Add -> "Add"
+    Num -> "Num"
+
+
 -- Note, no superclasses, for now
 data Pred tv
   = Pred BuiltinTC (Type tv)
-  deriving Show
+  deriving (Show, Eq)
 
 data Instance tv
   = Instance [Pred tv] (Pred tv)
@@ -193,6 +204,7 @@ instance Plated (Type n) where
     -- TyInterface n ->
     --   pure $ TyInterface n
     -- TyModule n -> pure $ TyModule n
+    TCTyCon b tv -> pure (TCTyCon b tv)
     TyForall ns ty ->
       TyForall ns <$> f ty
 
@@ -222,6 +234,12 @@ instance Pretty n => Pretty (Row n) where
         Just v -> "|" <+> pretty v
         Nothing -> mempty
 
+instance Pretty n => Pretty (Pred n) where
+  pretty (Pred tc ty) = case tc of
+    WithoutField f ->
+      Pretty.parens (pretty f <> "\\" <> pretty ty)
+    _ -> pretty tc <>  Pretty.angles (pretty ty)
+
 instance Pretty n => Pretty (Type n) where
   pretty = \case
     TyVar n -> pretty n
@@ -241,6 +259,10 @@ instance Pretty n => Pretty (Type n) where
     TyTable t -> "table" <+> Pretty.parens (pretty t)
     TyCap -> "capability"
     -- TyInterface i -> "module" <> Pretty.angles (pretty i)
+    TCTyCon b tv -> case b of
+      WithoutField f ->
+        Pretty.parens (pretty tv <> "\\" <> pretty f)
+      _ -> pretty b <> pretty tv
     TyForall as ty ->
       "∀" <> render (NE.toList as) "TYPE"  <> "." <> pretty ty
       where

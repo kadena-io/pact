@@ -103,11 +103,7 @@ renameTerm = \case
 
 renameType :: Monad m => Type TypeName -> RenamerT m (Type NamedDeBruijn)
 renameType = \case
-  TyVar n -> do
-    depth <- view rnTyDepth
-    views rnTyBinds (Map.lookup (_tynameUnique n)) >>= \case
-      Just d -> pure (TyVar (tnToDebruijn (depth - d) n))
-      Nothing -> error "found unbound type var"
+  TyVar n -> TyVar <$> renameTv n
   TyPrim p -> pure (TyPrim p)
   TyFun l r ->
     TyFun <$> renameType l <*> renameType r
@@ -116,6 +112,8 @@ renameType = \case
   TyList t -> TyList <$> renameType t
   TyTable t -> TyTable <$> renameRow t
   TyCap -> pure TyCap
+  TCTyCon b ty ->
+    TCTyCon b <$> renameType ty
   TyForall ts ty -> do
     depth <- view rnTyDepth
     let newDepth = depth + fromIntegral (NE.length ts)
@@ -126,16 +124,15 @@ renameType = \case
     ty' <- locally rnTyBinds (Map.union m) $ local (set rnTyDepth newDepth) $ renameType ty
     pure (TyForall ts' ty')
   where
-  renameRow EmptyRow = pure EmptyRow
-  renameRow (RowVar n) = do
+  renameTv n = do
     depth <- view rnTyDepth
     views rnTyBinds (Map.lookup (_tynameUnique n)) >>= \case
-      Just d -> pure (RowVar (tnToDebruijn (depth - d) n))
-      Nothing -> error "found unbound row var"
-  renameRow (RowTy obj (Just n)) = do
-    depth <- view rnTyDepth
-    views rnTyBinds (Map.lookup (_tynameUnique n)) >>= \case
-      Just d -> RowTy <$> traverse renameType obj <*> pure (Just (tnToDebruijn (depth - d) n))
+      Just d -> pure (tnToDebruijn (depth - d) n)
       Nothing -> error "found unbound type var"
-  renameRow (RowTy obj Nothing) =
-    RowTy <$> traverse renameType obj <*> pure Nothing
+  renameRow EmptyRow = pure EmptyRow
+  renameRow (RowVar n) =
+    RowVar <$> renameTv n
+  renameRow (RowTy obj on) = do
+    obj' <- traverse renameType obj
+    on' <- traverse renameTv on
+    pure (RowTy obj' on')
