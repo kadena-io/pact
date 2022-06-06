@@ -49,14 +49,15 @@ data RawBuiltin
   | RawAbs
   | RawRound
   | RawCeiling
-  | RawExp
   | RawFloor
+  | RawExp
   | RawLn
   | RawLogBase
   | RawMod
   -- General
   | RawMap
   | RawFilter
+  | RawZip
   | RawIf
   | RawIntToStr
   | RawConcat
@@ -70,30 +71,30 @@ data RawBuiltin
   | RawEnforceOne
   | RawEnumerate
   | RawEnumerateStepN
-  | RawDummy
   | RawShow
+  | RawDummy
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
-  RawAdd -> "+"
-  RawSub -> "-"
-  RawMultiply -> "*"
-  RawDivide -> "/"
-  RawNegate -> "-"
-  RawAnd -> "&&"
+  RawAdd -> "(+)"
+  RawSub -> "(-)"
+  RawMultiply -> "(*)"
+  RawDivide -> "(/)"
+  RawNegate -> "(-)"
+  RawAnd -> "(&&)"
   RawOr -> "||"
   RawNot -> "not"
-  RawEq -> "=="
-  RawNeq -> "!="
-  RawGT -> ">"
-  RawGEQ -> ">="
-  RawLT -> "<"
-  RawLEQ -> "<="
-  RawBitwiseAnd -> "&"
-  RawBitwiseOr -> "|"
+  RawEq -> "(==)"
+  RawNeq -> "(!=)"
+  RawGT -> "(>)"
+  RawGEQ -> "(>=)"
+  RawLT -> "(<)"
+  RawLEQ -> "(<=)"
+  RawBitwiseAnd -> "(&)"
+  RawBitwiseOr -> "(|)"
   RawBitwiseXor -> "xor"
-  RawBitwiseFlip -> "~"
+  RawBitwiseFlip -> "(~)"
   RawBitShift -> "shift"
   RawAbs -> "abs"
   RawRound -> "round"
@@ -113,6 +114,7 @@ rawBuiltinToText = \case
   RawDrop -> "drop"
   RawLength -> "length"
   RawFold -> "fold"
+  RawZip -> "zip"
   RawDistinct -> "distinct"
   RawEnforce -> "enforce"
   RawEnforceOne -> "enforce-one"
@@ -167,6 +169,8 @@ data CoreBuiltin
   | AndBool
   | OrBool
   | NotBool
+  | EqBool
+  | NeqBool
   -- Int Equality
   | EqInt
   | NeqInt
@@ -193,6 +197,7 @@ data CoreBuiltin
   | NeqObj
   -- List Equality
   | EqList
+  | NeqList
   | ShowList
   -- String Ops
   | AddStr
@@ -203,8 +208,8 @@ data CoreBuiltin
   | ShowStr
   -- Unit ops
   | EqUnit
+  | NeqUnit
   | ShowUnit
-  | GTLTUnit
   -- ListOps
   | AddList
   | DistinctList
@@ -213,7 +218,9 @@ data CoreBuiltin
   | LengthList
   | FilterList
   | MapList
+  | ZipList
   | FoldList
+  -- Others
   | Enforce
   | EnforceOne
   | Enumerate
@@ -260,6 +267,8 @@ coreBuiltinToText = \case
   AndBool -> "andBool"
   OrBool -> "orBool"
   NotBool -> "notBool"
+  EqBool -> "eqBool"
+  NeqBool -> "neqBool"
   -- Int Equality
   EqInt -> "eqInt"
   NeqInt -> "neqInt"
@@ -286,6 +295,7 @@ coreBuiltinToText = \case
   NeqObj -> "neqObj"
   -- List Equality
   EqList -> "eqList"
+  NeqList -> "neqList"
   ShowList -> "showList"
   -- String Ops
   AddStr -> "addStr"
@@ -296,9 +306,9 @@ coreBuiltinToText = \case
   ShowStr -> "showStr"
   -- Unit ops
   EqUnit -> "eqUnit"
+  NeqUnit -> "neqUnit"
   ShowUnit -> "showUnit"
-  GTLTUnit -> "gtltUnit"
-  -- Unit ops
+  -- List ops
   AddList -> "addList"
   DistinctList -> "distinctList"
   TakeList -> "takeList"
@@ -307,6 +317,8 @@ coreBuiltinToText = \case
   FilterList -> "filter"
   MapList -> "map"
   FoldList -> "fold"
+  ZipList -> "zip"
+  -- Rest
   Enforce -> "enforce"
   EnforceOne -> "enforce-one"
   Enumerate -> "enumerate"

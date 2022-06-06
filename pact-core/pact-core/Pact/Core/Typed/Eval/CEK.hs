@@ -44,6 +44,7 @@ import qualified Data.Vector as V
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Typed.Term
+import Pact.Core.Builtin
 import Pact.Core.Pretty(Pretty(..), (<+>))
 import Pact.Types.Gas
 import qualified Pact.Core.Pretty as P
@@ -74,7 +75,7 @@ data CEKValue b
   = VLiteral !Literal
   | VObject !(Map Field (CEKValue b))
   | VList !(Vector (CEKValue b))
-  | VClosure !Name (NonEmpty Name) (ETerm b) !(CEKEnv b)
+  | VClosure !Name [Name] (ETerm b) !(CEKEnv b)
   | VNative !b
   | VGuard !(Guard Name (CEKValue b))
   | VCap !Name
@@ -106,18 +107,18 @@ eval = evalCEK Mt
     -> EvalT b (CEKValue b)
   evalCEK cont env (Var n _)  =
     returnCEK cont $ case _nKind n of
-      LocallyBoundName (DeBruijn i) ->
+      NBound i ->
         env RAList.!! i
-      TopLevelName m mh ->
+      NTopLevel m mh ->
         ?cekLoaded Map.! (DeclName mh (_nName n) m)
   evalCEK cont _env (Constant l _)=
     returnCEK cont (VLiteral l)
   evalCEK cont env (App fn arg _) =
     evalCEK (Arg env arg cont) env fn
   evalCEK cont env (Lam n ns body _) =
-    returnCEK cont (VClosure n (fst <$> ns) body env)
+    returnCEK cont (VClosure n (NE.toList (fst <$> ns)) body env)
   evalCEK cont env (Let n e1 e2 _) =
-    returnCEK (Arg env (e1 :| []) cont) (VClosure n (n :| []) e2 env)
+    returnCEK (Arg env (e1 :| []) cont) (VClosure n [n] e2 env)
   evalCEK cont _env (Builtin b _) = do
     returnCEK cont (VNative b)
   evalCEK cont env (ObjectLit obj _) = do
@@ -133,15 +134,15 @@ eval = evalCEK Mt
   evalCEK cont env (TyAbs _ t _) =
     evalCEK cont env t
   evalCEK cont env (ObjectOp op _) = case op of
-    TObjectAccess f _ o -> do
+    ObjectAccess f o -> do
       o' <- evalCEK Mt env o
       v' <- objAccess f o'
       returnCEK cont v'
-    TObjectRemove f _ o -> do
+    ObjectRemove f o -> do
       o' <- evalCEK Mt env o
       v' <- objRemove f o'
       returnCEK cont v'
-    TObjectUpdate f _ v o -> do
+    ObjectUpdate f v o -> do
       o' <- evalCEK Mt env o
       v' <- evalCEK Mt env v
       out <- objUpdate f o' v'
@@ -168,7 +169,7 @@ eval = evalCEK Mt
   returnCEKArgs _args _ =
     error "Invalid stack frame"
   applyLam (VClosure n ns body env) args cont =
-    applyArgs n (NE.toList ns) (NE.toList args) env body cont
+    applyArgs n ns (NE.toList args) env body cont
   applyLam (VNative b) args cont =
     let (BuiltinFn f) = indexArray ?cekBuiltins (fromEnum b)
     in f args >>= returnCEK cont
@@ -181,7 +182,7 @@ eval = evalCEK Mt
     -- local (addFrame (StackFrame lamn DTDefun)) $ evalCEK cont env body
   -- Args unsaturated, create a closure and return as an argument
   applyArgs lamn (n:ns') [] env body cont =
-    returnCEK cont (VClosure lamn (n :| ns') body env)
+    returnCEK cont (VClosure lamn (n:ns') body env)
   applyArgs _lamn [] (_args:_args') _env _body _cont =
     error "too many arguments in fn application"
   objAccess f (VObject o) = pure (o Map.! f)

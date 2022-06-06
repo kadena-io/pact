@@ -370,8 +370,8 @@ library pact-core
     Pact.Core.IR.ParseTree
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck
+    Pact.Core.IR.Bidirectional
     Pact.Core.IR.Desugar
-    Pact.Core.IR.TCRemy
     -- Typed core modules
     Pact.Core.Typed.Renamer
     Pact.Core.Typed.Typecheck

@@ -13,6 +13,7 @@
 module Pact.Core.Type
  ( PrimType(..)
  , Type(..)
+ , TypeScheme(..)
  , RowObject
  , Row(..)
  , InterfaceType(..)
@@ -29,8 +30,12 @@ module Pact.Core.Type
  , typeOfLit
  , BuiltinTC(..)
  , Pred(..)
- , Instance(..)
- , Class(..)
+ , addType
+ , numType
+ , showType
+ , ordType
+ , eqType
+ , tcToRowType
  ) where
 
 import Control.Lens
@@ -68,7 +73,7 @@ data Row n
   = RowTy (RowObject n) (Maybe n)
   | RowVar n
   | EmptyRow
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 newtype InterfaceType n
   = InterfaceType n
@@ -109,13 +114,12 @@ data Type n
   -- | TyInterface (InterfaceType n)
    -- ^ interfaces, which are nominal
   -- | TyModule (ModuleType n)
-  | TCTyCon BuiltinTC (Type n)
   -- ^ module type being the name of the module + implemented interfaces.
   | TyForall (NonEmpty n) (Type n)
   -- ^ Universally quantified types, which have to be part of the type
   -- constructor since system F
   -- If we allow impredicative polymorphism later, it also works.
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -165,17 +169,9 @@ data Pred tv
   = Pred BuiltinTC (Type tv)
   deriving (Show, Eq)
 
-data Instance tv
-  = Instance [Pred tv] (Pred tv)
+data TypeScheme tv =
+  TypeScheme [tv] [Pred tv]  (Type tv)
   deriving Show
-
-data Class tv
-  = Class
-  { _cName :: BuiltinTC
-  , _cSuper :: [BuiltinTC]
-  , _cInstances :: [Instance tv]
-  } deriving Show
-
 
 tyFunToArgList :: Type n -> Maybe ([Type n], Type n)
 tyFunToArgList (TyFun l r) =
@@ -191,6 +187,59 @@ traverseRowTy f = \case
   RowVar n -> pure (RowVar n)
   EmptyRow -> pure EmptyRow
 
+tcToRowType :: BuiltinTC -> Type tv -> Type tv
+tcToRowType = \case
+  Eq -> eqType
+  Ord -> ordType
+  Show -> showType
+  -- invariant note:
+  -- dangerous if we don't remove `WithoutField` evidence explicitly
+  WithoutField _ -> id
+  Add -> addType
+  Num -> numType
+
+
+eqType :: Type tv -> Type tv
+eqType ty = TyRow (RowTy obj Nothing)
+  where
+  eq = ty :~> ty :~> TyPrim PrimBool
+  obj = Map.fromList [(Field "==",eq), (Field "/=", eq)]
+
+ordType :: Type tv -> Type tv
+ordType ty = TyRow (RowTy obj Nothing)
+  where
+  eq = ty :~> ty :~> TyPrim PrimBool
+  obj =
+    Map.fromList
+    [ (Field ">", eq)
+    , (Field ">=", eq)
+    , (Field "<", eq)
+    , (Field "<=", eq)]
+
+showType :: Type tv -> Type tv
+showType ty = TyRow (RowTy obj Nothing)
+  where
+  showTy = ty :~> TyPrim PrimString
+  obj =
+    Map.fromList
+    [(Field "show", showTy)]
+
+numType :: Type tv -> Type tv
+numType ty = TyRow (RowTy obj Nothing)
+  where
+  numTy = ty :~> ty :~> ty
+  obj =
+    Map.fromList
+    [ (Field "/", numTy)
+    , (Field "-", numTy)
+    , (Field "*", numTy)
+    , (Field "negate", ty :~> ty)]
+
+addType :: Type tv -> Type tv
+addType ty = TyRow (RowTy obj Nothing)
+  where
+  addTy = ty :~> ty :~> ty
+  obj = Map.fromList [(Field "+", addTy)]
 
 instance Plated (Type n) where
   plate f = \case
@@ -204,7 +253,7 @@ instance Plated (Type n) where
     -- TyInterface n ->
     --   pure $ TyInterface n
     -- TyModule n -> pure $ TyModule n
-    TCTyCon b tv -> pure (TCTyCon b tv)
+    -- TCTyCon b tv -> pure (TCTyCon b tv)
     TyForall ns ty ->
       TyForall ns <$> f ty
 
@@ -259,13 +308,25 @@ instance Pretty n => Pretty (Type n) where
     TyTable t -> "table" <+> Pretty.parens (pretty t)
     TyCap -> "capability"
     -- TyInterface i -> "module" <> Pretty.angles (pretty i)
-    TCTyCon b tv -> case b of
-      WithoutField f ->
-        Pretty.parens (pretty tv <> "\\" <> pretty f)
-      _ -> pretty b <> pretty tv
+    -- TCTyCon b tv -> case b of
+    --   WithoutField f ->
+    --     Pretty.parens (pretty tv <> "\\" <> pretty f)
+      -- _ -> pretty b <> pretty tv
     TyForall as ty ->
-      "∀" <> render (NE.toList as) "TYPE"  <> "." <> pretty ty
+      "∀" <> render (NE.toList as) "*" <> "." <> pretty ty
       where
       render xs suffix =
         Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
 
+instance Pretty tv => Pretty (TypeScheme tv) where
+  pretty (TypeScheme tvs preds ty) =
+    quant tvs <> qual preds <> pretty ty
+    where
+    renderTvs xs suffix =
+      Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
+    quant [] = mempty
+    quant as =
+      "∀" <> renderTvs as "*" <> ". "
+    qual [] = mempty
+    qual as =
+      Pretty.parens (Pretty.hsep $ Pretty.punctuate "," (pretty <$> as)) <+> "=> "

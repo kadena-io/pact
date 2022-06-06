@@ -242,6 +242,7 @@ unimplemented = BuiltinFn \case
 
 coreBuiltinFn :: CoreBuiltin -> BuiltinFn CoreBuiltin
 coreBuiltinFn = \case
+  -- IntOps
   AddInt -> addInt
   SubInt -> subInt
   DivInt -> divInt
@@ -257,7 +258,10 @@ coreBuiltinFn = \case
   BitXorInt ->  bitXorInt
   BitShiftInt -> bitShiftInt
   BitComplementInt -> bitFlipInt
+  ShowInt -> unimplemented
+  -- If
   IfElse -> coreIf
+  -- Decimal ops
   AddDec -> unimplemented
   SubDec -> unimplemented
   DivDec -> unimplemented
@@ -270,41 +274,60 @@ coreBuiltinFn = \case
   FloorDec -> floorDec
   LnDec -> lnDec
   LogBaseDec -> unimplemented
+  ShowDec -> unimplemented
+  -- Bool Comparisons
   AndBool -> andBool
   OrBool -> orBool
   NotBool -> notBool
+  EqBool -> unimplemented
+  NeqBool -> unimplemented
+  -- Int Equality
   EqInt -> eqInt
   NeqInt -> neqInt
   GTInt -> gtInt
   GEQInt -> geqInt
   LTInt -> ltInt
   LEQInt -> leqInt
+  -- Decimal Equality
   EqDec -> unimplemented
   NeqDec -> unimplemented
   GTDec -> unimplemented
   GEQDec -> unimplemented
   LTDec -> unimplemented
   LEQDec -> unimplemented
+  -- String Equality
   EqStr -> unimplemented
   NeqStr -> unimplemented
   GTStr -> unimplemented
   GEQStr -> unimplemented
   LTStr -> unimplemented
   LEQStr -> unimplemented
+  -- Object equality
   EqObj -> unimplemented
   NeqObj -> unimplemented
+  -- List Equality
   EqList -> unimplemented
+  NeqList -> unimplemented
+  ShowList -> unimplemented
+  -- String Ops
   AddStr -> unimplemented
   ConcatStr -> coreConcat
   DropStr -> unimplemented
   TakeStr -> unimplemented
   LengthStr -> unimplemented
+  ShowStr -> unimplemented
+  -- Unit ops
+  EqUnit -> unimplemented
+  NeqUnit -> unimplemented
+  ShowUnit -> unimplemented
+  -- ListOps
   AddList -> unimplemented
   DistinctList -> unimplemented
   TakeList -> takeList
   DropList -> dropList
   LengthList -> lengthList
   FilterList -> coreFilter
+  ZipList -> unimplemented
   MapList -> coreMap
   FoldList -> coreFold
   Enforce -> unimplemented

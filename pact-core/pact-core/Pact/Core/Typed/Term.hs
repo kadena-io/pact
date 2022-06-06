@@ -23,7 +23,8 @@ module Pact.Core.Typed.Term
 , termInfo
 , traverseTermType
 , ETerm
-, TObjectOp(..)
+, OverloadedTerm
+, EvalTerm
 )
  where
 
@@ -37,6 +38,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as Map
 
+import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type
@@ -170,19 +172,22 @@ data Term name tyname builtin info
   -- ^ {f_1:e_1, .., f_n:e_n}
   | ListLit (Type tyname) (Vector (Term name tyname builtin info)) info
   -- ^ [e_1, e_2, .., e_n]
-  | ObjectOp (TObjectOp tyname (Term name tyname builtin info)) info
+  | ObjectOp (ObjectOp (Term name tyname builtin info)) info
   -- Object access, update and remove
   | Error Text (Type tyname) info
   -- ^ error terms + their inferred type
   deriving (Show, Functor)
 
+type OverloadedTerm b i =
+  Term (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type EvalTerm i = Term Name NamedDeBruijn CoreBuiltin i
 type ETerm b = Term Name NamedDeBruijn b ()
 
-data TObjectOp tyname o
-  = TObjectAccess Field [Type tyname] o
-  | TObjectRemove Field [Type tyname] o
-  | TObjectUpdate Field [Type tyname] o o
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+-- data TObjectOp tyname o
+--   = TObjectAccess Field [Type tyname] o
+--   | TObjectRemove Field [Type tyname] o
+--   | TObjectUpdate Field [Type tyname] o o
+--   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
   pretty = \case
@@ -207,11 +212,11 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     ObjectLit (Map.toList -> obj) _ ->
       Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
     ObjectOp oop _ -> case oop of
-      TObjectAccess f _ o ->
+      ObjectAccess f o ->
         "accessObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
-      TObjectRemove f _ o ->
+      ObjectRemove f o ->
         "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
-      TObjectUpdate f _ v o ->
+      ObjectUpdate f v o ->
         "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
     ListLit ty (V.toList -> li) _ ->
       (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty

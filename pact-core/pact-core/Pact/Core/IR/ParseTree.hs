@@ -156,6 +156,7 @@ instance Pretty Type where
 data Expr name i
   = Var name i
   | Let Text (Maybe Type) (Expr name i) i
+  | LetIn Text (Maybe Type) (Expr name i) (Expr name i) i
   | Lam name (NonEmpty (Text, Maybe Type)) (Expr name i) i
   | If (Expr name i) (Expr name i) (Expr name i) i
   -- | If (Expr name i) (Expr name i) i
@@ -175,6 +176,8 @@ termInfo :: Lens' (Expr name i) i
 termInfo f = \case
   Var n i -> Var n <$> f i
   Let a b c i -> Let a b c <$> f i
+  LetIn a b c d i ->
+    LetIn a b c d <$> f i
   Lam n nel e i ->
     Lam n nel e <$> f i
   If e1 e2 e3 i ->
@@ -200,6 +203,14 @@ instance Pretty name => Pretty (Expr name i) where
     Var n _ -> pretty n
     Let n mt e _ ->
       "let" <+> pretty n <> maybe mempty (\b -> " :" <+> pretty b) mt <+> "=" <+> pretty e
+    LetIn n mt e1 e2 _ ->
+      "let"
+        <+> pretty n
+        <> maybe mempty (\b -> " :" <+> pretty b) mt
+        <+> "="
+        <+> pretty e1
+        <+> "in"
+        <+> pretty e2
     Lam _ nel e _ ->
       "lambda" <+> renderLamTypes nel <+> "=>" <+> pretty e
     If cond e1 e2 _ ->

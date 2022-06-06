@@ -29,20 +29,13 @@ type DesugarT = ReaderT DesugarState IO
 
 data DesugarState
   = DesugarState
-  { _dsBinds :: Map Text NameKind
-  , _dsModuleBinds :: Map QualifiedName NameKind
+  { _dsBinds :: Map Text (IRNameKind, Unique)
+  , _dsModuleBinds :: Map QualifiedName IRNameKind
   , _dsTyBinds :: Map Text Unique
   , _dsSupply :: IORef Supply
-  , _dsDepth :: DeBruijn
   }
 
 makeLenses ''DesugarState
-
--- todo: this qualifier use could work for aliasing!
-toIRName :: Unique -> IRNameKind -> ParsedName -> IRName
-toIRName u irnk = \case
-  BN (BareName bn) -> IRName bn irnk u
-  QN (QualifiedName bn qual) -> IRName bn (IRTopLevelName qual) u
 
 newUnique' :: DesugarT Unique
 newUnique' = do
@@ -51,42 +44,46 @@ newUnique' = do
   lift (modifyIORef' sup (+ 1))
   pure u
 
-resolve :: ParsedName -> DesugarT (Maybe NameKind)
+resolve :: ParsedName -> DesugarT (Maybe (IRNameKind, Unique))
 resolve = \case
   BN (BareName bn) ->
     views dsBinds (Map.lookup bn)
   QN qn ->
-    views dsModuleBinds (Map.lookup qn)
+    fmap (, -1111) <$> views dsModuleBinds (Map.lookup qn)
 
-desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term Name TypeVar RawBuiltin i)
+desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term IRName TypeVar RawBuiltin i)
 desugarTerm = \case
   PT.Var (BN n) i | isReservedNative (_bnName n) ->
     pure (Builtin (rawBuiltinMap Map.! _bnName n) i)
   PT.Var n i -> do
-    depth <- view dsDepth
     resolve n >>= \case
-      Just nk -> case nk of
-        LocallyBoundName d -> pure $ Var (Name (rawParsedName n) (LocallyBoundName (depth - d - 1))) i
-        _ -> pure $ Var (Name (rawParsedName n) nk) i
+      Just (nk, u) -> do
+        let n' = IRName (rawParsedName n) nk u
+        pure (Var n' i)
       Nothing -> error ("unbound variable " <> show n)
   PT.Block (h :| hs) _ ->
     unLetBlock h hs
   -- Names will always come out are barenames from the parser
   PT.Let name mt expr i -> do
-    let name' = Name name (LocallyBoundName 0)
+    nu <- newUnique'
+    let name' = IRName name IRBound nu
     expr' <- desugarTerm expr
     mt' <- traverse desugarType mt
     pure (Let name' mt' expr' (Constant LUnit i) i)
+  PT.LetIn name mt e1 e2 i -> do
+    nu <- newUnique'
+    let name' = IRName name IRBound nu
+    e1' <- desugarTerm e1
+    mt' <- traverse desugarType mt
+    e2' <- locally dsBinds (Map.insert name (IRBound, nu)) $ desugarTerm e2
+    pure (Let name' mt' e1' e2' i)
   PT.Lam name nsts body i -> do
-    depth <- view dsDepth
-    let (ns, ts) = NE.unzip nsts
-        len = fromIntegral (NE.length nsts)
-        newDepth = depth + len
-        ixs = NE.fromList [depth .. newDepth - 1]
-        ns' = NE.zipWith (\n ix -> Name n (LocallyBoundName (newDepth - ix - 1))) ns ixs
-        m = Map.fromList $ NE.toList $ NE.zip ns (LocallyBoundName <$> ixs)
     name' <- resolveLamName name
-    term' <- lamArgsInEnv m newDepth $ desugarTerm body
+    let (ns, ts) = NE.unzip nsts
+    nUniques <- traverse (const newUnique') ns
+    let m = Map.fromList $ NE.toList $ NE.zip ns ((IRBound,) <$> nUniques)
+        ns' = NE.zipWith (\n u -> IRName n IRBound u) ns nUniques
+    term' <- lamArgsInEnv m $ desugarTerm body
     ts' <- (traverse.traverse) desugarType ts
     pure $ Lam name' (NE.zip ns' ts') term' i
   PT.If cond e1 e2 i -> do
@@ -120,22 +117,25 @@ desugarTerm = \case
     pure $ Error text i
   where
   suspend i e = do
-    let name = Name "#ifArg" (LocallyBoundName 0)
-    e' <- locally dsDepth succ $ desugarTerm e
+    nu <- newUnique'
+    let name = IRName "#ifArg" IRBound nu
+    e' <- desugarTerm e
     pure (Lam name ((name, Nothing) :| []) e' i)
   isReservedNative n =
     elem n rawBuiltinNames
   resolveLamName n = resolve n >>= \case
-    Just nk -> pure $ Name (rawParsedName n) nk
-    Nothing -> pure $ Name (rawParsedName n) (LocallyBoundName 0)
-  lamArgsInEnv m newDepth =
-    local (over dsBinds (Map.union m) . set dsDepth newDepth)
+    Just (nk, u) -> pure $ IRName (rawParsedName n) nk u
+    Nothing -> do
+      u <- newUnique'
+      pure (IRName (rawParsedName n) IRBound u)
+  lamArgsInEnv m =
+    locally dsBinds (Map.union m)
   unLetBlock (PT.Let name mt expr i) (h:hs) = do
-    depth <- view dsDepth
-    let name' = Name name (LocallyBoundName 0)
+    u <- newUnique'
+    let name' = IRName name IRBound u
     expr' <- desugarTerm expr
     mt' <- traverse desugarType mt
-    let inEnv = over dsBinds (Map.insert name (LocallyBoundName depth)) . over dsDepth (+ 1)
+    let inEnv = over dsBinds (Map.insert name (IRBound, u))
     e2 <- local inEnv $ unLetBlock h hs
     pure (Let name' mt' expr' e2 i)
   unLetBlock other l = case l of
@@ -191,10 +191,9 @@ desugarBinary = \case
   PT.AndOp -> RawAnd
   PT.OrOp -> RawOr
 
-runDesugarTerm :: PT.Expr ParsedName i -> IO (Term Name TypeVar RawBuiltin i, Supply)
+runDesugarTerm :: PT.Expr ParsedName i -> IO (Term IRName TypeVar RawBuiltin i, Supply)
 runDesugarTerm e = do
   ref <- newIORef 0
-  let depth = 0
-      dstate = DesugarState mempty mempty mempty ref depth
+  let dstate = DesugarState mempty mempty mempty ref
   lastSupply <- readIORef ref
   (,lastSupply) <$> runReaderT (desugarTerm e) dstate

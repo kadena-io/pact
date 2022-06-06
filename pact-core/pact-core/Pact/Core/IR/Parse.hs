@@ -246,6 +246,17 @@ lamExpr = do
     t <- typeExpr
     pure (v, Just t)
 
+letExpr :: Parser (Expr ParsedName ())
+letExpr = do
+  _ <- keyword "let"
+  v <- variable
+  ty <- optional (singleChar ':' *> typeExpr)
+  _ <- singleChar '='
+  e1 <- expr
+  _ <- keyword "in"
+  e2 <- expr
+  pure $ LetIn v ty e1 e2 ()
+
 operatorTable :: [[Operator Parser (Expr ParsedName ())]]
 operatorTable =
   [ [ postfix "@" ObjectAccess
@@ -339,7 +350,7 @@ expr' = do
     es <- many (singleChar ',' *> expr)
     pure (List (e:es) ())
   emptyList =  pure (List [] ())
-  atom = constantExpr <|> lamExpr <|> varExpr <|> parens expr <|> try obj <|> list
+  atom = constantExpr <|> lamExpr <|> letExpr <|> varExpr <|> parens expr <|> try obj <|> list
 
 expr :: Parser (Expr ParsedName ())
 expr = makeExprParser expr' operatorTable

@@ -19,7 +19,7 @@ module Pact.Core.Names
  , irUnique
  , QualifiedName(..)
  , TypeVar(..)
- , Unique(..)
+ , Unique
  , tyVarName
  , tyVarUnique
  , tyname
@@ -29,7 +29,7 @@ module Pact.Core.Names
  , NamedDeBruijn(..)
  , ndIndex
  , ndName
- , DeBruijn(..)
+ , DeBruijn
  , TypeName(..)
  , rawParsedName
  , ONameKind(..)
@@ -99,34 +99,22 @@ instance Pretty Field where
 
 
 -- Uniques
-newtype Unique =
-  Unique { _unique :: Int }
-  deriving (Show, Eq, Ord)
-  deriving (Num, Enum) via Int
+type Unique = Int
+type Supply = Int
 
-type Supply = Unique
-
--- Todo:
 data IRNameKind
-  = IRLocallyBoundName
-  | IRTopLevelName ModuleName
-  | IRModuleName
-  deriving (Show)
+  = IRBound
+  | IRTopLevel ModuleName
+  deriving (Show, Eq, Ord)
 
 data IRName
   = IRName
   { _irName :: !Text
   , _irNameKind :: IRNameKind
   , _irUnique :: Unique
-  } deriving (Show)
+  } deriving (Show, Eq, Ord)
 
 makeLenses ''IRName
-
-instance Eq IRName where
-  l == r = _irUnique l == _irUnique r
-
-instance Ord IRName where
-  l <= r =_irUnique l <= _irUnique r
 
 data NamedDeBruijn
   = NamedDeBruijn
@@ -134,10 +122,7 @@ data NamedDeBruijn
   , _ndName :: Text }
   deriving (Show, Eq)
 
-newtype DeBruijn
-  = DeBruijn { _debruijn :: Word64 }
-  deriving (Show, Eq, Ord)
-  deriving (Num, Bounded, Enum) via Word64
+type DeBruijn = Word64
 
 data DeclName
   = DeclName
@@ -148,7 +133,7 @@ data DeclName
   deriving (Show, Eq, Ord)
 
 data ONameKind b
-  = OBound DeBruijn
+  = OBound Unique
   | OTopLevel ModuleName ModuleHash
   | OBuiltinDict b
   deriving (Show, Eq)
@@ -167,8 +152,8 @@ data Name
   deriving (Show, Eq, Ord)
 
 data NameKind
-  = LocallyBoundName DeBruijn
-  | TopLevelName ModuleName ModuleHash
+  = NBound DeBruijn
+  | NTopLevel ModuleName ModuleHash
   deriving (Show, Eq, Ord)
 
 data TypeVar
@@ -204,8 +189,7 @@ instance (Pretty b) => Pretty (OverloadedName b) where
 
 instance Pretty Name where
   pretty (Name n nk) = case nk of
-    LocallyBoundName _ ->
-      pretty n
+    NBound _ -> pretty n
     _ -> undefined
 
 instance Pretty NamedDeBruijn where
