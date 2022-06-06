@@ -193,5 +193,5 @@ instance Pretty Name where
     _ -> undefined
 
 instance Pretty NamedDeBruijn where
-  pretty (NamedDeBruijn _ n) =
-    pretty n
+  pretty (NamedDeBruijn i n) =
+    pretty n <> "_d" <> pretty i

@@ -6,10 +6,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 
 
 -- |
@@ -27,7 +27,6 @@ import Control.Monad.Reader
 import Control.Monad.ST
 import Data.IntMap.Strict(IntMap)
 import Data.Foldable(traverse_)
-import Data.List(nub)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.STRef
 import Data.Text(Text)
@@ -44,7 +43,6 @@ import Pact.Core.Type
 import Pact.Core.Names
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
-
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -288,7 +286,7 @@ withoutFieldInst f = \case
       when (Map.member f obj) $ fail "BOOM has row"
       case mty of
         Nothing -> pure (Just [])
-        Just r -> pure $ Just [Pred Eq (TyRow (RowVar r))]
+        Just r -> pure $ Just [Pred (WithoutField f) (TyRow (RowVar r))]
   _ -> pure Nothing
 
 showInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
@@ -323,9 +321,7 @@ toHnf :: Pred (TvRef s) -> InferT s b [Pred (TvRef s)]
 toHnf p = isHnf p >>= \case
   True -> pure [p]
   False -> byInst p >>= \case
-    Nothing -> do
-      p' <- _dbgPred p
-      fail $ "context reduction failure for: " <> show p'
+    Nothing -> fail "context reduction failure"
     Just ps -> toHnfs ps
 
 toHnfs :: [Pred (TvRef s)] -> InferT s b [Pred (TvRef s)]
@@ -376,7 +372,6 @@ split ps = do
       _ -> pure False
     TyCap -> pure False
     -- TCTyCon _ ty -> hasUnbound ty
-
     _ -> pure False
   hasUnbound' [] = pure False
   hasUnbound' (x:xs) = do
@@ -590,7 +585,8 @@ generalizeWithTerm
   -> [TCPred s]
   -> TypedTCTerm s b i
   -> InferT s b (TypeScheme (TvRef s), TypedTCTerm s b i, [TCPred s])
-generalizeWithTerm ty preds term = do
+generalizeWithTerm ty pp term = do
+  preds <- nubPreds pp
   sts <- lift (newSTRef Set.empty)
   (ftvs, ty') <- gen' sts ty
   (deferred, retained) <- split preds
@@ -599,14 +595,32 @@ generalizeWithTerm ty preds term = do
     [] -> do
       when (retained /= []) $ fail "boom2"
       pure (TypeScheme [] [] ty' , term, deferred)
-    (x:xs) -> case removeFieldConstraints (nub retained') of
+    (x:xs) -> case removeFieldConstraints retained' of
       y:ys -> do
         let typedArgs = toTyArg <$> (y:|ys)
             tlam = Typed.Lam (fst $ NE.head typedArgs) typedArgs term info
             tfinal = Typed.TyAbs (x :| xs) tlam info
         pure (TypeScheme ftvs retained' ty', tfinal, deferred)
-      _ ->  pure (TypeScheme ftvs [] ty', Typed.TyAbs (x:|xs) term info, deferred)
+      _ ->  pure (TypeScheme ftvs retained ty', Typed.TyAbs (x:|xs) term info, deferred)
   where
+  nubPreds li = nubPreds' li []
+  -- we expect
+  nubPreds' (p@(Pred tc x) : xs) elems = case x of
+    TyVar rv -> readTvRef rv >>= \case
+      Link tl -> nubPreds' (Pred tc tl :xs) elems
+      _ ->
+        if elem p elems
+        then nubPreds' xs elems
+        else nubPreds' xs (Pred tc x:elems)
+    TyRow (RowVar rv) -> readTvRef rv >>= \case
+      Link (TyRow r) -> nubPreds' (Pred tc (TyRow r) :xs) elems
+      _ ->
+        if elem p elems
+        then nubPreds' xs elems
+        else nubPreds' xs (Pred tc x:elems)
+    _ -> nubPreds' xs elems
+  nubPreds' [] elems = pure (reverse elems)
+
   info = term ^. Typed.termInfo
   toTyArg p@(Pred t tytv) =
     let n  = OverloadedName "#dictVar" (OBuiltinDict p)
