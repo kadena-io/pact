@@ -75,7 +75,7 @@ data CEKValue b
   = VLiteral !Literal
   | VObject !(Map Field (CEKValue b))
   | VList !(Vector (CEKValue b))
-  | VClosure !Name [Name] (ETerm b) !(CEKEnv b)
+  | VClosure !Name ![Name] !(ETerm b) !(CEKEnv b)
   | VNative !b
   | VGuard !(Guard Name (CEKValue b))
   | VCap !Name

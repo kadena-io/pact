@@ -19,15 +19,93 @@ data ObjectOp o
   | ObjectUpdate Field o o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
+{-
+  Builtin operators, grouped by the current type class hierarchy:
 
+  class Add a where
+    (+) :: a -> a -> a
+
+  instance Add integer
+  instance Add decimal
+  instance Add string
+  instance Add (list a)
+
+  class Eq a where
+    (==) :: a -> a -> bool
+    (/=) :: a -> a -> bool
+
+  instance Eq integer
+  instance Eq decimal
+  instance Eq string
+  instance Eq time
+  instance Eq unit
+  instance Eq bool
+  instance (Eq a) => Eq (list a)
+  -- todo: rows
+
+  class Ord a where
+    (>=) :: a -> a -> bool
+    (>) :: a -> a -> bool
+    (<) :: a -> a -> bool
+    (<=) :: a -> a -> bool
+
+  instance Ord integer
+  instance Ord decimal
+  instance Ord string
+  instance Ord time
+  instance Ord unit
+  instance Ord a => Ord (list a)
+
+  class Show a where
+    show :: a -> string
+
+  instance Show integer
+  instance Show decimal
+  instance Show string
+  instance Show time
+  instance Show unit
+  instance Show bool
+  instance (Show a) => Show (list a)
+
+  class Num a where
+    (-) :: a -> a -> a
+    (*) :: a -> a -> a
+    (/) :: a -> a -> a
+    abs :: a -> a
+    negate :: a -> a
+
+  instance Num integer
+  instance Num decimal
+
+  class Fractional a where
+    ln :: a -> decimal
+    exp :: a -> decimal
+    sqrt :: a -> decimal
+    log-base :: a -> a -> a
+
+  instance Fractional integer
+  instance Fractional decimal
+
+  class ListLike a where
+    take :: integer -> a -> a
+    drop :: integer -> a -> a
+    concat :: [a] -> a
+    reverse :: a -> a
+    length :: a -> integer
+
+  instance ListList string
+  instance ListLike (list a)
+-}
 data RawBuiltin
   -- Operators
-  -- BasicArith
+  -- Addition/Concatenation
   = RawAdd
+  -- Num
   | RawSub
   | RawMultiply
   | RawDivide
   | RawNegate
+  | RawAbs
   -- Boolean Ops
   | RawAnd
   | RawOr
@@ -35,6 +113,7 @@ data RawBuiltin
   -- Equality and Comparisons
   | RawEq
   | RawNeq
+  -- Ord
   | RawGT
   | RawGEQ
   | RawLT
@@ -45,74 +124,91 @@ data RawBuiltin
   | RawBitwiseXor
   | RawBitwiseFlip
   | RawBitShift
-    -- Other Numerics
-  | RawAbs
+  --  Rounding
   | RawRound
   | RawCeiling
   | RawFloor
+  -- Fractional
   | RawExp
   | RawLn
+  | RawSqrt
   | RawLogBase
-  | RawMod
+  -- List like
+  | RawLength
+  | RawTake
+  | RawDrop
+  | RawConcat
+  | RawReverse
   -- General
+  | RawMod
   | RawMap
   | RawFilter
   | RawZip
   | RawIf
   | RawIntToStr
-  | RawConcat
   | RawStrToInt
-  | RawTake
-  | RawDrop
-  | RawLength
   | RawFold
   | RawDistinct
   | RawEnforce
   | RawEnforceOne
   | RawEnumerate
   | RawEnumerateStepN
+  -- Show
   | RawShow
+  -- Testing builtin atm
   | RawDummy
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
+  -- Addition
   RawAdd -> "(+)"
+  -- Num
   RawSub -> "(-)"
   RawMultiply -> "(*)"
   RawDivide -> "(/)"
   RawNegate -> "(-)"
+  RawAbs -> "abs"
+  -- Bolean ops
   RawAnd -> "(&&)"
   RawOr -> "||"
   RawNot -> "not"
+  -- Eq
   RawEq -> "(==)"
   RawNeq -> "(!=)"
+  -- Ord
   RawGT -> "(>)"
   RawGEQ -> "(>=)"
   RawLT -> "(<)"
   RawLEQ -> "(<=)"
+  -- Int ops
   RawBitwiseAnd -> "(&)"
   RawBitwiseOr -> "(|)"
   RawBitwiseXor -> "xor"
   RawBitwiseFlip -> "(~)"
   RawBitShift -> "shift"
-  RawAbs -> "abs"
+  RawMod -> "mod"
+  -- roundings
   RawRound -> "round"
   RawCeiling -> "ceiling"
-  RawExp -> "exp"
   RawFloor -> "floor"
+  -- Fractional
+  RawExp -> "exp"
   RawLn -> "ln"
+  RawSqrt -> "sqrt"
   RawLogBase -> "logBase"
-  RawMod -> "mod"
+  -- ListLike
+  RawLength -> "length"
+  RawTake -> "take"
+  RawDrop -> "drop"
+  RawConcat -> "concat"
+  RawReverse -> "reverse"
+  -- general
   RawMap -> "map"
   RawFilter -> "filter"
   RawIf -> "if"
   RawIntToStr -> "int-to-str"
-  RawConcat -> "concat"
   RawStrToInt -> "str-to-int"
-  RawTake -> "take"
-  RawDrop -> "drop"
-  RawLength -> "length"
   RawFold -> "fold"
   RawZip -> "zip"
   RawDistinct -> "distinct"
@@ -133,44 +229,28 @@ rawBuiltinMap = Map.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. 
 -- TODO: TIME
 data CoreBuiltin
   -- IntOps
+  -- Integer Add
   = AddInt
+  -- Int Num functions
   | SubInt
   | DivInt
   | MulInt
   | NegateInt
   | AbsInt
-  | LogBaseInt
-  | ModInt
+  -- Int fractional
   | ExpInt
   | LnInt
+  | SqrtInt
+  | LogBaseInt
+  -- General int ops
+  | ModInt
   | BitAndInt
   | BitOrInt
   | BitXorInt
   | BitShiftInt
   | BitComplementInt
+  -- Int show instance
   | ShowInt
-  -- If
-  | IfElse
-  -- Decimal ops
-  | AddDec
-  | SubDec
-  | DivDec
-  | MulDec
-  | NegateDec
-  | AbsDec
-  | RoundDec
-  | CeilingDec
-  | ExpDec
-  | FloorDec
-  | LnDec
-  | LogBaseDec
-  | ShowDec
-  -- Bool Comparisons
-  | AndBool
-  | OrBool
-  | NotBool
-  | EqBool
-  | NeqBool
   -- Int Equality
   | EqInt
   | NeqInt
@@ -178,48 +258,93 @@ data CoreBuiltin
   | GEQInt
   | LTInt
   | LEQInt
+  -- If
+  | IfElse
+  -- Decimal ops
+  -- Decimal add
+  | AddDec
+  -- Decimal num
+  | SubDec
+  | DivDec
+  | MulDec
+  | NegateDec
+  | AbsDec
+  -- Decimal rounding ops
+  | RoundDec
+  | CeilingDec
+  | FloorDec
+  -- Decimal rounding ops
+  | ExpDec
+  | LnDec
+  | LogBaseDec
+  | SqrtDec
+  -- Decimal Show
+  | ShowDec
   -- Decimal Equality
   | EqDec
   | NeqDec
+  -- Decimal ord
   | GTDec
   | GEQDec
   | LTDec
   | LEQDec
+  -- Bool Comparisons
+  | AndBool
+  | OrBool
+  | NotBool
+  -- other bool ops
+  | EqBool
+  | NeqBool
+  | ShowBool
   -- String Equality
   | EqStr
   | NeqStr
+  -- String Ord
   | GTStr
   | GEQStr
   | LTStr
   | LEQStr
+   -- String Add
+  | AddStr
+  -- String ListLike
+  | ConcatStr
+  | DropStr
+  | TakeStr
+  | LengthStr
+  | ReverseStr
+  -- String Show
+  | ShowStr
   -- Object equality
   | EqObj
   | NeqObj
   -- List Equality
   | EqList
   | NeqList
+  -- List Ord
+  | GTList
+  | GEQList
+  | LTList
+  | LEQList
+  -- List Show
   | ShowList
-  -- String Ops
-  | AddStr
-  | ConcatStr
-  | DropStr
-  | TakeStr
-  | LengthStr
-  | ShowStr
+  -- List Add
+  | AddList
+  -- ListLike List
+  | TakeList
+  | DropList
+  | LengthList
+  | ConcatList
+  | ReverseList
+  | FilterList
+  -- Misc list ops
+  | DistinctList
+  | MapList
+  | ZipList
+  | FoldList
   -- Unit ops
   | EqUnit
   | NeqUnit
   | ShowUnit
-  -- ListOps
-  | AddList
-  | DistinctList
-  | TakeList
-  | DropList
-  | LengthList
-  | FilterList
-  | MapList
-  | ZipList
-  | FoldList
   -- Others
   | Enforce
   | EnforceOne

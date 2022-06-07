@@ -35,6 +35,8 @@ module Pact.Core.Type
  , showType
  , ordType
  , eqType
+ , fractionalType
+ , listLikeType
  , tcToRowType
  ) where
 
@@ -149,9 +151,11 @@ data BuiltinTC
   = Eq
   | Ord
   | Show
-  | WithoutField Field
   | Add
   | Num
+  | ListLike
+  | Fractional
+  | WithoutField Field
   deriving (Show, Eq, Ord)
 
 instance Pretty BuiltinTC where
@@ -159,9 +163,11 @@ instance Pretty BuiltinTC where
     Eq -> "Eq"
     Ord -> "Ord"
     Show -> "Show"
-    WithoutField _ -> "<>"
     Add -> "Add"
     Num -> "Num"
+    ListLike -> "ListLike"
+    Fractional -> "Fractional"
+    WithoutField _ -> "<>"
 
 
 -- Note, no superclasses, for now
@@ -197,6 +203,8 @@ tcToRowType = \case
   WithoutField _ -> id
   Add -> addType
   Num -> numType
+  Fractional -> fractionalType
+  ListLike -> listLikeType
 
 
 eqType :: Type tv -> Type tv
@@ -233,13 +241,35 @@ numType ty = TyRow (RowTy obj Nothing)
     [ (Field "/", numTy)
     , (Field "-", numTy)
     , (Field "*", numTy)
-    , (Field "negate", ty :~> ty)]
+    , (Field "negate", ty :~> ty)
+    , (Field "abs", ty :~> ty)]
 
 addType :: Type tv -> Type tv
 addType ty = TyRow (RowTy obj Nothing)
   where
   addTy = ty :~> ty :~> ty
   obj = Map.fromList [(Field "+", addTy)]
+
+listLikeType :: Type tv -> Type tv
+listLikeType ty = TyRow (RowTy obj Nothing)
+  where
+  obj =
+    Map.fromList
+    [ (Field "concat", TyList ty :~> ty)
+    , (Field "take", TyInt :~> ty :~> ty)
+    , (Field "drop", TyInt :~> ty :~> ty)
+    , (Field "reverse", ty :~> ty)
+    , (Field "length", ty :~> TyInt)]
+
+fractionalType :: Type tv -> Type tv
+fractionalType ty = TyRow (RowTy obj Nothing)
+  where
+  obj =
+    Map.fromList
+    [ (Field "ln", ty :~> TyDecimal)
+    , (Field "exp", ty :~> TyDecimal)
+    , (Field "sqrt", ty :~> TyDecimal)
+    , (Field "logBase", ty :~> ty :~> ty)]
 
 instance Plated (Type n) where
   plate f = \case

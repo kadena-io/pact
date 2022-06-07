@@ -30,10 +30,6 @@ _compile file source = do
   let (ty, typed) = IR.runInferTerm sup IR.rawBuiltinType desugared
   prettyPrint typed
   resolved <- Typed.runOverload typed
-  let ?cekLoaded = mempty
-      ?cekBuiltins = Runtime.coreBuiltinRuntime
-  let initState = Runtime.CEKState 0 Nothing
-  (value, _) <- Runtime.runEvalT initState (Runtime.eval mempty resolved)
   putStrLn "---- Parsed Term ----"
   prettyPrint parsed
   putStrLn "---- Type ----"
@@ -42,6 +38,10 @@ _compile file source = do
   prettyPrint typed
   putStrLn "---- System F Term Post overload---"
   prettyPrint resolved
+  let ?cekLoaded = mempty
+      ?cekBuiltins = Runtime.coreBuiltinRuntime
+  let initState = Runtime.CEKState 0 Nothing
+  (value, _) <- Runtime.runEvalT initState (Runtime.eval mempty resolved)
   putStrLn "----- Result -----"
   prettyPrint value
   where

@@ -97,7 +97,6 @@ newtype Field = Field Text
 instance Pretty Field where
   pretty (Field f) = pretty f
 
-
 -- Uniques
 type Unique = Int
 type Supply = Int
@@ -193,5 +192,5 @@ instance Pretty Name where
     _ -> undefined
 
 instance Pretty NamedDeBruijn where
-  pretty (NamedDeBruijn i n) =
-    pretty n <> "_d" <> pretty i
+  pretty (NamedDeBruijn i _n) =
+    pretty i

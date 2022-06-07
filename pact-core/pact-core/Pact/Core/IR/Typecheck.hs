@@ -197,6 +197,8 @@ byInst (Pred p ty) = case p of
   Num -> numInst ty
   Ord -> ordInst ty
   Show -> showInst ty
+  ListLike -> listLikeInst ty
+  Fractional -> fractionalInst ty
   WithoutField f -> withoutFieldInst f ty
 
 -- | Instances of Eq:
@@ -231,7 +233,17 @@ eqInst = \case
     _ -> pure Nothing
   _ -> pure Nothing
 
--- | z
+-- | Instances of Ord:
+--
+--  instance Ord integer
+--  instance Ord decimal
+--  instance Ord string
+--  instance Ord unit
+--  instance Ord time <- todo
+--
+--  instance (Ord 'a) => Ord (list 'a)
+--  For rows:
+--
 ordInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
 ordInst = \case
   TyVar tv -> readTvRef tv >>= \case
@@ -249,6 +261,14 @@ ordInst = \case
   _ -> pure Nothing
 
 
+-- | Instances of Add:
+--
+--  instance Add integer
+--  instance Add decimal
+--  instance Add string
+--  instance Add (list 'a)
+--
+--
 addInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
 addInst = \case
   TyVar tv -> readTvRef tv >>= \case
@@ -263,6 +283,9 @@ addInst = \case
   TyList _ -> pure (Just [])
   _ -> pure Nothing
 
+-- | Instances of num:
+-- instance Num integer
+-- instance Num decimal
 numInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
 numInst = \case
   TyVar tv -> readTvRef tv >>= \case
@@ -275,6 +298,37 @@ numInst = \case
     _ -> Nothing
   _ -> pure Nothing
 
+-- | Instances of fractional:
+-- instance Fractional integer
+-- instance Fractional decimal
+fractionalInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
+fractionalInst = \case
+  TyVar tv -> readTvRef tv >>= \case
+    Link ty -> fractionalInst ty
+    _ -> pure Nothing
+  -- All prims have an EQ instance
+  TyPrim p -> pure $ case p of
+    PrimInt -> Just []
+    PrimDecimal -> Just []
+    _ -> Nothing
+  _ -> pure Nothing
+
+listLikeInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
+listLikeInst = \case
+  TyVar tv -> readTvRef tv >>= \case
+    Link ty -> fractionalInst ty
+    _ -> pure Nothing
+  -- All prims have an EQ instance
+  TyPrim p -> pure $ case p of
+    PrimInt -> Just []
+    PrimDecimal -> Just []
+    _ -> Nothing
+  _ -> pure Nothing
+
+-- | Compile-time evidence typeclass:
+-- (r\f) implies some row varible `r` does not contain the field `f`.
+-- A type `{a_1:t1_..a_k:t_k|r} satisfies (r\f)
+-- if f is not in contained in {a_1,..,a_n}
 withoutFieldInst :: Field -> TCType s -> InferT s b (Maybe [Pred (TvRef s)])
 withoutFieldInst f = \case
   TyRow t -> case t of
@@ -289,6 +343,20 @@ withoutFieldInst f = \case
         Just r -> pure $ Just [Pred (WithoutField f) (TyRow (RowVar r))]
   _ -> pure Nothing
 
+-- | Instances of Show:
+--
+--  instance Show integer
+--  instance Show decimal
+--  instance Show string
+--  instance Show unit
+--  instance Show bool
+--  instance Show time <- todo
+--
+--  instance (Show 'a) => Show (list 'a)
+--  instance (Show )
+--  For rows:
+--  instance (Eq {l1:t1, .., ln:tn}) where t1..tn are monotypes without type variables.
+--
 showInst :: TCType s -> InferT s b (Maybe [Pred (TvRef s)])
 showInst = \case
   TyVar tv -> readTvRef tv >>= \case
@@ -1005,20 +1073,41 @@ dbjRow env depth = \case
 -- -- todo: debruijnize automatically
 rawBuiltinType :: RawBuiltin -> TypeScheme NamedDeBruijn
 rawBuiltinType = \case
+  -- Add
   RawAdd -> addBinopType
-  RawSub -> numBinopType
-  RawMultiply -> numBinopType
-  RawDivide -> numBinopType
-  RawNegate -> negateType
-  RawAnd -> binaryBool
-  RawOr -> binaryBool
-  RawNot -> TypeScheme [] [] (TyBool :~> TyBool)
-  RawEq -> eqTyp
-  RawNeq -> eqTyp
-  RawGT -> ordTyp
-  RawGEQ -> ordTyp
-  RawLT -> ordTyp
-  RawLEQ -> ordTyp
+  -- Num
+  RawSub ->
+    numBinopType
+  RawMultiply ->
+    numBinopType
+  RawDivide ->
+    numBinopType
+  RawNegate ->
+    unaryNumType
+  RawAbs ->
+    unaryNumType
+  -- Bool ops
+  RawAnd ->
+    binaryBool
+  RawOr ->
+    binaryBool
+  RawNot ->
+    TypeScheme [] [] (TyBool :~> TyBool)
+  -- Eq ops
+  RawEq ->
+    eqTyp
+  RawNeq ->
+    eqTyp
+  -- Ord ops
+  RawGT ->
+    ordTyp
+  RawGEQ ->
+    ordTyp
+  RawLT ->
+    ordTyp
+  RawLEQ ->
+    ordTyp
+  -- Integer ops
   RawBitwiseAnd ->
     binaryInt
   RawBitwiseOr ->
@@ -1026,16 +1115,47 @@ rawBuiltinType = \case
   RawBitwiseXor ->
     binaryInt
   RawBitwiseFlip ->
-    TypeScheme [] [] (TyInt :~> TyInt)
-  RawBitShift -> unaryInt
-  RawAbs -> unaryInt
-  RawRound -> roundingFn
-  RawCeiling -> roundingFn
-  RawExp -> unaryDecimal
-  RawFloor -> roundingFn
-  RawLn -> unaryDecimal
-  RawLogBase -> binaryDecimal
-  RawMod -> binaryInt
+    unaryInt
+  RawMod ->
+    binaryInt
+  RawBitShift ->
+    unaryInt
+  -- Rounding ops
+  RawRound ->
+    roundingFn
+  RawCeiling ->
+    roundingFn
+  RawFloor ->
+    roundingFn
+  -- Fractional
+  RawExp ->
+    unaryFractional
+  RawLn ->
+    unaryFractional
+  RawSqrt ->
+    unaryFractional
+  RawLogBase ->
+    let aVar = nd "a" 0
+        a = TyVar aVar
+    in TypeScheme [aVar] [Pred Fractional a] (a :~> a :~> a)
+  -- ListLike
+  RawConcat ->
+    let aVar = nd "a" 0
+        a = TyVar aVar
+    in TypeScheme [aVar] [Pred ListLike a] (TyList a :~> a)
+  RawTake ->
+    takeDropTy
+  RawDrop ->
+    takeDropTy
+  RawLength ->
+    let aVar = nd "a" 0
+        a = TyVar aVar
+    in TypeScheme [aVar] [Pred ListLike a] (a :~> TyInt)
+  RawReverse ->
+    let aVar = nd "a" 0
+        a = TyVar aVar
+    in TypeScheme [aVar] [Pred ListLike a] (a :~> a)
+  -- General
   RawMap ->
     let aVar = nd "a" 1
         bVar = nd "b" 0
@@ -1066,22 +1186,8 @@ rawBuiltinType = \case
     in TypeScheme [aVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
   RawIntToStr ->
     TypeScheme [] [] (TyInt :~> TyString)
-  RawConcat ->
-    TypeScheme  [] [] (TyList TyString :~> TyString)
   RawStrToInt ->
     TypeScheme  [] [] (TyString :~> TyInt)
-  RawTake ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [] (TyInt :~> TyList a :~> TyList a)
-  RawDrop ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [] (TyInt :~> TyList a :~> TyList a)
-  RawLength ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [] (TyList a :~> TyInt)
   RawDistinct ->
     let aVar  = nd "a" 0
         a = TyVar aVar
@@ -1102,10 +1208,14 @@ rawBuiltinType = \case
     in TypeScheme [aVar] [] (TyRow (RowVar aVar) :~> TyRow (RowVar aVar) :~> TyUnit)
   where
   nd b a = NamedDeBruijn a b
-  negateType =
+  unaryNumType =
     let aVar = nd "a" 0
         a = TyVar aVar
     in TypeScheme [aVar] [Pred Num a] (a :~> a)
+  unaryFractional =
+    let aVar = nd "a" 0
+        a = TyVar aVar
+    in TypeScheme [aVar] [Pred Fractional a] (a :~> TyDecimal)
   addBinopType =
     let aVar = nd "a" 0
         a = TyVar aVar
@@ -1123,11 +1233,18 @@ rawBuiltinType = \case
         a = TyVar aVar
     in TypeScheme [aVar] [Pred Ord a] (a :~> a :~> TyBool)
   unaryInt = TypeScheme [] [] (TyInt :~> TyInt)
+  -- integer -> integer -> integer
   binaryInt = TypeScheme [] [] (TyInt :~> TyInt :~> TyInt)
-  unaryDecimal = TypeScheme [] [] (TyDecimal :~> TyDecimal)
-  binaryDecimal = TypeScheme [] [] (TyDecimal :~> TyDecimal :~> TyDecimal)
+  -- decimal -> integer
   roundingFn = TypeScheme [] [] (TyDecimal :~> TyInt)
+  -- bool -> bool -> bool
   binaryBool = TypeScheme [] [] (TyBool :~> TyBool :~> TyBool)
+  -- forall a. ListLike a => int -> a -> a
+  takeDropTy =
+    let aVar = nd "a" 0
+        a = TyVar aVar
+    in TypeScheme [aVar] [Pred ListLike a] (TyInt :~> a :~> TyBool)
+
 
 objectAccessType :: Field -> TypeScheme NamedDeBruijn
 objectAccessType f =

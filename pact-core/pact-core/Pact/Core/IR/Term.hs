@@ -105,7 +105,7 @@ data IfDefun name tyname info
 
 data IfDef name tyname builtin info
   = IfDfun (IfDefun name tyname info)
-  | IFDConst (DefConst name tyname builtin info)
+  | IfDConst (DefConst name tyname builtin info)
   deriving Show
 
 data TopLevel name tyname builtin info
@@ -147,7 +147,7 @@ data Term name tyname builtin info
   -- List Literals ^
   | ObjectOp (ObjectOp (Term name tyname builtin info)) info
   deriving (Show, Functor)
-  
+
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case

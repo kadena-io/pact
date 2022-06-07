@@ -116,7 +116,7 @@ resolveOverload = \case
   solveOverload i = \case
     -- Addition
     -- Note, we can also sanity check this here.
-    -- (+) Add instances for base types, including list concat
+    -- (+) Add instances for base types
     (RawAdd, [TyInt], _) ->
       pure (Builtin AddInt i)
 
@@ -256,6 +256,25 @@ resolveOverload = \case
     (RawIf, [t1], []) -> do
       let b = Builtin IfElse i
       pure (TyApp b (t1:|[]) i)
+    (RawShow, [TyInt], _) ->
+      pure (Builtin ShowInt i)
+    (RawShow, [TyDecimal], _) ->
+      pure (Builtin ShowDec i)
+    (RawShow, [TyString], _) ->
+      pure (Builtin ShowStr i)
+    (RawShow, [TyUnit], _) ->
+      pure (Builtin ShowUnit i)
+    (RawShow, [TyBool], _) ->
+      error "todo: show bool"
+    (RawShow, [TyList t], [_]) -> do
+      b <- solveOverload i (RawShow, [t], [Pred Show t])
+       -- todo: give this thing the proper type
+      let a1Var = Name "" (NBound 0)
+          a1 = (a1Var, TyString)
+          app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
+      pure (Lam a1Var (a1 :| []) app i)
+    (RawShow, [_], [p]) ->
+      accessDict i "show" <$> lookupDictVar i p
     _ -> error "unimplemented"
     -- RawAbs -> AbsInt
     -- RawRound -> RoundDec
