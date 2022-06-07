@@ -184,6 +184,12 @@ lnInt = BuiltinFn \case
     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
   _ -> fail "impossible"
 
+sqrtInt :: BuiltinFn b
+sqrtInt = BuiltinFn \case
+  VLiteral (LInteger i) :| [] ->
+    pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
+  _ -> fail "impossible"
+
 showInt :: BuiltinFn b
 showInt = BuiltinFn \case
   VLiteral (LInteger i) :| [] ->
@@ -253,6 +259,9 @@ expDec = unaryDecFn (f2Dec . exp . dec2F)
 lnDec :: BuiltinFn b
 lnDec = unaryDecFn (f2Dec . log . dec2F)
 
+sqrtDec :: BuiltinFn b
+sqrtDec = unaryDecFn (f2Dec . sqrt . dec2F)
+
 ---------------------------
 -- bool ops
 ---------------------------
@@ -272,6 +281,13 @@ eqBool = binaryBoolFn (==)
 
 neqBool :: BuiltinFn b
 neqBool = binaryBoolFn (/=)
+
+showBool :: BuiltinFn b
+showBool = BuiltinFn \case
+  VLiteral (LBool i) :| [] -> do
+    let out = if i then "true" else "false"
+    pure (VLiteral (LString out))
+  _ -> fail "impossible"
 
 ---------------------------
 -- string ops
@@ -299,11 +315,62 @@ addStr =  BuiltinFn \case
   VLiteral (LString i) :| [VLiteral (LString i')] -> pure (VLiteral (LString (i <> i')))
   _ -> fail "impossible"
 
+takeStr :: BuiltinFn b
+takeStr = BuiltinFn \case
+  VLiteral (LInteger i) :| [VLiteral (LString t)] -> do
+    pure (VLiteral (LString (T.take (fromIntegral i) t)))
+  _ -> fail "impossible"
+
+dropStr :: BuiltinFn b
+dropStr = BuiltinFn \case
+  VLiteral (LInteger i) :| [VLiteral (LString t)] -> do
+    pure (VLiteral (LString (T.drop (fromIntegral i) t)))
+  _ -> fail "impossible"
+
+lengthStr :: BuiltinFn b
+lengthStr = BuiltinFn \case
+  VLiteral (LString t) :| [] -> do
+    pure (VLiteral (LInteger (fromIntegral (T.length t))))
+  _ -> fail "impossible"
+
+reverseStr :: BuiltinFn b
+reverseStr = BuiltinFn \case
+  VLiteral (LString t) :| [] -> do
+    pure (VLiteral (LString (T.reverse t)))
+  _ -> fail "impossible"
+
+showStr :: BuiltinFn b
+showStr = BuiltinFn \case
+  VLiteral (LString t) :| [] -> do
+    let out = "\"" <> t <> "\""
+    pure (VLiteral (LString out))
+  _ -> fail "impossible"
+
 concatStr :: BuiltinFn b
 concatStr = BuiltinFn \case
   VList li :| [] -> do
     li' <- traverse asString li
     pure (VLiteral (LString (T.concat (V.toList li'))))
+  _ -> fail "impossible"
+
+
+---------------------------
+-- Unit ops
+---------------------------
+
+eqUnit :: BuiltinFn b
+eqUnit = BuiltinFn \case
+  VLiteral LUnit :| [VLiteral LUnit] -> pure (VLiteral (LBool True))
+  _ -> fail "impossible"
+
+neqUnit :: BuiltinFn b
+neqUnit = BuiltinFn \case
+  VLiteral LUnit :| [VLiteral LUnit] -> pure (VLiteral (LBool False))
+  _ -> fail "impossible"
+
+showUnit :: BuiltinFn b
+showUnit = BuiltinFn \case
+  VLiteral LUnit :| [] -> pure (VLiteral (LString "()"))
   _ -> fail "impossible"
 
 ---------------------------
@@ -362,12 +429,29 @@ unsafeNeqCEKValue a b = not (unsafeEqCEKValue a b)
 ---------------------------
 eqList :: BuiltinFn b
 eqList = BuiltinFn \case
-  l@VList{} :| [r@VList{}] -> pure (VLiteral (LBool (unsafeEqCEKValue l r)))
+  eqClo :| [VList l, VList r] ->
+    if V.length l /= V.length r then
+      pure (VLiteral (LBool False))
+    else do
+      v' <- V.zipWithM (\a b -> asBool =<< unsafeApplyTwo eqClo a b) l r
+      pure (VLiteral (LBool (and v')))
   _ -> fail "impossible"
 
 neqList :: BuiltinFn b
 neqList = BuiltinFn \case
-  l@VList{} :| [r@VList{}] -> pure (VLiteral (LBool (unsafeNeqCEKValue l r)))
+  neqClo :| [VList l, VList r] ->
+    if V.length l /= V.length r then
+      pure (VLiteral (LBool True))
+    else do
+      v' <- V.zipWithM (\a b -> asBool =<< unsafeApplyTwo neqClo a b) l r
+      pure (VLiteral (LBool (or v')))
+  _ -> fail "impossible"
+
+zipList :: BuiltinFn b
+zipList = BuiltinFn \case
+  clo :| [VList l, VList r] -> do
+    v' <- V.zipWithM (unsafeApplyTwo clo) l r
+    pure (VList v')
   _ -> fail "impossible"
 
 addList :: BuiltinFn b
@@ -420,6 +504,12 @@ dropList :: BuiltinFn b
 dropList = BuiltinFn \case
   VLiteral (LInteger i) :| [VList li] ->
     pure (VList (V.drop (fromIntegral i) li))
+  _ -> fail "impossible"
+
+reverseList :: BuiltinFn b
+reverseList = BuiltinFn \case
+  VList li :| [] ->
+    pure (VList (V.reverse li))
   _ -> fail "impossible"
 
 coreEnumerate :: BuiltinFn b
@@ -477,7 +567,7 @@ coreBuiltinFn = \case
   -- Int fractional
   ExpInt -> expInt
   LnInt -> lnInt
-  SqrtInt -> unimplemented
+  SqrtInt -> sqrtInt
   LogBaseInt -> unimplemented
   -- Geenral int ops
   ModInt -> modInt
@@ -513,7 +603,7 @@ coreBuiltinFn = \case
   ExpDec -> expDec
   LnDec -> lnDec
   LogBaseDec -> unimplemented
-  SqrtDec -> unimplemented
+  SqrtDec -> sqrtDec
   -- Decimal show
   ShowDec -> showDec
   -- Decimal Equality + Ord
@@ -530,7 +620,7 @@ coreBuiltinFn = \case
   -- Bool Equality
   EqBool -> eqBool
   NeqBool -> neqBool
-  ShowBool -> unimplemented
+  ShowBool -> showBool
   -- String Equality + Ord
   EqStr -> eqStr
   NeqStr -> neqStr
@@ -542,12 +632,12 @@ coreBuiltinFn = \case
   AddStr -> addStr
   -- String listlike
   ConcatStr -> concatStr
-  DropStr -> unimplemented
-  TakeStr -> unimplemented
-  LengthStr -> unimplemented
-  ReverseStr -> unimplemented
+  DropStr -> dropStr
+  TakeStr -> takeStr
+  LengthStr -> lengthStr
+  ReverseStr -> reverseStr
   -- String show
-  ShowStr -> unimplemented
+  ShowStr -> showStr
   -- Object equality
   EqObj -> eqObj
   NeqObj -> neqObj
@@ -567,17 +657,17 @@ coreBuiltinFn = \case
   DropList -> dropList
   LengthList -> lengthList
   ConcatList -> concatList
-  ReverseList -> unimplemented
+  ReverseList -> reverseList
   -- misc list ops
   FilterList -> coreFilter
   DistinctList -> unimplemented
-  ZipList -> unimplemented
+  ZipList -> zipList
   MapList -> coreMap
   FoldList -> coreFold
   -- Unit ops
-  EqUnit -> unimplemented
-  NeqUnit -> unimplemented
-  ShowUnit -> unimplemented
+  EqUnit -> eqUnit
+  NeqUnit -> neqUnit
+  ShowUnit -> showUnit
   Enforce -> unimplemented
   EnforceOne -> unimplemented
   Enumerate -> coreEnumerate

@@ -1173,9 +1173,13 @@ rawBuiltinType = \case
         a = TyVar aVar
     in TypeScheme [aVar] [] ((a :~> TyBool) :~> TyList a :~> TyList a)
   RawZip ->
-    let aVar = nd "a" 0
+    let aVar = nd "a" 2
         a = TyVar aVar
-    in TypeScheme [aVar] [] ((a :~> TyBool) :~> TyList a :~> TyList a)
+        bVar = nd "b" 1
+        b = TyVar bVar
+        cVar = nd "c" 0
+        c = TyVar cVar
+    in TypeScheme [aVar, bVar, cVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
   RawIf ->
     let aVar = nd "a" 2
         bVar = nd "b" 1
@@ -1243,7 +1247,7 @@ rawBuiltinType = \case
   takeDropTy =
     let aVar = nd "a" 0
         a = TyVar aVar
-    in TypeScheme [aVar] [Pred ListLike a] (TyInt :~> a :~> TyBool)
+    in TypeScheme [aVar] [Pred ListLike a] (TyInt :~> a :~> a)
 
 
 objectAccessType :: Field -> TypeScheme NamedDeBruijn

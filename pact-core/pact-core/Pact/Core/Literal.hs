@@ -23,7 +23,7 @@ instance Pretty Literal where
     LString t -> dquotes (pretty t)
     LInteger i -> pretty i
     -- TODO: SUS
-    LDecimal _d -> "<TODO:DECIMAL>"
+    LDecimal d -> pretty (show d)
     LUnit -> "()"
-    LBool b -> if b then "True" else "False"
+    LBool b -> if b then "true" else "false"
     LTime _t -> "<TODO:TIME>"
