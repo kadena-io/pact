@@ -13,6 +13,7 @@ module Pact.Core.Typed.Overload where
 import Control.Lens hiding (ix, op)
 import Control.Monad.Reader
 -- import Data.Map.Strict(Map)
+import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.IntMap.Strict(IntMap)
 import Data.Foldable(foldl')
@@ -35,6 +36,7 @@ data ROState
 makeLenses ''ROState
 
 type OverloadT = ReaderT ROState IO
+
 
 resolveOverload
   :: OverloadedTerm RawBuiltin info
@@ -107,122 +109,218 @@ resolveOverload = \case
   Error t1 t2 i ->
     pure (Error t1 t2 i)
   where
+  listEqualityInstance i raw inst (Pred tc t) = do
+    b <- solveOverload i (raw, [t], [Pred tc t])
+    let a1Var = Name "" (NBound 1)
+        a1 = (a1Var, TyList t)
+        a2Var = Name "" (NBound 0)
+        a2 = (a2Var, TyList t)
+        app = App (Builtin inst i) (b :| [Var a1Var i, Var a2Var i]) i
+    pure (Lam a1Var (a1 :| [a2]) app i)
+
+  specializeAdd
+    :: info
+    -> Pred NamedDeBruijn
+    -> OverloadT (EvalTerm info)
+  specializeAdd i p@(Pred _ t) = case t of
+    TyInt -> pure (Builtin AddInt i)
+    TyDecimal -> pure (Builtin AddDec i)
+    TyString -> pure (Builtin AddStr i)
+    TyList _ -> pure (Builtin AddList i)
+    _ -> accessDict i "+" <$> lookupDictVar i p
+
+  specializeNumOp i reso p@(Pred _ t) = case t of
+    TyInt -> pure (Builtin (_nrIntInstance reso) i)
+    TyDecimal -> pure (Builtin (_nrDecInstance reso) i)
+    _ -> accessDict i (_nrRawName reso) <$> lookupDictVar i p
+
+  specializeEq i raw reso p@(Pred _ t) = case t of
+    TyInt -> pure (Builtin (_erIntInstance reso))
+    TyDecimal -> pure (Builtin (_erDecInstance reso) i)
+    TyString -> pure (Builtin (_erStrInstance reso) i)
+    TyUnit -> pure (Builtin (_erUnitInstance reso) i)
+    TyBool -> pure (Builtin (_erBoolInstance reso) i)
+    TyList t' ->
+      listEqualityInstance raw (_erListInstance reso) (Pred Eq t')
+    _ -> accessDict i (_orRawName reso) <$> lookupDictVar i p
+
+  specializeOrd i raw reso p@(Pred _ t) = case t of
+    TyInt -> pure (Builtin (_orIntInstance reso) i)
+    TyDecimal -> pure (Builtin (_orDecInstance reso) i)
+    TyString -> pure (Builtin (_orStrInstance reso) i)
+    TyUnit -> pure (Builtin (_orUnitInstance reso) i)
+    TyList t' ->
+      listEqualityInstance raw (_orListInstance reso) (Pred Ord t')
+    _ -> accessDict i (_orRawName reso) <$> lookupDictVar i p
+
   accessDict i f v =
     let op = ObjectAccess (Field f) v
     in ObjectOp op i
   -- We specialize here on the common case
   -- and solve overloaded variables.
-  solveOverload :: info -> (RawBuiltin, [Type NamedDeBruijn], [Pred NamedDeBruijn]) -> OverloadT (EvalTerm info)
+  -- see: [Typeclasses and Instances] in
+  -- Builtin.hs
+  -- NOTE: We rely on the invariant that
+  -- the typechecker produces the right dictionaries passed
+  -- to the builtins
+  solveOverload
+    :: info
+    -> (RawBuiltin, [Type NamedDeBruijn], [Pred NamedDeBruijn])
+    -> OverloadT (EvalTerm info)
   solveOverload i = \case
     -- Addition
     -- Note, we can also sanity check this here.
-    -- (+) Add instances for base types
-    (RawAdd, [TyInt], _) ->
-      pure (Builtin AddInt i)
-
-    (RawAdd, [TyDecimal], _) ->
-      pure (Builtin AddDec i)
-
-    (RawAdd, [TyString], _) ->
-      pure (Builtin AddStr i)
-
-    (RawAdd, [TyList _], [_]) ->
-      pure (Builtin AddList i)
-    -- (+) Add dynamic access
+    -- (+) Add instances for base types + dynamic access
     (RawAdd, [_], [p]) ->
-      accessDict i "+" <$> lookupDictVar i p
-    -- (-) Num instance for base types
-    (RawSub, [TyInt], _) ->
-      pure (Builtin SubInt i)
+      specializeAdd i p
 
-    (RawSub, [TyDecimal], _) ->
-      pure (Builtin SubDec i)
-    -- (-) dynamic access
-    (RawSub, _, [p]) ->
-      accessDict i "-" <$> lookupDictVar i p
-    (RawMultiply, [TyInt], _) -> pure (Builtin MulInt i)
-    (RawMultiply, [TyDecimal], _) -> pure (Builtin MulDec i)
-    (RawMultiply, _, [p]) -> do
-      accessDict i "*" <$> lookupDictVar i p
-    (RawDivide, [TyInt], _) -> pure (Builtin SubInt i)
-    (RawDivide, [TyDecimal], _) -> pure (Builtin SubDec i)
-    (RawDivide, _, [p]) -> do
-      accessDict i "/" <$> lookupDictVar i p
-    (RawDivide, [TyInt], _) ->
-      pure (Builtin SubInt i)
-    (RawDivide, [TyDecimal], _) ->
-      pure (Builtin SubDec i)
-    (RawNegate, _, [p]) -> do
-      accessDict i "negate" <$> lookupDictVar i p
+    -- (-) Num instances
+    (RawSub, [_], [p]) ->
+      specializeNumOp i subResolve p
+
+    -- (*) Instances + Dynamic access
+    (RawMultiply, [_], [p]) ->
+      specializeNumOp i mulResolve p
+
+    -- (/) instances + dynamic access
+    (RawDivide, [_], [p]) ->
+      specializeNumOp i divResolve p
+    -- (negate) instances + dynamic access
+    (RawNegate, [_], [p]) ->
+      specializeNumOp i negateResolve p
+    (RawAbs, [_], [p]) ->
+      specializeNumOp i absResolve p
     -- bool ops
-    (RawAnd, [] , []) -> pure (Builtin AndBool i)
-    (RawOr, [], []) -> pure (Builtin OrBool i)
-    (RawNot, [], []) -> pure (Builtin NotBool i)
-    -- Eq
-    (RawEq, [TyInt], _) -> pure (Builtin EqInt i)
-    (RawEq, [TyDecimal], _) -> pure (Builtin EqDec i)
-    (RawEq, [TyString], _) -> pure (Builtin EqStr i)
-    (RawEq, [TyList t], [Pred Eq (TyList _)]) -> do
-      _ <- solveOverload i (RawEq, [t], [Pred Eq t])
-      pure (Builtin EqList i)
-      -- pure (App (Builtin EqList i) (d :| []) i)
-    (RawEq, [TyRow _], _) -> pure (Builtin EqObj i)
+    (RawAnd, [] , []) ->
+      pure (Builtin AndBool i)
+    (RawOr, [], []) ->
+      pure (Builtin OrBool i)
+    (RawNot, [], []) ->
+      pure (Builtin NotBool i)
+    -- (==) instance + dyn access
+    -- TODO: TIME
+    (RawEq, [TyInt], _) ->
+      pure (Builtin EqInt i)
+    (RawEq, [TyDecimal], _) ->
+      pure (Builtin EqDec i)
+    (RawEq, [TyString], _) ->
+      pure (Builtin EqStr i)
+    (RawEq, [TyUnit], _) ->
+      pure (Builtin EqUnit i)
+    (RawEq, [TyBool], _) ->
+      pure (Builtin EqBool i)
+    -- Eq for lists essentially builds the closure
+    -- for some type T enclosed by list T
+    -- (\a b -> eqList #eqFnT a b)
+    (RawEq, [TyList t], [p]) -> do
+      listEqualityInstance i RawEq EqList (Pred )
+    (RawEq, [TyRow _], _) ->
+      pure (Builtin EqObj i)
     (RawEq, _, [p]) ->
       accessDict i "==" <$> lookupDictVar i p
-    (RawNeq, [TyInt], _) -> pure (Builtin NeqInt i)
-    (RawNeq, [TyDecimal], _) -> pure (Builtin NeqDec i)
-    (RawNeq, [TyString], _) -> pure (Builtin NeqStr i)
-    (RawNeq, [TyList t], [Pred Eq (TyList _)]) -> do
-      _ <- solveOverload i (RawNeq, [t], [Pred Eq t])
-      pure (Builtin NeqList i)
-      -- pure (App (Builtin NeqList i) (d :| []) i)
-    (RawNeq, [TyRow _], _) -> pure (Builtin NeqObj i)
+    -- (/=) instance + dyn access
+    (RawNeq, [TyInt], _) ->
+      pure (Builtin NeqInt i)
+
+    (RawNeq, [TyDecimal], _) ->
+      pure (Builtin NeqDec i)
+
+    (RawNeq, [TyString], _) ->
+      pure (Builtin NeqStr i)
+
+    (RawNeq, [TyUnit], _) ->
+      pure (Builtin NeqUnit i)
+
+    (RawNeq, [TyBool], _) ->
+      pure (Builtin NeqBool i)
+
+    -- See: comment on list eq instance
+    (RawNeq, [TyList t], [_]) -> do
+      b <- solveOverload i (RawNeq, [t], [Pred Eq t])
+      let a1Var = Name "" (NBound 1)
+          a1 = (a1Var, TyList t)
+          a2Var = Name "" (NBound 0)
+          a2 = (a2Var, TyList t)
+          app = App (Builtin EqList i) (b :| [Var a1Var i, Var a2Var i]) i
+      pure (Lam a1Var (a1 :| [a2]) app i)
+    (RawNeq, [TyRow _], _) ->
+      pure (Builtin NeqObj i)
     (RawNeq, _, [p]) ->
       accessDict i "/=" <$> lookupDictVar i p
-    -- Ord : GT
+    -- Ord : GT (>) instances
+    -- todo: time
     (RawGT, [TyInt], _) ->
       pure (Builtin GTInt i)
+
     (RawGT, [TyDecimal], _) ->
       pure (Builtin GTDec i)
+
     (RawGT, [TyString], _) ->
       pure (Builtin GTStr i)
+
+    (RawGT, [TyUnit], _) ->
+      pure (Builtin NeqUnit i)
+
     (RawGT, [_], [p]) ->
       accessDict i ">" <$> lookupDictVar i p
     -- Ord : GEQ
     (RawGEQ, [TyInt], _) ->
       pure (Builtin GEQInt i)
+
     (RawGEQ, [TyDecimal], _) ->
       pure (Builtin GEQDec i)
+
     (RawGEQ, [TyString], _) ->
       pure (Builtin GEQStr i)
+
+    (RawGEQ, [TyUnit], _) ->
+      pure (Builtin EqUnit i)
+
     (RawGEQ, [_], [p]) ->
       accessDict i ">=" <$> lookupDictVar i p
     -- Ord: LT
     (RawLT, [TyInt], _) ->
       pure (Builtin LTInt i)
+
     (RawLT, [TyDecimal], _) ->
       pure (Builtin LTDec i)
+
     (RawLT, [TyString], _) ->
       pure (Builtin LTStr i)
+
+    (RawLT, [TyUnit], _) ->
+      pure (Builtin NeqUnit i)
+
     (RawLT, [_], [p]) ->
       accessDict i "<" <$> lookupDictVar i p
     -- Ord : LEQ
     (RawLEQ, [TyInt], _) ->
       pure (Builtin LEQInt i)
+
     (RawLEQ, [TyDecimal], _) ->
       pure (Builtin LEQDec i)
+
     (RawLEQ, [TyString], _) ->
       pure (Builtin LEQStr i)
+
+    (RawLEQ, [TyUnit], _) ->
+      pure (Builtin EqUnit i)
+
     (RawLEQ, [_], [p]) ->
       accessDict i "<=" <$> lookupDictVar i p
+
     (RawBitwiseAnd, _, _) ->
       pure (Builtin BitAndInt i)
+
     (RawBitwiseOr, _, _) ->
       pure (Builtin BitOrInt i)
+
     (RawBitwiseXor, _, _) ->
       pure (Builtin BitXorInt i)
+
     (RawBitwiseFlip, _, _) ->
       pure (Builtin BitComplementInt i)
+
     (RawBitShift, _,  _) ->
       pure (Builtin BitShiftInt i)
     -- Todo: OVERLOADS HERE
@@ -268,9 +366,8 @@ resolveOverload = \case
       error "todo: show bool"
     (RawShow, [TyList t], [_]) -> do
       b <- solveOverload i (RawShow, [t], [Pred Show t])
-       -- todo: give this thing the proper type
       let a1Var = Name "" (NBound 0)
-          a1 = (a1Var, TyString)
+          a1 = (a1Var, t)
           app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
       pure (Lam a1Var (a1 :| []) app i)
     (RawShow, [_], [p]) ->
@@ -301,6 +398,234 @@ resolveOverload = \case
     -- RawEnumerateStepN -> EnumerateStepN
     -- RawDummy -> Dummy
     -- _ -> undefined
+-------------------------------------------------
+-- Auxiliary data types to group
+-- builtin resolution
+-- todo: time instances
+-------------------------------------------------
+data NumResolution
+  = NumResolution
+  { _nrRawName :: Text
+  , _nrIntInstance :: CoreBuiltin
+  , _nrDecInstance :: CoreBuiltin
+  } deriving Show
+
+data EqResolution
+  = EqResolution
+  { _erRawName :: Text
+  , _erIntInstance :: CoreBuiltin
+  , _erDecInstance :: CoreBuiltin
+  , _erStrInstance :: CoreBuiltin
+  , _erUnitInstance :: CoreBuiltin
+  , _erBoolInstance :: CoreBuiltin
+  , _erListInstance :: CoreBuiltin
+  } deriving Show
+
+data OrdResolution
+  = OrdResolution
+  { _orRawName :: Text
+  , _orIntInstance :: CoreBuiltin
+  , _orDecInstance :: CoreBuiltin
+  , _orStrInstance :: CoreBuiltin
+  , _orUnitInstance :: CoreBuiltin
+  , _orListInstance :: CoreBuiltin }
+  deriving Show
+
+data FracResolution
+  = FracResolution
+  { _frRawName :: Text
+  , _frIntInstance :: CoreBuiltin
+  , _frDecInstance :: CoreBuiltin
+  } deriving Show
+
+
+data ListLikeResolution
+  = ListLikeResolution
+  { _llrRawName :: Text
+  , _llStrInstance :: CoreBuiltin
+  , _llrListInstance :: CoreBuiltin
+  } deriving Show
+
+-- Num instances
+subResolve :: NumResolution
+subResolve =
+  NumResolution
+  { _nrRawName = "-"
+  , _nrIntInstance = SubInt
+  , _nrDecInstance = SubDec }
+
+mulResolve :: NumResolution
+mulResolve =
+  NumResolution
+  { _nrRawName = "*"
+  , _nrIntInstance = MulInt
+  , _nrDecInstance = MulDec }
+
+divResolve :: NumResolution
+divResolve =
+  NumResolution
+  { _nrRawName = "/"
+  , _nrIntInstance = DivInt
+  , _nrDecInstance = DivDec }
+
+absResolve :: NumResolution
+absResolve =
+  NumResolution
+  { _nrRawName = "abs"
+  , _nrIntInstance = AbsInt
+  , _nrDecInstance = AbsDec }
+
+negateResolve :: NumResolution
+negateResolve =
+  NumResolution
+  { _nrRawName = "negate"
+  , _nrIntInstance = NegateInt
+  , _nrDecInstance = NegateDec }
+
+-- Eq instances
+eqResolve :: EqResolution
+eqResolve =
+  EqResolution
+  { _erRawName = "=="
+  , _erIntInstance = EqInt
+  , _erDecInstance = EqDec
+  , _erStrInstance = EqStr
+  , _erUnitInstance = EqUnit
+  , _erBoolInstance = EqBool
+  , _erListInstance = EqList
+  }
+
+neqResolve :: EqResolution
+neqResolve =
+  EqResolution
+  { _erRawName = "/="
+  , _erIntInstance = NeqInt
+  , _erDecInstance = NeqDec
+  , _erStrInstance = NeqStr
+  , _erUnitInstance = NeqUnit
+  , _erBoolInstance = NeqBool
+  , _erListInstance = NeqList
+  }
+
+-- Ord instances
+gtResolve :: OrdResolution
+gtResolve =
+  OrdResolution
+  { _orRawName = ">"
+  , _orIntInstance = GTInt
+  , _orDecInstance = GTDec
+  , _orStrInstance = GTStr
+  , _orUnitInstance = NeqUnit
+  , _orListInstance = GTList
+  }
+
+geqResolve :: OrdResolution
+geqResolve =
+  OrdResolution
+  { _orRawName = ">="
+  , _orIntInstance = GEQInt
+  , _orDecInstance = GEQDec
+  , _orStrInstance = GEQStr
+  , _orUnitInstance = EqUnit
+  , _orListInstance = GEQList
+  }
+
+ltResolve :: OrdResolution
+ltResolve =
+  OrdResolution
+  { _orRawName = "<"
+  , _orIntInstance = LTInt
+  , _orDecInstance = LTDec
+  , _orStrInstance = LTStr
+  , _orUnitInstance = NeqUnit
+  , _orListInstance = LTList
+  }
+
+leqResolve :: OrdResolution
+leqResolve =
+  OrdResolution
+  { _orRawName = "<="
+  , _orIntInstance = LEQInt
+  , _orDecInstance = LEQDec
+  , _orStrInstance = LEQStr
+  , _orUnitInstance = EqUnit
+  , _orListInstance = LEQList
+  }
+
+-- Fractional instances
+lnResolve :: FracResolution
+lnResolve =
+  FracResolution
+  { _frRawName = "ln"
+  , _frIntInstance = LnInt
+  , _frDecInstance = LnDec
+  }
+
+expResolve :: FracResolution
+expResolve =
+  FracResolution
+  { _frRawName = "exp"
+  , _frIntInstance = ExpInt
+  , _frDecInstance = ExpDec
+  }
+
+sqrtResolve :: FracResolution
+sqrtResolve =
+  FracResolution
+  { _frRawName = "sqrt"
+  , _frIntInstance = SqrtInt
+  , _frDecInstance = SqrtDec
+  }
+
+logBaseResolve :: FracResolution
+logBaseResolve =
+  FracResolution
+  { _frRawName = "logBase"
+  , _frIntInstance = LogBaseInt
+  , _frDecInstance = LogBaseDec
+  }
+
+-- ListLike instances
+takeResolve :: ListLikeResolution
+takeResolve =
+  ListLikeResolution
+  { _llrRawName = "take"
+  , _llStrInstance = TakeStr
+  , _llrListInstance = TakeList
+  }
+
+dropResolve :: ListLikeResolution
+dropResolve =
+  ListLikeResolution
+  { _llrRawName = "drop"
+  , _llStrInstance = DropStr
+  , _llrListInstance = DropList
+  }
+
+concatResolve :: ListLikeResolution
+concatResolve =
+  ListLikeResolution
+  { _llrRawName = "concat"
+  , _llStrInstance = ConcatStr
+  , _llrListInstance = ConcatList
+  }
+
+reverseResolve :: ListLikeResolution
+reverseResolve =
+  ListLikeResolution
+  { _llrRawName = "reverse"
+  , _llStrInstance = ReverseStr
+  , _llrListInstance = ReverseList
+  }
+
+
+lengthResolve :: ListLikeResolution
+lengthResolve =
+  ListLikeResolution
+  { _llrRawName = "length"
+  , _llStrInstance = LengthStr
+  , _llrListInstance = LengthList
+  }
 
 varOverloaded :: i -> Pred NamedDeBruijn -> ReaderT ROState IO (EvalTerm i)
 varOverloaded i (Pred tc ty) = case tc of

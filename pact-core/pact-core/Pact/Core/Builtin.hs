@@ -20,7 +20,8 @@ data ObjectOp o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 {-
-  Builtin operators, grouped by the current type class hierarchy:
+  [Typeclasses and Instances]
+  Builtin operator overloads, grouped by the current type class hierarchy:
 
   class Add a where
     (+) :: a -> a -> a
@@ -335,8 +336,8 @@ data CoreBuiltin
   | LengthList
   | ConcatList
   | ReverseList
-  | FilterList
   -- Misc list ops
+  | FilterList
   | DistinctList
   | MapList
   | ZipList
@@ -357,43 +358,26 @@ coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
 -- IntOps
   AddInt -> "addInt"
+  -- Int Num functions
   SubInt -> "subInt"
   DivInt -> "divInt"
   MulInt -> "mulInt"
   NegateInt -> "negateInt"
   AbsInt -> "absInt"
-  LogBaseInt -> "logBaseInt"
-  ModInt -> "modInt"
+  -- Int fractional
   ExpInt -> "expInt"
   LnInt -> "lnInt"
+  SqrtInt -> "sqrtInt"
+  LogBaseInt -> "logBaseInt"
+  -- General int ops
+  ModInt -> "modInt"
   BitAndInt -> "bitAndInt"
   BitOrInt -> "bitOrInt"
   BitXorInt -> "bitXorInt"
   BitShiftInt -> "bitShiftInt"
-  BitComplementInt -> "bitFlipInt"
+  BitComplementInt -> "bitComplementInt"
+  -- Int show instance
   ShowInt -> "showInt"
- -- If
-  IfElse -> "if"
-  -- Decimal ops
-  AddDec -> "addDec"
-  SubDec -> "subDec"
-  DivDec -> "divDec"
-  MulDec -> "mulDec"
-  NegateDec -> "negateDec"
-  AbsDec -> "absDec"
-  RoundDec -> "roundDec"
-  CeilingDec -> "ceilingDec"
-  ExpDec -> "expDec"
-  FloorDec -> "floorDec"
-  LnDec -> "lnDec"
-  LogBaseDec -> "logBaseDec"
-  ShowDec -> "showDec"
-  -- Bool Comparisons
-  AndBool -> "andBool"
-  OrBool -> "orBool"
-  NotBool -> "notBool"
-  EqBool -> "eqBool"
-  NeqBool -> "neqBool"
   -- Int Equality
   EqInt -> "eqInt"
   NeqInt -> "neqInt"
@@ -401,53 +385,98 @@ coreBuiltinToText = \case
   GEQInt -> "geqInt"
   LTInt -> "ltInt"
   LEQInt -> "leqInt"
+  -- If
+  IfElse -> "ifElse"
+  -- Decimal ops
+  -- Decimal add
+  AddDec -> "addDec"
+  -- Decimal num
+  SubDec -> "subDec"
+  DivDec -> "divDec"
+  MulDec -> "mulDec"
+  NegateDec -> "negateDec"
+  AbsDec -> "absDec"
+  -- Decimal rounding ops
+  RoundDec -> "roundDec"
+  CeilingDec -> "ceilingDec"
+  FloorDec -> "floorDec"
+  -- Decimal rounding ops
+  ExpDec -> "expDec"
+  LnDec -> "lnDec"
+  LogBaseDec -> "logBaseDec"
+  SqrtDec -> "sqrtDec"
+  -- Decimal Show
+  ShowDec -> "showDec"
   -- Decimal Equality
-  EqDec -> "eqInt"
+  EqDec -> "eqDec"
   NeqDec -> "neqDec"
+  -- Decimal ord
   GTDec -> "gtDec"
   GEQDec -> "geqDec"
   LTDec -> "ltDec"
   LEQDec -> "leqDec"
+  -- Bool Comparisons
+  AndBool -> "andBool"
+  OrBool -> "orBool"
+  NotBool -> "notBool"
+  -- other bool ops
+  EqBool -> "eqBool"
+  NeqBool -> "neqBool"
+  ShowBool -> "showBool"
   -- String Equality
   EqStr -> "eqStr"
   NeqStr -> "neqStr"
+  -- String Ord
   GTStr -> "gtStr"
-  GEQStr -> "geqStr"
-  LTStr -> "ltStr"
-  LEQStr -> "leqStr"
+  GEQStr -> "gtStr"
+  LTStr -> "gtStr"
+  LEQStr -> "gtStr"
+   -- String Add
+  AddStr -> "addStr"
+  -- String ListLike
+  ConcatStr -> "concatStr"
+  DropStr -> "dropStr"
+  TakeStr -> "takeStr"
+  LengthStr -> "lengthStr"
+  ReverseStr -> "reverseStr"
+  -- String Show
+  ShowStr -> "showStr"
   -- Object equality
   EqObj -> "eqObj"
   NeqObj -> "neqObj"
   -- List Equality
   EqList -> "eqList"
   NeqList -> "neqList"
+  -- List Ord
+  GTList -> "gtList"
+  GEQList -> "geqList"
+  LTList -> "ltList"
+  LEQList -> "leqList"
+  -- List Show
   ShowList -> "showList"
-  -- String Ops
-  AddStr -> "addStr"
-  ConcatStr -> "concatStr"
-  DropStr -> "dropStr"
-  TakeStr -> "takeStr"
-  LengthStr -> "lengthStr"
-  ShowStr -> "showStr"
+  -- List Add
+  AddList -> "addList"
+  -- ListLike List
+  TakeList -> "takeList"
+  DropList -> "dropList"
+  LengthList -> "lengthList"
+  ConcatList -> "concatList"
+  ReverseList -> "reverseList"
+  -- Misc list ops
+  FilterList -> "filterList"
+  DistinctList -> "distinctList"
+  MapList -> "mapList"
+  ZipList -> "zipList"
+  FoldList -> "foldList"
   -- Unit ops
   EqUnit -> "eqUnit"
   NeqUnit -> "neqUnit"
   ShowUnit -> "showUnit"
-  -- List ops
-  AddList -> "addList"
-  DistinctList -> "distinctList"
-  TakeList -> "takeList"
-  DropList -> "dropList"
-  LengthList -> "lengthList"
-  FilterList -> "filter"
-  MapList -> "map"
-  FoldList -> "fold"
-  ZipList -> "zip"
-  -- Rest
+  -- Others
   Enforce -> "enforce"
-  EnforceOne -> "enforce-one"
+  EnforceOne -> "enforceOn"
   Enumerate -> "enumerate"
-  EnumerateStepN -> "enumerateStepN"
+  EnumerateStepN -> "enumerateStep"
   Dummy -> "dummy"
 
 instance Pretty RawBuiltin where

@@ -16,6 +16,7 @@ import Data.Text(Text)
 import Data.Decimal(roundTo', Decimal)
 import Data.Bits
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.Vector(Vector)
 
 import qualified Data.RAList as RAList
 import qualified Data.Vector as V
@@ -156,8 +157,8 @@ bitAndInt = binaryIntFn (.&.)
 bitOrInt :: BuiltinFn b
 bitOrInt = binaryIntFn (.|.)
 
-bitFlipInt :: BuiltinFn b
-bitFlipInt = unaryIntFn complement
+bitComplementInt :: BuiltinFn b
+bitComplementInt = unaryIntFn complement
 
 bitXorInt :: BuiltinFn b
 bitXorInt = binaryIntFn xor
@@ -298,6 +299,13 @@ addStr =  BuiltinFn \case
   VLiteral (LString i) :| [VLiteral (LString i')] -> pure (VLiteral (LString (i <> i')))
   _ -> fail "impossible"
 
+concatStr :: BuiltinFn b
+concatStr = BuiltinFn \case
+  VList li :| [] -> do
+    li' <- traverse asString li
+    pure (VLiteral (LString (T.concat (V.toList li'))))
+  _ -> fail "impossible"
+
 ---------------------------
 -- Object ops
 ---------------------------
@@ -323,6 +331,10 @@ asBool _ = fail "impossible"
 asString :: CEKValue b -> EvalT b Text
 asString (VLiteral (LString b)) = pure b
 asString _ = fail "impossible"
+
+asList :: CEKValue b -> EvalT b (Vector (CEKValue b))
+asList (VList l) = pure l
+asList _ = fail "impossible"
 
 unsafeEqLiteral :: Literal -> Literal -> Bool
 unsafeEqLiteral (LString i) (LString i') = i == i'
@@ -432,11 +444,11 @@ coreEnumerateStepN = BuiltinFn \case
     | from == to && step == 0 = pure $ toVecList $ V.singleton from
     | otherwise = fail "enumerate outside interval bounds"
 
-coreConcat :: BuiltinFn b
-coreConcat = BuiltinFn \case
+concatList :: BuiltinFn b
+concatList = BuiltinFn \case
   VList li :| [] -> do
-    li' <- traverse asString li
-    pure (VLiteral (LString (T.concat (V.toList li'))))
+    li' <- traverse asList li
+    pure (VList (V.concat (V.toList li')))
   _ -> fail "impossible"
 
 -----------------------------------
@@ -455,94 +467,117 @@ unimplemented = BuiltinFn \case
 
 coreBuiltinFn :: CoreBuiltin -> BuiltinFn CoreBuiltin
 coreBuiltinFn = \case
-  -- IntOps
+  -- Int Add + num ops
   AddInt -> addInt
   SubInt -> subInt
   DivInt -> divInt
   MulInt -> mulInt
   NegateInt -> negateInt
   AbsInt -> absInt
-  LogBaseInt -> unimplemented
-  ModInt -> modInt
+  -- Int fractional
   ExpInt -> expInt
   LnInt -> lnInt
+  SqrtInt -> unimplemented
+  LogBaseInt -> unimplemented
+  -- Geenral int ops
+  ModInt -> modInt
   BitAndInt -> bitAndInt
   BitOrInt -> bitOrInt
   BitXorInt ->  bitXorInt
   BitShiftInt -> bitShiftInt
-  BitComplementInt -> bitFlipInt
-  ShowInt -> showInt
-  -- If
-  IfElse -> coreIf
-  -- Decimal ops
-  AddDec -> addDec
-  SubDec -> subDec
-  DivDec -> divDec
-  MulDec -> mulDec
-  NegateDec -> negateDec
-  AbsDec -> absDec
-  RoundDec -> roundDec
-  CeilingDec -> ceilingDec
-  ExpDec -> expDec
-  FloorDec -> floorDec
-  LnDec -> lnDec
-  LogBaseDec -> unimplemented
-  ShowDec -> showDec
-  -- Bool Comparisons
-  AndBool -> andBool
-  OrBool -> orBool
-  NotBool -> notBool
-  EqBool -> eqBool
-  NeqBool -> neqBool
-  -- Int Equality
+  BitComplementInt -> bitComplementInt
+  -- Int Equality + Ord
   EqInt -> eqInt
   NeqInt -> neqInt
   GTInt -> gtInt
   GEQInt -> geqInt
   LTInt -> ltInt
   LEQInt -> leqInt
-  -- Decimal Equality
+  -- IntShow inst
+  ShowInt -> showInt
+  -- If
+  IfElse -> coreIf
+  -- Decimal ops
+  -- Add + Num
+  AddDec -> addDec
+  SubDec -> subDec
+  DivDec -> divDec
+  MulDec -> mulDec
+  NegateDec -> negateDec
+  AbsDec -> absDec
+  -- Decimal rounding ops
+  RoundDec -> roundDec
+  CeilingDec -> ceilingDec
+  FloorDec -> floorDec
+  -- Decimal fractional
+  ExpDec -> expDec
+  LnDec -> lnDec
+  LogBaseDec -> unimplemented
+  SqrtDec -> unimplemented
+  -- Decimal show
+  ShowDec -> showDec
+  -- Decimal Equality + Ord
   EqDec -> eqDec
   NeqDec -> neqDec
   GTDec -> gtDec
   GEQDec -> geqDec
   LTDec -> ltDec
   LEQDec -> leqDec
-  -- String Equality
+  -- Bool Ops
+  AndBool -> andBool
+  OrBool -> orBool
+  NotBool -> notBool
+  -- Bool Equality
+  EqBool -> eqBool
+  NeqBool -> neqBool
+  ShowBool -> unimplemented
+  -- String Equality + Ord
   EqStr -> eqStr
   NeqStr -> neqStr
   GTStr -> gtStr
   GEQStr -> geqStr
   LTStr -> ltStr
   LEQStr -> leqStr
-  -- Object equality
-  EqObj -> eqObj
-  NeqObj -> neqObj
-  -- List Equality
-  EqList -> eqList
-  NeqList -> neqList
-  ShowList -> pcShowList
   -- String Ops
   AddStr -> addStr
-  ConcatStr -> coreConcat
+  -- String listlike
+  ConcatStr -> concatStr
   DropStr -> unimplemented
   TakeStr -> unimplemented
   LengthStr -> unimplemented
+  ReverseStr -> unimplemented
+  -- String show
   ShowStr -> unimplemented
+  -- Object equality
+  EqObj -> eqObj
+  NeqObj -> neqObj
+  -- List Equality + Ord
+  EqList -> eqList
+  NeqList -> neqList
+  GTList -> unimplemented
+  GEQList -> unimplemented
+  LTList -> unimplemented
+  LEQList -> unimplemented
+  -- List Show
+  ShowList -> pcShowList
+  -- ListAdd
+  AddList -> addList
+  -- List ListlLike
+  TakeList -> takeList
+  DropList -> dropList
+  LengthList -> lengthList
+  ConcatList -> concatList
+  ReverseList -> unimplemented
+  -- misc list ops
+  FilterList -> coreFilter
+  DistinctList -> unimplemented
+  ZipList -> unimplemented
+  MapList -> coreMap
+  FoldList -> coreFold
   -- Unit ops
   EqUnit -> unimplemented
   NeqUnit -> unimplemented
   ShowUnit -> unimplemented
-  -- ListOps
-  AddList -> addList
-  DistinctList -> unimplemented
-  TakeList -> takeList
-  DropList -> dropList
-  LengthList -> lengthList
-  FilterList -> coreFilter
-  ZipList -> unimplemented
-  MapList -> coreMap
-  FoldList -> coreFold
   Enforce -> unimplemented
   EnforceOne -> unimplemented
   Enumerate -> coreEnumerate
