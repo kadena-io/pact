@@ -19,14 +19,13 @@ import Data.Vector (Vector)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Set as Set
 
-import Pact.Types.Hash (Hash)
-import Pact.Types.Term (ModuleHash(..), Governance(..))
+import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Builtin
 import Pact.Core.Imports
-import qualified Pact.Types.Names as PNames
+import Pact.Core.Guards
 
 
 -- Todo: Not sure if this type is useful at all,
@@ -113,12 +112,6 @@ data TopLevel name tyname builtin info
   | TLInterface (Interface name tyname builtin info)
   | TLTerm (Term name tyname builtin info)
   deriving Show
-
-type TermP = Term PNames.Name Text RawBuiltin
-type DefP = Def PNames.Name Text RawBuiltin
-type ModuleP = Module PNames.Name Text RawBuiltin
-type TopLevelP = TopLevel PNames.Name Text RawBuiltin
-type CoreIRProgramP info = [TopLevelP info]
 
 -- | Core IR
 data Term name tyname builtin info

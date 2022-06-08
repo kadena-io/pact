@@ -334,7 +334,6 @@ library pact-core
   import:  pact-common
   hs-source-dirs: pact-core/pact-core
   build-depends:
-    , pact
     , criterion >= 1.1.4 && < 1.6
     , cryptonite
     , direct-sqlite == 2.3.26
@@ -363,6 +362,7 @@ library pact-core
     Pact.Core.Pretty
     Pact.Core.Compile
     Pact.Core.Runtime
+    Pact.Core.Gas
     -- Pact.Core.Repl
     -- Core IR modules
     Pact.Core.IR.Parse

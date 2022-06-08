@@ -641,15 +641,16 @@ addDict add i =
   where
   o = Map.singleton (Field "+") (Builtin add i)
 
-numDict :: b -> b -> b -> b -> i -> Term n tn b i
-numDict sub mul divv neg i =
+numDict :: b -> b -> b -> b -> b-> i -> Term n tn b i
+numDict sub mul divv neg abs' i =
   ObjectLit o i
   where
   o = Map.fromList
     [ (Field "-", Builtin sub i)
     , (Field "*", Builtin mul i)
     , (Field "/", Builtin divv i)
-    , (Field "negate", Builtin neg i)]
+    , (Field "negate", Builtin neg i)
+    , (Field "abs", Builtin abs' i)]
 
 eqInt :: info -> EvalTerm info
 eqInt = eqDict EqInt NeqInt
@@ -673,8 +674,8 @@ eqTime :: info -> EvalTerm info
 eqTime = undefined
 
 numInt, numDec :: info -> EvalTerm info
-numInt = numDict SubInt MulInt DivInt NegateInt
-numDec = numDict AddDec MulDec DivDec NegateDec
+numInt = numDict SubInt MulInt DivInt NegateInt AbsInt
+numDec = numDict AddDec MulDec DivDec NegateDec AbsDec
 
 addInt, addDec, addStr, addList :: info -> EvalTerm info
 addInt = addDict AddInt

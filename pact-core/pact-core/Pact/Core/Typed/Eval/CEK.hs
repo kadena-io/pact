@@ -46,7 +46,7 @@ import Pact.Core.Guards
 import Pact.Core.Typed.Term
 import Pact.Core.Builtin
 import Pact.Core.Pretty(Pretty(..), (<+>))
-import Pact.Types.Gas
+import Pact.Core.Gas
 import qualified Pact.Core.Pretty as P
 
 type CEKTLEnv b = Map DeclName (CEKValue b)
