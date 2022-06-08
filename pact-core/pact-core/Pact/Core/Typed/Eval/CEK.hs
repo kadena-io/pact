@@ -1,4 +1,3 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
@@ -6,9 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -110,7 +107,7 @@ eval = evalCEK Mt
       NBound i ->
         env RAList.!! i
       NTopLevel m mh ->
-        ?cekLoaded Map.! (DeclName mh (_nName n) m)
+        ?cekLoaded Map.! DeclName mh (_nName n) m
   evalCEK cont _env (Constant l _)=
     returnCEK cont (VLiteral l)
   evalCEK cont env (App fn arg _) =
@@ -198,7 +195,7 @@ instance Pretty b => Pretty (CEKValue b) where
     VLiteral i -> pretty i
     VObject o ->
       let toBind (k, e) = pretty k <> ":" <> pretty e
-      in P.braces $ P.hsep (P.punctuate P.comma (toBind <$> (Map.toList o)))
+      in P.braces $ P.hsep (P.punctuate P.comma (toBind <$> Map.toList o))
     VList v ->
       P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
     VClosure n _ _ _ ->

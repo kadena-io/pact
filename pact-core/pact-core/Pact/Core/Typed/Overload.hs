@@ -339,7 +339,9 @@ resolveOverload = \case
       pure (Builtin Enumerate i)
     (RawEnumerateStepN, [], []) ->
       pure (Builtin EnumerateStepN i)
-
+    (RawFold, [l, r], []) ->
+      let b = Builtin FoldList i
+      in pure (TyApp b (l :| [r]) i)
     _ -> error "could not resolve overload"
 
 -------------------------------------------------

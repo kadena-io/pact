@@ -72,13 +72,6 @@ moduleDeclName = do
   rest <- takeWhileP Nothing isAlphaNum
   pure (T.cons c rest)
 
--- moduleName :: Parser ModuleName
--- moduleName = do
---   a <- moduleDeclName
---   b <- optional (dot *> moduleDeclName)
---   case b of
---     Nothing -> return (ModuleName a Nothing) <?> "module name"
---     Just b' -> return (ModuleName b' (Just . NamespaceName $ a)) <?> "namespaced module name"
 
 qualifiedName :: Parser QualifiedName
 qualifiedName = do
@@ -181,7 +174,7 @@ ifStatement = do
   where
   ifStatement' i = L.indentBlock spaceConsumerNL $ do
     condE <- between (symbol "if") (symbol "then") expr
-    (thenElseExpr condE) <|> (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE . (Block (NE.fromList bloc) (),) <$> thenElseStmt) statement))
+    thenElseExpr condE <|> (try (singleChar '{') *> pure (L.IndentSome (pactIndent i) (\bloc -> mkIf condE . (Block (NE.fromList bloc) (),) <$> thenElseStmt) statement))
     where
     mkIf condE (b1, b2) = If condE b1 b2 ()
     thenElseStmt = L.indentBlock spaceConsumerNL $ do
@@ -307,12 +300,12 @@ objUpdate = Postfix $ braces $ do
 
 
 varExpr :: Parser (Expr ParsedName ())
-varExpr = fmap (flip Var ()) $
+varExpr = fmap (`Var` ()) $
   (QN <$> try qualifiedName)
   <|> (BN . BareName <$> variable)
 
 constantExpr :: Parser (Expr name ())
-constantExpr = fmap (flip Constant ()) $
+constantExpr = fmap (`Constant` ()) $
   intLiteral
   <|> boolLiteral
   <|> unitLiteral
@@ -326,7 +319,7 @@ expr' = do
   applications b = do
     bs <- many app
     pure $ foldl' (\e apps -> App e apps ()) b bs
-  app = parens $ (appWithArgs <|> pure [])
+  app = parens (appWithArgs <|> pure [])
   appWithArgs = do
     arg1 <- expr
     args <- many (singleChar ',' *> expr)

@@ -346,6 +346,9 @@ library pact-core
     , primitive
     , haskeline
     , exceptions
+  build-tool-depends:
+    , alex:alex
+    , happy:happy
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
@@ -366,6 +369,8 @@ library pact-core
     -- Pact.Core.Repl
     -- Core IR modules
     Pact.Core.IR.Parse
+    Pact.Core.IR.LexUtils
+    -- Pact.Core.IR.ParseHappy
     Pact.Core.IR.ParseAtto
     Pact.Core.IR.ParseTree
     Pact.Core.IR.Term

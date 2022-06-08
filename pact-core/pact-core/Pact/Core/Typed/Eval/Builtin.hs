@@ -49,7 +49,7 @@ unsafeApplyTwo (VClosure cn (_:ns) body env) arg1 arg2 = case ns of
   _:ms -> case ms of
     [] -> applyTwo body env arg1 arg2
     _ ->
-      let env' = (RAList.cons arg2 (RAList.cons arg1 env))
+      let env' = RAList.cons arg2 (RAList.cons arg1 env)
       in pure (VClosure cn ms body env')
 unsafeApplyTwo (VNative b) arg1 arg2 = do
   let (BuiltinFn f) = Array.indexArray ?cekBuiltins (fromEnum b)
