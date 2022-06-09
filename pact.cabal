@@ -346,6 +346,7 @@ library pact-core
     , primitive
     , haskeline
     , exceptions
+    , array
   build-tool-depends:
     , alex:alex
     , happy:happy
@@ -370,12 +371,12 @@ library pact-core
     -- Core IR modules
     Pact.Core.IR.Parse
     Pact.Core.IR.LexUtils
-    -- Pact.Core.IR.ParseHappy
+    Pact.Core.IR.Lexer
+    Pact.Core.IR.ParseHappy
     Pact.Core.IR.ParseAtto
     Pact.Core.IR.ParseTree
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck
-    Pact.Core.IR.Bidirectional
     Pact.Core.IR.Desugar
     -- Typed core modules
     Pact.Core.Typed.Renamer
