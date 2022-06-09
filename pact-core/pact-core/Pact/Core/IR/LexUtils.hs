@@ -75,6 +75,8 @@ data Token
   | TokenAnd
   | TokenOr
   | TokenIdent !Text
+  | TokenInteger Text
+  | TokenDecimal Text
   -- Layout
   | TokenVOpen
   | TokenVSemi

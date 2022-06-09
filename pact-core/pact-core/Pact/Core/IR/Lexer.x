@@ -23,6 +23,8 @@ $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
+@decimal = [$digit]\.[$digit]+
+@integer = [$digit]+
 @tyvar = [\'][$lower]+
 
 
@@ -73,6 +75,8 @@ tokens :-
 <0> \@           { token TokenObjAccess }
 <0> \#           { token TokenObjRemove }
 <0> @ident       { emit  TokenIdent }
+<0> @integer     { emit TokenInteger }
+<0> @decimal     { emit TokenDecimal }
 <0> \-\>         { token TokenTyArrow }
 <0> \n           { handleNewline }
 
