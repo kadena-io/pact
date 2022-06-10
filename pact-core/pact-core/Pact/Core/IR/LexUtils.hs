@@ -4,6 +4,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+
 module Pact.Core.IR.LexUtils where
 
 import Control.Lens hiding (uncons)
@@ -18,6 +19,18 @@ import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.ByteString.Lazy as B
 
+import Pact.Core.Info
+import Pact.Core.Names
+import Pact.Core.IR.ParseTree
+
+type ParserT = Either String
+type ParsedExpr = Expr ParsedName LineInfo
+
+data PosToken =
+  PosToken
+  { _ptToken :: Token
+  , _ptInfo :: LineInfo }
+  deriving Show
 
 data Token
   -- Keywords
@@ -46,6 +59,8 @@ data Token
   | TokenOpenBracket
   | TokenCloseBracket
   | TokenComma
+  | TokenSemiColon
+  | TokenDot
   -- Types
   | TokenTyList
   | TokenTyTable
@@ -75,8 +90,10 @@ data Token
   | TokenAnd
   | TokenOr
   | TokenIdent !Text
-  | TokenInteger Text
-  | TokenDecimal Text
+  | TokenNumber !Text
+  | TokenString !Text
+  | TokenTrue
+  | TokenFalse
   -- Layout
   | TokenVOpen
   | TokenVSemi
@@ -166,11 +183,21 @@ initState :: ByteString -> LexState
 initState s =
   LexState (AlexInput 0 1 '\n' s) (0 :| []) [] (-1)
 
-emit :: (Text -> Token) -> Text -> LexerT Token
-emit = (pure .)
+getLineInfo :: LexerT LineInfo
+getLineInfo = do
+  input <- gets _lexInput
+  pure (LineInfo (_inpLine input) (_inpColumn input) 1)
 
-token :: Token -> Text -> LexerT Token
-token = const . pure
+withLineInfo :: Token -> LexerT PosToken
+withLineInfo tok = do
+  info <- getLineInfo
+  pure (PosToken tok info)
+
+emit :: (Text -> Token) -> Text -> LexerT PosToken
+emit f e = withLineInfo (f e)
+
+token :: Token -> Text -> LexerT PosToken
+token tok = const (withLineInfo tok)
 
 runLexerT :: LexerT a -> ByteString -> Either String a
 runLexerT act s = evalStateT act (initState s)

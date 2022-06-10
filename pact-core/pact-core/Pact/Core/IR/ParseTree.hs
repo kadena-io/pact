@@ -20,13 +20,17 @@ import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Pretty
 
+data Arg i
+  = Arg Text Type i
+  deriving Show
 
 data Defun name i
   = Defun
-  { _dfunName :: Text
-  , _dfunArgs :: [(Text, Maybe Type)]
-  , _dfunTerm :: Expr name i
-  , _dfunTermType :: Maybe Type
+  { _dfunName :: !Text
+  , _dfunArgs :: ![Arg i]
+  , _dfunTerm :: (Expr name i)
+  , _dfunTermType :: Type
+  , _dfunInfo :: i
   } deriving Show
 
 data DefConst name i
@@ -34,12 +38,13 @@ data DefConst name i
   { _dcName :: Text
   , _dcType :: Maybe Type
   , _dcTerm :: Expr name i
+  , _dcInfo :: i
   } deriving Show
 
 data DefCap name i
   = DefCap
   { _dcapName :: Text
-  , _dcapArgs :: [(Text, Maybe Type)]
+  , _dcapArgs :: ![Arg i]
   , _dcapTerm :: Expr name i
   } deriving Show
 
@@ -67,6 +72,7 @@ data Interface name i
 data IfDefun i
   = IfDefun
   { _ifdName :: Text
+  , _ifdArgs :: [Arg i]
   , _ifdType :: Type
   , _ifdInfo :: i
   } deriving Show
@@ -141,7 +147,7 @@ instance Pretty Type where
       _ -> pretty l <+> "->" <+> pretty r
     TyList t -> "List" <+> renderListParens t (pretty t)
     TyObject fields r ->
-      "{" <> fold (intersperse ", " $ renderMapObjs <$> (Map.toList fields)) <> renderRowVar r <> "}"
+      "{" <> fold (intersperse ", " $ renderMapObjs <$> Map.toList fields) <> renderRowVar r <> "}"
     TyCap -> "Capability"
     where
     renderMapObjs (Field f, t) = pretty f <+> ":" <+> pretty t

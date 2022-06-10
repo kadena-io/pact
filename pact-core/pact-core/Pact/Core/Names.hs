@@ -170,6 +170,9 @@ instance Eq TypeVar where
 instance Ord TypeVar where
   l <= r = _tyVarUnique l <= _tyVarUnique r
 
+instance Pretty TypeVar where
+  pretty t = pretty (_tyVarName t)
+
 data TypeName
   = TypeName
   { _tyname :: !Text
@@ -185,6 +188,9 @@ instance (Pretty b) => Pretty (OverloadedName b) where
     OBound _ -> pretty n
     OBuiltinDict b -> "DICT<" <> pretty b <> ">"
     _ -> undefined
+
+instance Pretty IRName where
+  pretty r = pretty (_irName r)
 
 instance Pretty Name where
   pretty (Name n nk) = case nk of

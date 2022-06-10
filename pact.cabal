@@ -349,7 +349,7 @@ library pact-core
     , array
   build-tool-depends:
     , alex:alex
-    , happy:happy
+    , happy:happy >= 1.19.12 && < 2.0
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
@@ -367,6 +367,8 @@ library pact-core
     Pact.Core.Compile
     Pact.Core.Runtime
     Pact.Core.Gas
+    Pact.Core.Info
+    Pact.Core.Errors
     -- Pact.Core.Repl
     -- Core IR modules
     Pact.Core.IR.Parse

@@ -1181,13 +1181,9 @@ rawBuiltinType = \case
         c = TyVar cVar
     in TypeScheme [aVar, bVar, cVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
   RawIf ->
-    let aVar = nd "a" 2
-        bVar = nd "b" 1
-        cVar = nd "c" 0
+    let aVar = nd "a" 0
         a = TyVar aVar
-        b = TyVar bVar
-        c = TyVar cVar
-    in TypeScheme [aVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
+    in TypeScheme [aVar] [] (TyBool :~> (TyUnit :~> a) :~> (TyUnit :~> a) :~> a)
   RawIntToStr ->
     TypeScheme [] [] (TyInt :~> TyString)
   RawStrToInt ->

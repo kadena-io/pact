@@ -1,6 +1,8 @@
 {
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 
 
 module Pact.Core.IR.Lexer where
@@ -10,9 +12,12 @@ import Pact.Core.IR.LexUtils
 import Data.Text(Text)
 import Control.Lens hiding (uncons)
 import Control.Monad.State.Strict
+import Data.ByteString.Lazy(ByteString)
+import Data.ByteString.Internal(w2c)
 import Control.Monad.Except
 
 import qualified Data.ByteString.Lazy as B
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 }
@@ -23,7 +28,7 @@ $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
-@decimal = [$digit]\.[$digit]+
+@decimal = [$digit]+
 @integer = [$digit]+
 @tyvar = [\'][$lower]+
 
@@ -47,6 +52,9 @@ tokens :-
 <0> bless        { token TokenBless }
 <0> implements   { token TokenImplements }
 <0> list         { token TokenTyList }
+<0> true         { token TokenTrue }
+<0> false        { token TokenFalse }
+<0> bool         { token TokenTyBool }
 
 <0> \(           { token TokenOpenParens }
 <0> \)           { token TokenCloseParens }
@@ -55,6 +63,8 @@ tokens :-
 <0> \[           { token TokenOpenBracket }
 <0> \]           { token TokenCloseBracket }
 <0> \,           { token TokenComma }
+<0> \.           { token TokenDot }
+<0> \:           { token TokenSemiColon }
 <0> \\           { token TokenLambda }
 <0> \=\>         { token TokenLambdaArrow}
 <0> \=\=         { token TokenEq }
@@ -74,26 +84,21 @@ tokens :-
 <0> \|           { token TokenBitAnd }
 <0> \@           { token TokenObjAccess }
 <0> \#           { token TokenObjRemove }
-<0> @ident       { emit  TokenIdent }
-<0> @integer     { emit TokenInteger }
-<0> @decimal     { emit TokenDecimal }
+<0> \"           { stringLiteral }
+<0> @integer     { emit TokenNumber }
+<0> @ident       { emit TokenIdent }
 <0> \-\>         { token TokenTyArrow }
+<0> \r\n         { handleNewline }
 <0> \n           { handleNewline }
 
 <openBrace> {
   "--".*;
   [\n]+[\ \t]* { beginLayout }
-  ();
-}
-
-<closeBrace> {
-  "--".*;
-  [\n][\ \t] { closeLayout }
-  ();
+  () { \_ -> popStartCode *> scan }
 }
 
 <newline> {
-  \n         ;
+  \n       ;
   "--".*\n ;
 
   () { offsideRule }
@@ -102,16 +107,13 @@ tokens :-
 <eof> () { doEOF }
 
 {
--- handleEOF = do
---   -- TODO: handle layout
---   pure TkEOF
 -- Todo: non-horrible errors
-scan :: LexerT Token
+scan :: LexerT PosToken
 scan = do
   input@(AlexInput _ _ _ bs) <- gets _lexInput
   startcode <- startCode
   case alexScan input startcode of
-    AlexEOF -> pure TokenEOF
+    AlexEOF -> handleEOF
     AlexError (AlexInput _ _ _ inp) ->
       throwError $ "Lexical error: " ++ show (B.head inp)
     AlexSkip input' _ -> do
@@ -119,7 +121,8 @@ scan = do
       scan
     AlexToken input' tokl action -> do
       modify' $ \s -> s { _lexInput = input' }
-      action (T.decodeLatin1 (B.toStrict (B.take (fromIntegral tokl) bs)))
+      let t = T.decodeLatin1 (B.toStrict (B.take (fromIntegral tokl) bs))
+      action t
 
 
 -- Starting a layout inserts the "virtual open"
@@ -127,6 +130,7 @@ scan = do
 -- VOpen is how we distinguish something like
 -- defun f(a:integer, b:integer) = {a:1, b:1}
 -- from the alternative which expects a function body
+beginLayout :: Text -> LexerT PosToken
 beginLayout _ = do
   popStartCode
   col <- column
@@ -138,7 +142,7 @@ beginLayout _ = do
       let currIndent = col - lz
       when (currIndent <= 0 || currIndent /= indentSize) $ throwError "Lexical error, invalid indentation"
       pushLayout (Layout (lz + indentSize))
-      pure TokenVOpen
+      withLineInfo TokenVOpen
     -- We're _not_ in a layout, so we'll check whether indent size was set at all
     -- Given we're _not_ in an indent block at all, we assume we're @ indent 0
     Nothing -> handleIndent indentSize col
@@ -156,43 +160,87 @@ beginLayout _ = do
         else do
           lexIndentSize .= currIndent
           pushLayout (Layout currIndent)
-          pure TokenVOpen
+          withLineInfo TokenVOpen
     -- Indent has been set before, so there's two cases:
     -- The current indentation greater so it's part of the previous line
-    | currIndent == oldIndent = pure TokenVOpen
+    | currIndent == oldIndent = do
+        pushLayout (Layout (currIndent+oldIndent))
+        withLineInfo TokenVOpen
     | otherwise = throwError "Lexical error: indentation is "
 
+handleNewline :: Text -> LexerT PosToken
 handleNewline _ = pushStartCode newline *> scan
 
+handleEOF :: LexerT PosToken
 handleEOF = pushStartCode eof *> scan
 
+doEOF :: Text -> LexerT PosToken
 doEOF _ = do
   layout >>= \case
-    Nothing -> popStartCode *> pure TokenEOF
-    _ -> popLayout *> pure TokenVClose
+    Nothing -> popStartCode *> withLineInfo TokenEOF
+    _ ->
+      popLayout *> withLineInfo TokenVClose
 
-closeLayout _ = do
-  popLayout
-  pure TokenVClose
-
+offsideRule :: Text -> LexerT PosToken
 offsideRule _ = do
   col <- column
   layout >>= \case
     Just (Layout lcol) -> case compare col lcol of
-      EQ -> popStartCode *> pure TokenVSemi
+      EQ -> popStartCode *> withLineInfo TokenVSemi
       GT -> continue
       LT -> do
         popLayout
-        pure TokenVClose
+        withLineInfo TokenVClose
     Nothing -> continue
   where
   continue = popStartCode *> scan
 
+stringLiteral :: Text -> LexerT PosToken
+stringLiteral _ = do
+  inp <- gets _lexInput
+  info <- getLineInfo
+  body <- loop [] inp
+  pure (PosToken (TokenString (T.pack body)) info)
+  where
+  loop acc inp =
+    case alexGetByte inp of
+      Just (c, rest) ->
+        handleChar acc (w2c c) rest
+      Nothing -> throwError "Lexical error: Did not close string literal"
+  handleChar acc c rest
+    | c == '\\' = escape acc rest
+    | c == '\n' = throwError "Lexical error: newline in string literal"
+    | c == '\r' = throwError "Lexical error: carriage return in string literal"
+    | c == '\"' = reverse acc <$ modify' (\s -> s { _lexInput = rest })
+    | otherwise = loop (c:acc) rest
+  escape acc inp =
+    case alexGetByte inp of
+      Just (w2c -> c, rest)
+        | c == 'n' -> loop ('\n':acc) rest
+        | c == 't' -> loop ('\t':acc) rest
+        | c == '\\' -> loop ('\\':acc) rest
+        | c == '\"' -> loop ('\"':acc) rest
+        | c == 'r' -> throwError "Lexical error: carriage return is not supported in strings literals"
+        | otherwise -> throwError "Lexical error: Invalid escape sequence"
+      Nothing -> throwError "Lexical error: Did not close string literal"
+
+
+
 -- Opening a brace lets us know we're beginning an indented block,
 -- so we push a layout which is
-handleOpenBrace :: Text -> LexerT Token
+handleOpenBrace :: Text -> LexerT PosToken
 handleOpenBrace _ = do
   pushStartCode openBrace
-  pure TokenOpenBrace
+  withLineInfo TokenOpenBrace
 
+scanTokens :: LexerT [PosToken]
+scanTokens = scan' []
+  where
+  scan' acc =
+    scan >>= \case
+      PosToken TokenEOF _ -> pure (reverse acc)
+      tok -> scan' (tok:acc)
+
+lexer :: ByteString -> Either String [PosToken]
+lexer bs = runLexerT scanTokens bs
 }
