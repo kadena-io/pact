@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Pact.Core.IR.ParseHappy where
+module Pact.Core.Syntax.New.Parser where
 
 import Control.Lens(view)
 import Control.Monad.Except
@@ -19,8 +19,8 @@ import Pact.Core.Info
 import Pact.Core.Literal
 import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
-import Pact.Core.IR.ParseTree
-import Pact.Core.IR.LexUtils
+import Pact.Core.Syntax.New.ParseTree
+import Pact.Core.Syntax.New.LexUtils
 
 
 }

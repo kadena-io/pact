@@ -5,9 +5,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 
-module Pact.Core.IR.Lexer where
-
-import Pact.Core.IR.LexUtils
+module Pact.Core.Syntax.New.Lexer where
 
 import Data.Text(Text)
 import Control.Lens hiding (uncons)
@@ -19,6 +17,8 @@ import Control.Monad.Except
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+
+import Pact.Core.Syntax.New.LexUtils
 
 }
 %encoding "latin1"

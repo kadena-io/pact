@@ -355,6 +355,7 @@ library pact-core
   default-language:    Haskell2010
 
   exposed-modules:
+    Pact.Core.Compile
     Pact.Core.Builtin
     Pact.Core.Names
     Pact.Core.Literal
@@ -364,22 +365,22 @@ library pact-core
     Pact.Core.Hash
     Pact.Core.Type
     Pact.Core.Pretty
-    Pact.Core.Compile
     Pact.Core.Runtime
     Pact.Core.Gas
     Pact.Core.Info
     Pact.Core.Errors
+    -- Syntax modules
+    Pact.Core.Syntax.New.ParseTree
+    Pact.Core.Syntax.New.Lexer
+    Pact.Core.Syntax.New.LexUtils
+    Pact.Core.Syntax.New.Parser
+    --
     -- Pact.Core.Repl
     -- Core IR modules
-    Pact.Core.IR.Parse
-    Pact.Core.IR.LexUtils
-    Pact.Core.IR.Lexer
-    Pact.Core.IR.ParseHappy
-    Pact.Core.IR.ParseAtto
-    Pact.Core.IR.ParseTree
     Pact.Core.IR.Term
     Pact.Core.IR.Typecheck
     Pact.Core.IR.Desugar
+
     -- Typed core modules
     Pact.Core.Typed.Renamer
     Pact.Core.Typed.Typecheck

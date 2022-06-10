@@ -1,7 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Pact.Core.IR.ParseTree where
+module Pact.Core.Syntax.New.ParseTree where
 
 import Control.Lens hiding (List, op)
 import Data.Foldable(fold)

@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 
-module Pact.Core.IR.LexUtils where
+module Pact.Core.Syntax.New.LexUtils where
 
 import Control.Lens hiding (uncons)
 import Control.Monad.State.Strict
@@ -21,7 +21,7 @@ import qualified Data.ByteString.Lazy as B
 
 import Pact.Core.Info
 import Pact.Core.Names
-import Pact.Core.IR.ParseTree
+import Pact.Core.Syntax.New.ParseTree
 
 type ParserT = Either String
 type ParsedExpr = Expr ParsedName LineInfo

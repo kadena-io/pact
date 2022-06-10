@@ -23,7 +23,7 @@ import Pact.Core.Type
 import Pact.Core.Literal
 
 import Pact.Core.IR.Term as Term
-import qualified Pact.Core.IR.ParseTree as PT
+import qualified Pact.Core.Syntax.New.ParseTree as PT
 
 type DesugarT = ReaderT DesugarState IO
 
