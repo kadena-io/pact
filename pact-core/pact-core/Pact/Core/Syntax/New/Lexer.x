@@ -7,12 +7,12 @@
 
 module Pact.Core.Syntax.New.Lexer where
 
-import Data.Text(Text)
 import Control.Lens hiding (uncons)
 import Control.Monad.State.Strict
+import Control.Monad.Except
+import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.ByteString.Internal(w2c)
-import Control.Monad.Except
 
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -64,8 +64,8 @@ tokens :-
 <0> table        { token TokenTyTable }
 <0> decimal      { token TokenTyDecimal }
 <0> string       { token TokenTyString }
-
 <0> unit         { token TokenTyUnit }
+
 <0> \(           { token TokenOpenParens }
 <0> \)           { token TokenCloseParens }
 <0> \{           { handleOpenBrace }
@@ -172,9 +172,8 @@ beginLayout _ = do
           pushLayout (Layout currIndent)
           withLineInfo TokenVOpen
     -- Indent has been set before, so there's two cases:
-    -- The current indentation greater so it's part of the previous line
     | currIndent == oldIndent = do
-        pushLayout (Layout (currIndent+oldIndent))
+        pushLayout (Layout oldIndent)
         withLineInfo TokenVOpen
     | otherwise = throwError "Lexical error: indentation is "
 
