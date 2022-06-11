@@ -13,11 +13,11 @@ import Data.Word (Word8)
 import Data.Text(Text)
 import Data.List(uncons)
 import Data.ByteString.Internal(w2c)
-import Data.ByteString.Lazy(ByteString)
+import Data.ByteString(ByteString)
 import Data.List.NonEmpty(NonEmpty(..))
 
 import qualified Data.List.NonEmpty as NE
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as B
 
 import Pact.Core.Info
 import Pact.Core.Names

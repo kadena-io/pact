@@ -10,11 +10,11 @@ module Pact.Core.Syntax.New.Lexer where
 import Data.Text(Text)
 import Control.Lens hiding (uncons)
 import Control.Monad.State.Strict
-import Data.ByteString.Lazy(ByteString)
+import Data.ByteString(ByteString)
 import Data.ByteString.Internal(w2c)
 import Control.Monad.Except
 
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
@@ -131,7 +131,7 @@ scan = do
       scan
     AlexToken input' tokl action -> do
       modify' $ \s -> s { _lexInput = input' }
-      let t = T.decodeLatin1 (B.toStrict (B.take (fromIntegral tokl) bs))
+      let t = T.decodeLatin1 (B.take (fromIntegral tokl) bs)
       action t
 
 
@@ -200,7 +200,7 @@ offsideRule _ = do
         popStartCode *> withLineInfo TokenVSemi
       GT -> continue
       LT -> do
-        popStartCode  
+        popStartCode
         popLayout
         withLineInfo TokenVClose
     Nothing -> continue

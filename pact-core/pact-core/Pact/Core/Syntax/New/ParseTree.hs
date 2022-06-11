@@ -69,7 +69,7 @@ data Module name i
   { _mName :: ModuleName
   , _mGovernance :: Governance Text
   , _mExternal :: [ExtDecl]
-  , _mDefs :: (NonEmpty (Def name i))
+  , _mDefs :: NonEmpty (Def name i)
   } deriving Show
 
 data Interface name i

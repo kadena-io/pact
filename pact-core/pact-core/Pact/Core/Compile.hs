@@ -9,7 +9,7 @@
 module Pact.Core.Compile where
 
 
-import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString as BL
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.IR.Desugar as IR
@@ -17,7 +17,6 @@ import qualified Pact.Core.IR.Typecheck as IR
 import qualified Pact.Core.Typed.Overload as Typed
 import qualified Pact.Core.Typed.Eval.CEK as Runtime
 import qualified Pact.Core.Typed.Eval.Builtin as Runtime
-
 
 import qualified Pact.Core.Syntax.New.LexUtils as NLex
 import qualified Pact.Core.Syntax.New.Lexer as NLex
@@ -36,7 +35,7 @@ _compile source = do
   prettyPrint parsed
   (desugared, sup) <- IR.runDesugarTerm parsed
   putStrLn "----- Desugared term ----- "
-  putStrLn (show desugared)
+  print desugared
   let (ty, typed) = IR.runInferTerm sup IR.rawBuiltinType desugared
   prettyPrint typed
   resolved <- Typed.runOverload typed
