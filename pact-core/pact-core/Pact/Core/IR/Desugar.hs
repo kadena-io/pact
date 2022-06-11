@@ -51,6 +51,24 @@ resolve = \case
   QN qn ->
     fmap (, -1111) <$> views dsModuleBinds (Map.lookup qn)
 
+
+defunToLet :: PT.Defun ParsedName i -> PT.Expr ParsedName i
+defunToLet = \case
+  PT.Defun defname args retTy body i ->
+    let lamName = BN (BareName defname)
+    in case args of
+      [] ->
+        let defTy = PT.TyFun PT.TyUnit retTy
+            lamBody = PT.Lam lamName (("#unitArg", Just PT.TyUnit):| []) body i
+        in PT.Let defname (Just defTy) lamBody i
+      x:xs ->
+        let args' = x:|xs
+            defTy = foldr PT.TyFun retTy (PT._argType <$> args')
+            lamArgs = (\(PT.Arg n ty) -> (n, Just ty)) <$> args'
+            lamBody = PT.Lam lamName lamArgs body i
+        in (PT.Let defname (Just defTy) lamBody i)
+
+-- Todo: Opportunities for reuse in the code for desugaring nested defuns???
 desugarTerm :: PT.Expr ParsedName i -> DesugarT (Term IRName TypeVar RawBuiltin i)
 desugarTerm = \case
   PT.Var (BN n) i | isReservedNative (_bnName n) ->
@@ -70,6 +88,8 @@ desugarTerm = \case
     expr' <- desugarTerm expr
     mt' <- traverse desugarType mt
     pure (Let name' mt' expr' (Constant LUnit i) i)
+  PT.NestedDefun d _ ->
+    desugarTerm (defunToLet d)
   PT.LetIn name mt e1 e2 i -> do
     nu <- newUnique'
     let name' = IRName name IRBound nu
@@ -130,6 +150,8 @@ desugarTerm = \case
       pure (IRName (rawParsedName n) IRBound u)
   lamArgsInEnv m =
     locally dsBinds (Map.union m)
+  unLetBlock (PT.NestedDefun d _) rest = do
+    unLetBlock (defunToLet d) rest
   unLetBlock (PT.Let name mt expr i) (h:hs) = do
     u <- newUnique'
     let name' = IRName name IRBound u

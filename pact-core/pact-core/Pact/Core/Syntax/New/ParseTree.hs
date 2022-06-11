@@ -1,6 +1,8 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+
 module Pact.Core.Syntax.New.ParseTree where
 
 import Control.Lens hiding (List, op)
@@ -20,16 +22,18 @@ import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Pretty
 
-data Arg i
-  = Arg Text Type i
+data Arg
+  = Arg
+  { _argName :: Text
+  , _argType :: Type }
   deriving Show
 
 data Defun name i
   = Defun
   { _dfunName :: !Text
-  , _dfunArgs :: ![Arg i]
-  , _dfunTerm :: (Expr name i)
-  , _dfunTermType :: Type
+  , _dfunArgs :: ![Arg]
+  , _dfunRetType :: !Type
+  , _dfunTerm :: !(Expr name i)
   , _dfunInfo :: i
   } deriving Show
 
@@ -44,23 +48,28 @@ data DefConst name i
 data DefCap name i
   = DefCap
   { _dcapName :: Text
-  , _dcapArgs :: ![Arg i]
+  , _dcapArgs :: ![Arg]
   , _dcapTerm :: Expr name i
   } deriving Show
 
 data Def name i
   = Dfun (Defun name i)
   | DConst (DefConst name i)
-  | DCap (DefCap name i)
+  -- | DCap (DefCap name i)
+  deriving Show
+
+data ExtDecl
+  = ExtBless Text
+  | ExtImport Import
+  | ExtImplements ModuleName
   deriving Show
 
 data Module name i
   = Module
   { _mName :: ModuleName
   , _mGovernance :: Governance Text
+  , _mExternal :: [ExtDecl]
   , _mDefs :: (NonEmpty (Def name i))
-  , _mBlessed :: ![Text]
-  , _mImports :: [Import]
   } deriving Show
 
 data Interface name i
@@ -72,7 +81,7 @@ data Interface name i
 data IfDefun i
   = IfDefun
   { _ifdName :: Text
-  , _ifdArgs :: [Arg i]
+  , _ifdArgs :: [Arg]
   , _ifdType :: Type
   , _ifdInfo :: i
   } deriving Show
@@ -125,6 +134,7 @@ instance Pretty BinaryOp where
     AndOp -> "&&"
     OrOp -> "||"
 
+
 -- Todo: type constructors aren't 1-1 atm.
 data Type
   = TyPrim PrimType
@@ -135,6 +145,25 @@ data Type
   | TyObject (Map Field Type) (Maybe Text)
   | TyCap
   deriving Show
+
+pattern TyInt :: Type
+pattern TyInt = TyPrim PrimInt
+
+pattern TyDecimal :: Type
+pattern TyDecimal = TyPrim PrimDecimal
+
+pattern TyTime :: Type
+pattern TyTime = TyPrim PrimTime
+
+pattern TyBool :: Type
+pattern TyBool = TyPrim PrimBool
+
+pattern TyString :: Type
+pattern TyString = TyPrim PrimString
+
+pattern TyUnit :: Type
+pattern TyUnit = TyPrim PrimUnit
+
 
 -- | Do we render parenthesis for the type if it shows nested in another
 instance Pretty Type where
@@ -163,10 +192,9 @@ data Expr name i
   = Var name i
   | Let Text (Maybe Type) (Expr name i) i
   | LetIn Text (Maybe Type) (Expr name i) (Expr name i) i
+  | NestedDefun (Defun name i) i
   | Lam name (NonEmpty (Text, Maybe Type)) (Expr name i) i
   | If (Expr name i) (Expr name i) (Expr name i) i
-  -- | If (Expr name i) (Expr name i) i
-  -- | Else (Expr name i) i
   | App (Expr name i) [Expr name i] i
   | Block (NonEmpty (Expr name i)) i
   | Object (Map Field (Expr name i)) i
@@ -190,6 +218,7 @@ termInfo f = \case
     If e1 e2 e3 <$> f i
   App e1 args i -> App e1 args <$> f i
   Block nel i -> Block nel <$> f i
+  NestedDefun d i -> NestedDefun d <$> f i
   Object m i -> Object m <$> f i
   UnaryOp _op e i -> UnaryOp _op e <$> f i
   BinaryOp _op e1 e2 i -> BinaryOp _op e1 e2 <$> f i
@@ -203,6 +232,15 @@ prettyCommaSepNE = fold . NE.intersperse ", " . fmap pretty
 
 prettyCommaSep :: Pretty a => [a] -> Doc ann
 prettyCommaSep = fold . intersperse ", " . fmap pretty
+
+
+instance Pretty Arg where
+  pretty (Arg n ty) =
+    pretty n <> ":" <+> pretty ty
+
+instance Pretty name => Pretty (Defun name i) where
+  pretty (Defun n args rettype term _) =
+    "defun" <+> pretty n <+> parens (prettyCommaSep args) <> ":" <+> pretty rettype <+> "=" <+> pretty term
 
 instance Pretty name => Pretty (Expr name i) where
   pretty = \case
@@ -227,6 +265,8 @@ instance Pretty name => Pretty (Expr name i) where
       pretty uop <> pretty e1
     BinaryOp b e1 e2 _ ->
       pretty e1 <+> pretty b <+> pretty e2
+    NestedDefun d _ ->
+      pretty d
     Block nel _ ->
       "{" <+> nest 2 (hardline <> vsep (pretty <$> NE.toList nel)) <> hardline <> "}"
     Object m _ ->

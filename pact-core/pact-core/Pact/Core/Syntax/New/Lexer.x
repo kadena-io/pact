@@ -51,11 +51,21 @@ tokens :-
 <0> module       { token TokenModule }
 <0> bless        { token TokenBless }
 <0> implements   { token TokenImplements }
+<0> import       { token TokenImport }
 <0> list         { token TokenTyList }
 <0> true         { token TokenTrue }
 <0> false        { token TokenFalse }
+<0> keyGov       { token TokenKeyGov }
+<0> capGov       { token TokenCapGov }
 <0> bool         { token TokenTyBool }
+<0> fn           { token TokenLambda }
+<0> integer      { token TokenTyInteger }
+<0> bool         { token TokenTyBool }
+<0> table        { token TokenTyTable }
+<0> decimal      { token TokenTyDecimal }
+<0> string       { token TokenTyString }
 
+<0> unit         { token TokenTyUnit }
 <0> \(           { token TokenOpenParens }
 <0> \)           { token TokenCloseParens }
 <0> \{           { handleOpenBrace }
@@ -65,7 +75,6 @@ tokens :-
 <0> \,           { token TokenComma }
 <0> \.           { token TokenDot }
 <0> \:           { token TokenSemiColon }
-<0> \\           { token TokenLambda }
 <0> \=\>         { token TokenLambdaArrow}
 <0> \=\=         { token TokenEq }
 <0> \!\=         { token TokenEq }
@@ -77,7 +86,7 @@ tokens :-
 <0> \+           { token TokenPlus }
 <0> \-           { token TokenMinus }
 <0> \*           { token TokenMult }
-<0> \\           { token TokenDiv }
+<0> \/           { token TokenDiv }
 <0> \&\&         { token TokenAnd }
 <0> \|\|         { token TokenOr }
 <0> \&           { token TokenBitAnd }
@@ -87,6 +96,7 @@ tokens :-
 <0> \"           { stringLiteral }
 <0> @integer     { emit TokenNumber }
 <0> @ident       { emit TokenIdent }
+<0> @tyvar       { emit TokenTyVar }
 <0> \-\>         { token TokenTyArrow }
 <0> \r\n         { handleNewline }
 <0> \n           { handleNewline }
@@ -186,9 +196,11 @@ offsideRule _ = do
   col <- column
   layout >>= \case
     Just (Layout lcol) -> case compare col lcol of
-      EQ -> popStartCode *> withLineInfo TokenVSemi
+      EQ ->
+        popStartCode *> withLineInfo TokenVSemi
       GT -> continue
       LT -> do
+        popStartCode  
         popLayout
         withLineInfo TokenVClose
     Nothing -> continue

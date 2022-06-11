@@ -22,6 +22,9 @@ interface blah {
 
 }
 
+module Coin {
+  
+}
 
 
 module Coin {

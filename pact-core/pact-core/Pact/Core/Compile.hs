@@ -26,7 +26,6 @@ import qualified Pact.Core.Syntax.New.Parser as NParse
 _compileFile :: String -> IO ()
 _compileFile s = BL.readFile s >>= _compile
 
-
 _compile :: BL.ByteString -> IO ()
 _compile source = do
   lexx <- either error pure $ NLex.lexer source
@@ -56,3 +55,13 @@ _compile source = do
   where
   prettyPrint :: Pretty.Pretty a => a -> IO ()
   prettyPrint = putStrLn . show . Pretty.pretty
+
+_compileModule :: String -> IO ()
+_compileModule file = do
+  source <- BL.readFile file
+  lexx <- either error pure $ NLex.lexer source
+  putStrLn "---- Lexer output -----"
+  print (NLex._ptToken <$> lexx)
+  parsed <- either error pure $ NParse.parseModule lexx
+  putStrLn "------------ Parsed Module -------------"
+  print parsed

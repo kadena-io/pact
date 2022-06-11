@@ -25,6 +25,10 @@ import Pact.Core.Syntax.New.ParseTree
 
 type ParserT = Either String
 type ParsedExpr = Expr ParsedName LineInfo
+type ParsedDefun = Defun ParsedName LineInfo
+type ParsedDef = Def ParsedName LineInfo
+type ParsedDefConst = DefConst ParsedName LineInfo
+type ParsedModule = Module ParsedName LineInfo
 
 data PosToken =
   PosToken
@@ -42,7 +46,10 @@ data Token
   | TokenLambda
   | TokenLambdaArrow
   | TokenModule
+  | TokenKeyGov
+  | TokenCapGov
   | TokenInterface
+  | TokenImport
   | TokenDefun
   | TokenDefConst
   | TokenDefCap

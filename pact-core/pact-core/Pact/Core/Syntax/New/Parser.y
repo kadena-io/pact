@@ -19,12 +19,15 @@ import Pact.Core.Info
 import Pact.Core.Literal
 import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
+import Pact.Core.Guards
+import Pact.Core.Imports
 import Pact.Core.Syntax.New.ParseTree
 import Pact.Core.Syntax.New.LexUtils
 
 
 }
 %name parseExpr Statement
+%name parseModule Module
 
 %tokentype { PosToken }
 %monad { ParserT }
@@ -43,7 +46,13 @@ import Pact.Core.Syntax.New.LexUtils
   '=>'       { PosToken TokenLambdaArrow _ }
   module     { PosToken TokenModule _ }
   interface  { PosToken TokenInterface _ }
+  import     { PosToken TokenImport _ }
+  keygov     { PosToken TokenKeyGov _ }
+  capgov     { PosToken TokenCapGov _ }
   defun      { PosToken TokenDefun _ }
+  defcap     { PosToken TokenDefCap _ }
+  defconst   { PosToken TokenDefConst _ }
+  defschema  { PosToken TokenDefSchema _ }
   bless      { PosToken TokenBless _}
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
@@ -92,6 +101,50 @@ import Pact.Core.Syntax.New.LexUtils
 
 
 %%
+Module :: { ParsedModule }
+  : module IDENT '(' Gov ')' '{' OPEN Exts Defs CLOSE '}'
+    { Module (ModuleName (getIdent $2) Nothing) $4 (reverse $8) (NE.fromList (reverse $9)) }
+
+Gov :: { Governance Text }
+  : keygov STR { Governance (Left (KeySetName (getStr $2))) }
+  | capgov IDENT { Governance (Right (getIdent $2)) }
+
+Exts :: { [ExtDecl] }
+  : Exts SEMI Ext SEMI { $3:$1 }
+  | Ext { [$1] }
+  | {- empty -} { [] }
+
+Ext :: { ExtDecl }
+  : import ModQual ImportList { ExtImport (Import (mkModName $2) Nothing $3)  }
+  | implements ModQual { ExtImplements (mkModName $2) }
+
+Defs :: { [ParsedDef] }
+  : Defs SEMI Def { $3:$1 }
+  | Def { [$1] }
+
+Def :: { ParsedDef }
+  : Defun { Dfun $1 }
+  | DefConst { DConst $1 }
+
+ImportList :: { Maybe [Text] }
+  : '(' CommaSepIdents ')' { Just (reverse $2) }
+  | {- empty -} { Nothing }
+
+CommaSepIdents :: { [Text] }
+  : CommaSepIdents ',' IDENT { (getIdent $3):$1 }
+  | IDENT { [(getIdent $1)] }
+
+DefConst :: { ParsedDefConst }
+  : defconst IDENT MTypeAnn '=' Expr { DefConst (getIdent $2) $3 $5 (_ptInfo $1) }
+
+Defun :: { ParsedDefun }
+  : defun IDENT '(' ArgList ')' ':' Type '=' MaybeBlock
+    { Defun (getIdent $2) (reverse $4) $7 $9 (combineSpan (_ptInfo $1) (view termInfo $9)) }
+
+ArgList :: { [Arg] }
+  : ArgList ',' IDENT ':' Type { (Arg (getIdent $3) $5):$1 }
+  | IDENT ':' Type { [(Arg (getIdent $1) $3)] }
+  | {- empty -} { [] }
 
 Type :: { Type }
   : TyArrows '->' Type1 { foldr TyFun $3 (reverse $1) }
@@ -161,10 +214,14 @@ PrefixOp :: { UnaryOp }
 Statement :: { ParsedExpr }
   : IfStmt { $1 }
   | LetStmt { $1 }
+  | Defun  { NestedDefun $1 (_dfunInfo $1) }
   | Expr { $1 }
 
 IfStmt :: { ParsedExpr }
   : if Expr then MaybeBlock else MaybeBlock { If $2 $4 $6 (combineSpans $2 $6) }
+
+IfExpr :: { ParsedExpr }
+  : if Expr then Expr else Expr { If $2 $4 $6 (combineSpans $2 $6) }
 
 MaybeBlock :: { ParsedExpr }
   : '{' OPEN BlockBody CLOSE '}' { Block (NE.fromList (reverse $3)) (combineSpan (_ptInfo $1) (_ptInfo $5)) }
@@ -214,6 +271,7 @@ ExprCommaSep :: { [ParsedExpr] }
 
 ParensExpr :: { ParsedExpr }
   : LamExpr { $1 }
+  | IfExpr { $1 }
   | Expr { $1 }
 
 LamExpr :: { ParsedExpr }
@@ -233,6 +291,7 @@ Atom :: { ParsedExpr }
   | Object { $1 }
   | List { $1 }
   | Bool { $1 }
+  | '(' ')' { Constant LUnit (_ptInfo $1) }
   | '(' ParensExpr ')' { $2 }
 
 Bool :: { ParsedExpr }
@@ -240,10 +299,10 @@ Bool :: { ParsedExpr }
   | false { Constant (LBool False) (_ptInfo $1) }
 
 Name :: { ParsedExpr }
-  : IDENT '.' ModName  { mkModuleName (getIdent $1) $3 (_ptInfo $1) }
+  : IDENT '.' ModQual  { mkQualName (getIdent $1) $3 (_ptInfo $1) }
   | IDENT { Var (mkBarename (getIdent $1)) (_ptInfo $1) }
 
-ModName :: { (Text, Maybe Text) }
+ModQual :: { (Text, Maybe Text) }
   : IDENT '.' IDENT { (getIdent $1, Just (getIdent $3)) }
   | IDENT { (getIdent $1, Nothing) }
 
@@ -290,13 +349,16 @@ mkIntegerConstant n i =
     Right (d, _) -> pure (Constant (LInteger d) i)
     _ -> throwError "Impossible"
 
-mkModuleName ns (mod, (Just ident)) info =
+mkQualName ns (mod, (Just ident)) info =
   let ns' = NamespaceName ns
       qn = QualifiedName ident (ModuleName mod (Just ns'))
   in Var (QN qn) info
-mkModuleName mod (ident, Nothing) info =
+mkQualName mod (ident, Nothing) info =
   let qn = QualifiedName ident (ModuleName mod Nothing)
   in Var (QN qn) info
+
+mkModName (ident, Nothing) = ModuleName ident Nothing
+mkModName (ns, Just ident) = ModuleName ident (Just (NamespaceName ns))
 
 ln0 = BN (BareName "")
 
