@@ -18,6 +18,7 @@ module Pact.Core.Names
  , irNameKind
  , irUnique
  , QualifiedName(..)
+ , renderQualName
  , TypeVar(..)
  , Unique
  , tyVarName
@@ -34,6 +35,8 @@ module Pact.Core.Names
  , rawParsedName
  , ONameKind(..)
  , OverloadedName(..)
+ , FullyQualifiedName(..)
+ , TableName(..)
  ) where
 
 import Control.Lens
@@ -71,7 +74,17 @@ data QualifiedName =
   QualifiedName
   { _qnName :: Text
   , _qnModName :: ModuleName
-  } deriving (Show, Eq, Ord)
+  } deriving (Show, Eq)
+
+instance Ord QualifiedName where
+  compare (QualifiedName qn1 m1) (QualifiedName qn2 m2) =
+    case compare m1 m2 of
+      EQ -> compare qn1 qn2
+      t -> t
+
+renderQualName :: QualifiedName -> Text
+renderQualName (QualifiedName n (ModuleName m ns)) =
+  maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n
 
 instance Pretty QualifiedName where
   pretty (QualifiedName n m) =
@@ -155,6 +168,13 @@ data NameKind
   | NTopLevel ModuleName ModuleHash
   deriving (Show, Eq, Ord)
 
+data FullyQualifiedName
+  = FullyQualifiedName
+  { _fqModule :: ModuleName
+  , _fqName :: !Text
+  , _fqHash :: ModuleHash
+  } deriving (Eq, Show, Ord)
+
 data TypeVar
   = TypeVar
   { _tyVarName :: !Text
@@ -200,3 +220,6 @@ instance Pretty Name where
 instance Pretty NamedDeBruijn where
   pretty (NamedDeBruijn _i _n) =
     pretty _n
+
+newtype TableName = TableName Text
+  deriving (Eq, Show)

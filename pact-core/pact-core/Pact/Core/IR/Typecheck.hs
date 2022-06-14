@@ -25,6 +25,7 @@ module Pact.Core.IR.Typecheck where
 import Control.Lens hiding (Level)
 import Control.Monad.Reader
 import Control.Monad.ST
+import Data.Functor(($>))
 import Data.IntMap.Strict(IntMap)
 import Data.Foldable(traverse_)
 import Data.List.NonEmpty(NonEmpty(..))
@@ -665,8 +666,8 @@ generalizeWithTerm ty pp term = do
       pure (TypeScheme [] [] ty' , term, deferred)
     (x:xs) -> case removeFieldConstraints retained' of
       y:ys -> do
-        let typedArgs = toTyArg <$> (y:|ys)
-            tlam = Typed.Lam (fst $ NE.head typedArgs) typedArgs term info
+        let typedDictArgs = toTyArg <$> (y:|ys)
+            tlam = Typed.Lam typedDictArgs term info
             tfinal = Typed.TyAbs (x :| xs) tlam info
         pure (TypeScheme ftvs retained' ty', tfinal, deferred)
       _ ->  pure (TypeScheme ftvs retained ty', Typed.TyAbs (x:|xs) term info, deferred)
@@ -705,7 +706,7 @@ generalizeWithTerm ty pp term = do
         s <- lift (readSTRef sts)
         writeTvRef tv (Bound n u)
         if Set.member u s then pure ([], TyVar tv)
-        else lift (writeSTRef sts (Set.insert u s)) *> pure ([tv], TyVar tv)
+        else lift (writeSTRef sts (Set.insert u s)) $> ([tv], TyVar tv)
       else pure ([], TyVar tv)
     Link t' -> gen' sts t'
     Bound _ _ -> pure ([], TyVar tv)
@@ -803,7 +804,7 @@ inferTerm = \case
         instantiateWithTerm ts v'
       Nothing -> fail ("unbound variable in term infer" <> show n)
   IR.Var _ _ -> fail "unsupported top level"
-  IR.Lam lamname nts e i -> do
+  IR.Lam nts e i -> do
     let names = fst <$> nts
     ntys <- fmap TyVar <$> traverse (const newTvRef) names
     let ntysc = TypeScheme [] [] <$> ntys
@@ -812,7 +813,7 @@ inferTerm = \case
     (ty, e', preds) <- locally tcVarEnv (IntMap.union m) $ inferTerm e
     let nts' = NE.zipWith mkNameTup names ntys
         rty = foldr TyFun ty ntys
-    pure (rty, Typed.Lam (toOName lamname) nts' e' i, preds)
+    pure (rty, Typed.Lam nts' e' i, preds)
     where
     mkNameTup name ty = (toOName name, ty)
   IR.App e args i -> do
@@ -930,11 +931,10 @@ debruijnizeTermTypes = dbj [] 0
   dbj env depth = \case
     Typed.Var n i ->
       Typed.Var <$> dbjName env depth n <*> pure i
-    Typed.Lam n nts e i -> do
-      n' <- dbjName env depth n
+    Typed.Lam nts e i -> do
       nts' <- traverse dbjBoth nts
       e' <- dbj env depth e
-      pure (Typed.Lam n' nts' e' i)
+      pure (Typed.Lam nts' e' i)
       where
       dbjBoth (nn, tty) = do
         nn' <- dbjName env depth nn

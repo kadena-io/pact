@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveTraversable #-}
+
+
 module Pact.Core.Guards
 ( PublicKey(..)
 , KeySetName(..)
@@ -16,9 +19,9 @@ newtype PublicKey = PublicKey { _pubKey :: ByteString }
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,Show)
 
-newtype Governance a=
+newtype Governance a =
   Governance { _governance :: Either KeySetName a }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data KSPredicate name
   = KeysAll

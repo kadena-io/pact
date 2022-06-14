@@ -7,26 +7,28 @@
 {-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.Typed.Term
-( Defun(..)
-, DefConst(..)
-, DefCap(..)
-, DefPact(..)
-, Def(..)
-, Term(..)
-, Module(..)
-, Interface(..)
-, IfDefun(..)
-, IfDef(..)
-, Literal(..)
-, DefType(..)
-, TyVarType(..)
-, termInfo
-, traverseTermType
-, ETerm
-, OverloadedTerm
-, EvalTerm
-)
- where
+ ( Defun(..)
+ , DefConst(..)
+ , DefCap(..)
+ , DefPact(..)
+ , Def(..)
+ , Term(..)
+ , Module(..)
+ , Interface(..)
+ , IfDefun(..)
+ , IfDef(..)
+ , Literal(..)
+ , DefType(..)
+ , TyVarType(..)
+ , termInfo
+ , traverseTermType
+ , ETerm
+ , OverloadedTerm
+ , EvalTerm
+ , EvalModule
+ , CoreEvalTerm
+ , defName
+ ) where
 
 import Control.Lens
 import Data.Text(Text)
@@ -101,19 +103,26 @@ data DefTable name tyname info
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
-  | DCap (DefCap name tyname builtin info)
-  | DPact (DefPact name tyname builtin info)
-  | DSchema (DefSchema name tyname info)
-  | DTable (DefTable name tyname info)
-  deriving Show
+   deriving Show
+
+-- DCap (DefCap name tyname builtin info)
+-- DPact (DefPact name tyname builtin info)
+-- DSchema (DefSchema name tyname info)
+-- DTable (DefTable name tyname info)
+
+defName :: Def name tyname builtin i -> name
+defName = \case
+  Dfun d -> _dfunName d
+  DConst d -> _dcName d
 
 data Module name tyname builtin info
   = Module
   { _mName :: ModuleName
-  , _mGovernance :: Governance (DefCap name tyname builtin info)
+  , _mGovernance :: Governance name
   , _mDefs :: [Def name tyname builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
+  , _mImplemented :: [ModuleName]
   , _mHash :: ModuleHash
   } deriving Show
 
@@ -151,7 +160,7 @@ data TyVarType
 data Term name tyname builtin info
   = Var name info
   -- ^ single variables, e.g the term `x`
-  | Lam name (NonEmpty (name, Type tyname)) (Term name tyname builtin info) info
+  | Lam (NonEmpty (name, Type tyname)) (Term name tyname builtin info) info
   -- ^ f = \a b c -> e
   -- All lambdas, even anonymous ones, are named, for the sake of them adding a stack frame
   | App (Term name tyname builtin info) (NonEmpty (Term name tyname builtin info)) info
@@ -180,26 +189,23 @@ data Term name tyname builtin info
 
 type OverloadedTerm b i =
   Term (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
-type EvalTerm i = Term Name NamedDeBruijn CoreBuiltin i
+type EvalTerm b i = Term Name NamedDeBruijn b i
+type EvalModule b i = Module Name NamedDeBruijn b i
+type CoreEvalTerm i = Term Name NamedDeBruijn CoreBuiltin i
 type ETerm b = Term Name NamedDeBruijn b ()
 
--- data TObjectOp tyname o
---   = TObjectAccess Field [Type tyname] o
---   | TObjectRemove Field [Type tyname] o
---   | TObjectUpdate Field [Type tyname] o o
---   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
   pretty = \case
     Var n _ -> pretty n
-    Lam _ (NE.toList -> ns) body _ ->
+    Lam (NE.toList -> ns) body _ ->
       "λ" <> Pretty.hsep (fmap (\(n, t) -> Pretty.parens (pretty n <> ":" <+> pretty t)) ns) <+> "->" <+> pretty body
     App l (NE.toList -> nel) _ ->
       pretty l <> Pretty.parens (Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> nel)))
     Let n e1 e2 _ ->
       "let" <+> pretty n <+> "=" <+> pretty e1 <+> prettyFollowing e2
       where
-      prettyFollowing e@(Let _ _ _ _) = Pretty.hardline <> pretty e
+      prettyFollowing e@Let{} = Pretty.hardline <> pretty e
       prettyFollowing (Block nel _) = Pretty.nest 2 $
         "in {" <> Pretty.hardline <> prettyBlock nel <> "}"
       prettyFollowing e = Pretty.hardline <> "in" <+> pretty e
@@ -232,7 +238,7 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
   Var n i -> Var n <$> f i
-  Lam n ns term i -> Lam n ns term <$> f i
+  Lam ns term i -> Lam ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Let n e1 e2 i ->
     Let n e1 e2 <$> f i
@@ -249,8 +255,8 @@ termInfo f = \case
 traverseTermType :: Traversal' (Term name tyname builtin info) (Type tyname)
 traverseTermType f = \case
   Var n i -> pure (Var n i)
-  Lam n ns body i ->
-    Lam n <$> (traversed._2) f ns <*> traverseTermType f body <*> pure i
+  Lam ns body i ->
+    Lam <$> (traversed._2) f ns <*> traverseTermType f body <*> pure i
   App l r i ->
     App <$> traverseTermType f l <*> traverse (traverseTermType f) r <*> pure i
   Let n e1 e2 i ->
@@ -275,7 +281,7 @@ traverseTermType f = \case
 instance Plated (Term name tyname builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam n ns term i -> Lam n ns <$> f term <*> pure i
+    Lam ns term i -> Lam ns <$> f term <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Let n e1 e2 i ->
       Let n <$> f e1 <*> f e2 <*> pure i

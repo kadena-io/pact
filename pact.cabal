@@ -369,6 +369,7 @@ library pact-core
     Pact.Core.Gas
     Pact.Core.Info
     Pact.Core.Errors
+    Pact.Core.Persistence
     -- Syntax modules
     Pact.Core.Syntax.New.ParseTree
     Pact.Core.Syntax.New.Lexer

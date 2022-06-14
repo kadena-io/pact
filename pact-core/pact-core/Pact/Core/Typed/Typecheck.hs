@@ -5,16 +5,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-
--- |
--- Module      :  Pact.Core.Typed.Typecheck
--- Copyright   :  (C) 2016 Stuart Popejoy
--- License     :  BSD-style (see the file LICENSE)
--- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Jose Cardona <jose@kadena.io>
---
--- Typed Core Typechecker, which is a simple system F typechecker.
---
-
 module Pact.Core.Typed.Typecheck where
 
 import Control.Lens
@@ -115,7 +105,7 @@ typecheck' = \case
   -- Γ, x:t1 ⊢ e:t2
   -- ------------------- (T-Abs)
   -- Γ ⊢ (λx:t1.e):t1→t2
-  Lam _ args term _ -> do
+  Lam args term _ -> do
     -- let inEnv e = foldl' (\m (n', t') -> Map.insert n' t' m) e args
     ret <- locally tcVarEnv (Map.union (Map.fromList (NE.toList args))) (typecheck' term)
     pure $ foldr TyFun ret (snd <$> args)
@@ -160,8 +150,8 @@ typecheck' = \case
   -- Γ ⊢ [a_1, ..., a_n] @ t : List t
   ListLit ty ts _ -> do
     tys <- traverse typecheck' ts
-    if any (not . typeUnifies ty) tys then throwError "List literal type element mismatch"
-    else pure ty
+    unless (all (typeUnifies ty) tys) $ throwError "List literal type element mismatch"
+    pure (TyList ty)
   -- todo: objectlit type ann seems unnecessary
   -- a_1, ..., a_n : t
   -- ------------------------ (T-Builtin)
@@ -181,92 +171,3 @@ typecheck' = \case
   -- Γ ⊢ k : Prim p
   Constant l _ ->
     pure (typeOfLit l)
-
--- fromIR
---   :: Ord tyname
---   => IO name
---   -> IR.Term (name, Type tyname) tyname builtin (i, Type tyname)
---   -> IO (Term name tyname builtin i)
--- fromIR mkName = \case
---   IR.Var (n, _) (i, _) -> pure (Var n i)
---   -- Todo: for generalized nodes, tyAbs inserted here.
---   IR.Lam (n, ty) ns _ body (i, _) -> do
---     t <- Lam n (fst <$> ns) (snd <$> ns) <$> fromIR mkName body <*> pure i
---     pure (mkAbsLam i ty t)
---   -- Todo: type apps here.
---   IR.App l r (i, _) ->
---     mkTyApp l r i
---   IR.Let (n, typ) _ e1 e2 (i, _) ->
---     collectLets e2 (pure (n, typ)) (pure e1) i
---   IR.Constant l (i, _) -> pure (Constant l i)
---   IR.Block terms (i, _) ->
---     Block <$> traverse (fromIR mkName) terms <*> pure i
---   IR.Error errstr (i, ty) ->
---     pure (Error errstr ty i)
---   IR.ObjectLit objs (i, rty) -> do
---     objs' <- traverse (fromIR mkName) objs
---     case rty of
---       TyRow row ->
---         pure (ObjectLit row objs' i)
---       _ -> error "internal, fatal error: type inferred for object not a row type"
---   IR.ListLit objs (i, ty) ->
---     ListLit ty <$> traverse (fromIR mkName) objs <*> pure i
---   IR.Builtin b (i, _) -> pure (Builtin b i)
---   IR.DynAccess _mod _fn _i -> error "unsupported atm"
---   where
---   mkAbsLam _ (TyForall [] [] _) lam = lam
---   -- It is guaranteed that the concat of both is not empty
---   mkAbsLam i (TyForall xs ys _) lam =
---     let tyAbs = (,TyVarType) <$> xs
---         rowAbs = (,RowVarType) <$> ys
---         allAbs = NE.fromList (tyAbs ++ rowAbs)
---     in TyAbs allAbs lam i
---   mkAbsLam _ _ lam = lam
---   collectLets (IR.Let (n, typ) _ e1 e2 _) ns apps i =
---     collectLets e2 (NE.cons (n, typ) ns) (NE.cons e1 apps) i
---   collectLets t ans appArgs i = do
---     name <- mkName
---     let (ns, tys) = NE.unzip ans
---     lamT <- Lam name ns tys <$> fromIR mkName t <*> pure i
---     appArgs' <- traverse (fromIR mkName) appArgs
---     let lamAppArgs = uncurry (mkAbsLam i) <$> NE.zip tys appArgs'
---     pure (App lamT lamAppArgs i)
---   mkTyApp l@(IR.Lam (_, ty) _ _ _ _) appArgs i = case ty of
---     TyForall [] [] _ ->
---       App <$> fromIR mkName l <*> traverse (fromIR mkName) appArgs <*> pure i
---     TyForall tvs rvs typ -> case tyFunToArgList typ of
---       Just (NE.fromList -> funArgs, _) -> do
---         let argTys = view (IR.termInfo._2) <$> appArgs
---             substs = foldMap (uncurry tyAppUnify) $ NE.zip funArgs argTys
---             tvApps = (\n ->  fromMaybe (TyVar n, TyVarType) (Map.lookup n substs)) <$> tvs
---             rvApps = (\n -> fromMaybe (TyRow (RowVar n), RowVarType) (Map.lookup n substs)) <$> rvs
---         l' <- fromIR mkName l
---         appArgs' <- traverse (fromIR mkName) appArgs
---         let tyApp = (TyApp l' (NE.fromList (tvApps ++ rvApps)) i)
---         pure (App tyApp appArgs' i)
---       Nothing -> error "oop???"
---     _ ->
---       App <$> fromIR mkName l <*> traverse (fromIR mkName) appArgs <*> pure i
---   mkTyApp l appArgs i =
---     App <$> fromIR mkName l <*> traverse (fromIR mkName) appArgs <*> pure i
-
--- Left biased unification.
--- -- It is only to generate type/row applications
--- tyAppUnify :: (Ord n) => Type n -> Type n -> Map n (Type n, TyVarType)
--- tyAppUnify (TyVar n) ty = Map.singleton n (ty, TyVarType)
--- tyAppUnify (TyFun l r) (TyFun l' r') =
---   tyAppUnify l l' <> tyAppUnify r r'
--- tyAppUnify (TyList l) (TyList r) =
---   tyAppUnify l r
--- tyAppUnify (TyRow lrow) (TyRow rrow) = rowUnifies lrow rrow
---   where
---   rowUnifies (RowVar r) r' = Map.singleton r (TyRow r', RowVarType)
---   rowUnifies (RowTy obj (Just r)) (RowTy obj' r') =
---     let notInL = Map.difference obj' obj
---     in Map.singleton r (TyRow (RowTy notInL r'), RowVarType)
---   rowUnifies (RowTy _ (Just r)) EmptyRow =
---     Map.singleton r (TyRow EmptyRow, RowVarType)
---   rowUnifies (RowTy _ (Just r)) rv =
---     Map.singleton r (TyRow rv, RowVarType)
---   rowUnifies _ _ = Map.empty
--- tyAppUnify _ _ = Map.empty

@@ -43,15 +43,17 @@ data DefType
 data Defun name tyname builtin info
   = Defun
   { _dfunName :: name
+  , _dfunType :: Type tyname
   , _dfunTerm :: Term name tyname builtin info
-  , _dfunTermType :: Maybe (Type tyname)
+  , _dfunInfo :: info
   } deriving Show
 
 data DefConst name tyname builtin info
   = DefConst
   { _dcName :: name
-  , _dcTerm :: Term name tyname builtin info
   , _dcTermType :: Maybe (Type tyname)
+  , _dcTerm :: Term name tyname builtin info
+  , _dcInfo :: info
   } deriving Show
 
 data DefCap name tyname builtin info
@@ -73,18 +75,23 @@ data DefPact name tyname builtin info
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
-  | DPact (DefPact name tyname builtin info)
+  -- | DPact (DefPact name tyname builtin info)
   deriving Show
+
+defName :: Def name a b c -> name
+defName (Dfun d) = _dfunName d
+defName (DConst d) = _dcName d
 
 -- Todo:
 -- Support module guard
 data Module name tyname builtin info
   = Module
   { _mName :: ModuleName
-  , _mGovernance :: Governance (DefCap name tyname builtin info)
+  , _mGovernance :: Governance name
   , _mDefs :: [Def name tyname builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
+  , _mImplements :: [ModuleName]
   , _mHash :: ModuleHash
   } deriving Show
 
@@ -117,7 +124,7 @@ data TopLevel name tyname builtin info
 data Term name tyname builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam name (NonEmpty (name, Maybe (Type tyname))) (Term name tyname builtin info) info
+  | Lam (NonEmpty (name, Maybe (Type tyname))) (Term name tyname builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
   | Let name (Maybe (Type tyname)) (Term name tyname builtin info) (Term name tyname builtin info) info
@@ -125,8 +132,6 @@ data Term name tyname builtin info
   | App (Term name tyname builtin info) (NonEmpty (Term name tyname builtin info)) info
   -- ^ (e1 e2)
   | Block (NonEmpty (Term name tyname builtin info)) info
-  -- ^ (e1) (e2)
-  | Error Text info
   -- ^ error term , error "blah"
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
@@ -139,7 +144,15 @@ data Term name tyname builtin info
   | ListLit (Vector (Term name tyname builtin info)) info
   -- List Literals ^
   | ObjectOp (ObjectOp (Term name tyname builtin info)) info
+   -- ^ error e
+  | Error Text info
   deriving (Show, Functor)
+
+
+----------------------------
+-- Aliases for convenience
+----------------------------
+
 
 
 termInfo :: Lens' (Term name tyname builtin info) info
@@ -147,7 +160,7 @@ termInfo f = \case
   Var n i -> Var n <$> f i
   Let n mty t1 t2 i ->
     Let n mty t1 t2 <$> f i
-  Lam n ns term i -> Lam n ns term <$> f i
+  Lam ns term i -> Lam ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Error s i -> Error s <$> f i
   Builtin b i -> Builtin b <$> f i
@@ -161,7 +174,7 @@ termInfo f = \case
 instance Plated (Term name tyname builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam n ns term i -> Lam n ns <$> f term <*> pure i
+    Lam ns term i -> Lam ns <$> f term <*> pure i
     Let n mty t1 t2 i -> Let n mty <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Error s i -> pure (Error s i)

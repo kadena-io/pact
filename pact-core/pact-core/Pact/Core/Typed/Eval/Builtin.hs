@@ -35,22 +35,22 @@ applyTwo :: CEKRuntime b => ETerm b -> CEKEnv b -> CEKValue b -> CEKValue b -> E
 applyTwo body env arg1 arg2 = eval (RAList.cons arg2 (RAList.cons arg1 env)) body
 
 unsafeApplyOne :: CEKRuntime b => CEKValue b -> CEKValue b -> EvalT b (CEKValue b)
-unsafeApplyOne (VClosure cn (_:ns) body env) arg = case ns of
+unsafeApplyOne (VClosure (_:ns) body env) arg = case ns of
   [] -> applyOne body env arg
-  _ -> pure (VClosure cn ns body (RAList.cons arg env))
+  _ -> pure (VClosure ns body (RAList.cons arg env))
 unsafeApplyOne (VNative b) arg = do
   let (BuiltinFn f) = Array.indexArray ?cekBuiltins (fromEnum b)
   f (arg :| [])
 unsafeApplyOne _ _ = error "impossible"
 
 unsafeApplyTwo :: CEKRuntime b => CEKValue b -> CEKValue b -> CEKValue b -> EvalT b (CEKValue b)
-unsafeApplyTwo (VClosure cn (_:ns) body env) arg1 arg2 = case ns of
+unsafeApplyTwo (VClosure (_:ns) body env) arg1 arg2 = case ns of
   [] -> error "impossible"
   _:ms -> case ms of
     [] -> applyTwo body env arg1 arg2
     _ ->
       let env' = RAList.cons arg2 (RAList.cons arg1 env)
-      in pure (VClosure cn ms body env')
+      in pure (VClosure ms body env')
 unsafeApplyTwo (VNative b) arg1 arg2 = do
   let (BuiltinFn f) = Array.indexArray ?cekBuiltins (fromEnum b)
   f (arg1 :| [arg2])
@@ -547,7 +547,7 @@ concatList = BuiltinFn \case
 
 coreIf :: BuiltinFn b
 coreIf = BuiltinFn \case
-  VLiteral (LBool b) :| [VClosure _ _ ibody ienv, VClosure _ _ ebody eenv] ->
+  VLiteral (LBool b) :| [VClosure _ ibody ienv, VClosure _ ebody eenv] ->
     if b then applyOne ibody ienv (VLiteral LUnit) else  applyOne ebody eenv (VLiteral LUnit)
   _ -> fail "impossible"
 

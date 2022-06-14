@@ -72,7 +72,7 @@ data CEKValue b
   = VLiteral !Literal
   | VObject !(Map Field (CEKValue b))
   | VList !(Vector (CEKValue b))
-  | VClosure !Name ![Name] !(ETerm b) !(CEKEnv b)
+  | VClosure ![Name] !(ETerm b) !(CEKEnv b)
   | VNative !b
   | VGuard !(Guard Name (CEKValue b))
   | VCap !Name
@@ -112,10 +112,10 @@ eval = evalCEK Mt
     returnCEK cont (VLiteral l)
   evalCEK cont env (App fn arg _) =
     evalCEK (Arg env arg cont) env fn
-  evalCEK cont env (Lam n ns body _) =
-    returnCEK cont (VClosure n (NE.toList (fst <$> ns)) body env)
+  evalCEK cont env (Lam ns body _) =
+    returnCEK cont (VClosure (NE.toList (fst <$> ns)) body env)
   evalCEK cont env (Let n e1 e2 _) =
-    returnCEK (Arg env (e1 :| []) cont) (VClosure n [n] e2 env)
+    returnCEK (Arg env (e1 :| []) cont) (VClosure [n] e2 env)
   evalCEK cont _env (Builtin b _) = do
     returnCEK cont (VNative b)
   evalCEK cont env (ObjectLit obj _) = do
@@ -165,22 +165,22 @@ eval = evalCEK Mt
     applyLam fn args cont
   returnCEKArgs _args _ =
     error "Invalid stack frame"
-  applyLam (VClosure n ns body env) args cont =
-    applyArgs n ns (NE.toList args) env body cont
+  applyLam (VClosure ns body env) args cont =
+    applyArgs ns (NE.toList args) env body cont
   applyLam (VNative b) args cont =
     let (BuiltinFn f) = indexArray ?cekBuiltins (fromEnum b)
     in f args >>= returnCEK cont
   applyLam _ _ _ = error "applying to non-fun"
-  applyArgs lamn (_ : ns') (!arg : args') env body cont =
-    applyArgs lamn ns' args' (RAList.cons arg env) body cont
+  applyArgs (_ : ns') (arg : args') env body cont =
+    applyArgs ns' args' (RAList.cons arg env) body cont
   -- Todo: create stack frame here.
   -- function application is saturated.
-  applyArgs _lamn [] [] env body cont = evalCEK cont env body
+  applyArgs [] [] env body cont = evalCEK cont env body
     -- local (addFrame (StackFrame lamn DTDefun)) $ evalCEK cont env body
   -- Args unsaturated, create a closure and return as an argument
-  applyArgs lamn (n:ns') [] env body cont =
-    returnCEK cont (VClosure lamn (n:ns') body env)
-  applyArgs _lamn [] (_args:_args') _env _body _cont =
+  applyArgs (n:ns') [] env body cont =
+    returnCEK cont (VClosure (n:ns') body env)
+  applyArgs [] (_args:_args') _env _body _cont =
     error "too many arguments in fn application"
   objAccess f (VObject o) = pure (o Map.! f)
   objAccess _ _ = error "fail"
@@ -198,8 +198,8 @@ instance Pretty b => Pretty (CEKValue b) where
       in P.braces $ P.hsep (P.punctuate P.comma (toBind <$> Map.toList o))
     VList v ->
       P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
-    VClosure n _ _ _ ->
-      P.angles $ "closure" <+> pretty n
+    VClosure{} ->
+      P.angles "closure#"
     VNative b ->
       P.angles $ "native" <+> pretty b
     VGuard _ -> error "undefined"

@@ -40,7 +40,7 @@ type OverloadT = ReaderT ROState IO
 
 resolveOverload
   :: OverloadedTerm RawBuiltin info
-  -> OverloadT (EvalTerm info)
+  -> OverloadT (CoreEvalTerm info)
 resolveOverload = \case
   Var (OverloadedName n nk) i -> case nk of
     OBound u -> do
@@ -55,10 +55,9 @@ resolveOverload = \case
       pure (Var n' i)
     OBuiltinDict p ->
       varOverloaded i p
-  Lam lamn nts e info -> do
+  Lam nts e info -> do
     depth <- view roVarDepth
-    let lamn' = Name (_olName lamn) (NBound 0)
-        (ns, ts) = NE.unzip nts
+    let (ns, ts) = NE.unzip nts
         len = fromIntegral (NE.length nts)
         newDepth = depth + len
         ixs = NE.fromList [depth..newDepth-1]
@@ -66,7 +65,7 @@ resolveOverload = \case
         (m, de) = foldl' mkEnv (mempty, []) nsix
         ns' = toON <$> nsix
     e' <- local (inEnv m de newDepth) (resolveOverload e)
-    pure (Lam lamn' (NE.zip ns' ts) e' info)
+    pure (Lam (NE.zip ns' ts) e' info)
     where
     inEnv m de depth =
       over roBoundVars (IntMap.union m)
@@ -78,7 +77,7 @@ resolveOverload = \case
       OBuiltinDict p -> (m, (p, ix):de)
       _ -> (m, de)
   Let n e1 e2 i -> do
-    u <- case (_olNameKind n) of
+    u <- case _olNameKind n of
       OBound u -> pure u
       _ -> fail "invariant error: let bound as incorrect variable"
     depth <- view roVarDepth
@@ -116,12 +115,12 @@ resolveOverload = \case
         a2Var = Name "" (NBound 0)
         a2 = (a2Var, TyList t)
         app = App (Builtin inst i) (b :| [Var a1Var i, Var a2Var i]) i
-    pure (Lam a1Var (a1 :| [a2]) app i)
+    pure (Lam (a1 :| [a2]) app i)
 
   specializeAdd
     :: info
     -> Pred NamedDeBruijn
-    -> OverloadT (EvalTerm info)
+    -> OverloadT (CoreEvalTerm info)
   specializeAdd i p@(Pred _ t) = case t of
     TyInt -> pure (Builtin AddInt i)
     TyDecimal -> pure (Builtin AddDec i)
@@ -133,7 +132,7 @@ resolveOverload = \case
     :: info
     -> NumResolution
     -> Pred NamedDeBruijn
-    -> OverloadT (EvalTerm info)
+    -> OverloadT (CoreEvalTerm info)
   specializeNumOp i reso p@(Pred _ t) = case t of
     TyInt -> pure (Builtin (_nrIntInstance reso) i)
     TyDecimal -> pure (Builtin (_nrDecInstance reso) i)
@@ -144,7 +143,7 @@ resolveOverload = \case
     -> RawBuiltin
     -> EqResolution
     -> Pred NamedDeBruijn
-    -> OverloadT (EvalTerm info)
+    -> OverloadT (CoreEvalTerm info)
   specializeEq i raw reso p@(Pred _ t) = case t of
     TyInt -> pure (Builtin (_erIntInstance reso) i)
     TyDecimal -> pure (Builtin (_erDecInstance reso) i)
@@ -160,7 +159,7 @@ resolveOverload = \case
     -> RawBuiltin
     -> OrdResolution
     -> Pred NamedDeBruijn
-    -> OverloadT (EvalTerm info)
+    -> OverloadT (CoreEvalTerm info)
   specializeOrd i raw reso p@(Pred _ t) = case t of
     TyInt -> pure (Builtin (_orIntInstance reso) i)
     TyDecimal -> pure (Builtin (_orDecInstance reso) i)
@@ -174,7 +173,7 @@ resolveOverload = \case
     :: info
     -> FracResolution
     -> Pred NamedDeBruijn
-    -> OverloadT (EvalTerm info)
+    -> OverloadT (CoreEvalTerm info)
   specializeFracOp i reso p@(Pred _ t) = case t of
     TyInt -> pure (Builtin (_frIntInstance reso) i)
     TyDecimal -> pure (Builtin (_frDecInstance reso) i)
@@ -184,7 +183,7 @@ resolveOverload = \case
     :: info
     -> ListLikeResolution
     -> Pred NamedDeBruijn
-    -> OverloadT (EvalTerm info)
+    -> OverloadT (CoreEvalTerm info)
   specializeListLikeOp i reso p@(Pred _ t) = case t of
     TyString -> pure (Builtin (_llrStrInstance reso) i)
     TyList _ -> pure (Builtin (_llrListInstance reso) i)
@@ -204,7 +203,7 @@ resolveOverload = \case
   solveOverload
     :: info
     -> (RawBuiltin, [Type NamedDeBruijn], [Pred NamedDeBruijn])
-    -> OverloadT (EvalTerm info)
+    -> OverloadT (CoreEvalTerm info)
   solveOverload i = \case
     -- Addition
     -- Note, we can also sanity check this here.
@@ -332,7 +331,7 @@ resolveOverload = \case
       let a1Var = Name "" (NBound 0)
           a1 = (a1Var, t)
           app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
-      pure (Lam a1Var (a1 :| []) app i)
+      pure (Lam (a1 :| []) app i)
     (RawShow, [_], [p]) ->
       accessDict i "show" <$> lookupDictVar i p
     (RawEnumerate, [], []) ->
@@ -573,13 +572,13 @@ lengthResolve =
   , _llrListInstance = LengthList
   }
 
-varOverloaded :: i -> Pred NamedDeBruijn -> ReaderT ROState IO (EvalTerm i)
+varOverloaded :: i -> Pred NamedDeBruijn -> ReaderT ROState IO (CoreEvalTerm i)
 varOverloaded i (Pred tc ty) = case tc of
   WithoutField _ -> fail "invariant failure"
   Eq -> eqOverloaded i ty
   _ -> error "unimplemented"
 
-lookupDictVar :: i -> Pred NamedDeBruijn -> ReaderT ROState IO (EvalTerm i)
+lookupDictVar :: i -> Pred NamedDeBruijn -> ReaderT ROState IO (CoreEvalTerm i)
 lookupDictVar i p = do
   depth <- view roVarDepth
   ols <- view roOverloads
@@ -589,7 +588,7 @@ lookupDictVar i p = do
       pure (Var n i)
     Nothing -> fail "invariant failure: unbound dictionary variable"
 
-eqOverloaded :: i -> Type NamedDeBruijn -> OverloadT (EvalTerm i)
+eqOverloaded :: i -> Type NamedDeBruijn -> OverloadT (CoreEvalTerm i)
 eqOverloaded i = \case
   TyPrim p -> case p of
     PrimInt -> pure (eqInt i)
@@ -654,44 +653,44 @@ numDict sub mul divv neg abs' i =
     , (Field "negate", Builtin neg i)
     , (Field "abs", Builtin abs' i)]
 
-eqInt :: info -> EvalTerm info
+eqInt :: info -> CoreEvalTerm info
 eqInt = eqDict EqInt NeqInt
 
-eqDecimal :: info -> EvalTerm info
+eqDecimal :: info -> CoreEvalTerm info
 eqDecimal = eqDict EqDec NeqDec
 
-eqString :: info -> EvalTerm info
+eqString :: info -> CoreEvalTerm info
 eqString = eqDict EqStr NeqStr
 
-eqUnit :: info -> EvalTerm info
+eqUnit :: info -> CoreEvalTerm info
 eqUnit = eqDict EqUnit NeqUnit
 
-eqBool :: info -> EvalTerm info
+eqBool :: info -> CoreEvalTerm info
 eqBool = eqDict EqBool NeqBool
 
-eqObj :: info -> EvalTerm info
+eqObj :: info -> CoreEvalTerm info
 eqObj = eqDict EqObj NeqObj
 
-eqTime :: info -> EvalTerm info
+eqTime :: info -> CoreEvalTerm info
 eqTime = undefined
 
-numInt, numDec :: info -> EvalTerm info
+numInt, numDec :: info -> CoreEvalTerm info
 numInt = numDict SubInt MulInt DivInt NegateInt AbsInt
 numDec = numDict AddDec MulDec DivDec NegateDec AbsDec
 
-addInt, addDec, addStr, addList :: info -> EvalTerm info
+addInt, addDec, addStr, addList :: info -> CoreEvalTerm info
 addInt = addDict AddInt
 addDec = addDict AddDec
 addStr = addDict AddStr
 addList = addDict AddList
 
-ordInt, ordDec, ordStr, ordUnit :: info -> EvalTerm info
+ordInt, ordDec, ordStr, ordUnit :: info -> CoreEvalTerm info
 ordInt = ordDict GTInt GEQInt LTInt LEQInt
 ordDec = ordDict GTDec GEQDec LTDec LEQDec
 ordStr = ordDict GTStr GEQStr LTStr LEQStr
 ordUnit = ordDict NeqUnit EqUnit NeqUnit EqUnit
 
-runOverload :: OverloadedTerm RawBuiltin i -> IO (EvalTerm i)
+runOverload :: OverloadedTerm RawBuiltin i -> IO (CoreEvalTerm i)
 runOverload t = do
   let st = ROState mempty 0 []
   runReaderT (resolveOverload t) st
