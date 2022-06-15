@@ -51,7 +51,7 @@ data Defun name tyname builtin info
 data DefConst name tyname builtin info
   = DefConst
   { _dcName :: name
-  , _dcTermType :: Maybe (Type tyname)
+  , _dcType :: Maybe (Type tyname)
   , _dcTerm :: Term name tyname builtin info
   , _dcInfo :: info
   } deriving Show
@@ -75,8 +75,8 @@ data DefPact name tyname builtin info
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
-  -- | DPact (DefPact name tyname builtin info)
   deriving Show
+  -- | DPact (DefPact name tyname builtin info)
 
 defName :: Def name a b c -> name
 defName (Dfun d) = _dfunName d

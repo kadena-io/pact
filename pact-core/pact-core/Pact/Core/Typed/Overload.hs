@@ -8,7 +8,10 @@
 
 
 
-module Pact.Core.Typed.Overload where
+module Pact.Core.Typed.Overload
+ ( runOverloadTerm
+ , runOverloadModule
+ ) where
 
 import Control.Lens hiding (ix, op)
 import Control.Monad.Reader
@@ -32,16 +35,14 @@ data ROState
   , _roVarDepth :: DeBruijn
   , _roOverloads :: [(Pred NamedDeBruijn, DeBruijn)]
   }
-
 makeLenses ''ROState
 
 type OverloadT = ReaderT ROState IO
 
-
-resolveOverload
+resolveTerm
   :: OverloadedTerm RawBuiltin info
   -> OverloadT (CoreEvalTerm info)
-resolveOverload = \case
+resolveTerm = \case
   Var (OverloadedName n nk) i -> case nk of
     OBound u -> do
       depth <- view roVarDepth
@@ -64,7 +65,7 @@ resolveOverload = \case
         nsix = NE.zip ns ixs
         (m, de) = foldl' mkEnv (mempty, []) nsix
         ns' = toON <$> nsix
-    e' <- local (inEnv m de newDepth) (resolveOverload e)
+    e' <- local (inEnv m de newDepth) (resolveTerm e)
     pure (Lam (NE.zip ns' ts) e' info)
     where
     inEnv m de depth =
@@ -82,29 +83,29 @@ resolveOverload = \case
       _ -> fail "invariant error: let bound as incorrect variable"
     depth <- view roVarDepth
     let n' = Name (_olName n) (NBound depth)
-    e1' <- resolveOverload e1
-    e2' <- local (inEnv u depth) $ resolveOverload e2
+    e1' <- resolveTerm e1
+    e2' <- local (inEnv u depth) $ resolveTerm e2
     pure (Let n' e1' e2' i)
     where
     inEnv u depth =
       over roVarDepth (+ 1) . over roBoundVars (IntMap.insert u depth)
   App f args i ->
-    App <$> resolveOverload f <*> traverse resolveOverload args <*> pure i
+    App <$> resolveTerm f <*> traverse resolveTerm args <*> pure i
   TyApp l rs i ->
-    TyApp <$> resolveOverload l <*> pure rs <*> pure i
+    TyApp <$> resolveTerm l <*> pure rs <*> pure i
   TyAbs nel t i ->
-    TyAbs nel <$> resolveOverload t <*> pure i
+    TyAbs nel <$> resolveTerm t <*> pure i
   Block nel i ->
-    Block <$> traverse resolveOverload nel <*> pure i
+    Block <$> traverse resolveTerm nel <*> pure i
   ObjectLit ms i ->
-    ObjectLit <$> traverse resolveOverload ms <*> pure i
+    ObjectLit <$> traverse resolveTerm ms <*> pure i
   ListLit tn ts i ->
-    ListLit tn <$> traverse resolveOverload ts <*> pure i
+    ListLit tn <$> traverse resolveTerm ts <*> pure i
   Constant lit i ->
     pure (Constant lit i)
   Builtin b i -> solveOverload i b
   ObjectOp o i ->
-    ObjectOp <$> traverse resolveOverload o <*> pure i
+    ObjectOp <$> traverse resolveTerm o <*> pure i
   Error t1 t2 i ->
     pure (Error t1 t2 i)
   where
@@ -343,6 +344,42 @@ resolveOverload = \case
       in pure (TyApp b (l :| [r]) i)
     _ -> error "could not resolve overload"
 
+unsafeToTLName :: OverloadedName o -> Name
+unsafeToTLName (OverloadedName n nk) = case nk of
+  OTopLevel m mh -> Name n (NTopLevel m mh)
+  _ -> error "invalid"
+
+resolveDefun
+  :: OverloadedDefun RawBuiltin info
+  -> OverloadT (CoreEvalDefun info)
+resolveDefun (Defun dname ty term info) = do
+  let dname' = unsafeToTLName dname
+  term' <- resolveTerm term
+  pure (Defun dname' ty term' info)
+
+resolveDefConst
+  :: OverloadedDefConst RawBuiltin info
+  -> OverloadT (CoreEvalDefConst info)
+resolveDefConst (DefConst dname ty term info) = do
+  let dname' = unsafeToTLName dname
+  term' <- resolveTerm term
+  pure (DefConst dname' ty term' info)
+
+resolveDef
+  :: OverloadedDef RawBuiltin info
+  -> OverloadT (CoreEvalDef info)
+resolveDef = \case
+  Dfun d -> Dfun <$> resolveDefun d
+  DConst d -> DConst <$> resolveDefConst d
+
+resolveModule
+  :: OverloadedModule RawBuiltin info
+  -> OverloadT (CoreEvalModule info)
+resolveModule m = do
+  defs' <- traverse resolveDef (_mDefs m)
+  let gov' = unsafeToTLName <$> _mGovernance m
+  pure m{_mDefs=defs', _mGovernance=gov'}
+
 -------------------------------------------------
 -- Auxiliary data types to group
 -- builtin resolution
@@ -572,13 +609,18 @@ lengthResolve =
   , _llrListInstance = LengthList
   }
 
-varOverloaded :: i -> Pred NamedDeBruijn -> ReaderT ROState IO (CoreEvalTerm i)
+varOverloaded :: i -> Pred NamedDeBruijn -> OverloadT (CoreEvalTerm i)
 varOverloaded i (Pred tc ty) = case tc of
   WithoutField _ -> fail "invariant failure"
+  Add -> addOverloaded i ty
   Eq -> eqOverloaded i ty
-  _ -> error "unimplemented"
+  Num -> numOverloaded i ty
+  Ord -> ordOverloaded i ty
+  Show -> showOverloaded i ty
+  Fractional -> fractionalOverloaded i ty
+  ListLike -> listLikeOverloaded i ty
 
-lookupDictVar :: i -> Pred NamedDeBruijn -> ReaderT ROState IO (CoreEvalTerm i)
+lookupDictVar :: i -> Pred NamedDeBruijn -> OverloadT (CoreEvalTerm i)
 lookupDictVar i p = do
   depth <- view roVarDepth
   ols <- view roOverloads
@@ -588,29 +630,108 @@ lookupDictVar i p = do
       pure (Var n i)
     Nothing -> fail "invariant failure: unbound dictionary variable"
 
-eqOverloaded :: i -> Type NamedDeBruijn -> OverloadT (CoreEvalTerm i)
+addOverloaded
+  :: info
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm info)
+addOverloaded i = \case
+  TyInt -> pure (addInt i)
+  TyDecimal -> pure (addDec i)
+  TyString -> pure (addStr i)
+  TyList _ -> pure (addList i)
+  t@TyVar{} -> bindDictVar i Add t
+  _ -> fail "invariant failure: no instance for add"
+
+
+eqOverloaded
+  :: i
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm i)
 eqOverloaded i = \case
   TyPrim p -> case p of
     PrimInt -> pure (eqInt i)
     PrimDecimal -> pure (eqDecimal i)
     PrimString -> pure (eqString i)
     PrimBool -> pure (eqBool i)
-    PrimTime -> pure (eqTime i)
     PrimUnit -> pure (eqUnit i)
-  t@TyVar{} -> do
-    depth <- view roVarDepth
-    ols <- view roOverloads
-    case lookup (Pred Eq t) ols of
-      Just d -> do
-        let n = Name "#dictInst" $ NBound (depth - d - 1)
-        pure (Var n i)
-      Nothing -> fail "invariant failure: unbound dictionary variable"
-  TyList t -> eqOverloaded i t
+    _ -> fail "invariant failure: no instance for eq"
+  t@TyVar{} -> bindDictVar i Eq t
   TyRow _ -> pure (eqObj i)
-    -- term' <- eqOverloaded i t
-    -- let b = Builtin EqList i
-    -- pure (App b (term' :| []) i)
   _ -> fail "invariant failure: no instance for eq"
+
+ordOverloaded
+  :: info
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm info)
+ordOverloaded i = \case
+  TyPrim p -> case p of
+    PrimInt -> pure (ordInt i)
+    PrimDecimal -> pure (ordDec i)
+    PrimString -> pure (ordStr i)
+    PrimUnit -> pure (ordUnit i)
+    _ -> fail "invariant failure, no such ord instance"
+  t@TyVar{} -> bindDictVar i Ord t
+  _ -> fail "invariant failure, no such ord instance"
+
+bindDictVar
+  :: info
+  -> BuiltinTC
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm info)
+bindDictVar i tc t = do
+  depth <- view roVarDepth
+  ols <- view roOverloads
+  case lookup (Pred tc t) ols of
+    Just d -> do
+      let n = Name "#dictInst" $ NBound (depth - d - 1)
+      pure (Var n i)
+    Nothing -> fail "invariant failure: unbound dictionary variable"
+
+showOverloaded
+  :: info
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm info)
+showOverloaded i = \case
+  TyPrim p -> case p of
+    PrimInt -> pure (showInt i)
+    PrimDecimal -> pure (showDec i)
+    PrimString -> pure (showStr i)
+    PrimBool -> pure (showBool i)
+    PrimUnit -> pure (showUnit i)
+    _ -> fail "invariant failure: no instance for show"
+  t@TyVar{} -> bindDictVar i Show t
+  TyRow _ -> pure (eqObj i)
+  _ -> fail "invariant failure: no instance for show"
+
+numOverloaded
+  :: info
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm info)
+numOverloaded i = \case
+  TyInt -> pure (numInt i)
+  TyDecimal -> pure (numDec i)
+  t@TyVar{} -> bindDictVar i Num t
+  _ -> fail "invariant failure: no instance for num"
+
+fractionalOverloaded
+  :: info
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm info)
+fractionalOverloaded i = \case
+  TyInt -> pure (fracInt i)
+  TyDecimal -> pure (fracDec i)
+  t@TyVar{} -> bindDictVar i Fractional t
+  _ -> fail "invariant failure: no instance for frac"
+
+listLikeOverloaded
+  :: info
+  -> Type NamedDeBruijn
+  -> OverloadT (CoreEvalTerm info)
+listLikeOverloaded i = \case
+  TyString -> pure (listLikeStr i)
+  TyList _ -> pure (listLikeList i)
+  t@TyVar{} -> bindDictVar i ListLike t
+  _ -> fail "invariant failure: no instance for listLike"
 
 eqDict :: b -> b -> i -> Term n tn b i
 eqDict eq neq i =
@@ -636,13 +757,19 @@ ordDict gt geq lt leq i =
     , (Field "<", Builtin lt i)
     , (Field "<=", Builtin leq i)]
 
-addDict :: b -> i -> Term n tn b i
+addDict :: builtin -> info -> Term name tyname builtin info
 addDict add i =
   ObjectLit o i
   where
   o = Map.singleton (Field "+") (Builtin add i)
 
-numDict :: b -> b -> b -> b -> b-> i -> Term n tn b i
+numDict :: builtin
+  -> builtin
+  -> builtin
+  -> builtin
+  -> builtin
+  -> info
+  -> Term name tyname builtin info
 numDict sub mul divv neg abs' i =
   ObjectLit o i
   where
@@ -652,6 +779,38 @@ numDict sub mul divv neg abs' i =
     , (Field "/", Builtin divv i)
     , (Field "negate", Builtin neg i)
     , (Field "abs", Builtin abs' i)]
+
+fracDict :: builtin
+  -> builtin
+  -> builtin
+  -> builtin
+  -> info
+  -> Term name tyname builtin info
+fracDict ln_ exp_ sqrt_ logBase_ i =
+  ObjectLit o i
+  where
+  o = Map.fromList
+    [ (Field "ln", Builtin ln_ i)
+    , (Field "exp", Builtin exp_ i)
+    , (Field "sqrt", Builtin sqrt_ i)
+    , (Field "log-base", Builtin logBase_ i)]
+
+listLikeDict :: builtin
+  -> builtin
+  -> builtin
+  -> builtin
+  -> builtin
+  -> info
+  -> Term name tyname builtin info
+listLikeDict take_ drop_ concat_ rev len i =
+  ObjectLit o i
+  where
+  o = Map.fromList
+    [ (Field "take", Builtin take_ i)
+    , (Field "drop", Builtin drop_ i)
+    , (Field "concat", Builtin concat_ i)
+    , (Field "reverse", Builtin rev i)
+    , (Field "length", Builtin len i)]
 
 eqInt :: info -> CoreEvalTerm info
 eqInt = eqDict EqInt NeqInt
@@ -671,9 +830,6 @@ eqBool = eqDict EqBool NeqBool
 eqObj :: info -> CoreEvalTerm info
 eqObj = eqDict EqObj NeqObj
 
-eqTime :: info -> CoreEvalTerm info
-eqTime = undefined
-
 numInt, numDec :: info -> CoreEvalTerm info
 numInt = numDict SubInt MulInt DivInt NegateInt AbsInt
 numDec = numDict AddDec MulDec DivDec NegateDec AbsDec
@@ -690,7 +846,28 @@ ordDec = ordDict GTDec GEQDec LTDec LEQDec
 ordStr = ordDict GTStr GEQStr LTStr LEQStr
 ordUnit = ordDict NeqUnit EqUnit NeqUnit EqUnit
 
-runOverload :: OverloadedTerm RawBuiltin i -> IO (CoreEvalTerm i)
-runOverload t = do
+showInt, showDec, showStr, showUnit, showBool :: info -> CoreEvalTerm info
+showInt = showDict ShowInt
+showDec = showDict ShowDec
+showStr = showDict ShowStr
+showUnit = showDict ShowUnit
+showBool = showDict ShowBool
+
+fracInt, fracDec :: info -> CoreEvalTerm info
+fracInt = fracDict LnInt ExpInt SqrtInt LogBaseInt
+fracDec = fracDict LnDec ExpDec SqrtDec LogBaseDec
+
+listLikeStr, listLikeList :: info -> CoreEvalTerm info
+listLikeStr = listLikeDict TakeStr DropStr ConcatStr ReverseStr LengthStr
+listLikeList = listLikeDict TakeList DropList ConcatList ReverseList LengthList
+
+runOverload :: OverloadT a -> IO a
+runOverload act = do
   let st = ROState mempty 0 []
-  runReaderT (resolveOverload t) st
+  runReaderT act st
+
+runOverloadTerm :: OverloadedTerm RawBuiltin i -> IO (CoreEvalTerm i)
+runOverloadTerm t = runOverload (resolveTerm t)
+
+runOverloadModule :: OverloadedModule RawBuiltin i -> IO (CoreEvalModule i)
+runOverloadModule m = runOverload (resolveModule m)

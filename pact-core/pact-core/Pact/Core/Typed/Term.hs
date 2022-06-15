@@ -23,11 +23,23 @@ module Pact.Core.Typed.Term
  , termInfo
  , traverseTermType
  , ETerm
+ -- Post-overload
  , OverloadedTerm
+ , OverloadedDefun
+ , OverloadedDefConst
+ , OverloadedDef
+ , OverloadedModule
+ -- Flexible Eval terms
  , EvalTerm
  , EvalModule
+ -- On-chain eval terms
  , CoreEvalTerm
+ , CoreEvalDefun
+ , CoreEvalDefConst
+ , CoreEvalDef
+ , CoreEvalModule
  , defName
+ , defType
  ) where
 
 import Control.Lens
@@ -61,15 +73,17 @@ data DefType
 data Defun name tyname builtin info
   = Defun
   { _dfunName :: name
+  , _dfunType :: Type tyname
   , _dfunTerm :: Term name tyname builtin info
-  , _dfunTermType :: Type tyname
+  , _dfunInfo :: info
   } deriving Show
 
 data DefConst name tyname builtin info
   = DefConst
   { _dcName :: name
+  , _dcType :: Type tyname
   , _dcTerm :: Term name tyname builtin info
-  , _dcTermType :: Type tyname
+  , _dcInfo :: info
   } deriving Show
 
 data DefCap name tyname builtin info
@@ -109,6 +123,10 @@ data Def name tyname builtin info
 -- DPact (DefPact name tyname builtin info)
 -- DSchema (DefSchema name tyname info)
 -- DTable (DefTable name tyname info)
+defType :: Def name tyname builtin info -> Type tyname
+defType = \case
+  Dfun d -> _dfunType d
+  DConst d -> _dcType d
 
 defName :: Def name tyname builtin i -> name
 defName = \case
@@ -187,11 +205,28 @@ data Term name tyname builtin info
   -- ^ error terms + their inferred type
   deriving (Show, Functor)
 
+-- Post Typecheck terms + modules
 type OverloadedTerm b i =
   Term (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type OverloadedDefun b i =
+  Defun (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type OverloadedDefConst b i =
+  DefConst (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type OverloadedDef b i =
+  Def (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type OverloadedModule b i =
+  Module (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+
+-- Ideally flexible eval types.
 type EvalTerm b i = Term Name NamedDeBruijn b i
 type EvalModule b i = Module Name NamedDeBruijn b i
+
+-- On-chain, core builtin-types
 type CoreEvalTerm i = Term Name NamedDeBruijn CoreBuiltin i
+type CoreEvalDefun i = Defun Name NamedDeBruijn CoreBuiltin i
+type CoreEvalDefConst i = DefConst Name NamedDeBruijn CoreBuiltin i
+type CoreEvalDef i = Def Name NamedDeBruijn CoreBuiltin i
+type CoreEvalModule i = Module Name NamedDeBruijn CoreBuiltin i
 type ETerm b = Term Name NamedDeBruijn b ()
 
 

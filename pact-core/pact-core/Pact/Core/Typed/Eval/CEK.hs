@@ -46,7 +46,7 @@ import Pact.Core.Pretty(Pretty(..), (<+>))
 import Pact.Core.Gas
 import qualified Pact.Core.Pretty as P
 
-type CEKTLEnv b = Map DeclName (CEKValue b)
+type CEKTLEnv b = Map FullyQualifiedName (ETerm b)
 type CEKEnv b = RAList (CEKValue b)
 newtype BuiltinFn b = BuiltinFn (CEKRuntime b => NonEmpty (CEKValue b) -> EvalT b (CEKValue b))
 type CEKRuntime b = (?cekLoaded :: CEKTLEnv b, ?cekBuiltins :: Array (BuiltinFn b), Enum b)
@@ -54,7 +54,6 @@ type CEKRuntime b = (?cekLoaded :: CEKTLEnv b, ?cekBuiltins :: Array (BuiltinFn 
 data CEKState b
   = CEKState
   { _cekGas :: Gas
-  -- , _cekStack :: [StackFrame name]
   , _cekEvalLog :: Maybe [Text]
   } deriving Show
 
@@ -103,11 +102,12 @@ eval = evalCEK Mt
     -> ETerm b
     -> EvalT b (CEKValue b)
   evalCEK cont env (Var n _)  =
-    returnCEK cont $ case _nKind n of
-      NBound i ->
-        env RAList.!! i
-      NTopLevel m mh ->
-        ?cekLoaded Map.! DeclName mh (_nName n) m
+    case _nKind n of
+      NBound i -> returnCEK cont (env RAList.!! i)
+      -- Top level names are not closures, so we wipe the env
+      NTopLevel mname mh ->
+        let !t = ?cekLoaded Map.! FullyQualifiedName mname (_nName n) mh
+        in evalCEK cont RAList.Nil t
   evalCEK cont _env (Constant l _)=
     returnCEK cont (VLiteral l)
   evalCEK cont env (App fn arg _) =

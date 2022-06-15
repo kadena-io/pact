@@ -26,7 +26,6 @@ module Pact.Core.Names
  , tyname
  , tynameUnique
  , Supply
- , DeclName(..)
  , NamedDeBruijn(..)
  , ndIndex
  , ndName
@@ -116,7 +115,7 @@ type Supply = Int
 
 data IRNameKind
   = IRBound
-  | IRTopLevel ModuleName
+  | IRTopLevel ModuleName ModuleHash
   deriving (Show, Eq, Ord)
 
 data IRName
@@ -135,14 +134,6 @@ data NamedDeBruijn
   deriving (Show, Eq)
 
 type DeBruijn = Word64
-
-data DeclName
-  = DeclName
-  { _tlnHash :: ModuleHash
-  , _tlnName :: !Text
-  , _tlnModule :: !ModuleName
-  }
-  deriving (Show, Eq, Ord)
 
 data ONameKind b
   = OBound Unique

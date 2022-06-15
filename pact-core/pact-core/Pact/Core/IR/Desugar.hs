@@ -14,7 +14,6 @@ module Pact.Core.IR.Desugar
  , runDesugarModule
  ) where
 
-
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Lens hiding (List,ix)
@@ -295,7 +294,7 @@ termSCC currM = conn
   where
   conn = \case
     Var n _ -> case _irNameKind n of
-      IRTopLevel m | m == currM ->
+      IRTopLevel m _ | m == currM ->
         Set.singleton (_irName n)
       _ -> Set.empty
     Lam _ e _ -> conn e
@@ -411,9 +410,13 @@ renameType = \case
     Nothing ->
       TypeVar v <$> newUnique'
 
-renameDefun :: ModuleName -> Defun ParsedName Text b i -> RenamerT b' i' (Defun IRName TypeVar b i)
-renameDefun mn (Defun n dty term i) = do
-  let n' = IRName (rawParsedName n) (IRTopLevel mn) dummyTLUnique
+renameDefun
+  :: ModuleName
+  -> ModuleHash
+  -> Defun ParsedName Text b i
+  -> RenamerT b' i' (Defun IRName TypeVar b i)
+renameDefun mn mh (Defun n dty term i) = do
+  let n' = IRName (rawParsedName n) (IRTopLevel mn mh) dummyTLUnique
   -- Todo: put type variables in scope here, if we want to support polymorphism
   dty' <- renameType dty
   term' <- renameTerm term
@@ -421,21 +424,24 @@ renameDefun mn (Defun n dty term i) = do
 
 renameDefConst
   :: ModuleName
+  -> ModuleHash
   -> DefConst ParsedName Text b i
   -> RenamerT b' i' (DefConst IRName TypeVar b i)
-renameDefConst mn (DefConst n mty term i) = do
-  let n' = IRName (rawParsedName n) (IRTopLevel mn) dummyTLUnique
+renameDefConst mn mh (DefConst n mty term i) = do
+  let n' = IRName (rawParsedName n) (IRTopLevel mn mh) dummyTLUnique
   -- Todo: put type variables in scope here, if we want to support polymorphism
   mty' <- traverse renameType mty
   term' <- renameTerm term
   pure (DefConst n' mty' term' i)
 
-renameDef :: ModuleName
+renameDef
+  :: ModuleName
+  -> ModuleHash
   -> Def ParsedName Text builtin info
   -> RenamerT b' i' (Def IRName TypeVar builtin info)
-renameDef mn = \case
-  Dfun d -> Dfun <$> renameDefun mn d
-  DConst d -> DConst <$> renameDefConst mn d
+renameDef mn mh = \case
+  Dfun d -> Dfun <$> renameDefun mn mh d
+  DConst d -> DConst <$> renameDefConst mn mh d
 
 resolveBareName' :: Text -> RenamerT b i IRName
 resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
@@ -446,13 +452,13 @@ resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
 renameModule :: Module ParsedName Text b i -> RenamerT b' i' (Module IRName TypeVar b i)
 renameModule (Module mname mgov defs blessed imp implements mhash) = do
   let rawDefNames = rawDefName <$> defs
-      defMap = Map.fromList $ (, (IRTopLevel mname, dummyTLUnique)) <$> rawDefNames
+      defMap = Map.fromList $ (, (IRTopLevel mname mhash, dummyTLUnique)) <$> rawDefNames
       fqns = Map.fromList $ (\n -> (n, FullyQualifiedName mname n mhash)) <$> rawDefNames
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
   rsModuleBinds %= Map.insert mname (fst <$> defMap)
   rsLoaded . loToplevel %= Map.union fqns
-  defs' <- locally reBinds (Map.union defMap) $ traverse (renameDef mname) defs
+  defs' <- locally reBinds (Map.union defMap) $ traverse (renameDef mname mhash) defs
   let scc = mkScc <$> defs'
   defs'' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
@@ -472,11 +478,13 @@ reStateFromLoaded loaded = RenamerState mbinds loaded
   mbind md = let
     m = _mdModule md
     depNames = _nName . Typed.defName <$> Typed._mDefs m
-    in Map.fromList $ (,IRTopLevel (Typed._mName m)) <$> depNames
+    in Map.fromList $ (,IRTopLevel (Typed._mName m) (Typed._mHash m)) <$> depNames
   mbinds = fmap mbind (_loModules loaded)
 
 loadedBinds :: Loaded b i -> Map Text (IRNameKind, Unique)
-loadedBinds loaded = (, dummyTLUnique) . IRTopLevel . _fqModule <$> _loToplevel loaded
+loadedBinds loaded =
+  let f fqn  = (IRTopLevel (_fqModule fqn) (_fqHash fqn), dummyTLUnique)
+  in f <$> _loToplevel loaded
 
 runDesugarTerm
   :: PT.Expr ParsedName i
@@ -494,7 +502,10 @@ runDesugarTerm e loaded = do
 
 
 -- Todo: copy paste
-runDesugarModule :: PT.Module ParsedName i -> Loaded b i -> IO (Module IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+runDesugarModule
+  :: PT.Module ParsedName i
+  -> Loaded b i
+  -> IO (Module IRName TypeVar RawBuiltin i, Supply, Loaded b i)
 runDesugarModule m loaded = do
   ref <- newIORef 0
   let reState = reStateFromLoaded loaded
@@ -504,4 +515,3 @@ runDesugarModule m loaded = do
   (renamed, state') <- runRenamerT reState rEnv (renameModule desugared)
   lastSupply <- readIORef ref
   pure (renamed, lastSupply, _rsLoaded state')
-
