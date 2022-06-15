@@ -7,6 +7,7 @@ import Control.Monad.IO.Class(MonadIO(..))
 import Control.Monad.Catch
 import System.Console.Haskeline
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import Pact.Core.Compile
 
@@ -26,4 +27,4 @@ main = runInputT defaultSettings loop
         i | T.isPrefixOf ":load" i ->  do
           catch' (liftIO (_compileFile (T.unpack (T.drop 5 i))))
           loop
-        i -> catch' (liftIO (_compile "repl" i) *> loop)
+        i -> catch' (liftIO (_compile (T.encodeUtf8 i)) *> loop)
