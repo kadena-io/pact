@@ -72,6 +72,18 @@ data Module name i
   , _mDefs :: NonEmpty (Def name i)
   } deriving Show
 
+data TopLevel name i
+  = TLModule (Module name i)
+  | TLTerm (Expr name i)
+  deriving Show
+
+data ReplTopLevel name i
+  = RTLModule (Module name i)
+  | RTLDefun (Defun name i)
+  | RTLDefConst (DefConst name i)
+  | RTLTerm (Expr name i)
+  deriving Show
+
 data Interface name i
   = Interface
   { _ifName :: Text

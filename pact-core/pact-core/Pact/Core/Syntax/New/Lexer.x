@@ -202,7 +202,7 @@ offsideRule _ = do
         popStartCode
         popLayout
         withLineInfo TokenVClose
-    Nothing -> continue
+    Nothing -> popStartCode *> withLineInfo TokenVSemi
   where
   continue = popStartCode *> scan
 

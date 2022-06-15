@@ -28,6 +28,9 @@ import Pact.Core.Syntax.New.LexUtils
 }
 %name parseExpr Statement
 %name parseModule Module
+%name parseTopLevel TopLevel
+%name parseReplTopLevel TopLevel
+%name parseProgram Program
 
 %tokentype { PosToken }
 %monad { ParserT }
@@ -101,6 +104,25 @@ import Pact.Core.Syntax.New.LexUtils
 
 
 %%
+
+Program :: { [ParsedTopLevel] }
+  : ProgramList { reverse $1 }
+
+ProgramList :: { [ParsedTopLevel] }
+  : ProgramList SEMI TopLevel { $3:$1 }
+  | TopLevel { [$1] }
+  | {- empty -} { [] }
+
+TopLevel :: { ParsedTopLevel }
+  : Module { TLModule $1 }
+  | Expr { TLTerm $1 }
+
+ReplTopLevel :: { ParsedReplTopLevel }
+  : Module { RTLModule $1 }
+  | Defun { RTLDefun $1 }
+  | DefConst { RTLDefConst $1 }
+  | Expr { RTLTerm $1 }
+
 Module :: { ParsedModule }
   : module IDENT '(' Gov ')' '{' OPEN Exts Defs CLOSE '}'
     { Module (ModuleName (getIdent $2) Nothing) $4 (reverse $8) (NE.fromList (reverse $9)) }

@@ -15,7 +15,6 @@ module Pact.Core.Typed.Overload
 
 import Control.Lens hiding (ix, op)
 import Control.Monad.Reader
--- import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.IntMap.Strict(IntMap)

@@ -29,6 +29,8 @@ type ParsedDefun = Defun ParsedName LineInfo
 type ParsedDef = Def ParsedName LineInfo
 type ParsedDefConst = DefConst ParsedName LineInfo
 type ParsedModule = Module ParsedName LineInfo
+type ParsedTopLevel = TopLevel ParsedName LineInfo
+type ParsedReplTopLevel = ReplTopLevel ParsedName LineInfo
 
 data PosToken =
   PosToken
@@ -196,9 +198,7 @@ getLineInfo = do
   pure (LineInfo (_inpLine input) (_inpColumn input) 1)
 
 withLineInfo :: Token -> LexerT PosToken
-withLineInfo tok = do
-  info <- getLineInfo
-  pure (PosToken tok info)
+withLineInfo tok = PosToken tok <$> getLineInfo
 
 emit :: (Text -> Token) -> Text -> LexerT PosToken
 emit f e = withLineInfo (f e)

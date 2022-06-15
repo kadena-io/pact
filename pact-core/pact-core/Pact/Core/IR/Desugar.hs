@@ -12,6 +12,7 @@
 module Pact.Core.IR.Desugar
  ( runDesugarTerm
  , runDesugarModule
+ , runDesugarProgram
  ) where
 
 import Control.Monad.Reader
@@ -22,6 +23,7 @@ import Data.Map.Strict(Map)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.IORef
 import Data.Set(Set)
+import Data.Foldable(foldlM)
 import Data.Graph(stronglyConnComp, SCC(..))
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
@@ -486,32 +488,69 @@ loadedBinds loaded =
   let f fqn  = (IRTopLevel (_fqModule fqn) (_fqHash fqn), dummyTLUnique)
   in f <$> _loToplevel loaded
 
-runDesugarTerm
-  :: PT.Expr ParsedName i
-  -> Loaded b i
-  -> IO (Term IRName TypeVar RawBuiltin i, Supply, Loaded b i)
-runDesugarTerm e loaded = do
-  ref <- newIORef 0
+runDesugar'
+  :: Loaded b i
+  -> Supply
+  -> RenamerT b i a
+  -> IO (a, Supply, Loaded b i)
+runDesugar' loaded supply act = do
+  ref <- newIORef supply
   let reState = reStateFromLoaded loaded
       rTLBinds = loadedBinds loaded
       rEnv = RenamerEnv rTLBinds mempty ref
-      desugared = desugarTerm e
-  (renamed, state') <- runRenamerT reState rEnv (renameTerm desugared)
+  (renamed, state') <- runRenamerT reState rEnv act
   lastSupply <- readIORef ref
   pure (renamed, lastSupply, _rsLoaded state')
 
+runDesugarTerm'
+  :: Loaded b i
+  -> Supply
+  -> PT.Expr ParsedName i
+  -> IO (Term IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+runDesugarTerm' loaded supply e = let
+  desugared = desugarTerm e
+  in runDesugar' loaded supply (renameTerm desugared)
+
+runDesugarTerm
+  :: Loaded b i
+  -> PT.Expr ParsedName i
+  -> IO (Term IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+runDesugarTerm loaded = runDesugarTerm' loaded 0
 
 -- Todo: copy paste
-runDesugarModule
-  :: PT.Module ParsedName i
-  -> Loaded b i
+runDesugarModule'
+  :: Loaded b i
+  -> Supply
+  -> PT.Module ParsedName i
   -> IO (Module IRName TypeVar RawBuiltin i, Supply, Loaded b i)
-runDesugarModule m loaded = do
-  ref <- newIORef 0
-  let reState = reStateFromLoaded loaded
-      rTLBinds = loadedBinds loaded
-      rEnv = RenamerEnv rTLBinds mempty ref
-      desugared = desugarModule m
-  (renamed, state') <- runRenamerT reState rEnv (renameModule desugared)
-  lastSupply <- readIORef ref
-  pure (renamed, lastSupply, _rsLoaded state')
+runDesugarModule' loaded supply m  = let
+  desugared = desugarModule m
+  in runDesugar' loaded supply (renameModule desugared)
+
+runDesugarModule
+  :: Loaded b i
+  -> PT.Module ParsedName i
+  -> IO (Module IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+runDesugarModule loaded = runDesugarModule' loaded 0
+
+
+runDesugarTopLevel'
+  :: Loaded b i
+  -> Supply
+  -> PT.TopLevel ParsedName i
+  -> IO (TopLevel IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+runDesugarTopLevel' loaded supply = \case
+  PT.TLModule m -> over _1 TLModule <$> runDesugarModule' loaded supply m
+  PT.TLTerm e -> over _1 TLTerm <$> runDesugarTerm' loaded supply e
+
+runDesugarProgram
+  :: Loaded b i
+  -> [PT.TopLevel ParsedName i]
+  -> IO ([TopLevel IRName TypeVar RawBuiltin i], Supply, Loaded b i)
+runDesugarProgram loaded program = do
+  let supply = 0
+  over _1 reverse <$> foldlM go ([], supply, loaded) program
+  where
+  go (tls, s, l) tl = do
+    (tl', s', l') <- runDesugarTopLevel' l s tl
+    pure (tl':tls, s', l')

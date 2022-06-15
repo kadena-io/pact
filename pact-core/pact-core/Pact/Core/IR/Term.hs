@@ -153,8 +153,6 @@ data Term name tyname builtin info
 -- Aliases for convenience
 ----------------------------
 
-
-
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
   Var n i -> Var n <$> f i
