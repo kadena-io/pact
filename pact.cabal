@@ -390,6 +390,8 @@ library pact-core
     Pact.Core.Typed.Eval.Runtime
     Pact.Core.Typed.Eval.CEK
     Pact.Core.Typed.Eval.Builtin
+    -- Repl
+    Pact.Core.Repl.Utils
 
 executable pact-core-repl
   import: pact-common

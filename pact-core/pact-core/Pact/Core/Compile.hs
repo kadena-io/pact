@@ -11,6 +11,7 @@ module Pact.Core.Compile where
 
 import qualified Data.ByteString as BL
 
+import Pact.Core.Info
 import Pact.Core.Persistence
 
 import qualified Pact.Core.Pretty as Pretty
@@ -24,10 +25,10 @@ import qualified Pact.Core.Syntax.New.LexUtils as NLex
 import qualified Pact.Core.Syntax.New.Lexer as NLex
 import qualified Pact.Core.Syntax.New.Parser as NParse
 
-_compileFile :: String -> IO ()
+_compileFile :: HasPactDb b LineInfo => String -> IO ()
 _compileFile s = BL.readFile s >>= _compile
 
-_compile :: BL.ByteString -> IO ()
+_compile :: HasPactDb b LineInfo => BL.ByteString -> IO ()
 _compile source = do
   lexx <- either error pure $ NLex.lexer source
   let loaded = Loaded mempty mempty mempty
@@ -64,4 +65,14 @@ _compileModule file = do
   print (NLex._ptToken <$> lexx)
   parsed <- either error pure $ NParse.parseModule lexx
   putStrLn "------------ Parsed Module -------------"
+  print parsed
+
+_compileProgram :: String -> IO ()
+_compileProgram file = do
+  source <- BL.readFile file
+  lexx <- either error pure $ NLex.lexer source
+  putStrLn "---- Lexer output -----"
+  print (NLex._ptToken <$> lexx)
+  parsed <- either error pure $ NParse.parseProgram lexx
+  putStrLn "------------- Parsed program -------------"
   print parsed

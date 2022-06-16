@@ -28,8 +28,7 @@ import Pact.Core.Syntax.New.LexUtils
 }
 %name parseExpr Statement
 %name parseModule Module
-%name parseTopLevel TopLevel
-%name parseReplTopLevel TopLevel
+%name parseReplProgram ReplProgram
 %name parseProgram Program
 
 %tokentype { PosToken }
@@ -105,12 +104,21 @@ import Pact.Core.Syntax.New.LexUtils
 
 %%
 
+-- Programs will always end with a virtual semi
 Program :: { [ParsedTopLevel] }
-  : ProgramList { reverse $1 }
+  : ProgramList SEMI { reverse $1 }
 
 ProgramList :: { [ParsedTopLevel] }
   : ProgramList SEMI TopLevel { $3:$1 }
   | TopLevel { [$1] }
+  | {- empty -} { [] }
+
+ReplProgram :: { [ParsedReplTopLevel] }
+  : ReplProgramList SEMI { reverse $1 }
+
+ReplProgramList :: { [ParsedReplTopLevel] }
+  : ReplProgramList SEMI ReplTopLevel { $3:$1 }
+  | ReplTopLevel { [$1] }
   | {- empty -} { [] }
 
 TopLevel :: { ParsedTopLevel }
@@ -370,6 +378,7 @@ mkIntegerConstant n i =
   case T.decimal n of
     Right (d, _) -> pure (Constant (LInteger d) i)
     _ -> throwError "Impossible"
+
 
 mkQualName ns (mod, (Just ident)) info =
   let ns' = NamespaceName ns

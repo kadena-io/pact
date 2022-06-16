@@ -17,6 +17,8 @@ module Pact.Core.Typed.Term
  , Interface(..)
  , IfDefun(..)
  , IfDef(..)
+ , TopLevel(..)
+ , ReplTopLevel(..)
  , Literal(..)
  , DefType(..)
  , TyVarType(..)
@@ -29,6 +31,8 @@ module Pact.Core.Typed.Term
  , OverloadedDefConst
  , OverloadedDef
  , OverloadedModule
+ , OverloadedTopLevel
+ , OverloadedReplTopLevel
  -- Flexible Eval terms
  , EvalTerm
  , EvalModule
@@ -38,8 +42,11 @@ module Pact.Core.Typed.Term
  , CoreEvalDefConst
  , CoreEvalDef
  , CoreEvalModule
+ , CoreEvalTopLevel
+ , CoreEvalReplTopLevel
  , defName
  , defType
+ , defTerm
  ) where
 
 import Control.Lens
@@ -133,6 +140,11 @@ defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
 
+defTerm :: Def name tyname builtin info -> Term name tyname builtin info
+defTerm = \case
+  Dfun d -> _dfunTerm d
+  DConst d -> _dcTerm d
+
 data Module name tyname builtin info
   = Module
   { _mName :: ModuleName
@@ -224,6 +236,10 @@ type OverloadedDef b i =
   Def (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
 type OverloadedModule b i =
   Module (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type OverloadedTopLevel b i =
+  TopLevel (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type OverloadedReplTopLevel b i =
+  ReplTopLevel (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
 
 -- Ideally flexible eval types.
 type EvalTerm b i = Term Name NamedDeBruijn b i
@@ -235,6 +251,8 @@ type CoreEvalDefun i = Defun Name NamedDeBruijn CoreBuiltin i
 type CoreEvalDefConst i = DefConst Name NamedDeBruijn CoreBuiltin i
 type CoreEvalDef i = Def Name NamedDeBruijn CoreBuiltin i
 type CoreEvalModule i = Module Name NamedDeBruijn CoreBuiltin i
+type CoreEvalTopLevel i = TopLevel Name NamedDeBruijn CoreBuiltin i
+type CoreEvalReplTopLevel i = ReplTopLevel Name NamedDeBruijn CoreBuiltin i
 type ETerm b = Term Name NamedDeBruijn b ()
 
 

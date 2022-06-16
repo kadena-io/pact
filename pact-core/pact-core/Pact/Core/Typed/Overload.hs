@@ -11,6 +11,8 @@
 module Pact.Core.Typed.Overload
  ( runOverloadTerm
  , runOverloadModule
+ , runOverloadProgram
+ , runOverloadReplProgram
  ) where
 
 import Control.Lens hiding (ix, op)
@@ -378,6 +380,33 @@ resolveModule m = do
   defs' <- traverse resolveDef (_mDefs m)
   let gov' = unsafeToTLName <$> _mGovernance m
   pure m{_mDefs=defs', _mGovernance=gov'}
+
+resolveTopLevel
+  :: OverloadedTopLevel RawBuiltin info
+  -> OverloadT (CoreEvalTopLevel info)
+resolveTopLevel = \case
+  TLModule m -> TLModule <$> resolveModule m
+  TLTerm t -> TLTerm <$> resolveTerm t
+  _ -> error "unimplemented"
+
+resolveProgram
+  :: [OverloadedTopLevel RawBuiltin info]
+  -> OverloadT [CoreEvalTopLevel info]
+resolveProgram  = traverse resolveTopLevel
+
+resolveReplTopLevel
+  :: OverloadedReplTopLevel RawBuiltin info
+  -> OverloadT (CoreEvalReplTopLevel info)
+resolveReplTopLevel = \case
+  RTLModule m -> RTLModule <$> resolveModule m
+  RTLTerm t -> RTLTerm <$> resolveTerm t
+  RTLDefun d -> RTLDefun <$> resolveDefun d
+  RTLDefConst d -> RTLDefConst <$> resolveDefConst d
+
+resolveReplProgram
+  :: [OverloadedReplTopLevel RawBuiltin info]
+  -> OverloadT [CoreEvalReplTopLevel info]
+resolveReplProgram = traverse resolveReplTopLevel
 
 -------------------------------------------------
 -- Auxiliary data types to group
@@ -870,3 +899,14 @@ runOverloadTerm t = runOverload (resolveTerm t)
 
 runOverloadModule :: OverloadedModule RawBuiltin i -> IO (CoreEvalModule i)
 runOverloadModule m = runOverload (resolveModule m)
+
+
+runOverloadProgram
+  :: [OverloadedTopLevel RawBuiltin info]
+  -> IO [CoreEvalTopLevel info]
+runOverloadProgram prog = runOverload (resolveProgram prog)
+
+runOverloadReplProgram
+  :: [OverloadedReplTopLevel RawBuiltin info]
+  -> IO [CoreEvalReplTopLevel info]
+runOverloadReplProgram prog = runOverload (resolveReplProgram prog)

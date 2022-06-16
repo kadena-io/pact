@@ -1,6 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- |
+-- Module      :  Pact.Core.IR.Typecheck
+-- Copyright   :  (C) 2022 Kadena
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Jose Cardona <jose@kadena.io>
+--
+-- Pact core minimal repl
+--
+
+
 module Main where
 
 import Control.Monad.IO.Class(MonadIO(..))
@@ -25,6 +35,6 @@ main = runInputT defaultSettings loop
         "" -> loop
         ":quit" -> outputStrLn "goodbye"
         i | T.isPrefixOf ":load" i ->  do
-          catch' (liftIO (_compileFile (T.unpack (T.drop 5 i))))
+          catch' (liftIO (_compileFile (T.unpack (T.drop 6 i))))
           loop
         i -> catch' (liftIO (_compile (T.encodeUtf8 i)) *> loop)
