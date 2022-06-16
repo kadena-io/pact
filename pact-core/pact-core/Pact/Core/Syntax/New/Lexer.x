@@ -74,7 +74,7 @@ tokens :-
 <0> \]           { token TokenCloseBracket }
 <0> \,           { token TokenComma }
 <0> \.           { token TokenDot }
-<0> \:           { token TokenSemiColon }
+<0> \:           { token TokenColon }
 <0> \=\>         { token TokenLambdaArrow}
 <0> \=\=         { token TokenEq }
 <0> \!\=         { token TokenEq }

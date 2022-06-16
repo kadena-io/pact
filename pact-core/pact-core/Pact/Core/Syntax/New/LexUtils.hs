@@ -21,6 +21,7 @@ import qualified Data.ByteString as B
 
 import Pact.Core.Info
 import Pact.Core.Names
+import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.New.ParseTree
 
 type ParserT = Either String
@@ -68,7 +69,7 @@ data Token
   | TokenOpenBracket
   | TokenCloseBracket
   | TokenComma
-  | TokenSemiColon
+  | TokenColon
   | TokenDot
   -- Types
   | TokenTyList
@@ -208,3 +209,70 @@ token tok = const (withLineInfo tok)
 
 runLexerT :: LexerT a -> ByteString -> Either String a
 runLexerT act s = evalStateT act (initState s)
+
+instance Pretty Token where
+  pretty = \case
+    TokenLet -> "let"
+    TokenIn -> "in"
+    TokenIf -> "if"
+    TokenThen -> "then"
+    TokenElse -> "else"
+    TokenLambda -> "fn"
+    TokenLambdaArrow -> "=>"
+    TokenModule -> "module"
+    TokenKeyGov -> "keyGov"
+    TokenCapGov -> "capGov"
+    TokenInterface -> "interface"
+    TokenImport -> "import"
+    TokenDefun -> "defun"
+    TokenDefConst -> "defconst"
+    TokenDefCap -> "defcap"
+    TokenDefPact -> "defpact"
+    TokenDefSchema -> "defschema"
+    TokenDefTable -> "deftable"
+    TokenBless -> "bless"
+    TokenImplements -> "implements"
+    TokenOpenBrace -> "{"
+    TokenCloseBrace -> "}"
+    TokenOpenParens -> "("
+    TokenCloseParens -> ")"
+    TokenOpenBracket -> "["
+    TokenCloseBracket -> "]"
+    TokenComma -> ","
+    TokenColon -> ":"
+    TokenDot -> "."
+    TokenTyList -> "list"
+    TokenTyTable -> "table"
+    TokenTyInteger -> "integer"
+    TokenTyDecimal -> "decimal"
+    TokenTyString -> "string"
+    TokenTyBool -> "bool"
+    TokenTyUnit -> "unit"
+    TokenTyArrow -> "->"
+    TokenTyVar b -> "'" <> pretty b
+    TokenAssign -> "="
+    TokenEq -> "=="
+    TokenNeq -> "!="
+    TokenGT -> ">"
+    TokenGEQ -> ">="
+    TokenLT -> "<"
+    TokenLEQ -> "<="
+    TokenPlus -> "+"
+    TokenMinus -> "-"
+    TokenMult -> "*"
+    TokenDiv -> "/"
+    TokenObjAccess -> "@"
+    TokenObjRemove -> "#"
+    TokenBitAnd -> "&"
+    TokenBitOr -> "|"
+    TokenAnd -> "&&"
+    TokenOr -> "||"
+    TokenIdent t -> "ident<" <> pretty t <> ">"
+    TokenNumber n -> "number<" <> pretty n <> ">"
+    TokenString s -> "\"" <> pretty s <> "\""
+    TokenTrue -> "true"
+    TokenFalse -> "false"
+    TokenVOpen -> "VOPEN"
+    TokenVSemi -> "VSEMI"
+    TokenVClose -> "VCLOSE"
+    TokenEOF -> "EOF"

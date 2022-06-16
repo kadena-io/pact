@@ -18,7 +18,7 @@
 -- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
---
+--  
 -- HM type inference for core IR.
 --
 module Pact.Core.IR.Typecheck
@@ -147,8 +147,10 @@ newtype InferT s b i a =
 
 -- ABSOLUTELY UNHOLY USE OF ST
 instance (Show i, Typeable i) => MonadError (PactError i) (InferT s b i) where
-  throwError  e = InferT (ReaderT (const (unsafeIOToST (throwIO e))))
-  catchError act handler = InferT (ReaderT (\s -> unsafeIOToST $ catch (unsafeMkIO s act) (handle' s)))
+  throwError e =
+    InferT (ReaderT (const (unsafeIOToST (throwIO e))))
+  catchError act handler =
+    InferT (ReaderT (\s -> unsafeIOToST $ catch (unsafeMkIO s act) (handle' s)))
     where
     unsafeMkIO :: TCState s b -> InferT s b i a -> IO a
     unsafeMkIO s (InferT act') = unsafeSTToIO (runReaderT act' s)

@@ -66,7 +66,7 @@ import Pact.Core.Syntax.New.LexUtils
   '['        { PosToken TokenOpenBracket _ }
   ']'        { PosToken TokenCloseBracket _ }
   ','        { PosToken TokenComma _ }
-  ':'        { PosToken TokenSemiColon _ }
+  ':'        { PosToken TokenColon _ }
   '.'        { PosToken TokenDot _ }
   TYLIST     { PosToken TokenTyList _ }
   TYTABLE    { PosToken TokenTyTable _ }

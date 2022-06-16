@@ -1,8 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE InstanceSigs #-}
 
-module Pact.Core.Builtin where
+module Pact.Core.Builtin
+ ( ObjectOp(..)
+ , RawBuiltin(..)
+ , rawBuiltinToText
+ , rawBuiltinMap
+ , rawBuiltinNames
+ , CoreBuiltin(..)
+ , coreBuiltinToText
+ , ReplBuiltin(..)
+ , replRawBuiltinNames
+ , replRawBuiltinMap
+ )where
 
 import Data.Text(Text)
 import Data.Map.Strict(Map)
@@ -353,6 +368,101 @@ data CoreBuiltin
   | Dummy
   deriving (Eq, Show, Ord, Bounded, Enum)
 
+-- Note: commented out natives are
+-- to be implemented later
+data ReplBuiltin b
+  = RBuiltinWrap b
+  -- | RBeginTx
+  -- | RBench
+  -- | RCommitTx
+  -- | RContinuePact
+  -- | REnvChainData
+  -- | REnvData
+  -- | REnvDynRef
+  -- | REnvEnableReplNatives
+  -- | REnvEntity
+  -- | REnvEvents
+  -- | REnvExecConfig
+  -- | REnvGas
+  -- | REnvGasLimit
+  -- | REnvGasLog
+  -- | REnvGasModel
+  -- | REnvGasPrice
+  -- | REnvGasRate
+  -- | REnvHash
+  -- | REnvKeys
+  -- | REnvNamespacePolicy
+  -- | REnvSigs
+  | RExpect
+  | RExpectFailure
+  | RExpectThat
+  -- | RFormatAddress
+  -- | RPactState
+  | RPrint
+  -- | RRollbackTx
+  -- | RSigKeyset
+  -- | RTestCapability
+  -- | RVerify
+  -- | RWithAppliedEnv
+  | RLoad
+  deriving (Eq, Show)
+
+instance Bounded b => Bounded (ReplBuiltin b) where
+  minBound = RBuiltinWrap minBound
+  maxBound = RLoad
+
+instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
+  toEnum  = replBToEnum
+  {-# SPECIALISE toEnum :: Int -> ReplBuiltin CoreBuiltin #-}
+  {-# SPECIALISE toEnum :: Int -> ReplBuiltin RawBuiltin #-}
+
+  fromEnum = replBFromEnum
+  {-# SPECIALISE fromEnum :: ReplBuiltin CoreBuiltin -> Int #-}
+  {-# SPECIALISE fromEnum :: ReplBuiltin RawBuiltin -> Int #-}
+
+replBToEnum :: forall b. (Bounded b, Enum b) => Int -> ReplBuiltin b
+replBToEnum i =
+  if i <= mbound then RBuiltinWrap (toEnum i)
+  else case i - mbound of
+    1 -> RExpect
+    2 -> RExpectFailure
+    3 -> RExpectThat
+    4 -> RPrint
+    5 -> RLoad
+    _ -> error "invalid"
+  where
+  mbound = fromEnum (maxBound :: b)
+{-# INLINE replBToEnum #-}
+
+
+replBFromEnum :: forall b. (Bounded b, Enum b) => ReplBuiltin b -> Int
+replBFromEnum e =
+  let maxContained = fromEnum (maxBound :: b)
+  in case e of
+    RBuiltinWrap b -> fromEnum b
+    RExpect -> maxContained + 1
+    RExpectFailure -> maxContained + 2
+    RExpectThat -> maxContained + 3
+    RPrint -> maxContained + 4
+    RLoad -> maxContained + 5
+{-# INLINE replBFromEnum #-}
+
+replBuiltinToText :: (b -> Text) -> ReplBuiltin b -> Text
+replBuiltinToText f = \case
+  RBuiltinWrap b -> f b
+  RExpect -> "expect"
+  RExpectFailure -> "expect-failure"
+  RExpectThat -> "expect"
+  RPrint -> "print"
+  RLoad -> "load"
+
+replRawBuiltinNames :: [Text]
+replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. maxBound]
+
+replRawBuiltinMap :: Map Text (ReplBuiltin RawBuiltin)
+replRawBuiltinMap = Map.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+
+
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
 -- IntOps
@@ -483,3 +593,8 @@ instance Pretty RawBuiltin where
 
 instance Pretty CoreBuiltin where
   pretty = pretty . coreBuiltinToText
+
+instance (Pretty b) => Pretty (ReplBuiltin b) where
+  pretty = \case
+    RBuiltinWrap b -> pretty b
+    t -> pretty (replBuiltinToText (const "") t)

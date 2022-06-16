@@ -900,7 +900,6 @@ runOverloadTerm t = runOverload (resolveTerm t)
 runOverloadModule :: OverloadedModule RawBuiltin i -> IO (CoreEvalModule i)
 runOverloadModule m = runOverload (resolveModule m)
 
-
 runOverloadProgram
   :: [OverloadedTopLevel RawBuiltin info]
   -> IO [CoreEvalTopLevel info]

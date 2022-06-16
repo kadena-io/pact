@@ -7,7 +7,10 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TypeApplications #-}
 
 
 module Pact.Core.IR.Desugar
@@ -72,6 +75,7 @@ import qualified Pact.Core.Typed.Term as Typed
     worth writing our own.
 -}
 
+
 data RenamerEnv
   = RenamerEnv
   { _reBinds :: Map Text (IRNameKind, Unique)
@@ -87,17 +91,17 @@ data RenamerState b i
 
 makeLenses ''RenamerState
 
-newtype RenamerT b i a =
-  RenamerT (StateT (RenamerState b i) (ReaderT RenamerEnv IO) a)
+newtype RenamerT cb ci a =
+  RenamerT (StateT (RenamerState cb ci) (ReaderT RenamerEnv IO) a)
   deriving
     (Functor, Applicative, Monad
     , MonadReader RenamerEnv
-    , MonadState (RenamerState b i) 
+    , MonadState (RenamerState cb ci)
     , MonadFail
     , MonadIO)
-  via (StateT (RenamerState b i) (ReaderT RenamerEnv IO))
+  via (StateT (RenamerState cb ci) (ReaderT RenamerEnv IO))
 
-newUnique' :: RenamerT b i Unique
+newUnique' :: RenamerT cb ci Unique
 newUnique' = do
   sup <- view reSupply
   u <- liftIO (readIORef sup)
@@ -106,6 +110,24 @@ newUnique' = do
 
 dummyTLUnique :: Unique
 dummyTLUnique = -1111
+
+class DesugarBuiltin b where
+  builtinIf :: b
+  reservedNatives :: Map Text b
+  desugarBinary :: PT.BinaryOp -> b
+  desugarUnary :: PT.UnaryOp -> b
+
+instance DesugarBuiltin RawBuiltin where
+  reservedNatives = rawBuiltinMap
+  builtinIf = RawIf
+  desugarBinary = desugarBinary'
+  desugarUnary = desugarUnary'
+
+instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
+  reservedNatives = replRawBuiltinMap
+  builtinIf = RBuiltinWrap RawIf
+  desugarBinary = RBuiltinWrap . desugarBinary'
+  desugarUnary = RBuiltinWrap . desugarUnary'
 
 -----------------------------------------------------------
 -- Desugaring
@@ -127,10 +149,10 @@ defunToLet = \case
         in PT.Let defname (Just defTy) lamBody i
 
 
-desugarTerm :: PT.Expr ParsedName i -> Term ParsedName Text RawBuiltin i
+desugarTerm :: forall b i. DesugarBuiltin b => PT.Expr ParsedName i -> Term ParsedName Text b i
 desugarTerm = \case
   PT.Var (BN n) i | isReservedNative (_bnName n) ->
-   Builtin (rawBuiltinMap Map.! _bnName n) i
+    Builtin (reservedNatives Map.! _bnName n) i
   PT.Var n i -> Var n i
   PT.Block (h :| hs) _ ->
     unLetBlock h hs
@@ -157,7 +179,7 @@ desugarTerm = \case
     cond' = desugarTerm cond
     e1' = suspend i e1
     e2' = suspend i e2
-    in App (Builtin RawIf i) (cond' :| [e1', e2']) i
+    in App (Builtin builtinIf i) (cond' :| [e1', e2']) i
   PT.App e [] i -> let
     e' = desugarTerm e
     body = Constant LUnit i :| []
@@ -185,11 +207,12 @@ desugarTerm = \case
   PT.Error text i ->
     Error text i
   where
+  isReservedNative n =
+    Map.member n (reservedNatives @b)
   suspend i e = let
     name = BN (BareName "#ifArg")
     e' = desugarTerm e
     in Lam ((name, Just TyUnit) :| []) e' i
-  isReservedNative n = elem n rawBuiltinNames
   unLetBlock (PT.NestedDefun d _) rest = do
     unLetBlock (defunToLet d) rest
   unLetBlock (PT.Let name mt expr i) (h:hs) = let
@@ -207,7 +230,7 @@ desugarTerm = \case
         t -> Block (other' :| [t]) (other' ^. termInfo)
     [] -> desugarTerm other
 
-desugarDefun :: PT.Defun ParsedName i -> Defun ParsedName Text RawBuiltin i
+desugarDefun :: DesugarBuiltin b => PT.Defun ParsedName i -> Defun ParsedName Text b i
 desugarDefun (PT.Defun defname [] rt body i) = let
   defname' = BN (BareName defname)
   dfnType = TyFun TyUnit (desugarType rt)
@@ -225,19 +248,19 @@ desugarDefun (PT.Defun defname (arg:args) rt body i) = let
   body' = desugarTerm lamBody
   in Defun defname' dfnType body' i
 
-desugarDefConst :: PT.DefConst ParsedName i -> DefConst ParsedName Text RawBuiltin i
+desugarDefConst :: DesugarBuiltin b => PT.DefConst ParsedName i -> DefConst ParsedName Text b i
 desugarDefConst (PT.DefConst n mty e i) = let
   n' = BN (BareName n)
   mty' = desugarType <$> mty
   e' = desugarTerm e
   in DefConst n' mty' e' i
 
-desugarDef :: PT.Def ParsedName i -> Def ParsedName Text RawBuiltin i
+desugarDef :: DesugarBuiltin b => PT.Def ParsedName i -> Def ParsedName Text b i
 desugarDef = \case
   PT.Dfun d -> Dfun (desugarDefun d)
   PT.DConst d -> DConst (desugarDefConst d)
 
-desugarModule :: PT.Module ParsedName i -> Module ParsedName Text RawBuiltin i
+desugarModule :: DesugarBuiltin b => PT.Module ParsedName i -> Module ParsedName Text b i
 desugarModule (PT.Module mname gov extdecls defs) = let
   (imports, blessed, implemented) = splitExts extdecls
   defs' = desugarDef <$> NE.toList defs
@@ -268,13 +291,13 @@ desugarType = \case
     TyList (desugarType t)
   PT.TyCap -> TyCap
 
-desugarUnary :: PT.UnaryOp -> RawBuiltin
-desugarUnary = \case
+desugarUnary' :: PT.UnaryOp -> RawBuiltin
+desugarUnary' = \case
   PT.NegateOp -> RawNegate
   PT.FlipBitsOp -> RawBitwiseFlip
 
-desugarBinary :: PT.BinaryOp -> RawBuiltin
-desugarBinary = \case
+desugarBinary' :: PT.BinaryOp -> RawBuiltin
+desugarBinary' = \case
   PT.AddOp -> RawAdd
   PT.SubOp -> RawSub
   PT.MultOp -> RawMultiply
@@ -337,10 +360,10 @@ defSCC mn = \case
 -- current namespace.
 -- Namespace definitions are yet to be supported in core
 lookupModuleMember
-  :: HasPactDb b i
+  :: HasPactDb cb ci
   => ModuleName
   -> Text
-  -> RenamerT b i IRName
+  -> RenamerT cb ci IRName
 lookupModuleMember modName name = do
   liftIO (_readModule ?pactDb modName) >>= \case
     Just md -> let
@@ -559,55 +582,55 @@ runDesugar' loaded supply act = do
   pure (renamed, lastSupply, _rsLoaded state')
 
 runDesugarTerm'
-  :: HasPactDb b i
+  :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> Supply
   -> PT.Expr ParsedName i
-  -> IO (Term IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+  -> IO (Term IRName TypeVar b' i, Supply, Loaded b i)
 runDesugarTerm' loaded supply e = let
   desugared = desugarTerm e
   in runDesugar' loaded supply (renameTerm desugared)
 
 runDesugarTerm
-  :: HasPactDb b i
+  :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> PT.Expr ParsedName i
-  -> IO (Term IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+  -> IO (Term IRName TypeVar b' i, Supply, Loaded b i)
 runDesugarTerm loaded = runDesugarTerm' loaded 0
 
 runDesugarModule'
-  :: HasPactDb b i
+  :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> Supply
   -> PT.Module ParsedName i
-  -> IO (Module IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+  -> IO (Module IRName TypeVar b' i, Supply, Loaded b i)
 runDesugarModule' loaded supply m  = let
   desugared = desugarModule m
   in runDesugar' loaded supply (renameModule desugared)
 
 runDesugarModule
-  :: HasPactDb b i
+  :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> PT.Module ParsedName i
-  -> IO (Module IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+  -> IO (Module IRName TypeVar b' i, Supply, Loaded b i)
 runDesugarModule loaded = runDesugarModule' loaded 0
 
 
 runDesugarTopLevel'
-  :: HasPactDb b i
+  :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> Supply
   -> PT.TopLevel ParsedName i
-  -> IO (TopLevel IRName TypeVar RawBuiltin i, Supply, Loaded b i)
+  -> IO (TopLevel IRName TypeVar b' i, Supply, Loaded b i)
 runDesugarTopLevel' loaded supply = \case
   PT.TLModule m -> over _1 TLModule <$> runDesugarModule' loaded supply m
   PT.TLTerm e -> over _1 TLTerm <$> runDesugarTerm' loaded supply e
 
 runDesugarProgram
-  :: HasPactDb b i
+  :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> [PT.TopLevel ParsedName i]
-  -> IO ([TopLevel IRName TypeVar RawBuiltin i], Supply, Loaded b i)
+  -> IO ([TopLevel IRName TypeVar b' i], Supply, Loaded b i)
 runDesugarProgram loaded program = do
   let supply = 0
   over _1 reverse <$> foldlM go ([], supply, loaded) program
