@@ -45,7 +45,6 @@ import Data.Char
 import Data.Default
 import Data.Foldable
 import Data.Maybe
-import Data.Serialize (Serialize)
 import Data.Set (Set)
 import qualified Data.Set as S
 import Data.String
@@ -69,7 +68,6 @@ newtype PublicKey = PublicKey { _pubKey :: ByteString }
 instance Arbitrary PublicKey where
   arbitrary = PublicKey <$> encodeUtf8 <$> T.pack <$> vectorOf 64 genValidPublicKeyChar
     where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
-instance Serialize PublicKey
 instance NFData PublicKey
 instance FromJSON PublicKey where
   parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)

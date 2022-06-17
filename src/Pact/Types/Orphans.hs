@@ -16,7 +16,6 @@
 --
 module Pact.Types.Orphans where
 
-import Data.Serialize
 import Data.Decimal
 import qualified Data.Aeson as A
 import Text.Trifecta.Combinators (DeltaParsing(..))
@@ -24,7 +23,6 @@ import Text.Trifecta.Delta
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.Attoparsec.Internal.Types as APT
 import Data.Text (Text)
-import Data.Text.Encoding
 import Pact.Time.Internal (NominalDiffTime(..), UTCTime(..))
 import Data.Default
 import Data.Hashable
@@ -38,18 +36,6 @@ import Test.QuickCheck (Arbitrary(..))
 
 instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
   arbitrary = Decimal <$> arbitrary <*> arbitrary
-
-instance (Serialize i) => Serialize (DecimalRaw i) where
-    put (Decimal p i) = put p >> put i
-    get = Decimal <$> get <*> get
-    {-# INLINE put #-}
-    {-# INLINE get #-}
-
-instance Serialize A.Value where
-    put v = put (A.encode v)
-    get = get >>= \g -> either fail return $ A.eitherDecode g
-    {-# INLINE put #-}
-    {-# INLINE get #-}
 
 instance NFData Delta
 
@@ -68,10 +54,6 @@ attoPos :: APT.Parser n APT.Pos
 attoPos = APT.Parser $ \t pos more _lose win -> win t pos more pos
 
 instance Default Text where def = ""
-instance Serialize Text where
-  put = put . encodeUtf8
-  get = decodeUtf8 <$> get
-
 ------ Bound/Scope/Var instances ------
 
 instance (A.ToJSON a, A.ToJSON b) =>

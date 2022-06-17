@@ -15,7 +15,6 @@ module Pact.Types.Scheme
 import GHC.Generics
 import Control.DeepSeq
 import Data.Kind (Type)
-import Data.Serialize
 import Data.Aeson
 
 import Pact.Types.Util (ParseText(..))
@@ -28,7 +27,6 @@ data PPKScheme = ED25519 | ETH
 
 
 instance NFData PPKScheme
-instance Serialize PPKScheme
 instance ToJSON PPKScheme where
   toJSON ED25519 = "ED25519"
   toJSON ETH = "ETH"

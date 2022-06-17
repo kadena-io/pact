@@ -38,7 +38,6 @@ import Data.Aeson
 import Data.Default (Default, def)
 import Data.Hashable (Hashable)
 import Data.Int (Int64)
-import Data.Serialize (Serialize)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text
@@ -55,19 +54,19 @@ import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.
 newtype EntityName = EntityName Text
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString)
+  deriving newtype (Show, NFData, Hashable, Default, ToJSON, FromJSON, IsString, AsString)
 
 -- | Wrapper for 'PublicMeta' ttl field in seconds since offset
 --
 newtype TTLSeconds = TTLSeconds ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
+  deriving newtype (Show, Num, NFData, ToJSON, FromJSON)
 
 -- | Wrapper for 'PublicMeta' creation time field in seconds since POSIX epoch
 --
 newtype TxCreationTime = TxCreationTime ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
+  deriving newtype (Show, Num, NFData, ToJSON, FromJSON)
 
 -- | Get current time as TxCreationTime
 getCurrentCreationTime :: IO TxCreationTime
@@ -84,7 +83,6 @@ data Address = Address
   } deriving (Eq,Show,Ord,Generic)
 
 instance NFData Address
-instance Serialize Address
 instance ToJSON Address where toJSON = lensyToJSON 2
 instance FromJSON Address where parseJSON = lensyParseJSON 2
 makeLenses ''Address
@@ -98,7 +96,6 @@ instance Default PrivateMeta where def = PrivateMeta def
 instance ToJSON PrivateMeta where toJSON = lensyToJSON 3
 instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
-instance Serialize PrivateMeta
 
 -- | Allows user to specify execution parameters specific to public-chain
 -- execution, namely gas parameters, TTL, creation time, chain identifier.
@@ -140,7 +137,6 @@ instance FromJSON PublicMeta where
     <*> o .: "creationTime"
 
 instance NFData PublicMeta
-instance Serialize PublicMeta
 
 class HasPlafMeta a where
   getPrivateMeta :: a -> PrivateMeta

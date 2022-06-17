@@ -119,7 +119,6 @@ import Data.Int (Int64)
 import Data.List
 import qualified Data.Map.Strict as M
 import Data.Maybe
-import Data.Serialize (Serialize)
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -351,7 +350,7 @@ instance FromJSON g => FromJSON (Governance g) where
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
-  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText)
+  deriving (Eq, Ord, Show, Generic, Hashable, AsString, Pretty, ToJSON, FromJSON, ParseText)
   deriving newtype (NFData, SizeOf)
 
 instance Arbitrary ModuleHash where
