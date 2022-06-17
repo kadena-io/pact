@@ -11,6 +11,8 @@
 module Pact.Core.Typed.Overload
  ( runOverloadTerm
  , runOverloadModule
+ , runOverloadTopLevel
+ , runOverloadReplTopLevel
  , runOverloadProgram
  , runOverloadReplProgram
  ) where
@@ -899,6 +901,14 @@ runOverloadTerm t = runOverload (resolveTerm t)
 
 runOverloadModule :: OverloadedModule RawBuiltin i -> IO (CoreEvalModule i)
 runOverloadModule m = runOverload (resolveModule m)
+
+runOverloadTopLevel :: OverloadedTopLevel RawBuiltin info -> IO (CoreEvalTopLevel info)
+runOverloadTopLevel tl = runOverload (resolveTopLevel tl)
+
+runOverloadReplTopLevel
+  :: OverloadedReplTopLevel RawBuiltin info
+  -> IO (CoreEvalReplTopLevel info)
+runOverloadReplTopLevel tl = runOverload (resolveReplTopLevel tl)
 
 runOverloadProgram
   :: [OverloadedTopLevel RawBuiltin info]

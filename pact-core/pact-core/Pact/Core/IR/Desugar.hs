@@ -16,7 +16,9 @@
 module Pact.Core.IR.Desugar
  ( runDesugarTerm
  , runDesugarModule
+ , runDesugarTopLevel
  , runDesugarProgram
+ , DesugarOutput(..)
  ) where
 
 import Control.Monad.Reader
@@ -87,7 +89,8 @@ makeLenses ''RenamerEnv
 data RenamerState b i
   = RenamerState
   { _rsModuleBinds :: Map ModuleName (Map Text IRNameKind)
-  , _rsLoaded :: Loaded b i }
+  , _rsLoaded :: Loaded b i
+  , _rsDependencies :: Set ModuleName }
 
 makeLenses ''RenamerState
 
@@ -100,6 +103,19 @@ newtype RenamerT cb ci a =
     , MonadFail
     , MonadIO)
   via (StateT (RenamerState cb ci) (ReaderT RenamerEnv IO))
+
+data DesugarOutput b i a
+  = DesugarOutput
+  { _dsOut :: a
+  , _dsSupply :: Supply
+  , _dsLoaded :: Loaded b i
+  , _dsDeps :: Set ModuleName
+  } deriving (Show, Functor)
+
+dsOut :: Lens (DesugarOutput b i a) (DesugarOutput b i a') a a'
+dsOut f (DesugarOutput a s l d) =
+  f a <&> \a' -> DesugarOutput a' s l d
+
 
 newUnique' :: RenamerT cb ci Unique
 newUnique' = do
@@ -379,6 +395,7 @@ lookupModuleMember modName name = do
               allDeps = Map.union memberTerms (_mdDependencies md)
           rsLoaded %= over loModules (Map.insert modName md) . over loAllLoaded (Map.union allDeps)
           rsModuleBinds %= Map.insert modName depMap
+          rsDependencies %= Set.insert modName
           pure (IRName name irtl dummyTLUnique)
         -- Module exists, but it has no such member
         -- Todo: check whether the module name includes a namespace
@@ -392,6 +409,16 @@ lookupModuleMember modName name = do
     fqn = FullyQualifiedName modName (rawDefName def) mhash
     in (fqn, Typed.defTerm def)
 
+-- not in immediate binds, so it must be in the module
+-- Todo: resolve module ref within this model
+-- Todo: hierarchical namespace search
+resolveBare :: Text -> RenamerT cb ci IRName
+resolveBare bn = views reBinds (Map.lookup bn) >>= \case
+  Just (irnk, u) ->
+    pure (IRName bn irnk u)
+  Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
+    Just fqn -> pure (IRName bn (IRTopLevel (_fqModule fqn) (_fqHash fqn)) dummyTLUnique)
+    Nothing -> fail $ "unbound free variable " <> show bn
 
 -- Rename a term (that is part of a module)
 -- emitting the list of dependent calls
@@ -402,21 +429,15 @@ renameTerm
 renameTerm = fvd
   where
   fvd (Var n i) = case n of
-      BN (BareName bn) ->
-        views reBinds (Map.lookup bn) >>= \case
-          -- We emit a top level name from the same module
-          -- as part of the set of dependencies
-          Just (irnk, u) ->
-            pure (Var (IRName bn irnk u) i)
-          Nothing -> fail "unbound free variable"
+      BN (BareName bn) -> (`Var` i) <$> resolveBare bn
       QN (QualifiedName qn qmn) -> do
         uses rsModuleBinds (Map.lookup qmn) >>= \case
           Just binds -> case Map.lookup qn binds of
             Just irnk -> pure (Var (IRName qn irnk dummyTLUnique) i)
-            Nothing -> do
-              irn <- lookupModuleMember qmn qn
-              pure (Var irn i)
-          Nothing -> fail "todo: implement module lookup"
+            Nothing -> fail "bound module has no such member"
+          Nothing -> do
+            irn <- lookupModuleMember qmn qn
+            pure (Var irn i)
   fvd (Lam nsts body i) = do
     let (pns, ts) = NE.unzip nsts
         ns = rawParsedName <$> pns
@@ -554,7 +575,7 @@ runRenamerT
 runRenamerT st env (RenamerT act) = runReaderT (runStateT act st) env
 
 reStateFromLoaded :: Loaded b i -> RenamerState b i
-reStateFromLoaded loaded = RenamerState mbinds loaded
+reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
   where
   mbind md = let
     m = _mdModule md
@@ -571,22 +592,22 @@ runDesugar'
   :: Loaded b i
   -> Supply
   -> RenamerT b i a
-  -> IO (a, Supply, Loaded b i)
+  -> IO (DesugarOutput b i a)
 runDesugar' loaded supply act = do
   ref <- newIORef supply
   let reState = reStateFromLoaded loaded
       rTLBinds = loadedBinds loaded
       rEnv = RenamerEnv rTLBinds mempty ref
-  (renamed, state') <- runRenamerT reState rEnv act
+  (renamed, RenamerState _ loaded' deps) <- runRenamerT reState rEnv act
   lastSupply <- readIORef ref
-  pure (renamed, lastSupply, _rsLoaded state')
+  pure (DesugarOutput renamed lastSupply loaded' deps)
 
 runDesugarTerm'
   :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> Supply
   -> PT.Expr ParsedName i
-  -> IO (Term IRName TypeVar b' i, Supply, Loaded b i)
+  -> IO (DesugarOutput b i (Term IRName TypeVar b' i))
 runDesugarTerm' loaded supply e = let
   desugared = desugarTerm e
   in runDesugar' loaded supply (renameTerm desugared)
@@ -595,7 +616,7 @@ runDesugarTerm
   :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> PT.Expr ParsedName i
-  -> IO (Term IRName TypeVar b' i, Supply, Loaded b i)
+  -> IO (DesugarOutput b i (Term IRName TypeVar b' i))
 runDesugarTerm loaded = runDesugarTerm' loaded 0
 
 runDesugarModule'
@@ -603,7 +624,7 @@ runDesugarModule'
   => Loaded b i
   -> Supply
   -> PT.Module ParsedName i
-  -> IO (Module IRName TypeVar b' i, Supply, Loaded b i)
+  -> IO (DesugarOutput b i (Module IRName TypeVar b' i))
 runDesugarModule' loaded supply m  = let
   desugared = desugarModule m
   in runDesugar' loaded supply (renameModule desugared)
@@ -612,29 +633,35 @@ runDesugarModule
   :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> PT.Module ParsedName i
-  -> IO (Module IRName TypeVar b' i, Supply, Loaded b i)
+  -> IO (DesugarOutput b i (Module IRName TypeVar b' i))
 runDesugarModule loaded = runDesugarModule' loaded 0
-
 
 runDesugarTopLevel'
   :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> Supply
   -> PT.TopLevel ParsedName i
-  -> IO (TopLevel IRName TypeVar b' i, Supply, Loaded b i)
+  -> IO (DesugarOutput b i (TopLevel IRName TypeVar b' i))
 runDesugarTopLevel' loaded supply = \case
-  PT.TLModule m -> over _1 TLModule <$> runDesugarModule' loaded supply m
-  PT.TLTerm e -> over _1 TLTerm <$> runDesugarTerm' loaded supply e
+  PT.TLModule m -> over dsOut TLModule <$> runDesugarModule' loaded supply m
+  PT.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm' loaded supply e
+
+runDesugarTopLevel
+  :: (HasPactDb b i, DesugarBuiltin b')
+  => Loaded b i
+  -> PT.TopLevel ParsedName i
+  -> IO (DesugarOutput b i (TopLevel IRName TypeVar b' i))
+runDesugarTopLevel loaded = runDesugarTopLevel' loaded 0
 
 runDesugarProgram
   :: (HasPactDb b i, DesugarBuiltin b')
   => Loaded b i
   -> [PT.TopLevel ParsedName i]
-  -> IO ([TopLevel IRName TypeVar b' i], Supply, Loaded b i)
+  -> IO (DesugarOutput b i [TopLevel IRName TypeVar b' i])
 runDesugarProgram loaded program = do
   let supply = 0
-  over _1 reverse <$> foldlM go ([], supply, loaded) program
+  over dsOut reverse <$> foldlM go (DesugarOutput [] supply loaded mempty) program
   where
-  go (tls, s, l) tl = do
-    (tl', s', l') <- runDesugarTopLevel' l s tl
-    pure (tl':tls, s', l')
+  go (DesugarOutput tls s l deps) tl = do
+    (DesugarOutput tl' s' l' deps') <- runDesugarTopLevel' l s tl
+    pure (DesugarOutput (tl':tls) s' l' (Set.union deps deps'))

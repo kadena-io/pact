@@ -19,6 +19,7 @@ module Pact.Core.Names
  , irUnique
  , QualifiedName(..)
  , renderQualName
+ , renderModuleName
  , TypeVar(..)
  , Unique
  , tyVarName
@@ -84,6 +85,10 @@ instance Ord QualifiedName where
 renderQualName :: QualifiedName -> Text
 renderQualName (QualifiedName n (ModuleName m ns)) =
   maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n
+
+renderModuleName :: ModuleName -> Text
+renderModuleName (ModuleName m ns) =
+  maybe "" ((<> ".") . _namespaceName) ns <> m
 
 instance Pretty QualifiedName where
   pretty (QualifiedName n m) =

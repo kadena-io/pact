@@ -276,3 +276,6 @@ instance Pretty Token where
     TokenVSemi -> "VSEMI"
     TokenVClose -> "VCLOSE"
     TokenEOF -> "EOF"
+
+instance Pretty PosToken where
+  pretty = pretty . _ptToken

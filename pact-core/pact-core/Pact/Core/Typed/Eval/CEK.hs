@@ -21,7 +21,6 @@ module Pact.Core.Typed.Eval.CEK
  , runEvalT
  , EvalT(..)
  , Cont(..)
- , ETerm
  ) where
 
 import Control.Monad.Reader
@@ -46,10 +45,10 @@ import Pact.Core.Pretty(Pretty(..), (<+>))
 import Pact.Core.Gas
 import qualified Pact.Core.Pretty as P
 
-type CEKTLEnv b = Map FullyQualifiedName (ETerm b)
-type CEKEnv b = RAList (CEKValue b)
-newtype BuiltinFn b = BuiltinFn (CEKRuntime b => NonEmpty (CEKValue b) -> EvalT b (CEKValue b))
-type CEKRuntime b = (?cekLoaded :: CEKTLEnv b, ?cekBuiltins :: Array (BuiltinFn b), Enum b)
+type CEKTLEnv b i = Map FullyQualifiedName (EvalTerm b i)
+type CEKEnv b i = RAList (CEKValue b i)
+newtype BuiltinFn b i = BuiltinFn (CEKRuntime b i => NonEmpty (CEKValue b i) -> EvalT b (CEKValue b i))
+type CEKRuntime b i = (?cekLoaded :: CEKTLEnv b i, ?cekBuiltins :: Array (BuiltinFn b i), Enum b)
 
 data CEKState b
   = CEKState
@@ -59,30 +58,32 @@ data CEKState b
 
 newtype EvalT b a =
   EvalT { unEval :: StateT (CEKState b) IO a }
-  deriving ( Functor, Applicative, Monad
-           , MonadState (CEKState b), MonadIO
-           , MonadFail)
-           via (StateT (CEKState b) IO)
+  deriving
+    ( Functor, Applicative, Monad
+    , MonadState (CEKState b)
+    , MonadIO
+    , MonadFail)
+  via (StateT (CEKState b) IO)
 
 runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
 runEvalT s (EvalT action) = runStateT action s
 
-data CEKValue b
+data CEKValue b i
   = VLiteral !Literal
-  | VObject !(Map Field (CEKValue b))
-  | VList !(Vector (CEKValue b))
-  | VClosure ![Name] !(ETerm b) !(CEKEnv b)
+  | VObject !(Map Field (CEKValue b i))
+  | VList !(Vector (CEKValue b i))
+  | VClosure ![Name] !(EvalTerm b i) !(CEKEnv b i)
   | VNative !b
-  | VGuard !(Guard Name (CEKValue b))
+  | VGuard !(Guard Name (CEKValue b i))
   | VCap !Name
   | VModRef
   | VError Text
   deriving (Show)
 
-data Cont b
-  = Fn (CEKValue b) (Cont b)
-  | Arg (CEKEnv b) (NonEmpty (ETerm b)) (Cont b)
-  | BlockC (CEKEnv b) [ETerm b] (Cont b)
+data Cont b i
+  = Fn (CEKValue b i) (Cont b i)
+  | Arg (CEKEnv b i) (NonEmpty (EvalTerm b i)) (Cont b i)
+  | BlockC (CEKEnv b i) [EvalTerm b i] (Cont b i)
   | Mt
   deriving Show
 
@@ -90,17 +91,18 @@ data Cont b
 -- Todo: `traverse` usage should be perf tested.
 -- It might be worth making `Arg` frames incremental, as opposed to a traverse call
 eval
-  :: forall b. CEKRuntime b
-  => CEKEnv b
-  -> ETerm b
-  -> EvalT b (CEKValue b)
+  :: CEKRuntime b i
+  => CEKEnv b i
+  -> EvalTerm b i
+  -> EvalT b (CEKValue b i)
 eval = evalCEK Mt
   where
   evalCEK
-    :: Cont b
-    -> CEKEnv b
-    -> ETerm b
-    -> EvalT b (CEKValue b)
+    :: CEKRuntime b i
+    => Cont b i
+    -> CEKEnv b i
+    -> EvalTerm b i
+    -> EvalT b (CEKValue b i)
   evalCEK cont env (Var n _)  =
     case _nKind n of
       NBound i -> returnCEK cont (env RAList.!! i)
@@ -146,9 +148,10 @@ eval = evalCEK Mt
       returnCEK cont out
   evalCEK _cont _env (Error s _ _) = error (T.unpack s) -- todo: proper error continuations, we actually have `try`
   returnCEK
-    :: Cont b
-    -> CEKValue b
-    -> EvalT b (CEKValue b)
+    :: CEKRuntime b i
+    => Cont b i
+    -> CEKValue b i
+    -> EvalT b (CEKValue b i)
   returnCEK (Arg env args cont) fn =
     evalCEKArgs args env (Fn fn cont)
   returnCEK (Fn fn ctx) arg =
@@ -190,7 +193,7 @@ eval = evalCEK Mt
   objUpdate _ _ _ = error "fail"
 
 
-instance Pretty b => Pretty (CEKValue b) where
+instance Pretty b => Pretty (CEKValue b i) where
   pretty = \case
     VLiteral i -> pretty i
     VObject o ->

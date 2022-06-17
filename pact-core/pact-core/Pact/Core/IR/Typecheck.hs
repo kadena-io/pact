@@ -18,13 +18,14 @@
 -- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
---  
+--
 -- HM type inference for core IR.
 --
 module Pact.Core.IR.Typecheck
  ( runInferProgram
  , runInferTerm
  , runInferModule
+ , runInferTopLevel
  , runInferReplProgram
  , rawBuiltinType
  ) where
@@ -1511,6 +1512,15 @@ runInferModule
   -> TypedModule b i
 runInferModule u loaded bfn term0 =
   runST $ runInfer u loaded bfn (inferModule term0)
+
+runInferTopLevel
+  :: Supply
+  -> Loaded b' i'
+  -> (b -> TypeScheme NamedDeBruijn)
+  -> IR.TopLevel IRName TypeVar b i
+  -> TypedTopLevel b i
+runInferTopLevel u l bfn tl =
+  runST $ runInfer u l bfn (inferTopLevel tl)
 
 runInferProgram
   :: Supply
