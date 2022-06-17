@@ -17,6 +17,7 @@ module Pact.Core.Compile
 
 import Control.Lens
 import Control.Monad.IO.Class(liftIO)
+import Control.Monad.Catch
 import Data.Text as Text
 import Data.ByteString(ByteString)
 import qualified Data.Map.Strict as Map
@@ -28,7 +29,7 @@ import Pact.Core.Persistence
 import Pact.Core.Builtin
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
-import Pact.Core.Typed.Term(TopLevel(..), Module(..))
+import Pact.Core.Typed.Term
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Typecheck
 import Pact.Core.Typed.Eval.CEK
@@ -53,9 +54,9 @@ interpretExpr source = do
   loaded <- use replLoaded
   p <- use replPactDb
   let ?pactDb = p
-  lexx <- either error pure $ NLex.lexer source
+  lexx <- liftIO (NLex.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
-  parsed <- either error pure $ NParse.parseExpr lexx
+  parsed <- either throwM pure $ NParse.parseExpr lexx
   debugIfFlagSet DebugParser parsed
   DesugarOutput desugared sup loaded' _ <- liftIO (runDesugarTerm loaded parsed)
   let (ty, typed) = runInferTerm sup loaded' rawBuiltinType desugared
@@ -74,12 +75,13 @@ interpretProgramFile source = liftIO (B.readFile source) >>= interpretProgram
 
 interpretProgram :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
 interpretProgram source = do
-  lexx <- either error pure $ NLex.lexer source
+  lexx <- liftIO (NLex.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
-  parsed <- either error pure $ NParse.parseProgram lexx
+  parsed <- either throwM pure $ NParse.parseProgram lexx
   traverse interpretTopLevel parsed
 
 
+-- todo: Clean up function 
 interpretTopLevel
   :: PT.TopLevel ParsedName LineInfo
   -> ReplT CoreBuiltin (InterpretOutput CoreBuiltin LineInfo)
@@ -89,15 +91,27 @@ interpretTopLevel parsed = do
   let ?pactDb = p
   dout <- liftIO (runDesugarTopLevel loaded parsed)
   let DesugarOutput desugared supply loaded' deps = dout
-      !typechecked = runInferTopLevel supply loaded' rawBuiltinType desugared
+  let !typechecked = runInferTopLevel supply loaded' rawBuiltinType desugared
   liftIO (runOverloadTopLevel typechecked) >>= \case
     TLModule m -> do
       let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
           mdata = ModuleData m deps'
       liftIO (_writeModule p mdata)
       let out = "Loaded module " <> renderModuleName (_mName m)
-      replLoaded .= loaded'
+          newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
+          loaded'' =
+            over loModules (Map.insert (_mName m) mdata) $
+            over loAllLoaded (Map.union newLoaded) loaded'
+      replLoaded .= loaded''
       pure (InterpretLog out)
+      where
+      -- Todo: remove this duplication
+      -- this is a trick copied over from desugar
+      rawDefName def = _nName (defName def)
+      toFqDep modName mhash def = let
+        fqn = FullyQualifiedName modName (rawDefName def) mhash
+        in (fqn, defTerm def)
+
     TLTerm e -> do
       let ?cekLoaded = _loAllLoaded loaded'
           ?cekBuiltins = Runtime.coreBuiltinRuntime

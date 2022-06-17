@@ -14,9 +14,26 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Info
 
+type PactErrorI = PactError LineInfo
+
+data LexerError info
+  = LexicalError Char Char info
+  -- ^ Lexical error: encountered character, last seen character
+  | InvalidIndentation Int Int info
+  -- ^ Invalid indentation: ^ current indentation, expected indentation
+  | InvalidInitialIndent Int info
+  -- ^ Invalid initial indentation: got ^, expected 2 or 4
+  | StringLiteralError Text info
+  -- ^ Error lexing string literal
+  | OutOfInputError info
+  deriving Show
+
+instance (Show info, Typeable info) => Exception (LexerError info)
+
 data ParseError info
-  = LexicalError Text info
-  | ParsingError Text info
+  = ParsingError [Text] [Text] info
+  -- ^ Parsing error: [remaining] [expected]
+  | PrecisionOverflowError Int info
   deriving Show
 
 instance (Show info, Typeable info) => Exception (ParseError info)
@@ -48,12 +65,14 @@ instance (Show info, Typeable info) => Exception (TypecheckError info)
 data FatalPactError
   = FatalExecutionError Text
   | FatalOverloadError Text
+  | FatalParserError Text
   deriving Show
 
 instance Exception FatalPactError
 
 data PactError info
-  = PEParseError (ParseError info)
+  = PELexerError (LexerError info)
+  | PEParseError (ParseError info)
   | PEDesugarError (DesugarError info)
   | PETypecheckError (TypecheckError info)
   | PEFatalError FatalPactError
@@ -72,6 +91,7 @@ instance ErrorLog () where
   renderLoc _ = ""
   {-# INLINE renderLoc #-}
   renderPactError _ = \case
+    PELexerError _ -> "Lexical error"
     PEParseError _ -> "Parsing Error"
     PEDesugarError _ -> "Desugar/Name Resolution Error"
     PETypecheckError _ -> "Typechecking failure"

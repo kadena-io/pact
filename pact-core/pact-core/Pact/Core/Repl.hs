@@ -17,26 +17,27 @@
 
 module Main where
 
-import Control.Monad.IO.Class(MonadIO(..))
 import Control.Monad.Catch
 import System.Console.Haskeline
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.IORef
 import Data.Foldable(traverse_)
+import Control.Monad.Trans(lift)
 
 import Pact.Core.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Persistence
 import Pact.Core.Pretty
-
+import Pact.Core.Builtin
 
 main :: IO ()
 main = do
   pactDb <- mockPactDb
   ref <- newIORef (ReplState mempty emptyLoaded pactDb)
-  runInputT defaultSettings (loop ref)
+  runReplT ref (runInputT replSettings (loop ref))
   where
+  replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
     InterpretValue v -> outputStrLn (show (pretty v))
     InterpretLog t -> outputStrLn (T.unpack t)
@@ -51,10 +52,10 @@ main = do
         i | T.isPrefixOf ":load" i -> let
           file = T.unpack (T.drop 6 i)
           in catch' ref $ do
-            vs <- liftIO $ runReplT ref (interpretProgramFile file)
+            vs <- lift (interpretProgramFile file)
             traverse_ displayOutput vs
             loop ref
         i -> catch' ref $ do
-          out <- liftIO $ runReplT ref (interpretExpr (T.encodeUtf8 i))
+          out <- lift (interpretExpr (T.encodeUtf8 i))
           displayOutput (InterpretValue  out)
           loop ref

@@ -4,13 +4,16 @@
 
 module Pact.Core.Syntax.New.Parser where
 
-import Control.Lens(view)
+import Control.Lens(preview, view, _head)
 import Control.Monad.Except
 
+import Data.Decimal(DecimalRaw(..))
+import Data.Char(digitToInt)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import qualified Data.List.NonEmpty as NE
 
@@ -21,6 +24,7 @@ import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
 import Pact.Core.Imports
+import Pact.Core.Errors
 import Pact.Core.Syntax.New.ParseTree
 import Pact.Core.Syntax.New.LexUtils
 
@@ -337,8 +341,8 @@ ModQual :: { (Text, Maybe Text) }
   | IDENT { (getIdent $1, Nothing) }
 
 Number :: { ParsedExpr }
-  : NUM '.' NUM { undefined }
-  | NUM {% mkIntegerConstant (getNumber $1) (_ptInfo $1) }
+  : NUM '.' NUM {% mkDecimal (getNumber $1) (getNumber $3) (_ptInfo $1) }
+  | NUM { mkIntegerConstant (getNumber $1) (_ptInfo $1) }
 
 String :: { ParsedExpr }
  : STR  { Constant (LString (getStr $1)) (_ptInfo $1) }
@@ -372,13 +376,22 @@ getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
 getTyvar (PosToken (TokenTyVar x) _) = x
 
-parseError s = throwError (show s)
+parseError (remaining, exp) =
+  let rendered = renderTokenText . _ptToken <$> remaining
+      expected = T.pack <$> exp
+      li = maybe (LineInfo 0 0 1) _ptInfo (preview _head remaining)
+  in throwError $ PEParseError $ (ParsingError rendered expected li)
 
 mkIntegerConstant n i =
-  case T.decimal n of
-    Right (d, _) -> pure (Constant (LInteger d) i)
-    _ -> throwError "Impossible"
+  let strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
+  in Constant (LInteger (strToNum 0 n)) i
 
+mkDecimal num dec i = do
+  let strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
+      prec = T.length dec
+  when (prec > 255) $ throwError $ PEParseError $ PrecisionOverflowError prec i
+  let out = Decimal (fromIntegral prec) (strToNum (strToNum 0 num) dec)
+  pure $ Constant (LDecimal out) i
 
 mkQualName ns (mod, (Just ident)) info =
   let ns' = NamespaceName ns

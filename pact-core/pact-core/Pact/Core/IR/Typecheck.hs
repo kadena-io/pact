@@ -377,7 +377,6 @@ fractionalInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> fractionalInst ty
     _ -> pure Nothing
-  -- All prims have an EQ instance
   TyPrim p -> pure $ case p of
     PrimInt -> Just []
     PrimDecimal -> Just []
@@ -387,13 +386,12 @@ fractionalInst = \case
 listLikeInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
 listLikeInst = \case
   TyVar tv -> readTvRef tv >>= \case
-    Link ty -> fractionalInst ty
+    Link ty -> listLikeInst ty
     _ -> pure Nothing
-  -- All prims have an EQ instance
   TyPrim p -> pure $ case p of
-    PrimInt -> Just []
-    PrimDecimal -> Just []
+    PrimString -> Just []
     _ -> Nothing
+  TyList _ -> pure $ Just []
   _ -> pure Nothing
 
 -- | Compile-time evidence typeclass:
@@ -1059,7 +1057,8 @@ inferModule (IR.Module mname gov defs blessed imports impl mh) = do
 inferTermNonGen :: IRTerm b i -> InferT s b i (TypedTerm b i)
 inferTermNonGen t = do
   (ty, t',preds) <- inferTerm t
-  unless (null preds) $ fail "term inferred with generic signature"
+  (deferred, retained) <- split preds
+  unless (null deferred && null retained) $ fail "term inferred with generic signature"
   _ <- debruijnizeType ty
   debruijnizeTermTypes t'
 

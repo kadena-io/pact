@@ -3,11 +3,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingVia #-}
 
 
 module Pact.Core.Syntax.New.LexUtils where
 
 import Control.Lens hiding (uncons)
+import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Word (Word8)
 import Data.Text(Text)
@@ -21,10 +23,11 @@ import qualified Data.ByteString as B
 
 import Pact.Core.Info
 import Pact.Core.Names
+import Pact.Core.Errors
 import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.New.ParseTree
 
-type ParserT = Either String
+type ParserT = Either PactErrorI
 type ParsedExpr = Expr ParsedName LineInfo
 type ParsedDefun = Defun ParsedName LineInfo
 type ParsedDef = Def ParsedName LineInfo
@@ -158,7 +161,15 @@ data LexState
 
 makeLenses ''LexState
 
-type LexerT = StateT LexState (Either String)
+newtype LexerT a =
+  LexerT (StateT LexState (Either PactErrorI) a)
+  deriving
+    ( Functor, Applicative
+    , Monad
+    , MonadState LexState
+    , MonadError PactErrorI)
+  via (StateT LexState (Either PactErrorI))
+
 
 column :: LexerT Int
 column = gets (_inpColumn . _lexInput)
@@ -207,75 +218,85 @@ emit f e = withLineInfo (f e)
 token :: Token -> Text -> LexerT PosToken
 token tok = const (withLineInfo tok)
 
-runLexerT :: LexerT a -> ByteString -> Either String a
-runLexerT act s = evalStateT act (initState s)
+throwLexerError :: LexerError LineInfo -> LexerT a
+throwLexerError = throwError . PELexerError
+
+throwLexerError' :: (LineInfo -> LexerError LineInfo) -> LexerT a
+throwLexerError' f = getLineInfo >>= throwLexerError . f
+
+runLexerT :: LexerT a -> ByteString -> Either PactErrorI a
+runLexerT (LexerT act) s = evalStateT act (initState s)
+
+renderTokenText :: Token -> Text
+renderTokenText = \case
+  TokenLet -> "let"
+  TokenIn -> "in"
+  TokenIf -> "if"
+  TokenThen -> "then"
+  TokenElse -> "else"
+  TokenLambda -> "fn"
+  TokenLambdaArrow -> "=>"
+  TokenModule -> "module"
+  TokenKeyGov -> "keyGov"
+  TokenCapGov -> "capGov"
+  TokenInterface -> "interface"
+  TokenImport -> "import"
+  TokenDefun -> "defun"
+  TokenDefConst -> "defconst"
+  TokenDefCap -> "defcap"
+  TokenDefPact -> "defpact"
+  TokenDefSchema -> "defschema"
+  TokenDefTable -> "deftable"
+  TokenBless -> "bless"
+  TokenImplements -> "implements"
+  TokenOpenBrace -> "{"
+  TokenCloseBrace -> "}"
+  TokenOpenParens -> "("
+  TokenCloseParens -> ")"
+  TokenOpenBracket -> "["
+  TokenCloseBracket -> "]"
+  TokenComma -> ","
+  TokenColon -> ":"
+  TokenDot -> "."
+  TokenTyList -> "list"
+  TokenTyTable -> "table"
+  TokenTyInteger -> "integer"
+  TokenTyDecimal -> "decimal"
+  TokenTyString -> "string"
+  TokenTyBool -> "bool"
+  TokenTyUnit -> "unit"
+  TokenTyArrow -> "->"
+  TokenTyVar b -> "'" <> b
+  TokenAssign -> "="
+  TokenEq -> "=="
+  TokenNeq -> "!="
+  TokenGT -> ">"
+  TokenGEQ -> ">="
+  TokenLT -> "<"
+  TokenLEQ -> "<="
+  TokenPlus -> "+"
+  TokenMinus -> "-"
+  TokenMult -> "*"
+  TokenDiv -> "/"
+  TokenObjAccess -> "@"
+  TokenObjRemove -> "#"
+  TokenBitAnd -> "&"
+  TokenBitOr -> "|"
+  TokenAnd -> "&&"
+  TokenOr -> "||"
+  TokenIdent t -> "ident<" <> t <> ">"
+  TokenNumber n -> "number<" <> n <> ">"
+  TokenString s -> "\"" <> s <> "\""
+  TokenTrue -> "true"
+  TokenFalse -> "false"
+  TokenVOpen -> "VOPEN"
+  TokenVSemi -> "VSEMI"
+  TokenVClose -> "VCLOSE"
+  TokenEOF -> "EOF"
+
 
 instance Pretty Token where
-  pretty = \case
-    TokenLet -> "let"
-    TokenIn -> "in"
-    TokenIf -> "if"
-    TokenThen -> "then"
-    TokenElse -> "else"
-    TokenLambda -> "fn"
-    TokenLambdaArrow -> "=>"
-    TokenModule -> "module"
-    TokenKeyGov -> "keyGov"
-    TokenCapGov -> "capGov"
-    TokenInterface -> "interface"
-    TokenImport -> "import"
-    TokenDefun -> "defun"
-    TokenDefConst -> "defconst"
-    TokenDefCap -> "defcap"
-    TokenDefPact -> "defpact"
-    TokenDefSchema -> "defschema"
-    TokenDefTable -> "deftable"
-    TokenBless -> "bless"
-    TokenImplements -> "implements"
-    TokenOpenBrace -> "{"
-    TokenCloseBrace -> "}"
-    TokenOpenParens -> "("
-    TokenCloseParens -> ")"
-    TokenOpenBracket -> "["
-    TokenCloseBracket -> "]"
-    TokenComma -> ","
-    TokenColon -> ":"
-    TokenDot -> "."
-    TokenTyList -> "list"
-    TokenTyTable -> "table"
-    TokenTyInteger -> "integer"
-    TokenTyDecimal -> "decimal"
-    TokenTyString -> "string"
-    TokenTyBool -> "bool"
-    TokenTyUnit -> "unit"
-    TokenTyArrow -> "->"
-    TokenTyVar b -> "'" <> pretty b
-    TokenAssign -> "="
-    TokenEq -> "=="
-    TokenNeq -> "!="
-    TokenGT -> ">"
-    TokenGEQ -> ">="
-    TokenLT -> "<"
-    TokenLEQ -> "<="
-    TokenPlus -> "+"
-    TokenMinus -> "-"
-    TokenMult -> "*"
-    TokenDiv -> "/"
-    TokenObjAccess -> "@"
-    TokenObjRemove -> "#"
-    TokenBitAnd -> "&"
-    TokenBitOr -> "|"
-    TokenAnd -> "&&"
-    TokenOr -> "||"
-    TokenIdent t -> "ident<" <> pretty t <> ">"
-    TokenNumber n -> "number<" <> pretty n <> ">"
-    TokenString s -> "\"" <> pretty s <> "\""
-    TokenTrue -> "true"
-    TokenFalse -> "false"
-    TokenVOpen -> "VOPEN"
-    TokenVSemi -> "VSEMI"
-    TokenVClose -> "VCLOSE"
-    TokenEOF -> "EOF"
+  pretty = pretty . renderTokenText
 
 instance Pretty PosToken where
   pretty = pretty . _ptToken

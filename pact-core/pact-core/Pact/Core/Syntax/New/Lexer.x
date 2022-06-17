@@ -5,11 +5,11 @@
 {-# LANGUAGE ViewPatterns #-}
 
 
-module Pact.Core.Syntax.New.Lexer where
+module Pact.Core.Syntax.New.Lexer(lexer, runLexerIO) where
 
 import Control.Lens hiding (uncons)
 import Control.Monad.State.Strict
-import Control.Monad.Except
+import Control.Exception(throwIO)
 import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.ByteString.Internal(w2c)
@@ -18,6 +18,8 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
+import Pact.Core.Info
+import Pact.Core.Errors
 import Pact.Core.Syntax.New.LexUtils
 
 }
@@ -77,7 +79,7 @@ tokens :-
 <0> \:           { token TokenColon }
 <0> \=\>         { token TokenLambdaArrow}
 <0> \=\=         { token TokenEq }
-<0> \!\=         { token TokenEq }
+<0> \!\=         { token TokenNeq }
 <0> \=           { token TokenAssign }
 <0> \>\=         { token TokenGEQ }
 <0> \>           { token TokenGT }
@@ -124,8 +126,12 @@ scan = do
   startcode <- startCode
   case alexScan input startcode of
     AlexEOF -> handleEOF
-    AlexError (AlexInput _ _ _ inp) ->
-      throwError $ "Lexical error: " ++ show (B.head inp)
+    AlexError (AlexInput line col _last inp) ->
+      let li = LineInfo line col 1
+      in case B.uncons inp of
+        Just (h, _) -> throwLexerError (LexicalError (w2c h) _last li)
+        Nothing -> throwLexerError (OutOfInputError li)
+
     AlexSkip input' _ -> do
       modify' $ \s -> s { _lexInput = input' }
       scan
@@ -150,9 +156,11 @@ beginLayout _ = do
     -- incremented the right quantity, etc.
     Just (Layout lz) -> do
       let currIndent = col - lz
-      when (currIndent <= 0 || currIndent /= indentSize) $ throwError "Lexical error, invalid indentation"
+      lineInfo <- getLineInfo
+      when (currIndent <= 0 || currIndent /= indentSize) $
+        throwLexerError (InvalidIndentation currIndent indentSize lineInfo)
       pushLayout (Layout (lz + indentSize))
-      withLineInfo TokenVOpen
+      pure (PosToken TokenVOpen lineInfo)
     -- We're _not_ in a layout, so we'll check whether indent size was set at all
     -- Given we're _not_ in an indent block at all, we assume we're @ indent 0
     Nothing -> handleIndent indentSize col
@@ -166,7 +174,9 @@ beginLayout _ = do
     -- the indent is exactly 2 or 4 spaces
     | oldIndent < 0 = do
       if currIndent /= 2 && currIndent /= 4
-        then throwError ("Lexical error, invalid indentation " ++ show currIndent)
+        then do
+          i <- getLineInfo
+          throwLexerError (InvalidInitialIndent currIndent i)
         else do
           lexIndentSize .= currIndent
           pushLayout (Layout currIndent)
@@ -175,7 +185,7 @@ beginLayout _ = do
     | currIndent == oldIndent = do
         pushLayout (Layout oldIndent)
         withLineInfo TokenVOpen
-    | otherwise = throwError "Lexical error: indentation is "
+    | otherwise = throwLexerError =<< (InvalidIndentation currIndent oldIndent <$> getLineInfo)
 
 handleNewline :: Text -> LexerT PosToken
 handleNewline _ = pushStartCode newline *> scan
@@ -202,7 +212,9 @@ offsideRule _ = do
         popStartCode
         popLayout
         withLineInfo TokenVClose
-    Nothing -> popStartCode *> withLineInfo TokenVSemi
+    Nothing ->
+      if col == 0 then popStartCode *> withLineInfo TokenVSemi
+      else continue
   where
   continue = popStartCode *> scan
 
@@ -217,11 +229,11 @@ stringLiteral _ = do
     case alexGetByte inp of
       Just (c, rest) ->
         handleChar acc (w2c c) rest
-      Nothing -> throwError "Lexical error: Did not close string literal"
+      Nothing -> throwLexerError' $ StringLiteralError "Did not close string literal"
   handleChar acc c rest
     | c == '\\' = escape acc rest
-    | c == '\n' = throwError "Lexical error: newline in string literal"
-    | c == '\r' = throwError "Lexical error: carriage return in string literal"
+    | c == '\n' = throwLexerError' $ StringLiteralError "newline in string literal"
+    | c == '\r' = throwLexerError' $ StringLiteralError "carriage return in string literal"
     | c == '\"' = reverse acc <$ modify' (\s -> s { _lexInput = rest })
     | otherwise = loop (c:acc) rest
   escape acc inp =
@@ -231,9 +243,9 @@ stringLiteral _ = do
         | c == 't' -> loop ('\t':acc) rest
         | c == '\\' -> loop ('\\':acc) rest
         | c == '\"' -> loop ('\"':acc) rest
-        | c == 'r' -> throwError "Lexical error: carriage return is not supported in strings literals"
-        | otherwise -> throwError "Lexical error: Invalid escape sequence"
-      Nothing -> throwError "Lexical error: Did not close string literal"
+        | c == 'r' -> throwLexerError' $ StringLiteralError "carriage return is not supported in strings literals"
+        | otherwise -> throwLexerError' $ StringLiteralError "Lexical error: Invalid escape sequence"
+      Nothing -> throwLexerError' $ StringLiteralError "Did not close string literal"
 
 
 
@@ -252,6 +264,9 @@ scanTokens = scan' []
       PosToken TokenEOF _ -> pure (reverse acc)
       tok -> scan' (tok:acc)
 
-lexer :: ByteString -> Either String [PosToken]
+lexer :: ByteString -> Either PactErrorI [PosToken]
 lexer bs = runLexerT scanTokens bs
+
+runLexerIO :: ByteString -> IO [PosToken]
+runLexerIO bs = either throwIO pure (lexer bs)
 }
