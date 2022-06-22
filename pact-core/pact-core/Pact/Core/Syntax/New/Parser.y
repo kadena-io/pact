@@ -136,7 +136,7 @@ ReplTopLevel :: { ParsedReplTopLevel }
   | Expr { RTLTerm $1 }
 
 Module :: { ParsedModule }
-  : module IDENT '(' Gov ')' '{' OPEN Exts Defs CLOSE '}'
+  : module IDENT '(' Gov ')' ':' OPEN Exts Defs CLOSE
     { Module (ModuleName (getIdent $2) Nothing) $4 (reverse $8) (NE.fromList (reverse $9)) }
 
 Gov :: { Governance Text }
@@ -172,8 +172,12 @@ DefConst :: { ParsedDefConst }
   : defconst IDENT MTypeAnn '=' Expr { DefConst (getIdent $2) $3 $5 (_ptInfo $1) }
 
 Defun :: { ParsedDefun }
-  : defun IDENT '(' ArgList ')' ':' Type '=' MaybeBlock
-    { Defun (getIdent $2) (reverse $4) $7 $9 (combineSpan (_ptInfo $1) (view termInfo $9)) }
+  : defun IDENT '(' ArgList ')' '->' Type MaybeFnBlock
+    { Defun (getIdent $2) (reverse $4) $7 $8 (combineSpan (_ptInfo $1) (view termInfo $8)) }
+
+MaybeFnBlock :: { ParsedExpr }
+  : ':' OPEN BlockBody CLOSE { Block (NE.fromList (reverse $3)) (combineSpan (_ptInfo $1) (_ptInfo $4)) }
+  | '=' Expr { $2 }
 
 ArgList :: { [Arg] }
   : ArgList ',' IDENT ':' Type { (Arg (getIdent $3) $5):$1 }
@@ -252,13 +256,17 @@ Statement :: { ParsedExpr }
   | Expr { $1 }
 
 IfStmt :: { ParsedExpr }
-  : if Expr then MaybeBlock else MaybeBlock { If $2 $4 $6 (combineSpans $2 $6) }
+  : if Expr then MaybeBlock MaybeSemi else MaybeBlock { If $2 $4 $7 (combineSpans $2 $7) }
+
+MaybeSemi :: { () }
+  : SEMI { () }
+  | {- empty -} { () }
 
 IfExpr :: { ParsedExpr }
   : if Expr then Expr else Expr { If $2 $4 $6 (combineSpans $2 $6) }
 
 MaybeBlock :: { ParsedExpr }
-  : '{' OPEN BlockBody CLOSE '}' { Block (NE.fromList (reverse $3)) (combineSpan (_ptInfo $1) (_ptInfo $5)) }
+  : ':' OPEN BlockBody CLOSE { Block (NE.fromList (reverse $3)) (combineSpan (_ptInfo $1) (_ptInfo $4)) }
   | Expr { $1 }
 
 BlockBody :: { [ParsedExpr] }

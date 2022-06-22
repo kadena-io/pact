@@ -1,68 +1,15 @@
-lambda (x : Int) (y : 'a) -> {
-  if x >= 0 then blah else {
-    1 + 2(3, 4) + blah(2, 3)
-  }
-  let x = 1
-}
+  module m (capGov g):
 
-interface blah {
+    defun f(a:integer) -> integer:
+      a + 1
 
+    defun g(a:integer) -> integer:
+      defun double(aa: integer) -> integer = f(aa) * f2(aa)
+      double(a)
 
-  defun f (i : Int,  b: String): Int
+    defun f2(a:integer) -> integer:
+      a + 1
 
-  defun g (a  : Int, b : T Int): Int
-
-  deconst myobj:T Int = {f:1, g:2}
-
-  defcap mycap (someParam : String): Capability
-
-  defcap mycap2 (someParam : String): Cap
-
-  deftable mytable: Table myschema
-
-}
-
-module Coin {
-  
-}
-
-
-module Coin {
-  defun with-balance(hasBalance) = hasBalance.balance
-
-  @managed TRANSFER-mgr(amount)
-  defcap TRANSFER (sender : String, receiver : String, amount: Decimal): Capability = {
-    enforce(sender != receiver, "same sender and receiver")
-    enforce-unit(amount)
-    enforce(amount > 0.0, "positive amount")
-    compose-capability(DEBIT(sender))
-    compose-capability(CREDIT(receiver))
-  }
-
-  defun redeem-gas (miner : String, miner-guard : Guard, sender: String, total: Decimal): Unit = {
-    validate-account(sender)
-    validate-account(miner)
-    enforce-unit(total)
-    require-capability(GAS())
-    let fee = read-decimal("fee")
-    let refund = total - fee
-
-    enforce-unit(fee)
-    enforce(fee >= 0.0, "fee must be a non-negative quantity")
-    enforce(refund >= 0.0, "refund must be a non-negative quantity")
-    emit-event(TRANSFER(sender, miner, fee))
-
-    with-capability(CREDIT(sender)) {
-      if refund >= 0.0 then {
-        with-read(coin-table, sender) { lambda o ->
-          update(coin-table, sender, {balance:o.balance})
-        }
-      } else ()
-    }
-
-    with-capability(CREDIT(miner)) {
-      if fee >= 0.0 then credit(miner, miner-guard, fee)
-      else ()
-    }
-  }
-}
+f(1)
+f2(2)
+g(1)

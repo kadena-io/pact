@@ -70,13 +70,13 @@ tokens :-
 
 <0> \(           { token TokenOpenParens }
 <0> \)           { token TokenCloseParens }
-<0> \{           { handleOpenBrace }
+<0> \{           { token TokenOpenBrace }
 <0> \}           { token TokenCloseBrace }
 <0> \[           { token TokenOpenBracket }
 <0> \]           { token TokenCloseBracket }
 <0> \,           { token TokenComma }
 <0> \.           { token TokenDot }
-<0> \:           { token TokenColon }
+<0> \:           { handleColon }
 <0> \=\>         { token TokenLambdaArrow}
 <0> \=\=         { token TokenEq }
 <0> \!\=         { token TokenNeq }
@@ -103,7 +103,7 @@ tokens :-
 <0> \r\n         { handleNewline }
 <0> \n           { handleNewline }
 
-<openBrace> {
+<colon> {
   "--".*;
   [\n]+[\ \t]* { beginLayout }
   () { \_ -> popStartCode *> scan }
@@ -209,7 +209,6 @@ offsideRule _ = do
         popStartCode *> withLineInfo TokenVSemi
       GT -> continue
       LT -> do
-        popStartCode
         popLayout
         withLineInfo TokenVClose
     Nothing ->
@@ -247,14 +246,12 @@ stringLiteral _ = do
         | otherwise -> throwLexerError' $ StringLiteralError "Lexical error: Invalid escape sequence"
       Nothing -> throwLexerError' $ StringLiteralError "Did not close string literal"
 
-
-
--- Opening a brace lets us know we're beginning an indented block,
--- so we push a layout which is
-handleOpenBrace :: Text -> LexerT PosToken
-handleOpenBrace _ = do
-  pushStartCode openBrace
-  withLineInfo TokenOpenBrace
+-- A colon _may_ indicate the start of a block,
+-- so we emit the token and push the start code.
+handleColon :: Text -> LexerT PosToken
+handleColon _ = do
+  pushStartCode colon
+  withLineInfo TokenColon
 
 scanTokens :: LexerT [PosToken]
 scanTokens = scan' []
