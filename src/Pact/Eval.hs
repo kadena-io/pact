@@ -375,6 +375,7 @@ validateImports i rs mh (Just is)
       Just _ -> return ()
 
 mangleDefs :: ModuleName -> Term Name -> Term Name
+mangleDefs mn term = modifyMn term
   where
     modifyMn = case term of
       TDef{}    -> set (tDef . dModule) mn
