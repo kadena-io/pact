@@ -1,3 +1,10 @@
+4.3
+---
+* Interpreter improvements (#970)
+* New `create-principal` and `validate-principal` natives (#969)
+* Fixes to name resolution (#987)
+* New nested defpacts + `continue` native (#980)
+
 4.2.1
 ---
 * Backport chainweb gasmodel (#978)

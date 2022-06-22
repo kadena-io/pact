@@ -159,6 +159,8 @@ data ExecutionFlag
   | FlagDisableInlineMemCheck
   -- | Disable new non-inlined modules
   | FlagDisablePact43
+  -- | Disable pact 4.3 features
+  | FlagDisablePact431
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
