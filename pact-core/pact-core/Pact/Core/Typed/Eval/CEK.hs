@@ -68,6 +68,27 @@ newtype EvalT b a =
 runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
 runEvalT s (EvalT action) = runStateT action s
 
+
+data UserGuard name v
+  = UserGuard
+  { _ugFun :: name
+  , _ugArgs :: ![v]
+  } deriving (Eq, Show)
+
+data ModuleGuard name
+  = ModuleGuard
+  { _mgModuleName :: name
+  , _mgName :: !Text
+  } deriving (Eq, Show)
+
+
+data Guard name v
+  = GKeyset (KeySet name)
+  | GKeySetRef KeySetName
+  | GUserGuard (UserGuard name v)
+  | GModuleGuard (ModuleGuard name)
+  deriving (Eq, Show)
+
 data CEKValue b i
   = VLiteral !Literal
   | VObject !(Map Field (CEKValue b i))
