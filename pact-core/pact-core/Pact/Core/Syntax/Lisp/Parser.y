@@ -61,6 +61,7 @@ import Pact.Core.Syntax.Lisp.LexUtils
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
   false      { PosToken TokenFalse _ }
+  progn      { PosToken TokenBlockIntro _ }
   '{'        { PosToken TokenOpenBrace _ }
   '}'        { PosToken TokenCloseBrace _ }
   '('        { PosToken TokenOpenParens _ }
@@ -246,6 +247,7 @@ SExpr :: { LineInfo -> ParsedExpr }
   | OperatorExpr { $1 }
   | LetExpr { $1 }
   | IfExpr { $1 }
+  | ProgNExpr { $1 }
   | GenAppExpr { $1 }
 
 OperatorExpr :: { LineInfo -> ParsedExpr }
@@ -285,6 +287,9 @@ Binders :: { [Binder ParsedName LineInfo] }
 
 GenAppExpr :: { LineInfo -> ParsedExpr }
   : Expr AppList { App $1 (reverse $2) }
+
+ProgNExpr :: { LineInfo -> ParsedExpr }
+  : progn BlockBody { Block (NE.fromList (reverse $2)) }
 
 AppList :: { [ParsedExpr] }
   : AppList Expr { $2:$1 }

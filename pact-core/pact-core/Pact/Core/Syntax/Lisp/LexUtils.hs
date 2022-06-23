@@ -104,6 +104,7 @@ data Token
   | TokenString !Text
   | TokenTrue
   | TokenFalse
+  | TokenBlockIntro
   -- Layout
   | TokenEOF
   deriving (Eq, Show)
@@ -245,6 +246,7 @@ renderTokenText = \case
   TokenObjRemove -> "#"
   TokenBitAnd -> "&"
   TokenBitOr -> "|"
+  TokenBlockIntro -> "progn"
   TokenAnd -> "and"
   TokenOr -> "or"
   TokenIdent t -> "ident<" <> t <> ">"

@@ -71,6 +71,7 @@ tokens :-
     or           { token TokenOr }
     at           { token TokenObjAccess }
     remove       { token TokenObjRemove }
+    progn        { token TokenBlockIntro }
 
     \(           { token TokenOpenParens }
     \)           { token TokenCloseParens }
