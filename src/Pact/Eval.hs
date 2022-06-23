@@ -236,7 +236,11 @@ eval t =
   where
   stripped = do
     inRepl <- view eeInRepl
-    if inRepl then eval' $!! t else eval' $!! stripTermInfo t
+    if inRepl then eval' $!! t
+    else ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule) (eval' $!! stripTermInfo t)
+  stripOnlyModule = case t of
+    TModule {} -> stripTermInfo t
+    _ -> t
 
 -- | Evaluate top-level term.
 eval' ::  Term Name ->  Eval e (Term Name)
