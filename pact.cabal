@@ -358,12 +358,19 @@ library pact-core
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
-    -- Syntax modules
+
+    Pact.Core.Syntax.Common
+    -- New Syntax modules
     Pact.Core.Syntax.New.ParseTree
     Pact.Core.Syntax.New.Lexer
     Pact.Core.Syntax.New.LexUtils
     Pact.Core.Syntax.New.Parser
-    --
+
+     -- Syntax modules
+    Pact.Core.Syntax.Lisp.ParseTree
+    Pact.Core.Syntax.Lisp.Lexer
+    Pact.Core.Syntax.Lisp.LexUtils
+    Pact.Core.Syntax.Lisp.Parser
     -- Pact.Core.Repl
     -- Core IR modules
     Pact.Core.IR.Term

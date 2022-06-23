@@ -6,19 +6,16 @@
 {-# LANGUAGE DerivingVia #-}
 
 
-module Pact.Core.Syntax.New.LexUtils where
+module Pact.Core.Syntax.Lisp.LexUtils where
 
 import Control.Lens hiding (uncons)
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Word (Word8)
 import Data.Text(Text)
-import Data.List(uncons)
 import Data.ByteString.Internal(w2c)
 import Data.ByteString(ByteString)
-import Data.List.NonEmpty(NonEmpty(..))
 
-import qualified Data.List.NonEmpty as NE
 import qualified Data.ByteString as B
 
 import Pact.Core.Info
@@ -26,7 +23,7 @@ import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.Common
-import Pact.Core.Syntax.New.ParseTree
+import Pact.Core.Syntax.Lisp.ParseTree
 
 type ParserT = Either PactErrorI
 type ParsedExpr = Expr ParsedName LineInfo
@@ -86,7 +83,6 @@ data Token
   | TokenTyArrow
   | TokenTyVar Text
   -- Operators
-  | TokenAssign
   | TokenEq
   | TokenNeq
   | TokenGT
@@ -109,9 +105,6 @@ data Token
   | TokenTrue
   | TokenFalse
   -- Layout
-  | TokenVOpen
-  | TokenVSemi
-  | TokenVClose
   | TokenEOF
   deriving (Eq, Show)
 
@@ -140,6 +133,13 @@ alexGetByte (AlexInput line col _ stream) =
     , _inpColumn = 0
     , _inpLast = '\n'
     , _inpStream = rest})
+  advance (c, rest) | w2c c  == '\n' =
+    (c
+    , AlexInput
+    { _inpLine  = line + 1
+    , _inpColumn = 0
+    , _inpLast = '\n'
+    , _inpStream = rest})
   advance (c, rest) =
     (c
     , AlexInput
@@ -152,62 +152,25 @@ newtype Layout
   = Layout Int
   deriving (Eq, Show)
 
-data LexState
-  = LexState
-  { _lexInput :: !AlexInput
-  , _lexStartCodes :: !(NonEmpty Int)
-  , _lexLayout :: [Layout]
-  , _lexIndentSize :: Int }
-  deriving (Eq, Show)
-
-makeLenses ''LexState
-
 newtype LexerT a =
-  LexerT (StateT LexState (Either PactErrorI) a)
+  LexerT (StateT AlexInput (Either PactErrorI) a)
   deriving
     ( Functor, Applicative
     , Monad
-    , MonadState LexState
+    , MonadState AlexInput
     , MonadError PactErrorI)
-  via (StateT LexState (Either PactErrorI))
+  via (StateT AlexInput (Either PactErrorI))
 
 
 column :: LexerT Int
-column = gets (_inpColumn . _lexInput)
+column = gets _inpColumn
 
-startCode :: LexerT Int
-startCode = gets (NE.head . _lexStartCodes)
-
-pushStartCode :: Int -> LexerT ()
-pushStartCode i = modify' \case
-  LexState inp sc ly is -> LexState inp (NE.cons i sc) ly is
-
-popStartCode :: LexerT ()
-popStartCode = modify' \case
-  LexState inp sc ly is -> case sc of
-    _ :| [] -> LexState inp (0 :| []) ly is
-    _ :| (x:xs) -> LexState inp (x :| xs) ly is
-
-layout :: LexerT (Maybe Layout)
-layout = gets (fmap fst . uncons . _lexLayout)
-
-pushLayout :: Layout -> LexerT ()
-pushLayout i = modify' \case
-  LexState inp sc ly is -> LexState inp sc (i:ly) is
-
-popLayout :: LexerT ()
-popLayout = modify' \case
-  LexState inp sc ly is -> case ly of
-    _:xs -> LexState inp sc xs is
-    [] -> LexState inp sc [] is
-
-initState :: ByteString -> LexState
-initState s =
-  LexState (AlexInput 0 1 '\n' s) (0 :| []) [] (-1)
+initState :: ByteString -> AlexInput
+initState s = AlexInput 0 1 '\n' s
 
 getLineInfo :: LexerT LineInfo
 getLineInfo = do
-  input <- gets _lexInput
+  input <- get
   pure (LineInfo (_inpLine input) (_inpColumn input) 1)
 
 withLineInfo :: Token -> LexerT PosToken
@@ -268,8 +231,7 @@ renderTokenText = \case
   TokenTyUnit -> "unit"
   TokenTyArrow -> "->"
   TokenTyVar b -> "'" <> b
-  TokenAssign -> "="
-  TokenEq -> "=="
+  TokenEq -> "="
   TokenNeq -> "!="
   TokenGT -> ">"
   TokenGEQ -> ">="
@@ -283,16 +245,13 @@ renderTokenText = \case
   TokenObjRemove -> "#"
   TokenBitAnd -> "&"
   TokenBitOr -> "|"
-  TokenAnd -> "&&"
-  TokenOr -> "||"
+  TokenAnd -> "and"
+  TokenOr -> "or"
   TokenIdent t -> "ident<" <> t <> ">"
   TokenNumber n -> "number<" <> n <> ">"
   TokenString s -> "\"" <> s <> "\""
   TokenTrue -> "true"
   TokenFalse -> "false"
-  TokenVOpen -> "VOPEN"
-  TokenVSemi -> "VSEMI"
-  TokenVClose -> "VCLOSE"
   TokenEOF -> "EOF"
 
 

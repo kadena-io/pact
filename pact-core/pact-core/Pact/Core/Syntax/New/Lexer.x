@@ -67,7 +67,11 @@ tokens :-
 <0> decimal      { token TokenTyDecimal }
 <0> string       { token TokenTyString }
 <0> unit         { token TokenTyUnit }
+<0> and          { token TokenAnd }
+<0> or           { token TokenOr }
 
+<0> \@          { token TokenObjAccess }
+<0> \#          { token TokenObjRemove }
 <0> \(           { token TokenOpenParens }
 <0> \)           { token TokenCloseParens }
 <0> \{           { token TokenOpenBrace }
@@ -89,12 +93,8 @@ tokens :-
 <0> \-           { token TokenMinus }
 <0> \*           { token TokenMult }
 <0> \/           { token TokenDiv }
-<0> \&\&         { token TokenAnd }
-<0> \|\|         { token TokenOr }
 <0> \&           { token TokenBitAnd }
 <0> \|           { token TokenBitAnd }
-<0> \@           { token TokenObjAccess }
-<0> \#           { token TokenObjRemove }
 <0> \"           { stringLiteral }
 <0> @integer     { emit TokenNumber }
 <0> @ident       { emit TokenIdent }

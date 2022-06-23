@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module Pact.Core.Syntax.New.ParseTree where
+module Pact.Core.Syntax.Lisp.ParseTree where
 
 import Control.Lens hiding (List, op)
 import Data.Foldable(fold)
@@ -21,12 +21,13 @@ import Pact.Core.Pretty
 
 import Pact.Core.Syntax.Common
 
+data Binder name i =
+  Binder Text (Maybe Type) (Expr name i)
+  deriving Show
 
 data Expr name i
   = Var name i
-  | Let Text (Maybe Type) (Expr name i) i
-  | LetIn Text (Maybe Type) (Expr name i) (Expr name i) i
-  | NestedDefun (Defun (Expr name i) i) i
+  | LetIn (NonEmpty (Binder name i)) (Expr name i) i
   | Lam name (NonEmpty (Text, Maybe Type)) (Expr name i) i
   | If (Expr name i) (Expr name i) (Expr name i) i
   | App (Expr name i) [Expr name i] i
@@ -43,16 +44,14 @@ data Expr name i
 termInfo :: Lens' (Expr name i) i
 termInfo f = \case
   Var n i -> Var n <$> f i
-  Let a b c i -> Let a b c <$> f i
-  LetIn a b c d i ->
-    LetIn a b c d <$> f i
+  LetIn bnds e1 i ->
+    LetIn bnds e1 <$> f i
   Lam n nel e i ->
     Lam n nel e <$> f i
   If e1 e2 e3 i ->
     If e1 e2 e3 <$> f i
   App e1 args i -> App e1 args <$> f i
   Block nel i -> Block nel <$> f i
-  NestedDefun d i -> NestedDefun d <$> f i
   Object m i -> Object m <$> f i
   UnaryOp _op e i -> UnaryOp _op e <$> f i
   BinaryOp _op e1 e2 i -> BinaryOp _op e1 e2 <$> f i
@@ -64,16 +63,7 @@ termInfo f = \case
 instance Pretty name => Pretty (Expr name i) where
   pretty = \case
     Var n _ -> pretty n
-    Let n mt e _ ->
-      "let" <+> pretty n <> maybe mempty (\b -> " :" <+> pretty b) mt <+> "=" <+> pretty e
-    LetIn n mt e1 e2 _ ->
-      "let"
-        <+> pretty n
-        <> maybe mempty (\b -> " :" <+> pretty b) mt
-        <+> "="
-        <+> pretty e1
-        <+> "in"
-        <+> pretty e2
+    LetIn{} -> error "todo: implement"
     Lam _ nel e _ ->
       "lambda" <+> renderLamTypes nel <+> "=>" <+> pretty e
     If cond e1 e2 _ ->
@@ -84,8 +74,6 @@ instance Pretty name => Pretty (Expr name i) where
       pretty uop <> pretty e1
     BinaryOp b e1 e2 _ ->
       pretty e1 <+> pretty b <+> pretty e2
-    NestedDefun d _ ->
-      pretty d
     Block nel _ ->
       "{" <+> nest 2 (hardline <> vsep (pretty <$> NE.toList nel)) <> hardline <> "}"
     Object m _ ->

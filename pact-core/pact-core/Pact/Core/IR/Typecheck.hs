@@ -161,6 +161,38 @@ instance (Show i, Typeable i) => MonadError (PactError i) (InferT s b i) where
 liftST :: ST s a -> InferT s b i a
 liftST action = InferT (ReaderT (const action))
 
+_dbgTypedTerm
+  :: TCTerm s b i
+  -> InferT s b i (Typed.Term Text String (b, [Type String], [Pred String]) i)
+_dbgTypedTerm = \case
+  Typed.Var n i -> pure (Typed.Var (_olName n) i)
+  Typed.Lam nel body i -> do
+    nel' <- (traversed._2) _dbgType nel
+    body' <- _dbgTypedTerm body
+    pure (Typed.Lam (over (mapped._1) _olName nel') body' i)
+  Typed.App fn body i ->
+    Typed.App <$> _dbgTypedTerm fn <*> traverse _dbgTypedTerm body <*> pure i
+  Typed.Let n e1 e2 i ->
+    Typed.Let (_olName n) <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
+  Typed.Builtin (b, tys, preds) i -> do
+    tys' <- traverse _dbgType tys
+    preds' <- traverse _dbgPred preds
+    pure (Typed.Builtin (b, tys', preds') i)
+  Typed.Constant l i -> pure (Typed.Constant l i)
+  Typed.TyApp t nelty i ->
+    Typed.TyApp <$> _dbgTypedTerm t <*> traverse _dbgType nelty <*> pure i
+  Typed.TyAbs nel term i ->
+    Typed.TyAbs <$> traverse _dbgTvRef nel <*> _dbgTypedTerm term <*> pure i
+  Typed.Block nel i ->
+    Typed.Block <$> traverse _dbgTypedTerm nel <*> pure i
+  Typed.ObjectLit obj i ->
+    Typed.ObjectLit <$> traverse _dbgTypedTerm obj <*> pure i
+  Typed.ListLit ty li i ->
+    Typed.ListLit <$> _dbgType ty <*> traverse _dbgTypedTerm li <*> pure i
+  Typed.ObjectOp oop i ->
+    Typed.ObjectOp <$> traverse _dbgTypedTerm oop <*> pure i
+  Typed.Error e ty i -> Typed.Error e <$> _dbgType ty <*> pure i
+
 _dbgTypeScheme :: TypeScheme (TvRef s) -> InferT s b i (TypeScheme String)
 _dbgTypeScheme (TypeScheme tvs preds ty) = do
   tvs' <- traverse rv tvs
@@ -172,6 +204,14 @@ _dbgTypeScheme (TypeScheme tvs preds ty) = do
     Unbound u l _ -> pure ("unbound" <> show (u, l))
     Bound u l -> pure ("bound" <> show (u, l))
     Link _ -> pure "linktv"
+
+_dbgTvRef :: TvRef s -> InferT s b i String
+_dbgTvRef tv = readTvRef tv >>= \case
+    Unbound u l _ -> pure ("unbound" <> show (u, l))
+    Bound u l -> pure ("bound" <> show (u, l))
+    Link ty -> do
+      ty' <- _dbgType ty
+      pure $ "linked type: " <> show ty'
 
 _dbgPred :: TCPred s -> InferT s b i (Pred String)
 _dbgPred (Pred i t) = Pred i <$> _dbgType t
@@ -1008,9 +1048,9 @@ inferDefun (IR.Defun name dfTy term info) = do
   leaveLevel
   (deferred, retained) <- split preds
   unless (null deferred && null retained) $ fail "typeclass constraints not supported in defun"
-  fterm <- debruijnizeTermTypes term'
   dfTy' <- liftTypeVar dfTy
   unify dfTy' termTy
+  fterm <- debruijnizeTermTypes term'
   rty' <- debruijnizeType dfTy'
   pure (Typed.Defun name' rty' fterm info)
 
@@ -1492,8 +1532,8 @@ runInferTerm
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IRTerm b i
-  -> (TypeScheme NamedDeBruijn, TypedTerm b i)
-runInferTerm u loaded bfn term0 = runST $
+  -> IO (TypeScheme NamedDeBruijn, TypedTerm b i)
+runInferTerm u loaded bfn term0 = stToIO $
   runInfer u loaded bfn $ do
     enterLevel
     (ty, term1, preds) <- inferTerm term0
@@ -1508,33 +1548,33 @@ runInferModule
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IRModule b i
-  -> TypedModule b i
+  -> IO (TypedModule b i)
 runInferModule u loaded bfn term0 =
-  runST $ runInfer u loaded bfn (inferModule term0)
+  stToIO $ runInfer u loaded bfn (inferModule term0)
 
 runInferTopLevel
   :: Supply
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IR.TopLevel IRName TypeVar b i
-  -> TypedTopLevel b i
+  -> IO (TypedTopLevel b i)
 runInferTopLevel u l bfn tl =
-  runST $ runInfer u l bfn (inferTopLevel tl)
+  stToIO $ runInfer u l bfn (inferTopLevel tl)
 
 runInferProgram
   :: Supply
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> [IR.TopLevel IRName TypeVar b info]
-  -> [TypedTopLevel b info]
+  -> IO [TypedTopLevel b info]
 runInferProgram u l bfn prog =
-  runST $ runInfer u l bfn $ inferProgram prog
+  stToIO $ runInfer u l bfn $ inferProgram prog
 
 runInferReplProgram
   :: Supply
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> [IR.ReplTopLevel IRName TypeVar b info]
-  -> [TypedReplTopLevel b info]
+  -> IO [TypedReplTopLevel b info]
 runInferReplProgram u l bfn prog =
-  runST $ runInfer u l bfn $ inferReplProgram prog
+  stToIO $ runInfer u l bfn $ inferReplProgram prog

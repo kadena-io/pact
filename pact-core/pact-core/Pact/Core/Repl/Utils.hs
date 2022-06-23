@@ -136,7 +136,5 @@ replCompletion natives =
     dns = defNames ems
     in fmap ((renderModuleName mn <> ".") <>) dns
 
-
-
 runReplT :: IORef (ReplState b) ->  ReplT b a -> IO a
 runReplT env (ReplT act) = runReaderT act env
