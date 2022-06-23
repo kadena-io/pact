@@ -96,6 +96,7 @@ library
     Pact.Types.PactError
     Pact.Types.PactValue
     Pact.Types.Parser
+    Pact.Types.Principal
     Pact.Types.Advice
     Pact.Types.Persistence
     Pact.Types.Pretty

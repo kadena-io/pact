@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ViewPatterns #-}
+
 -- |
 -- Module      :  Pact.Native.Guards
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -16,24 +16,19 @@ module Pact.Native.Guards
 ( guardDefs
 ) where
 
-
-import Control.Applicative
-
 import Data.Aeson (encode)
 import Data.Attoparsec.Text
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.Foldable
-import Data.Functor (($>), void)
+import Data.Functor (void)
 import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Hash
+import Pact.Types.Principal
 import Pact.Types.Runtime
-
-import Text.Parser.Combinators (eof)
-import Data.Char (isHexDigit)
 
 
 guardDefs :: NativeModule
@@ -133,60 +128,5 @@ typeOfPrincipalDef = defRNative "typeof-principal" typeOfPrincipal
     typeOfPrincipal i as = case as of
       [TLitString p] -> case parseOnly (principalParser i) p of
         Left{} -> pure $ tStr ""
-        Right ty -> pure $ tStr ty
+        Right ty -> pure $ tStr $ showPrincipalType ty
       _ -> argsError i as
-
-principalParser :: HasInfo i => i -> Parser Text
-principalParser (getInfo -> i) = (kParser $> "k:")
-  <|> (wParser $> "w:")
-  <|> (rParser $> "r:")
-  <|> (uParser $> "u:")
-  <|> (mParser $> "m:")
-  <|> (pParser $> "p:")
-  where
-    base64UrlUnpaddedAlphabet :: String
-    base64UrlUnpaddedAlphabet =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-
-    base64UrlHashParser = count 43 (satisfy f) where
-      f c = c `elem` base64UrlUnpaddedAlphabet
-
-    hexKeyFormat = count 64 $ satisfy isHexDigit
-
-    kParser = char 'k'
-      *> char ':'
-      *> hexKeyFormat
-      *> eof
-
-    wParser = char 'w'
-      *> char ':'
-      *> base64UrlHashParser
-      *> char ':'
-      *> nameParser i
-      *> eof
-
-    pParser = char 'p'
-      *> char ':'
-      *> base64UrlHashParser
-      *> char ':'
-      *> nameParser i
-      *> eof
-
-    rParser = char 'r'
-      *> char ':'
-      *> nameParser i
-      *> eof
-
-    mParser = char 'm'
-      *> char ':'
-      *> moduleNameParser
-      *> char ':'
-      *> nameParser i
-      *> eof
-
-    uParser = char 'u'
-      *> char ':'
-      *> nameParser i
-      *> char ':'
-      *> base64UrlHashParser
-      *> eof
