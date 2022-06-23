@@ -23,7 +23,7 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice,
    toPactId,
@@ -226,6 +226,8 @@ data EvalEnv e = EvalEnv {
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
+      -- | Are we in the repl? If so, ignore info
+    , _eeInRepl :: Bool
     }
 makeLenses ''EvalEnv
 

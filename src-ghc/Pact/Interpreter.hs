@@ -182,6 +182,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
   , _eePublicData = pd
   , _eeExecutionConfig = ec
   , _eeAdvice = def
+  , _eeInRepl = False
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss

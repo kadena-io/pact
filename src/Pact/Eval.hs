@@ -232,11 +232,11 @@ evalNamespace info setter m = do
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
-  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) stripped
   where
-  stripped = case t of
-    TModule{} -> stripTermInfo t
-    _ -> t
+  stripped = do
+    inRepl <- view eeInRepl
+    if inRepl then eval' $!! t else eval' $!! stripTermInfo t
 
 -- | Evaluate top-level term.
 eval' ::  Term Name ->  Eval e (Term Name)
