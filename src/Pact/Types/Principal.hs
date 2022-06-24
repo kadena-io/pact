@@ -1,8 +1,16 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 module Pact.Types.Principal
 ( Principal(..)
+, _W, _K, _R, _U, _M, _P
+, kKey
+, wHash, wPred
+, rName
+, uFuncName, uArgsHash
+, mModName, mGuardName
+, pPactId, pFuncName
 , principalParser
 , guardToPrincipal
 , mkPrincipalIdent
@@ -10,6 +18,7 @@ module Pact.Types.Principal
 ) where
 
 import Control.Applicative
+import Control.Lens
 
 import Data.Aeson (encode)
 import Data.Attoparsec.Text
@@ -49,6 +58,39 @@ data Principal
   | P PactId Text
     -- ^ format: `p:pactid:fqn of pact function
   deriving Eq
+makePrisms ''Principal
+
+kKey :: Traversal' Principal PublicKey
+kKey = _K
+
+wHash :: Traversal' Principal Text
+wHash = _W . _1
+
+wPred :: Traversal' Principal Text
+wPred = _W . _2
+
+rName :: Traversal' Principal Text
+rName = _R
+
+uFuncName :: Traversal' Principal Text
+uFuncName = _U . _1
+
+uArgsHash :: Traversal' Principal Text
+uArgsHash = _U . _2
+
+mModName :: Traversal' Principal ModuleName
+mModName = _M . _1
+
+mGuardName :: Traversal' Principal Text
+mGuardName = _M . _2
+
+pPactId :: Traversal' Principal PactId
+pPactId = _P . _1
+
+pFuncName :: Traversal' Principal Text
+pFuncName = _P . _2
+
+-- wEncodedHash :: Traversal'
 
 mkPrincipalIdent :: Principal -> Text
 mkPrincipalIdent = \case
