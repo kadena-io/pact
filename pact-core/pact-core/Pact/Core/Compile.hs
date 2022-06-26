@@ -105,8 +105,10 @@ interpretExpr (DesugarOutput desugared sup loaded' _) = do
   debugIfFlagSet DebugTypecheckerType ty
   debugIfFlagSet DebugTypechecker typed
   resolved <- liftIO (runOverloadTerm typed)
-  let ?cekLoaded = _loAllLoaded loaded'
-      ?cekBuiltins = Runtime.coreBuiltinRuntime
+  let ?cekEnv = Runtime.RuntimeEnv
+        (_loAllLoaded loaded')
+        Runtime.coreBuiltinRuntime
+        Map.empty
   let initState = Runtime.CEKState 0 Nothing
   (value, _) <- liftIO (Runtime.runEvalT initState (Runtime.eval mempty resolved))
   replLoaded .= loaded'
@@ -166,8 +168,10 @@ interpretTopLevel (DesugarOutput desugared supply loaded deps) = do
         in (fqn, defTerm def)
 
     TLTerm e -> do
-      let ?cekLoaded = _loAllLoaded loaded
-          ?cekBuiltins = Runtime.coreBuiltinRuntime
+      let ?cekEnv = Runtime.RuntimeEnv
+            (_loAllLoaded loaded)
+            Runtime.coreBuiltinRuntime
+            Map.empty
       let initState = Runtime.CEKState 0 Nothing
       (value, _) <- liftIO (Runtime.runEvalT initState (Runtime.eval mempty e))
       replLoaded .= loaded

@@ -21,6 +21,7 @@ module Pact.Core.Typed.Eval.CEK
  , runEvalT
  , EvalT(..)
  , Cont(..)
+ , RuntimeEnv(..)
  ) where
 
 import Control.Monad.Reader
@@ -47,8 +48,15 @@ import qualified Pact.Core.Pretty as P
 
 type CEKTLEnv b i = Map FullyQualifiedName (EvalTerm b i)
 type CEKEnv b i = RAList (CEKValue b i)
+type TermObject b i = Map Field (EvalTerm b i)
 newtype BuiltinFn b i = BuiltinFn (CEKRuntime b i => NonEmpty (CEKValue b i) -> EvalT b (CEKValue b i))
-type CEKRuntime b i = (?cekLoaded :: CEKTLEnv b i, ?cekBuiltins :: Array (BuiltinFn b i), Enum b)
+type CEKRuntime b i = (?cekEnv :: RuntimeEnv b i, Enum b)
+
+data RuntimeEnv b i
+  = RuntimeEnv
+  { _rLoaded :: CEKTLEnv b i
+  , _rBuiltins :: Array (BuiltinFn b i)
+  , _rData :: TermObject b i }
 
 data CEKState b
   = CEKState
@@ -129,7 +137,7 @@ eval = evalCEK Mt
       NBound i -> returnCEK cont (env RAList.!! i)
       -- Top level names are not closures, so we wipe the env
       NTopLevel mname mh ->
-        let !t = ?cekLoaded Map.! FullyQualifiedName mname (_nName n) mh
+        let !t = (_rLoaded ?cekEnv) Map.! FullyQualifiedName mname (_nName n) mh
         in evalCEK cont RAList.Nil t
   evalCEK cont _env (Constant l _)=
     returnCEK cont (VLiteral l)
@@ -192,7 +200,7 @@ eval = evalCEK Mt
   applyLam (VClosure ns body env) args cont =
     applyArgs ns (NE.toList args) env body cont
   applyLam (VNative b) args cont =
-    let (BuiltinFn f) = indexArray ?cekBuiltins (fromEnum b)
+    let (BuiltinFn f) = indexArray (_rBuiltins ?cekEnv) (fromEnum b)
     in f args >>= returnCEK cont
   applyLam _ _ _ = error "applying to non-fun"
   applyArgs (_ : ns') (arg : args') env body cont =

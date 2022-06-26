@@ -60,7 +60,7 @@ tokens :-
 <0> keyGov       { token TokenKeyGov }
 <0> capGov       { token TokenCapGov }
 <0> bool         { token TokenTyBool }
-<0> fn           { token TokenLambda }
+<0> lambda       { token TokenLambda }
 <0> integer      { token TokenTyInteger }
 <0> bool         { token TokenTyBool }
 <0> table        { token TokenTyTable }
@@ -104,7 +104,7 @@ tokens :-
 <0> \n           { handleNewline }
 
 <colon> {
-  "--".*;
+  "--".*[\n]+[\ \t]* { beginLayout }
   [\n]+[\ \t]* { beginLayout }
   () { \_ -> popStartCode *> scan }
 }

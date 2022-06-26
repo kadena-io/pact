@@ -105,14 +105,13 @@ import Pact.Core.Syntax.New.LexUtils
   OPEN       { PosToken TokenVOpen _ }
   SEMI       { PosToken TokenVSemi _ }
   CLOSE      { PosToken TokenVClose _ }
-
 %%
 
 
 
 -- Programs will always end with a virtual semi
 Program :: { [ParsedTopLevel] }
-  : ProgramList SEMI { reverse $1 }
+  : ProgramList MTerminator { reverse $1 }
 
 ProgramList :: { [ParsedTopLevel] }
   : ProgramList SEMI TopLevel { $3:$1 }
@@ -120,7 +119,7 @@ ProgramList :: { [ParsedTopLevel] }
   | {- empty -} { [] }
 
 ReplProgram :: { [ParsedReplTopLevel] }
-  : ReplProgramList SEMI { reverse $1 }
+  : ReplProgramList MTerminator { reverse $1 }
 
 ReplProgramList :: { [ParsedReplTopLevel] }
   : ReplProgramList SEMI ReplTopLevel { $3:$1 }
@@ -136,6 +135,10 @@ ReplTopLevel :: { ParsedReplTopLevel }
   | Defun { RTLDefun $1 }
   | DefConst { RTLDefConst $1 }
   | Expr { RTLTerm $1 }
+
+MTerminator :: { () }
+  : SEMI { () }
+  | {- empty -} { () }
 
 Module :: { ParsedModule }
   : module IDENT '(' Gov ')' ':' OPEN Exts Defs CLOSE
@@ -319,11 +322,12 @@ ParensExpr :: { ParsedExpr }
   | Expr { $1 }
 
 LamExpr :: { ParsedExpr }
-  : lam LamArgs '=>' Expr { Lam ln0 (NE.fromList (reverse $2)) $4 (_ptInfo $1) }
+  : lam LamArgs ':' Expr { Lam ln0 (NE.fromList (reverse $2)) $4 (_ptInfo $1) }
+  | lam ':' Expr { Lam ln0 (("#unitArg", Just TyUnit) :| []) $3 (_ptInfo $1) }
 
 LamArgs :: { [(Text, Maybe Type)] }
-  : LamArgs '(' IDENT ':' Type ')' { (getIdent $3, Just $5):$1 }
-  | LamArgs IDENT { (getIdent $2, Nothing):$1 }
+  : LamArgs ',' '(' IDENT ':' Type ')' { (getIdent $4, Just $6):$1 }
+  | LamArgs ',' IDENT { (getIdent $3, Nothing):$1 }
   | '(' IDENT ':' Type ')' { [(getIdent $2, Just $4)] }
   | IDENT { [(getIdent $1, Nothing)] }
 

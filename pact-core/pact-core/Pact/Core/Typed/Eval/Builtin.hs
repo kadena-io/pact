@@ -36,7 +36,7 @@ unsafeApplyOne (VClosure (_:ns) body env) arg = case ns of
   [] -> applyOne body env arg
   _ -> pure (VClosure ns body (RAList.cons arg env))
 unsafeApplyOne (VNative b) arg = do
-  let (BuiltinFn f) = Array.indexArray ?cekBuiltins (fromEnum b)
+  let (BuiltinFn f) = Array.indexArray (_rBuiltins ?cekEnv) (fromEnum b)
   f (arg :| [])
 unsafeApplyOne _ _ = error "impossible"
 
@@ -49,7 +49,7 @@ unsafeApplyTwo (VClosure (_:ns) body env) arg1 arg2 = case ns of
       let env' = RAList.cons arg2 (RAList.cons arg1 env)
       in pure (VClosure ms body env')
 unsafeApplyTwo (VNative b) arg1 arg2 = do
-  let (BuiltinFn f) = Array.indexArray ?cekBuiltins (fromEnum b)
+  let (BuiltinFn f) = Array.indexArray (_rBuiltins ?cekEnv) (fromEnum b)
   f (arg1 :| [arg2])
 unsafeApplyTwo _ _ _ = error "impossible"
 

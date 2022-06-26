@@ -651,7 +651,6 @@ instantiateImported  = \case
     TyList t -> TyList <$> inst rl t
     TyTable t -> TyTable <$> instRow rl t
     TyCap -> pure TyCap
-    -- TCTyCon _ _ -> fail "typeclass in arg position? "
     -- Impredicative type might work
     -- If we change unification.
     TyForall _ _ -> fail "unsupported impredicative polymorphism"
@@ -946,7 +945,7 @@ inferTerm = \case
         Nothing -> fail ("unbound free variable in term infer " <> show (IRName n nk u))
   IR.Lam nts e i -> do
     let names = fst <$> nts
-    ntys <- fmap TyVar <$> traverse (const newTvRef) names
+    ntys <- traverse withTypeInfo nts
     let ntysc = TypeScheme [] [] <$> ntys
     -- Todo: bidirectionality
     let m = IntMap.fromList $ NE.toList $ NE.zipWith (\n t ->  (_irUnique n, t)) names ntysc
@@ -955,6 +954,9 @@ inferTerm = \case
         rty = foldr TyFun ty ntys
     pure (rty, Typed.Lam nts' e' i, preds)
     where
+    withTypeInfo p = case snd p of
+      Just ty -> liftTypeVar ty
+      Nothing -> TyVar <$> newTvRef
     mkNameTup name ty = (toOName name, ty)
   IR.App e args i -> do
     tv1 <- TyVar <$> newTvRef
@@ -965,10 +967,14 @@ inferTerm = \case
         preds' = concat (pte : NE.toList (view _3 <$> as))
     unify te (foldr TyFun tv1 tys)
     pure (tv1, Typed.App e' args' i, preds')
-  IR.Let n _ e1 e2 i -> do
+  IR.Let n mty e1 e2 i -> do
     enterLevel
     (te1, e1Unqual, pe1) <- inferTerm e1
     leaveLevel
+    _ <- _Just (liftTypeVar >=> unify te1) mty
+    -- todo: dictionary passing here still, potentially.
+    -- we might want to remove generalization entirely, but it's
+    -- cool that we get it for free right now.
     (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1Unqual
     let u = _irUnique n
     (te2, e2', rest) <- locally tcVarEnv (IntMap.insert u ts) $ inferTerm e2
@@ -1002,6 +1008,7 @@ inferTerm = \case
         objTy = TyRow (RowTy (view _1 <$> objTup) Nothing)
         objPreds = concat (view _3 <$> objTup)
     pure (objTy, Typed.ObjectLit obj' i, objPreds)
+  -- Todo: comment this case out better.
   IR.ObjectOp oop i -> case oop of
     ObjectAccess f o -> do
       tv <- TyVar <$> newTvRef
