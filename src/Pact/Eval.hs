@@ -141,6 +141,27 @@ enforceKeySet i ksn KeySet{..} = go
                      | otherwise = failed
 {-# INLINE enforceKeySet #-}
 
+enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
+enforceGuard i g = case g of
+  GKeySet k -> runSysOnly $ enforceKeySet (getInfo i) Nothing k
+  GKeySetRef n -> enforceKeySetName (getInfo i) n
+  GPact PactGuard{..} -> do
+    pid <- getPactId i
+    unless (pid == _pgPactId) $
+      evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
+  GModule mg@ModuleGuard{..} -> do
+    md <- _mdModule <$> getModule i _mgModuleName
+    case md of
+      MDModule m@Module{..} -> calledByModule m >>= \r ->
+        if r then
+          return ()
+        else
+          void $ acquireModuleAdmin (getInfo i) _mName _mGovernance
+      MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
+  GUser UserGuard{..} ->
+    void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
+
+
 
 -- | Hoist Name back to ref
 liftTerm :: Term Name -> Term Ref
@@ -211,10 +232,13 @@ enforceModuleAdmin i modGov =
 -- 'namespace.modulename' is the name we will associate
 -- with a module unless the namespace policy is defined
 -- otherwise
-evalNamespace :: Info -> (Setter' s ModuleName) -> s -> Eval e s
-evalNamespace info setter m = do
-  mNs <- use $ evalRefs . rsNamespace
-  case mNs of
+evalNamespace
+    :: Info
+    -> (Setter' s ModuleName)
+    -> s
+    -> Maybe (Namespace (Term Name))
+    -> Eval e s
+evalNamespace info setter m = \case
     Nothing -> do
       policy <- view eeNamespacePolicy
       unless (allowRoot policy) $
@@ -249,13 +273,14 @@ eval' (TModule _tm@(MDModule m) bod i) =
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
 #endif
     checkAllowModule i
+    mNs <- use $ evalRefs . rsNamespace
     -- prepend namespace def to module name
-    mangledM <- evalNamespace i mName m
+    mangledM <- evalNamespace i mName m mNs
     -- enforce old module governance
     preserveModuleNameBug <- isExecutionFlagSet FlagPreserveModuleNameBug
     oldM <- lookupModule i $ _mName $ if preserveModuleNameBug then m else mangledM
     case oldM of
-      Nothing -> return ()
+      Nothing -> enforceNamespaceUser i mNs
       Just (ModuleData omd _ _) ->
         case omd of
           MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
@@ -291,8 +316,10 @@ eval' (TModule _tm@(MDInterface m) bod i) =
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
 #endif
     checkAllowModule i
+    mNs <- use $ evalRefs . rsNamespace
+    enforceNamespaceUser i mNs
      -- prepend namespace def to module name
-    mangledI <- evalNamespace i interfaceName m
+    mangledI <- evalNamespace i interfaceName m mNs
     -- enforce no upgrades
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
@@ -305,6 +332,16 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 #endif
 eval' t = enscope t >>= reduce
+
+enforceNamespaceUser
+    :: HasInfo i
+    => i
+    -> Maybe (Namespace (Term Name))
+    -> Eval e ()
+enforceNamespaceUser _i Nothing = return () -- root ns policy enforced in ns entry
+enforceNamespaceUser i (Just ns) =
+  unlessExecutionFlagSet FlagPreserveNamespaceUpgrade $ do
+    enforceGuard i $ _nsUser ns
 
 
 #ifdef ADVICE
