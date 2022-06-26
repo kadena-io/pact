@@ -35,6 +35,7 @@ module Pact.Eval
     ,reduce,reduceBody
     ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
+    ,enforceGuard
     ,deref
     ,liftTerm,apply
     ,acquireModuleAdmin
