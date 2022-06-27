@@ -204,12 +204,12 @@ benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
   \p -> benchNFIO (fst p) $ execPure pt dbEnv p
 
 benchKeySet :: KeySet
-benchKeySet = mkKeySet [PublicKey "benchadmin"] ">"
+benchKeySet = mkKeySet [PublicKey "benchadmin"] ">" Nothing
 
 acctRow :: RowData
 acctRow = RowData RDV1 $ fmap pactValueToRowData $ ObjectMap $ M.fromList
   [("balance",PLiteral (LDecimal 100.0))
-  ,("guard",PGuard $ GKeySet (mkKeySet [PublicKey $ encodeUtf8 pk] "keys-all"))
+  ,("guard",PGuard $ GKeySet (mkKeySet [PublicKey $ encodeUtf8 pk] "keys-all" Nothing))
   ]
 
 benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)

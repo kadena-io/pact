@@ -66,7 +66,7 @@ initializeRepl :: IO ReplState
 initializeRepl = do
   rs <- initReplState StringEval Nothing
   let dbImpl = rs ^. rEnv . eePactDb
-      dummyKeySet = mkKeySet [] "keys-all"
+      dummyKeySet = mkKeySet [] "keys-all" Nothing
 
       -- Stub out all keyset accesses to return a dummy value. We don't care
       -- about real keys because we're not going to be doing any concrete

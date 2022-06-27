@@ -64,7 +64,7 @@ createPrincipal i = \case
   GPact (PactGuard pid n) -> do
     chargeGas 1
     pure $ "p:" <> asString pid <> ":" <> n
-  GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
+  GKeySet (KeySet ks pf _) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> do
       chargeGas 1
       pure $ "k:" <> asString k

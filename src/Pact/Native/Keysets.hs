@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE LambdaCase #-}
 -- |
 -- Module      :  Pact.Native.Keysets
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -78,8 +78,14 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      let ksn = KeySetName name
-          i = _faInfo fi
+      ksn <- use (evalRefs . rsNamespace) >>= \case
+        Nothing -> pure $ KeySetName name
+        Just ns -> do
+          let NamespaceName nsn = _nsName ns
+          pure $ KeySetName $ nsn <> "." <> name
+
+      let i = _faInfo fi
+
       old <- readRow i KeySets ksn
       case old of
         Nothing -> do

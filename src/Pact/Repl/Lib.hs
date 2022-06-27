@@ -679,8 +679,12 @@ verify i as = argsError i as
 
 
 sigKeyset :: RNativeFun LibState
-sigKeyset _ _ = view eeMsgSigs >>= \ss ->
-  return $ toTerm $ mkKeySet (M.keys ss) (asString KeysAll)
+sigKeyset _ _ = view eeMsgSigs >>= \ss -> do
+  ns <- use $ evalRefs . rsNamespace
+  let n = case _nsName <$> ns of
+        Nothing -> Nothing
+        Just (NamespaceName nsn) -> Just nsn
+  return $ toTerm $ mkKeySet (M.keys ss) (asString KeysAll) n
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")
