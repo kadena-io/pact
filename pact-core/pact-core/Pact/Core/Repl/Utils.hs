@@ -126,10 +126,10 @@ replCompletion natives =
     tlns <- uses (replLoaded . loToplevel) Map.keys
     moduleNames <- uses (replLoaded . loModules) (fmap renderModuleName . Map.keys)
     prefixed <- uses (replLoaded . loModules) toPrefixed
-    let allNames = Set.fromList $ fmap T.unpack $ concat [tlns, moduleNames, prefixed, natives]
+    let allNames = Set.fromList $ T.unpack <$> concat [tlns, moduleNames, prefixed, natives]
     pure $ simpleCompletion <$> Set.toList (Set.filter (str `isPrefixOf`) allNames)
   where
-  defNames = fmap (_nName . Term.defName) . Term._mDefs . _mdModule
+  defNames = fmap Term.defName . Term._mDefs . _mdModule
   toPrefixed m =
     concat $ prefixF <$> Map.toList m
   prefixF (mn, ems) = let

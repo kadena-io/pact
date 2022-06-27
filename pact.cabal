@@ -358,7 +358,10 @@ library pact-core
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
+
+    -- Common syntax
     Pact.Core.Syntax.Common
+
     -- New Syntax modules
     Pact.Core.Syntax.New.ParseTree
     Pact.Core.Syntax.New.Lexer
@@ -383,6 +386,13 @@ library pact-core
     Pact.Core.Typed.Eval.Runtime
     Pact.Core.Typed.Eval.CEK
     Pact.Core.Typed.Eval.Builtin
+
+    -- Untyped core
+    Pact.Core.Untyped.Term
+    -- Pact.Core.Untyped.Eval.Runtime
+    -- Pact.Core.Untyped.Eval.CEK
+    -- Pact.Core.Untyped.Eval.Builtin
+
     -- Repl
     Pact.Core.Repl.Utils
 

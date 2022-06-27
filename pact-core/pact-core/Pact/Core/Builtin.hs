@@ -29,8 +29,14 @@ import Pact.Core.Pretty(Pretty(..))
 
 data ObjectOp o
   = ObjectAccess Field o
+  -- access[f](o)
+  -- For some {f:a|r}, access f
   | ObjectRemove Field o
-  | ObjectUpdate Field o o
+  -- remove[f](o)
+  -- For some {f:a|r}, remove f
+  | ObjectExtend Field o o
+  -- extend[k:=v](o)
+  -- For some {r}, extend with
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 {-

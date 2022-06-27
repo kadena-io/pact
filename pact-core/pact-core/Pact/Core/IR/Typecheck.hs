@@ -191,7 +191,6 @@ _dbgTypedTerm = \case
     Typed.ListLit <$> _dbgType ty <*> traverse _dbgTypedTerm li <*> pure i
   Typed.ObjectOp oop i ->
     Typed.ObjectOp <$> traverse _dbgTypedTerm oop <*> pure i
-  Typed.Error e ty i -> Typed.Error e <$> _dbgType ty <*> pure i
 
 _dbgTypeScheme :: TypeScheme (TvRef s) -> InferT s b i (TypeScheme String)
 _dbgTypeScheme (TypeScheme tvs preds ty) = do
@@ -981,9 +980,6 @@ inferTerm = \case
         outTy = view _1 (NE.last nelTup)
         preds' = concat (view _3 <$> nelTup)
     pure (outTy, Typed.Block nel' i, preds')
-  IR.Error e i -> do
-    tv <- TyVar <$> newTvRef
-    pure (tv, Typed.Error e tv i, [])
   -- Todo: Here, convert to dictionary
   IR.Builtin b i -> do
     tyImported <- views tcBuiltins ($ b)
@@ -1022,14 +1018,14 @@ inferTerm = \case
       unify tyInst (TyFun objTyp tv)
       let term' = Typed.ObjectOp (ObjectRemove f o') i
       pure (tv, term', p1 ++ preds)
-    ObjectUpdate f v obj -> do
+    ObjectExtend f v obj -> do
       tv <- TyVar <$> newTvRef
       (vTyp, v', pv) <- inferTerm v
       (objTyp, o', pobj) <- inferTerm obj
       let ty = objectUpdateType f
       (tyInst, _tvs, preds) <- instantiateImported ty
       unify tyInst (TyFun vTyp (TyFun objTyp tv))
-      let term' = Typed.ObjectOp (ObjectUpdate f o' v') i
+      let term' = Typed.ObjectOp (ObjectExtend f o' v') i
       pure (tv, term', pv ++ pobj ++ preds)
   IR.ListLit li i -> do
     tv <- TyVar <$> newTvRef
@@ -1045,7 +1041,6 @@ inferDefun
   :: IR.Defun IRName TypeVar b i
   -> InferT s b i (TypedDefun b i)
 inferDefun (IR.Defun name dfTy term info) = do
-  name' <- dbjName [] 0 (toOName name)
   enterLevel
   (termTy, term', preds) <- inferTerm term
   leaveLevel
@@ -1055,13 +1050,12 @@ inferDefun (IR.Defun name dfTy term info) = do
   unify dfTy' termTy
   fterm <- debruijnizeTermTypes term'
   rty' <- debruijnizeType dfTy'
-  pure (Typed.Defun name' rty' fterm info)
+  pure (Typed.Defun name rty' fterm info)
 
 inferDefConst
   :: IR.DefConst IRName TypeVar b i
   -> InferT s b i (TypedDefConst b i)
 inferDefConst (IR.DefConst name dcTy term info) = do
-  name' <- dbjName [] 0 (toOName name)
   enterLevel
   (termTy, term', preds) <- inferTerm term
   leaveLevel
@@ -1070,7 +1064,7 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   _ <- maybe (pure ()) (`unify` termTy) dcTy'
   unless (null preds) $ fail "typeclass constraints not supported in defun"
   rty' <- debruijnizeType (maybe termTy id dcTy')
-  pure (Typed.DefConst name' rty' fterm info)
+  pure (Typed.DefConst name rty' fterm info)
 
 inferDef
   :: IR.Def IRName TypeVar b i
@@ -1090,7 +1084,7 @@ inferModule (IR.Module mname gov defs blessed imports impl mh) = do
   where
   infer' (xs, m) d = do
     def' <- local (set tcFree m) (inferDef d)
-    let name' = _olName (Typed.defName def')
+    let name' = Typed.defName def'
         ty = TypeScheme [] [] (Typed.defType def')
         m' = Map.adjust (Map.insert name' ty) mname  m
     pure (def':xs, m')
@@ -1200,14 +1194,12 @@ debruijnizeTermTypes = dbj [] 0
       ObjectRemove f o -> do
         o' <- dbj env depth o
         pure (ObjectRemove f o')
-      ObjectUpdate f v o -> do
+      ObjectExtend f v o -> do
         v' <- dbj env depth v
         o' <- dbj env depth o
-        pure (ObjectUpdate f v' o')
+        pure (ObjectExtend f v' o')
     Typed.ListLit ty v i ->
       Typed.ListLit <$> dbjTyp env depth ty <*> traverse (dbj env depth) v <*> pure i
-    Typed.Error e t i ->
-      Typed.Error e <$> dbjTyp env depth t <*> pure i
     Typed.Builtin (b, tys, preds) i -> do
       tys' <- traverse (dbjTyp env depth) tys
       preds' <- traverse (dbjPred env depth) preds
@@ -1515,7 +1507,7 @@ objectRemoveType f =
 mkFree :: Loaded builtin info -> Map ModuleName (Map Text (TypeScheme NamedDeBruijn))
 mkFree loaded = let
   tl = _loModules loaded
-  toTy d = (_nName (Typed.defName d), TypeScheme [] [] (Typed.defType d))
+  toTy d = (Typed.defName d, TypeScheme [] [] (Typed.defType d))
   mdefs =  Typed._mDefs . _mdModule <$> tl
   in Map.fromList . fmap toTy <$> mdefs
 

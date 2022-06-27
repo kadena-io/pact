@@ -37,7 +37,6 @@ data Expr name i
   | List [Expr name i] i
   | Constant Literal i
   | ObjectOp (ObjectOp (Expr name i)) i
-  | Error Text i
   deriving Show
 
 termInfo :: Lens' (Expr name i) i
@@ -59,7 +58,6 @@ termInfo f = \case
   List nel i -> List nel <$> f i
   ObjectOp o i -> ObjectOp o <$> f i
   Constant l i -> Constant l <$> f i
-  Error e i -> Error e <$> f i
 
 instance Pretty name => Pretty (Expr name i) where
   pretty = \case
@@ -99,11 +97,9 @@ instance Pretty name => Pretty (Expr name i) where
         pretty o <> "->" <> pretty f
       ObjectRemove f o ->
         pretty o <> "#" <> pretty f
-      ObjectUpdate f u o ->
+      ObjectExtend f u o ->
         pretty o <> braces (pretty f <> ":=" <> pretty u)
     -- Todo: fix errors
-    Error e _ ->
-      "throw" <+> dquotes (pretty e)
     where
     prettyObj m =
       fold $ intersperse ", " $ fmap (\(k, v) -> pretty k <> ":" <+> pretty v) (Map.toList m)

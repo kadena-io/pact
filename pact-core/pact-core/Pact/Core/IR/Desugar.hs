@@ -232,8 +232,6 @@ desugarNewTerm = \case
     ObjectLit (desugarNewTerm <$> objs) i
   New.ObjectOp o i ->
     ObjectOp (desugarNewTerm <$> o) i
-  New.Error text i ->
-    Error text i
   where
   isReservedNative n =
     Map.member n (reservedNatives @b)
@@ -303,8 +301,6 @@ desugarLispTerm = \case
     ObjectLit (desugarLispTerm <$> objs) i
   Lisp.ObjectOp o i ->
     ObjectOp (desugarLispTerm <$> o) i
-  Lisp.Error text i ->
-    Error text i
   where
   binderToLet i (Lisp.Binder n mty expr) term =
     Let (BN (BareName n)) (desugarType <$> mty) (desugarLispTerm expr) term i
@@ -317,25 +313,22 @@ desugarLispTerm = \case
 
 desugarDefun :: (DesugarTerm term b i) => Common.Defun term i -> Defun ParsedName Text b i
 desugarDefun (Common.Defun defname [] rt body i) = let
-  defname' = BN (BareName defname)
   dfnType = TyFun TyUnit (desugarType rt)
   lamName = BN (BareName defname)
   body' = Lam ((lamName, Just TyUnit) :| []) (desugarTerm body) i
-  in Defun defname' dfnType body' i
+  in Defun defname dfnType body' i
 desugarDefun (Common.Defun defname (arg:args) rt body i) = let
-  defname' = BN (BareName defname)
   neArgs = arg :| args
   dfnType = foldr TyFun (desugarType rt) (desugarType . Common._argType <$> neArgs)
   lamArgs = (\(Common.Arg n ty) -> (BN (BareName n), Just (desugarType ty))) <$> neArgs
   body' = Lam lamArgs (desugarTerm body) i
-  in Defun defname' dfnType body' i
+  in Defun defname dfnType body' i
 
 desugarDefConst :: (DesugarTerm term b i) => Common.DefConst term i -> DefConst ParsedName Text b i
 desugarDefConst (Common.DefConst n mty e i) = let
-  n' = BN (BareName n)
   mty' = desugarType <$> mty
   e' = desugarTerm e
-  in DefConst n' mty' e' i
+  in DefConst n mty' e' i
 
 desugarDef :: (DesugarTerm term b i) => Common.Def term i -> Def ParsedName Text b i
 desugarDef = \case
@@ -421,7 +414,6 @@ termSCC currM = conn
     ObjectLit o _ -> foldMap conn o
     ListLit v _ -> foldMap conn v
     ObjectOp o _ -> foldMap conn o
-    Error{} -> Set.empty
 
 
 defunSCC :: ModuleName -> Defun IRName TypeVar b i -> Set Text
@@ -469,7 +461,7 @@ lookupModuleMember modName name = do
         Nothing -> fail "boom: module does not have member"
     Nothing -> fail "no such module"
   where
-  rawDefName def = _nName (Typed.defName def)
+  rawDefName def = Typed.defName def
   toDepMap mhash def = (rawDefName def, IRTopLevel modName mhash)
   toFqDep mhash def = let
     fqn = FullyQualifiedName modName (rawDefName def) mhash
@@ -538,8 +530,6 @@ renameTerm = fvd
     ListLit <$> traverse fvd v <*> pure i
   fvd (ObjectOp o i) = do
     ObjectOp <$> traverse fvd o <*> pure i
-  fvd (Error e i) =
-    pure (Error e i)
 
 renameType :: Type Text -> RenamerT b i (Type TypeVar)
 renameType = \case
@@ -570,39 +560,31 @@ renameType = \case
 
 renameDefun
   :: HasPactDb cb ci
-  => ModuleName
-  -> ModuleHash
-  -> Defun ParsedName Text b i
+  => Defun ParsedName Text b i
   -> RenamerT cb ci (Defun IRName TypeVar b i)
-renameDefun mn mh (Defun n dty term i) = do
-  let n' = IRName (rawParsedName n) (IRTopLevel mn mh) dummyTLUnique
+renameDefun (Defun n dty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   dty' <- renameType dty
   term' <- renameTerm term
-  pure (Defun n' dty' term' i)
+  pure (Defun n dty' term' i)
 
 renameDefConst
   :: HasPactDb cb ci
-  => ModuleName
-  -> ModuleHash
-  -> DefConst ParsedName Text b i
+  => DefConst ParsedName Text b i
   -> RenamerT cb ci (DefConst IRName TypeVar b i)
-renameDefConst mn mh (DefConst n mty term i) = do
-  let n' = IRName (rawParsedName n) (IRTopLevel mn mh) dummyTLUnique
+renameDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   mty' <- traverse renameType mty
   term' <- renameTerm term
-  pure (DefConst n' mty' term' i)
+  pure (DefConst n mty' term' i)
 
 renameDef
   :: HasPactDb cb ci
-  => ModuleName
-  -> ModuleHash
-  -> Def ParsedName Text b i
+  => Def ParsedName Text b i
   -> RenamerT cb ci (Def IRName TypeVar b i)
-renameDef mn mh = \case
-  Dfun d -> Dfun <$> renameDefun mn mh d
-  DConst d -> DConst <$> renameDefConst mn mh d
+renameDef = \case
+  Dfun d -> Dfun <$> renameDefun d
+  DConst d -> DConst <$> renameDefConst d
 
 resolveBareName' :: Text -> RenamerT b i IRName
 resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
@@ -615,14 +597,14 @@ renameModule
   => Module ParsedName Text b i
   -> RenamerT cb ci (Module IRName TypeVar b i)
 renameModule (Module mname mgov defs blessed imp implements mhash) = do
-  let rawDefNames = rawDefName <$> defs
+  let rawDefNames = defName <$> defs
       defMap = Map.fromList $ (, (IRTopLevel mname mhash, dummyTLUnique)) <$> rawDefNames
       fqns = Map.fromList $ (\n -> (n, FullyQualifiedName mname n mhash)) <$> rawDefNames
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
   rsModuleBinds %= Map.insert mname (fst <$> defMap)
   rsLoaded . loToplevel %= Map.union fqns
-  defs' <- locally reBinds (Map.union defMap) $ traverse (renameDef mname mhash) defs
+  defs' <- locally reBinds (Map.union defMap) $ traverse renameDef defs
   let scc = mkScc <$> defs'
   defs'' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
@@ -630,8 +612,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash) = do
   mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
   pure (Module mname mgov' defs'' blessed imp implements mhash)
   where
-  rawDefName = rawParsedName . defName
-  mkScc def = (def, _irName (defName def), Set.toList (defSCC mname def))
+  mkScc def = (def, defName def, Set.toList (defSCC mname def))
 
 runRenamerT
   :: RenamerState b i
@@ -645,7 +626,7 @@ reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
   where
   mbind md = let
     m = _mdModule md
-    depNames = _nName . Typed.defName <$> Typed._mDefs m
+    depNames = Typed.defName <$> Typed._mDefs m
     in Map.fromList $ (,IRTopLevel (Typed._mName m) (Typed._mHash m)) <$> depNames
   mbinds = fmap mbind (_loModules loaded)
 

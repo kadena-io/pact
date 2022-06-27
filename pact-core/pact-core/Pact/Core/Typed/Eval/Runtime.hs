@@ -1,9 +1,7 @@
 module Pact.Core.Typed.Eval.Runtime where
 
-import Pact.Core.Typed.Term
-
-data StackFrame name
+-- todo: move CEK typed and co. here
+newtype StackFrame name
   = StackFrame
   { _sfName :: name
-  , _sfType :: DefType
   } deriving Show

@@ -109,8 +109,6 @@ resolveTerm = \case
   Builtin b i -> solveOverload i b
   ObjectOp o i ->
     ObjectOp <$> traverse resolveTerm o <*> pure i
-  Error t1 t2 i ->
-    pure (Error t1 t2 i)
   where
   listEqualityInstance i raw inst (Pred tc t) = do
     b <- solveOverload i (raw, [t], [Pred tc t])
@@ -356,17 +354,15 @@ resolveDefun
   :: OverloadedDefun RawBuiltin info
   -> OverloadT (CoreEvalDefun info)
 resolveDefun (Defun dname ty term info) = do
-  let dname' = unsafeToTLName dname
   term' <- resolveTerm term
-  pure (Defun dname' ty term' info)
+  pure (Defun dname ty term' info)
 
 resolveDefConst
   :: OverloadedDefConst RawBuiltin info
   -> OverloadT (CoreEvalDefConst info)
 resolveDefConst (DefConst dname ty term info) = do
-  let dname' = unsafeToTLName dname
   term' <- resolveTerm term
-  pure (DefConst dname' ty term' info)
+  pure (DefConst dname ty term' info)
 
 resolveDef
   :: OverloadedDef RawBuiltin info

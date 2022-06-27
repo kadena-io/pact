@@ -27,22 +27,9 @@ import Pact.Core.Builtin
 import Pact.Core.Imports
 import Pact.Core.Guards
 
-
--- Todo: Not sure if this type is useful at all,
--- since we're trying to share the `DefConst`
--- type in interfaces.
--- might just be useful to provide a lens into
--- `Def` bodies.
-data DefType
-  = DTDefCap
-  | DTDefun
-  | DTDefPact
-  | DTDefConst
-  deriving Show
-
 data Defun name tyname builtin info
   = Defun
-  { _dfunName :: name
+  { _dfunName :: Text
   , _dfunType :: Type tyname
   , _dfunTerm :: Term name tyname builtin info
   , _dfunInfo :: info
@@ -50,35 +37,19 @@ data Defun name tyname builtin info
 
 data DefConst name tyname builtin info
   = DefConst
-  { _dcName :: name
+  { _dcName :: Text
   , _dcType :: Maybe (Type tyname)
   , _dcTerm :: Term name tyname builtin info
   , _dcInfo :: info
   } deriving Show
 
-data DefCap name tyname builtin info
-  = DefCap
-  { _dcapName :: name
-  , _dcapTerm :: Term name tyname builtin info
-  , _dcapTermType :: Maybe (Type tyname)
-  } deriving Show
-
--- Todo :: probably need a special form
--- either structurally, or these typecheck different.
-data DefPact name tyname builtin info
-  = DefPact
-  { _dpName :: name
-  , _dpTerm :: Term name tyname builtin info
-  , _dpTermType :: Maybe (Type tyname)
-  } deriving Show
 
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
   deriving Show
-  -- | DPact (DefPact name tyname builtin info)
 
-defName :: Def name a b c -> name
+defName :: Def name a b c -> Text
 defName (Dfun d) = _dfunName d
 defName (DConst d) = _dcName d
 
@@ -153,8 +124,6 @@ data Term name tyname builtin info
   | ListLit (Vector (Term name tyname builtin info)) info
   -- List Literals ^
   | ObjectOp (ObjectOp (Term name tyname builtin info)) info
-   -- ^ error e
-  | Error Text info
   deriving (Show, Functor)
 
 
@@ -169,7 +138,6 @@ termInfo f = \case
     Let n mty t1 t2 <$> f i
   Lam ns term i -> Lam ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
-  Error s i -> Error s <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
   DynAccess n1 n2 i -> DynAccess n1 n2 <$> f i
@@ -184,7 +152,6 @@ instance Plated (Term name tyname builtin info) where
     Lam ns term i -> Lam ns <$> f term <*> pure i
     Let n mty t1 t2 i -> Let n mty <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
-    Error s i -> pure (Error s i)
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
     DynAccess n1 n2 i -> pure (DynAccess n1 n2 i)

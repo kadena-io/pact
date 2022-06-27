@@ -9,8 +9,6 @@
 module Pact.Core.Typed.Term
  ( Defun(..)
  , DefConst(..)
- , DefCap(..)
- , DefPact(..)
  , Def(..)
  , Term(..)
  , Module(..)
@@ -20,7 +18,6 @@ module Pact.Core.Typed.Term
  , TopLevel(..)
  , ReplTopLevel(..)
  , Literal(..)
- , DefType(..)
  , TyVarType(..)
  , termInfo
  , traverseTermType
@@ -70,16 +67,9 @@ import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
 
-data DefType
-  = DTDefCap
-  | DTDefun
-  | DTDefPact
-  | DTDefConst
-  deriving Show
-
 data Defun name tyname builtin info
   = Defun
-  { _dfunName :: name
+  { _dfunName :: Text
   , _dfunType :: Type tyname
   , _dfunTerm :: Term name tyname builtin info
   , _dfunInfo :: info
@@ -87,38 +77,10 @@ data Defun name tyname builtin info
 
 data DefConst name tyname builtin info
   = DefConst
-  { _dcName :: name
+  { _dcName :: Text
   , _dcType :: Type tyname
   , _dcTerm :: Term name tyname builtin info
   , _dcInfo :: info
-  } deriving Show
-
-data DefCap name tyname builtin info
-  = DefCap
-  { _dcapName :: name
-  , _dcapTerm :: Term name tyname builtin info
-  , _dcapTermType :: Type tyname
-  } deriving Show
-
--- Todo :: probably need a special form
--- either structurally, or these typecheck different.
-data DefPact name tyname builtin info
-  = DefPact
-  { _dpName :: name
-  , _dpTerm :: Term name tyname builtin info
-  , _dpTermType :: Type tyname
-  } deriving Show
-
-data DefSchema name tyname info
-  = DefSchema
-  { _dsName :: name
-  , _dsType :: RowObject tyname
-  } deriving Show
-
-data DefTable name tyname info
-  = DefTable
-  { _dtName :: name
-  , _dtType :: Type tyname
   } deriving Show
 
 data Def name tyname builtin info
@@ -135,7 +97,7 @@ defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
 
-defName :: Def name tyname builtin i -> name
+defName :: Def name tyname builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
@@ -165,7 +127,7 @@ data Interface name tyname builtin info
 
 data IfDefun name tyname info
   = IfDefun
-  { _ifdName :: name
+  { _ifdName :: Text
   , _ifdType :: Type tyname
   , _ifdInfo :: info
   } deriving Show
@@ -220,8 +182,6 @@ data Term name tyname builtin info
   | ListLit (Type tyname) (Vector (Term name tyname builtin info)) info
   -- ^ [e_1, e_2, .., e_n]
   | ObjectOp (ObjectOp (Term name tyname builtin info)) info
-  -- Object access, update and remove
-  | Error Text (Type tyname) info
   -- ^ error terms + their inferred type
   deriving (Show, Functor)
 
@@ -283,12 +243,10 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
         "accessObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
       ObjectRemove f o ->
         "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
-      ObjectUpdate f v o ->
+      ObjectExtend f v o ->
         "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
     ListLit ty (V.toList -> li) _ ->
       (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
-    Error e ty _ ->
-      "error" <> prettyTyApp ty <> Pretty.dquotes (pretty e)
     Builtin b _ -> pretty b
     Constant l _ -> pretty l
     where
@@ -309,7 +267,6 @@ termInfo f = \case
   ObjectLit obj i -> ObjectLit obj <$> f i
   ObjectOp o i -> ObjectOp o <$> f i
   ListLit ty v i -> ListLit ty v <$> f i
-  Error s ty i -> Error s ty <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
 
@@ -334,8 +291,6 @@ traverseTermType f = \case
     ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
   ListLit ty v i ->
     ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
-  Error e ty i ->
-    Error e <$> f ty <*> pure i
   Constant l i -> pure (Constant l i)
   Builtin b i -> pure (Builtin b i)
 
@@ -355,7 +310,6 @@ instance Plated (Term name tyname builtin info) where
     ObjectOp oop i ->
       ObjectOp <$> traverse f oop <*> pure i
     Block terms i -> Block <$> traverse f terms <*> pure i
-    Error s ty i -> pure (Error s ty i)
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
 

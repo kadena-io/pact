@@ -159,9 +159,8 @@ interpretTopLevel (DesugarOutput desugared supply loaded deps) = do
       where
       -- Todo: remove this duplication
       -- this is a trick copied over from desugar
-      rawDefName def = _nName (defName def)
       toFqDep modName mhash def = let
-        fqn = FullyQualifiedName modName (rawDefName def) mhash
+        fqn = FullyQualifiedName modName (defName def) mhash
         in (fqn, defTerm def)
 
     TLTerm e -> do

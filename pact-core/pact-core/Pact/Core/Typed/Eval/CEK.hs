@@ -34,7 +34,6 @@ import Data.RAList(RAList)
 import Data.Primitive(Array, indexArray)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
 import qualified Data.RAList as RAList
 import qualified Data.Vector as V
 
@@ -164,19 +163,19 @@ eval = evalCEK Mt
       o' <- evalCEK Mt env o
       v' <- objRemove f o'
       returnCEK cont v'
-    ObjectUpdate f v o -> do
+    ObjectExtend f v o -> do
       o' <- evalCEK Mt env o
       v' <- evalCEK Mt env v
       out <- objUpdate f o' v'
       returnCEK cont out
-  evalCEK _cont _env (Error s _ _) = error (T.unpack s) -- todo: proper error continuations, we actually have `try`
   returnCEK
     :: CEKRuntime b i
     => Cont b i
     -> CEKValue b i
     -> EvalT b (CEKValue b i)
-  returnCEK (Arg env args cont) fn =
-    evalCEKArgs args env (Fn fn cont)
+  returnCEK (Arg env args cont) fn = do
+    args' <- traverse (evalCEK Mt env) args
+    applyLam fn args' cont
   returnCEK (Fn fn ctx) arg =
     applyLam fn (arg :| []) ctx
   returnCEK (BlockC env (t:ts) cont) _discarded =
@@ -184,13 +183,6 @@ eval = evalCEK Mt
   returnCEK (BlockC _ [] cont) v =
     returnCEK cont v
   returnCEK Mt v = return v
-  evalCEKArgs args env cont = do
-    args' <- traverse (evalCEK Mt env) args
-    returnCEKArgs args' cont
-  returnCEKArgs args (Fn fn cont) =
-    applyLam fn args cont
-  returnCEKArgs _args _ =
-    error "Invalid stack frame"
   applyLam (VClosure ns body env) args cont =
     applyArgs ns (NE.toList args) env body cont
   applyLam (VNative b) args cont =

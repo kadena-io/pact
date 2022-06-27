@@ -134,10 +134,6 @@ typecheck' = \case
     typ <- typecheck' term
     pure (TyForall tn typ)
 
-  -- ------------------------ (T-Error)
-  -- Γ ⊢ (error msg t1) : t1
-  Error _ t _ ->
-    pure t
   -- b : t ∈ B                (where B = { b : t | for b in Builtins, t in T})
   -- ------------------------ (T-Builtin)
   -- Γ ⊢ b : t
