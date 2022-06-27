@@ -41,8 +41,6 @@ typeUnifies (TyRow r) (TyRow r') = rowUnifies r r'
       && Map.isSubmapOfBy typeUnifies obj obj'
   rowUnifies _ _ = False
 typeUnifies TyCap TyCap = True
--- typeUnifies (TyInterface n) (TyInterface n') = n == n'
--- typeUnifies (TyModule mt) (TyModule mt') = mt == mt'
 typeUnifies (TyForall as ty) (TyForall as' ty') =
   let tys = NE.zip as (TyVar <$>  as')
       env = Map.fromList (NE.toList tys)

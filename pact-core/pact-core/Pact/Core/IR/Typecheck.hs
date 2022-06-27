@@ -228,6 +228,7 @@ _dbgType = \case
   TyList t -> TyList <$> _dbgType t
   TyPrim p -> pure (TyPrim p)
   TyCap -> pure TyCap
+  TyGuard -> pure TyGuard
   TyForall {} -> fail "impredicative"
   where
   _dbgRow = \case
@@ -650,6 +651,7 @@ instantiateImported  = \case
     TyRow r -> TyRow <$> instRow rl r
     TyList t -> TyList <$> inst rl t
     TyTable t -> TyTable <$> instRow rl t
+    TyGuard -> pure TyGuard
     TyCap -> pure TyCap
     -- Impredicative type might work
     -- If we change unification.
@@ -838,6 +840,7 @@ generalizeWithTerm' ty pp term = do
   gen' sts (TyList t) = over _2 TyList <$> gen' sts t
   gen' sts (TyTable t) = over _2 TyTable <$> genRow sts t
   gen' _sts TyCap = pure ([], TyCap)
+  gen' _sts TyGuard = pure ([], TyGuard)
   -- gen' _sts t@TCTyCon{} = pure ([], t)
   gen' _sts t@TyForall{} = pure ([], t)
   genRow _sts EmptyRow = pure ([], EmptyRow)
@@ -885,21 +888,14 @@ liftTypeVar = \case
   TyRow r -> TyRow <$> liftTVRow r
   TyTable r -> TyTable <$> liftTVRow r
   TyList l -> TyList <$> liftTypeVar l
-  -- TCTyCon tc t ->
-  --   TCTyCon tc <$> liftTypeVar t
+  TyGuard -> pure TyGuard
   TyCap -> pure TyCap
   TyForall _ _ -> fail "impossible"
   where
-  -- BIG TODO: placeholder impl, DEFINITELY
-  -- unsound in the presence of type anns (vars that should not be generalized)
-  -- would get a level higher than where they were declared.
-  -- Type anns need to be indexed @ their declared binder
+  -- Todo: Do we want to allow
+  -- bounded type variables to be captured and quantified by users?
+  -- Probably not, so this is just "fail" for now.
   liftRef _ = fail "unsupported lifting of unbound variable"
-  -- liftRef tyv = do
-  --   level <- currentLevel
-  --   let name = _tyVarName tyv
-  --       u = _tyVarUnique tyv
-  --   TvRef <$> lift (newSTRef (Unbound name u level))
   liftTVRow = \case
     EmptyRow -> pure EmptyRow
     RowVar v -> RowVar <$> liftRef v
@@ -1314,7 +1310,8 @@ dbjRow env depth = \case
 rawBuiltinType :: RawBuiltin -> TypeScheme NamedDeBruijn
 rawBuiltinType = \case
   -- Add
-  RawAdd -> addBinopType
+  RawAdd ->
+    addBinopType
   -- Num
   RawSub ->
     numBinopType

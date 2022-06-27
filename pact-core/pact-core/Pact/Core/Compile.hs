@@ -51,9 +51,6 @@ import qualified Pact.Core.Syntax.New.Parser as New
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
--- Big TODO for this module:
--- Reducing duplication is _purely_ just passing the desugarer + the lexer + parser
-
 data InterpretOutput b i
   = InterpretValue (CEKValue b i)
   | InterpretLog Text

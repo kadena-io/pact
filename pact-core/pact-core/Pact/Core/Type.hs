@@ -102,13 +102,13 @@ data Type n
   -- ^ List aka [a]
   | TyTable (Row n)
   -- ^ Named tables.
+  | TyGuard
+  -- ^ Type of Guards.
   | TyCap
   -- ^ Capabilities
   -- Atm, until we have a proper constraint system,
   -- caps will simply be enforced @ runtime.
   -- Later on, however, it makes sense to have the set of nominally defined caps in the constraints of a function.
-  -- | TyInterface (InterfaceType n)
-   -- ^ interfaces, which are nominal
   -- | TyModule (ModuleType n)
   -- ^ module type being the name of the module + implemented interfaces.
   | TyForall (NonEmpty n) (Type n)
@@ -265,22 +265,6 @@ fractionalType ty = TyRow (RowTy obj Nothing)
     , (Field "sqrt", ty :~> TyDecimal)
     , (Field "logBase", ty :~> ty :~> ty)]
 
-instance Plated (Type n) where
-  plate f = \case
-    TyVar n -> pure (TyVar n)
-    TyPrim k -> pure (TyPrim k)
-    TyFun l r -> TyFun <$> f l <*> f r
-    TyRow rows -> TyRow <$> traverseRowTy f rows
-    TyList t -> TyList <$> f t
-    TyTable r -> TyTable <$> traverseRowTy f r
-    TyCap -> pure TyCap
-    -- TyInterface n ->
-    --   pure $ TyInterface n
-    -- TyModule n -> pure $ TyModule n
-    -- TCTyCon b tv -> pure (TCTyCon b tv)
-    TyForall ns ty ->
-      TyForall ns <$> f ty
-
 
 typeOfLit :: Literal -> Type n
 typeOfLit = TyPrim . \case
@@ -317,6 +301,7 @@ instance Pretty n => Pretty (Type n) where
   pretty = \case
     TyVar n -> pretty n
     TyPrim p -> pretty p
+    TyGuard -> "guard"
     TyFun l r -> fnParens l <+> "->" <+> pretty r
       where
         fnParens t@TyFun{} = Pretty.parens (pretty t)
@@ -331,11 +316,6 @@ instance Pretty n => Pretty (Type n) where
     TyRow r -> pretty r
     TyTable t -> "table" <+> Pretty.parens (pretty t)
     TyCap -> "capability"
-    -- TyInterface i -> "module" <> Pretty.angles (pretty i)
-    -- TCTyCon b tv -> case b of
-    --   WithoutField f ->
-    --     Pretty.parens (pretty tv <> "\\" <> pretty f)
-      -- _ -> pretty b <> pretty tv
     TyForall as ty ->
       "∀" <> render (NE.toList as) "*" <> "." <> pretty ty
       where

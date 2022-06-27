@@ -76,26 +76,22 @@ newtype EvalT b a =
 runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
 runEvalT s (EvalT action) = runStateT action s
 
-
-data UserGuard name v
-  = UserGuard
-  { _ugFun :: name
-  , _ugArgs :: ![v]
-  } deriving (Eq, Show)
-
 data ModuleGuard name
   = ModuleGuard
   { _mgModuleName :: name
   , _mgName :: !Text
   } deriving (Eq, Show)
 
+data Closure b i
+  = Closure ![Name] !(EvalTerm b i) !(CEKEnv b i)
+  deriving (Show)
 
-data Guard name v
+data Guard name i
   = GKeyset (KeySet name)
   | GKeySetRef KeySetName
-  | GUserGuard (UserGuard name v)
+  | GUserGuard (Closure name i)
   | GModuleGuard (ModuleGuard name)
-  deriving (Eq, Show)
+  deriving (Show)
 
 data CEKValue b i
   = VLiteral !Literal
@@ -104,8 +100,6 @@ data CEKValue b i
   | VClosure ![Name] !(EvalTerm b i) !(CEKEnv b i)
   | VNative !b
   | VGuard !(Guard Name (CEKValue b i))
-  | VCap !Name
-  | VModRef
   | VError Text
   deriving (Show)
 
@@ -235,6 +229,4 @@ instance Pretty b => Pretty (CEKValue b i) where
     VNative b ->
       P.angles $ "native" <+> pretty b
     VGuard _ -> error "undefined"
-    VCap _ -> P.angles "capability"
-    VModRef -> "modref"
     VError e -> "Error:" <+> pretty e

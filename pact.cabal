@@ -358,7 +358,6 @@ library pact-core
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
-
     Pact.Core.Syntax.Common
     -- New Syntax modules
     Pact.Core.Syntax.New.ParseTree
@@ -378,7 +377,6 @@ library pact-core
     Pact.Core.IR.Desugar
 
     -- Typed core modules
-    Pact.Core.Typed.Renamer
     Pact.Core.Typed.Typecheck
     Pact.Core.Typed.Term
     Pact.Core.Typed.Overload
