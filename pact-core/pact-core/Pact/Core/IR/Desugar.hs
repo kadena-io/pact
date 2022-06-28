@@ -49,7 +49,7 @@ import Pact.Core.IR.Term
 import qualified Pact.Core.Syntax.Common as Common
 import qualified Pact.Core.Syntax.New.ParseTree as New
 import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
-import qualified Pact.Core.Typed.Term as Typed
+import qualified Pact.Core.Untyped.Term as Term
 
 {- Note on Desugaring + Renaming:
 
@@ -442,14 +442,14 @@ lookupModuleMember modName name = do
   liftIO (_readModule ?pactDb modName) >>= \case
     Just md -> let
       module_ = _mdModule md
-      mhash = Typed._mHash module_
-      depMap = Map.fromList $ toDepMap mhash <$> Typed._mDefs module_
+      mhash = Term._mHash module_
+      depMap = Map.fromList $ toDepMap mhash <$> Term._mDefs module_
       in case Map.lookup name depMap of
         -- Great! The name exists
         -- This, we must include the module in `Loaded`, as well as propagate its deps and
         -- all loaded members in `loAllLoaded`
         Just irtl -> do
-          let memberTerms = Map.fromList (toFqDep mhash <$> Typed._mDefs module_)
+          let memberTerms = Map.fromList (toFqDep mhash <$> Term._mDefs module_)
               allDeps = Map.union memberTerms (_mdDependencies md)
           rsLoaded %= over loModules (Map.insert modName md) . over loAllLoaded (Map.union allDeps)
           rsModuleBinds %= Map.insert modName depMap
@@ -461,11 +461,11 @@ lookupModuleMember modName name = do
         Nothing -> fail "boom: module does not have member"
     Nothing -> fail "no such module"
   where
-  rawDefName def = Typed.defName def
+  rawDefName def = Term.defName def
   toDepMap mhash def = (rawDefName def, IRTopLevel modName mhash)
   toFqDep mhash def = let
     fqn = FullyQualifiedName modName (rawDefName def) mhash
-    in (fqn, Typed.defTerm def)
+    in (fqn, Term.defTerm def)
 
 -- not in immediate binds, so it must be in the module
 -- Todo: resolve module ref within this model
@@ -626,8 +626,8 @@ reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
   where
   mbind md = let
     m = _mdModule md
-    depNames = Typed.defName <$> Typed._mDefs m
-    in Map.fromList $ (,IRTopLevel (Typed._mName m) (Typed._mHash m)) <$> depNames
+    depNames = Term.defName <$> Term._mDefs m
+    in Map.fromList $ (,IRTopLevel (Term._mName m) (Term._mHash m)) <$> depNames
   mbinds = fmap mbind (_loModules loaded)
 
 loadedBinds :: Loaded b i -> Map Text (IRNameKind, Unique)

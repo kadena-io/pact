@@ -25,6 +25,7 @@ module Pact.Core.Untyped.Term
  , fromTypedTerm
  , fromTypedDef
  , fromTypedModule
+ , fromTypedTopLevel
  , termInfo
  ) where
 
@@ -209,6 +210,12 @@ fromTypedModule
   -> Module Name builtin info
 fromTypedModule (Typed.Module mn mgov defs blessed imports implements hs) =
   Module mn mgov (fromTypedDef <$> defs) blessed imports implements hs
+
+fromTypedTopLevel :: Typed.TopLevel Name NamedDeBruijn builtin info -> TopLevel Name builtin info
+fromTypedTopLevel = \case
+  Typed.TLModule m -> TLModule (fromTypedModule m)
+  Typed.TLInterface _ -> error "todo: implement interfaces"
+  Typed.TLTerm e -> TLTerm (fromTypedTerm e)
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case

@@ -203,7 +203,7 @@ instance (Pretty b) => Pretty (OverloadedName b) where
   pretty (OverloadedName n nk) = case nk of
     OBound _ -> pretty n
     OBuiltinDict b -> "DICT<" <> pretty b <> ">"
-    _ -> undefined
+    OTopLevel mn _ -> pretty mn <> "." <> pretty n
 
 instance Pretty IRName where
   pretty r = pretty (_irName r)
@@ -211,7 +211,7 @@ instance Pretty IRName where
 instance Pretty Name where
   pretty (Name n nk) = case nk of
     NBound _ -> pretty n
-    _ -> undefined
+    NTopLevel mn _mh -> pretty mn <> "." <> pretty n
 
 instance Pretty NamedDeBruijn where
   pretty (NamedDeBruijn _i _n) =

@@ -73,7 +73,7 @@ instance Pretty name => Pretty (Expr name i) where
         <+> "in"
         <+> pretty e2
     Lam _ nel e _ ->
-      "lambda" <+> renderLamTypes nel <+> "=>" <+> pretty e
+      "lambda" <+> renderLamTypes nel <+> ":" <+> pretty e
     If cond e1 e2 _ ->
       "if" <+> pretty cond <+> "then" <+> pretty e1 <+> "else" <+> pretty e2
     App e1 nel _ ->
@@ -106,4 +106,4 @@ instance Pretty name => Pretty (Expr name i) where
     renderLamPair (n, mt) = case mt of
       Nothing -> pretty n
       Just t -> parens $ pretty n <+> ":" <+> pretty t
-    renderLamTypes = fold . NE.intersperse " " . fmap renderLamPair
+    renderLamTypes = fold . NE.intersperse ", " . fmap renderLamPair

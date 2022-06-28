@@ -75,6 +75,7 @@ common pact-core-common
     , vector >= 0.11.0.0 && < 0.13
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
+    , megaparsec >= 9
 
 library
 
@@ -385,12 +386,11 @@ library pact-core
     Pact.Core.Typed.Overload
     Pact.Core.Typed.Eval.Runtime
     Pact.Core.Typed.Eval.CEK
-    Pact.Core.Typed.Eval.Builtin
 
     -- Untyped core
     Pact.Core.Untyped.Term
-    -- Pact.Core.Untyped.Eval.Runtime
-    -- Pact.Core.Untyped.Eval.CEK
+    Pact.Core.Untyped.Eval.Runtime
+    Pact.Core.Untyped.Eval.CEK
     -- Pact.Core.Untyped.Eval.Builtin
 
     -- Repl

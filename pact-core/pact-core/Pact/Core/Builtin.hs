@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -17,6 +16,7 @@ module Pact.Core.Builtin
  , ReplBuiltin(..)
  , replRawBuiltinNames
  , replRawBuiltinMap
+ , BuiltinArity(..)
  )where
 
 import Data.Text(Text)
@@ -176,8 +176,6 @@ data RawBuiltin
   | RawEnumerateStepN
   -- Show
   | RawShow
-  -- Testing builtin atm
-  | RawDummy
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
@@ -238,7 +236,6 @@ rawBuiltinToText = \case
   RawEnumerate -> "enumerate"
   RawEnumerateStepN -> "enumerate-step"
   RawShow -> "show"
-  RawDummy -> "dummy"
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
@@ -371,7 +368,6 @@ data CoreBuiltin
   | EnforceOne
   | Enumerate
   | EnumerateStepN
-  | Dummy
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 -- Note: commented out natives are
@@ -468,6 +464,103 @@ replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. max
 replRawBuiltinMap :: Map Text (ReplBuiltin RawBuiltin)
 replRawBuiltinMap = Map.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
+-- Todo: is not a great abstraction.
+-- In particular: the arity could be gathered from the type.
+class BuiltinArity b where
+  builtinArity :: b -> Int
+
+instance BuiltinArity CoreBuiltin where
+  builtinArity = \case
+    AddInt -> 2
+    SubInt -> 2
+    DivInt -> 2
+    MulInt -> 2
+    NegateInt -> 1
+    AbsInt -> 1
+    ExpInt -> 1
+    LnInt -> 1
+    SqrtInt -> 1
+    LogBaseInt -> 2
+    ModInt -> 2
+    BitAndInt -> 2
+    BitOrInt -> 2
+    BitXorInt -> 2
+    BitShiftInt -> 2
+    BitComplementInt -> 1
+    ShowInt -> 1
+    EqInt -> 2
+    NeqInt -> 2
+    GTInt -> 2
+    GEQInt -> 2
+    LTInt -> 2
+    LEQInt -> 2
+    IfElse -> 3
+    AddDec -> 2
+    SubDec -> 2
+    DivDec -> 2
+    MulDec -> 2
+    NegateDec -> 1
+    AbsDec -> 1
+    RoundDec -> 1
+    CeilingDec -> 1
+    FloorDec -> 1
+    ExpDec -> 1
+    LnDec -> 1
+    LogBaseDec -> 2
+    SqrtDec -> 1
+    ShowDec -> 1
+    EqDec -> 2
+    NeqDec -> 2
+    GTDec -> 2
+    GEQDec -> 2
+    LTDec -> 2
+    LEQDec -> 2
+    AndBool -> 2
+    OrBool -> 2
+    NotBool -> 2
+    EqBool -> 2
+    NeqBool -> 2
+    ShowBool -> 1
+    EqStr -> 2
+    NeqStr -> 2
+    GTStr -> 2
+    GEQStr -> 2
+    LTStr -> 2
+    LEQStr -> 2
+    AddStr -> 2
+    ConcatStr -> 1
+    DropStr -> 2
+    TakeStr -> 2
+    LengthStr -> 1
+    ReverseStr -> 1
+    ShowStr -> 1
+    EqObj -> 2
+    NeqObj -> 2
+    EqList -> 2
+    NeqList -> 2
+    GTList -> 2
+    GEQList -> 2
+    LTList -> 2
+    LEQList -> 2
+    ShowList -> 1
+    AddList -> 2
+    TakeList -> 2
+    DropList -> 2
+    LengthList -> 1
+    ConcatList -> 1
+    ReverseList -> 1
+    FilterList -> 2
+    DistinctList -> 1
+    MapList -> 2
+    ZipList -> 3
+    FoldList -> 3
+    EqUnit -> 2
+    NeqUnit -> 2
+    ShowUnit -> 1
+    Enforce -> 2
+    EnforceOne -> 2
+    Enumerate -> 2
+    EnumerateStepN -> 3
 
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
@@ -592,7 +685,6 @@ coreBuiltinToText = \case
   EnforceOne -> "enforceOn"
   Enumerate -> "enumerate"
   EnumerateStepN -> "enumerateStep"
-  Dummy -> "dummy"
 
 instance Pretty RawBuiltin where
   pretty b = pretty (rawBuiltinToText b)

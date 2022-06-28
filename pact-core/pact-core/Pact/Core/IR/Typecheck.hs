@@ -59,6 +59,9 @@ import Pact.Core.Errors
 import Pact.Core.Persistence
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
+import qualified Pact.Core.Untyped.Term as Untyped
+
+
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -1432,9 +1435,6 @@ rawBuiltinType = \case
     let aVar = nd "a" 0
         a = TyVar aVar
     in TypeScheme [aVar] [Pred Show a] (a :~> TyString)
-  RawDummy ->
-    let aVar = nd "a" 0
-    in TypeScheme [aVar] [] (TyRow (RowVar aVar) :~> TyRow (RowVar aVar) :~> TyUnit)
   where
   nd b a = NamedDeBruijn a b
   unaryNumType =
@@ -1507,8 +1507,8 @@ objectRemoveType f =
 mkFree :: Loaded builtin info -> Map ModuleName (Map Text (TypeScheme NamedDeBruijn))
 mkFree loaded = let
   tl = _loModules loaded
-  toTy d = (Typed.defName d, TypeScheme [] [] (Typed.defType d))
-  mdefs =  Typed._mDefs . _mdModule <$> tl
+  toTy d = (Untyped.defName d, TypeScheme [] [] (Untyped.defType d))
+  mdefs =  Untyped._mDefs . _mdModule <$> tl
   in Map.fromList . fmap toTy <$> mdefs
 
 runInfer

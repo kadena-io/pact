@@ -199,7 +199,7 @@ renderTokenText = \case
   TokenIf -> "if"
   TokenThen -> "then"
   TokenElse -> "else"
-  TokenLambda -> "fn"
+  TokenLambda -> "lambda"
   TokenLambdaArrow -> "=>"
   TokenModule -> "module"
   TokenKeyGov -> "keyGov"

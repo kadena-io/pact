@@ -190,12 +190,12 @@ ArgList :: { [Arg] }
   | {- empty -} { [] }
 
 Type :: { Type }
-  : TyArrows '->' Type1 { foldr TyFun $3 (reverse $1) }
-  | Type1 { $1 }
+  -- : TyArrows '->' Type1 { foldr TyFun $3 (reverse $1) }
+  : Type1 { $1 }
 
-TyArrows :: { [Type] }
-  : TyArrows '->' Type1 { $3:$1 }
-  | Type1 { [$1] }
+-- TyArrows :: { [Type] }
+--   : TyArrows '->' Type1 { $3:$1 }
+--   | Type1 { [$1] }
 
 Type1 :: { Type }
   : TYLIST AtomicType { TyList $2 }

@@ -17,6 +17,7 @@
 
 module Main where
 
+import Control.Lens
 import Control.Monad.IO.Class(liftIO)
 import Control.Monad.Catch
 import System.Console.Haskeline
@@ -27,6 +28,7 @@ import Control.Monad.Trans(lift)
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Set as Set
 
 import Pact.Core.Compile
 import Pact.Core.Repl.Utils
@@ -49,19 +51,33 @@ main = do
     minput <- getInputLine "pact>"
     case minput of
       Nothing -> outputStrLn "goodbye"
-      Just input -> case T.strip (T.pack input) of
-        ":lisp" -> loop lispInterpretBundle ref
-        ":new" -> loop newInterpretBundle ref
-        "" -> loop bundle ref
-        ":quit" -> outputStrLn "goodbye"
-        i | T.isPrefixOf ":load" i -> let
-          file = T.unpack (T.drop 6 i)
-          in catch' bundle ref $ do
-            source <- liftIO (B.readFile file)
-            vs <- lift (program bundle source)
-            traverse_ displayOutput vs
-            loop bundle ref
-        i -> catch' bundle ref $ do
-          out <- lift (expr bundle (T.encodeUtf8 i))
-          displayOutput (InterpretValue  out)
+      Just input -> case parseReplAction (T.strip (T.pack input)) of
+        Nothing -> do
+          outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
           loop bundle ref
+        Just ra -> case ra of
+          RALoad txt -> let
+            file = T.unpack txt
+            in catch' bundle ref $ do
+              source <- liftIO (B.readFile file)
+              vs <- lift (program bundle source)
+              traverse_ displayOutput vs
+              loop bundle ref
+          RASetLispSyntax -> loop lispInterpretBundle ref
+          RASetNewSyntax -> loop newInterpretBundle ref
+          RATypecheck txt -> catch' bundle ref $ do
+            out <- lift (exprType bundle (T.encodeUtf8 txt))
+            outputStrLn (show (pretty out))
+            loop bundle ref
+          RASetFlag flag -> do
+            liftIO (modifyIORef' ref (over replFlags (Set.insert flag)))
+            outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]
+            loop bundle ref
+          RADebugAll -> do
+            liftIO (modifyIORef' ref (set replFlags (Set.fromList [minBound .. maxBound])))
+            outputStrLn $ unwords ["set all debug flags"]
+            loop bundle ref
+          RAExecuteExpr src -> catch' bundle ref $ do
+            out <- lift (expr bundle (T.encodeUtf8 src))
+            displayOutput (InterpretValue out)
+            loop bundle ref

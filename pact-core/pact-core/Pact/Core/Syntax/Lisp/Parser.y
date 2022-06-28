@@ -173,17 +173,17 @@ ArgList :: { [Arg] }
   | {- empty -} { [] }
 
 Type :: { Type }
-  : '(' TyArrows '->' Type1 ')' { foldr TyFun $4 (reverse $2) }
-  | Type1 { $1 }
+  -- : '(' TyArrows '->' Type1 ')' { foldr TyFun $4 (reverse $2) }
+  : Type1 { $1 }
 
 Type1 :: { Type }
   : TYLIST Type { TyList $2 }
   | '{' RowType '}' { TyObject (Map.fromList $2) Nothing }
   | AtomicType { $1 }
 
-TyArrows :: { [Type] }
-  : TyArrows '->' Type1 { $3:$1 }
-  | Type1 { [$1] }
+-- TyArrows :: { [Type] }
+--   : TyArrows '->' Type1 { $3:$1 }
+--   | Type1 { [$1] }
 
 AtomicType :: { Type }
   : PrimType { TyPrim $1 }

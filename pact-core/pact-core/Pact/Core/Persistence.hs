@@ -26,7 +26,7 @@ import Data.IORef
 import Data.Map.Strict(Map)
 
 import Pact.Core.Names
-import Pact.Core.Typed.Term
+import Pact.Core.Untyped.Term
 
 import qualified Data.Map.Strict as Map
 

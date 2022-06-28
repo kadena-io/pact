@@ -79,27 +79,3 @@ data PactError info
   deriving Show
 
 instance (Show info, Typeable info) => Exception (PactError info)
-
-class ErrorLog e where
-  liftLineInfo :: LineInfo -> e
-  renderLoc :: e -> Text
-  renderPactError :: Text -> PactError e -> Text
-
-instance ErrorLog () where
-  liftLineInfo _ = ()
-  {-# INLINE liftLineInfo #-}
-  renderLoc _ = ""
-  {-# INLINE renderLoc #-}
-  renderPactError _ = \case
-    PELexerError _ -> "Lexical error"
-    PEParseError _ -> "Parsing Error"
-    PEDesugarError _ -> "Desugar/Name Resolution Error"
-    PETypecheckError _ -> "Typechecking failure"
-    PEFatalError _ -> "Internal invariant failure"
-  {-# INLINE renderPactError #-}
-
-instance ErrorLog LineInfo where
-  liftLineInfo = id
-  renderLoc (LineInfo li col _) =
-    "At line: " <> T.pack (show li) <> ", column: " <> T.pack (show col)
-  renderPactError _ _ = ""

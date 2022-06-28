@@ -17,6 +17,8 @@ module Pact.Core.Compile
  , interpretProgramFileLisp
  , newInterpretBundle
  , lispInterpretBundle
+ , interpretExprTypeNew
+ , interpretExprTypeLisp
  , InterpretBundle(..)
  ) where
 
@@ -34,16 +36,17 @@ import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Builtin
 import Pact.Core.Names
+import Pact.Core.Type
 import Pact.Core.Repl.Utils
-import Pact.Core.Typed.Term
+import Pact.Core.Untyped.Term
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Typecheck
-import Pact.Core.Typed.Eval.CEK
 import Pact.Core.Typed.Overload
 
+import Pact.Core.Untyped.Eval.CEK
+
 import qualified Pact.Core.IR.Term as IR
-import qualified Pact.Core.Typed.Eval.CEK as Runtime
-import qualified Pact.Core.Typed.Eval.Builtin as Runtime
+import qualified Pact.Core.Untyped.Eval.CEK as Runtime
 
 import qualified Pact.Core.Syntax.New.Lexer as New
 import qualified Pact.Core.Syntax.New.Parser as New
@@ -61,14 +64,23 @@ data InterpretOutput b i
 data InterpretBundle
   = InterpretBundle
   { expr :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
+  , exprType :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
   , program :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
   }
 
 newInterpretBundle :: InterpretBundle
-newInterpretBundle = InterpretBundle interpretExprNew interpretProgramNew
+newInterpretBundle =
+  InterpretBundle
+  { expr = interpretExprNew
+  , exprType = interpretExprTypeNew
+  , program = interpretProgramNew }
 
 lispInterpretBundle :: InterpretBundle
-lispInterpretBundle = InterpretBundle interpretExprLisp interpretProgramLisp
+lispInterpretBundle =
+    InterpretBundle
+  { expr = interpretExprLisp
+  , exprType = interpretExprTypeLisp
+  , program = interpretProgramLisp }
 
 interpretExprNew :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
 interpretExprNew source = do
@@ -102,14 +114,45 @@ interpretExpr (DesugarOutput desugared sup loaded' _) = do
   debugIfFlagSet DebugTypecheckerType ty
   debugIfFlagSet DebugTypechecker typed
   resolved <- liftIO (runOverloadTerm typed)
-  let ?cekEnv = Runtime.RuntimeEnv
-        (_loAllLoaded loaded')
-        Runtime.coreBuiltinRuntime
-        Map.empty
-  let initState = Runtime.CEKState 0 Nothing
-  (value, _) <- liftIO (Runtime.runEvalT initState (Runtime.eval mempty resolved))
+  debugIfFlagSet DebugSpecializer resolved
+  let untyped = fromTypedTerm resolved
+  debugIfFlagSet DebugUntyped untyped
+  (value, _) <- liftIO (Runtime.runCEKCorebuiltin (_loAllLoaded loaded') untyped)
   replLoaded .= loaded'
   pure value
+
+interpretExprTypeLisp :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
+interpretExprTypeLisp source = do
+  p <- use replPactDb
+  loaded <- use replLoaded
+  lexx <- liftIO (Lisp.runLexerIO source)
+  debugIfFlagSet DebugLexer lexx
+  parsed <- either throwM pure $ Lisp.parseExpr lexx
+  debugIfFlagSet DebugParser parsed
+  let ?pactDb = p
+  desugared <- liftIO (runDesugarTermLisp loaded parsed)
+  interpretExprType desugared
+
+interpretExprTypeNew :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
+interpretExprTypeNew source = do
+  p <- use replPactDb
+  loaded <- use replLoaded
+  lexx <- liftIO (New.runLexerIO source)
+  debugIfFlagSet DebugLexer lexx
+  parsed <- either throwM pure $ New.parseExpr lexx
+  debugIfFlagSet DebugParser parsed
+  let ?pactDb = p
+  desugared <- liftIO (runDesugarTermNew loaded parsed)
+  interpretExprType desugared
+
+interpretExprType
+  :: DesugarOutput CoreBuiltin LineInfo (IR.Term IRName TypeVar RawBuiltin LineInfo)
+  -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
+interpretExprType (DesugarOutput desugared sup loaded' _) = do
+  (ty, typed) <- liftIO (runInferTerm sup loaded' rawBuiltinType desugared)
+  debugIfFlagSet DebugTypecheckerType ty
+  debugIfFlagSet DebugTypechecker typed
+  pure ty
 
 interpretProgramFileNew :: FilePath -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
 interpretProgramFileNew source = liftIO (B.readFile source) >>= interpretProgramNew
@@ -144,7 +187,8 @@ interpretTopLevel
 interpretTopLevel (DesugarOutput desugared supply loaded deps) = do
   p <- use replPactDb
   typechecked <- liftIO (runInferTopLevel supply loaded rawBuiltinType desugared)
-  liftIO (runOverloadTopLevel typechecked) >>= \case
+  overloaded <- liftIO (runOverloadTopLevel typechecked)
+  case fromTypedTopLevel overloaded of
     TLModule m -> do
       let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
           mdata = ModuleData m deps'
@@ -163,13 +207,8 @@ interpretTopLevel (DesugarOutput desugared supply loaded deps) = do
         fqn = FullyQualifiedName modName (defName def) mhash
         in (fqn, defTerm def)
 
-    TLTerm e -> do
-      let ?cekEnv = Runtime.RuntimeEnv
-            (_loAllLoaded loaded)
-            Runtime.coreBuiltinRuntime
-            Map.empty
-      let initState = Runtime.CEKState 0 Nothing
-      (value, _) <- liftIO (Runtime.runEvalT initState (Runtime.eval mempty e))
+    TLTerm resolved -> do
+      (value, _) <- liftIO (Runtime.runCEKCorebuiltin (_loAllLoaded loaded) resolved)
       replLoaded .= loaded
       pure (InterpretValue value)
     TLInterface _ -> error "interfaces not yet supported"
