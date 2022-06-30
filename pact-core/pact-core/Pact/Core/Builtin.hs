@@ -27,6 +27,25 @@ import qualified Data.Map.Strict as Map
 import Pact.Core.Names
 import Pact.Core.Pretty(Pretty(..))
 
+-- data EnvReadOp
+--   = EnvReadInteger
+--   | EnvReadDecimal
+--   | EnvReadString
+--   | EnvReadObject
+--   deriving (Show, Eq, Enum, Bounded)
+
+-- renderReadOp :: EnvReadOp -> Text
+-- renderReadOp = \case
+--   EnvReadInteger -> "read-integer"
+--   EnvReadDecimal -> "read-decimal"
+--   EnvReadString -> "read-string"
+--   EnvReadObject -> "read-object"
+
+
+-- instance Pretty EnvReadOp where
+--   pretty = pretty . renderReadOp
+
+
 data ObjectOp o
   = ObjectAccess Field o
   -- access[f](o)
@@ -37,6 +56,7 @@ data ObjectOp o
   | ObjectExtend Field o o
   -- extend[k:=v](o)
   -- For some {r}, extend with
+  -- | ObjectEnvRead Field EnvReadOp
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 {-
@@ -176,6 +196,17 @@ data RawBuiltin
   | RawEnumerateStepN
   -- Show
   | RawShow
+  | RawReadInteger
+  | RawReadDecimal
+  | RawReadString
+  | RawReadKeyset
+  | RawReadObject
+  | RawEnforceGuard
+  | RawKeysetRefGuard
+  | RawCreateUserGuard
+  | RawListAccess
+  | RawB64Encode
+  | RawB64Decode
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
@@ -236,6 +267,17 @@ rawBuiltinToText = \case
   RawEnumerate -> "enumerate"
   RawEnumerateStepN -> "enumerate-step"
   RawShow -> "show"
+  RawReadInteger -> "read-integer"
+  RawReadDecimal -> "read-decimal"
+  RawReadString -> "read-string"
+  RawReadKeyset -> "read-keyset"
+  RawReadObject -> "read-object"
+  RawEnforceGuard -> "enforce-guard"
+  RawKeysetRefGuard -> "keyset-ref-guard"
+  RawCreateUserGuard -> "create-user-guard"
+  RawListAccess -> "at"
+  RawB64Encode -> "base64-encode"
+  RawB64Decode -> "base64-decode"
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
@@ -368,6 +410,17 @@ data CoreBuiltin
   | EnforceOne
   | Enumerate
   | EnumerateStepN
+  | ReadInteger
+  | ReadDecimal
+  | ReadString
+  | ReadKeyset
+  | ReadObject
+  | EnforceGuard
+  | KeysetRefGuard
+  | CreateUserGuard
+  | ListAccess
+  | B64Encode
+  | B64Decode
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 -- Note: commented out natives are
@@ -561,6 +614,17 @@ instance BuiltinArity CoreBuiltin where
     EnforceOne -> 2
     Enumerate -> 2
     EnumerateStepN -> 3
+    ReadInteger -> 1
+    ReadDecimal -> 1
+    ReadString -> 1
+    ReadKeyset -> 1
+    ReadObject -> 1
+    EnforceGuard -> 1
+    KeysetRefGuard -> 1
+    CreateUserGuard -> 1
+    ListAccess -> 2
+    B64Encode -> 1
+    B64Decode -> 1
 
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
@@ -685,6 +749,17 @@ coreBuiltinToText = \case
   EnforceOne -> "enforceOn"
   Enumerate -> "enumerate"
   EnumerateStepN -> "enumerateStep"
+  ReadInteger -> "read-integer"
+  ReadDecimal -> "read-decimal"
+  ReadString -> "read-string"
+  ReadKeyset -> "read-keyset"
+  ReadObject -> "read-object"
+  EnforceGuard -> "enforce-guard"
+  KeysetRefGuard -> "keyset-ref-guard"
+  CreateUserGuard -> "create-user-guard"
+  ListAccess -> "at"
+  B64Encode -> "base64-encode"
+  B64Decode -> "base64-decode"
 
 instance Pretty RawBuiltin where
   pretty b = pretty (rawBuiltinToText b)

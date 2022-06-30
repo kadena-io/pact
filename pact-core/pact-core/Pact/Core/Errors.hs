@@ -62,6 +62,17 @@ data TypecheckError info
 
 instance (Show info, Typeable info) => Exception (TypecheckError info)
 
+data ExecutionError
+  = ArrayOutOfBoundsException
+  | EnforceException Text
+  | ReadException Text
+  | ArithmeticException
+  | EnumeratationError Text
+  | DecodeError
+  deriving Show
+
+instance Exception ExecutionError
+
 data FatalPactError
   = FatalExecutionError Text
   | FatalOverloadError Text
@@ -75,6 +86,7 @@ data PactError info
   | PEParseError (ParseError info)
   | PEDesugarError (DesugarError info)
   | PETypecheckError (TypecheckError info)
+  | PEExecutionError ExecutionError
   | PEFatalError FatalPactError
   deriving Show
 

@@ -359,6 +359,7 @@ library pact-core
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
+    Pact.Core.PactValue
 
     -- Common syntax
     Pact.Core.Syntax.Common

@@ -84,26 +84,24 @@ lispInterpretBundle =
 
 interpretExprNew :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
 interpretExprNew source = do
-  p <- use replPactDb
+  pactdb <- use replPactDb
   loaded <- use replLoaded
   lexx <- liftIO (New.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
   parsed <- either throwM pure $ New.parseExpr lexx
   debugIfFlagSet DebugParser parsed
-  let ?pactDb = p
-  desugared <- liftIO (runDesugarTermNew loaded parsed)
+  desugared <- liftIO (runDesugarTermNew pactdb loaded parsed)
   interpretExpr desugared
 
 interpretExprLisp :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
 interpretExprLisp source = do
-  p <- use replPactDb
+  pactdb <- use replPactDb
   loaded <- use replLoaded
   lexx <- liftIO (Lisp.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
   parsed <- either throwM pure $ Lisp.parseExpr lexx
   debugIfFlagSet DebugParser parsed
-  let ?pactDb = p
-  desugared <- liftIO (runDesugarTermLisp loaded parsed)
+  desugared <- liftIO (runDesugarTermLisp pactdb loaded parsed)
   interpretExpr desugared
 
 interpretExpr
@@ -123,26 +121,24 @@ interpretExpr (DesugarOutput desugared sup loaded' _) = do
 
 interpretExprTypeLisp :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprTypeLisp source = do
-  p <- use replPactDb
+  pactdb <- use replPactDb
   loaded <- use replLoaded
   lexx <- liftIO (Lisp.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
   parsed <- either throwM pure $ Lisp.parseExpr lexx
   debugIfFlagSet DebugParser parsed
-  let ?pactDb = p
-  desugared <- liftIO (runDesugarTermLisp loaded parsed)
+  desugared <- liftIO (runDesugarTermLisp pactdb loaded parsed)
   interpretExprType desugared
 
 interpretExprTypeNew :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprTypeNew source = do
-  p <- use replPactDb
+  pactdb <- use replPactDb
   loaded <- use replLoaded
   lexx <- liftIO (New.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
   parsed <- either throwM pure $ New.parseExpr lexx
   debugIfFlagSet DebugParser parsed
-  let ?pactDb = p
-  desugared <- liftIO (runDesugarTermNew loaded parsed)
+  desugared <- liftIO (runDesugarTermNew pactdb loaded parsed)
   interpretExprType desugared
 
 interpretExprType
@@ -160,12 +156,11 @@ interpretProgramFileNew source = liftIO (B.readFile source) >>= interpretProgram
 interpretProgramNew :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
 interpretProgramNew source = do
   loaded <- use replLoaded
-  p <- use replPactDb
-  let ?pactDb = p
+  pactdb <- use replPactDb
   lexx <- liftIO (New.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
   parsed <- either throwM pure $ New.parseProgram lexx
-  traverse (liftIO . runDesugarTopLevelNew loaded >=> interpretTopLevel) parsed
+  traverse (liftIO . runDesugarTopLevelNew pactdb loaded >=> interpretTopLevel) parsed
 
 interpretProgramFileLisp :: FilePath -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
 interpretProgramFileLisp source = liftIO (B.readFile source) >>= interpretProgramLisp
@@ -173,12 +168,11 @@ interpretProgramFileLisp source = liftIO (B.readFile source) >>= interpretProgra
 interpretProgramLisp :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
 interpretProgramLisp source = do
   loaded <- use replLoaded
-  p <- use replPactDb
-  let ?pactDb = p
+  pactdb <- use replPactDb
   lexx <- liftIO (Lisp.runLexerIO source)
   debugIfFlagSet DebugLexer lexx
   parsed <- either throwM pure $ Lisp.parseProgram lexx
-  traverse (liftIO . runDesugarTopLevelLisp loaded >=> interpretTopLevel) parsed
+  traverse (liftIO . runDesugarTopLevelLisp pactdb loaded >=> interpretTopLevel) parsed
 
 -- todo: Clean up function
 interpretTopLevel

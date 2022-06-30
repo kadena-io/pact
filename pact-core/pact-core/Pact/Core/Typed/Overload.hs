@@ -343,6 +343,28 @@ resolveTerm = \case
     (RawFold, [l, r], []) ->
       let b = Builtin FoldList i
       in pure (TyApp b (l :| [r]) i)
+    (RawReadInteger, _, _) ->
+      pure (Builtin ReadInteger i)
+    (RawReadDecimal, _, _) ->
+      pure (Builtin ReadDecimal i)
+    (RawReadString, _, _) ->
+      pure (Builtin ReadString i)
+    (RawReadKeyset, _, _) ->
+      pure (Builtin ReadKeyset i)
+    (RawReadObject, _, _) ->
+      pure (Builtin ReadObject i)
+    (RawEnforceGuard, _, _) ->
+      pure (Builtin EnforceGuard  i)
+    (RawKeysetRefGuard, _, _) ->
+      pure (Builtin KeysetRefGuard i)
+    (RawCreateUserGuard, _, _) ->
+      pure (Builtin CreateUserGuard i)
+    (RawListAccess, _, _) ->
+      pure (Builtin ListAccess i)
+    (RawB64Encode, _, _) ->
+      pure (Builtin B64Encode i)
+    (RawB64Decode, _, _) ->
+      pure (Builtin B64Decode i)
     _ -> error "could not resolve overload"
 
 unsafeToTLName :: OverloadedName o -> Name

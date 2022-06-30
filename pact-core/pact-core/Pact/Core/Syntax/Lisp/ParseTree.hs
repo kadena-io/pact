@@ -10,9 +10,10 @@ import Data.Foldable(fold)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Map.Strict(Map)
+import Data.List(intersperse)
+
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
-import Data.List(intersperse)
 
 import Pact.Core.Builtin
 import Pact.Core.Literal

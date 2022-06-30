@@ -93,22 +93,6 @@ newtype EvalT b a =
 runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
 runEvalT s (EvalT action) = runStateT action s
 
-data ModuleGuard name
-  = ModuleGuard
-  { _mgModuleName :: name
-  , _mgName :: !Text
-  } deriving (Eq, Show)
-
-data Closure b i
-  = Closure ![Name] !(EvalTerm b i) !(CEKEnv b i)
-  deriving (Show)
-
-data Guard name i
-  = GKeyset (KeySet name)
-  | GKeySetRef KeySetName
-  | GUserGuard (Closure name i)
-  | GModuleGuard (ModuleGuard name)
-  deriving (Show)
 
 data CEKValue b i
   = VLiteral !Literal
@@ -917,6 +901,17 @@ coreBuiltinFn = \case
   EnforceOne -> unimplemented
   Enumerate -> coreEnumerate
   EnumerateStepN -> coreEnumerateStepN
+  ReadInteger -> unimplemented
+  ReadDecimal -> unimplemented
+  ReadString -> unimplemented
+  ReadKeyset -> unimplemented
+  ReadObject -> unimplemented
+  EnforceGuard -> unimplemented
+  KeysetRefGuard -> unimplemented
+  CreateUserGuard -> unimplemented
+  ListAccess -> unimplemented
+  B64Encode -> unimplemented
+  B64Decode -> unimplemented
 
 coreBuiltinRuntime :: Array.Array (BuiltinFn CoreBuiltin i)
 coreBuiltinRuntime = Array.arrayFromList (coreBuiltinFn <$> [minBound .. maxBound])

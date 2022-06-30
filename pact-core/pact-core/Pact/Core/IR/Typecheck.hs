@@ -1435,6 +1435,30 @@ rawBuiltinType = \case
     let aVar = nd "a" 0
         a = TyVar aVar
     in TypeScheme [aVar] [Pred Show a] (a :~> TyString)
+  RawReadInteger ->
+    TypeScheme [] [] (TyString :~> TyInt)
+  RawReadDecimal ->
+    TypeScheme [] [] (TyString :~> TyDecimal)
+  RawReadString ->
+    TypeScheme [] [] (TyString :~> TyString)
+  RawReadKeyset ->
+    TypeScheme [] [] (TyString :~> TyGuard)
+  RawReadObject ->
+    TypeScheme [nd "a" 0] [] (TyString :~> TyRow (RowVar (nd "a" 0)))
+  RawEnforceGuard ->
+    TypeScheme [] [] (TyGuard :~> TyUnit)
+  RawKeysetRefGuard ->
+    TypeScheme [] [] (TyString :~> TyGuard)
+  RawCreateUserGuard -> let
+    a = nd "a" 0
+    in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
+  RawListAccess -> let
+    a = nd "a" 0
+    in TypeScheme [a] [] (TyInt :~> TyList (TyVar a) :~> TyVar a)
+  RawB64Encode ->
+    TypeScheme [] [] (TyString :~> TyString)
+  RawB64Decode ->
+    TypeScheme [] [] (TyString :~> TyString)
   where
   nd b a = NamedDeBruijn a b
   unaryNumType =

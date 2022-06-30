@@ -8,25 +8,30 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Untyped.Eval.Runtime
  ( CEKTLEnv
  , CEKEnv
  , HasTLEnv
  , HasBuiltinEnv
+ , HasRuntimeEnv
  , CEKRuntime
  , BuiltinFn(..)
  , CEKState(..)
  , EvalT(..)
  , runEvalT
- , ModuleGuard(..)
- , Guard(..)
- , Closure(..)
  , CEKValue(..)
  , Cont(..)
+ , RuntimeEnv(..)
+ , ckeData
+ , ckeTxHash
+ , ckeResolveName
  ) where
 
 
+import Control.Lens
+import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Text(Text)
@@ -42,7 +47,8 @@ import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..), (<+>))
 import Pact.Core.Gas
--- import Pact.Core.Hash
+import Pact.Core.PactValue
+import Pact.Core.Hash
 import Pact.Core.Untyped.Term
 import Pact.Core.Literal
 import qualified Pact.Core.Pretty as P
@@ -57,7 +63,38 @@ type HasTLEnv b i = (?cekLoaded :: CEKTLEnv b i)
 -- | List of builtins
 type HasBuiltinEnv b i = (?cekBuiltins :: Array (BuiltinFn b i))
 -- | runtime env
-type CEKRuntime b i = (HasTLEnv b i, HasBuiltinEnv b i, Enum b)
+type HasRuntimeEnv b i = (?cekRuntimeEnv :: RuntimeEnv b i)
+
+type CEKRuntime b i = (HasTLEnv b i, HasBuiltinEnv b i, HasRuntimeEnv b i, Enum b)
+
+-- | The type of our semantic runtime values
+data CEKValue b i
+  = VLiteral !Literal
+  | VObject !(Map Field (CEKValue b i))
+  | VList !(Vector (CEKValue b i))
+  | VClosure !(EvalTerm b i) !(CEKEnv b i)
+  | VNative !(BuiltinFn b i)
+  | VGuard !(Guard Name (CEKValue b i))
+  deriving (Show)
+
+data CEKState b
+  = CEKState
+  { _cekGas :: Gas
+  , _cekEvalLog :: Maybe [Text]
+  } deriving Show
+
+newtype EvalT b a =
+  EvalT (StateT (CEKState b) IO a)
+  deriving
+    ( Functor, Applicative, Monad
+    , MonadState (CEKState b)
+    , MonadIO
+    , MonadThrow
+    , MonadCatch)
+  via (StateT (CEKState b) IO)
+
+runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
+runEvalT s (EvalT action) = runStateT action s
 
 data BuiltinFn b i
   = BuiltinFn
@@ -65,6 +102,25 @@ data BuiltinFn b i
   , _nativeFn :: CEKRuntime b i => [CEKValue b i] -> EvalT b (CEKValue b i)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeAppliedArgs :: [CEKValue b i]
+  }
+
+data ExecutionMode
+  = Transactional
+  | Local
+  deriving (Eq, Show, Bounded, Enum)
+
+data Cont b i
+  = Fn (CEKValue b i) (Cont b i)
+  | Arg (CEKEnv b i) (EvalTerm b i) (Cont b i)
+  | BlockC (CEKEnv b i) [EvalTerm b i] (Cont b i)
+  | Mt
+  deriving Show
+
+data RuntimeEnv b i
+  = RuntimeEnv
+  { _ckeData :: EnvData (EvalTerm b i)
+  , _ckeTxHash :: Hash
+  , _ckeResolveName :: QualifiedName -> EvalT b FullyQualifiedName
   }
 
 instance (Pretty b) => Show (BuiltinFn b i) where
@@ -80,60 +136,6 @@ instance (Pretty b) => Show (BuiltinFn b i) where
 instance (Pretty b) => Pretty (BuiltinFn b i) where
   pretty = pretty . show
 
-
-data CEKState b
-  = CEKState
-  { _cekGas :: Gas
-  , _cekEvalLog :: Maybe [Text]
-  } deriving Show
-
-newtype EvalT b a =
-  EvalT (StateT (CEKState b) IO a)
-  deriving
-    ( Functor, Applicative, Monad
-    , MonadState (CEKState b)
-    , MonadIO
-    , MonadFail)
-  via (StateT (CEKState b) IO)
-
-runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
-runEvalT s (EvalT action) = runStateT action s
-
-data ModuleGuard name
-  = ModuleGuard
-  { _mgModuleName :: name
-  , _mgName :: !Text
-  } deriving (Eq, Show)
-
-data Closure b i
-  = Closure !(EvalTerm b i) !(CEKEnv b i)
-  deriving (Show)
-
-data Guard name i
-  = GKeyset (KeySet name)
-  | GKeySetRef KeySetName
-  | GUserGuard (Closure name i)
-  | GModuleGuard (ModuleGuard name)
-  deriving (Show)
-
-data CEKValue b i
-  = VLiteral !Literal
-  | VObject !(Map Field (CEKValue b i))
-  | VList !(Vector (CEKValue b i))
-  | VClosure !(EvalTerm b i) !(CEKEnv b i)
-  | VNative !(BuiltinFn b i)
-  | VGuard !(Guard Name (CEKValue b i))
-  | VError Text
-  deriving (Show)
-
-data Cont b i
-  = Fn (CEKValue b i) (Cont b i)
-  | Arg (CEKEnv b i) (EvalTerm b i) (Cont b i)
-  | BlockC (CEKEnv b i) [EvalTerm b i] (Cont b i)
-  | Mt
-  deriving Show
-
-
 instance Pretty b => Pretty (CEKValue b i) where
   pretty = \case
     VLiteral i -> pretty i
@@ -147,4 +149,5 @@ instance Pretty b => Pretty (CEKValue b i) where
     VNative b ->
       P.angles $ "native" <+> pretty b
     VGuard _ -> error "undefined"
-    VError e -> "Error:" <+> pretty e
+
+makeLenses ''RuntimeEnv
