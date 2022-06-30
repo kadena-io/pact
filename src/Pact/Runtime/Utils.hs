@@ -25,6 +25,7 @@ module Pact.Runtime.Utils
   , lookupFreeVar
   , lookupFullyQualifiedTerm
   , inlineModuleData
+  , getPactId
   ) where
 
 import Bound
@@ -220,6 +221,10 @@ calledByModule Module{..} =
     forModule FunApp{..} | _faModule == Just _mName = Just ()
                          | otherwise = Nothing
 
+getPactId :: HasInfo i => i -> Eval e PactId
+getPactId i = use evalPactExec >>= \pe -> case pe of
+  Nothing -> evalError' i "pact-id: not in pact execution"
+  Just PactExec{..} -> return _pePactId
 
 -- | Lookup a module and fail if not found.
 getModule :: HasInfo i => i -> ModuleName -> Eval e (ModuleData Ref)

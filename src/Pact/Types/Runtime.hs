@@ -161,6 +161,8 @@ data ExecutionFlag
   | FlagDisablePact43
   -- | Disable pact 4.3 features
   | FlagDisablePact431
+  -- | Preserve old ns behavior for module upgrade
+  | FlagPreserveNamespaceUpgrade
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

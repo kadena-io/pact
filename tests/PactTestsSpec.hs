@@ -131,6 +131,11 @@ badErrors = M.fromList
    ,"module restore failed: Native lookup failed")
   ,(pfx "bad-import-wrong-hash.repl"
    ,"does not match specified hash")
+  ,(pfx "bad-module-enforce-ns-user.repl"
+   ,"Keyset failure")
+  ,(pfx "bad-iface-enforce-ns-user.repl"
+   ,"Keyset failure")
+
   ]
   where
     pfx = ("tests/pact/bad/" ++)
@@ -176,4 +181,3 @@ checkLegacyProdParser expectSuccess fp = describe fp $ do
   if expectSuccess
     then it "parsing succeeds" $ pc `shouldSatisfy` isRight
     else it "parsing fails as expected" $ pc `shouldSatisfy` isLeft
-
