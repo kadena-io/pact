@@ -264,7 +264,7 @@ literals :: Compile (Term Name)
 literals =
   literal
   <|> listLiteral
-  <|> objectLiteral
+  <|> try objectLiteral
 
 
 -- | Bare atoms (excluding reserved words).
@@ -282,7 +282,7 @@ userVar = userAtom >>= \AtomExp{..} ->
 app :: Compile (Term Name)
 app = do
   v <- varAtom
-  args <- many (try bindingForm <|> valueLevel)
+  args <- many (valueLevel <|> bindingForm)
   i <- contextInfo
   return $ TApp (App v args i) i
 
