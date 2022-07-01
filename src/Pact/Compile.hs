@@ -282,7 +282,7 @@ userVar = userAtom >>= \AtomExp{..} ->
 app :: Compile (Term Name)
 app = do
   v <- varAtom
-  args <- many (valueLevel <|> bindingForm)
+  args <- many (try bindingForm <|> valueLevel)
   i <- contextInfo
   return $ TApp (App v args i) i
 
