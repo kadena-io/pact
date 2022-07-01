@@ -135,6 +135,8 @@ badErrors = M.fromList
    ,"Keyset failure")
   ,(pfx "bad-iface-enforce-ns-user.repl"
    ,"Keyset failure")
+  ,(pfx "bad-term-in-list.repl"
+   ,"Expected: value level form")
 
   ]
   where
