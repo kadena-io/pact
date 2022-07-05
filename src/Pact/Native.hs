@@ -100,6 +100,7 @@ import Pact.Types.Pretty hiding (list)
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
+import Pact.Types.Namespace
 
 -- | All production native modules.
 natives :: [NativeModule]

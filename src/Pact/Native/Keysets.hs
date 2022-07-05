@@ -24,6 +24,7 @@ import Pact.Native.Internal
 import Pact.Types.KeySet
 import Pact.Types.Purity
 import Pact.Types.Runtime
+import Pact.Types.Namespace
 
 readKeysetDef :: NativeDef
 readKeysetDef =

@@ -45,6 +45,7 @@ import Pact.Types.Pretty
 import Pact.Types.PactValue
 import Pact.Types.RowData
 import Pact.Types.Term
+import Pact.Types.Namespace
 import Pact.Parse
 import Pact.Types.SizeOf(Bytes)
 

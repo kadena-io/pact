@@ -34,7 +34,7 @@
 --
 
 module Pact.Types.Term
- ( Namespace(..), nsName, nsUser, nsAdmin,
+ (
    Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..), mkKeySet,
@@ -759,29 +759,6 @@ instance NFData Interface
 
 instance SizeOf Interface
 
--- -------------------------------------------------------------------------- --
--- Namespace
-
-data Namespace a = Namespace
-  { _nsName :: !NamespaceName
-  , _nsUser :: !(Guard a)
-  , _nsAdmin :: !(Guard a)
-  } deriving (Eq, Show, Generic)
-
-instance (Arbitrary a) => Arbitrary (Namespace a) where
-  arbitrary = Namespace <$> arbitrary <*> arbitrary <*> arbitrary
-
-instance Pretty (Namespace a) where
-  pretty Namespace{..} = "(namespace " <> prettyString (asString' _nsName) <> ")"
-
-instance (SizeOf n) => SizeOf (Namespace n) where
-  sizeOf (Namespace name ug ag) =
-    (constructorCost 3) + (sizeOf name) + (sizeOf ug) + (sizeOf ag)
-
-instance (ToJSON a, FromJSON a) => ToJSON (Namespace a) where toJSON = lensyToJSON 3
-instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
-
-instance (NFData a) => NFData (Namespace a)
 
 -- -------------------------------------------------------------------------- --
 -- ModuleDef
@@ -1519,7 +1496,6 @@ canUnifyWith = unifiesWith termEq
 -- -------------------------------------------------------------------------- --
 -- Lenses
 
-makeLenses ''Namespace
 makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''Interface

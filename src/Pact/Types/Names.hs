@@ -53,7 +53,7 @@ import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof, alphaNum, between, char)
 
 
 import Pact.Types.Info
-import Pact.Types.Parser
+import Pact.Types.Parser ( style )
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util

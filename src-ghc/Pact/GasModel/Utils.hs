@@ -83,6 +83,7 @@ import Pact.Types.Lang
 import Pact.Types.PactValue (toPactValueLenient, PactValue(..))
 import Pact.Types.RowData
 import Pact.Types.Runtime
+import Pact.Types.Namespace
 import Pact.Parse
 
 

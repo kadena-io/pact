@@ -51,6 +51,7 @@ module Pact.Eval
 
 import Bound
 import Control.Lens hiding (DefName)
+import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -82,7 +83,7 @@ import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
-import Control.DeepSeq
+import Pact.Types.Namespace
 
 #ifdef ADVICE
 import Pact.Types.Advice
