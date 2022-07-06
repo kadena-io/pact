@@ -22,8 +22,8 @@ testFromJSON = do
   it "just list, no namespace" $
     eitherDecode "[\"a\",\"b\"]" `shouldBe` Right ks
   it "full read from JSON, namespaced" $
-    eitherDecode "{ \"keys\": [\"a\",\"b\"], \"pred\": \"keys-all\" }" `shouldBe` Right ksn
+    eitherDecode "{ \"keys\": [\"a\",\"b\"], \"pred\": \"keys-all\", \"ns\": \"ns\" }"
+      `shouldBe` Right ksn
   it "object no pred, namespaced" $
-    eitherDecode "{ \"keys\": [\"a\",\"b\"]}" `shouldBe` Right ksn
-  it "just list, namespaced" $
-    eitherDecode "[\"a\",\"b\"]" `shouldBe` Right ksn
+    eitherDecode "{ \"keys\": [\"a\",\"b\"], \"ns\": \"ns\"}"
+      `shouldBe` Right ksn

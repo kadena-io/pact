@@ -117,10 +117,7 @@ instance Arbitrary KeySet where
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
 instance FromJSON KeySet where
-    parseJSON v = withObject
-      "KeySet"
-      (\o -> keyListPred o <|> keyListOnly o)
-      v
+    parseJSON v = withObject "KeySet" keyListPred v <|> keyListOnly v
       where
         defPred = Name (BareName "keys-all" def)
 
