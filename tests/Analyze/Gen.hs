@@ -692,7 +692,7 @@ genEnv = GenEnv
         SCons (SSymbol @"name") SStr
           SNil
     )]
-  [ (Pact.mkKeySet [alice, bob] "keys-all", Guard 0)
-  , (Pact.mkKeySet [alice, bob] "keys-any", Guard 1)
-  , (Pact.mkKeySet [alice, bob] "keys-2", Guard 2)
+  [ (Pact.mkKeySet [alice, bob] "keys-all" Nothing, Guard 0)
+  , (Pact.mkKeySet [alice, bob] "keys-any" Nothing, Guard 1)
+  , (Pact.mkKeySet [alice, bob] "keys-2" Nothing, Guard 2)
   ]

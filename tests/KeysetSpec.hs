@@ -13,7 +13,7 @@ spec = describe "fromJSON" testFromJSON
 
 testFromJSON :: Spec
 testFromJSON = do
-  let ks = mkKeySet ["a","b"] "keys-all"
+  let ks = mkKeySet ["a","b"] "keys-all" Nothing
   it "full read from JSON" $
     eitherDecode "{ \"keys\": [\"a\",\"b\"], \"pred\": \"keys-all\" }" `shouldBe` Right ks
   it "object no pred" $
