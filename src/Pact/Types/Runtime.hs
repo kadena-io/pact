@@ -148,6 +148,8 @@ data ExecutionFlag
   | FlagDisablePact43
   -- | Disable pact 4.3 features
   | FlagDisablePact431
+  -- | Disable pact 4.4 features
+  | FlagDisablePact44
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

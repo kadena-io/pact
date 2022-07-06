@@ -79,11 +79,18 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      ksn <- use (evalRefs . rsNamespace) >>= \case
-        Nothing -> pure $ KeySetName name
-        Just ns -> do
-          let NamespaceName nsn = _nsName ns
-          pure $ KeySetName $ nsn <> "." <> name
+      ksn <- use (evalRefs . rsNamespace) >>= \mNs ->
+        ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName name)
+        (case mNs of
+          Nothing ->
+            -- disallow creating keysets outside of a namespace
+            evalError' fi "Cannot define keysets outside of a namespace"
+          Just (Namespace (NamespaceName nsn) _ ug) -> do
+            -- If we're in a namespace, enforce user guard early
+            -- to avoid spending more time on defining the keyset.
+            enforceGuard fi ug
+            pure $ KeySetName $ nsn <> "." <> name)
 
       let i = _faInfo fi
 

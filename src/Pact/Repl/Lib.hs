@@ -77,7 +77,7 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
-
+import Pact.Types.Namespace
 
 initLibState :: Loggers -> Maybe String -> IO LibState
 initLibState loggers verifyUri = do
