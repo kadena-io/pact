@@ -330,6 +330,7 @@ test-suite hspec
 
   build-depends:
     , aeson
+    , attoparsec
     , base
     , bound
     , bytestring

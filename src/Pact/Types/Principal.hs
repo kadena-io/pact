@@ -5,12 +5,6 @@
 module Pact.Types.Principal
 ( Principal(..)
 , _W, _K, _R, _U, _M, _P
-, kKey
-, wHash, wPred
-, rName
-, uFuncName, uArgsHash
-, mModName, mGuardName
-, pPactId, pFuncName
 , principalParser
 , guardToPrincipal
 , mkPrincipalIdent
@@ -60,38 +54,13 @@ data Principal
   deriving Eq
 makePrisms ''Principal
 
-kKey :: Traversal' Principal PublicKey
-kKey = _K
+instance Show Principal where
+  show = T.unpack . showPrincipalType
 
-wHash :: Traversal' Principal Text
-wHash = _W . _1
-
-wPred :: Traversal' Principal Text
-wPred = _W . _2
-
-rName :: Traversal' Principal Text
-rName = _R
-
-uFuncName :: Traversal' Principal Text
-uFuncName = _U . _1
-
-uArgsHash :: Traversal' Principal Text
-uArgsHash = _U . _2
-
-mModName :: Traversal' Principal ModuleName
-mModName = _M . _1
-
-mGuardName :: Traversal' Principal Text
-mGuardName = _M . _2
-
-pPactId :: Traversal' Principal PactId
-pPactId = _P . _1
-
-pFuncName :: Traversal' Principal Text
-pFuncName = _P . _2
-
--- wEncodedHash :: Traversal'
-
+-- | Given a principal type, construct its textual representation
+--
+-- Invariant: should roundtrip with parser.
+--
 mkPrincipalIdent :: Principal -> Text
 mkPrincipalIdent = \case
   P pid n -> "p:" <> asString pid <> ":" <> asString n
@@ -101,6 +70,8 @@ mkPrincipalIdent = \case
   U n ph -> "u:" <> asString n <> ":" <> asString ph
   M mn n -> "m:" <> asString mn <> ":" <> asString n
 
+-- | Show a principal guard type as a textual value
+--
 showPrincipalType :: Principal -> Text
 showPrincipalType = \case
   K{} -> "k:"
@@ -110,6 +81,8 @@ showPrincipalType = \case
   M{} -> "m:"
   P{} -> "p:"
 
+-- | Parser producing a principal value from a textual representation.
+--
 principalParser :: HasInfo i => i -> Parser Principal
 principalParser (getInfo -> i) = kParser
   <|> wParser
@@ -182,6 +155,8 @@ principalParser (getInfo -> i) = kParser
       eof'
       pure $ U n h
 
+-- | Given a pact guard, convert to a principal type
+--
 guardToPrincipal :: Guard (Term Name) -> Eval e Principal
 guardToPrincipal = \case
   GPact (PactGuard pid n) -> pure $ P pid n
