@@ -160,7 +160,8 @@ principalParser (getInfo -> i) = kParser
 guardToPrincipal :: Guard (Term Name) -> Eval e Principal
 guardToPrincipal = \case
   GPact (PactGuard pid n) -> pure $ P pid n
-  GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
+  -- TODO later: revisit structure of principal k and w accounts in light of namespaces
+  GKeySet (KeySet ks pf _) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> pure $ K k
     (l,fun) -> pure $ W (asString $ mkHash $ map _pubKey l) fun
   GKeySetRef (KeySetName n) -> pure $ R n
