@@ -3,12 +3,17 @@ module Pact.Core.Info
  , combineSpan
  ) where
 
+import Data.Default
+
 data LineInfo
   = LineInfo
   { _liLine :: !Int
   , _liColumn :: !Int
   , _liSpan :: !Int
   } deriving (Eq, Show)
+
+instance Default LineInfo where
+  def = LineInfo 0 0 0
 
 -- | Combine two Line infos
 -- and spit out how far down the expression spans.

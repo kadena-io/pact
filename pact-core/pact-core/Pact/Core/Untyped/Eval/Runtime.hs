@@ -27,6 +27,11 @@ module Pact.Core.Untyped.Eval.Runtime
  , ckeData
  , ckeTxHash
  , ckeResolveName
+ , ckePactDb
+ , ckeSigs
+ , fromPactValue
+ , checkPactValueType
+ , Closure(..)
  ) where
 
 
@@ -34,8 +39,10 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Data.Void
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Data.Set(Set)
 import Data.Vector(Vector)
 -- import Data.List.NonEmpty(NonEmpty(..))
 import Data.RAList(RAList)
@@ -51,6 +58,8 @@ import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Untyped.Term
 import Pact.Core.Literal
+import Pact.Core.Persistence
+import Pact.Core.Type
 import qualified Pact.Core.Pretty as P
 
 -- | The top level env map
@@ -67,6 +76,11 @@ type HasRuntimeEnv b i = (?cekRuntimeEnv :: RuntimeEnv b i)
 
 type CEKRuntime b i = (HasTLEnv b i, HasBuiltinEnv b i, HasRuntimeEnv b i, Enum b)
 
+
+data Closure b i
+  = Closure !(EvalTerm b i) !(CEKEnv b i)
+  deriving Show
+
 -- | The type of our semantic runtime values
 data CEKValue b i
   = VLiteral !Literal
@@ -74,7 +88,7 @@ data CEKValue b i
   | VList !(Vector (CEKValue b i))
   | VClosure !(EvalTerm b i) !(CEKEnv b i)
   | VNative !(BuiltinFn b i)
-  | VGuard !(Guard Name (CEKValue b i))
+  | VGuard !(Guard FullyQualifiedName (CEKValue b i))
   deriving (Show)
 
 data CEKState b
@@ -118,9 +132,11 @@ data Cont b i
 
 data RuntimeEnv b i
   = RuntimeEnv
-  { _ckeData :: EnvData (EvalTerm b i)
+  { _ckeData :: EnvData PactValue
   , _ckeTxHash :: Hash
-  , _ckeResolveName :: QualifiedName -> EvalT b FullyQualifiedName
+  , _ckeResolveName :: QualifiedName -> Maybe FullyQualifiedName
+  , _ckeSigs :: Set PublicKey
+  , _ckePactDb :: PactDb b i
   }
 
 instance (Pretty b) => Show (BuiltinFn b i) where
@@ -151,3 +167,30 @@ instance Pretty b => Pretty (CEKValue b i) where
     VGuard _ -> error "undefined"
 
 makeLenses ''RuntimeEnv
+
+
+fromPactValue :: PactValue -> CEKValue b i
+fromPactValue = \case
+  PLiteral lit -> VLiteral lit
+  PList vec -> VList (fromPactValue <$> vec)
+  PObject o ->
+    VObject (fromPactValue <$> o)
+  PGuard gu ->
+    VGuard (fromPactValue <$> gu)
+
+checkPactValueType :: Type Void -> PactValue -> Bool
+checkPactValueType ty = \case
+  PLiteral lit -> typeOfLit lit == ty
+  PList vec -> case ty of
+    TyList t -> V.null vec || all (checkPactValueType t) vec
+    _ -> False
+  PObject m -> case ty of
+    TyRow r -> case r of
+      EmptyRow -> Map.null m
+      RowTy rm rv ->
+        maybe True absurd rv
+        && Map.keys rm == Map.keys m
+        && and (Map.intersectionWith checkPactValueType rm m)
+      RowVar v -> absurd v
+    _ -> False
+  PGuard _ -> ty == TyGuard

@@ -33,20 +33,26 @@ module Pact.Core.Untyped.Eval.CEK
  , coreBuiltinRuntime
  ) where
 
-import Control.Lens hiding (from, to, op)
+import Control.Lens hiding (op)
+import Control.Monad(guard)
 import Control.Monad.Catch
 import Control.Exception(throw)
+import Control.Monad.IO.Class(liftIO)
 import Data.Bits
+import Data.Char(isHexDigit)
 import Data.Decimal(roundTo', Decimal)
 import Data.Text(Text)
 import Data.Vector(Vector)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Primitive(Array, indexArray)
+import Data.Void
 import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Vector as V
 import qualified Data.Primitive.Array as Array
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Set as Set
 
 import Pact.Core.Names
 import Pact.Core.Builtin
@@ -54,6 +60,9 @@ import Pact.Core.Literal
 import Pact.Core.Errors
 import Pact.Core.PactValue
 import Pact.Core.Guards
+import Pact.Core.Type
+import Pact.Core.Persistence
+import Pact.Core.Hash
 
 import Pact.Core.Untyped.Term
 import Pact.Core.Untyped.Eval.Runtime
@@ -113,6 +122,10 @@ eval = evalCEK Mt
       v' <- evalCEK Mt env v
       out <- objUpdate f o' v'
       returnCEK cont out
+    ReadEnvObject ty o -> do
+      o' <- evalCEK Mt env o
+      v' <- coreReadObject ty o'
+      returnCEK cont v'
   returnCEK
     :: CEKRuntime b i
     => Cont b i
@@ -132,7 +145,7 @@ eval = evalCEK Mt
   applyLam (VNative (BuiltinFn b fn arity args)) arg cont
     | arity - 1 == 0 = fn (reverse (arg:args)) >>= returnCEK cont
     | otherwise = returnCEK cont (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
-  applyLam _ _ _ = error "applying to non-fun"
+  applyLam _ _ _ = failInvariant "Applying value to non-function"
   objAccess f (VObject o) = case Map.lookup f o of
     Just v -> pure v
     Nothing -> failInvariant "object access"
@@ -666,24 +679,24 @@ reverseList = mkBuiltinFn \case
 
 coreEnumerate :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 coreEnumerate = mkBuiltinFn \case
-  [VLiteral (LInteger from), VLiteral (LInteger to)] -> enum' from to
+  [VLiteral (LInteger from'), VLiteral (LInteger to')] -> enum' from' to'
   _ -> failInvariant "enumerate"
   where
   toVecList = VList . fmap (VLiteral . LInteger)
-  enum' from to
-    | to >= from = pure $ toVecList $ V.enumFromN from (fromIntegral (to - from + 1))
-    | otherwise = pure $ toVecList $ V.enumFromStepN from (-1) (fromIntegral (from - to + 1))
+  enum' from' to'
+    | to' >= from' = pure $ toVecList $ V.enumFromN from' (fromIntegral (to' - from' + 1))
+    | otherwise = pure $ toVecList $ V.enumFromStepN from' (-1) (fromIntegral (from' - to' + 1))
 
 coreEnumerateStepN :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 coreEnumerateStepN = mkBuiltinFn \case
-  [VLiteral (LInteger from), VLiteral (LInteger to), VLiteral (LInteger step)] -> enum' from to step
+  [VLiteral (LInteger from'), VLiteral (LInteger to'), VLiteral (LInteger step)] -> enum' from' to' step
   _ -> failInvariant "enumerate-step"
   where
   toVecList = VList . fmap (VLiteral . LInteger)
-  enum' from to step
-    | to > from && step > 0 = pure $ toVecList $ V.enumFromStepN from step (fromIntegral ((to - from + 1) `quot` step))
-    | from > to && step < 0 = pure $ toVecList $ V.enumFromStepN from step (fromIntegral ((from - to + 1) `quot` step))
-    | from == to && step == 0 = pure $ toVecList $ V.singleton from
+  enum' from' to' step
+    | to' > from' && step > 0 = pure $ toVecList $ V.enumFromStepN from' step (fromIntegral ((to' - from' + 1) `quot` step))
+    | from' > to' && step < 0 = pure $ toVecList $ V.enumFromStepN from' step (fromIntegral ((from' - to' + 1) `quot` step))
+    | from' == to' && step == 0 = pure $ toVecList $ V.singleton from'
     | otherwise = throwM (EnumeratationError "enumerate outside interval bounds")
 
 concatList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
@@ -693,6 +706,27 @@ concatList = mkBuiltinFn \case
     pure (VList (V.concat (V.toList li')))
   _ -> failInvariant "takeList"
 
+
+coreEnforce :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreEnforce = mkBuiltinFn \case
+  [VLiteral (LBool b), VLiteral (LString s)] ->
+    if b then pure (VLiteral LUnit)
+    else throwM (EnforceException s)
+  _ -> failInvariant "enforce"
+
+coreEnforceOne :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreEnforceOne = mkBuiltinFn \case
+  [VList v, VLiteral (LString msg)] ->
+    enforceFail msg (V.toList v)
+  _ -> failInvariant "coreEnforceOne"
+  where
+  handler msg rest = \case
+    EnforceException _ -> enforceFail msg rest
+    e -> throwM e
+  enforceClo _ [] = pure (VLiteral LUnit)
+  enforceClo msg (x:xs) = catch (unsafeApplyOne x (VLiteral LUnit)) (handler msg xs)
+  enforceFail msg [] = throwM (EnforceException msg)
+  enforceFail msg as = enforceClo msg as
 -----------------------------------
 -- Guards and reads
 -----------------------------------
@@ -705,8 +739,8 @@ coreReadInteger :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 coreReadInteger = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
-      Just term -> eval RAList.Nil term >>= \case
-        t@(VLiteral LInteger{}) -> pure t
+      Just pv -> case pv of
+        PLiteral l@LInteger{} -> pure (VLiteral l)
         _ -> throwM (ReadException (readError s "integer"))
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-integer"
@@ -715,8 +749,8 @@ coreReadString :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 coreReadString = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
-      Just term -> eval RAList.Nil term >>= \case
-        t@(VLiteral LString{}) -> pure t
+      Just pv-> case pv of
+        PLiteral l@LString{} -> pure (VLiteral l)
         _ -> throwM (ReadException (readError s "string"))
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-string"
@@ -725,19 +759,19 @@ coreReadDecimal :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 coreReadDecimal = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
-      Just term -> eval RAList.Nil term >>= \case
-        t@(VLiteral LDecimal{}) -> pure t
+      Just pv -> case pv of
+        PLiteral l@LDecimal{} -> pure (VLiteral l)
         _ -> throwM (ReadException (readError s "decimal"))
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-decimal"
 
-coreReadObject :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-coreReadObject = mkBuiltinFn \case
-  [VLiteral (LString s)] ->
+coreReadObject :: CEKRuntime b i => Row Void -> CEKValue b i  -> EvalT b (CEKValue b i)
+coreReadObject ty = \case
+  VLiteral (LString s) ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
-      Just term -> eval RAList.Nil term >>= \case
-        t@VObject{} -> pure t
-        _ -> throwM (ReadException (readError s "decimal"))
+      Just pv -> case pv of
+        t@PObject{} | checkPactValueType (TyRow ty) t -> pure (fromPactValue t)
+        _ -> throwM (ReadException (readError s "object"))
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "readObject"
 
@@ -745,16 +779,80 @@ coreReadKeyset :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 coreReadKeyset = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
-      Just term -> eval RAList.Nil term >>= \case
-        VObject{} -> error "todo"
+      Just pv -> case pv of
+        PObject m -> case lookupKs m of
+          Just ks -> pure (VGuard (GKeyset ks))
+          _ -> throwM (ReadException "Invalid keyset format")
         _ -> throwM (ReadException (readError s "decimal"))
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-keyset"
+  where
+  -- Todo: public key parsing.
+  -- This is most certainly wrong, it needs more checks.
+  lookupKs m = do
+    ks <- Map.lookup (Field "keys") m >>= \case
+      PList v -> do
+        o <- traverse (preview (_PLiteral . _LString)) v
+        guard (all (T.all isHexDigit) o)
+        pure $ Set.fromList $ V.toList (PublicKey . T.encodeUtf8 <$> o)
+      _ -> Nothing
+    kspred <- case Map.lookup (Field "pred") m of
+      (Just (PLiteral LString{})) -> pure KeysAll
+      Just _ -> Nothing
+      Nothing -> pure KeysAll
+    pure (KeySet ks kspred)
+
 
 coreKeysetRefGuard :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 coreKeysetRefGuard = mkBuiltinFn \case
   [VLiteral (LString s)] -> pure (VGuard (GKeySetRef (KeySetName s)))
   _ -> failInvariant "keyset-ref-guard"
+
+coreEnforceGuard :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreEnforceGuard = mkBuiltinFn \case
+  [VGuard v] -> case v of
+    GKeyset ks -> enforceKeySet ks
+    GKeySetRef ksr -> enforceKeySetRef ksr
+    GUserGuard ug -> enforceUserGuard ug
+  _ -> failInvariant "enforceGuard"
+
+enforceKeySet :: CEKRuntime b i => KeySet name -> EvalT b (CEKValue b i)
+enforceKeySet (KeySet keys p) = do
+  let sigs = _ckeSigs ?cekRuntimeEnv
+      matched = Set.size $ Set.filter (`Set.member` keys) sigs
+      count = Set.size keys
+  case p of
+    KeysAll | matched == count -> pure (VLiteral LUnit)
+    Keys2 | matched >= 2 -> pure (VLiteral LUnit)
+    KeysAny | matched > 0 -> pure (VLiteral LUnit)
+    _ -> throwM (EnforceException "cannot match keyset predicate")
+
+enforceKeySetRef :: CEKRuntime b i => KeySetName -> EvalT b (CEKValue b i)
+enforceKeySetRef ksr = do
+  let pactDb = _ckePactDb ?cekRuntimeEnv
+  liftIO (_readKeyset pactDb ksr) >>= \case
+    Just ks -> enforceKeySet ks
+    Nothing -> throwM (EnforceException "no such keyset")
+
+enforceUserGuard :: CEKRuntime b i => CEKValue b i -> EvalT b (CEKValue b i)
+enforceUserGuard = \case
+  v@VClosure{} -> unsafeApplyOne v (VLiteral LUnit) >>= \case
+    VLiteral LUnit -> pure (VLiteral LUnit)
+    _ -> failInvariant "expected a function returning unit"
+  _ -> failInvariant "invalid type for user closure"
+
+createUserGuard :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+createUserGuard = mkBuiltinFn \case
+  [v@VClosure{}] -> pure (VGuard (GUserGuard v))
+  _ -> failInvariant "create-user-guard"
+
+listAccess :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+listAccess = mkBuiltinFn \case
+  [VLiteral (LInteger i), VList vec] ->
+    case vec V.!? fromIntegral i of
+      Just v -> pure v
+      _ -> throwM ArrayOutOfBoundsException
+  _ -> failInvariant "list-access"
 
 -----------------------------------
 -- Other Core forms
@@ -765,6 +863,26 @@ coreIf = mkBuiltinFn \case
   [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
     if b then eval tenv tbody else  eval fenv fbody
   _ -> failInvariant "if"
+
+coreB64Encode :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreB64Encode = mkBuiltinFn \case
+  [VLiteral (LString l)] ->
+    pure $ VLiteral $ LString $ toB64UrlUnpaddedText $ T.encodeUtf8 l
+  _ -> failInvariant "base64-encode"
+
+
+coreB64Decode :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreB64Decode = mkBuiltinFn \case
+  [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
+    Left{} -> throwM (DecodeError "invalid b64 encoding")
+    Right txt -> pure (VLiteral (LString txt))
+  _ -> failInvariant "base64-encode"
+
+
+
+-----------------------------------
+-- Core definitions
+-----------------------------------
 
 unimplemented :: BuiltinFn CoreBuiltin i
 unimplemented = error "unimplemented"
@@ -886,21 +1004,20 @@ coreBuiltinFn = \case
   EqUnit -> eqUnit EqUnit
   NeqUnit -> neqUnit NeqUnit
   ShowUnit -> showUnit ShowUnit
-  Enforce -> unimplemented
-  EnforceOne -> unimplemented
+  Enforce -> coreEnforce Enforce
+  EnforceOne -> coreEnforceOne EnforceOne
   Enumerate -> coreEnumerate Enumerate
   EnumerateStepN -> coreEnumerateStepN EnumerateStepN
   ReadInteger -> coreReadInteger ReadInteger
   ReadDecimal -> coreReadDecimal ReadDecimal
   ReadString -> coreReadString ReadString
   ReadKeyset -> coreReadKeyset ReadKeyset
-  ReadObject -> coreReadObject ReadObject
-  EnforceGuard -> unimplemented
+  EnforceGuard -> coreEnforceGuard EnforceGuard
   KeysetRefGuard -> coreKeysetRefGuard KeysetRefGuard
-  CreateUserGuard -> unimplemented
-  ListAccess -> unimplemented
-  B64Encode -> unimplemented
-  B64Decode -> unimplemented
+  CreateUserGuard -> createUserGuard CreateUserGuard
+  ListAccess -> listAccess ListAccess
+  B64Encode -> coreB64Encode B64Encode
+  B64Decode -> coreB64Decode B64Decode
 
 coreBuiltinRuntime :: Array.Array (BuiltinFn CoreBuiltin i)
 coreBuiltinRuntime = Array.arrayFromList (coreBuiltinFn <$> [minBound .. maxBound])

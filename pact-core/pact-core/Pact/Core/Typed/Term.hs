@@ -245,6 +245,8 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
         "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
       ObjectExtend f v o ->
         "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
+      ReadEnvObject ty o ->
+        "read-object" <+> "@{" <> pretty ty <> "}" <> pretty o
     ListLit ty (V.toList -> li) _ ->
       (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Builtin b _ -> pretty b

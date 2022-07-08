@@ -36,6 +36,7 @@ import Control.Monad.ST
 import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
 import Control.Monad.Except
 import Control.Exception(throwIO, catch)
+import Data.Void
 import Data.Dynamic (Typeable)
 import Data.Functor(($>))
 import Data.IntMap.Strict(IntMap)
@@ -1030,6 +1031,11 @@ inferTerm = \case
       unify tyInst (TyFun vTyp (TyFun objTyp tv))
       let term' = Typed.ObjectOp (ObjectExtend f o' v') i
       pure (tv, term', pv ++ pobj ++ preds)
+    ReadEnvObject row o -> do
+      (oTyp, o', po) <- inferTerm o
+      unify TyString oTyp
+      let term' = Typed.ObjectOp (ReadEnvObject row o') i
+      pure (TyRow (absurd <$> row), term', po)
   IR.ListLit li i -> do
     tv <- TyVar <$> newTvRef
     liTup <- traverse inferTerm li
@@ -1201,6 +1207,8 @@ debruijnizeTermTypes = dbj [] 0
         v' <- dbj env depth v
         o' <- dbj env depth o
         pure (ObjectExtend f v' o')
+      ReadEnvObject row o ->
+        ReadEnvObject row <$> dbj env depth o
     Typed.ListLit ty v i ->
       Typed.ListLit <$> dbjTyp env depth ty <*> traverse (dbj env depth) v <*> pure i
     Typed.Builtin (b, tys, preds) i -> do
@@ -1443,8 +1451,6 @@ rawBuiltinType = \case
     TypeScheme [] [] (TyString :~> TyString)
   RawReadKeyset ->
     TypeScheme [] [] (TyString :~> TyGuard)
-  RawReadObject ->
-    TypeScheme [nd "a" 0] [] (TyString :~> TyRow (RowVar (nd "a" 0)))
   RawEnforceGuard ->
     TypeScheme [] [] (TyGuard :~> TyUnit)
   RawKeysetRefGuard ->

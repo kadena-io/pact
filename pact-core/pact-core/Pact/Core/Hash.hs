@@ -27,6 +27,8 @@ module Pact.Core.Hash
 , pactInitialHash
 , pactHashLength
 , typedHashToText
+, toB64UrlUnpaddedText
+, fromB64UrlUnpaddedText
 ) where
 
 import Control.DeepSeq
@@ -40,6 +42,7 @@ import GHC.Generics
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64.URL as B64URL
+import qualified Data.Text.Encoding as T
 
 import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
@@ -137,10 +140,22 @@ equalWord8 :: Word8
 equalWord8 = toEnum $ fromEnum '='
 
 toB64UrlUnpaddedText :: ByteString -> Text
-toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
+toB64UrlUnpaddedText  = decodeUtf8 . encodeBase64UrlUnpadded
 
 encodeBase64UrlUnpadded :: ByteString -> ByteString
 encodeBase64UrlUnpadded = fst . B.spanEnd (== equalWord8) . B64URL.encode
+
+decodeBase64UrlUnpadded :: ByteString -> Either String ByteString
+decodeBase64UrlUnpadded = B64URL.decode . pad
+  where pad t = let s = B.length t `mod` 4 in t <> B.replicate ((4 - s) `mod` 4) equalWord8
+
+fromB64UrlUnpaddedText :: ByteString -> Either String Text
+fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
+  Right bs' -> case T.decodeUtf8' bs' of
+    Left _ -> Left $ "Base64URL decode failed: invalid unicode"
+    Right t -> Right t
+  Left e -> Left $ "Base64URL decode failed: " ++ e
+
 
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show)

@@ -19,6 +19,7 @@ module Pact.Core.Builtin
  , BuiltinArity(..)
  )where
 
+import Data.Void(Void)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 
@@ -26,6 +27,7 @@ import qualified Data.Map.Strict as Map
 
 import Pact.Core.Names
 import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Type
 
 -- data EnvReadOp
 --   = EnvReadInteger
@@ -56,7 +58,7 @@ data ObjectOp o
   | ObjectExtend Field o o
   -- extend[k:=v](o)
   -- For some {r}, extend with
-  -- | ObjectEnvRead Field EnvReadOp
+  | ReadEnvObject (Row Void) o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 {-
@@ -200,7 +202,6 @@ data RawBuiltin
   | RawReadDecimal
   | RawReadString
   | RawReadKeyset
-  | RawReadObject
   | RawEnforceGuard
   | RawKeysetRefGuard
   | RawCreateUserGuard
@@ -271,7 +272,6 @@ rawBuiltinToText = \case
   RawReadDecimal -> "read-decimal"
   RawReadString -> "read-string"
   RawReadKeyset -> "read-keyset"
-  RawReadObject -> "read-object"
   RawEnforceGuard -> "enforce-guard"
   RawKeysetRefGuard -> "keyset-ref-guard"
   RawCreateUserGuard -> "create-user-guard"
@@ -414,7 +414,6 @@ data CoreBuiltin
   | ReadDecimal
   | ReadString
   | ReadKeyset
-  | ReadObject
   | EnforceGuard
   | KeysetRefGuard
   | CreateUserGuard
@@ -618,7 +617,6 @@ instance BuiltinArity CoreBuiltin where
     ReadDecimal -> 1
     ReadString -> 1
     ReadKeyset -> 1
-    ReadObject -> 1
     EnforceGuard -> 1
     KeysetRefGuard -> 1
     CreateUserGuard -> 1
@@ -753,7 +751,6 @@ coreBuiltinToText = \case
   ReadDecimal -> "read-decimal"
   ReadString -> "read-string"
   ReadKeyset -> "read-keyset"
-  ReadObject -> "read-object"
   EnforceGuard -> "enforce-guard"
   KeysetRefGuard -> "keyset-ref-guard"
   CreateUserGuard -> "create-user-guard"

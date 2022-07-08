@@ -8,6 +8,7 @@ module Pact.Core.Guards
 , KeySet(..)
 , Guard(..)
 , UserGuard(..)
+, KSPredicate(..)
 )
 where
 
@@ -31,7 +32,7 @@ data KSPredicate name
   = KeysAll
   | Keys2
   | KeysAny
-  | CustomPredicate name
+  -- | CustomPredicate name
   deriving (Eq, Show, Ord)
 
 data KeySet name
@@ -44,14 +45,14 @@ data UserGuard name term
   = UserGuard
   { _ugFunction :: name
   , _ugArgs :: [term] }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Guard name term
   = GKeyset (KeySet name)
   | GKeySetRef KeySetName
   | GUserGuard term
   -- | GUserGuard (UserGuard name term)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data Namespace name term
   = Namespace

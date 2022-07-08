@@ -138,7 +138,7 @@ toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 fromB64UrlUnpaddedText :: ByteString -> Either String Text
 fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
   Right bs' -> case decodeUtf8' bs' of
-    Left _ -> Left $ "Base64URL decode failed: invalid unicode"
+    Left _ -> Left "Base64URL decode failed: invalid unicode"
     Right t -> Right t
   Left e -> Left $ "Base64URL decode failed: " ++ e
 

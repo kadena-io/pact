@@ -170,6 +170,7 @@ eval = evalCEK Mt
       v' <- evalCEK Mt env v
       out <- objUpdate f o' v'
       returnCEK cont out
+    _ -> error "todo: implement"
   returnCEK
     :: CEKRuntime b i
     => Cont b i
@@ -905,7 +906,6 @@ coreBuiltinFn = \case
   ReadDecimal -> unimplemented
   ReadString -> unimplemented
   ReadKeyset -> unimplemented
-  ReadObject -> unimplemented
   EnforceGuard -> unimplemented
   KeysetRefGuard -> unimplemented
   CreateUserGuard -> unimplemented

@@ -1,12 +1,21 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
-module Pact.Core.Literal where
+module Pact.Core.Literal
+ ( _LString
+ , _LInteger
+ , _LDecimal
+ , _LUnit
+ , _LBool
+ , _LTime
+ , Literal(..)) where
 
+import Control.Lens(makePrisms)
 import Data.Text(Text)
-import Pact.Time(UTCTime)
 import Data.Decimal
 
+import Pact.Time(UTCTime)
 import Pact.Core.Pretty
 
 data Literal
@@ -17,6 +26,8 @@ data Literal
   | LBool !Bool
   | LTime !UTCTime
   deriving (Show, Eq)
+
+makePrisms ''Literal
 
 instance Pretty Literal where
   pretty = \case

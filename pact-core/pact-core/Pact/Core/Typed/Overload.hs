@@ -351,8 +351,6 @@ resolveTerm = \case
       pure (Builtin ReadString i)
     (RawReadKeyset, _, _) ->
       pure (Builtin ReadKeyset i)
-    (RawReadObject, _, _) ->
-      pure (Builtin ReadObject i)
     (RawEnforceGuard, _, _) ->
       pure (Builtin EnforceGuard  i)
     (RawKeysetRefGuard, _, _) ->

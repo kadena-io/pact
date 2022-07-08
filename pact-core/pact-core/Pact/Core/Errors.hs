@@ -68,7 +68,7 @@ data ExecutionError
   | ReadException Text
   | ArithmeticException
   | EnumeratationError Text
-  | DecodeError
+  | DecodeError Text
   deriving Show
 
 instance Exception ExecutionError
