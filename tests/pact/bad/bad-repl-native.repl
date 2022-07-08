@@ -1,6 +1,6 @@
 (begin-tx)
 (module bad-repl-native G
   (defcap G () true)
-  (defun f () (env-sigs [{"bob",[]}])))
+  (defun f () (env-sigs [{'key: "bob",'caps: []}])))
 (commit-tx)
 (bad-repl-native.f)

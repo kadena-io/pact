@@ -5,6 +5,7 @@ import Test.Hspec
 import qualified Blake2Spec
 import qualified KeysetSpec
 import qualified RoundTripSpec
+import qualified PrincipalSpec
 
 #ifndef ghcjs_HOST_OS
 import qualified PactTestsSpec
@@ -35,6 +36,7 @@ main = hspec $ do
   describe "Blake2Spec" Blake2Spec.spec
   describe "KeysetSpec" KeysetSpec.spec
   describe "RoundTripSpec" RoundTripSpec.spec
+  describe "PrincipalSpec" PrincipalSpec.spec
 
 #ifndef ghcjs_HOST_OS
 

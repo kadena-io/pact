@@ -30,3 +30,4 @@ docs/ja/_build/
 coverage
 .pact-history
 */.pact-history
+hie.yaml

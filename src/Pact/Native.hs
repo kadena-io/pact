@@ -475,7 +475,12 @@ namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
         Just n@(Namespace ns' g _) -> do
           nsPactValue <- toNamespacePactValue info n
           computeGas' g0 fa (GPostRead (ReadNamespace nsPactValue)) $ do
-            enforceGuard fa g
+            -- Old behavior enforces ns at declaration.
+            -- New behavior enforces at ns-related action:
+            -- 1. Module install (NOT at module upgrade)
+            -- 2. Interface install (Interfaces non-upgradeable)
+            -- 3. Namespaced keyset definition (once #351 is in)
+            whenExecutionFlagSet FlagPreserveNamespaceUpgrade $ enforceGuard fa g
             success ("Namespace set to " <> (asString ns')) $
               evalRefs . rsNamespace .= (Just n)
         Nothing  -> evalError info $

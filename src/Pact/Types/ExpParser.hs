@@ -296,7 +296,7 @@ list' d = list >>= \l@(ListExp{..},_) ->
 -- | Recongize a list with specified delimiter and act on contents, committing.
 {-# INLINE withList #-}
 withList :: ListDelimiter -> (ListExp Info -> ExpParse s a) -> ExpParse s a
-withList d act = try $ list' d >>= enter >>= act >>= \a -> exit >> return a
+withList d act = list' d >>= enter >>= act >>= \a -> exit >> return a
 
 -- | 'withList' without providing ListExp arg to action, committing.
 {-# INLINE withList' #-}

@@ -543,9 +543,20 @@ d.G3
 
 (env-gas 0)
 (env-gaslog)
+(env-exec-config ['PreserveNamespaceUpgrade])
 (namespace "a")
 (env-gaslog)
 (expect "Cost: using namespace" 14 (env-gas))
+
+(rollback-tx)
+(begin-tx)
+(env-keys ["s"])
+(env-gas 0)
+(env-gaslog)
+(env-exec-config [])
+(namespace "a")
+(env-gaslog)
+(expect "Cost: using namespace w/o enforce" 13 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
@@ -720,4 +731,3 @@ d.G3
 
 (expect "new keys" 40004 (env-gas))
 (commit-tx)
-
