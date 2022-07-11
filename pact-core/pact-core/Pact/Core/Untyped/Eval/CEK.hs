@@ -28,7 +28,7 @@ module Pact.Core.Untyped.Eval.CEK
  , CEKState(..)
  , CEKRuntime
  , runCEK
- , runCEKCorebuiltin
+ , runCoreCEK
  , Cont(..)
  , coreBuiltinRuntime
  ) where
@@ -161,31 +161,30 @@ runCEK
   -- ^ Top levels
   -> Array (BuiltinFn b i)
   -- ^ Builtins
+  -> RuntimeEnv b i
+  -- ^ runtime environment
   -> EvalTerm b i
   -- ^ Term to evaluate
   -> IO (CEKValue b i, CEKState b)
-runCEK env builtins term = let
+runCEK env builtins renv term = let
   ?cekLoaded = env
   ?cekBuiltins = builtins
-  ?cekRuntimeEnv = undefined
+  ?cekRuntimeEnv = renv
   in let
     cekState = CEKState 0 (Just [])
   in runEvalT cekState (eval RAList.Nil term)
-{-# SPECIALISE runCEK
-  :: CEKTLEnv CoreBuiltin i
-  -> Array (BuiltinFn CoreBuiltin i)
-  -> EvalTerm CoreBuiltin i
-  -> IO (CEKValue CoreBuiltin i, CEKState CoreBuiltin) #-}
 
 -- | Run our CEK interpreter
 --   for only our core builtins
-runCEKCorebuiltin
+runCoreCEK
   :: CEKTLEnv CoreBuiltin i
   -- ^ Top levels
+  -> RuntimeEnv CoreBuiltin i
+  -- ^ Runtime environment
   -> EvalTerm CoreBuiltin i
   -- ^ Term to evaluate
   -> IO (CEKValue CoreBuiltin i, CEKState CoreBuiltin)
-runCEKCorebuiltin env =
+runCoreCEK env =
   runCEK env coreBuiltinRuntime
 
 ----------------------------------------------------------------------

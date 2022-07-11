@@ -26,7 +26,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , RuntimeEnv(..)
  , ckeData
  , ckeTxHash
- , ckeResolveName
+--  , ckeResolveName
  , ckePactDb
  , ckeSigs
  , fromPactValue
@@ -134,7 +134,7 @@ data RuntimeEnv b i
   = RuntimeEnv
   { _ckeData :: EnvData PactValue
   , _ckeTxHash :: Hash
-  , _ckeResolveName :: QualifiedName -> Maybe FullyQualifiedName
+  -- , _ckeResolveName :: QualifiedName -> Maybe FullyQualifiedName
   , _ckeSigs :: Set PublicKey
   , _ckePactDb :: PactDb b i
   }

@@ -115,7 +115,7 @@ interpretExpr (DesugarOutput desugared sup loaded' _) = do
   debugIfFlagSet DebugSpecializer resolved
   let untyped = fromTypedTerm resolved
   debugIfFlagSet DebugUntyped untyped
-  (value, _) <- liftIO (Runtime.runCEKCorebuiltin (_loAllLoaded loaded') untyped)
+  (value, _) <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded') undefined untyped)
   replLoaded .= loaded'
   pure value
 
@@ -202,7 +202,7 @@ interpretTopLevel (DesugarOutput desugared supply loaded deps) = do
         in (fqn, defTerm def)
 
     TLTerm resolved -> do
-      (value, _) <- liftIO (Runtime.runCEKCorebuiltin (_loAllLoaded loaded) resolved)
+      (value, _) <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded) undefined resolved)
       replLoaded .= loaded
       pure (InterpretValue value)
     TLInterface _ -> error "interfaces not yet supported"
