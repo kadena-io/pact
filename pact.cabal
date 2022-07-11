@@ -345,6 +345,7 @@ test-suite hspec
     Blake2Spec
     KeysetSpec
     RoundTripSpec
+    PrincipalSpec
 
   if !impl(ghcjs)
     other-modules:
