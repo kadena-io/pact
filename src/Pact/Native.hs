@@ -416,24 +416,19 @@ describeNamespaceDef = setTopLevelOnly $ defGasRNative
 
     describeNamespace :: GasRNativeFun e
     describeNamespace g0 i as = case as of
-      [TLitString nsn] -> go g0 i nsn
+      [TLitString nsn] -> do
+        readRow (getInfo i) Namespaces (NamespaceName nsn) >>= \case
+          Just ns@(Namespace nsn' user admin) -> do
+            let guardTermOf g = TGuard (fromPactValue <$> g) def
+
+            computeGas' g0 i (GPostRead (ReadNamespace ns)) $
+              pure $ toTObject dnTy def
+                [ (dnUserGuard, guardTermOf user)
+                , (dnAdminGuard, guardTermOf admin)
+                , (dnNamespaceName, toTerm $ renderCompactText nsn')
+                ]
+          Nothing -> evalError' i $ "Namespace not defined: " <> pretty nsn
       _ -> argsError i as
-
-    go g0 fi n = do
-      readRow (getInfo fi) Namespaces (NamespaceName n) >>= \case
-        Just ns@(Namespace nsn user admin) -> do
-          let guardTermOf g = TGuard (fromPactValue <$> g) def
-
-          computeGas' g0 fi (GPostRead (ReadNamespace ns)) $
-            pure $ toTObject dnTy def
-              [ (dnUserGuard, guardTermOf user)
-              , (dnAdminGuard, guardTermOf admin)
-              , (dnNamespaceName, toTerm $ renderCompactText nsn)
-              ]
-
-        Nothing -> evalError' fi $ "Namespace not defined: " <> pretty n
-
-
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
