@@ -405,7 +405,8 @@ describeNamespaceSchema = defSchema "described-namespace"
   ]
 
 describeNamespaceDef :: NativeDef
-describeNamespaceDef = defGasRNative "describe-namespace" describeNamespace
+describeNamespaceDef = setTopLevelOnly $ defGasRNative
+  "describe-namespace" describeNamespace
   (funType (tTyObject dnTy) [("ns", tTyString)])
   [LitExample "(describe-namespace 'my-namespace)"]
   "Describe the namespace NS, returning a row object containing \
@@ -419,22 +420,18 @@ describeNamespaceDef = defGasRNative "describe-namespace" describeNamespace
       _ -> argsError i as
 
     go g0 fi n = do
-      let i = getInfo fi
-
-      mNs <- readRow i Namespaces $ NamespaceName n
-
-      case mNs of
+      readRow (getInfo fi) Namespaces (NamespaceName n) >>= \case
         Just ns@(Namespace nsn user admin) -> do
           let guardTermOf g = TGuard (fromPactValue <$> g) def
 
           computeGas' g0 fi (GPostRead (ReadNamespace ns)) $
-            pure $ toTObject TyAny def
+            pure $ toTObject dnTy def
               [ (dnUserGuard, guardTermOf user)
               , (dnAdminGuard, guardTermOf admin)
               , (dnNamespaceName, toTerm $ renderCompactText nsn)
               ]
 
-        Nothing -> evalError i $ "Namespace not defined: " <> pretty n
+        Nothing -> evalError' fi $ "Namespace not defined: " <> pretty n
 
 
 

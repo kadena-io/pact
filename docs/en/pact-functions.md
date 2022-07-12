@@ -175,6 +175,8 @@ Describe the namespace NS, returning a row object containing the user and admin 
 (describe-namespace 'my-namespace)
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### distinct {#distinct}
 
