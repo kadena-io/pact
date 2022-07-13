@@ -197,9 +197,14 @@ parsedCompileEval src r = do
 
 
 handleCompile :: String -> Exp Parsed -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
-handleCompile src exp a =
+handleCompile src exp a = do
     case compile (mkStringInfo src) exp of
       Right t -> a t
+      -- special case for `with-capability` bareword due to
+      -- `with-capability` being a reserved word that fails to
+      -- compile if issued in the repl for doc purposes
+      Left{} | "with-capability" == (exp ^. _EAtom . to _atomAtom) ->
+          a $ TVar (Name (BareName "with-capability" def)) def
       Left er -> do
           case _iInfo (peInfo er) of
             Just (_,d) -> do
