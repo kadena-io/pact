@@ -202,6 +202,7 @@ defaultGasTable =
   ,("describe-module", 100)
   ,("describe-table", 100)
   ,("list-modules", 100)
+  ,("describe-namespace",100)
 
   -- History, massive tx penalty
   ,("keylog", 100000)

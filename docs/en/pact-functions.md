@@ -165,6 +165,19 @@ Create a namespace called NAMESPACE where ownership and use of the namespace is 
 Top level only: this function will fail if used in module code.
 
 
+### describe-namespace {#describe-namespace}
+
+*ns*&nbsp;`string` *&rarr;*&nbsp;`object:{described-namespace}`
+
+
+Describe the namespace NS, returning a row object containing the user and admin guards of the namespace, as well as its name.
+```lisp
+(describe-namespace 'my-namespace)
+```
+
+Top level only: this function will fail if used in module code.
+
+
 ### distinct {#distinct}
 
 *values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`

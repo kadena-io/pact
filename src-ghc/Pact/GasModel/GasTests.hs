@@ -178,22 +178,23 @@ unitTestFromDef nativeName = tests
       "read-keyset"    -> Just $ readKeysetTests nativeName
 
       -- Database native functions
-      "create-table"      -> Just $ createTableTests nativeName
-      "describe-keyset"   -> Just $ describeKeysetTests nativeName
-      "describe-module"   -> Just $ describeModuleTests nativeName
-      "describe-table"    -> Just $ describeTableTests nativeName
-      "insert"            -> Just $ insertTests nativeName
-      "keylog"            -> Just $ keylogTests nativeName
-      "keys"              -> Just $ keysTests nativeName
-      "read"              -> Just $ readTests nativeName
-      "select"            -> Just $ selectTests nativeName
-      "txids"             -> Just $ txidsTests nativeName
-      "txlog"             -> Just $ txlogTests nativeName
-      "update"            -> Just $ updateTests nativeName
-      "with-default-read" -> Just $ withDefaultReadTests nativeName
-      "with-read"         -> Just $ withReadTests nativeName
-      "write"             -> Just $ writeTests nativeName
-      "fold-db"           -> Just $ foldDBTests nativeName
+      "create-table"       -> Just $ createTableTests nativeName
+      "describe-keyset"    -> Just $ describeKeysetTests nativeName
+      "describe-module"    -> Just $ describeModuleTests nativeName
+      "describe-table"     -> Just $ describeTableTests nativeName
+      "describe-namespace" -> Just $ describeNamespaceTests nativeName
+      "insert"             -> Just $ insertTests nativeName
+      "keylog"             -> Just $ keylogTests nativeName
+      "keys"               -> Just $ keysTests nativeName
+      "read"               -> Just $ readTests nativeName
+      "select"             -> Just $ selectTests nativeName
+      "txids"              -> Just $ txidsTests nativeName
+      "txlog"              -> Just $ txlogTests nativeName
+      "update"             -> Just $ updateTests nativeName
+      "with-default-read"  -> Just $ withDefaultReadTests nativeName
+      "with-read"          -> Just $ withReadTests nativeName
+      "write"              -> Just $ writeTests nativeName
+      "fold-db"            -> Just $ foldDBTests nativeName
 
       -- Capabilities native functions
       "compose-capability"  -> Just $ composeCapabilityTests nativeName
@@ -544,6 +545,11 @@ describeKeysetTests = defGasUnitTests allExprs
       defPactExpression [text| (describe-keyset "$sampleLoadedKeysetName") |]
     allExprs = describeKeysetExpr :| []
 
+describeNamespaceTests :: NativeDefName -> GasUnitTests
+describeNamespaceTests = defGasUnitTests $ pure descNsTestExpr
+  where
+    descNsTestExpr = defPactExpression
+      [text| (describe-namespace "$sampleNamespaceName") |]
 
 createTableTests :: NativeDefName -> GasUnitTests
 createTableTests = defGasUnitTests allExprs

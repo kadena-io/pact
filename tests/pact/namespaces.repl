@@ -16,6 +16,22 @@
 (define-namespace 'alice (read-keyset 'alice-keys) (read-keyset 'alice-keys))
 (define-namespace 'bob (read-keyset 'bob-keys) (read-keyset 'bob-keys))
 
+(expect
+  "describe-namespace describes namespaces correctly - alice"
+  { "admin-guard": (read-keyset 'alice-keys)
+  , "namespace-name": "alice"
+  , "user-guard": (read-keyset 'alice-keys)
+  }
+  (describe-namespace 'alice))
+
+(expect
+  "describe-namespace describes namespaces correctly - bob"
+  { "admin-guard": (read-keyset 'bob-keys)
+  , "namespace-name": "bob"
+  , "user-guard": (read-keyset 'bob-keys)
+  }
+  (describe-namespace 'bob))
+
 ; Set tx namespace to 'alice'
 (namespace 'alice)
 

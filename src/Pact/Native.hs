@@ -51,6 +51,8 @@ module Pact.Native
     , atDef
     , chainDataSchema
     , cdChainId, cdBlockHeight, cdBlockTime, cdSender, cdGasLimit, cdGasPrice
+    , describeNamespaceSchema
+    , dnUserGuard, dnAdminGuard, dnNamespaceName
     , cdPrevBlockHash
     ) where
 
@@ -386,6 +388,48 @@ fromNamespacePactValue :: Namespace PactValue -> Namespace (Term Name)
 fromNamespacePactValue (Namespace n userg adming) =
   Namespace n (fromGuardPactValue userg) (fromGuardPactValue adming)
 
+dnUserGuard :: FieldKey
+dnUserGuard = "user-guard"
+
+dnAdminGuard :: FieldKey
+dnAdminGuard = "admin-guard"
+
+dnNamespaceName :: FieldKey
+dnNamespaceName = "namespace-name"
+
+describeNamespaceSchema :: NativeDef
+describeNamespaceSchema = defSchema "described-namespace"
+  "Schema type for data returned from 'describe-namespace'."
+  [ (dnUserGuard, tTyGuard Nothing)
+  , (dnAdminGuard, tTyGuard Nothing)
+  , (dnNamespaceName, tTyString)
+  ]
+
+describeNamespaceDef :: NativeDef
+describeNamespaceDef = setTopLevelOnly $ defGasRNative
+  "describe-namespace" describeNamespace
+  (funType (tTyObject dnTy) [("ns", tTyString)])
+  [LitExample "(describe-namespace 'my-namespace)"]
+  "Describe the namespace NS, returning a row object containing \
+  \the user and admin guards of the namespace, as well as its name."
+  where
+    dnTy = TyUser (snd describeNamespaceSchema)
+
+    describeNamespace :: GasRNativeFun e
+    describeNamespace g0 i as = case as of
+      [TLitString nsn] -> do
+        readRow (getInfo i) Namespaces (NamespaceName nsn) >>= \case
+          Just ns@(Namespace nsn' user admin) -> do
+            let guardTermOf g = TGuard (fromPactValue <$> g) def
+
+            computeGas' g0 i (GPostRead (ReadNamespace ns)) $
+              pure $ toTObject dnTy def
+                [ (dnUserGuard, guardTermOf user)
+                , (dnAdminGuard, guardTermOf admin)
+                , (dnNamespaceName, toTerm $ renderCompactText nsn')
+                ]
+          Nothing -> evalError' i $ "Namespace not defined: " <> pretty nsn
+      _ -> argsError i as
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
@@ -778,6 +822,7 @@ langDefs =
     ,intToStrDef
     ,hashDef
     ,defineNamespaceDef
+    ,describeNamespaceDef
     ,namespaceDef
     ,chainDataDef
     ,chainDataSchema
