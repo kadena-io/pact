@@ -68,10 +68,9 @@ instance Pretty BinaryOp where
 -- Todo: type constructors aren't 1-1 atm.
 data Type
   = TyPrim PrimType
-  | TyVar Text
   | TyFun Type Type
   | TyList Type
-  | TyObject (Map Field Type) (Maybe Text)
+  | TyObject (Map Field Type)
   | TyCap
   deriving Show
 
@@ -97,20 +96,16 @@ pattern TyUnit = TyPrim PrimUnit
 instance Pretty Type where
   pretty = \case
     TyPrim prim -> pretty prim
-    TyVar t -> pretty t
     TyFun l r -> case l of
       TyFun _ _ ->
         parens (pretty l) <+> "->" <+> pretty r
       _ -> pretty l <+> "->" <+> pretty r
     TyList t -> "List" <+> renderListParens t (pretty t)
-    TyObject fields r ->
-      "{" <> fold (intersperse ", " $ renderMapObjs <$> Map.toList fields) <> renderRowVar r <> "}"
+    TyObject fields ->
+      "{" <> fold (intersperse ", " $ renderMapObjs <$> Map.toList fields) <> "}"
     TyCap -> "Capability"
     where
     renderMapObjs (Field f, t) = pretty f <+> ":" <+> pretty t
-    renderRowVar = \case
-      Nothing -> mempty
-      Just rv -> " | "  <> pretty rv
     renderListParens = \case
       TyList _ -> parens
       TyFun _ _ -> parens

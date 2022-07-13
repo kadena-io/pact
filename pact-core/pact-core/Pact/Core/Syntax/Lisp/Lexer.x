@@ -31,7 +31,6 @@ $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
 @decimal = [$digit]+
 @integer = [$digit]+
-@tyvar = [\'][$lower]+
 
 
 tokens :-
@@ -99,7 +98,6 @@ tokens :-
     \"           { stringLiteral }
     @integer     { emit TokenNumber }
     @ident       { emit TokenIdent }
-    @tyvar       { emit TokenTyVar }
     \-\>         { token TokenTyArrow }
 
 {

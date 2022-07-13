@@ -79,7 +79,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   TYBOOL     { PosToken TokenTyBool _ }
   TYUNIT     { PosToken TokenTyUnit _ }
   '->'       { PosToken TokenTyArrow _ }
-  TYVAR      { PosToken (TokenTyVar _) _ }
   '=='       { PosToken TokenEq _ }
   '!='       { PosToken TokenNeq _ }
   '>'        { PosToken TokenGT _ }
@@ -178,7 +177,7 @@ Type :: { Type }
 
 Type1 :: { Type }
   : TYLIST Type { TyList $2 }
-  | '{' RowType '}' { TyObject (Map.fromList $2) Nothing }
+  | '{' RowType '}' { TyObject (Map.fromList $2) }
   | AtomicType { $1 }
 
 -- TyArrows :: { [Type] }
@@ -187,7 +186,6 @@ Type1 :: { Type }
 
 AtomicType :: { Type }
   : PrimType { TyPrim $1 }
-  | TYVAR { TyVar (getTyvar $1) }
 
 TyFieldPair :: { (Field, Type) }
   : IDENT ':' Type { (Field (getIdent $1), $3) }
@@ -350,7 +348,6 @@ combineSpans lexpr rexpr =
 getIdent (PosToken (TokenIdent x) _) = x
 getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
-getTyvar (PosToken (TokenTyVar x) _) = x
 getIdentField = Field . getIdent
 
 

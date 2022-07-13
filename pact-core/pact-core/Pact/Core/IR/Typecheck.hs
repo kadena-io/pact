@@ -110,8 +110,8 @@ type TCPred s = Pred (TvRef s)
 type TCOName s = OverloadedName (TCPred s)
 
 -- | Term emitted by desugar
-type IRTerm b i = IR.Term IRName TypeVar b i
-type IRModule b i = IR.Module IRName TypeVar b i
+type IRTerm b i = IR.Term IRName b i
+type IRModule b i = IR.Module IRName b i
 
 -- | Term emitted by the typechecker prior to final generalization/unification.
 type TCTerm s b i = Typed.Term (TCOName s) (TvRef s) (b, [TCType s], [TCPred s]) i
@@ -882,30 +882,32 @@ generalizeWithTerm' ty pp term = do
         Bound _ _ -> pure (ftvs, RowTy obj' mrv)
       Nothing -> pure (ftvs, RowTy obj' Nothing)
 
-liftTypeVar :: Type TypeVar -> InferT s b i (TCType s)
-liftTypeVar = \case
-  TyVar tyv -> liftRef tyv
-  TyPrim p -> pure (TyPrim p)
-  TyFun l r ->
-    TyFun <$> liftTypeVar l <*> liftTypeVar r
-  TyRow r -> TyRow <$> liftTVRow r
-  TyTable r -> TyTable <$> liftTVRow r
-  TyList l -> TyList <$> liftTypeVar l
-  TyGuard -> pure TyGuard
-  TyCap -> pure TyCap
-  TyForall _ _ -> fail "impossible"
-  where
-  -- Todo: Do we want to allow
-  -- bounded type variables to be captured and quantified by users?
-  -- Probably not, so this is just "fail" for now.
-  liftRef _ = fail "unsupported lifting of unbound variable"
-  liftTVRow = \case
-    EmptyRow -> pure EmptyRow
-    RowVar v -> RowVar <$> liftRef v
-    RowTy obj mrv -> do
-      obj' <- traverse liftTypeVar obj
-      mrv' <- traverse liftRef mrv
-      pure (RowTy obj' mrv')
+liftType :: Type Void -> Type a
+liftType = fmap absurd
+-- liftTypeVar :: Type Void -> InferT s b i (TCType s)
+-- liftTypeVar = \case
+--   TyVar tyv -> liftRef tyv
+--   TyPrim p -> pure (TyPrim p)
+--   TyFun l r ->
+--     TyFun <$> liftTypeVar l <*> liftTypeVar r
+--   TyRow r -> TyRow <$> liftTVRow r
+--   TyTable r -> TyTable <$> liftTVRow r
+--   TyList l -> TyList <$> liftTypeVar l
+--   TyGuard -> pure TyGuard
+--   TyCap -> pure TyCap
+--   TyForall _ _ -> fail "impossible"
+--   where
+--   -- Todo: Do we want to allow
+--   -- bounded type variables to be captured and quantified by users?
+--   -- Probably not, so this is just "fail" for now.
+--   liftRef _ = fail "unsupported lifting of unbound variable"
+--   liftTVRow = \case
+--     EmptyRow -> pure EmptyRow
+--     RowVar v -> RowVar <$> liftRef v
+--     RowTy obj mrv -> do
+--       obj' <- traverse liftTypeVar obj
+--       mrv' <- traverse liftRef mrv
+--       pure (RowTy obj' mrv')
 
 toOName :: IRName -> OverloadedName b
 toOName (IRName n nk u) =
@@ -954,7 +956,7 @@ inferTerm = \case
     pure (rty, Typed.Lam nts' e' i, preds)
     where
     withTypeInfo p = case snd p of
-      Just ty -> liftTypeVar ty
+      Just ty -> pure (liftType ty)
       Nothing -> TyVar <$> newTvRef
     mkNameTup name ty = (toOName name, ty)
   IR.App e args i -> do
@@ -970,7 +972,7 @@ inferTerm = \case
     enterLevel
     (te1, e1Unqual, pe1) <- inferTerm e1
     leaveLevel
-    _ <- _Just (liftTypeVar >=> unify te1) mty
+    _ <- _Just (unify te1 . liftType) mty
     -- todo: dictionary passing here still, potentially.
     -- we might want to remove generalization entirely, but it's
     -- cool that we get it for free right now.
@@ -1047,7 +1049,7 @@ inferTerm = \case
 -- We can't generalize yet since
 -- we're not allowing type schemes just yet.
 inferDefun
-  :: IR.Defun IRName TypeVar b i
+  :: IR.Defun IRName b i
   -> InferT s b i (TypedDefun b i)
 inferDefun (IR.Defun name dfTy term info) = do
   enterLevel
@@ -1055,35 +1057,33 @@ inferDefun (IR.Defun name dfTy term info) = do
   leaveLevel
   (deferred, retained) <- split preds
   unless (null deferred && null retained) $ fail "typeclass constraints not supported in defun"
-  dfTy' <- liftTypeVar dfTy
-  unify dfTy' termTy
+  unify (liftType dfTy) termTy
   fterm <- debruijnizeTermTypes term'
-  rty' <- debruijnizeType dfTy'
-  pure (Typed.Defun name rty' fterm info)
+  pure (Typed.Defun name (liftType dfTy) fterm info)
 
 inferDefConst
-  :: IR.DefConst IRName TypeVar b i
+  :: IR.DefConst IRName b i
   -> InferT s b i (TypedDefConst b i)
 inferDefConst (IR.DefConst name dcTy term info) = do
   enterLevel
   (termTy, term', preds) <- inferTerm term
   leaveLevel
   fterm <- debruijnizeTermTypes term'
-  dcTy' <- traverse liftTypeVar dcTy
+  let dcTy' = liftType <$> dcTy
   _ <- maybe (pure ()) (`unify` termTy) dcTy'
   unless (null preds) $ fail "typeclass constraints not supported in defun"
   rty' <- debruijnizeType (maybe termTy id dcTy')
   pure (Typed.DefConst name rty' fterm info)
 
 inferDef
-  :: IR.Def IRName TypeVar b i
+  :: IR.Def IRName b i
   -> InferT s b i (TypedDef b i)
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
   IR.DConst d -> Typed.DConst <$> inferDefConst d
 
 inferModule
-  :: IR.Module IRName TypeVar b i
+  :: IR.Module IRName b i
   -> InferT s b i (TypedModule b i)
 inferModule (IR.Module mname gov defs blessed imports impl mh) = do
   gov' <- traverse (dbjName [] 0 . toOName ) gov
@@ -1109,7 +1109,7 @@ inferTermNonGen t = do
   debruijnizeTermTypes t'
 
 inferTopLevel
-  :: IR.TopLevel IRName TypeVar b i
+  :: IR.TopLevel IRName b i
   -> InferT s b i (TypedTopLevel b i)
 inferTopLevel = \case
   IR.TLModule m -> Typed.TLModule <$> inferModule m
@@ -1117,7 +1117,7 @@ inferTopLevel = \case
   IR.TLInterface _ -> error "todo: implement interface inference"
 
 inferReplTopLevel
-  :: IR.ReplTopLevel IRName TypeVar b i
+  :: IR.ReplTopLevel IRName b i
   -> InferT s b i (TypedReplTopLevel b i)
 inferReplTopLevel = \case
   IR.RTLModule m -> Typed.RTLModule <$> inferModule m
@@ -1127,12 +1127,12 @@ inferReplTopLevel = \case
   IR.RTLInterface _ -> error "todo: implement interface inference"
 
 inferProgram
-  :: [IR.TopLevel IRName TypeVar b i]
+  :: [IR.TopLevel IRName b i]
   -> InferT s b i [TypedTopLevel b i]
 inferProgram = traverse inferTopLevel
 
 inferReplProgram
-  :: [IR.ReplTopLevel IRName TypeVar b i]
+  :: [IR.ReplTopLevel IRName b i]
   -> InferT s b i [TypedReplTopLevel b i]
 inferReplProgram = traverse inferReplTopLevel
 
@@ -1582,7 +1582,7 @@ runInferTopLevel
   :: Supply
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
-  -> IR.TopLevel IRName TypeVar b i
+  -> IR.TopLevel IRName b i
   -> IO (TypedTopLevel b i)
 runInferTopLevel u l bfn tl =
   stToIO $ runInfer u l bfn (inferTopLevel tl)
@@ -1591,7 +1591,7 @@ runInferProgram
   :: Supply
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
-  -> [IR.TopLevel IRName TypeVar b info]
+  -> [IR.TopLevel IRName b info]
   -> IO [TypedTopLevel b info]
 runInferProgram u l bfn prog =
   stToIO $ runInfer u l bfn $ inferProgram prog
@@ -1600,7 +1600,7 @@ runInferReplProgram
   :: Supply
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
-  -> [IR.ReplTopLevel IRName TypeVar b info]
+  -> [IR.ReplTopLevel IRName b info]
   -> IO [TypedReplTopLevel b info]
 runInferReplProgram u l bfn prog =
   stToIO $ runInfer u l bfn $ inferReplProgram prog

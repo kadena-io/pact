@@ -81,7 +81,6 @@ import Pact.Core.Syntax.New.LexUtils
   TYBOOL     { PosToken TokenTyBool _ }
   TYUNIT     { PosToken TokenTyUnit _ }
   '->'       { PosToken TokenTyArrow _ }
-  TYVAR      { PosToken (TokenTyVar _) _ }
   '='        { PosToken TokenAssign _ }
   '=='       { PosToken TokenEq _ }
   '!='       { PosToken TokenNeq _ }
@@ -200,12 +199,11 @@ Type :: { Type }
 Type1 :: { Type }
   : TYLIST AtomicType { TyList $2 }
   | TYLIST '(' Type ')' { TyList $3 }
-  | '{' RowType '}' { TyObject (Map.fromList $2) Nothing }
+  | '{' RowType '}' { TyObject (Map.fromList $2) }
   | AtomicType { $1 }
 
 AtomicType :: { Type }
   : PrimType { TyPrim $1 }
-  | TYVAR { TyVar (getTyvar $1) }
 
 TyFieldPair :: { (Field, Type) }
   : IDENT ':' Type { (Field (getIdent $1), $3) }
@@ -388,7 +386,6 @@ combineSpans lexpr rexpr =
 getIdent (PosToken (TokenIdent x) _) = x
 getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
-getTyvar (PosToken (TokenTyVar x) _) = x
 
 parseError (remaining, exp) =
   let rendered = renderTokenText . _ptToken <$> remaining

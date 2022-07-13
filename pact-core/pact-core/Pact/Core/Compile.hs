@@ -105,7 +105,7 @@ interpretExprLisp source = do
   interpretExpr desugared
 
 interpretExpr
-  :: DesugarOutput CoreBuiltin LineInfo (IR.Term IRName TypeVar RawBuiltin LineInfo)
+  :: DesugarOutput CoreBuiltin LineInfo (IR.Term IRName RawBuiltin LineInfo)
   -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared sup loaded' _) = do
   (ty, typed) <- liftIO (runInferTerm sup loaded' rawBuiltinType desugared)
@@ -142,7 +142,7 @@ interpretExprTypeNew source = do
   interpretExprType desugared
 
 interpretExprType
-  :: DesugarOutput CoreBuiltin LineInfo (IR.Term IRName TypeVar RawBuiltin LineInfo)
+  :: DesugarOutput CoreBuiltin LineInfo (IR.Term IRName RawBuiltin LineInfo)
   -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared sup loaded' _) = do
   (ty, typed) <- liftIO (runInferTerm sup loaded' rawBuiltinType desugared)
@@ -176,7 +176,7 @@ interpretProgramLisp source = do
 
 -- todo: Clean up function
 interpretTopLevel
-  :: DesugarOutput CoreBuiltin LineInfo (IR.TopLevel IRName TypeVar RawBuiltin LineInfo)
+  :: DesugarOutput CoreBuiltin LineInfo (IR.TopLevel IRName RawBuiltin LineInfo)
   -> ReplT CoreBuiltin (InterpretOutput CoreBuiltin LineInfo)
 interpretTopLevel (DesugarOutput desugared supply loaded deps) = do
   p <- use replPactDb

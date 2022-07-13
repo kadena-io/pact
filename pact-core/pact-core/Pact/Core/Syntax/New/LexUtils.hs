@@ -84,7 +84,6 @@ data Token
   | TokenTyBool
   | TokenTyUnit
   | TokenTyArrow
-  | TokenTyVar Text
   -- Operators
   | TokenAssign
   | TokenEq
@@ -267,7 +266,6 @@ renderTokenText = \case
   TokenTyBool -> "bool"
   TokenTyUnit -> "unit"
   TokenTyArrow -> "->"
-  TokenTyVar b -> "'" <> b
   TokenAssign -> "="
   TokenEq -> "=="
   TokenNeq -> "!="
