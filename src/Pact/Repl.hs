@@ -197,7 +197,7 @@ parsedCompileEval src r = do
 
 
 handleCompile :: String -> Exp Parsed -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
-handleCompile src exp a = do
+handleCompile src exp a =
     case compile (mkStringInfo src) exp of
       Right t -> a t
       -- special case for `with-capability` bareword due to
