@@ -50,13 +50,12 @@ data CapType
   | Unmanaged
   deriving Show
 
-
 data DefCap name builtin info
   = DefCap
   { _dcapName :: Text
   , _dcapArgs :: [Text]
   , _dcapTerm :: Term name builtin info
-  , _dcapManaged :: Maybe Int
+  , _dcapCapType :: CapType
   , _dcapType :: Type Void
   , _dcapInfo :: info
   } deriving Show

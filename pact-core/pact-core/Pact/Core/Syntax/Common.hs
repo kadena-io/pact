@@ -139,17 +139,24 @@ data DefConst expr i
   , _dcInfo :: i
   } deriving Show
 
+data Managed
+  = AutoManaged
+  | Managed Text ParsedName
+  deriving (Show)
+  --
+
 data DefCap expr i
   = DefCap
   { _dcapName :: Text
   , _dcapArgs :: ![Arg]
+  , _dcapManaged :: Maybe Managed
   , _dcapTerm :: expr
   } deriving Show
 
 data Def expr i
   = Dfun (Defun expr i)
   | DConst (DefConst expr i)
-  -- | DCap (DefCap name i)
+  | DCap (DefCap expr i)
   deriving Show
 
 data ExtDecl
