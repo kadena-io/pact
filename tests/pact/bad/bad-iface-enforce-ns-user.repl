@@ -1,0 +1,22 @@
+(begin-tx)
+(env-data { 'user: ["user"], 'admin: ["admin"] })
+(define-namespace 'ns-user-behavior (read-keyset 'user) (read-keyset 'admin))
+(commit-tx)
+
+(begin-tx)
+(env-data { 'user: ["user"], 'admin: ["admin"] })
+(env-keys [])
+(env-exec-config [])
+(expect-failure
+ "ensure user keyset does not pass"
+ (enforce-keyset (read-keyset 'user)))
+
+(expect-that
+ "entering ns does not enforce user guard"
+ (constantly true)
+ (namespace 'ns-user-behavior))
+
+;; interface install should FAIL
+(interface user-iface-fail
+  (defun f ())
+)

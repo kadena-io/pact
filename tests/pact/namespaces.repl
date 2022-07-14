@@ -16,6 +16,22 @@
 (define-namespace 'alice (read-keyset 'alice-keys) (read-keyset 'alice-keys))
 (define-namespace 'bob (read-keyset 'bob-keys) (read-keyset 'bob-keys))
 
+(expect
+  "describe-namespace describes namespaces correctly - alice"
+  { "admin-guard": (read-keyset 'alice-keys)
+  , "namespace-name": "alice"
+  , "user-guard": (read-keyset 'alice-keys)
+  }
+  (describe-namespace 'alice))
+
+(expect
+  "describe-namespace describes namespaces correctly - bob"
+  { "admin-guard": (read-keyset 'bob-keys)
+  , "namespace-name": "bob"
+  , "user-guard": (read-keyset 'bob-keys)
+  }
+  (describe-namespace 'bob))
+
 ; Set tx namespace to 'alice'
 (namespace 'alice)
 
@@ -144,6 +160,63 @@
   )
 
 ;;;;;
+;; Don't check ns-user guard for upgrade: OLD BEHAVIOR
+;;;;
+
+(begin-tx)
+(env-exec-config ['PreserveNamespaceUpgrade])
+(env-data { 'user: ["user"], 'admin: ["admin"] })
+(define-namespace 'ns-user-behavior (read-keyset 'user) (read-keyset 'admin))
+
+(expect-failure
+ "Legacy: entering ns enforces ns user guard, fails"
+ (namespace 'ns-user-behavior))
+(env-keys ["user"])
+(expect-that
+ "Legacy: entering ns enforces ns user guard, success"
+ (constantly true)
+ (namespace 'ns-user-behavior))
+
+(module user-module-1 G
+  (defcap G () true)
+  (defun f () 1))
+
+(commit-tx)
+
+;;;;;
+;; Don't check ns-user guard for upgrade: NEW BEHAVIOR
+;;;;
+
+(begin-tx)
+;; TODO need `describe-namespace` #1009
+(env-data { 'user: ["user"], 'admin: ["admin"] })
+(env-keys [])
+(env-exec-config [])
+(expect-failure
+ "ensure user keyset does not pass"
+ (enforce-keyset (read-keyset 'user)))
+
+(expect-that
+ "entering ns does not enforce user guard"
+ (constantly true)
+ (namespace 'ns-user-behavior))
+
+;; Upgrading SUCCESS with new behavior
+(module user-module-1 G
+  (defcap G () false)
+  (defun f () 2))
+
+(expect "upgrade succeeds" 2 (f))
+
+;; FAILURE on module install: bad-module-enforce-ns-user.repl
+;; FAILURE on interface install: bad-iface-enforce-ns-user.repl
+
+(rollback-tx)
+
+
+
+
+;;;;;
 ;; test managed namespaces
 ;;;;;
 
@@ -157,6 +230,8 @@
           (enforce (= guard (the-guard)) "Invalid guard")
         false))))
 (commit-tx)
+
+(begin-tx)
 (use test-mgd-ns)
 (expect
  "ns policy install succeeds"
@@ -184,3 +259,5 @@
   (defun foo () 1))
 
 ;; testing allow-root in bad-root-namespace.repl
+
+(rollback-tx)

@@ -165,6 +165,19 @@ Create a namespace called NAMESPACE where ownership and use of the namespace is 
 Top level only: this function will fail if used in module code.
 
 
+### describe-namespace {#describe-namespace}
+
+*ns*&nbsp;`string` *&rarr;*&nbsp;`object:{described-namespace}`
+
+
+Describe the namespace NS, returning a row object containing the user and admin guards of the namespace, as well as its name.
+```lisp
+(describe-namespace 'my-namespace)
+```
+
+Top level only: this function will fail if used in module code.
+
+
 ### distinct {#distinct}
 
 *values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
@@ -448,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.3"
+"4.3.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1848,7 +1861,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNamespaceUpgrade","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
