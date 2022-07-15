@@ -130,9 +130,25 @@ initPureEvalEnv verifyUri = do
 initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
-  return $ EvalEnv (RefStore nativeDefs) mempty Null Transactional
-    def def mv repldb def pactInitialHash freeGasEnv
-    permissiveNamespacePolicy (spvs mv) def def def True
+  return $ EvalEnv
+    { _eeRefStore = RefStore nativeDefs
+    , _eeMsgSigs = mempty
+    , _eeMsgBody = Null
+    , _eeMode = Transactional
+    , _eeEntity = Nothing
+    , _eePactStep = Nothing
+    , _eePactDbVar = mv
+    , _eePactDb = repldb
+    , _eePurity = PImpure
+    , _eeHash = pactInitialHash
+    , _eeGasEnv = freeGasEnv
+    , _eeNamespacePolicy = permissiveNamespacePolicy
+    , _eeSPVSupport = spvs mv
+    , _eePublicData = def
+    , _eeExecutionConfig = def
+    , _eeAdvice = def
+    , _eeInRepl = True
+    }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport
 

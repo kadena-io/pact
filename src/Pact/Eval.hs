@@ -259,7 +259,7 @@ eval :: Term Name -> Eval e (Term Name)
 eval t =
   ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (strippedEval t)
   where
-  strippedEval t' = do
+  strippedEval t' =
     view eeInRepl >>= \case
       True ->  eval' $!! t'
       False ->  ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
