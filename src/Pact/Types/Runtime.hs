@@ -23,7 +23,7 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice,
    toPactId,
@@ -161,6 +161,8 @@ data ExecutionFlag
   | FlagDisablePact43
   -- | Disable pact 4.3 features
   | FlagDisablePact431
+  -- | Disable Pact 4.4 features
+  | FlagDisablePact44
   -- | Preserve old ns behavior for module upgrade
   | FlagPreserveNamespaceUpgrade
   deriving (Eq,Ord,Show,Enum,Bounded)
@@ -228,6 +230,8 @@ data EvalEnv e = EvalEnv {
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
+      -- | Are we in the repl? If so, ignore info
+    , _eeInRepl :: Bool
     }
 makeLenses ''EvalEnv
 

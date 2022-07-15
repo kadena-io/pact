@@ -62,7 +62,7 @@ spec = do
 goldenModule :: [ExecutionFlag] -> String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
 goldenModule flags tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
   let ec = mkExecutionConfig flags
-  (r,s) <- runIO $ execScriptF' Quiet fp (\st -> st & rEnv . eeExecutionConfig .~ ec)
+  (r,s) <- runIO $ execScriptF' Quiet fp (set (rEnv . eeExecutionConfig) ec . set (rEnv . eeInRepl) False)
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
   case mr of
@@ -80,8 +80,10 @@ subTestName tn n = tn ++ "-" ++ n
 acctsSuccessCR :: String -> ReplState -> Spec
 acctsSuccessCR tn s = doCRTest tn s "1"
 
+-- Needs disablePact44 here, accts failure cr
+-- results in `interactive:0:0` which is an info that has been stripped
 acctsFailureCR :: String -> ReplState -> Spec
-acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
+acctsFailureCR tn s = doCRTest' (mkExecutionConfig [FlagDisablePact44]) tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> ReplState -> Spec
 eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]) tn s $
