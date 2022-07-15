@@ -257,12 +257,12 @@ evalNamespace info setter m = \case
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
-  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) stripped
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (strippedEval t)
   where
-  stripped = do
+  strippedEval t' = do
     view eeInRepl >>= \case
-      True -> eval' $!! t
-      False -> ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t) (eval' $!! stripTermInfo t)
+      True ->  eval' $!! t'
+      False ->  ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
   stripOnlyModule t' = case t' of
     TModule {} -> stripTermInfo t'
     _ -> t'
@@ -1271,13 +1271,14 @@ reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
-createNestedPactId _ pc@(PactContinuation (QName _) _) (PactId parent) =
-  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> (BL.toStrict (A.encode pc))
+createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
+  let pc = PactContinuation (QName qn{_qnInfo = def}) pvs
+  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
 createNestedPactId i n _ =
   evalError' i $ "Error creating nested pact id, name is not qualified: " <> pretty n
 
 initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
-initPact i app bod = view eePactStep >>= \es -> case es of
+initPact i app bod = view eePactStep >>= \case
   Just v@(PactStep step b parent _) -> do
     whenExecutionFlagSet FlagDisablePact43 $
       evalError i $ "initPact: internal error: step already in environment: " <> pretty v

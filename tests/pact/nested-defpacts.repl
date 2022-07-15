@@ -2,7 +2,6 @@
 ; non-namespaced
 (env-data {"keyset": { "keys": ["bob"], "pred": "keys-any" }})
 (env-keys ["bob"])
-(env-exec-config ['DisablePact44, 'PreserveNamespaceUpgrade])
 (begin-tx)
 (define-namespace 'free (read-keyset 'keyset) (read-keyset 'keyset))
 (commit-tx)
