@@ -227,11 +227,14 @@ getLoadedState code = do
 --   * Sample keyset and namespace
 
 defEvalEnv :: PactDbEnv e -> EvalEnv e
-defEvalEnv db =
-  setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-  initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def def
-  where entity = Just $ EntityName "entity"
-        prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
+defEvalEnv db = setupEvalEnv
+  db entity Transactional (initMsgData pactInitialHash)
+  initRefStore prodGasModel permissiveNamespacePolicy
+  noSPVSupport def noPact44EC
+  where
+    entity = Just $ EntityName "entity"
+    prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
+    noPact44EC = mkExecutionConfig [FlagDisablePact44]
 
 -- MockDb
 --
@@ -273,6 +276,7 @@ defSqliteBackend = do
                (insert $acctModuleNameText.accounts
                   "someId"
                   { "balance": 0.0 })
+
                (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName)
                (define-namespace "$sampleNamespaceName" $sampleLoadedKeysetName $sampleLoadedKeysetName)
         |]

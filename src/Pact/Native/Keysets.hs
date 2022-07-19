@@ -17,6 +17,7 @@ module Pact.Native.Keysets
 where
 
 import Control.Lens
+
 import Data.Text (Text)
 
 import Pact.Eval
@@ -25,6 +26,7 @@ import Pact.Types.KeySet
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Namespace
+
 
 readKeysetDef :: NativeDef
 readKeysetDef =
@@ -79,10 +81,9 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      ksn <- use (evalRefs . rsNamespace) >>= \mNs ->
-        ifExecutionFlagSet FlagDisablePact44
+      ksn <- ifExecutionFlagSet FlagDisablePact44
         (pure $ KeySetName name)
-        (case mNs of
+        (use (evalRefs . rsNamespace) >>= \case
           Nothing ->
             -- disallow creating keysets outside of a namespace
             evalError' fi "Cannot define keysets outside of a namespace"

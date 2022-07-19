@@ -32,9 +32,10 @@ module Pact.Types.KeySet
   , keyFormats
   , validateKeyFormat
   , enforceKeyFormats
+  , keysetNameParser
   ) where
 
-import Control.Applicative
+import Control.Applicative ( Alternative((<|>)) )
 import Control.DeepSeq
 import Control.Monad
 import Data.Aeson
@@ -56,9 +57,13 @@ import GHC.Generics
 import Test.QuickCheck
 
 import Pact.Types.Names
-import Pact.Types.Pretty
+import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util
+import Pact.Types.Parser (style)
+
+import Text.Parser.Combinators (eof)
+import Text.Parser.Token
 
 -- -------------------------------------------------------------------------- --
 -- PublicKey
@@ -99,8 +104,9 @@ instance Pretty KeySet where
     ]
 
 instance SizeOf KeySet where
-  sizeOf (KeySet pkArr ksPred ns) =
-    constructorCost 2 + sizeOf pkArr + sizeOf ksPred + sizeOf ns
+  sizeOf (KeySet pkArr ksPred _ns) =
+    -- TODO: check this ns sizeOf later
+    constructorCost 2 + sizeOf pkArr + sizeOf ksPred -- + sizeOf ns
 
 instance Arbitrary KeySet where
   arbitrary = do
@@ -132,10 +138,11 @@ instance FromJSON KeySet where
           <*> pure Nothing
 
 instance ToJSON KeySet where
-    toJSON (KeySet k f ns) = object
+    toJSON (KeySet k f ns) = object $
       [ "keys" .= k
       , "pred" .= f
-      , "ns" .= ns
+      ] ++
+      [ "ns" .= ns | isJust ns
       ]
 
 
@@ -150,6 +157,14 @@ instance Arbitrary KeySetName where
 
 instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
 
+keysetNameParser
+  :: TokenParsing m
+  => Monad m
+  => m (NamespaceName, KeySetName)
+keysetNameParser = do
+  ns <- ident style
+  kn <- dot *> ident style <* eof
+  pure (NamespaceName ns, KeySetName kn)
 
 -- | Smart constructor for a simple list and barename predicate.
 mkKeySet :: [PublicKey] -> Text -> Maybe Text -> KeySet

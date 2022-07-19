@@ -313,7 +313,6 @@ nameParser i = (QName <$> qualifiedNameParser i <?> "qualifiedName") <|>
   where
     bareNameParser = BareName <$> ident style <*> pure i
 
-
 instance Hashable Name where
   hashWithSalt s (Name (BareName t _)) =
     s `hashWithSalt` (0::Int) `hashWithSalt` t

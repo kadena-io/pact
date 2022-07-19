@@ -57,6 +57,7 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Monoid (Sum(..))
+import Data.Attoparsec.Text (parseOnly)
 import Data.Aeson (Value)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as A
@@ -80,6 +81,7 @@ import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
 import Pact.Types.Capability
 import Pact.Types.PactValue
+import Pact.Types.KeySet
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
@@ -114,12 +116,29 @@ enforceKeySetName mi mksn = do
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn KeySet{..} = go
+enforceKeySet i ksn KeySet{..} = do
+  void validateKsn
+  sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
+  sigs' <- checkSigCaps sigs
+  runPred (M.size sigs')
   where
-    go = do
-      sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
-      sigs' <- checkSigCaps sigs
-      runPred (M.size sigs')
+    validateKsn = case ksn of
+      Nothing -> pure ()
+      Just (KeySetName n) -> case parseOnly keysetNameParser n of
+        Left{} -> case _ksNamespace of
+          -- the keyset name is not namespaced
+          -- and there is no namespace for the keyset
+          Nothing -> pure ()
+          -- the keyset name is not namespaced,
+          -- but the keyset requires one. Hence, failure.
+          Just{} -> failed
+        Right (nsn, _ksn) ->
+          -- the keyset is namespace-qualified
+          -- and we should match the keyset namespace against
+          -- it.
+          unless (Just nsn == _ksNamespace)
+            failed
+
     matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
