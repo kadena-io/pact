@@ -117,7 +117,7 @@ enforceKeySetName mi mksn = do
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
-  void validateKsn
+  unlessExecutionFlagSet FlagDisablePact44 validateKsn
   sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
   sigs' <- checkSigCaps sigs
   runPred (M.size sigs')
