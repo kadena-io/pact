@@ -702,9 +702,9 @@ setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
 envGas _ [] = do
-  use evalGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
 envGas _ [TLitInteger g] = do
-  evalGas .= fromIntegral g
+  putGas $ fromIntegral g
   return $ tStr $ "Set gas to " <> tShow g
 envGas i as = argsError i as
 

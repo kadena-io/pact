@@ -24,13 +24,13 @@ module Pact.Types.Runtime
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
-   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
+   eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
-   evalGas,evalCapabilities,evalLogGas,evalEvents,
+   evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -62,6 +62,7 @@ import Control.Monad.State.Strict
 import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
+import Data.IORef(IORef)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -220,6 +221,8 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
+      -- | Tallied gas
+    , _eeGas :: IORef Gas
       -- | Namespace Policy
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
@@ -276,7 +279,7 @@ data EvalState = EvalState {
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
       -- | Gas tally
-    , _evalGas :: Gas
+    -- , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
@@ -286,7 +289,7 @@ data EvalState = EvalState {
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def 0 def def def
+instance Default EvalState where def = EvalState def def def def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =

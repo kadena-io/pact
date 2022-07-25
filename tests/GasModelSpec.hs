@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module GasModelSpec (spec) where
 
@@ -18,6 +19,7 @@ import Control.Lens hiding ((.=))
 import Control.Exception (bracket, throwIO)
 import Control.Monad (when)
 import Data.Aeson
+import Data.IORef
 import Data.Int (Int64)
 import Data.List (foldl')
 import Test.QuickCheck
@@ -105,29 +107,32 @@ allNativesInGasTable = do
     `shouldBe`
     (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
 
-gasTestResults :: IO [GasTestResult ([Term Name], EvalState)]
+gasTestResults :: IO [GasTestResult ([Term Name], EvalState, Gas)]
 gasTestResults = concat <$> mapM (runTest . snd) (HM.toList unitTests)
 
 -- | Use this to run a single named test.
 _runNative :: NativeDefName -> IO (Maybe [(T.Text,Gas)])
 _runNative = traverse (fmap (map toGoldenOutput) . runTest) . unitTestFromDef
 
-runTest :: GasUnitTests -> IO [GasTestResult ([Term Name], EvalState)]
-runTest t = mapOverGasUnitTests t run run
+runTest :: GasUnitTests -> IO [GasTestResult ([Term Name], EvalState, Gas)]
+runTest t = runGasUnitTests t run run
   where
     run expr dbSetup = do
-      (res, st) <- bracket (setupEnv' dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
+      (res, (gas, st)) <- bracket (setupEnv' dbSetup) (gasSetupCleanup dbSetup) $ \(e,s) -> do
+        writeIORef (_eeGas e) 0
+        res <- mockRun expr (e,s)
+        gas <- readIORef (_eeGas e)
+        return ((gas,) <$> res)
       res' <- eitherDie (getDescription expr dbSetup) res
-      return (res', st)
+      return (res', st, gas)
     setupEnv' dbs = do
       (r, s) <- setupEnv dbs
       let r' = set eeExecutionConfig (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePactEvents, FlagDisablePact43]) r
       pure (r', s)
 
-toGoldenOutput :: GasTestResult ([Term Name], EvalState) -> (T.Text, Gas)
-toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
-    where
-      gasCost = _evalGas . snd . _gasTestResultSqliteDb
+toGoldenOutput :: GasTestResult ([Term Name], EvalState, Gas) -> (T.Text, Gas)
+toGoldenOutput r =
+  (_gasTestResultDesciption r, view _3 (_gasTestResultSqliteDb r))
 
 -- Utils
 --
