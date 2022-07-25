@@ -44,18 +44,12 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
-data CapType
-  = ManagedCap Int
-  | AutomanagedCap
-  | Unmanaged
-  deriving Show
-
 data DefCap name builtin info
   = DefCap
   { _dcapName :: Text
   , _dcapArgs :: [Text]
   , _dcapTerm :: Term name builtin info
-  , _dcapCapType :: CapType
+  , _dcapCapType :: CapType name
   , _dcapType :: Type Void
   , _dcapInfo :: info
   } deriving Show
@@ -63,11 +57,13 @@ data DefCap name builtin info
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
+  | DCap (DefCap name builtin info)
   deriving Show
 
 defName :: Def name b i -> Text
 defName (Dfun d) = _dfunName d
 defName (DConst d) = _dcName d
+defName (DCap d) = _dcapName d
 
 -- Todo:
 -- Support module guard

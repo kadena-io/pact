@@ -311,7 +311,7 @@ instance Pretty n => Pretty (Type n) where
       where
       liParens t@TyVar{} = pretty t
       liParens t@TyPrim{} = pretty t
-      liParens t@TyCap = pretty t
+      liParens t@TyCap{} = pretty t
       liParens t = Pretty.parens (pretty t)
     TyRow r -> pretty r
     TyTable t -> "table" <+> Pretty.parens (pretty t)

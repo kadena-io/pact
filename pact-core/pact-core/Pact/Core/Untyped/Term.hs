@@ -204,6 +204,7 @@ fromTypedDef
 fromTypedDef = \case
   Typed.Dfun d -> Dfun (fromTypedDefun d)
   Typed.DConst d -> DConst (fromTypedDConst d)
+  _ -> undefined
 
 fromTypedModule
   :: Typed.Module Name NamedDeBruijn builtin info

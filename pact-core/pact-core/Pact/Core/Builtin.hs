@@ -17,6 +17,8 @@ module Pact.Core.Builtin
  , replRawBuiltinNames
  , replRawBuiltinMap
  , BuiltinArity(..)
+ , CapabilityOp(..)
+ , CapType(..)
  )where
 
 import Data.Void(Void)
@@ -28,25 +30,6 @@ import qualified Data.Map.Strict as Map
 import Pact.Core.Names
 import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Type
-
--- data EnvReadOp
---   = EnvReadInteger
---   | EnvReadDecimal
---   | EnvReadString
---   | EnvReadObject
---   deriving (Show, Eq, Enum, Bounded)
-
--- renderReadOp :: EnvReadOp -> Text
--- renderReadOp = \case
---   EnvReadInteger -> "read-integer"
---   EnvReadDecimal -> "read-decimal"
---   EnvReadString -> "read-string"
---   EnvReadObject -> "read-object"
-
-
--- instance Pretty EnvReadOp where
---   pretty = pretty . renderReadOp
-
 
 data ObjectOp o
   = ObjectAccess Field o
@@ -60,6 +43,20 @@ data ObjectOp o
   -- For some {r}, extend with
   | ReadEnvObject (Row Void) o
   deriving (Show, Eq, Functor, Foldable, Traversable)
+
+
+data CapabilityOp name o
+  = WithCapability name [o] o
+  | RequireCapability name [o]
+  | InstallCapability name [o]
+  | ComposeCapability name [o]
+  deriving (Show, Eq, Functor, Foldable, Traversable)
+
+data CapType name
+  = ManagedCap Int name
+  | AutomanagedCap
+  | Unmanaged
+  deriving Show
 
 {-
   [Typeclasses and Instances]

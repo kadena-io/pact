@@ -385,8 +385,6 @@ library pact-core
     Pact.Core.Typed.Typecheck
     Pact.Core.Typed.Term
     Pact.Core.Typed.Overload
-    Pact.Core.Typed.Eval.Runtime
-    Pact.Core.Typed.Eval.CEK
 
     -- Untyped core
     Pact.Core.Untyped.Term

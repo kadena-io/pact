@@ -9,6 +9,7 @@
 module Pact.Core.Typed.Term
  ( Defun(..)
  , DefConst(..)
+ , DefCap(..)
  , Def(..)
  , Term(..)
  , Module(..)
@@ -83,9 +84,20 @@ data DefConst name tyname builtin info
   , _dcInfo :: info
   } deriving Show
 
+data DefCap name tyname builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapArgs :: [Text]
+  , _dcapTerm :: Term name tyname builtin info
+  , _dcapCapType :: CapType name
+  , _dcapType :: Type tyname
+  , _dcapInfo :: info
+  } deriving Show
+
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
+  | DCap (DefCap name tyname builtin info)
    deriving Show
 
 -- DCap (DefCap name tyname builtin info)
@@ -96,16 +108,20 @@ defType :: Def name tyname builtin info -> Type tyname
 defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
+  DCap d -> _dcapType d
+
 
 defName :: Def name tyname builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
+  DCap d -> _dcapName d
 
 defTerm :: Def name tyname builtin info -> Term name tyname builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
+  DCap d -> _dcapTerm d
 
 data Module name tyname builtin info
   = Module

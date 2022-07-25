@@ -390,6 +390,7 @@ resolveDef
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
+  _ -> undefined
 
 resolveModule
   :: OverloadedModule RawBuiltin info

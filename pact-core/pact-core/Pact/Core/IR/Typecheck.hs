@@ -130,6 +130,10 @@ type TypedDefun b i =
 type TypedDefConst b i =
   Typed.DefConst (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (OBundle b) i
 
+type TypedDefCap b i =
+  Typed.DefCap (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (OBundle b) i
+
+
 type TypedDef b i =
   Typed.Def (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (OBundle b) i
 
@@ -142,7 +146,7 @@ type TypedReplTopLevel b i =
 type TypedModule b i =
   Typed.Module (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (OBundle b) i
 
-newtype InferT s b i a =
+newtype InferM s b i a =
   InferT (ReaderT (TCState s b) (ST s) a)
   deriving
     ( Functor, Applicative, Monad
@@ -151,23 +155,23 @@ newtype InferT s b i a =
   via (ReaderT (TCState s b) (ST s))
 
 -- ABSOLUTELY UNHOLY USE OF ST
-instance (Show i, Typeable i) => MonadError (PactError i) (InferT s b i) where
+instance (Show i, Typeable i) => MonadError (PactError i) (InferM s b i) where
   throwError e =
     InferT (ReaderT (const (unsafeIOToST (throwIO e))))
   catchError act handler =
     InferT (ReaderT (\s -> unsafeIOToST $ catch (unsafeMkIO s act) (handle' s)))
     where
-    unsafeMkIO :: TCState s b -> InferT s b i a -> IO a
+    unsafeMkIO :: TCState s b -> InferM s b i a -> IO a
     unsafeMkIO s (InferT act') = unsafeSTToIO (runReaderT act' s)
     handle' s e = unsafeMkIO s (handler e)
 
 
-liftST :: ST s a -> InferT s b i a
+liftST :: ST s a -> InferM s b i a
 liftST action = InferT (ReaderT (const action))
 
 _dbgTypedTerm
   :: TCTerm s b i
-  -> InferT s b i (Typed.Term Text String (b, [Type String], [Pred String]) i)
+  -> InferM s b i (Typed.Term Text String (b, [Type String], [Pred String]) i)
 _dbgTypedTerm = \case
   Typed.Var n i -> pure (Typed.Var (_olName n) i)
   Typed.Lam nel body i -> do
@@ -196,7 +200,7 @@ _dbgTypedTerm = \case
   Typed.ObjectOp oop i ->
     Typed.ObjectOp <$> traverse _dbgTypedTerm oop <*> pure i
 
-_dbgTypeScheme :: TypeScheme (TvRef s) -> InferT s b i (TypeScheme String)
+_dbgTypeScheme :: TypeScheme (TvRef s) -> InferM s b i (TypeScheme String)
 _dbgTypeScheme (TypeScheme tvs preds ty) = do
   tvs' <- traverse rv tvs
   preds' <- traverse _dbgPred preds
@@ -208,7 +212,7 @@ _dbgTypeScheme (TypeScheme tvs preds ty) = do
     Bound u l -> pure ("bound" <> show (u, l))
     Link _ -> pure "linktv"
 
-_dbgTvRef :: TvRef s -> InferT s b i String
+_dbgTvRef :: TvRef s -> InferM s b i String
 _dbgTvRef tv = readTvRef tv >>= \case
     Unbound u l _ -> pure ("unbound" <> show (u, l))
     Bound u l -> pure ("bound" <> show (u, l))
@@ -216,10 +220,10 @@ _dbgTvRef tv = readTvRef tv >>= \case
       ty' <- _dbgType ty
       pure $ "linked type: " <> show ty'
 
-_dbgPred :: TCPred s -> InferT s b i (Pred String)
+_dbgPred :: TCPred s -> InferM s b i (Pred String)
 _dbgPred (Pred i t) = Pred i <$> _dbgType t
 
-_dbgType :: TCType s -> InferT s b i (Type String)
+_dbgType :: TCType s -> InferM s b i (Type String)
 _dbgType = \case
   TyVar tv -> readTvRef tv >>= \case
     Unbound u l _ -> pure (TyVar ("unbound" <> show (u, l)))
@@ -256,27 +260,27 @@ _dbgType = \case
         Nothing -> pure (RowTy obj' Nothing)
 
 
-enterLevel :: InferT s b i ()
+enterLevel :: InferM s b i ()
 enterLevel = do
   lref <- asks _tcLevel
   liftST (modifySTRef' lref succ)
 
-leaveLevel :: InferT s b i ()
+leaveLevel :: InferM s b i ()
 leaveLevel = do
   lref <- asks _tcLevel
   liftST (modifySTRef' lref pred)
 
-currentLevel :: InferT s b i Level
+currentLevel :: InferM s b i Level
 currentLevel =
   asks _tcLevel >>= liftST . readSTRef
 
-readTvRef :: TvRef s -> InferT s b i (Tv s)
+readTvRef :: TvRef s -> InferM s b i (Tv s)
 readTvRef (TvRef tv) = liftST (readSTRef tv)
 
-writeTvRef :: TvRef s -> Tv s -> InferT s b i ()
+writeTvRef :: TvRef s -> Tv s -> InferM s b i ()
 writeTvRef (TvRef tv) t = liftST (writeSTRef tv t)
 
-newTvRef :: InferT s b i (TvRef s)
+newTvRef :: InferM s b i (TvRef s)
 newTvRef = do
   uref <- asks _tcSupply
   u <- liftST (readSTRef uref)
@@ -285,7 +289,7 @@ newTvRef = do
   liftST (modifySTRef' uref (+ 1))
   TvRef <$> liftST (newSTRef (Unbound tvName u l))
 
-newSupplyIx :: InferT s b i Unique
+newSupplyIx :: InferM s b i Unique
 newSupplyIx = do
   uref <- asks _tcSupply
   u <- liftST (readSTRef uref)
@@ -304,7 +308,7 @@ newSupplyIx = do
 -- Note: if these were user defined, if we decide to extend to this
 -- byInst would have to match the type of C (K t) to an instantiated version
 -- of the qualified type (C a_1, .., C a_n) => C (K t_1) for type constructors
-byInst :: Pred (TvRef s) -> InferT s b i (Maybe [Pred (TvRef s)])
+byInst :: Pred (TvRef s) -> InferM s b i (Maybe [Pred (TvRef s)])
 byInst (Pred p ty) = case p of
   Eq -> eqInst ty
   Add -> addInst ty
@@ -328,7 +332,7 @@ byInst (Pred p ty) = case p of
 --  For rows:
 --  instance (Eq {l1:t1, .., ln:tn}) where t1..tn are monotypes without type variables.
 --
-eqInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+eqInst :: TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 eqInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> eqInst ty
@@ -359,7 +363,7 @@ eqInst = \case
 --  instance (Ord 'a) => Ord (list 'a)
 --  For rows:
 --
-ordInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+ordInst :: TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 ordInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> ordInst ty
@@ -384,7 +388,7 @@ ordInst = \case
 --  instance Add (list 'a)
 --
 --
-addInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+addInst :: TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 addInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> addInst ty
@@ -401,7 +405,7 @@ addInst = \case
 -- | Instances of num:
 -- instance Num integer
 -- instance Num decimal
-numInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+numInst :: TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 numInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> numInst ty
@@ -416,7 +420,7 @@ numInst = \case
 -- | Instances of fractional:
 -- instance Fractional integer
 -- instance Fractional decimal
-fractionalInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+fractionalInst :: TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 fractionalInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> fractionalInst ty
@@ -427,7 +431,7 @@ fractionalInst = \case
     _ -> Nothing
   _ -> pure Nothing
 
-listLikeInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+listLikeInst :: TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 listLikeInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> listLikeInst ty
@@ -442,7 +446,7 @@ listLikeInst = \case
 -- (r\f) implies some row varible `r` does not contain the field `f`.
 -- A type `{a_1:t1_..a_k:t_k|r} satisfies (r\f)
 -- if f is not in contained in {a_1,..,a_n}
-withoutFieldInst :: Field -> TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+withoutFieldInst :: Field -> TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 withoutFieldInst f = \case
   TyRow t -> case t of
     RowVar tv -> readTvRef tv >>= \case
@@ -470,7 +474,7 @@ withoutFieldInst f = \case
 --  For rows:
 --  instance (Eq {l1:t1, .., ln:tn}) where t1..tn are monotypes without type variables.
 --
-showInst :: TCType s -> InferT s b i (Maybe [Pred (TvRef s)])
+showInst :: TCType s -> InferM s b i (Maybe [Pred (TvRef s)])
 showInst = \case
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> showInst ty
@@ -480,12 +484,12 @@ showInst = \case
   TyList t -> pure (Just [Pred Show t])
   _ -> pure Nothing
 
-entail :: [Pred (TvRef s)] -> Pred (TvRef s) -> InferT s b i Bool
+entail :: [Pred (TvRef s)] -> Pred (TvRef s) -> InferM s b i Bool
 entail ps p = byInst p >>= \case
   Nothing -> pure False
   Just qs -> and <$> traverse (entail ps) qs
 
-isHnf :: Pred (TvRef s) -> InferT s b i Bool
+isHnf :: Pred (TvRef s) -> InferM s b i Bool
 isHnf (Pred c t) = case t of
   TyVar tv -> readTvRef tv >>= \case
     Link ty -> isHnf (Pred c ty)
@@ -498,19 +502,19 @@ isHnf (Pred c t) = case t of
     _ -> pure True
   _ -> pure False
 
-toHnf :: Pred (TvRef s) -> InferT s b i [Pred (TvRef s)]
+toHnf :: Pred (TvRef s) -> InferM s b i [Pred (TvRef s)]
 toHnf p = isHnf p >>= \case
   True -> pure [p]
   False -> byInst p >>= \case
     Nothing -> fail "context reduction failure"
     Just ps -> toHnfs ps
 
-toHnfs :: [Pred (TvRef s)] -> InferT s b i [Pred (TvRef s)]
+toHnfs :: [Pred (TvRef s)] -> InferM s b i [Pred (TvRef s)]
 toHnfs ps = do
   pss <- traverse toHnf ps
   pure (concat pss)
 
-simplify :: [Pred (TvRef s)] -> InferT s b i [Pred (TvRef s)]
+simplify :: [Pred (TvRef s)] -> InferM s b i [Pred (TvRef s)]
 
 simplify = loop []
   where
@@ -518,10 +522,10 @@ simplify = loop []
   loop rs (p:ps) = entail (rs ++ rs) p >>= \cond ->
     if cond then loop rs ps else loop (p:rs) ps
 
-reduce :: [Pred (TvRef s)]-> InferT s b i [Pred (TvRef s)]
+reduce :: [Pred (TvRef s)]-> InferM s b i [Pred (TvRef s)]
 reduce ps = toHnfs ps >>= simplify
 
-split :: [TCPred s] -> InferT s b i ([TCPred s], [TCPred s])
+split :: [TCPred s] -> InferM s b i ([TCPred s], [TCPred s])
 split ps = do
   ps' <- reduce ps
   partition' ([], []) ps'
@@ -574,7 +578,7 @@ split ps = do
 instantiateWithTerm
   :: TypeScheme (TvRef s)
   -> TCTerm s b i
-  -> InferT s b i (TCType s, TCTerm s b i, [TCPred s])
+  -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
 instantiateWithTerm (TypeScheme ts preds ty) term = do
   nts <- fmap TyVar <$> traverse (const newTvRef) ts
   let m = zip ts nts
@@ -636,7 +640,7 @@ instantiateWithTerm (TypeScheme ts preds ty) term = do
         _ -> pure t
       Nothing -> pure (RowTy obj Nothing)
 
-instantiateImported :: TypeScheme NamedDeBruijn -> InferT s b i (TCType s, [TvRef s], [TCPred s])
+instantiateImported :: TypeScheme NamedDeBruijn -> InferM s b i (TCType s, [TvRef s], [TCPred s])
 instantiateImported  = \case
   TypeScheme tvs preds ty -> do
     ntvs <- traverse (const newTvRef) tvs
@@ -667,7 +671,7 @@ instantiateImported  = \case
       Just (NamedDeBruijn i _) -> pure (RowTy obj' (Just (rl RAList.!! i)))
       Nothing -> pure (RowTy obj' Nothing)
 
-occurs :: TvRef s -> TCType s -> InferT s b i ()
+occurs :: TvRef s -> TCType s -> InferM s b i ()
 occurs tv = \case
   TyVar tv' | tv == tv' -> fail "occurs check failed"
   TyVar tv' -> bindRef tv'
@@ -698,7 +702,7 @@ occurs tv = \case
       Just tv' -> bindRef tv'
       Nothing -> pure ()
 
-unifyTyVar :: TvRef s -> TCType s -> InferT s b i ()
+unifyTyVar :: TvRef s -> TCType s -> InferM s b i ()
 unifyTyVar tv t1 = readTvRef tv >>= \case
   Unbound{} -> do
     occurs tv t1
@@ -706,7 +710,7 @@ unifyTyVar tv t1 = readTvRef tv >>= \case
   Link t2 -> unify t2 t1
   _ -> pure ()
 
-unify :: TCType s -> TCType s -> InferT s b i ()
+unify :: TCType s -> TCType s -> InferM s b i ()
 unify t1 t2 | t1 == t2 = pure ()
 unify (TyVar tv) t = unifyTyVar tv t
 unify t (TyVar tv) = unifyTyVar tv t
@@ -718,7 +722,7 @@ unify (TyPrim p) (TyPrim p') | p == p' = pure ()
 unify TyCap TyCap = pure ()
 unify _ _ = fail "types do not unify"
 
-unifyRow :: Row (TvRef s) -> Row (TvRef s) -> InferT s b i ()
+unifyRow :: Row (TvRef s) -> Row (TvRef s) -> InferM s b i ()
 unifyRow (RowVar n) t = unifyTyVar n (TyRow t)
 unifyRow t (RowVar n) = unifyTyVar n (TyRow t)
 unifyRow EmptyRow EmptyRow = pure ()
@@ -767,7 +771,7 @@ generalizeWithTerm
   :: TCType s
   -> [TCPred s]
   -> TCTerm s b i
-  -> InferT s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
+  -> InferM s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
 generalizeWithTerm ty pp term = case term of
   Typed.Lam{} -> generalizeWithTerm' ty pp term
   _ -> pure (TypeScheme [] [] ty, term, pp)
@@ -777,7 +781,7 @@ generalizeWithTerm'
   :: TCType s
   -> [TCPred s]
   -> TCTerm s b i
-  -> InferT s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
+  -> InferM s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
 generalizeWithTerm' ty pp term = do
   preds <- nubPreds pp
   sts <- liftST (newSTRef Set.empty)
@@ -916,7 +920,7 @@ toOName (IRName n nk u) =
     IRTopLevel m mh -> OTopLevel m mh
 
 -- Todo: bidirectionality
-inferTerm :: IRTerm b i -> InferT s b i (TCType s, TCTerm s b i, [TCPred s])
+inferTerm :: IRTerm b i -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
 inferTerm = \case
   IR.Var (IRName n nk u) i -> case nk of
     IRBound -> do
@@ -1050,7 +1054,7 @@ inferTerm = \case
 -- we're not allowing type schemes just yet.
 inferDefun
   :: IR.Defun IRName b i
-  -> InferT s b i (TypedDefun b i)
+  -> InferM s b i (TypedDefun b i)
 inferDefun (IR.Defun name dfTy term info) = do
   enterLevel
   (termTy, term', preds) <- inferTerm term
@@ -1063,7 +1067,7 @@ inferDefun (IR.Defun name dfTy term info) = do
 
 inferDefConst
   :: IR.DefConst IRName b i
-  -> InferT s b i (TypedDefConst b i)
+  -> InferM s b i (TypedDefConst b i)
 inferDefConst (IR.DefConst name dcTy term info) = do
   enterLevel
   (termTy, term', preds) <- inferTerm term
@@ -1075,16 +1079,24 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   rty' <- debruijnizeType (maybe termTy id dcTy')
   pure (Typed.DefConst name rty' fterm info)
 
+-- inferDefCap
+  -- :: IR.DefCap IRName b i
+inferDefCap (IR.DefCap name args term captype ty info ) = do
+  enterLevel
+  
+  leaveLevel
+
+
 inferDef
   :: IR.Def IRName b i
-  -> InferT s b i (TypedDef b i)
+  -> InferM s b i (TypedDef b i)
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
   IR.DConst d -> Typed.DConst <$> inferDefConst d
 
 inferModule
   :: IR.Module IRName b i
-  -> InferT s b i (TypedModule b i)
+  -> InferM s b i (TypedModule b i)
 inferModule (IR.Module mname gov defs blessed imports impl mh) = do
   gov' <- traverse (dbjName [] 0 . toOName ) gov
   fv <- Map.insert mname mempty <$> view tcFree
@@ -1100,7 +1112,7 @@ inferModule (IR.Module mname gov defs blessed imports impl mh) = do
 
 -- | Note: debruijnizeType will
 -- ensure that terms that are generic will fail
-inferTermNonGen :: IRTerm b i -> InferT s b i (TypedTerm b i)
+inferTermNonGen :: IRTerm b i -> InferM s b i (TypedTerm b i)
 inferTermNonGen t = do
   (ty, t',preds) <- inferTerm t
   (deferred, retained) <- split preds
@@ -1110,7 +1122,7 @@ inferTermNonGen t = do
 
 inferTopLevel
   :: IR.TopLevel IRName b i
-  -> InferT s b i (TypedTopLevel b i)
+  -> InferM s b i (TypedTopLevel b i)
 inferTopLevel = \case
   IR.TLModule m -> Typed.TLModule <$> inferModule m
   IR.TLTerm m -> Typed.TLTerm <$> inferTermNonGen m
@@ -1118,7 +1130,7 @@ inferTopLevel = \case
 
 inferReplTopLevel
   :: IR.ReplTopLevel IRName b i
-  -> InferT s b i (TypedReplTopLevel b i)
+  -> InferM s b i (TypedReplTopLevel b i)
 inferReplTopLevel = \case
   IR.RTLModule m -> Typed.RTLModule <$> inferModule m
   IR.RTLTerm m -> Typed.RTLTerm <$> inferTermNonGen m
@@ -1128,12 +1140,12 @@ inferReplTopLevel = \case
 
 inferProgram
   :: [IR.TopLevel IRName b i]
-  -> InferT s b i [TypedTopLevel b i]
+  -> InferM s b i [TypedTopLevel b i]
 inferProgram = traverse inferTopLevel
 
 inferReplProgram
   :: [IR.ReplTopLevel IRName b i]
-  -> InferT s b i [TypedReplTopLevel b i]
+  -> InferM s b i [TypedReplTopLevel b i]
 inferReplProgram = traverse inferReplTopLevel
 
 
@@ -1159,10 +1171,10 @@ inferReplProgram = traverse inferReplTopLevel
 -- --  The typechecker does not spit out impredicative polymorphism, but while
 -- --  it would be trivial to support their renaming here, I'd rather fail
 -- --  for now as the typechecker does not support it and it functions as a sanity check
-debruijnizeTermTypes :: TCTerm s b i -> InferT s b i (TypedTerm b i)
+debruijnizeTermTypes :: TCTerm s b i -> InferM s b i (TypedTerm b i)
 debruijnizeTermTypes = dbj [] 0
   where
-  dbj :: [(TvRef s, NamedDeBruijn)] -> DeBruijn -> TCTerm s b i -> InferT s b i (TypedTerm b i)
+  dbj :: [(TvRef s, NamedDeBruijn)] -> DeBruijn -> TCTerm s b i -> InferM s b i (TypedTerm b i)
   dbj env depth = \case
     Typed.Var n i ->
       Typed.Var <$> dbjName env depth n <*> pure i
@@ -1219,7 +1231,7 @@ debruijnizeTermTypes = dbj [] 0
 
 
 
-nameTvs :: DeBruijn -> (TvRef s, DeBruijn) -> InferT s b i NamedDeBruijn
+nameTvs :: DeBruijn -> (TvRef s, DeBruijn) -> InferM s b i NamedDeBruijn
 nameTvs depth (nt, i) = readTvRef nt >>= \case
   Bound n _ -> pure (NamedDeBruijn (depth - i - 1) n)
   _ -> fail "found unbound variable"
@@ -1228,13 +1240,13 @@ dbjName
   :: [(TvRef s, NamedDeBruijn)]
   -> DeBruijn
   -> OverloadedName (TCPred s)
-  -> InferT s b i (OverloadedName (Pred NamedDeBruijn))
+  -> InferM s b i (OverloadedName (Pred NamedDeBruijn))
 dbjName env depth (OverloadedName n kind) = fmap (OverloadedName n) $ case kind of
   OBound b -> pure (OBound b)
   OTopLevel m h -> pure (OTopLevel m h)
   OBuiltinDict b -> OBuiltinDict <$> dbjPred env depth b
 
-debruijnizeTypeScheme :: TypeScheme (TvRef s) -> InferT s b i (TypeScheme NamedDeBruijn)
+debruijnizeTypeScheme :: TypeScheme (TvRef s) -> InferM s b i (TypeScheme NamedDeBruijn)
 debruijnizeTypeScheme (TypeScheme tvs preds t) = do
     let len = fromIntegral (length tvs)
     let ixs = [0.. len - 1]
@@ -1244,14 +1256,14 @@ debruijnizeTypeScheme (TypeScheme tvs preds t) = do
     preds' <- traverse (dbjPred env len) preds
     pure (TypeScheme names preds' t')
 
-debruijnizeType :: TCType s -> InferT s b i (Type NamedDeBruijn)
+debruijnizeType :: TCType s -> InferM s b i (Type NamedDeBruijn)
 debruijnizeType = dbjTyp [] 0
 
 dbjPred
   :: [(TvRef s, NamedDeBruijn)]
   -> DeBruijn
   -> TCPred s
-  -> InferT s b i (Pred NamedDeBruijn)
+  -> InferM s b i (Pred NamedDeBruijn)
 dbjPred env depth (Pred tc ty) =
   Pred tc <$> dbjTyp env depth ty
 
@@ -1259,7 +1271,7 @@ dbjTyp
   :: [(TvRef s, NamedDeBruijn)]
   -> DeBruijn
   -> TCType s
-  -> InferT s b i (Type NamedDeBruijn)
+  -> InferM s b i (Type NamedDeBruijn)
 dbjTyp env depth = \case
   TyVar n -> case lookup n env of
     Just v -> pure (TyVar v)
@@ -1279,7 +1291,7 @@ dbjRow
   :: [(TvRef s, NamedDeBruijn)]
   -> DeBruijn
   -> Row (TvRef s)
-  -> InferT s b i (Row NamedDeBruijn)
+  -> InferM s b i (Row NamedDeBruijn)
 dbjRow env depth = \case
   RowVar rv -> case lookup rv env of
     Just v -> pure (RowVar v)
@@ -1545,7 +1557,7 @@ runInfer
   :: Supply
   -> Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
-  -> InferT s b i a
+  -> InferM s b i a
   -> ST s a
 runInfer u loaded bfn (InferT act) = do
   uref <- newSTRef u

@@ -28,6 +28,7 @@ import Control.Monad.State.Strict
 import Control.Lens hiding (List,ix)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.IORef
 import Data.Set(Set)
@@ -330,10 +331,28 @@ desugarDefConst (Common.DefConst n mty e i) = let
   e' = desugarTerm e
   in DefConst n mty' e' i
 
+desugarDefCap :: DesugarTerm expr builtin info => Common.DefCap expr info -> DefCap ParsedName builtin info
+desugarDefCap (Common.DefCap dn argList managed term i) = let
+  managed' = maybe Unmanaged fromCommonCap managed
+  lamArgs = (\(Common.Arg n ty) -> (BN (BareName n), Just (desugarType ty))) <$> argList
+  -- term' = Lam lamArgs (desugarTerm term) i
+  capType = foldr TyFun TyCap (desugarType . Common._argType <$> argList)
+  in case lamArgs of
+    [] -> DefCap dn [] (desugarTerm term) managed' capType i
+    (arg:args) ->  DefCap dn [] (Lam (arg :| args) (desugarTerm term) i) managed' capType i
+  where
+  fromCommonCap = \case
+    Common.AutoManaged -> AutomanagedCap
+    Common.Managed t pn -> case findIndex ((== t) . Common._argName) argList of
+      Nothing -> error "invalid managed cap decl"
+      Just n -> ManagedCap n pn
+
+
 desugarDef :: (DesugarTerm term b i) => Common.Def term i -> Def ParsedName b i
 desugarDef = \case
   Common.Dfun d -> Dfun (desugarDefun d)
   Common.DConst d -> DConst (desugarDefConst d)
+  Common.DCap d -> DCap (desugarDefCap d)
 
 desugarModule :: (DesugarTerm term b i) => Common.Module term i -> Module ParsedName b i
 desugarModule (Common.Module mname gov extdecls defs) = let

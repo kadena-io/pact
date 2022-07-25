@@ -143,7 +143,6 @@ data Managed
   = AutoManaged
   | Managed Text ParsedName
   deriving (Show)
-  --
 
 data DefCap expr i
   = DefCap
@@ -151,6 +150,7 @@ data DefCap expr i
   , _dcapArgs :: ![Arg]
   , _dcapManaged :: Maybe Managed
   , _dcapTerm :: expr
+  , _dcapInfo :: i
   } deriving Show
 
 data Def expr i
