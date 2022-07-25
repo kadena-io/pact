@@ -72,7 +72,13 @@ readKeySet' i key = do
   ks <- parseMsgKey i "read-keyset" key
   whenExecutionFlagSet FlagEnforceKeyFormats $
       enforceKeyFormats (const $ evalError' i "Invalid keyset") ks
-  return ks
+
+  ifExecutionFlagSet FlagDisablePact44
+    (pure ks)
+    (use (evalRefs . rsNamespace) >>= \case
+       Nothing -> pure ks
+       Just (Namespace nsn _ _) ->
+         pure $ set ksNamespace (Just nsn) ks)
 
 defineKeyset :: GasRNativeFun e
 defineKeyset g0 fi as = case as of
@@ -81,23 +87,28 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      ksn <- ifExecutionFlagSet FlagDisablePact44
-        (pure $ KeySetName name)
+      (mug, ksn) <- ifExecutionFlagSet FlagDisablePact44
+        (pure (Nothing, KeySetName name))
         (use (evalRefs . rsNamespace) >>= \case
           Nothing ->
             -- disallow creating keysets outside of a namespace
             evalError' fi "Cannot define keysets outside of a namespace"
-          Just (Namespace (NamespaceName nsn) _ ug) -> do
-            -- If we're in a namespace, enforce user guard early
-            -- to avoid spending more time on defining the keyset.
-            enforceGuard fi ug
-            pure $ KeySetName $ nsn <> "." <> name)
+          Just (Namespace nsn@(NamespaceName n) _ ug)
+            | _ksNamespace ks == Just nsn ->
+              pure (Just ug, KeySetName $ n <> "." <> name)
+            | otherwise ->
+              evalError' fi "Mismatching namespace in keyset definition")
 
       let i = _faInfo fi
 
       old <- readRow i KeySets ksn
       case old of
         Nothing -> do
+          -- Enforce user guard on new keyset definition.
+          -- Do not enforce if rotating, since only initial
+          -- definition requires admin rights.
+          maybe (pure ()) (enforceGuard fi) mug
+
           computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
             writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do

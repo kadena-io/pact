@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
+{-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Keyset
 -- Copyright   :  (C) 2022 Stuart Popejoy
@@ -33,11 +33,15 @@ module Pact.Types.KeySet
   , validateKeyFormat
   , enforceKeyFormats
   , keysetNameParser
+  , ksKeys
+  , ksNamespace
+  , ksPredFun
   ) where
 
 import Control.Applicative ( Alternative((<|>)) )
 import Control.DeepSeq
 import Control.Monad
+import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC
@@ -93,6 +97,7 @@ data KeySet = KeySet
   , _ksPredFun :: !Name
   , _ksNamespace :: !(Maybe NamespaceName)
   } deriving (Eq,Generic,Show,Ord)
+makeLenses ''KeySet
 
 instance NFData KeySet
 

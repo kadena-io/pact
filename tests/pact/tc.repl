@@ -1,5 +1,5 @@
 ;; NB this is both a Pact test and used in TypecheckSpec.hs tests too
-
+(env-exec-config ["DisablePact44"])
 (env-data { "msgkeys": { "keys": ["k"], "pred": ">" } })
 (begin-tx)
 (define-keyset 'keyset (read-keyset "msgkeys"))

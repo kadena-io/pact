@@ -4,36 +4,25 @@
 (begin-tx)
 
 (env-data
-  { "alice-keys" : ["alice"]
-  , "bob-keys"   : ["bob"]
+  { "alice-keys-env" : ["alice"]
+  , "bob-keys-env"   : ["bob"]
   })
 
-(define-keyset 'alice-keys)
-(define-keyset 'bob-keys)
 (env-keys ["alice", "bob"])
 
 ; Define namespace using a keyset guard
-(define-namespace 'alice (read-keyset 'alice-keys) (read-keyset 'alice-keys))
-(define-namespace 'bob (read-keyset 'bob-keys) (read-keyset 'bob-keys))
-
-(expect
-  "describe-namespace describes namespaces correctly - alice"
-  { "admin-guard": (read-keyset 'alice-keys)
-  , "namespace-name": "alice"
-  , "user-guard": (read-keyset 'alice-keys)
-  }
-  (describe-namespace 'alice))
-
-(expect
-  "describe-namespace describes namespaces correctly - bob"
-  { "admin-guard": (read-keyset 'bob-keys)
-  , "namespace-name": "bob"
-  , "user-guard": (read-keyset 'bob-keys)
-  }
-  (describe-namespace 'bob))
+(define-namespace 'alice (read-keyset 'alice-keys-env) (read-keyset 'alice-keys-env))
+(define-namespace 'bob (read-keyset 'bob-keys-env) (read-keyset 'bob-keys-env))
 
 ; Set tx namespace to 'alice'
 (namespace 'alice)
+(expect
+  "describe-namespace describes namespaces correctly - alice"
+  { "admin-guard": (read-keyset 'alice-keys-env)
+  , "namespace-name": "alice"
+  , "user-guard": (read-keyset 'alice-keys-env)
+  }
+  (describe-namespace 'alice))
 
 (interface alice-contract
 
@@ -51,6 +40,14 @@
 ; now bob gets his own namespace in the tx
 (namespace 'bob)
 
+(expect
+  "describe-namespace describes namespaces correctly - bob"
+  { "admin-guard": (read-keyset 'bob-keys-env)
+  , "namespace-name": "bob"
+  , "user-guard": (read-keyset 'bob-keys-env)
+  }
+  (describe-namespace 'bob))
+
 (interface bob-contract
   @doc "this contract is for bob, and occurs in the \
        \namespace 'bob'"
@@ -62,14 +59,18 @@
 (commit-tx)
 (begin-tx)
 
-(env-data { "carl-keys" : ["carl"] })
-(define-keyset 'carl-keys)
+(env-data { "carl-keys-env" : ["carl"] })
 (env-keys ["carl"])
 
-(define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
-(namespace 'carl)
+(define-namespace 'carl (read-keyset "carl-keys-env") (read-keyset "carl-keys-env"))
 
-(module carl-module 'carl-keys
+(namespace 'carl)
+(env-data { "carl-keys" : ["carl"] })
+(env-keys ["carl"])
+
+(define-keyset "carl-keys")
+
+(module carl-module "carl.carl-keys"
   @doc "lets implement alice's and bob's contracts"
 
   (implements alice.alice-contract)
@@ -109,6 +110,7 @@
   (defconst TBOOL true)
 )
 
+(env-exec-config ['DisablePact44])
 (env-data { "test-keys" : ["test"] })
 (define-keyset 'test-keys)
 (env-keys ["test"])
