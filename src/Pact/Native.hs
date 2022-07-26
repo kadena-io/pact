@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE MultiWayIf #-}
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -224,23 +225,23 @@ formatDef =
   ["(format \"My {} has {}\" [\"dog\" \"fleas\"])"]
   "Interpolate VARS into TEMPLATE using {}."
   where
-
     format :: RNativeFun e
     format i [TLitString s,TList es _ _] = do
       let parts = T.splitOn "{}" s
           plen = length parts
-          rep (TLitString t) = t
-          rep t = renderCompactText t
-      if plen == 1
-      then return $ tStr s
-      else if plen - length es > 1
-           then evalError' i "format: not enough arguments for template"
-           else return $ tStr $
-                foldl'
-                  (\r (e,t) -> r <> rep e <> t)
-                  (head parts)
-                  (zip (V.toList es) (tail parts))
+      if | plen == 1 -> return $ tStr s
+         | plen - length es > 1 -> evalError' i "format: not enough arguments for template"
+         | otherwise -> do
+          let args = rep <$> V.toList es
+              !totalArgLen = sum (T.length <$> args)
+              inputLength = T.length s
+          unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
+          return $ tStr $ T.concat $ alternate parts (take (plen - 1) args)
     format i as = argsError i as
+    rep (TLitString t) = t
+    rep t = renderCompactText t
+    alternate (x:xs) ys = x : alternate ys xs
+    alternate _ _ = []
 
 strToListDef :: NativeDef
 strToListDef = defGasRNative "str-to-list" strToList
