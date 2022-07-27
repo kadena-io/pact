@@ -250,7 +250,7 @@ defMockDb = mockdb
 
     rowRead :: Domain k v -> k -> Method () (Maybe v)
     rowRead UserTables {} _ = rc (Just acctRow)
-    rowRead KeySets (KeySetName ks)
+    rowRead KeySets (KeySetName ks _n)
       | ks == sampleLoadedKeysetName = rc (Just sampleKeyset)
       | otherwise = rc Nothing
     rowRead Namespaces (NamespaceName n)

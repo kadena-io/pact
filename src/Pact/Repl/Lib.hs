@@ -77,7 +77,7 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
-import Pact.Types.Namespace
+
 
 initLibState :: Loggers -> Maybe String -> IO LibState
 initLibState loggers verifyUri = do
@@ -679,12 +679,8 @@ verify i as = argsError i as
 
 
 sigKeyset :: RNativeFun LibState
-sigKeyset _ _ = view eeMsgSigs >>= \ss -> do
-  ns <- use $ evalRefs . rsNamespace
-  let n = case _nsName <$> ns of
-        Nothing -> Nothing
-        Just (NamespaceName nsn) -> Just nsn
-  return $ toTerm $ mkKeySet (M.keys ss) (asString KeysAll) n
+sigKeyset _ _ = view eeMsgSigs >>= \ss ->
+  return $ toTerm $ mkKeySet (M.keys ss) (asString KeysAll)
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")

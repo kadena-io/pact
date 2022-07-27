@@ -57,7 +57,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Monoid (Sum(..))
-import Data.Attoparsec.Text (parseOnly)
 import Data.Aeson (Value)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as A
@@ -108,39 +107,21 @@ evalCommitTx i = do
 {-# INLINE evalCommitTx #-}
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
-enforceKeySetName mi mksn = do
-  ks <- readRow mi KeySets mksn >>= \case
-      Nothing -> evalError mi $ "No such keyset: " <> pretty mksn
+enforceKeySetName mi ksn = do
+  ks <- readRow mi KeySets ksn >>= \case
+      Nothing -> evalError mi $ "No such keyset: " <> pretty ksn
       Just ks -> pure ks
-  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet mksn ks))
-  runSysOnly $ enforceKeySet mi (Just mksn) ks
+  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet ksn ks))
+  runSysOnly $ enforceKeySet mi (Just ksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
-  unlessExecutionFlagSet FlagDisablePact44 validateKsn
   sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
   sigs' <- checkSigCaps sigs
   runPred (M.size sigs')
   where
-    validateKsn = case ksn of
-      Nothing -> pure ()
-      Just (KeySetName n) -> case parseOnly keysetNameParser n of
-        Left{} -> case _ksNamespace of
-          -- the keyset name is not namespaced
-          -- and there is no namespace for the keyset
-          Nothing -> pure ()
-          -- the keyset name is not namespaced,
-          -- but the keyset requires one. Hence, failure.
-          Just{} -> failed
-        Right (nsn, _ksn) ->
-          -- the keyset is namespace-qualified
-          -- and we should match the keyset namespace against
-          -- it.
-          unless (Just nsn == _ksNamespace)
-            failed
-
     matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn

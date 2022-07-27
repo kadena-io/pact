@@ -34,7 +34,6 @@ module Pact.Types.KeySet
   , enforceKeyFormats
   , keysetNameParser
   , ksKeys
-  , ksNamespace
   , ksPredFun
   ) where
 
@@ -43,6 +42,7 @@ import Control.DeepSeq
 import Control.Monad
 import Control.Lens hiding ((.=))
 import Data.Aeson
+import Data.Attoparsec.Text (parseOnly)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.UTF8 as BSU
@@ -76,7 +76,7 @@ newtype PublicKey = PublicKey { _pubKey :: ByteString }
   deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
 
 instance Arbitrary PublicKey where
-  arbitrary = PublicKey <$> encodeUtf8 <$> T.pack <$> vectorOf 64 genValidPublicKeyChar
+  arbitrary = PublicKey . encodeUtf8 . T.pack <$> vectorOf 64 genValidPublicKeyChar
     where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
 instance Serialize PublicKey
 instance NFData PublicKey
@@ -95,35 +95,32 @@ instance Pretty PublicKey where
 data KeySet = KeySet
   { _ksKeys :: !(Set PublicKey)
   , _ksPredFun :: !Name
-  , _ksNamespace :: !(Maybe NamespaceName)
   } deriving (Eq,Generic,Show,Ord)
 makeLenses ''KeySet
 
 instance NFData KeySet
 
 instance Pretty KeySet where
-  pretty (KeySet ks f ns) = "KeySet" <+> commaBraces
+  pretty (KeySet ks f) = "KeySet" <+> commaBraces
     [ "keys: " <> prettyList (toList ks)
     , "pred: " <> pretty f
-    , "ns: " <> pretty ns
     ]
 
 instance SizeOf KeySet where
-  sizeOf (KeySet pkArr ksPred _ns) =
+  sizeOf (KeySet pkArr ksPred) =
     -- TODO: check this ns sizeOf later
-    constructorCost 2 + sizeOf pkArr + sizeOf ksPred -- + sizeOf ns
+    constructorCost 2 + sizeOf pkArr + sizeOf ksPred
 
 instance Arbitrary KeySet where
   arbitrary = do
     pks <- listOf1 arbitrary
-    ns <- genBareText
     name <- frequency
       [ (3, pure "keys-all")
       , (2, pure "keys-any")
       , (1, pure "keys-2")
       , (1, genBareText)
       ]
-    pure $ mkKeySet pks name (Just ns)
+    pure $ mkKeySet pks name
 
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
@@ -135,48 +132,73 @@ instance FromJSON KeySet where
         keyListPred o = KeySet
           <$> o .: "keys"
           <*> (fromMaybe defPred <$> o .:? "pred")
-          <*> o .:? "ns"
 
         keyListOnly = KeySet
           <$> parseJSON v
           <*> pure defPred
-          <*> pure Nothing
 
 instance ToJSON KeySet where
-    toJSON (KeySet k f ns) = object $
+    toJSON (KeySet k f) = object
       [ "keys" .= k
       , "pred" .= f
-      ] ++
-      [ "ns" .= ns | isJust ns
       ]
-
 
 -- -------------------------------------------------------------------------- --
 -- KeySetName
 
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)
+data KeySetName
+  = KeySetName
+  { _ksnName :: Text
+  , _ksnNamespace :: Maybe NamespaceName
+  } deriving (Eq, Ord, Show, Generic)
+
+instance IsString KeySetName where
+  fromString ksn = case parseOnly keysetNameParser (T.pack ksn) of
+    Left e -> error e
+    Right ks -> ks
+
+instance NFData KeySetName
+
+instance SizeOf KeySetName where
+  sizeOf (KeySetName ks nsn) =
+    constructorCost 2 + sizeOf ks + sizeOf nsn
+
+instance FromJSON KeySetName where
+  parseJSON = lensyParseJSON 4
+
+instance ToJSON KeySetName where
+  toJSON = lensyToJSON 4
+
+instance AsString KeySetName where
+  asString (KeySetName n mns) = case mns of
+    Nothing -> n
+    Just (NamespaceName ns) -> n <> "." <> ns
 
 instance Arbitrary KeySetName where
-  arbitrary = KeySetName <$> genBareText
+  arbitrary = KeySetName
+    <$> genBareText
+    <*> (Just . NamespaceName <$> genBareText)
 
-instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
+instance Pretty KeySetName where pretty ksn = "'" <> pretty (asString ksn)
 
 keysetNameParser
   :: TokenParsing m
   => Monad m
-  => m (NamespaceName, KeySetName)
-keysetNameParser = do
-  ns <- ident style
-  kn <- dot *> ident style <* eof
-  pure (NamespaceName ns, KeySetName kn)
+  => m KeySetName
+keysetNameParser = withNs <|> woNs
+  where
+    withNs = do
+      ns <- NamespaceName <$> ident style
+      kn <- dot *> ident style <* eof
+      pure $ KeySetName kn (Just ns)
+
+    woNs = (`KeySetName` Nothing) <$> (ident style <* eof)
 
 -- | Smart constructor for a simple list and barename predicate.
-mkKeySet :: [PublicKey] -> Text -> Maybe Text -> KeySet
-mkKeySet pks p ns = KeySet
+mkKeySet :: [PublicKey] -> Text -> KeySet
+mkKeySet pks p = KeySet
   (S.fromList pks)
   (Name $ BareName p def)
-  (NamespaceName <$> ns)
 
 -- | A predicate for public key format validation.
 type KeyFormat = PublicKey -> Bool
@@ -201,6 +223,6 @@ validateKeyFormat k = any ($ k) keyFormats
 
 -- | Enforce valid 'KeySet' keys, evaluating error action on failure.
 enforceKeyFormats :: Monad m => (PublicKey -> m ()) -> KeySet -> m ()
-enforceKeyFormats err (KeySet ks _p _ns) = traverse_ go ks
+enforceKeyFormats err (KeySet ks _p) = traverse_ go ks
   where
     go k = unless (validateKeyFormat k) $ err k

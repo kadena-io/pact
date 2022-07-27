@@ -34,6 +34,7 @@ import qualified Data.Map.Strict as M
 import Data.Foldable (foldlM)
 import qualified Data.Vector as V
 import Data.Text (pack)
+import Data.Attoparsec.Text (parseOnly)
 
 import Pact.Eval
 import Pact.Runtime.Typecheck
@@ -43,7 +44,7 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.PactValue
-
+import Pact.Types.KeySet (keysetNameParser)
 
 class Readable a where
   readable :: a -> ReadValue
@@ -179,9 +180,14 @@ descTable i as = argsError i as
 
 descKeySet :: GasRNativeFun e
 descKeySet g i [TLitString t] = do
-  r <- readRow (_faInfo i) KeySets (KeySetName t)
+  k <- case parseOnly keysetNameParser t of
+    Left {} ->
+      evalError' i "incorrect keyset name format"
+    Right k -> pure k
+
+  r <- readRow (_faInfo i) KeySets k
   case r of
-    Just v -> computeGas' g i (GPostRead (ReadKeySet (KeySetName t) v)) $
+    Just v -> computeGas' g i (GPostRead (ReadKeySet k v)) $
               return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
 descKeySet _ i as = argsError i as

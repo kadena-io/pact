@@ -397,10 +397,10 @@ samplePubKeysWithCaps :: [(PublicKey, S.Set SigCapability)]
 samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
 
 sampleKeyset :: KeySet
-sampleKeyset = mkKeySet samplePubKeys "keys-all" $ Just sampleNamespaceName
+sampleKeyset = mkKeySet samplePubKeys "keys-all"
 
 sampleMultiSigKeyset :: KeySet
-sampleMultiSigKeyset = mkKeySet sampleMultiPubKeys "keys-all" $ Just sampleNamespaceName
+sampleMultiSigKeyset = mkKeySet sampleMultiPubKeys "keys-all"
 
 sampleNamespaceName :: T.Text
 sampleNamespaceName = "my-namespace"

@@ -24,6 +24,7 @@ import Control.Monad
 import Data.Default
 import Data.Maybe (isJust)
 import qualified Data.Set as S
+import Data.Attoparsec.Text (parseOnly)
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -33,7 +34,7 @@ import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-
+import Pact.Types.KeySet (keysetNameParser)
 
 capDefs :: NativeModule
 capDefs =
@@ -278,8 +279,13 @@ keysetRefGuard =
   where
     keysetRefGuard' :: RNativeFun e
     keysetRefGuard' fa [TLitString kref] = do
-      let n = KeySetName kref
-          i = _faInfo fa
+      n <- case parseOnly keysetNameParser kref of
+        Left {} ->
+          evalError' fa "incorrect keyset name format"
+        Right k -> pure k
+
+      let i = _faInfo fa
+
       readRow i KeySets n >>= \t -> case t of
         Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
         Just _ -> return $ (`TGuard` i) $ GKeySetRef n

@@ -476,8 +476,7 @@ defpact = do
 moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
-  gov <- Governance <$>
-    (((Left . KeySetName) <$> str) <|> (Right <$> userVar))
+  gov <- Governance <$> ((Left <$> keysetNameStr) <|> (Right <$> userVar))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"

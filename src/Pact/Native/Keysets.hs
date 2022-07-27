@@ -18,6 +18,7 @@ where
 
 import Control.Lens
 
+import Data.Attoparsec.Text (parseOnly)
 import Data.Text (Text)
 
 import Pact.Eval
@@ -26,7 +27,6 @@ import Pact.Types.KeySet
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Namespace
-
 
 readKeysetDef :: NativeDef
 readKeysetDef =
@@ -72,13 +72,7 @@ readKeySet' i key = do
   ks <- parseMsgKey i "read-keyset" key
   whenExecutionFlagSet FlagEnforceKeyFormats $
       enforceKeyFormats (const $ evalError' i "Invalid keyset") ks
-
-  ifExecutionFlagSet FlagDisablePact44
-    (pure ks)
-    (use (evalRefs . rsNamespace) >>= \case
-       Nothing -> pure ks
-       Just (Namespace nsn _ _) ->
-         pure $ set ksNamespace (Just nsn) ks)
+  pure ks
 
 defineKeyset :: GasRNativeFun e
 defineKeyset g0 fi as = case as of
@@ -87,28 +81,27 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      (mug, ksn) <- ifExecutionFlagSet FlagDisablePact44
-        (pure (Nothing, KeySetName name))
+      ksn <- case parseOnly keysetNameParser name of
+        Left {} -> evalError' fi "incorrect keyset name format"
+        Right k -> pure k
+
+      let i = _faInfo fi
+
+      ifExecutionFlagSet FlagDisablePact44
+        (pure ())
         (use (evalRefs . rsNamespace) >>= \case
           Nothing ->
             -- disallow creating keysets outside of a namespace
             evalError' fi "Cannot define keysets outside of a namespace"
-          Just (Namespace nsn@(NamespaceName n) _ ug)
-            | _ksNamespace ks == Just nsn ->
-              pure (Just ug, KeySetName $ n <> "." <> name)
+          Just (Namespace nsn _ ug)
+            | Just nsn == _ksnNamespace ksn ->
+              enforceGuard i ug
             | otherwise ->
-              evalError' fi "Mismatching namespace in keyset definition")
-
-      let i = _faInfo fi
+              evalError' fi "Mismatching keyset namespaces")
 
       old <- readRow i KeySets ksn
       case old of
         Nothing -> do
-          -- Enforce user guard on new keyset definition.
-          -- Do not enforce if rotating, since only initial
-          -- definition requires admin rights.
-          maybe (pure ()) (enforceGuard fi) mug
-
           computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
             writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do

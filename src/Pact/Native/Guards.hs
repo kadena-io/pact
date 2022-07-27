@@ -59,16 +59,16 @@ createPrincipal i = \case
   GPact (PactGuard pid n) -> do
     chargeGas 1
     pure $ "p:" <> asString pid <> ":" <> n
-  GKeySet (KeySet ks pf _) -> case (toList ks,asString pf) of
+  GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> do
       chargeGas 1
       pure $ "k:" <> asString k
     (l,fun) -> do
       a <- mkHash $ map _pubKey l
       pure $ "w:" <> asString a <> ":" <> fun
-  GKeySetRef (KeySetName n) -> do
+  GKeySetRef kref -> do
     chargeGas 1
-    pure $ "r:" <> n
+    pure $ "r:" <> asString kref
   GModule (ModuleGuard mn n) -> do
     chargeGas 1
     pure $ "m:" <> asString mn <> ":" <> n
