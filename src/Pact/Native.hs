@@ -164,11 +164,18 @@ enforceOneDef =
           TLitString s -> return s
           _ -> argsError' i as
         let tryCond r@Just {} _ = return r
-            tryCond Nothing cond = catch
-              (Just <$> reduce cond)
-              -- TODO: instead of catching all here, make pure violations
-              -- independently catchable
-              (\(_ :: SomeException) -> return Nothing)
+            tryCond Nothing cond = isExecutionFlagSet FlagDisablePact44 >>= \case
+              True -> do
+                g <- getGas
+                catch (Just <$> reduce cond)
+                  -- TODO: instead of catching all here, make pure violations
+                  -- independently catchable
+                  (\(_ :: SomeException) -> putGas g *> return Nothing)
+              False -> do
+                catch (Just <$> reduce cond)
+                  -- TODO: instead of catching all here, make pure violations
+                  -- independently catchable
+                  (\(_ :: SomeException) -> return Nothing)
         r <- foldM tryCond Nothing conds
         case r of
           Nothing -> failTx (_faInfo i) $ pretty msg'
@@ -187,12 +194,17 @@ tryDef =
   \to impure expressions such as reading and writing to a table."
   where
     try' :: NativeFun e
-    try' i as@[da, action] = gasUnreduced i as $ do
-      ra <- reduce da
-      -- TODO: instead of catching all here, make pure violations
-      -- independently catchable
-      catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) ->
-        return ra
+    try' i as@[da, action] = gasUnreduced i as $ isExecutionFlagSet FlagDisablePact44 >>= \case
+      True -> do
+        ra <- reduce da
+        g1 <- getGas
+        -- TODO: instead of catching all here, make pure violations
+        -- independently catchable
+        catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) -> do
+          putGas g1
+          return ra
+      False -> do
+        catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) -> reduce da
     try' i as = argsError' i as
 
 pactVersionDef :: NativeDef

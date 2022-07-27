@@ -14,7 +14,7 @@ module Pact.GasModel.Types
 
   , GasUnitTests(..)
   , concatGasUnitTests
-  , mapOverGasUnitTests
+  , runGasUnitTests
 
   , NoopNFData(..)
 
