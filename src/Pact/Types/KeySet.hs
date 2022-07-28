@@ -188,13 +188,9 @@ keysetNameParser
   :: TokenParsing m
   => Monad m
   => m KeySetName
-keysetNameParser = withNs <|> woNs
+keysetNameParser =
+  qualifiedKeysetNameParser <|> woNs
   where
-    withNs = do
-      ns <- NamespaceName <$> ident style
-      kn <- dot *> ident style <* eof
-      pure $ KeySetName kn (Just ns)
-
     woNs = (`KeySetName` Nothing) <$> (ident style <* eof)
 
 qualifiedKeysetNameParser
