@@ -198,9 +198,9 @@ qualifiedKeysetNameParser
   => Monad m
   => m KeySetName
 qualifiedKeysetNameParser = do
-      ns <- NamespaceName <$> ident style
-      kn <- dot *> ident style <* eof
-      pure $ KeySetName kn (Just ns)
+  ns <- NamespaceName <$> ident style
+  kn <- dot *> ident style <* eof
+  pure $ KeySetName kn (Just ns)
 
 parseAnyKeysetName
   :: Text
