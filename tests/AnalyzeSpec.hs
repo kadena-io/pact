@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
@@ -1259,8 +1260,7 @@ spec = describe "analyze" $ do
     expectCapGovPass code $ Satisfiable Success'
     expectCapGovPass code $ Satisfiable Abort'
 
-  describe "property language can describe whether cap-based governance \
-    \passes" $ do
+  describe "property language can describe whether cap-based governance passes" $ do
       res <- runIO $ runVerification $
         [text|
           (begin-tx)
@@ -1278,8 +1278,7 @@ spec = describe "analyze" $ do
       it "passes in-code checks" $
         handlePositiveTestResult res
 
-  describe "property language can describe whether ks-based governance passes \
-    \without mentioning the keyset" $ do
+  describe "property language can describe whether ks-based governance passes without mentioning the keyset" $ do
       let code =
             [text|
               (defun test:bool ()
@@ -3919,12 +3918,14 @@ spec = describe "analyze" $ do
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
 
+#if !darwin_HOST_OS
     describe "associativity of list concatenation" $ do
       expectVerified [text|
         (defun test:bool (a:[integer] b:[integer] c:[integer])
           @model [ (property result) ]
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
+#endif
 
     describe "testing monotonicity of a function" $ do
       expectVerified [text|

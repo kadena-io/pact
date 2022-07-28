@@ -161,7 +161,7 @@ enforceOneDef =
     enforceOne :: NativeFun e
     enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
-        msg' <- reduce msg >>= \m -> case m of
+        msg' <- reduce msg >>= \case
           TLitString s -> return s
           _ -> argsError' i as
         let tryCond r@Just {} _ = return r
@@ -1304,7 +1304,7 @@ continueNested i as = gasUnreduced i as $ case as of
       (Just ps, Just pe) -> do
         contArgs <- traverse reduce args >>= enforcePactValue'
         let childName = QName (QualifiedName (_dModule d) (asString (_dDefName d)) def)
-            cont = PactContinuation childName contArgs
+            cont = PactContinuation childName (stripPactValueInfo <$> contArgs)
         newPactId <- createNestedPactId i cont (_psPactId ps)
         let newPs = PactStep (_psStep ps) (_psRollback ps) newPactId
         case _peNested pe ^. at newPactId of

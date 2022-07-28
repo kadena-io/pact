@@ -130,9 +130,25 @@ initPureEvalEnv verifyUri = do
 initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
-  return $ EvalEnv (RefStore nativeDefs) mempty Null Transactional
-    def def mv repldb def pactInitialHash freeGasEnv
-    permissiveNamespacePolicy (spvs mv) def def def
+  return $ EvalEnv
+    { _eeRefStore = RefStore nativeDefs
+    , _eeMsgSigs = mempty
+    , _eeMsgBody = Null
+    , _eeMode = Transactional
+    , _eeEntity = Nothing
+    , _eePactStep = Nothing
+    , _eePactDbVar = mv
+    , _eePactDb = repldb
+    , _eePurity = PImpure
+    , _eeHash = pactInitialHash
+    , _eeGasEnv = freeGasEnv
+    , _eeNamespacePolicy = permissiveNamespacePolicy
+    , _eeSPVSupport = spvs mv
+    , _eePublicData = def
+    , _eeExecutionConfig = def
+    , _eeAdvice = def
+    , _eeInRepl = True
+    }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport
 
@@ -200,6 +216,11 @@ handleCompile :: String -> Exp Parsed -> (Term Name -> Repl (Either String a)) -
 handleCompile src exp a =
     case compile (mkStringInfo src) exp of
       Right t -> a t
+      -- special case for `with-capability` bareword due to
+      -- `with-capability` being a reserved word that fails to
+      -- compile if issued in the repl for doc purposes
+      Left{} | "with-capability" == (exp ^. _EAtom . to _atomAtom) ->
+          a $ TVar (Name (BareName "with-capability" def)) def
       Left er -> do
           case _iInfo (peInfo er) of
             Just (_,d) -> do
