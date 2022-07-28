@@ -157,6 +157,13 @@ enforceOneDef =
   ["(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])"]
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success."
   where
+    enforceBool i e = reduce e >>= \case
+      tl@(TLiteral (LBool cond) _) -> if cond then pure (Just tl) else pure Nothing
+      _ -> evalError' i "Failure: expected boolean result in enforce-one"
+    catchTxFailure :: PactError -> Eval e (Maybe (Term Name))
+    catchTxFailure e = case peType e of
+      TxFailure -> pure Nothing
+      _ -> throwM e
     enforceOne :: NativeFun e
     enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
@@ -171,11 +178,7 @@ enforceOneDef =
                   -- TODO: instead of catching all here, make pure violations
                   -- independently catchable
                   (\(_ :: SomeException) -> putGas g *> return Nothing)
-              False -> do
-                catch (Just <$> reduce cond)
-                  -- TODO: instead of catching all here, make pure violations
-                  -- independently catchable
-                  (\(_ :: SomeException) -> return Nothing)
+              False -> catch (enforceBool i cond) catchTxFailure
         r <- foldM tryCond Nothing conds
         case r of
           Nothing -> failTx (_faInfo i) $ pretty msg'
@@ -204,7 +207,9 @@ tryDef =
           putGas g1
           return ra
       False -> do
-        catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) -> reduce da
+        catch (runReadOnly i $ reduce action) $ \(e :: PactError) -> case peType e of
+          TxFailure -> reduce da
+          _ -> throwM e
     try' i as = argsError' i as
 
 pactVersionDef :: NativeDef

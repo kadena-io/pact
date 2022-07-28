@@ -1,5 +1,5 @@
 (begin-tx)
-
+(env-exec-config ["DisablePact44"])
 (module try-module GOVERNANCE
 
   "Test the try/handle-based control flow primitives"
