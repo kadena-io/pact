@@ -33,6 +33,9 @@ module Pact.Types.KeySet
   , validateKeyFormat
   , enforceKeyFormats
   , keysetNameParser
+  , qualifiedKeysetNameParser
+  , parseAnyKeysetName
+  , parseQualifiedKeySetName
   , ksKeys
   , ksPredFun
   ) where
@@ -153,7 +156,7 @@ data KeySetName
   } deriving (Eq, Ord, Show, Generic)
 
 instance IsString KeySetName where
-  fromString ksn = case parseOnly keysetNameParser (T.pack ksn) of
+  fromString ksn = case parseAnyKeysetName (T.pack ksn) of
     Left e -> error e
     Right ks -> ks
 
@@ -193,6 +196,27 @@ keysetNameParser = withNs <|> woNs
       pure $ KeySetName kn (Just ns)
 
     woNs = (`KeySetName` Nothing) <$> (ident style <* eof)
+
+qualifiedKeysetNameParser
+  :: TokenParsing m
+  => Monad m
+  => m KeySetName
+qualifiedKeysetNameParser = do
+      ns <- NamespaceName <$> ident style
+      kn <- dot *> ident style <* eof
+      pure $ KeySetName kn (Just ns)
+
+parseAnyKeysetName
+  :: Text
+  -> Either String KeySetName
+parseAnyKeysetName
+  = parseOnly keysetNameParser
+
+parseQualifiedKeySetName
+  :: Text
+  -> Either String KeySetName
+parseQualifiedKeySetName
+  = parseOnly qualifiedKeysetNameParser
 
 -- | Smart constructor for a simple list and barename predicate.
 mkKeySet :: [PublicKey] -> Text -> KeySet

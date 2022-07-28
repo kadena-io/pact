@@ -18,7 +18,6 @@ where
 
 import Control.Lens
 
-import Data.Attoparsec.Text (parseOnly)
 import Data.Text (Text)
 
 import Pact.Eval
@@ -81,23 +80,24 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      ksn <- case parseOnly keysetNameParser name of
-        Left {} -> evalError' fi "incorrect keyset name format"
-        Right k -> pure k
-
       let i = _faInfo fi
 
-      ifExecutionFlagSet FlagDisablePact44
-        (pure ())
+      ksn <- ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName name Nothing)
         (use (evalRefs . rsNamespace) >>= \case
           Nothing ->
             -- disallow creating keysets outside of a namespace
             evalError' fi "Cannot define keysets outside of a namespace"
-          Just (Namespace nsn _ ug)
-            | Just nsn == _ksnNamespace ksn ->
-              enforceGuard i ug
-            | otherwise ->
-              evalError' fi "Mismatching keyset namespaces")
+          Just (Namespace nsn _ ug) ->
+            case parseQualifiedKeySetName name of
+              Left {} -> evalError' fi "incorrect keyset name format"
+              Right k@(KeySetName _ (Just nsn'))
+                | nsn == nsn' -> do
+                  -- when the namespace matches with the env
+                  -- enforce the user guard and make sure we have privs
+                  enforceGuard i ug
+                  pure k
+              _ -> evalError' fi "Mismatching keyset namespaces")
 
       old <- readRow i KeySets ksn
       case old of

@@ -48,7 +48,6 @@ import Text.Megaparsec as MP
 import Text.Megaparsec.Internal (ParsecT(..))
 import Data.Proxy
 import Data.Void
-import Data.Attoparsec.Text (parseOnly)
 import Data.List.NonEmpty (NonEmpty(..),fromList,toList)
 import Data.List
 import Control.Monad
@@ -66,7 +65,7 @@ import Pact.Types.Exp
 import Pact.Types.Pretty hiding (list, sep)
 import Pact.Types.PactError (PactError(..),PactErrorType(..))
 import Pact.Types.Info
-import Pact.Types.KeySet (KeySetName, keysetNameParser)
+import Pact.Types.KeySet (KeySetName, parseAnyKeysetName)
 
 -- | Exp stream type.
 data Cursor = Cursor
@@ -292,7 +291,7 @@ str = lit' "string" _LString
 keysetNameStr :: ExpParse s KeySetName
 keysetNameStr = parseKsn =<< lit' "keyset-name" _LString
   where
-    parseKsn k = case parseOnly keysetNameParser k of
+    parseKsn k = case parseAnyKeysetName k of
       Left{} -> syntaxError "invalid keyset name format"
       Right a -> pure a
 

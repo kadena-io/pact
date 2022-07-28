@@ -48,7 +48,6 @@ import Data.Default
 import Data.Foldable
 import qualified Data.Vector as V
 import Data.Text (Text)
-import Data.Attoparsec.Text (parseOnly)
 import Unsafe.Coerce
 import Data.Functor (($>))
 
@@ -60,7 +59,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Runtime.Utils
-import Pact.Types.KeySet (keysetNameParser)
+import Pact.Types.KeySet (parseAnyKeysetName)
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -175,7 +174,7 @@ enforceGuardDef dn =
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of
       [TGuard g _] -> enforceGuard i g >> return (toTerm True)
-      [TLitString k] -> case parseOnly keysetNameParser k of
+      [TLitString k] -> case parseAnyKeysetName k of
         Left{} -> evalError' i "incorrect keyset name format"
         Right ksn -> enforceGuard i (GKeySetRef ksn) $> toTerm True
       _ -> argsError i as

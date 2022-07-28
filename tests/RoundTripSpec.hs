@@ -35,7 +35,7 @@ testJSONPersist = do
   rt "bool" (PLiteral (LBool False))
   rt "string" (PLiteral (LString "hello"))
   rt "time" (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
-  rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun" Nothing))
+  rt "keyset" (PGuard (GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
   rt "modref" (PModRef (ModRef "foo.bar" (Just ["baz", "bof.quux"]) def))
   rt "list" (PList (V.fromList [PLiteral (LInteger 123), PLiteral (LBool False), PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC"))]))
   rt "object" (PObject (ObjectMap (fromList [("A",PLiteral (LInteger 123)), ("B",PLiteral (LBool False))])))
@@ -48,8 +48,8 @@ testJSONColumns = do
   where
   uguard = GUser $ UserGuard (Name (BareName "a" def)) [PLiteral (LInteger 123)]
   pguard = GPact $ PactGuard (PactId "123") "456"
-  ksguard = GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun" Nothing
-  ksrguard = GKeySetRef $ KeySetName "beepboop"
+  ksguard = GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"
+  ksrguard = GKeySetRef $ KeySetName "beepboop" Nothing
   mguard = GModule $ ModuleGuard (ModuleName "beep" Nothing) "boop"
   obj = ObjectMap $ fromList
     [("A", PLiteral (LInteger 123))

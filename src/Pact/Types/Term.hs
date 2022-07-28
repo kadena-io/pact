@@ -106,7 +106,6 @@ import Data.Aeson hiding (pairs,Object, (<?>))
 #else
 import Data.Aeson hiding (pairs,Object)
 #endif
-import Data.Attoparsec.Text (parseOnly)
 import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
@@ -706,7 +705,7 @@ guardCodec = Codec enc dec
       (GKeySet <$> parseJSON v) <|>
       (withObject "KeySetRef" $ \o -> do
           ksn <- o .: keyNamef
-          ks <- case parseOnly keysetNameParser ksn of
+          ks <- case parseAnyKeysetName ksn of
             -- TODO: review!!!!
             Left {} -> fail "Invalid keyset ref json format"
             Right n -> pure n
