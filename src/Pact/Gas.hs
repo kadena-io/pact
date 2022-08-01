@@ -54,7 +54,7 @@ computeGasNoLog commit info name args = do
     else return gUsed
 
 putGas :: Gas -> Eval e ()
-putGas g = do
+putGas !g = do
   gasRef <- view eeGas
   liftIO (writeIORef gasRef g)
 

@@ -278,8 +278,6 @@ data EvalState = EvalState {
     , _evalCallStack :: ![StackFrame]
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
-      -- | Gas tally
-    -- , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)

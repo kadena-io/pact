@@ -127,7 +127,11 @@ runTest t = runGasUnitTests t run run
       return (res', st, gas)
     setupEnv' dbs = do
       (r, s) <- setupEnv dbs
-      let r' = set eeExecutionConfig (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePactEvents, FlagDisablePact43, FlagDisablePact44]) r
+      let
+        flags = mkExecutionConfig
+               [ FlagDisableInlineMemCheck, FlagDisablePactEvents
+               , FlagDisablePact43, FlagDisablePact44]
+        r' = set eeExecutionConfig flags r
       pure (r', s)
 
 toGoldenOutput :: GasTestResult ([Term Name], EvalState, Gas) -> (T.Text, Gas)
