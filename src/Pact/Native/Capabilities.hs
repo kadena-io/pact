@@ -261,7 +261,7 @@ createModuleGuard =
   "Defines a guard by NAME that enforces the current module admin predicate."
   where
     createModuleGuard' :: RNativeFun e
-    createModuleGuard' i [TLitString name] = findCallingModule >>= \m -> case m of
+    createModuleGuard' i [TLitString name] = findCallingModule >>= \case
       Just mn ->
         return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
       Nothing -> evalError' i "create-module-guard: must call within module"
@@ -285,7 +285,7 @@ keysetRefGuard =
 
       let i = _faInfo fa
 
-      readRow i KeySets n >>= \t -> case t of
+      readRow i KeySets n >>= \case
         Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
         Just _ -> return $ (`TGuard` i) $ GKeySetRef n
     keysetRefGuard' i as = argsError i as
