@@ -175,7 +175,7 @@ instance ToJSON KeySetName where
 instance AsString KeySetName where
   asString (KeySetName n mns) = case mns of
     Nothing -> n
-    Just (NamespaceName ns) -> n <> "." <> ns
+    Just (NamespaceName ns) -> ns <> "." <> n
 
 instance Arbitrary KeySetName where
   arbitrary = KeySetName

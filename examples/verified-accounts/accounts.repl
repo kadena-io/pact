@@ -1,3 +1,4 @@
+(env-exec-config ["DisablePact44"])
 (env-keys ["accountadmin" "user123" "user456"])
 (env-data { "accounts-admin-keyset": ["accountadmin"] })
 (begin-tx)

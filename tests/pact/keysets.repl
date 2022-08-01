@@ -1,5 +1,5 @@
-
 (begin-tx)
+(env-exec-config ["DisablePact44"])
 (env-data { "kall": ["a" "b" "c"] })
 (define-keyset "k" (sig-keyset))
 (define-keyset 'kall (read-keyset "kall"))
