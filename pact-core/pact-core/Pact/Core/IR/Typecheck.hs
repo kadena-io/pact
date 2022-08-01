@@ -888,30 +888,6 @@ generalizeWithTerm' ty pp term = do
 
 liftType :: Type Void -> Type a
 liftType = fmap absurd
--- liftTypeVar :: Type Void -> InferT s b i (TCType s)
--- liftTypeVar = \case
---   TyVar tyv -> liftRef tyv
---   TyPrim p -> pure (TyPrim p)
---   TyFun l r ->
---     TyFun <$> liftTypeVar l <*> liftTypeVar r
---   TyRow r -> TyRow <$> liftTVRow r
---   TyTable r -> TyTable <$> liftTVRow r
---   TyList l -> TyList <$> liftTypeVar l
---   TyGuard -> pure TyGuard
---   TyCap -> pure TyCap
---   TyForall _ _ -> fail "impossible"
---   where
---   -- Todo: Do we want to allow
---   -- bounded type variables to be captured and quantified by users?
---   -- Probably not, so this is just "fail" for now.
---   liftRef _ = fail "unsupported lifting of unbound variable"
---   liftTVRow = \case
---     EmptyRow -> pure EmptyRow
---     RowVar v -> RowVar <$> liftRef v
---     RowTy obj mrv -> do
---       obj' <- traverse liftTypeVar obj
---       mrv' <- traverse liftRef mrv
---       pure (RowTy obj' mrv')
 
 toOName :: IRName -> OverloadedName b
 toOName (IRName n nk u) =
@@ -1079,12 +1055,24 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   rty' <- debruijnizeType (maybe termTy id dcTy')
   pure (Typed.DefConst name rty' fterm info)
 
--- inferDefCap
-  -- :: IR.DefCap IRName b i
-inferDefCap (IR.DefCap name args term captype ty info ) = do
+inferDefCap
+  :: IR.DefCap IRName b i
+  -> InferM s b i (TypedDefCap b i)
+inferDefCap (IR.DefCap name args term captype capTy info) = do
   enterLevel
-  
+  (ty', term', preds) <- inferTerm term
   leaveLevel
+  let capTy' = liftType ty
+  fterm <- debruijnizeTermTypes term'
+  unify capTy' (ty' :~> TyCap)
+  unless (null preds) $ fail "typeclass constraints not supported in defun"
+  case captype of
+    ManagedCap i ty n -> case _irNameKind n of
+      IRBound -> views tcVarEnv (IntMap.lookup (_irUnique n)) >>= \case
+        Just tys ->  undefined
+      IRTopLevel mn mh -> undefined
+      -- pure (IR.DefCap name args fterm captype capTy' info)
+
 
 
 inferDef
@@ -1093,6 +1081,7 @@ inferDef
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
   IR.DConst d -> Typed.DConst <$> inferDefConst d
+  IR.DCap d -> Typed.DCap <$> inferDefCap d
 
 inferModule
   :: IR.Module IRName b i

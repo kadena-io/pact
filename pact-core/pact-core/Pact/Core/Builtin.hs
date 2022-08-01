@@ -19,6 +19,7 @@ module Pact.Core.Builtin
  , BuiltinArity(..)
  , CapabilityOp(..)
  , CapType(..)
+ , DefType(..)
  )where
 
 import Data.Void(Void)
@@ -44,6 +45,11 @@ data ObjectOp o
   | ReadEnvObject (Row Void) o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
+data DefType
+  = DTDefun
+  | DTDefcap
+  | DTDefConst
+  deriving Show
 
 data CapabilityOp name o
   = WithCapability name [o] o
@@ -53,10 +59,10 @@ data CapabilityOp name o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 data CapType name
-  = ManagedCap Int name
+  = ManagedCap Int (Type Void) name
   | AutomanagedCap
   | Unmanaged
-  deriving Show
+  deriving  (Show, Eq, Functor, Foldable, Traversable)
 
 {-
   [Typeclasses and Instances]

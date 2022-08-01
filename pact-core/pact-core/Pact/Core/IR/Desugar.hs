@@ -98,7 +98,7 @@ data RenamerState b i
 
 makeLenses ''RenamerState
 
-newtype RenamerT cb ci a =
+newtype RenamerM cb ci a =
   RenamerT (StateT (RenamerState cb ci) (ReaderT (RenamerEnv cb ci) IO) a)
   deriving
     (Functor, Applicative, Monad
@@ -120,7 +120,7 @@ dsOut :: Lens (DesugarOutput b i a) (DesugarOutput b i a') a a'
 dsOut f (DesugarOutput a s l d) =
   f a <&> \a' -> DesugarOutput a' s l d
 
-newUnique' :: RenamerT cb ci Unique
+newUnique' :: RenamerM cb ci Unique
 newUnique' = do
   sup <- view reSupply
   u <- liftIO (readIORef sup)
@@ -345,7 +345,9 @@ desugarDefCap (Common.DefCap dn argList managed term i) = let
     Common.AutoManaged -> AutomanagedCap
     Common.Managed t pn -> case findIndex ((== t) . Common._argName) argList of
       Nothing -> error "invalid managed cap decl"
-      Just n -> ManagedCap n pn
+      Just n -> let
+        ty' = desugarType $ Common._argType (argList !! n)
+        in ManagedCap n ty' pn
 
 
 desugarDef :: (DesugarTerm term b i) => Common.Def term i -> Def ParsedName b i
@@ -439,10 +441,14 @@ defunSCC mn = termSCC mn . _dfunTerm
 defConstSCC :: ModuleName -> DefConst IRName b i -> Set Text
 defConstSCC mn = termSCC mn . _dcTerm
 
+defCapSCC :: ModuleName -> DefCap IRName b i -> Set Text
+defCapSCC mn = termSCC mn . _dcapTerm
+
 defSCC :: ModuleName -> Def IRName b i1 -> Set Text
 defSCC mn = \case
   Dfun d -> defunSCC mn d
   DConst d -> defConstSCC mn d
+  DCap d -> defCapSCC mn d
 
 -- | Look up a qualified name in the pact db
 -- if it's there, great! We will load the module into the scope of
@@ -453,7 +459,7 @@ defSCC mn = \case
 lookupModuleMember
   :: ModuleName
   -> Text
-  -> RenamerT cb ci IRName
+  -> RenamerM cb ci IRName
 lookupModuleMember modName name = do
   view rePactDb >>= liftIO . (`_readModule` modName) >>= \case
     Just md -> let
@@ -483,70 +489,48 @@ lookupModuleMember modName name = do
     fqn = FullyQualifiedName modName (rawDefName def) mhash
     in (fqn, Term.defTerm def)
 
--- not in immediate binds, so it must be in the module
--- Todo: resolve module ref within this model
--- Todo: hierarchical namespace search
-resolveBare :: Text -> RenamerT cb ci IRName
-resolveBare bn = views reBinds (Map.lookup bn) >>= \case
-  Just (irnk, u) ->
-    pure (IRName bn irnk u)
-  Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
-    Just fqn -> pure (IRName bn (IRTopLevel (_fqModule fqn) (_fqHash fqn)) dummyTLUnique)
-    Nothing -> fail $ "unbound free variable " <> show bn
-
 -- Rename a term (that is part of a module)
 -- emitting the list of dependent calls
 renameTerm
   :: Term ParsedName b i
-  -> RenamerT cb ci (Term IRName b i)
-renameTerm = fvd
-  where
-  fvd (Var n i) = case n of
-      BN (BareName bn) -> (`Var` i) <$> resolveBare bn
-      QN (QualifiedName qn qmn) -> do
-        uses rsModuleBinds (Map.lookup qmn) >>= \case
-          Just binds -> case Map.lookup qn binds of
-            Just irnk -> pure (Var (IRName qn irnk dummyTLUnique) i)
-            Nothing -> fail "bound module has no such member"
-          Nothing -> do
-            irn <- lookupModuleMember qmn qn
-            pure (Var irn i)
-  fvd (Lam nsts body i) = do
-    let (pns, ts) = NE.unzip nsts
-        ns = rawParsedName <$> pns
-    nUniques <- traverse (const newUnique') ns
-    let m = Map.fromList $ NE.toList $ NE.zip ns ((IRBound,) <$> nUniques)
-        ns' = NE.zipWith (`IRName` IRBound) ns nUniques
-    term' <- locally reBinds (Map.union m) (fvd body)
-    pure (Lam (NE.zip ns' ts) term' i)
-  fvd (Let name mt e1 e2 i) = do
-    nu <- newUnique'
-    let rawName = rawParsedName name
-        name' = IRName rawName IRBound nu
-    e1' <- fvd e1
-    e2' <- locally reBinds (Map.insert rawName (IRBound, nu)) (fvd e2)
-    pure (Let name' mt e1' e2' i)
-  fvd (App fn apps i) = do
-    fn' <- fvd fn
-    apps' <- traverse fvd apps
-    pure (App fn' apps' i)
-  fvd (Block exprs i) = do
-    exprs' <- traverse fvd exprs
-    pure (Block exprs' i)
-  fvd (Builtin b i) = pure (Builtin b i)
-  fvd DynAccess{} = fail "todo: implement"
-  fvd (Constant l i) =
-    pure (Constant l i)
-  fvd (ObjectLit o i) =
-    ObjectLit <$> traverse fvd o <*> pure i
-  fvd (ListLit v i) = do
-    ListLit <$> traverse fvd v <*> pure i
-  fvd (ObjectOp o i) = do
-    ObjectOp <$> traverse fvd o <*> pure i
+  -> RenamerM cb ci (Term IRName b i)
+renameTerm (Var n i) = (`Var` i) <$> resolveName n
+renameTerm (Lam nsts body i) = do
+  let (pns, ts) = NE.unzip nsts
+      ns = rawParsedName <$> pns
+  nUniques <- traverse (const newUnique') ns
+  let m = Map.fromList $ NE.toList $ NE.zip ns ((IRBound,) <$> nUniques)
+      ns' = NE.zipWith (`IRName` IRBound) ns nUniques
+  term' <- locally reBinds (Map.union m) (renameTerm body)
+  pure (Lam (NE.zip ns' ts) term' i)
+renameTerm (Let name mt e1 e2 i) = do
+  nu <- newUnique'
+  let rawName = rawParsedName name
+      name' = IRName rawName IRBound nu
+  e1' <- renameTerm e1
+  e2' <- locally reBinds (Map.insert rawName (IRBound, nu)) (renameTerm e2)
+  pure (Let name' mt e1' e2' i)
+renameTerm (App fn apps i) = do
+  fn' <- renameTerm fn
+  apps' <- traverse renameTerm apps
+  pure (App fn' apps' i)
+renameTerm (Block exprs i) = do
+  exprs' <- traverse renameTerm exprs
+  pure (Block exprs' i)
+renameTerm (Builtin b i) = pure (Builtin b i)
+renameTerm DynAccess{} = fail "todo: implement"
+renameTerm (Constant l i) =
+  pure (Constant l i)
+renameTerm (ObjectLit o i) =
+  ObjectLit <$> traverse renameTerm o <*> pure i
+renameTerm (ListLit v i) = do
+  ListLit <$> traverse renameTerm v <*> pure i
+renameTerm (ObjectOp o i) = do
+  ObjectOp <$> traverse renameTerm o <*> pure i
 
 renameDefun
   :: Defun ParsedName b i
-  -> RenamerT cb ci (Defun IRName b i)
+  -> RenamerM cb ci (Defun IRName b i)
 renameDefun (Defun n dty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   term' <- renameTerm term
@@ -554,28 +538,61 @@ renameDefun (Defun n dty term i) = do
 
 renameDefConst
   :: DefConst ParsedName b i
-  -> RenamerT cb ci (DefConst IRName b i)
+  -> RenamerM cb ci (DefConst IRName b i)
 renameDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   term' <- renameTerm term
   pure (DefConst n mty term' i)
 
+renameDefCap
+  :: DefCap ParsedName builtin info
+  -> RenamerM cb ci (DefCap IRName builtin info)
+renameDefCap (DefCap name args term capType ty i) = do
+  term' <- renameTerm term
+  capType' <- traverse resolveName capType
+  pure (DefCap name args term' capType' ty i)
+
 renameDef
   :: Def ParsedName b i
-  -> RenamerT cb ci (Def IRName b i)
+  -> RenamerM cb ci (Def IRName b i)
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
+  DCap d -> DCap <$> renameDefCap d
 
-resolveBareName' :: Text -> RenamerT b i IRName
+resolveName :: ParsedName -> RenamerM b i IRName
+resolveName = \case
+  BN b -> resolveBare b
+  QN q -> resolveQualified q
+
+-- not in immediate binds, so it must be in the module
+-- Todo: resolve module ref within this model
+-- Todo: hierarchical namespace search
+resolveBare :: BareName -> RenamerM cb ci IRName
+resolveBare (BareName bn) = views reBinds (Map.lookup bn) >>= \case
+  Just (irnk, u) ->
+    pure (IRName bn irnk u)
+  Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
+    Just fqn -> pure (IRName bn (IRTopLevel (_fqModule fqn) (_fqHash fqn)) dummyTLUnique)
+    Nothing -> fail $ "unbound free variable " <> show bn
+
+resolveBareName' :: Text -> RenamerM b i IRName
 resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
   Just (irnk, u) -> pure (IRName bn irnk u)
   Nothing -> fail $ "Expected identifier " <> T.unpack bn <> " in scope"
 
+resolveQualified :: QualifiedName -> RenamerM b i IRName
+resolveQualified (QualifiedName qn qmn) = do
+  uses rsModuleBinds (Map.lookup qmn) >>= \case
+    Just binds -> case Map.lookup qn binds of
+      Just irnk -> pure (IRName qn irnk dummyTLUnique)
+      Nothing -> fail "bound module has no such member"
+    Nothing -> lookupModuleMember qmn qn
+
 -- | Todo: support imports
 renameModule
   :: Module ParsedName b i
-  -> RenamerT cb ci (Module IRName b i)
+  -> RenamerM cb ci (Module IRName b i)
 renameModule (Module mname mgov defs blessed imp implements mhash) = do
   let rawDefNames = defName <$> defs
       defMap = Map.fromList $ (, (IRTopLevel mname mhash, dummyTLUnique)) <$> rawDefNames
@@ -597,7 +614,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash) = do
 runRenamerT
   :: RenamerState b i
   -> RenamerEnv b i
-  -> RenamerT b i a
+  -> RenamerM b i a
   -> IO (a, RenamerState b i)
 runRenamerT st env (RenamerT act) = runReaderT (runStateT act st) env
 
@@ -619,7 +636,7 @@ runDesugar'
   :: PactDb b i
   -> Loaded b i
   -> Supply
-  -> RenamerT b i a
+  -> RenamerM b i a
   -> IO (DesugarOutput b i a)
 runDesugar' pdb loaded supply act = do
   ref <- newIORef supply
