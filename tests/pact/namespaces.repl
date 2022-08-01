@@ -36,8 +36,10 @@
 (env-data
   { "alice.alice-keys" : ["alice"]
   , "alice-keys" : ["alice"]
+  , "bob.bob-keys" : ["bob"]
+  , "bob-keys" : ["bob"]
   })
-(env-keys ["alice"])
+(env-keys ["alice", "bob"])
 
 (define-keyset "alice.alice-keys")
 
@@ -60,7 +62,7 @@
 
 ; now bob gets his own namespace in the tx
 (namespace 'bob)
-(define-keyset 'bob-keys)
+(define-keyset "bob.bob-keys")
 
 (interface bob-contract
   @doc "this contract is for bob, and occurs in the \
@@ -73,14 +75,18 @@
 (commit-tx)
 (begin-tx)
 
-(env-data { "carl-keys" : ["carl"] })
-(define-keyset 'carl-keys)
+(env-data
+  { "carl-keys" : ["carl"]
+  , "carl.carl-keys": ["carl"]
+  })
+
 (env-keys ["carl"])
 
 (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
 (namespace 'carl)
+(define-keyset "carl.carl-keys")
 
-(module carl-module 'carl-keys
+(module carl-module "carl.carl-keys"
   @doc "lets implement alice's and bob's contracts"
 
   (implements alice.alice-contract)
@@ -120,6 +126,7 @@
   (defconst TBOOL true)
 )
 
+(env-exec-config ['DisablePact44])
 (env-data { "test-keys" : ["test"] })
 (define-keyset 'test-keys)
 (env-keys ["test"])
