@@ -111,8 +111,7 @@ instance Pretty KeySet where
 
 instance SizeOf KeySet where
   sizeOf (KeySet pkArr ksPred) =
-    -- TODO: check this ns sizeOf later
-    constructorCost 2 + sizeOf pkArr + sizeOf ksPred
+    (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
 
 instance Arbitrary KeySet where
   arbitrary = do
@@ -182,7 +181,8 @@ instance Arbitrary KeySetName where
     <$> genBareText
     <*> (Just . NamespaceName <$> genBareText)
 
-instance Pretty KeySetName where pretty ksn = "'" <> pretty (asString ksn)
+instance Pretty KeySetName where
+  pretty ksn = "\"" <> pretty (asString ksn) <> "\""
 
 keysetNameParser
   :: TokenParsing m

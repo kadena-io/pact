@@ -278,10 +278,11 @@ keysetRefGuard =
   where
     keysetRefGuard' :: RNativeFun e
     keysetRefGuard' fa [TLitString kref] = do
-      n <- case parseAnyKeysetName kref of
-        Left {} ->
-          evalError' fa "incorrect keyset name format"
-        Right k -> pure k
+      n <- ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName kref Nothing)
+        (case parseAnyKeysetName kref of
+           Left {} -> evalError' fa "incorrect keyset name format"
+           Right k -> pure k)
 
       let i = _faInfo fa
 

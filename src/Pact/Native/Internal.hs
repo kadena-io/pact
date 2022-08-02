@@ -174,9 +174,14 @@ enforceGuardDef dn =
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of
       [TGuard g _] -> enforceGuard i g >> return (toTerm True)
-      [TLitString k] -> case parseAnyKeysetName k of
-        Left{} -> evalError' i "incorrect keyset name format"
-        Right ksn -> enforceGuard i (GKeySetRef ksn) $> toTerm True
+      [TLitString k] -> do
+        let f ksn = enforceGuard i (GKeySetRef ksn) $> toTerm True
+
+        ifExecutionFlagSet FlagDisablePact44
+          (f $ KeySetName k Nothing)
+          (case parseAnyKeysetName k of
+             Left{} -> evalError' i "incorrect keyset name format"
+             Right ksn -> f ksn)
       _ -> argsError i as
 
 
