@@ -498,32 +498,32 @@ d.G3
 (env-gaslog)
 (define-keyset "a" (read-keyset "short-key"))
 (env-gaslog)
-(expect "Cost: defining keyset with short name" 55 (env-gas))
+(expect "Cost: defining keyset with short name" 59 (env-gas))
 
 (env-keys ["s"])
 (env-gas 0)
 (env-gaslog)
 (define-keyset "a" (read-keyset "short-key"))
 (env-gaslog)
-(expect "Cost: rotating keyset with short name" 56 (env-gas))
+(expect "Cost: rotating keyset with short name" 60 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (define-keyset "a-key" (read-keyset "short-key"))
 (env-gaslog)
-(expect "Cost: defining keyset with longer name" 56 (env-gas))
+(expect "Cost: defining keyset with longer name" 59 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (define-keyset "c" (read-keyset "long-key"))
 (env-gaslog)
-(expect "Cost: defining keyset with short name and longer keyset" 64 (env-gas))
+(expect "Cost: defining keyset with short name and longer keyset" 68 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (define-namespace "a" (keyset-ref-guard "a-key") (keyset-ref-guard "a-key"))
 (env-gaslog)
-(expect "Cost: defining namespace with short name" 62 (env-gas))
+(expect "Cost: defining namespace with short name" 69 (env-gas))
 
 (env-keys [])
 (env-keys ["s"])
@@ -531,7 +531,7 @@ d.G3
 (env-gaslog)
 (define-namespace "a" (keyset-ref-guard "a-key") (keyset-ref-guard "a-key"))
 (env-gaslog)
-(expect "Cost: rotating namespace with short name" 64 (env-gas))
+(expect "Cost: rotating namespace with short name" 71 (env-gas))
 
 (commit-tx)
 

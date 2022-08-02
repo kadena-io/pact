@@ -182,7 +182,7 @@ instance Arbitrary KeySetName where
     <*> (Just . NamespaceName <$> genBareText)
 
 instance Pretty KeySetName where
-  pretty ksn = "\"" <> pretty (asString ksn) <> "\""
+  pretty ksn = "'" <> pretty (asString ksn)
 
 keysetNameParser
   :: TokenParsing m
