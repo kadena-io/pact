@@ -51,11 +51,11 @@ spec = do
     ,("crossChainSendCRBackCompat",crossChainSendCR True)
     ]
   describe "goldenAutoCap" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
   describe "goldenLambdas" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "lambda-module" "golden/golden.lams.repl" "lams-test" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "lambda-module" "golden/golden.lams.repl" "lams-test" []
   describe "goldenModuleMemcheck" $
-    goldenModule [FlagDisablePact43] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
+    goldenModule [FlagDisablePact43, FlagDisablePact44] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
   describe "goldenFullyQuals" $
     goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
 
