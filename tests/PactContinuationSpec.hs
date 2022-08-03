@@ -245,7 +245,6 @@ testCorrectNextStep mgr code command cfg = do
 threeStepPactCode :: T.Text -> T.Text
 threeStepPactCode moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
       (module $moduleName 'k
         (defpact tester ()
@@ -256,7 +255,6 @@ threeStepPactCode moduleName =
 threeStepNestedPactCode :: T.Text -> T.Text
 threeStepNestedPactCode moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (interface iface
 
@@ -382,7 +380,6 @@ testErrStep mgr code command cfg = do
 errorStepPactCode :: T.Text -> T.Text
 errorStepPactCode moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (module $moduleName 'k
       (defpact tester ()
@@ -393,7 +390,6 @@ errorStepPactCode moduleName =
 errorStepNestedPactCode :: T.Text -> T.Text
 errorStepNestedPactCode moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
       (module $moduleName 'k
        (defpact tester ()
@@ -475,7 +471,6 @@ testCorrectRollbackStep mgr = do
 pactWithRollbackCode :: T.Text -> T.Text
 pactWithRollbackCode moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (module $moduleName 'k
       (defpact tester ()
@@ -538,7 +533,6 @@ testRollbackErr mgr = do
 pactWithRollbackErrCode :: T.Text -> T.Text
 pactWithRollbackErrCode moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (module $moduleName 'k
       (defpact tester ()
@@ -738,7 +732,6 @@ testValidYield moduleName mgr mkCode cfg = do
 pactWithYield :: T.Text -> T.Text
 pactWithYield moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (module $moduleName 'k
       (defpact tester (name)
@@ -758,7 +751,6 @@ pactWithYield moduleName =
 nestedPactWithYield :: T.Text -> T.Text
 nestedPactWithYield moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (module nested-$moduleName 'k
       (defpact tester (name)
@@ -836,7 +828,6 @@ pactWithYieldErr moduleName =
 nestedPactWithYieldErr :: T.Text -> T.Text
 nestedPactWithYieldErr moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (module nested-$moduleName 'k
       (defpact tester (name)
@@ -896,7 +887,6 @@ testResetYield moduleName mgr mkCode cfg = do
 pactWithSameNameYield :: T.Text -> T.Text
 pactWithSameNameYield moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
       (module $moduleName 'k
         (defpact tester ()
@@ -916,7 +906,6 @@ pactWithSameNameYield moduleName =
 nestedPactWithSameNameYield :: T.Text -> T.Text
 nestedPactWithSameNameYield moduleName =
   [text|
-    (env-exec-config ["DisablePact44"])
     (define-keyset 'k (read-keyset "admin-keyset"))
     (module nested-$moduleName 'k
       (defpact tester ()
