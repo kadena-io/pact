@@ -43,7 +43,7 @@ import Pact.Types.SPV
 spec :: Spec
 spec = do
   describe "goldenAccounts" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "accounts-module" "golden/golden.accounts.repl" "accounts"
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
     ,("eventCR",eventCR)
