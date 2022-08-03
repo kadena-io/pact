@@ -31,3 +31,4 @@ coverage
 .pact-history
 */.pact-history
 hie.yaml
+commands.sqlite
