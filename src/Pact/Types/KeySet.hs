@@ -166,10 +166,13 @@ instance SizeOf KeySetName where
     constructorCost 2 + sizeOf ks + sizeOf nsn
 
 instance FromJSON KeySetName where
-  parseJSON = lensyParseJSON 4
+  parseJSON = withObject "KeySetName" $ \o -> KeySetName
+    <$> o .: "name"
+    <*> (fromMaybe Nothing <$> o .:? "ns")
 
 instance ToJSON KeySetName where
-  toJSON = lensyToJSON 4
+  toJSON (KeySetName k n) =
+    object $ [ "name" .= k ] ++ [ "ns" .= n | isJust n ]
 
 instance AsString KeySetName where
   asString (KeySetName n mns) = case mns of
