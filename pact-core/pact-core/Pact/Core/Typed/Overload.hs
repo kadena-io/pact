@@ -384,13 +384,21 @@ resolveDefConst (DefConst dname ty term info) = do
   term' <- resolveTerm term
   pure (DefConst dname ty term' info)
 
+resolveDefCap
+  :: OverloadedDefCap RawBuiltin info
+  -> OverloadT (DefCap Name NamedDeBruijn CoreBuiltin info)
+resolveDefCap (DefCap dname dargs term captype termtype info) = do
+  term' <- resolveTerm term
+  let captype' = unsafeToTLName <$> captype
+  pure (DefCap dname dargs term' captype' termtype info)
+
 resolveDef
   :: OverloadedDef RawBuiltin info
   -> OverloadT (CoreEvalDef info)
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
-  _ -> undefined
+  DCap d -> DCap <$> resolveDefCap d
 
 resolveModule
   :: OverloadedModule RawBuiltin info

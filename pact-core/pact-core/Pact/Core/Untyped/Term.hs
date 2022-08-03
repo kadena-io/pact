@@ -68,9 +68,20 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
+data DefCap name builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapArgs :: [Text]
+  , _dcapTerm :: Term name builtin info
+  , _dcapCapType :: CapType name
+  , _dcapType :: Type NamedDeBruijn
+  , _dcapInfo :: info
+  } deriving Show
+
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
+  | DCap (DefCap name builtin info)
    deriving Show
 
 -- DCap (DefCap name builtin info)
@@ -81,16 +92,19 @@ defType :: Def name builtin info -> Type NamedDeBruijn
 defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
+  DCap d -> _dcapType d
 
 defName :: Def name builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
+  DCap d -> _dcapName d
 
 defTerm :: Def name builtin info -> Term name builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
+  DCap d -> _dcapTerm d
 
 data Module name builtin info
   = Module
@@ -163,7 +177,7 @@ data Term name builtin info
 type EvalTerm b i = Term Name b i
 type EvalModule b i = Module Name b i
 
-fromTypedTerm :: Typed.Term Name tyname b i -> Term Name b i
+fromTypedTerm :: Typed.Term name tyname b i -> Term name b i
 fromTypedTerm = \case
   Typed.Var n i -> Var n i
   Typed.Lam args body i ->
@@ -187,32 +201,40 @@ fromTypedTerm = \case
     ObjectOp (fromTypedTerm <$> oo) i
 
 fromTypedDefun
-  :: Typed.Defun Name NamedDeBruijn builtin info
-  -> Defun Name builtin info
+  :: Typed.Defun name NamedDeBruijn builtin info
+  -> Defun name builtin info
 fromTypedDefun (Typed.Defun n ty term i) =
   Defun n ty (fromTypedTerm term) i
 
 fromTypedDConst
-  :: Typed.DefConst Name NamedDeBruijn builtin info
-  -> DefConst Name builtin info
+  :: Typed.DefConst name NamedDeBruijn builtin info
+  -> DefConst name builtin info
 fromTypedDConst (Typed.DefConst n ty term i) =
   DefConst n ty (fromTypedTerm term) i
 
+fromTypedDCap
+  :: Typed.DefCap name NamedDeBruijn builtin info
+  -> DefCap name builtin info
+fromTypedDCap (Typed.DefCap name args term captype ty info) =
+  DefCap name args (fromTypedTerm term) captype ty info
+
 fromTypedDef
-  :: Typed.Def Name NamedDeBruijn builtin info
-  -> Def Name builtin info
+  :: Typed.Def name NamedDeBruijn builtin info
+  -> Def name builtin info
 fromTypedDef = \case
   Typed.Dfun d -> Dfun (fromTypedDefun d)
   Typed.DConst d -> DConst (fromTypedDConst d)
-  _ -> undefined
+  Typed.DCap d -> DCap (fromTypedDCap d)
 
 fromTypedModule
-  :: Typed.Module Name NamedDeBruijn builtin info
-  -> Module Name builtin info
+  :: Typed.Module name NamedDeBruijn builtin info
+  -> Module name builtin info
 fromTypedModule (Typed.Module mn mgov defs blessed imports implements hs) =
   Module mn mgov (fromTypedDef <$> defs) blessed imports implements hs
 
-fromTypedTopLevel :: Typed.TopLevel Name NamedDeBruijn builtin info -> TopLevel Name builtin info
+fromTypedTopLevel
+  :: Typed.TopLevel name NamedDeBruijn builtin info
+  -> TopLevel name builtin info
 fromTypedTopLevel = \case
   Typed.TLModule m -> TLModule (fromTypedModule m)
   Typed.TLInterface _ -> error "todo: implement interfaces"

@@ -1062,17 +1062,24 @@ inferDefCap (IR.DefCap name args term captype capTy info) = do
   enterLevel
   (ty', term', preds) <- inferTerm term
   leaveLevel
-  let capTy' = liftType ty
+  let capTy' = liftType capTy
   fterm <- debruijnizeTermTypes term'
   unify capTy' (ty' :~> TyCap)
   unless (null preds) $ fail "typeclass constraints not supported in defun"
   case captype of
-    ManagedCap i ty n -> case _irNameKind n of
-      IRBound -> views tcVarEnv (IntMap.lookup (_irUnique n)) >>= \case
-        Just tys ->  undefined
-      IRTopLevel mn mh -> undefined
-      -- pure (IR.DefCap name args fterm captype capTy' info)
-
+    ManagedCap i mArgTy n -> case _irNameKind n of
+      IRBound -> fail "manager cannot be a bound function. Invariant failure"
+      IRTopLevel mn _ -> do
+        fvs <- view tcFree
+        case fvs ^? ix mn . ix (_irName n) of
+          Just v -> do
+            let mArgTy' = liftType mArgTy
+            instantiateImported v >>= unify (mArgTy' :~> mArgTy' :~> mArgTy') . view _1
+            let captype' = ManagedCap i mArgTy (toOName n)
+            pure (Typed.DefCap name args fterm captype' (liftType capTy) info)
+          Nothing -> fail "invariant failure: no such manager function"
+    AutomanagedCap -> pure (Typed.DefCap name args fterm AutomanagedCap (liftType capTy) info)
+    Unmanaged -> pure (Typed.DefCap name args fterm Unmanaged (liftType capTy) info)
 
 
 inferDef

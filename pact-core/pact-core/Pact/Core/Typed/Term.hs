@@ -27,6 +27,7 @@ module Pact.Core.Typed.Term
  , OverloadedTerm
  , OverloadedDefun
  , OverloadedDefConst
+ , OverloadedDefCap
  , OverloadedDef
  , OverloadedModule
  , OverloadedTopLevel
@@ -208,6 +209,8 @@ type OverloadedDefun b i =
   Defun (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
 type OverloadedDefConst b i =
   DefConst (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+type OverloadedDefCap b i =
+  DefCap (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
 type OverloadedDef b i =
   Def (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
 type OverloadedModule b i =

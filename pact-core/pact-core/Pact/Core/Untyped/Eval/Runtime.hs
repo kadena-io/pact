@@ -164,7 +164,7 @@ instance Pretty b => Pretty (CEKValue b i) where
       P.angles "closure#"
     VNative b ->
       P.angles $ "native" <+> pretty b
-    VGuard _ -> error "undefined"
+    VGuard _ -> P.angles "guard#"
 
 makeLenses ''RuntimeEnv
 
