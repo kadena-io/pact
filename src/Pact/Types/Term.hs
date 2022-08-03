@@ -703,13 +703,7 @@ guardCodec = Codec enc dec
     {-# INLINE enc #-}
     dec v =
       (GKeySet <$> parseJSON v) <|>
-      (withObject "KeySetRef" $ \o -> do
-          ksn <- o .: keyNamef
-          ks <- case parseAnyKeysetName ksn of
-            -- TODO: review!!!!
-            Left {} -> fail "Invalid keyset ref json format"
-            Right n -> pure n
-          pure $ GKeySetRef ks) v <|>
+      (withObject "KeySetRef" $ \o -> GKeySetRef <$> o .: keyNamef) v <|>
       (GPact <$> parseJSON v) <|>
       (GModule <$> parseJSON v) <|>
       (GUser <$> parseJSON v)

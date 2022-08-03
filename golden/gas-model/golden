@@ -265,9 +265,9 @@
 - - (compose-capability (accounts.GOV))
   - 3
 - - '(define-keyset "some-loaded-keyset" some-loaded-keyset): rotating keyset'
-  - 63
+  - 60
 - - (define-keyset "some-keyset-name-not-present-already" some-loaded-keyset)
-  - 66
+  - 62
 - - (= longNumber longNumber)
   - 2
 - - (= medNumber medNumber)

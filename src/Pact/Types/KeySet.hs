@@ -162,17 +162,22 @@ instance IsString KeySetName where
 instance NFData KeySetName
 
 instance SizeOf KeySetName where
-  sizeOf (KeySetName ks nsn) =
-    constructorCost 2 + sizeOf ks + sizeOf nsn
+  sizeOf (KeySetName ks nsn) = sizeOf (maybe ks (\n -> _namespaceName n <> "." <> ks) nsn)
 
 instance FromJSON KeySetName where
-  parseJSON = withObject "KeySetName" $ \o -> KeySetName
-    <$> o .: "name"
-    <*> (fromMaybe Nothing <$> o .:? "ns")
+  parseJSON v =
+    newKs v <|> oldKs v
+    where
+    oldKs = withText "KeySetName" (pure . (`KeySetName` Nothing))
+    newKs =
+      withObject "KeySetName" $ \o -> KeySetName
+        <$> o .: "name"
+        <*> (fromMaybe Nothing <$> o .:? "ns")
 
 instance ToJSON KeySetName where
-  toJSON (KeySetName k n) =
-    object $ [ "name" .= k ] ++ [ "ns" .= n | isJust n ]
+  toJSON (KeySetName k n) = case n of
+    Nothing -> toJSON k
+    Just ns -> object [ "ksn" .= k , "ns" .= ns ]
 
 instance AsString KeySetName where
   asString (KeySetName n mns) = case mns of
