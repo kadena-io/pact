@@ -34,8 +34,7 @@
 --
 
 module Pact.Types.Term
- (
-   Meta(..),mDocs,mModel,
+ ( Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..), mkKeySet,
    KeySetName(..),

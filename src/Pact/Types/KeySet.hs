@@ -162,7 +162,7 @@ instance IsString KeySetName where
 instance NFData KeySetName
 
 instance SizeOf KeySetName where
-  sizeOf (KeySetName ks nsn) = sizeOf (maybe ks (\n -> _namespaceName n <> "." <> ks) nsn)
+  sizeOf = sizeOf . asString
 
 instance FromJSON KeySetName where
   parseJSON v =

@@ -164,7 +164,7 @@ guardToPrincipal = \case
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> pure $ K k
     (l,fun) -> pure $ W (asString $ mkHash $ map _pubKey l) fun
-  GKeySetRef ksn -> pure $ R $ asString ksn -- TODO revisit
+  GKeySetRef ksn -> pure $ R $ asString ksn
   GModule (ModuleGuard mn n) -> pure $ M mn n
   GUser (UserGuard f args) -> do
     args' <- enforcePactValue' args
