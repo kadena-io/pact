@@ -264,8 +264,8 @@ eval t =
   where
   strippedEval t' =
     view eeInRepl >>= \case
-      True ->  eval' $!! t'
-      False ->  ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
+      True -> eval' $!! t'
+      False -> ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
   stripOnlyModule t' = case t' of
     TModule {} -> stripTermInfo t'
     _ -> t'

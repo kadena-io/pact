@@ -1,7 +1,7 @@
 ;; time.repl: time unit tests
 (env-exec-config ["DisablePact44"])
-(define-keyset 'k (sig-keyset))
-(module stuff 'k
+(module stuff G
+  (defcap G () true)
   (defconst T (time "2010-12-21T13:23:45Z"))
   (defconst T2 (add-time T 0.001002))
   (defun time-rt (fmt t)
