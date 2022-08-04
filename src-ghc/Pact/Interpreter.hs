@@ -53,7 +53,6 @@ import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import System.Directory
 
-
 import Pact.Compile
 import Pact.Eval
 import Pact.Native (nativeDefs)
@@ -138,7 +137,8 @@ evalExec runner evalEnv ParsedCode {..} = do
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
-initStateModules modules = set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
+initStateModules modules =
+  set (evalRefs . rsQualifiedDeps) (foldMap allModuleExports modules) $ set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 -- | Resume a defpact execution, with optional PactExec.
 evalContinuation :: Interpreter e -> EvalEnv e -> ContMsg -> IO EvalResult
@@ -182,6 +182,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
   , _eePublicData = pd
   , _eeExecutionConfig = ec
   , _eeAdvice = def
+  , _eeInRepl = False
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss

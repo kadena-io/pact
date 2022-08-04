@@ -50,7 +50,7 @@
 
 (env-enable-repl-natives true)
 (module repl-natives 'k
-  (defun f () (env-sigs [{"bob",[]}])))
+  (defun f () (env-sigs [{'key: "bob",'caps: []}])))
 (expect
  "env-sigs in module"
  "Setting transaction signatures/caps"

@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -17,6 +17,7 @@ module Pact.Native.Capabilities
   ( capDefs
   , evalCap
   ) where
+
 
 import Control.Lens
 import Control.Monad
@@ -47,6 +48,7 @@ capDefs =
    , createPactGuard
    , createModuleGuard
    , keysetRefGuard
+
    ])
 
 tvA :: Type n
@@ -295,7 +297,8 @@ createUserGuard =
     createUserGuard' :: NativeFun e
     createUserGuard' i [TApp App {..} _] = gasUnreduced i [] $ do
       args <- mapM reduce _appArgs
-      fun <- case _appFun of
+      appFun' <- lookupFullyQualifiedTerm _appInfo _appFun
+      fun <- case appFun' of
         (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
           Defun -> return (QName $ QualifiedName _dModule (asString _dDefName) _dInfo)
           _ -> evalError _appInfo $ "User guard closure must be defun, found: " <> pretty _dDefType

@@ -178,22 +178,23 @@ unitTestFromDef nativeName = tests
       "read-keyset"    -> Just $ readKeysetTests nativeName
 
       -- Database native functions
-      "create-table"      -> Just $ createTableTests nativeName
-      "describe-keyset"   -> Just $ describeKeysetTests nativeName
-      "describe-module"   -> Just $ describeModuleTests nativeName
-      "describe-table"    -> Just $ describeTableTests nativeName
-      "insert"            -> Just $ insertTests nativeName
-      "keylog"            -> Just $ keylogTests nativeName
-      "keys"              -> Just $ keysTests nativeName
-      "read"              -> Just $ readTests nativeName
-      "select"            -> Just $ selectTests nativeName
-      "txids"             -> Just $ txidsTests nativeName
-      "txlog"             -> Just $ txlogTests nativeName
-      "update"            -> Just $ updateTests nativeName
-      "with-default-read" -> Just $ withDefaultReadTests nativeName
-      "with-read"         -> Just $ withReadTests nativeName
-      "write"             -> Just $ writeTests nativeName
-      "fold-db"           -> Just $ foldDBTests nativeName
+      "create-table"       -> Just $ createTableTests nativeName
+      "describe-keyset"    -> Just $ describeKeysetTests nativeName
+      "describe-module"    -> Just $ describeModuleTests nativeName
+      "describe-table"     -> Just $ describeTableTests nativeName
+      "describe-namespace" -> Just $ describeNamespaceTests nativeName
+      "insert"             -> Just $ insertTests nativeName
+      "keylog"             -> Just $ keylogTests nativeName
+      "keys"               -> Just $ keysTests nativeName
+      "read"               -> Just $ readTests nativeName
+      "select"             -> Just $ selectTests nativeName
+      "txids"              -> Just $ txidsTests nativeName
+      "txlog"              -> Just $ txlogTests nativeName
+      "update"             -> Just $ updateTests nativeName
+      "with-default-read"  -> Just $ withDefaultReadTests nativeName
+      "with-read"          -> Just $ withReadTests nativeName
+      "write"              -> Just $ writeTests nativeName
+      "fold-db"            -> Just $ foldDBTests nativeName
 
       -- Capabilities native functions
       "compose-capability"  -> Just $ composeCapabilityTests nativeName
@@ -206,6 +207,12 @@ unitTestFromDef nativeName = tests
       "require-capability"  -> Just $ requireCapabilityTests nativeName
       "with-capability"     -> Just $ withCapabilityTests nativeName
       "emit-event"          -> Just $ emitEventTests nativeName
+
+      -- Principal creation and validation
+      "create-principal"   -> Just $ createPrincipalTests nativeName
+      "validate-principal" -> Just $ validatePrincipalTests nativeName
+      "is-principal"       -> Just $ isPrincipalTests nativeName
+      "typeof-principal"   -> Just $ typeofPrincipalTests nativeName
 
       -- Non-native concepts to benchmark
       "use"       -> Just $ useTests nativeName
@@ -303,6 +310,7 @@ createPactGuardTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
     updateWithPactExec = setState (set evalPactExec mockPactExec)
 
     tests =
@@ -537,6 +545,11 @@ describeKeysetTests = defGasUnitTests allExprs
       defPactExpression [text| (describe-keyset "$sampleLoadedKeysetName") |]
     allExprs = describeKeysetExpr :| []
 
+describeNamespaceTests :: NativeDefName -> GasUnitTests
+describeNamespaceTests = defGasUnitTests $ pure descNsTestExpr
+  where
+    descNsTestExpr = defPactExpression
+      [text| (describe-namespace "$sampleNamespaceName") |]
 
 createTableTests :: NativeDefName -> GasUnitTests
 createTableTests = defGasUnitTests allExprs
@@ -1282,6 +1295,7 @@ pactIdTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
     updateState = setState (set evalPactExec mockPactExec)
 
     tests =
@@ -1298,6 +1312,7 @@ yieldTests = tests
                           (PactId "somePactId")
                           (PactContinuation (Name $ BareName "some-defpact-func" def) [])
                           False
+                          mempty
 
     mockModules = HM.fromList [(someModuleName, someModuleData)]
     mockStackframe = [someStackFrame]
@@ -1881,3 +1896,248 @@ bindTests = defGasUnitTests allExprs
            strKeyIntValBindingsExpr
 
     allExprs = NEL.map bindExpr args
+
+createPrincipalTests :: NativeDefName -> GasUnitTests
+createPrincipalTests = createGasUnitTests
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    allExprs
+  where
+    allExprs = NEL.fromList
+      [ kExpr
+      , wExpr
+      , pExpr
+      , rExpr
+      , uExpr
+      , mExpr
+      ]
+
+    kExpr = defPactExpression
+      [text| (create-principal (read-keyset 'ks1)) |]
+
+
+    wExpr = defPactExpression
+      [text| (create-principal (read-keyset 'ks2)) |]
+
+    pExpr = defPactExpression
+      [text| (create-principal (create-pact-guard "test")) |]
+
+    rExpr = defPactExpression
+      [text| (create-principal (keyset-ref-guard "$sampleLoadedKeysetName")) |]
+
+    uExpr = defPactExpression
+      [text| (create-principal (create-user-guard ($acctModuleNameText.enforce-true))) |]
+
+    mExpr = defPactExpression
+      [text| (create-principal (create-module-guard "test")) |]
+
+    updateStackFrame = setState (set evalCallStack [someStackFrame])
+
+    updateWithPactExec = setState $ set evalPactExec $ Just $
+      PactExec 2 Nothing Nothing 0 (PactId "somePactId")
+      (PactContinuation (Name $ BareName "some-defpact-func" def) [])
+      False
+      mempty
+
+    updateEnv = setEnv $ set eeMsgBody $ A.object
+      [ "ks1" A..= A.object
+        [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      , "ks2" A..= A.object
+        [ "keys" A..=
+          [ "76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text
+          , "011b1bb033d77f0ef7fe0c09f7b10ed91c7f432f6fdc1ba68acdc776fa53d99c" :: T.Text
+          ]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      ]
+
+
+validatePrincipalTests :: NativeDefName -> GasUnitTests
+validatePrincipalTests = createGasUnitTests
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    allExprs
+  where
+    allExprs = NEL.fromList
+      [ kExpr
+      , wExpr
+      , pExpr
+      , rExpr
+      , uExpr
+      , mExpr
+      ]
+
+    kExpr = defPactExpression
+      [text|
+        (validate-principal
+          (read-keyset 'ks1)
+          (create-principal (read-keyset 'ks1))) |]
+
+
+    wExpr = defPactExpression
+      [text|
+        (validate-principal
+          (read-keyset 'ks2)
+          (create-principal (read-keyset 'ks2))) |]
+
+    pExpr = defPactExpression
+      [text|
+        (validate-principal
+          (create-pact-guard "test")
+          (create-principal (create-pact-guard "test"))) |]
+
+    rExpr = defPactExpression
+      [text|
+        (validate-principal
+          (keyset-ref-guard "$sampleLoadedKeysetName")
+          (create-principal (keyset-ref-guard "$sampleLoadedKeysetName"))) |]
+
+    uExpr = defPactExpression
+      [text|
+        (validate-principal
+          (create-user-guard ($acctModuleNameText.enforce-true))
+          (create-principal (create-user-guard ($acctModuleNameText.enforce-true)))) |]
+
+    mExpr = defPactExpression
+      [text|
+        (validate-principal
+          (create-module-guard "test")
+          (create-principal (create-module-guard "test"))) |]
+
+    updateStackFrame = setState (set evalCallStack [someStackFrame])
+
+    updateWithPactExec = setState $ set evalPactExec $ Just $
+      PactExec 2 Nothing Nothing 0 (PactId "somePactId")
+      (PactContinuation (Name $ BareName "some-defpact-func" def) [])
+      False
+      mempty
+
+    updateEnv = setEnv $ set eeMsgBody $ A.object
+      [ "ks1" A..= A.object
+        [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      , "ks2" A..= A.object
+        [ "keys" A..=
+          [ "76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text
+          , "011b1bb033d77f0ef7fe0c09f7b10ed91c7f432f6fdc1ba68acdc776fa53d99c" :: T.Text
+          ]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      ]
+
+isPrincipalTests :: NativeDefName -> GasUnitTests
+isPrincipalTests = createGasUnitTests
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    allExprs
+  where
+    allExprs = NEL.fromList
+      [ kExpr
+      , wExpr
+      , pExpr
+      , rExpr
+      , uExpr
+      , mExpr
+      ]
+
+    kExpr = defPactExpression
+      [text| (is-principal (create-principal (read-keyset 'ks1))) |]
+
+
+    wExpr = defPactExpression
+      [text| (is-principal (create-principal (read-keyset 'ks2))) |]
+
+    pExpr = defPactExpression
+      [text| (is-principal (create-principal (create-pact-guard "test"))) |]
+
+    rExpr = defPactExpression
+      [text| (is-principal (create-principal (keyset-ref-guard "$sampleLoadedKeysetName"))) |]
+
+    uExpr = defPactExpression
+      [text| (is-principal (create-principal (create-user-guard ($acctModuleNameText.enforce-true)))) |]
+
+    mExpr = defPactExpression
+      [text| (is-principal (create-principal (create-module-guard "test"))) |]
+
+
+    updateStackFrame = setState (set evalCallStack [someStackFrame])
+
+    updateWithPactExec = setState $ set evalPactExec $ Just $
+      PactExec 2 Nothing Nothing 0 (PactId "somePactId")
+      (PactContinuation (Name $ BareName "some-defpact-func" def) [])
+      False
+      mempty
+
+    updateEnv = setEnv $ set eeMsgBody $ A.object
+      [ "ks1" A..= A.object
+        [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      , "ks2" A..= A.object
+        [ "keys" A..=
+          [ "76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text
+          , "011b1bb033d77f0ef7fe0c09f7b10ed91c7f432f6fdc1ba68acdc776fa53d99c" :: T.Text
+          ]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      ]
+
+
+typeofPrincipalTests :: NativeDefName -> GasUnitTests
+typeofPrincipalTests = createGasUnitTests
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    (updateWithPactExec . updateStackFrame . updateEnv)
+    allExprs
+  where
+    allExprs = NEL.fromList
+      [ kExpr
+      , wExpr
+      , pExpr
+      , rExpr
+      , uExpr
+      , mExpr
+      ]
+
+    kExpr = defPactExpression
+      [text| (typeof-principal (create-principal (read-keyset 'ks1))) |]
+
+
+    wExpr = defPactExpression
+      [text| (typeof-principal (create-principal (read-keyset 'ks2))) |]
+
+    pExpr = defPactExpression
+      [text| (typeof-principal (create-principal (create-pact-guard "test"))) |]
+
+    rExpr = defPactExpression
+      [text| (typeof-principal (create-principal (keyset-ref-guard "$sampleLoadedKeysetName"))) |]
+
+    uExpr = defPactExpression
+      [text| (typeof-principal (create-principal (create-user-guard ($acctModuleNameText.enforce-true)))) |]
+
+    mExpr = defPactExpression
+      [text| (typeof-principal (create-principal (create-module-guard "test"))) |]
+
+    updateStackFrame = setState (set evalCallStack [someStackFrame])
+
+    updateWithPactExec = setState $ set evalPactExec $ Just $
+      PactExec 2 Nothing Nothing 0 (PactId "somePactId")
+      (PactContinuation (Name $ BareName "some-defpact-func" def) [])
+      False
+      mempty
+
+    updateEnv = setEnv $ set eeMsgBody $ A.object
+      [ "ks1" A..= A.object
+        [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      , "ks2" A..= A.object
+        [ "keys" A..=
+          [ "76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text
+          , "011b1bb033d77f0ef7fe0c09f7b10ed91c7f432f6fdc1ba68acdc776fa53d99c" :: T.Text
+          ]
+        , "pred" A..= ("keys-all" :: T.Text)
+        ]
+      ]

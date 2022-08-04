@@ -744,7 +744,13 @@ translatePact nodes = do
       )
     (postLastCancelV, [], [])
     -- all but the last step, in reverse order
-    (tail $ reverse protoSteps)
+    -- TODO: ?!?!?!?
+    -- Arcane magic here, but the nested pact steps here may actually be empty
+    -- in the case of a nested defpact execution from a module reference (interface empty body problem).
+    -- The proper fix is recognizing the nested defpact dyn invoke and replacing it with
+    -- the default value of what the invocation would return.
+    -- For now, this unblocks the problem.
+    (if null protoSteps then [] else tail $ reverse protoSteps)
 
   let steps = zipWith3
         (\(Step exec p e _ _) mCancel mRb -> Step exec p e mCancel mRb)
@@ -903,7 +909,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
       withNewScope LetScope bindingTs $
         translateBody body
 
-  AST_InlinedApp modName funName bindings body -> do
+  AST_InlinedApp modName funName Pact.Defpact bindings body ->
+    withTranslatedBindings bindings $ \bindingTs -> do
+    withNewScope (PactScope modName funName) bindingTs $
+        Some SStr . Pact <$> translatePact body
+
+  AST_InlinedApp modName funName _ bindings body ->
     withTranslatedBindings bindings $ \bindingTs -> do
       withNewScope (FunctionScope modName funName) bindingTs $
         translateBody body
@@ -1005,7 +1016,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr strT -> pure $ Some SGuard $ MkPactGuard strT
     _ -> unexpectedNode astNode
 
-  AST_CreateUserGuard (AST_InlinedApp modName funName bindings appBodyA) -> do
+  AST_CreateUserGuard (AST_InlinedApp modName funName _ bindings appBodyA) -> do
     guard <- genGuard
     body <- withTranslatedBindings bindings $ \bindingTs ->
       withNewScope (FunctionScope modName funName) bindingTs $
@@ -1331,14 +1342,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
 
-  AST_WithCapability (AST_InlinedApp modName funName bindings appBodyA) withBodyA -> do
+  AST_WithCapability (AST_InlinedApp modName funName _ bindings appBodyA) withBodyA -> do
     let capName = mkCapName modName funName
     appET <- translateCapabilityApp modName capName bindings appBodyA
     Some ty withBodyT <- trackCapScope capName $
       translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
-  AST_RequireCapability node (AST_InlinedApp modName funName bindings _) -> do
+  AST_RequireCapability node (AST_InlinedApp modName funName _ bindings _) -> do
     let capName = mkCapName modName funName
     cap <- lookupCapability capName
     withTranslatedBindings bindings $ \bindingTs -> do
@@ -1361,7 +1372,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         addWarning' $ UnscopedCapability capName
         pure $ Some SBool $ Lit' True
 
-  AST_ComposeCapability (AST_InlinedApp modName funName bindings appBodyA) -> do
+  AST_ComposeCapability (AST_InlinedApp modName funName _ bindings appBodyA) -> do
     let capName = mkCapName modName funName
     app <- translateCapabilityApp modName (mkCapName modName funName) bindings appBodyA
     tsStaticCapsInScope %= Set.insert capName
@@ -1656,6 +1667,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ Some SInteger $ inject @(Numerical Term) $
       BitwiseOp op args'
 
+  AST_Continue _node body -> do
+    translateNode body
+    -- translate and move on from nested defpact
+    -- shimNative astNode node "continue" []
+
   AST_NFun node fn@"install-capability" [_] -> do
     -- current system does not grok managed caps yet, so
     -- not translating argument
@@ -1678,6 +1694,32 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr _ -> shimNative' node fn [b] "format string" a'
     _ -> unexpectedNode astNode
 
+  AST_NFun node fn@"create-principal" [a] -> translateNode a >>= \case
+    -- assuming we have a guard as input, yield an empty string
+    Some SGuard _ -> shimNative astNode node fn []
+    _ -> unexpectedNode astNode
+
+  AST_NFun node fn@"validate-principal" [a, b] -> translateNode a >>= \case
+    -- term check inputs and produce an empty string
+    Some SGuard _ -> translateNode b >>= \case
+      Some SStr _ -> shimNative astNode node fn []
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
+
+  AST_NFun node fn@"is-principal" [a] -> translateNode a >>= \case
+    -- assuming we have a principal string as input, yield true
+    Some SStr _ -> shimNative astNode node fn []
+    _ -> unexpectedNode astNode
+
+  AST_NFun node fn@"typeof-principal" [a] -> translateNode a >>= \a' -> case a' of
+    -- assuming we have a principal string as input, yield empty string
+    Some SStr _ -> shimNative' node fn [] "principal" a'
+    _ -> unexpectedNode astNode
+
+  AST_NFun node fn@"describe-namespace" [a] -> translateNode a >>= \case
+    -- assuming we have a namespace name as input, yield an empty object
+    Some SStr _ -> shimNative astNode node fn []
+    _ -> unexpectedNode astNode
 
   AST_NFun node fn as -> shimNative astNode node fn as
 

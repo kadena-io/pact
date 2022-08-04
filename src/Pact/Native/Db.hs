@@ -20,7 +20,7 @@
 --
 
 module Pact.Native.Db
-    (dbDefs)
+    (dbDefs, checkNonLocalAllowed)
     where
 
 import Bound
@@ -188,6 +188,7 @@ descKeySet _ i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
+  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
   mods <- lookupModule i (ModuleName t Nothing)
   case _mdModule <$> mods of
     Just m ->

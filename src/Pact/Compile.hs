@@ -264,7 +264,7 @@ literals :: Compile (Term Name)
 literals =
   literal
   <|> listLiteral
-  <|> objectLiteral
+  <|> try objectLiteral
 
 
 -- | Bare atoms (excluding reserved words).

@@ -141,6 +141,17 @@ true
 ```
 
 
+### continue {#continue}
+
+*value*&nbsp;`*` *&rarr;*&nbsp;`*`
+
+
+Continue a previously started nested defpact.
+```lisp
+(continue (coin.transfer-crosschain "bob" "alice" 10.0))
+```
+
+
 ### define-namespace {#define-namespace}
 
 *namespace*&nbsp;`string` *user-guard*&nbsp;`guard` *admin-guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
@@ -149,6 +160,19 @@ true
 Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place.
 ```lisp
 (define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))
+```
+
+Top level only: this function will fail if used in module code.
+
+
+### describe-namespace {#describe-namespace}
+
+*ns*&nbsp;`string` *&rarr;*&nbsp;`object:{described-namespace}`
+
+
+Describe the namespace NS, returning a row object containing the user and admin guards of the namespace, as well as its name.
+```lisp
+(describe-namespace 'my-namespace)
 ```
 
 Top level only: this function will fail if used in module code.
@@ -437,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.2.0"
+"4.3.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -679,6 +703,8 @@ pact> (zip (-) [1 2 3 4] [4 5 6])
 [-3 -3 -3]
 pact> (zip (+) [1 2 3] [4 5 6 7])
 [5 7 9]
+pact> (zip (lambda (x y) { 'x: x, 'y: y }) [1 2 3 4] [4 5 6 7])
+[{"x": 1,"y": 4} {"x": 2,"y": 5} {"x": 3,"y": 6} {"x": 4,"y": 7}]
 ```
 
 ## Database {#Database}
@@ -1643,6 +1669,55 @@ Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are bas
 (validate-keypair pubkey privkey)
 ```
 
+## Guards {#Guards}
+
+### create-principal {#create-principal}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
+
+
+Create a principal which unambiguously identifies GUARD.
+```lisp
+(create-principal (read-keyset 'keyset))
+(create-principal (keyset-ref-guard 'keyset))
+(create-principal (create-module-guard 'module-guard))
+(create-principal (create-user-guard 'user-guard))
+(create-principal (create-pact-guard 'pact-guard))
+```
+
+
+### is-principal {#is-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Tell whether PRINCIPAL string conforms to the principal format without proving validity.
+```lisp
+(enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+```
+
+
+### typeof-principal {#typeof-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Return the protocol type of a given PRINCIPAL value. If input value is not a principal type, then the empty string is returned.
+```lisp
+(typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
+```
+
+
+### validate-principal {#validate-principal}
+
+*guard*&nbsp;`guard` *principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Validate that PRINCIPAL unambiguously identifies GUARD.
+```lisp
+(enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -1786,7 +1861,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableModuleInstall","DisablePact40","DisablePact420","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNamespaceUpgrade","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

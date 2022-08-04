@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE CPP #-}
 module Pact.Gas.Table where
 
 import Data.Ratio
@@ -7,6 +11,10 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+#if !defined(ghcjs_HOST_OS)
+import qualified GHC.Integer.Logarithms as IntLog
+import GHC.Int(Int(..))
+#endif
 
 import Pact.Types.Continuation
 import Pact.Types.Gas
@@ -37,6 +45,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_functionApplicationCost :: Gas
   , _gasCostConfig_defPactCost :: Gas
   , _gasCostConfig_foldDBCost :: Gas
+  , _gasCostConfig_principalCost :: Gas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -55,6 +64,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_functionApplicationCost = 1
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   , _gasCostConfig_foldDBCost = 1
+  , _gasCostConfig_principalCost = 5 -- matches 'hash' cost
   }
 
 defaultGasTable :: Map Text Gas
@@ -89,6 +99,7 @@ defaultGasTable =
   ,("contains", 2)
   ,("create-module-guard", 1)
   ,("create-pact-guard", 1)
+  ,("create-principal", 1)
   ,("create-user-guard", 1)
   ,("days", 4)
   ,("decrypt-cc20p1305", 33)
@@ -114,6 +125,7 @@ defaultGasTable =
   ,("install-capability", 3)
   ,("int-to-str", 1)
   ,("is-charset", 1)
+  ,("is-principal",1)
   ,("keys-2", 1)
   ,("keys-all", 1)
   ,("keys-any", 1)
@@ -155,8 +167,10 @@ defaultGasTable =
   ,("try", 1)
   ,("tx-hash", 1)
   ,("typeof", 2)
+  ,("typeof-principal",1)
   ,("distinct", 2)
   ,("validate-keypair", 29)
+  ,("validate-principal", 1)
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)
   ,("with-capability", 2)
@@ -166,6 +180,8 @@ defaultGasTable =
   ,("yield", 2)
   ,("|", 1)
   ,("~", 1)
+  -- Nested defpacts
+  ,("continue",1)
   -- IO
   -- DDL
   ,("create-table", 250)
@@ -186,6 +202,7 @@ defaultGasTable =
   ,("describe-module", 100)
   ,("describe-table", 100)
   ,("list-modules", 100)
+  ,("describe-namespace",100)
 
   -- History, massive tx penalty
   ,("keylog", 100000)
@@ -210,6 +227,8 @@ tableGasModel gasConfig =
         GUserApp t -> case t of
           Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
           _ -> _gasCostConfig_functionApplicationCost gasConfig
+        GIntegerOpCost i j ->
+          intCost i + intCost j
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
         GDistinct len -> expLengthPenalty len
@@ -252,6 +271,8 @@ tableGasModel gasConfig =
         GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
+        GModuleMemory i -> moduleMemoryCost i
+        GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
@@ -271,7 +292,64 @@ memoryCost val (Gas cost) = Gas totalCost
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
 {-# INLINE memoryCost #-}
 
+-- Slope to costing function,
+-- sets a 10mb practical limit on module sizes.
+moduleMemFeePerByte :: Rational
+moduleMemFeePerByte = 0.006
+
+-- 0.01x+50000 linear costing funciton
+moduleMemoryCost :: Bytes -> Gas
+moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
+{-# INLINE moduleMemoryCost #-}
 
 -- | Gas model that charges varible (positive) rate per tracked operation
 defaultGasModel :: GasModel
 defaultGasModel = tableGasModel defaultGasConfig
+
+#if !defined(ghcjs_HOST_OS)
+-- | Costing function for binary integer ops
+intCost :: Integer -> Gas
+intCost !a
+  | (abs a) < threshold = 0
+  | otherwise =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in fromIntegral (nbytes * nbytes `quot` 100)
+  where
+  threshold :: Integer
+  threshold = (10 :: Integer) ^ (30 :: Integer)
+
+
+_intCost :: Integer -> Int
+_intCost !a =
+    let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
+    in nbytes
+#else
+intCost :: Integer -> Gas
+intCost !a
+  | (abs a) < threshold = 0
+  | otherwise =
+    let !nbytes = (ceiling (logBase @Double 2 (fromIntegral (abs a))) + 1) `quot` 8
+    in (nbytes * nbytes) `quot` 100
+  where
+  threshold :: Integer
+  threshold = (10 :: Integer) ^ (30 :: Integer)
+#endif
+
+pact421GasModel :: GasModel
+pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
+  where
+  gasModel = tableGasModel gasConfig
+  gasConfig = defaultGasConfig { _gasCostConfig_primTable = updTable }
+  updTable = Map.union upd defaultGasTable
+  unknownOperationPenalty = 1000000
+  multiRowOperation = 40000
+  upd = Map.fromList
+    [("keys",    multiRowOperation)
+    ,("select",  multiRowOperation)
+    ,("fold-db", multiRowOperation)
+    ]
+  modifiedRunFunction name ga = case ga of
+    GUnreduced _ts -> case Map.lookup name updTable of
+      Just g -> g
+      Nothing -> unknownOperationPenalty
+    _ -> runGasModel defaultGasModel name ga

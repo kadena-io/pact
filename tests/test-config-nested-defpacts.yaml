@@ -1,0 +1,16 @@
+# Config file for pact http server. Launch with `pact -s config.yaml`
+
+# HTTP server port
+port: 8080
+
+# directory for HTTP logs
+logDir: tests/test-log
+
+# persistence directory
+persistDir: tests/test-log
+
+# SQLite pragmas for pact back-end
+pragmas: []
+
+# verbose: provide log output
+verbose: False

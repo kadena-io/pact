@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
@@ -33,7 +34,8 @@ import           Test.Hspec
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
 import           Pact.Repl.Types              (ReplMode (StringEval))
-import           Pact.Types.Runtime           (Exp, Info, ModuleData, Ref, ModuleName)
+import           Pact.Types.Runtime           (Exp, Info, ModuleData(..), Ref, ModuleName)
+import           Pact.Runtime.Utils
 import           Pact.Types.Pretty
 import           Pact.Types.Util              (tShow)
 
@@ -119,6 +121,7 @@ renderTestFailure = \case
 -- TODO: use ExceptT
 --
 
+
 compile' :: ModuleName -> Text -> IO (Either TestFailure (ModuleData Ref))
 compile' modName code = do
   replState0 <- initReplState StringEval Nothing
@@ -129,7 +132,7 @@ compile' modName code = do
       moduleM <- replLookupModule replState modName
       pure $ case moduleM of
         Left err -> Left $ ReplError (show err)
-        Right m -> Right m
+        Right m -> Right (inlineModuleData m)
 
 compile :: Text -> IO (Either TestFailure (ModuleData Ref))
 compile = compile' "test"
@@ -1255,8 +1258,7 @@ spec = describe "analyze" $ do
     expectCapGovPass code $ Satisfiable Success'
     expectCapGovPass code $ Satisfiable Abort'
 
-  describe "property language can describe whether cap-based governance \
-    \passes" $ do
+  describe "property language can describe whether cap-based governance passes" $ do
       res <- runIO $ runVerification $
         [text|
           (begin-tx)
@@ -1274,8 +1276,7 @@ spec = describe "analyze" $ do
       it "passes in-code checks" $
         handlePositiveTestResult res
 
-  describe "property language can describe whether ks-based governance passes \
-    \without mentioning the keyset" $ do
+  describe "property language can describe whether ks-based governance passes without mentioning the keyset" $ do
       let code =
             [text|
               (defun test:bool ()
@@ -3915,12 +3916,14 @@ spec = describe "analyze" $ do
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
 
+#if !darwin_HOST_OS
     describe "associativity of list concatenation" $ do
       expectVerified [text|
         (defun test:bool (a:[integer] b:[integer] c:[integer])
           @model [ (property result) ]
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
+#endif
 
     describe "testing monotonicity of a function" $ do
       expectVerified [text|

@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -22,12 +23,12 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice,
    toPactId,
    Purity(..),
-   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
    evalGas,evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
@@ -108,7 +109,7 @@ keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [
 
 -- | Storage for natives.
 data RefStore = RefStore {
-      _rsNatives :: HM.HashMap Name Ref
+      _rsNatives :: HM.HashMap Text Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty
@@ -152,8 +153,18 @@ data ExecutionFlag
   | FlagDisablePact40
   -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
   | FlagEnforceKeyFormats
-  -- | Enable Pact 4.2.0 db sorted key guarantees, and row persistence
+  -- | Disable Pact 4.2.0 db sorted key guarantees, and row persistence
   | FlagDisablePact420
+  -- | Disable memory limit check
+  | FlagDisableInlineMemCheck
+  -- | Disable new non-inlined modules
+  | FlagDisablePact43
+  -- | Disable pact 4.3 features
+  | FlagDisablePact431
+  -- | Disable Pact 4.4 features
+  | FlagDisablePact44
+  -- | Preserve old ns behavior for module upgrade
+  | FlagPreserveNamespaceUpgrade
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -218,7 +229,9 @@ data EvalEnv e = EvalEnv {
       -- | Execution configuration flags
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
-    , _eeAdvice :: Advice
+    , _eeAdvice :: !Advice
+      -- | Are we in the repl? If so, ignore info
+    , _eeInRepl :: Bool
     }
 makeLenses ''EvalEnv
 
@@ -229,15 +242,18 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Name Ref
+      _rsLoaded :: HM.HashMap Text (Ref, Maybe (ModuleHash))
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe (Namespace (Term Name))
+      -- | Map of all fully qualified names in scope, including transitive dependencies.
+    , _rsQualifiedDeps :: HM.HashMap FullyQualifiedName Ref
     } deriving (Eq,Show,Generic)
+
 makeLenses ''RefState
 instance NFData RefState
-instance Default RefState where def = RefState HM.empty HM.empty Nothing
+instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty
 
 data PactEvent = PactEvent
   { _eventName :: !Text
@@ -317,8 +333,6 @@ whenExecutionFlagSet f onTrue =
 unlessExecutionFlagSet :: ExecutionFlag -> Eval e a -> Eval e ()
 unlessExecutionFlagSet f onFalse =
   ifExecutionFlagSet f (return ()) (void onFalse)
-
-
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
 call :: StackFrame -> Eval e (Gas,a) -> Eval e a

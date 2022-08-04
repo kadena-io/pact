@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Repl.Lib
@@ -32,6 +33,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.Text (Text, unpack)
@@ -272,6 +274,10 @@ replDefs = ("Repl",
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
+replDefsMap :: HM.HashMap Text (Ref, Maybe ModuleHash)
+replDefsMap =
+  (,Nothing) <$> moduleToMap replDefs
+
 invokeEnv :: (LibDb -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! (_rlsDb ls)
 {-# INLINE invokeEnv #-}
@@ -422,18 +428,24 @@ continuePact i as = case as of
         Nothing -> evalError' i
           "continue-pact: No pact id supplied and no pact exec in context"
         Just pid -> return $ PactId pid
-      y <- maybe (return Nothing) (toYield Nothing) mobj
+      y <- maybe (return Nothing) (mkSimpleYield Nothing) mobj
       return (pid, y)
     unwrapExec mpid mobj (Just ex) = do
       let pid = maybe (_pePactId ex) PactId mpid
       y <- case mobj of
         Nothing -> return $ _peYield ex
         Just o -> case _peYield ex of
-          Just (Yield _ p _) -> toYield p o
-          Nothing -> toYield Nothing o
+          Just (Yield _ p _) -> mkSimpleYield p o
+          Nothing -> mkSimpleYield Nothing o
       return (pid, y)
 
-    toYield p = fmap (Just . (\v -> Yield v p Nothing)) . enforcePactValue'
+mkSimpleYield
+  :: Pretty n
+  => Maybe Provenance
+  -> ObjectMap (Term n)
+  -> Eval e (Maybe Yield)
+mkSimpleYield p om =
+  Just . (\yieldData -> Yield yieldData p Nothing) <$> enforcePactValue' om
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
@@ -465,7 +477,7 @@ pactState i as = case as of
 
 tx :: Tx -> RNativeFun LibState
 tx t fi as = do
-
+  rsq <- use (evalRefs . rsQualifiedDeps)
   (tid,tname) <- case (t,as) of
     (Begin,[TLitString n]) -> doBegin (Just n)
     (Begin,[]) -> doBegin Nothing
@@ -475,7 +487,7 @@ tx t fi as = do
 
   -- reset to repl lib, preserve call stack
   cs <- use evalCallStack
-  put $ set (evalRefs.rsLoaded) (moduleToMap replDefs) $ set evalCallStack cs def
+  put $ over (evalRefs . rsQualifiedDeps) (<> rsq) $ set (evalRefs.rsLoaded) replDefsMap $ set evalCallStack cs def
   return $ tStr $ tShow t <> " Tx"
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
@@ -620,7 +632,7 @@ tc i as = case as of
   _ -> argsError i as
   where
     go modname dbg = do
-      md <- getModule i (ModuleName modname Nothing)
+      md <- inlineModuleData <$> getModule i (ModuleName modname Nothing)
       de <- viewLibState _rlsDynEnv
       r :: Either TC.CheckerException ([TC.TopLevel TC.Node],[TC.Failure]) <-
         try $ liftIO $ typecheckModule dbg de md
@@ -637,6 +649,7 @@ verify i _as@[TLitString modName] = do
 #if defined(ghcjs_HOST_OS)
     -- ghcjs: use remote server
     (md,modules) <- _loadModules
+
     uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
     renderedLines <- liftIO $
                      RemoteClient.verifyModule modules md uri
@@ -658,9 +671,10 @@ verify i _as@[TLitString modName] = do
 #endif
   where
     _failureMessage = tStr $ "Verification of " <> modName <> " failed"
-    _loadModules = (,)
-        <$> getModule i (ModuleName modName Nothing)
-        <*> getAllModules i
+    _loadModules =
+      (,)
+        <$> (inlineModuleData <$> getModule i (ModuleName modName Nothing))
+        <*> (fmap inlineModuleData <$> getAllModules i)
 verify i as = argsError i as
 
 
@@ -687,7 +701,8 @@ setGasLimit _ [TLitInteger l] = do
 setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
-envGas _ [] = use evalGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+envGas _ [] = do
+  use evalGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
 envGas _ [TLitInteger g] = do
   evalGas .= fromIntegral g
   return $ tStr $ "Set gas to " <> tShow g
@@ -742,8 +757,10 @@ setGasModel _ [] = do
   model <- asks (_geGasModel . _eeGasEnv)
   return $ tStr $ "Current gas model is '" <> gasModelName model <> "': " <> gasModelDesc model
 setGasModel _ as = do
+  mset <- isExecutionFlagSet FlagDisableInlineMemCheck
   let mMod = case as of
-        [TLitString "table"] -> Just $ tableGasModel defaultGasConfig
+        [TLitString "table"] ->
+          if mset then Just defaultGasModel else Just pact421GasModel
         [TLitString "fixed", TLitInteger r] -> Just $ constGasModel (fromIntegral r)
         _ -> Nothing
   case mMod of

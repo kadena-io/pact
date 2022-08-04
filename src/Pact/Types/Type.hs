@@ -96,10 +96,14 @@ import Pact.Types.Codec
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.Util
+import Pact.Types.SizeOf
 
 
 newtype TypeName = TypeName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show)
+
+instance SizeOf TypeName where
+  sizeOf (TypeName n) = sizeOf n
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
@@ -115,6 +119,8 @@ instance ToJSON o => ToJSON (Arg o) where toJSON = lensyToJSON 2
 instance FromJSON o => FromJSON (Arg o) where parseJSON = lensyParseJSON 2
 instance HasInfo (Arg o) where getInfo = _aInfo
 
+instance (SizeOf o) => SizeOf (Arg o)
+
 -- | Function type
 data FunType o = FunType {
   _ftArgs :: [Arg o],
@@ -127,6 +133,8 @@ instance (Pretty o) => Pretty (FunType o) where
 
 instance ToJSON o => ToJSON (FunType o) where toJSON = lensyToJSON 3
 instance FromJSON o => FromJSON (FunType o) where parseJSON = lensyParseJSON 3
+
+instance (SizeOf o) => SizeOf (FunType o)
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
@@ -196,6 +204,8 @@ instance FromJSON PrimType where
         | otherwise = fail "Bad PrimType Value"
       doObj o = TyGuard <$> o .: "guard"
 
+instance SizeOf PrimType where
+  sizeOf _ = 0
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,
   tyKeySet,tyTable,tyGuard :: Text
@@ -244,10 +254,16 @@ instance Pretty SchemaType where
   pretty TyObject  = pretty tyObject
   pretty TyBinding = "binding"
 
+instance SizeOf SchemaType where
+  sizeOf _ = 0
+
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
 
 instance Show TypeVarName where show (TypeVarName t) = show t
+
+instance SizeOf TypeVarName where
+  sizeOf = sizeOf . _typeVarName
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
@@ -274,6 +290,8 @@ instance (Pretty v) => Pretty (TypeVar v) where
   pretty (TypeVar n cs) = angles $ pretty n <> commaBrackets (map pretty cs)
   pretty (SchemaVar n)  = angles $ braces $ pretty n
 
+instance (SizeOf v) => SizeOf (TypeVar v)
+
 -- | Represent a full or partial schema inhabitant.
 --
 -- @PartialSchema@ represents a schema with only the given subset of fields.
@@ -297,6 +315,7 @@ instance FromJSON SchemaPartial where
     (withThisText "AnySubschema" "any" v $ pure AnySubschema) <|>
     (PartialSchema <$> parseJSON v)
 
+instance SizeOf SchemaPartial
 
 showPartial :: SchemaPartial -> String
 showPartial FullSchema = ""
@@ -321,6 +340,8 @@ data Type v =
     -- ^ Nothing for interfaces, implemented ifaces for modules
   }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
+
+instance SizeOf v => SizeOf (Type v)
 
 instance NFData v => NFData (Type v)
 

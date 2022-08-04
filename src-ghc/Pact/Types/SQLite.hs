@@ -100,22 +100,16 @@ closeStmt s = either (Left . show) Right <$> finalize s
 
 -- | Prepare/execute query with params
 qry :: Database -> Utf8 -> [SType] -> [RType] -> IO [[SType]]
-qry e q as rts = do
-  stmt <- prepStmt e q
+qry e q as rts = bracket (prepStmt e q) finalize $ \stmt -> do
   bindParams stmt as
-  rows <- stepStmt stmt rts
-  void $ finalize stmt
-  return (reverse rows)
+  reverse <$> stepStmt stmt rts
 {-# INLINE qry #-}
 
 
 -- | Prepare/execute query with no params
 qry_ :: Database -> Utf8 -> [RType] -> IO [[SType]]
-qry_ e q rts = do
-            stmt <- prepStmt e q
-            rows <- stepStmt stmt rts
-            _ <- finalize stmt
-            return (reverse rows)
+qry_ e q rts = bracket (prepStmt e q) finalize $ \stmt ->
+  reverse <$> stepStmt stmt rts
 {-# INLINE qry_ #-}
 
 -- | Execute query statement with params
@@ -180,12 +174,10 @@ exec_ e q = liftEither $ SQ3.exec e q
 
 -- | Prepare/exec statement with params
 exec' :: Database -> Utf8 -> [SType] -> IO ()
-exec' e q as = do
-             stmt <- prepStmt e q
-             bindParams stmt as
-             r <- step stmt
-             void $ finalize stmt
-             void $ liftEither (return r)
+exec' e q as = bracket (prepStmt e q) finalize $ \stmt -> do
+    bindParams stmt as
+    r <- step stmt
+    void $ liftEither (return r)
 {-# INLINE exec' #-}
 
 runPragmas :: Database -> [Pragma] -> IO ()
