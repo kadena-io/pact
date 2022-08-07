@@ -120,6 +120,17 @@ cabal v2-update
 cabal v2-build
 ```
 
+On some systems the default build might fail with linker errors complaining about cryptonite and ed25519, try:
+
+```bash
+# configure cabal 
+cabal v2-configure -f cryptonite-ed25519
+
+# Build the project.
+cabal v2-build
+```
+
+
 This will install a runnable version of Pact, which you can run via:
 
 ```bash
@@ -130,6 +141,8 @@ Alternatively, `cabal v2-install` will install the binary to `~/.cabal/bin/`, wh
 you may need to add to your path. Then, you can call `pact` as-is.
 
 #### Building with Stack
+
+***(stack is no longer supported)***
 
 Stack is a Haskell build tool that manages compiler and dependency versions for
 you. It's easy to install and use.
