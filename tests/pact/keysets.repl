@@ -25,10 +25,10 @@
     (enforce (enforce-keyset 'kall) "Fails with keyset"))
 
   (defun test-enforce-one ()
-    (enforce-one "Should work" [(enforce "should pass this" false) (enforce-keyset 'kall)]))
+    (enforce-one "Should work" [(enforce false "should pass this") (enforce-keyset 'kall)]))
 
   (defun test-enforce-one-fail ()
-    (enforce-one "Should fail" [(enforce "should pass this" false) (enforce "should fail this" false)]))
+    (enforce-one "Should fail" [(enforce false "should pass this") (enforce false "should fail this")]))
 
   )
 (commit-tx)

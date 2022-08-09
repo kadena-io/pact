@@ -12,6 +12,7 @@ import Control.Error
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Catch
+import Control.Lens hiding ((.=))
 
 import Criterion.Main hiding (env)
 
@@ -156,9 +157,9 @@ loadBenchModule db = do
            pactInitialHash
            [Signer Nothing pk Nothing []]
   let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-      e = setupEvalEnv db entity Transactional md initRefStore
+  e <- setupEvalEnv db entity Transactional md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def ec
-  (r :: Either SomeException EvalResult) <- try $ evalExec defaultInterpreter e pc
+  (r :: Either SomeException EvalResult) <- try $ evalExec  defaultInterpreter e pc
   void $ eitherDie "loadBenchModule (load)" $ fmapL show r
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
   p <- either (die "loadBenchModule" . show) (return $!) $ traverse (traverse toPersistDirect) benchMod
@@ -184,10 +185,10 @@ runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) -
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-      e = (\ee -> ee { _eeAdvice = pt }) $ setupEvalEnv dbEnv entity Transactional md
+  e <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Transactional md
           initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
-      s = perfInterpreter pt $ defaultInterpreterState $
-        maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
+  let s = perfInterpreter pt $ defaultInterpreterState $
+          maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
   r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
   return $!! _erOutput r'
@@ -196,7 +197,7 @@ execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
   let md = MsgData Null Nothing pactInitialHash []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-      env = (\ee -> ee { _eeAdvice = pt }) $ setupEvalEnv dbEnv entity Local md
+  env <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Local md
             initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   o <- try $ runEval def env $ mapM eval ts
   case o of

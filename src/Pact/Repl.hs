@@ -69,6 +69,7 @@ import qualified Data.ByteString.UTF8 as BS
 import Data.Char
 import Data.Default
 import Data.List
+import Data.IORef
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Monoid (appEndo)
@@ -130,6 +131,7 @@ initPureEvalEnv verifyUri = do
 initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
+  gasRef <- newIORef 0
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
@@ -142,6 +144,7 @@ initEvalEnv ls = do
     , _eePurity = PImpure
     , _eeHash = pactInitialHash
     , _eeGasEnv = freeGasEnv
+    , _eeGas = gasRef
     , _eeNamespacePolicy = permissiveNamespacePolicy
     , _eeSPVSupport = spvs mv
     , _eePublicData = def

@@ -14,7 +14,7 @@ module Pact.GasModel.Types
 
   , GasUnitTests(..)
   , concatGasUnitTests
-  , mapOverGasUnitTests
+  , runGasUnitTests
 
   , NoopNFData(..)
 
@@ -106,12 +106,12 @@ concatGasUnitTests listOfTests =
 
 
 
-mapOverGasUnitTests
+runGasUnitTests
   :: GasUnitTests
-  -> (PactExpression -> GasSetup SQLiteDb -> IO f)
-  -> (PactExpression -> GasSetup () -> IO f)
-  -> IO [GasTestResult f]
-mapOverGasUnitTests (GasUnitTests tests) sqliteFun mockFun = do
+  -> (PactExpression -> GasSetup SQLiteDb -> IO a)
+  -> (PactExpression -> GasSetup () -> IO a)
+  -> IO [GasTestResult a]
+runGasUnitTests (GasUnitTests tests) sqliteFun mockFun = do
   mapM run (NEL.toList tests)
   where
     description (PactExpression full abrid) =
@@ -204,8 +204,7 @@ defEvalState = do
   let loaded = HM.singleton sampleLoadedKeysetName
                (Direct $ TGuard (GKeySet sampleKeyset) def, Nothing)
   return
-      $ set (evalRefs . rsLoaded) loaded
-      $ set evalGas 0 stateWithModule
+      $ set (evalRefs . rsLoaded) loaded stateWithModule
 
 getLoadedState
   :: T.Text
@@ -214,7 +213,7 @@ getLoadedState code = do
   terms <- compileCode code
   pureDb <- mkPureEnv neverLog
   initSchema pureDb
-  let env = defEvalEnv pureDb
+  env <- defEvalEnv pureDb
   (_, newState) <- runEval def env $ mapM eval terms
   return newState
 
@@ -226,22 +225,20 @@ getLoadedState code = do
 --   * An account "someId" with 0.0 as its balance
 --   * Sample keyset and namespace
 
-defEvalEnv :: PactDbEnv e -> EvalEnv e
-defEvalEnv db = setupEvalEnv
-  db entity Transactional (initMsgData pactInitialHash)
-  initRefStore prodGasModel permissiveNamespacePolicy
-  noSPVSupport def noPact44EC
-  where
-    entity = Just $ EntityName "entity"
-    prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
-    noPact44EC = mkExecutionConfig [FlagDisablePact44]
+defEvalEnv :: PactDbEnv e -> IO (EvalEnv e)
+defEvalEnv db = do
+  setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
+    initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def noPact44EC
+  where entity = Just $ EntityName "entity"
+        prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
+        noPact44EC = mkExecutionConfig [FlagDisablePact44]
 
 -- MockDb
 --
 defMockBackend :: IO (EvalEnv ())
 defMockBackend = do
   db <- mkMockEnv defMockDb
-  return $ defEvalEnv db
+  defEvalEnv db
 
 defMockDb :: MockDb
 defMockDb = mockdb
@@ -269,8 +266,8 @@ defSqliteBackend = do
               True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   state <- defEvalState
-  let env = defEvalEnv sqliteDb
-      setupExprs =
+  env <- defEvalEnv sqliteDb
+  let setupExprs =
         (accountsModule acctModuleName) <>
         [text| (create-table $acctModuleNameText.accounts)
                (insert $acctModuleNameText.accounts

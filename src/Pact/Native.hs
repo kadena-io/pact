@@ -158,6 +158,13 @@ enforceOneDef =
   ["(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])"]
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success."
   where
+    enforceBool i e = reduce e >>= \case
+      tl@(TLiteral (LBool cond) _) -> if cond then pure (Just tl) else pure Nothing
+      _ -> evalError' i "Failure: expected boolean result in enforce-one"
+    catchTxFailure :: PactError -> Eval e (Maybe (Term Name))
+    catchTxFailure e = case peType e of
+      TxFailure -> pure Nothing
+      _ -> throwM e
     enforceOne :: NativeFun e
     enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
@@ -165,11 +172,14 @@ enforceOneDef =
           TLitString s -> return s
           _ -> argsError' i as
         let tryCond r@Just {} _ = return r
-            tryCond Nothing cond = catch
-              (Just <$> reduce cond)
-              -- TODO: instead of catching all here, make pure violations
-              -- independently catchable
-              (\(_ :: SomeException) -> return Nothing)
+            tryCond Nothing cond = isExecutionFlagSet FlagDisablePact44 >>= \case
+              True -> do
+                g <- getGas
+                catch (Just <$> reduce cond)
+                  -- TODO: instead of catching all here, make pure violations
+                  -- independently catchable
+                  (\(_ :: SomeException) -> putGas g *> return Nothing)
+              False -> catch (enforceBool i cond) catchTxFailure
         r <- foldM tryCond Nothing conds
         case r of
           Nothing -> failTx (_faInfo i) $ pretty msg'
@@ -188,12 +198,19 @@ tryDef =
   \to impure expressions such as reading and writing to a table."
   where
     try' :: NativeFun e
-    try' i as@[da, action] = gasUnreduced i as $ do
-      ra <- reduce da
-      -- TODO: instead of catching all here, make pure violations
-      -- independently catchable
-      catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) ->
-        return ra
+    try' i as@[da, action] = gasUnreduced i as $ isExecutionFlagSet FlagDisablePact44 >>= \case
+      True -> do
+        ra <- reduce da
+        g1 <- getGas
+        -- TODO: instead of catching all here, make pure violations
+        -- independently catchable
+        catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) -> do
+          putGas g1
+          return ra
+      False -> do
+        catch (runReadOnly i $ reduce action) $ \(e :: PactError) -> case peType e of
+          TxFailure -> reduce da
+          _ -> throwM e
     try' i as = argsError' i as
 
 pactVersionDef :: NativeDef
