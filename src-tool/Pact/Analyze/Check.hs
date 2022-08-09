@@ -1158,7 +1158,7 @@ moduleGovernance :: ModuleData Ref -> ExceptT VerificationFailure IO Governance
 moduleGovernance moduleData = case _mdModule moduleData of
   Pact.MDModule (Pact.Module {_mGovernance}) ->
     case _gGovernance _mGovernance of
-      Left (Pact.KeySetName rn) ->
+      Left (Pact.KeySetName rn _) ->
         pure $ KsGovernance $ RegistryName rn
       Right (Def {_dDefName=Pact.DefName dn,_dModule}) ->
         pure $ CapGovernance $ mkCapName _dModule dn

@@ -39,6 +39,7 @@ module Pact.Types.ExpParser
   , lit, lit', str
   , list, list', withList, withList'
   , sep
+  , keysetNameStr
     ) where
 
 import qualified Text.Trifecta.Delta as TF
@@ -64,6 +65,7 @@ import Pact.Types.Exp
 import Pact.Types.Pretty hiding (list, sep)
 import Pact.Types.PactError (PactError(..),PactErrorType(..))
 import Pact.Types.Info
+import Pact.Types.KeySet (KeySetName, parseAnyKeysetName)
 
 -- | Exp stream type.
 data Cursor = Cursor
@@ -285,6 +287,13 @@ lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
 {-# INLINE str #-}
 str :: ExpParse s Text
 str = lit' "string" _LString
+
+keysetNameStr :: ExpParse s KeySetName
+keysetNameStr = parseKsn =<< lit' "keyset-name" _LString
+  where
+    parseKsn k = case parseAnyKeysetName k of
+      Left{} -> syntaxError "invalid keyset name format"
+      Right a -> pure a
 
 -- | Recognize a list with specified delimiter, committing.
 {-# INLINE list' #-}

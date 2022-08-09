@@ -244,70 +244,72 @@ testCorrectNextStep mgr code command cfg = do
 
 threeStepPactCode :: T.Text -> T.Text
 threeStepPactCode moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module $moduleName 'k
-              (defpact tester ()
-                (step "step 0")
-                (step "step 1")
-                (step "step 2"))) |]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+      (module $moduleName 'k
+        (defpact tester ()
+          (step "step 0")
+          (step "step 1")
+          (step "step 2"))) |]
 
 threeStepNestedPactCode :: T.Text -> T.Text
 threeStepNestedPactCode moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (interface iface
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (interface iface
 
-              (defpact ndp:string ())
-             )
-             (module $moduleName 'k
-              (defpact tester ()
-                (step "step 0")
-                (step "step 1")
-                (step "step 2")))
-              (module $moduleName-2 'k
-              (implements iface)
-              (defpact ndp:string ()
-                (step
-                  (let
-                    ((unused 1))
-                    ($moduleName.tester)
-                    "step 0")
-                )
-                (step
-                  (let
-                    ((unused 1))
-                    (continue ($moduleName.tester))
-                    "step 1")
-                )
-                (step
-                  (let
-                    ((unused 1))
-                    (continue ($moduleName.tester))
-                    "step 2")
-                ))
-                )
+     (defpact ndp:string ())
+    )
+    (module $moduleName 'k
+     (defpact tester ()
+       (step "step 0")
+       (step "step 1")
+       (step "step 2")))
+     (module $moduleName-2 'k
+     (implements iface)
+     (defpact ndp:string ()
+       (step
+         (let
+           ((unused 1))
+           ($moduleName.tester)
+           "step 0")
+       )
+       (step
+         (let
+           ((unused 1))
+           (continue ($moduleName.tester))
+           "step 1")
+       )
+       (step
+         (let
+           ((unused 1))
+           (continue ($moduleName.tester))
+           "step 2")
+       ))
+       )
 
-              (module $moduleName-nested 'k
-                (defpact nestedTester (m:module{iface})
-                  (step
-                  (let
-                    ((unused 1))
-                    (m::ndp)
-                    "step 0")
-                )
-                (step
-                  (let
-                    ((unused 1))
-                    (continue (m::ndp))
-                    "step 1")
-                )
-                (step
-                  (let
-                    ((unused 1))
-                    (continue (m::ndp))
-                    "step 2")
-                )
-                ))
-                |]
+     (module $moduleName-nested 'k
+       (defpact nestedTester (m:module{iface})
+         (step
+         (let
+           ((unused 1))
+           (m::ndp)
+           "step 0")
+       )
+       (step
+         (let
+           ((unused 1))
+           (continue (m::ndp))
+           "step 1")
+       )
+       (step
+         (let
+           ((unused 1))
+           (continue (m::ndp))
+           "step 2")
+       )
+       ))
+       |]
 
 
 testIncorrectNextStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
@@ -377,42 +379,44 @@ testErrStep mgr code command cfg = do
 
 errorStepPactCode :: T.Text -> T.Text
 errorStepPactCode moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module $moduleName 'k
-               (defpact tester ()
-                 (step "step 0")
-                 (step (+ "will throw error in step 1"))
-             (step "step 2")))|]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (module $moduleName 'k
+      (defpact tester ()
+        (step "step 0")
+        (step (+ "will throw error in step 1"))
+    (step "step 2")))|]
 
 errorStepNestedPactCode :: T.Text -> T.Text
 errorStepNestedPactCode moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module $moduleName 'k
-              (defpact tester ()
-                (step "step 0")
-                (step (+ "will throw error in step 1"))
-                (step "step 2")))
-              (module $moduleName-nested 'k
-                (defpact nestedTester ()
-                  (step
-                  (let
-                    ((unused 1))
-                    ($moduleName.tester)
-                    "step 0")
-                )
-                (step
-                  (let
-                    ((unused 1))
-                    (continue ($moduleName.tester))
-                    "step 1")
-                )
-                (step
-                  (let
-                    ((unused 1))
-                    (continue ($moduleName.tester))
-                    "step 2")
-                )
-                ))
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+      (module $moduleName 'k
+       (defpact tester ()
+         (step "step 0")
+         (step (+ "will throw error in step 1"))
+         (step "step 2")))
+       (module $moduleName-nested 'k
+         (defpact nestedTester ()
+           (step
+           (let
+             ((unused 1))
+             ($moduleName.tester)
+             "step 0")
+         )
+         (step
+           (let
+             ((unused 1))
+             (continue ($moduleName.tester))
+             "step 1")
+         )
+         (step
+           (let
+             ((unused 1))
+             (continue ($moduleName.tester))
+             "step 2")
+         )
+         ))
                 |]
 
 
@@ -466,13 +470,14 @@ testCorrectRollbackStep mgr = do
 
 pactWithRollbackCode :: T.Text -> T.Text
 pactWithRollbackCode moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module $moduleName 'k
-               (defpact tester ()
-                 (step-with-rollback "step 0" "rollback 0")
-                 (step-with-rollback "step 1" "rollback 1")
-                 (step               "step 2")))
-            |]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (module $moduleName 'k
+      (defpact tester ()
+        (step-with-rollback "step 0" "rollback 0")
+        (step-with-rollback "step 1" "rollback 1")
+        (step               "step 2")))
+        |]
 
 
 testIncorrectRollbackStep :: HTTP.Manager -> Expectation
@@ -527,12 +532,14 @@ testRollbackErr mgr = do
 
 pactWithRollbackErrCode :: T.Text -> T.Text
 pactWithRollbackErrCode moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module $moduleName 'k
-               (defpact tester ()
-                 (step-with-rollback "step 0" "rollback 0")
-                 (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
-                 (step               "step 2")))|]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (module $moduleName 'k
+      (defpact tester ()
+        (step-with-rollback "step 0" "rollback 0")
+        (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
+        (step               "step 2")))
+        |]
 
 
 testNoRollbackFunc :: HTTP.Manager -> Expectation
@@ -724,57 +731,59 @@ testValidYield moduleName mgr mkCode cfg = do
 
 pactWithYield :: T.Text -> T.Text
 pactWithYield moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module $moduleName 'k
-               (defpact tester (name)
-                 (step
-                   (let ((result0 (+ name "->Step0")))
-                     (yield { "step0-result": result0})
-                     result0))
-                 (step
-                   (resume {"step0-result" := res0 }
-                   (let ((result1 (+ res0 "->Step1")))
-                     (yield {"step1-result": result1})
-                     result1)))
-                 (step
-                   (resume { "step1-result" := res1 }
-                      (+ res1 "->Step2")))))|]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (module $moduleName 'k
+      (defpact tester (name)
+        (step
+          (let ((result0 (+ name "->Step0")))
+            (yield { "step0-result": result0})
+            result0))
+        (step
+          (resume {"step0-result" := res0 }
+          (let ((result1 (+ res0 "->Step1")))
+            (yield {"step1-result": result1})
+            result1)))
+        (step
+          (resume { "step1-result" := res1 }
+             (+ res1 "->Step2")))))|]
 
 nestedPactWithYield :: T.Text -> T.Text
 nestedPactWithYield moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module nested-$moduleName 'k
-               (defpact tester (name)
-                 (step
-                   (let ((result0 (+ name "->Step0")))
-                     (yield { "step0-result": result0})
-                     result0))
-                 (step
-                   (resume {"step0-result" := res0 }
-                   (let ((result1 (+ res0 "->Step1")))
-                     (yield {"step1-result": result1})
-                     result1)))
-                 (step
-                   (resume { "step1-result" := res1 }
-                      (+ res1 "->Step2")))))
-              (module $moduleName 'k
-               (defpact tester (name)
-                 (step
-                   (let ((result0 (+ name "->Step0")))
-                     (nested-$moduleName.tester name)
-                     (yield { "step0-result": result0})
-                     result0))
-                 (step
-                   (resume {"step0-result" := res0 }
-                   (let ((result1 (+ res0 "->Step1")))
-                     (continue (nested-$moduleName.tester name))
-                     (yield {"step1-result": result1})
-                     result1)))
-                 (step
-                   (resume { "step1-result" := res1 }
-                      (continue (nested-$moduleName.tester name))
-                      (+ res1 "->Step2")))))
-                      |]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (module nested-$moduleName 'k
+      (defpact tester (name)
+        (step
+          (let ((result0 (+ name "->Step0")))
+            (yield { "step0-result": result0})
+            result0))
+        (step
+          (resume {"step0-result" := res0 }
+          (let ((result1 (+ res0 "->Step1")))
+            (yield {"step1-result": result1})
+            result1)))
+        (step
+          (resume { "step1-result" := res1 }
+             (+ res1 "->Step2")))))
+     (module $moduleName 'k
+      (defpact tester (name)
+        (step
+          (let ((result0 (+ name "->Step0")))
+            (nested-$moduleName.tester name)
+            (yield { "step0-result": result0})
+            result0))
+        (step
+          (resume {"step0-result" := res0 }
+          (let ((result1 (+ res0 "->Step1")))
+            (continue (nested-$moduleName.tester name))
+            (yield {"step1-result": result1})
+            result1)))
+        (step
+          (resume { "step1-result" := res1 }
+             (continue (nested-$moduleName.tester name))
+             (+ res1 "->Step2")))))
+             |]
 
 
 
@@ -818,34 +827,35 @@ pactWithYieldErr moduleName =
 
 nestedPactWithYieldErr :: T.Text -> T.Text
 nestedPactWithYieldErr moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module nested-$moduleName 'k
-               (defpact tester (name)
-                 (step
-                   (let ((result0 (+ name "->Step0")))
-                    (yield { "step0-result": result0 })
-                    result0))
-                 (step "step 1 has no yield")
-                 (step
-                   (resume { "step0-result" := res0 }
-                      (+ res0 "->Step2")))))
-              (module $moduleName 'k
-               (defpact tester (name)
-                 (step
-                   (let ((result0 (+ name "->Step0")))
-                    (nested-$moduleName.tester name)
-                    (yield { "step0-result": result0 })
-                      result0))
-                 (step
-                 (let ((unused 1))
-                 (continue (nested-$moduleName.tester name))
-                 "step 1 has no yield"
-                 ))
-                 (step
-                   (resume { "step0-result" := res0 }
-                      (continue (nested-$moduleName.tester name))
-                      (+ res0 "->Step2")))))
-                      |]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (module nested-$moduleName 'k
+      (defpact tester (name)
+       (step
+         (let ((result0 (+ name "->Step0")))
+          (yield { "step0-result": result0 })
+          result0))
+       (step "step 1 has no yield")
+       (step
+         (resume { "step0-result" := res0 }
+            (+ res0 "->Step2")))))
+    (module $moduleName 'k
+     (defpact tester (name)
+       (step
+         (let ((result0 (+ name "->Step0")))
+          (nested-$moduleName.tester name)
+          (yield { "step0-result": result0 })
+            result0))
+       (step
+       (let ((unused 1))
+       (continue (nested-$moduleName.tester name))
+       "step 1 has no yield"
+       ))
+       (step
+         (resume { "step0-result" := res0 }
+            (continue (nested-$moduleName.tester name))
+            (+ res0 "->Step2")))))
+            |]
 
 
 testResetYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
@@ -876,55 +886,57 @@ testResetYield moduleName mgr mkCode cfg = do
 
 pactWithSameNameYield :: T.Text -> T.Text
 pactWithSameNameYield moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module $moduleName 'k
-               (defpact tester ()
-                 (step
-                   (let ((result0 "step 0"))
-                    (yield { "result": result0 })
-                    result0))
-                 (step
-                   (let ((result1 "step 1"))
-                    (yield { "result": result1 })
-                    result1))
-                 (step
-                   (resume { "result" := res }
-                     res))))|]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+      (module $moduleName 'k
+        (defpact tester ()
+          (step
+            (let ((result0 "step 0"))
+             (yield { "result": result0 })
+             result0))
+          (step
+            (let ((result1 "step 1"))
+             (yield { "result": result1 })
+             result1))
+          (step
+            (resume { "result" := res }
+              res))))|]
 
 
 nestedPactWithSameNameYield :: T.Text -> T.Text
 nestedPactWithSameNameYield moduleName =
-  [text| (define-keyset 'k (read-keyset "admin-keyset"))
-             (module nested-$moduleName 'k
-               (defpact tester ()
-                 (step
-                   (let ((result0 "step 0"))
-                    (yield { "result": result0 })
-                    result0))
-                 (step
-                   (let ((result1 "step 1"))
-                    (yield { "result": result1 })
-                    result1))
-                 (step
-                   (resume { "result" := res }
-                     res))))
-              (module $moduleName 'k
-               (defpact tester ()
-                 (step
-                   (let ((result0 "step 0"))
-                    (nested-$moduleName.tester)
-                    (yield { "result": result0 })
-                    result0))
-                 (step
-                   (let ((result1 "step 1"))
-                    (continue (nested-$moduleName.tester))
-                    (yield { "result": result1 })
-                    result1))
-                 (step
-                   (resume { "result" := res }
-                     (enforce (= (continue (nested-$moduleName.tester)) "step 1") "failure")
-                     res))))
-                     |]
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+    (module nested-$moduleName 'k
+      (defpact tester ()
+        (step
+          (let ((result0 "step 0"))
+           (yield { "result": result0 })
+           result0))
+        (step
+          (let ((result1 "step 1"))
+           (yield { "result": result1 })
+           result1))
+        (step
+          (resume { "result" := res }
+            res))))
+     (module $moduleName 'k
+      (defpact tester ()
+        (step
+          (let ((result0 "step 0"))
+           (nested-$moduleName.tester)
+           (yield { "result": result0 })
+           result0))
+        (step
+          (let ((result1 "step 1"))
+           (continue (nested-$moduleName.tester))
+           (yield { "result": result1 })
+           result1))
+        (step
+          (resume { "result" := res }
+            (enforce (= (continue (nested-$moduleName.tester)) "step 1") "failure")
+            res))))
+            |]
 
 
 testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Bool -> Expectation

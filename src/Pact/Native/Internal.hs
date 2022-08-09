@@ -48,8 +48,8 @@ import Data.Default
 import Data.Foldable
 import qualified Data.Vector as V
 import Data.Text (Text)
-
 import Unsafe.Coerce
+import Data.Functor (($>))
 
 import Pact.Eval
 import Pact.Gas
@@ -59,6 +59,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Runtime.Utils
+import Pact.Types.KeySet (parseAnyKeysetName)
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -173,8 +174,16 @@ enforceGuardDef dn =
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of
       [TGuard g _] -> enforceGuard i g >> return (toTerm True)
-      [TLitString k] -> enforceGuard i (GKeySetRef (KeySetName k)) >> return (toTerm True)
+      [TLitString k] -> do
+        let f ksn = enforceGuard i (GKeySetRef ksn) $> toTerm True
+
+        ifExecutionFlagSet FlagDisablePact44
+          (f $ KeySetName k Nothing)
+          (case parseAnyKeysetName k of
+             Left{} -> evalError' i "incorrect keyset name format"
+             Right ksn -> f ksn)
       _ -> argsError i as
+
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.

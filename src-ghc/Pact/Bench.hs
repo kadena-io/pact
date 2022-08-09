@@ -23,6 +23,7 @@ import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import Data.Text (unpack, pack, intercalate)
 import Data.Text.Encoding
 import Pact.Time
@@ -155,8 +156,9 @@ loadBenchModule db = do
            Nothing
            pactInitialHash
            [Signer Nothing pk Nothing []]
+  let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- setupEvalEnv db entity Transactional md initRefStore
-          freeGasEnv permissiveNamespacePolicy noSPVSupport def def
+          freeGasEnv permissiveNamespacePolicy noSPVSupport def ec
   (r :: Either SomeException EvalResult) <- try $ evalExec  defaultInterpreter e pc
   void $ eitherDie "loadBenchModule (load)" $ fmapL show r
   (benchMod,_) <- runEval def e $ getModule (def :: Info) (ModuleName "bench" Nothing)
@@ -182,8 +184,9 @@ runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) -
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
+      ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Transactional md
-          initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def def
+          initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   let s = perfInterpreter pt $ defaultInterpreterState $
           maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
@@ -193,8 +196,9 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
   let md = MsgData Null Nothing pactInitialHash []
+      ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   env <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Local md
-            initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def def
+            initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   o <- try $ runEval def env $ mapM eval ts
   case o of
     Left (e :: SomeException) -> die "execPure" (n ++ ": " ++ show e)
@@ -377,5 +381,5 @@ main = do
       [ benchNFIO "round0" $ runPactExec def "round0" [] Null Nothing pureDb round0
       , benchNFIO "round4" $ runPactExec def "round4" [] Null Nothing pureDb round4
       ]
-    , benchNFIO "time" $ fmap (fmap fst) $ evalReplEval def replS (mapM eval timeTest)
+    , benchNFIO "time" $ fmap fst <$> evalReplEval def replS (mapM eval timeTest)
     ]

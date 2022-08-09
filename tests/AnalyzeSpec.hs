@@ -51,6 +51,7 @@ import           Pact.Analyze.Util
 wrap :: Text -> Text -> Text
 wrap code model =
   [text|
+    (env-exec-config ["DisablePact44"])
     (env-keys ["admin"])
     (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
     (begin-tx)
@@ -87,6 +88,7 @@ wrapNoTable code =
     (env-keys ["admin"])
     (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
     (begin-tx)
+    (env-exec-config ["DisablePact44"])
     (define-keyset 'ks (read-keyset "keyset"))
     (module test 'ks $code)
     (commit-tx)

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
+{-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Keyset
 -- Copyright   :  (C) 2022 Stuart Popejoy
@@ -32,12 +32,20 @@ module Pact.Types.KeySet
   , keyFormats
   , validateKeyFormat
   , enforceKeyFormats
+  , keysetNameParser
+  , qualifiedKeysetNameParser
+  , parseAnyKeysetName
+  , parseQualifiedKeySetName
+  , ksKeys
+  , ksPredFun
   ) where
 
-import Control.Applicative
+import Control.Applicative ( Alternative((<|>)) )
 import Control.DeepSeq
 import Control.Monad
+import Control.Lens hiding ((.=))
 import Data.Aeson
+import Data.Attoparsec.Text (parseOnly)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.UTF8 as BSU
@@ -56,9 +64,13 @@ import GHC.Generics
 import Test.QuickCheck
 
 import Pact.Types.Names
-import Pact.Types.Pretty
+import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util
+import Pact.Types.Parser (style)
+
+import Text.Parser.Combinators (eof)
+import Text.Parser.Token
 
 -- -------------------------------------------------------------------------- --
 -- PublicKey
@@ -67,7 +79,7 @@ newtype PublicKey = PublicKey { _pubKey :: ByteString }
   deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
 
 instance Arbitrary PublicKey where
-  arbitrary = PublicKey <$> encodeUtf8 <$> T.pack <$> vectorOf 64 genValidPublicKeyChar
+  arbitrary = PublicKey . encodeUtf8 . T.pack <$> vectorOf 64 genValidPublicKeyChar
     where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
 instance Serialize PublicKey
 instance NFData PublicKey
@@ -87,6 +99,7 @@ data KeySet = KeySet
   { _ksKeys :: !(Set PublicKey)
   , _ksPredFun :: !Name
   } deriving (Eq,Generic,Show,Ord)
+makeLenses ''KeySet
 
 instance NFData KeySet
 
@@ -114,29 +127,106 @@ instance Arbitrary KeySet where
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
 instance FromJSON KeySet where
-    parseJSON v = withObject "KeySet" (\o ->
-                    KeySet <$> o .: "keys" <*>
-                    (fromMaybe defPred <$> o .:? "pred")) v <|>
-                  (KeySet <$> parseJSON v <*> pure defPred)
-      where defPred = Name (BareName "keys-all" def)
-instance ToJSON KeySet where
-    toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
+    parseJSON v = withObject "KeySet" keyListPred v <|> keyListOnly
+      where
+        defPred = Name (BareName "keys-all" def)
 
+        keyListPred o = KeySet
+          <$> o .: "keys"
+          <*> (fromMaybe defPred <$> o .:? "pred")
+
+        keyListOnly = KeySet
+          <$> parseJSON v
+          <*> pure defPred
+
+instance ToJSON KeySet where
+    toJSON (KeySet k f) = object
+      [ "keys" .= k
+      , "pred" .= f
+      ]
 
 -- -------------------------------------------------------------------------- --
 -- KeySetName
 
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,SizeOf)
+data KeySetName
+  = KeySetName
+  { _ksnName :: Text
+  , _ksnNamespace :: Maybe NamespaceName
+  } deriving (Eq, Ord, Show, Generic)
+
+instance IsString KeySetName where
+  fromString ksn = case parseAnyKeysetName (T.pack ksn) of
+    Left e -> error e
+    Right ks -> ks
+
+instance NFData KeySetName
+
+instance SizeOf KeySetName where
+  sizeOf = sizeOf . asString
+
+instance FromJSON KeySetName where
+  parseJSON v =
+    newKs v <|> oldKs v
+    where
+    oldKs = withText "KeySetName" (pure . (`KeySetName` Nothing))
+    newKs =
+      withObject "KeySetName" $ \o -> KeySetName
+        <$> o .: "name"
+        <*> (fromMaybe Nothing <$> o .:? "ns")
+
+instance ToJSON KeySetName where
+  toJSON (KeySetName k n) = case n of
+    Nothing -> toJSON k
+    Just ns -> object [ "ksn" .= k , "ns" .= ns ]
+
+instance AsString KeySetName where
+  asString (KeySetName n mns) = case mns of
+    Nothing -> n
+    Just (NamespaceName ns) -> ns <> "." <> n
 
 instance Arbitrary KeySetName where
-  arbitrary = KeySetName <$> genBareText
-instance Pretty KeySetName where pretty (KeySetName s) = "'" <> pretty s
+  arbitrary = KeySetName
+    <$> genBareText
+    <*> (Just . NamespaceName <$> genBareText)
 
+instance Pretty KeySetName where
+  pretty ksn = "'" <> pretty (asString ksn)
+
+keysetNameParser
+  :: TokenParsing m
+  => Monad m
+  => m KeySetName
+keysetNameParser =
+  qualifiedKeysetNameParser <|> woNs
+  where
+    woNs = (`KeySetName` Nothing) <$> (ident style <* eof)
+
+qualifiedKeysetNameParser
+  :: TokenParsing m
+  => Monad m
+  => m KeySetName
+qualifiedKeysetNameParser = do
+  ns <- NamespaceName <$> ident style
+  kn <- dot *> ident style <* eof
+  pure $ KeySetName kn (Just ns)
+
+parseAnyKeysetName
+  :: Text
+  -> Either String KeySetName
+parseAnyKeysetName
+  = parseOnly keysetNameParser
+
+parseQualifiedKeySetName
+  :: Text
+  -> Either String KeySetName
+parseQualifiedKeySetName
+  = parseOnly qualifiedKeysetNameParser
 
 -- | Smart constructor for a simple list and barename predicate.
 mkKeySet :: [PublicKey] -> Text -> KeySet
-mkKeySet pks n = KeySet (S.fromList pks) (Name $ BareName n def)
+mkKeySet pks p = KeySet
+  (S.fromList pks)
+  (Name $ BareName p def)
 
 -- | A predicate for public key format validation.
 type KeyFormat = PublicKey -> Bool

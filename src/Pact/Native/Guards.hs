@@ -66,9 +66,9 @@ createPrincipal i = \case
     (l,fun) -> do
       a <- mkHash $ map _pubKey l
       pure $ "w:" <> asString a <> ":" <> fun
-  GKeySetRef (KeySetName n) -> do
+  GKeySetRef kref -> do
     chargeGas 1
-    pure $ "r:" <> n
+    pure $ "r:" <> asString kref
   GModule (ModuleGuard mn n) -> do
     chargeGas 1
     pure $ "m:" <> asString mn <> ":" <> n

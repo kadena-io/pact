@@ -26,6 +26,7 @@ import qualified Data.Text.Encoding as T
 import Pact.Eval (enforcePactValue')
 import Pact.Types.Hash
 import Pact.Types.Info
+import Pact.Types.KeySet (keysetNameParser)
 import Pact.Types.Names
 import Pact.Types.Runtime
 
@@ -41,7 +42,7 @@ data Principal
     -- ^ format: `w:b64url-encoded hash:pred` where
     -- the hash is a b64url-encoding of the hash of
     -- the list of public keys of the multisig keyset
-  | R Text
+  | R KeySetName
     -- ^ format: `r:keyset-name` where keyset name is
     -- any definable keyset name
   | U Text Text
@@ -133,7 +134,7 @@ principalParser (getInfo -> i) = kParser
     rParser = do
       char' 'r'
       char' ':'
-      n <- nameParser' i
+      n <- keysetNameParser
       eof'
       pure $ R n
 
@@ -160,10 +161,11 @@ principalParser (getInfo -> i) = kParser
 guardToPrincipal :: Guard (Term Name) -> Eval e Principal
 guardToPrincipal = \case
   GPact (PactGuard pid n) -> pure $ P pid n
+  -- TODO later: revisit structure of principal k and w accounts in light of namespaces
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> pure $ K k
     (l,fun) -> pure $ W (asString $ mkHash $ map _pubKey l) fun
-  GKeySetRef (KeySetName n) -> pure $ R n
+  GKeySetRef ksn -> pure $ R ksn
   GModule (ModuleGuard mn n) -> pure $ M mn n
   GUser (UserGuard f args) -> do
     args' <- enforcePactValue' args

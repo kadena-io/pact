@@ -92,6 +92,7 @@ library
     Pact.Types.Lang
     Pact.Types.Logger
     Pact.Types.Names
+    Pact.Types.Namespace
     Pact.Types.Native
     Pact.Types.PactError
     Pact.Types.PactValue

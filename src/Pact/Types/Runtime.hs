@@ -83,21 +83,8 @@ import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
+import Pact.Types.Namespace
 
-
--- | Governance of namespace use. Policy dictates:
--- 1. Whether a namespace can be created.
--- 2. Whether the default namespace can be used.
-data NamespacePolicy =
-  SimpleNamespacePolicy (Maybe (Namespace (Term Name)) -> Bool)
-  -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
-  |
-  SmartNamespacePolicy Bool QualifiedName
-  -- ^ Bool governs root usage, Name governs ns creation.
-  -- Def is (defun xxx:bool (ns:string ns-admin:guard))
-
-permissiveNamespacePolicy :: NamespacePolicy
-permissiveNamespacePolicy = SimpleNamespacePolicy $ const True
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where

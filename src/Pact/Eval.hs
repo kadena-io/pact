@@ -52,6 +52,7 @@ module Pact.Eval
 
 import Bound
 import Control.Lens hiding (DefName)
+import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -79,11 +80,12 @@ import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
 import Pact.Types.Capability
 import Pact.Types.PactValue
+import Pact.Types.KeySet
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
-import Control.DeepSeq
+import Pact.Types.Namespace
 
 #ifdef ADVICE
 import Pact.Types.Advice
@@ -105,20 +107,21 @@ evalCommitTx i = do
 {-# INLINE evalCommitTx #-}
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
-enforceKeySetName mi mksn = do
-  ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet mksn ks))
-  runSysOnly $ enforceKeySet mi (Just mksn) ks
+enforceKeySetName mi ksn = do
+  ks <- readRow mi KeySets ksn >>= \case
+      Nothing -> evalError mi $ "No such keyset: " <> pretty ksn
+      Just ks -> pure ks
+  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet ksn ks))
+  runSysOnly $ enforceKeySet mi (Just ksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn KeySet{..} = go
+enforceKeySet i ksn KeySet{..} = do
+  sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
+  sigs' <- checkSigCaps sigs
+  runPred (M.size sigs')
   where
-    go = do
-      sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
-      sigs' <- checkSigCaps sigs
-      runPred (M.size sigs')
     matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
@@ -261,8 +264,8 @@ eval t =
   where
   strippedEval t' =
     view eeInRepl >>= \case
-      True ->  eval' $!! t'
-      False ->  ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
+      True -> eval' $!! t'
+      False -> ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
   stripOnlyModule t' = case t' of
     TModule {} -> stripTermInfo t'
     _ -> t'

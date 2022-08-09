@@ -14,3 +14,6 @@ pragmas: []
 
 # verbose: provide log output
 verbose: False
+
+execConfig:
+  - DisablePact44
