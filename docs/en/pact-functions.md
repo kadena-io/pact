@@ -767,7 +767,7 @@ Select rows from TABLE using QRY as a predicate with both key and value, and the
 ```lisp
 (let* 
  ((qry (lambda (k obj) true)) ;; select all rows
-  (f (lambda (x) [(at 'firstName x), (at 'b x)]))
+  (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
  )
  (fold-db people (qry) (f))
 )
