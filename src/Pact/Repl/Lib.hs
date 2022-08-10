@@ -493,7 +493,7 @@ tx t fi as = do
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
   where
-    resetGas = views eeGas (`writeIORef` 0) >>= (liftIO $)
+    resetGas = views eeGas (`writeIORef` 0) >>= liftIO
     i = getInfo fi
     doBegin tname = do
       tid <- evalBeginTx i
