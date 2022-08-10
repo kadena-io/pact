@@ -731,3 +731,13 @@ d.G3
 
 (expect "new keys" 40004 (env-gas))
 (commit-tx)
+
+; Test that gas is reset across begin/commit boundaries as
+; gas lives in evalEnv now
+(begin-tx)
+(+ 1 1)
+(commit-tx)
+
+(begin-tx)
+(expect "gas was reset" 0 (env-gas))
+(commit-tx)
