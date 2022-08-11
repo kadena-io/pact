@@ -198,12 +198,12 @@ keysetNameParser =
   where
     -- legacy support for keyset names must support both
     -- whitespace spaces as well as names like "SB <2>".
-    woNs = (`KeySetName` Nothing) <$> (takeText <* eof)
+    woNs = (`KeySetName` Nothing) <$> takeText
 
 qualifiedKeysetNameParser :: Parser KeySetName
 qualifiedKeysetNameParser = do
   ns <- NamespaceName <$> ident style
-  kn <- dot *> takeText <* eof
+  kn <- dot *> ident style <* eof
   pure $ KeySetName kn (Just ns)
 
 parseAnyKeysetName
