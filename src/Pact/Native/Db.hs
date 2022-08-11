@@ -179,10 +179,11 @@ descTable i as = argsError i as
 
 descKeySet :: GasRNativeFun e
 descKeySet g i [TLitString t] = do
-  k <- case parseAnyKeysetName t of
-    Left {} ->
-      evalError' i "incorrect keyset name format"
-    Right k -> pure k
+  k <- ifExecutionFlagSet FlagDisablePact44
+    (pure $ KeySetName t Nothing)
+    (case parseAnyKeysetName t of
+       Left {} -> evalError' i "incorrect keyset name format"
+       Right k -> pure k)
 
   r <- readRow (_faInfo i) KeySets k
   case r of

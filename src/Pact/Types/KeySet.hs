@@ -45,7 +45,7 @@ import Control.DeepSeq
 import Control.Monad
 import Control.Lens hiding ((.=))
 import Data.Aeson
-import Data.Attoparsec.Text (parseOnly)
+import Data.Attoparsec.Text (parseOnly, takeText, Parser)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.UTF8 as BSU
@@ -192,22 +192,18 @@ instance Arbitrary KeySetName where
 instance Pretty KeySetName where
   pretty ksn = "'" <> pretty (asString ksn)
 
-keysetNameParser
-  :: TokenParsing m
-  => Monad m
-  => m KeySetName
+keysetNameParser :: Parser KeySetName
 keysetNameParser =
   qualifiedKeysetNameParser <|> woNs
   where
-    woNs = (`KeySetName` Nothing) <$> (ident style <* eof)
+    -- legacy support for keyset names must support both
+    -- whitespace spaces as well as names like "SB <2>".
+    woNs = (`KeySetName` Nothing) <$> (takeText <* eof)
 
-qualifiedKeysetNameParser
-  :: TokenParsing m
-  => Monad m
-  => m KeySetName
+qualifiedKeysetNameParser :: Parser KeySetName
 qualifiedKeysetNameParser = do
   ns <- NamespaceName <$> ident style
-  kn <- dot *> ident style <* eof
+  kn <- dot *> takeText <* eof
   pure $ KeySetName kn (Just ns)
 
 parseAnyKeysetName

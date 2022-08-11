@@ -266,9 +266,10 @@
   , "bob-keys"   : ["bob"]
   , "alice.alice-keys": ["alice"]
   , "bob.bob-keys" : ["bob"]
+  , "TEST <1>." : ["test"]
   })
 
-(env-keys ["alice", "bob"])
+(env-keys ["alice", "bob", "test"])
 
 ; Define namespace using a keyset guard
 (define-namespace 'alice
@@ -317,3 +318,17 @@
   "Rotating keyset in wrong namespace fails"
   "Mismatching keyset namespaces"
   (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
+
+;; parser tests
+
+(expect
+  "keyset definition parsing is permissive pre-pact-4.4"
+  (read-keyset "TEST <1>.")
+  (read-keyset "TEST <1>."))
+
+(env-exec-config ['DisablePact44])
+
+(expect
+  "keyset definition parsing is permissive post-pact-4.4"
+  (read-keyset "TEST <1>.")
+  (read-keyset "TEST <1>."))
