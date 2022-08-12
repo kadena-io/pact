@@ -198,7 +198,10 @@ keysetNameParser =
   where
     -- legacy support for keyset names must support both
     -- whitespace spaces as well as names like "SB <2>".
-    woNs = (`KeySetName` Nothing) <$> takeText
+    woNs = do
+      t <- takeText
+      guard $ not $ T.null t
+      return $ KeySetName t Nothing
 
 qualifiedKeysetNameParser :: Parser KeySetName
 qualifiedKeysetNameParser = do
