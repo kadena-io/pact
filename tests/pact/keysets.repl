@@ -318,6 +318,8 @@
   "Mismatching keyset namespaces"
   (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
 
+(commit-tx)
+(begin-tx)
 ;; parser tests
 
 (env-data
@@ -353,41 +355,45 @@
   (enforce-keyset ""))
 
 (expect
-    "keyset name format is permissive pre-pact-4.4 - empty keyset - enforce-guard - keyset"
+  "keyset name format is permissive pre-pact-4.4 - empty keyset - enforce-guard - keyset"
   true
   (enforce-guard (keyset-ref-guard "")))
+
+(commit-tx)
+(begin-tx)
+
+(env-data
+  { "TEST <2>." : ["test"]
+  , "" : ["test"]
+  })
+(env-keys ["test"])
 
 ;; clear env - post fork
 (env-exec-config [])
 
-(expect
-  "keyset definition parsing is permissive post-pact-4.4 - define-keyset"
-  "Keyset defined"
-  (define-keyset "TEST <1>."))
+(expect-failure
+  "keyset definition parsing is not permissive post-pact-4.4 - define-keyset"
+  "namespace"
+  (define-keyset "TEST <2>."))
 
-(expect
-  "keyset definition parsing is permissive post-pact-4.4 - enforce-keyset"
-  true
-  (enforce-keyset "TEST <1>."))
-
-(expect
+(expect-failure
   "keyset definition parsing is permissive post-pact-4.4 - enforce-guard - keyset ref"
-  true
-  (enforce-guard (keyset-ref-guard "TEST <1>.")))
+  (enforce-guard (keyset-ref-guard "TEST <2>.")))
 
-(expect
-  "keyset name format is permissive post-pact-4.4 - empty-keyset - define-keyset"
-  "Keyset defined"
+(namespace 'alice)
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty-keyset - define-keyset"
+  "incorrect keyset name format"
   (define-keyset ""))
 
-(expect
-  "keyset name format is permissive post-pact-4.4 - empty-keyset - enforce-keyset"
-  true
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty-keyset - enforce-keyset"
+  "incorrect keyset name format"
   (enforce-keyset ""))
 
-(expect
-  "keyset name format is permissive post-pact-4.4 - empty keyset - enforce-guard - keyset ref"
-  true
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty keyset - enforce-guard - keyset ref"
+  "incorrect keyset name format"
   (enforce-guard (keyset-ref-guard "")))
 
 ;; admin/user guard differentiation in keyset
