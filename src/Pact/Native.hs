@@ -542,7 +542,7 @@ namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
             -- 1. Module install (NOT at module upgrade)
             -- 2. Interface install (Interfaces non-upgradeable)
             -- 3. Namespaced keyset definition (once #351 is in)
-            whenExecutionFlagSet FlagPreserveNamespaceUpgrade $ enforceGuard fa g
+            whenExecutionFlagSet FlagDisablePact44 $ enforceGuard fa g
             success ("Namespace set to " <> (asString ns')) $
               evalRefs . rsNamespace .= (Just n)
         Nothing  -> evalError info $

@@ -348,7 +348,7 @@ enforceNamespaceUser
     -> Eval e ()
 enforceNamespaceUser _i Nothing = return () -- root ns policy enforced in ns entry
 enforceNamespaceUser i (Just ns) =
-  unlessExecutionFlagSet FlagPreserveNamespaceUpgrade $ do
+  unlessExecutionFlagSet FlagDisablePact44 $ do
     enforceGuard i $ _nsUser ns
 
 
