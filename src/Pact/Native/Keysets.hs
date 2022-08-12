@@ -94,9 +94,7 @@ defineKeyset g0 fi as = case as of
               Left {} ->
                 evalError' fi "incorrect keyset name format"
               Right k@(KeySetName _ (Just nsn'))
-                | nsn == nsn' -> do
-                  -- when the namespace matches with the env
-                  pure (k, Just ug)
+                | nsn == nsn' -> pure (k, Just ug)
               _ -> evalError' fi "Mismatching keyset namespaces")
 
       old <- readRow i KeySets ksn
