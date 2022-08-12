@@ -32,3 +32,4 @@ coverage
 */.pact-history
 hie.yaml
 commands.sqlite
+cabal.project.local*

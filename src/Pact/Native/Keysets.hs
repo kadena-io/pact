@@ -19,6 +19,7 @@ where
 import Control.Lens
 
 import Data.Text (Text)
+import Data.Foldable (traverse_)
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -82,26 +83,28 @@ defineKeyset g0 fi as = case as of
     go name ks = do
       let i = _faInfo fi
 
-      ksn <- ifExecutionFlagSet FlagDisablePact44
-        (pure $ KeySetName name Nothing)
+      (ksn, mug) <- ifExecutionFlagSet FlagDisablePact44
+        (pure (KeySetName name Nothing, Nothing))
         (use (evalRefs . rsNamespace) >>= \case
           Nothing ->
             -- disallow creating keysets outside of a namespace
             evalError' fi "Cannot define keysets outside of a namespace"
-          Just (Namespace nsn _ ug) ->
+          Just (Namespace nsn ug _ag) ->
             case parseQualifiedKeySetName name of
-              Left {} -> evalError' fi "incorrect keyset name format"
+              Left {} ->
+                evalError' fi "incorrect keyset name format"
               Right k@(KeySetName _ (Just nsn'))
-                | nsn == nsn' -> do
-                  -- when the namespace matches with the env
-                  -- enforce the user guard and make sure we have privs
-                  enforceGuard i ug
-                  pure k
+                | nsn == nsn' -> pure (k, Just ug)
               _ -> evalError' fi "Mismatching keyset namespaces")
 
       old <- readRow i KeySets ksn
       case old of
         Nothing -> do
+          -- enforce the user guard on first definition
+          -- and make sure we have privs
+          unlessExecutionFlagSet FlagDisablePact44 $
+            traverse_ (enforceGuard i) mug
+
           computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
             writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do
