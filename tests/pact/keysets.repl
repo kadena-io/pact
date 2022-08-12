@@ -396,6 +396,11 @@
   "incorrect keyset name format"
   (enforce-guard (keyset-ref-guard "")))
 
+(expect
+  "pre-defined keysets should be enforceable post-pact-4.4 - enforce-keyset"
+  true
+  (enforce-guard (keyset-ref-guard "TEST <1>.")))
+
 ;; admin/user guard differentiation in keyset
 
 (commit-tx)
