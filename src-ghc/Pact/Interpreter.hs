@@ -61,6 +61,7 @@ import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
 import Pact.Types.Command
+import Pact.Types.ExpParser
 import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.RPC
@@ -133,8 +134,10 @@ data EvalResult = EvalResult
 -- | Execute pact statements.
 evalExec :: Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
 evalExec runner evalEnv ParsedCode {..} = do
-  terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
+  terms <- throwEither $ compileExps (ParseEnv isNarrowTry) (mkTextInfo _pcCode) _pcExps
   interpret runner evalEnv (Right terms)
+  where
+    isNarrowTry = not $ S.member FlagDisablePact44 $ _ecFlags $ _eeExecutionConfig evalEnv
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState

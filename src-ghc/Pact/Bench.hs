@@ -117,14 +117,14 @@ benchParse = bgroup "parse" $ (`map` exps) $
 
 benchCompile :: [(String,[Exp Parsed])] -> Benchmark
 benchCompile es = bgroup "compile" $ (`map` es) $
-  \(bname,exs) -> bench bname $ nf (map (either (error . show) force . compile mkEmptyInfo)) exs
+  \(bname,exs) -> bench bname $ nf (map (either (error . show) force . compile def mkEmptyInfo)) exs
 
 compileExp :: Text -> IO [Term Name]
 compileExp code = do
   pcs <- _pcExps <$> parseCode code
   forM pcs $ \pc -> do
     either (\e -> die "compileExp" $ show code ++ ": " ++ show e) (return $!!) $
-      compile mkEmptyInfo pc
+      compile def mkEmptyInfo pc
 
 
 benchVerify :: [(String,Command ByteString)] -> Benchmark

@@ -24,8 +24,10 @@
 module Pact.Types.ExpParser
   ( Cursor(..)
   , ParseState(..), psCurrent, psUser
+  , ParseEnv(..)
   , MkInfo, mkEmptyInfo, mkStringInfo, mkTextInfo
   , ExpParse
+  , narrowTry
   , runCompile
   , tokenErr, tokenErr'
   , syntaxError
@@ -52,6 +54,7 @@ import Data.List.NonEmpty (NonEmpty(..),fromList,toList)
 import Data.List
 import Control.Monad
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Arrow (second)
 import Prelude hiding (exp)
 import Data.String
@@ -100,6 +103,10 @@ data ParseState a = ParseState
   }
 makeLenses ''ParseState
 
+-- | Current env has flag for try-narrow fix.
+data ParseEnv = ParseEnv
+    { _peNarrowTry :: Bool }
+instance Default ParseEnv where def = ParseEnv True
 
 type MkInfo = Parsed -> Info
 
@@ -117,13 +124,18 @@ mkTextInfo :: T.Text -> MkInfo
 mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $
                              T.drop (fromIntegral $ TF.bytes d) s,d))
 
-type ExpParse s a = StateT (ParseState s) (Parsec Void Cursor) a
+type ExpParse s a = ReaderT ParseEnv (StateT (ParseState s) (Parsec Void Cursor)) a
+
+narrowTry :: ExpParse s a -> ExpParse s a -> ExpParse s a
+narrowTry legacy narrowed = reader _peNarrowTry >>= \case
+  True -> narrowed
+  False -> legacy
 
 -- | Run a compile. TODO squint harder at MP errors for better output.
 {-# INLINE runCompile #-}
-runCompile :: ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
-runCompile act cs a =
-  case runParser (runStateT act cs) "" (Cursor Nothing [a]) of
+runCompile :: ParseEnv -> ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
+runCompile pe act cs a =
+  case runParser (runStateT (runReaderT act pe) cs) "" (Cursor Nothing [a]) of
     (Right (r,_)) -> Right r
     (Left (ParseErrorBundle es _)) ->
       Left $ PactError SyntaxError inf [] (prettyString msg)
@@ -215,7 +227,7 @@ pCommit = ParsecT $ \s cok _ _ _ -> cok () s mempty
 
 -- | Commit any previous recognitions.
 commit :: ExpParse s ()
-commit = lift pCommit
+commit = lift (lift pCommit)
 
 -- | Recognize a specific Exp sub-type, non-committing.
 {-# INLINE exp #-}
@@ -229,7 +241,7 @@ exp ty prism = do
         strErr $ "Expected: " ++ ty,
         Tokens (fromList [t])
         ]
-  r <- lift $! pTokenEpsilon test errs
+  r <- lift $! lift $! pTokenEpsilon test errs
   psCurrent .= snd r
   return r
 
@@ -305,7 +317,9 @@ list' d = list >>= \l@(ListExp{..},_) ->
 -- | Recongize a list with specified delimiter and act on contents, committing.
 {-# INLINE withList #-}
 withList :: ListDelimiter -> (ListExp Info -> ExpParse s a) -> ExpParse s a
-withList d act = list' d >>= enter >>= act >>= \a -> exit >> return a
+withList d act = noTryMay $ list' d >>= enter >>= act >>= \a -> exit >> return a
+  where
+    noTryMay a = narrowTry (try a) a
 
 -- | 'withList' without providing ListExp arg to action, committing.
 {-# INLINE withList' #-}

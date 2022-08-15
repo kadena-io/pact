@@ -91,7 +91,7 @@ import Pact.Parse
 compileCode :: T.Text -> IO [Term Name]
 compileCode m = do
   parsedCode <- parseCode m
-  eitherDie m $ compileExps
+  eitherDie m $ compileExps def
                 (mkTextInfo $ _pcCode parsedCode)
                 (_pcExps parsedCode)
 
