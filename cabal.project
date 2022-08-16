@@ -11,3 +11,14 @@ constraints: unordered-containers <0.2.16
 
 -- test upper bounds
 constraints: hspec-golden <0.2
+
+source-repository-package
+  type: git
+  tag: 467054da161a58887975c1a3a4b455c8112cf4f3
+  location: git@github.com:edmundnoble/late-cc-plugin.git
+  subdir: late-cc-plugin
+
+package pact
+  profiling: True
+  profiling-detail: none
+
