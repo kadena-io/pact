@@ -22,3 +22,4 @@ package pact
   profiling: True
   profiling-detail: none
 
+allow-newer: hashable:*
