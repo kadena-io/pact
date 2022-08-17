@@ -58,6 +58,8 @@ spec = do
     goldenModule [FlagDisablePact43, FlagDisablePact44] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
   describe "goldenFullyQuals" $
     goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
+  describe "goldenNamespaced keysets" $
+    goldenModule [] "goldenNamespacedKeysets" "golden/golden.nks.repl" "free.nks" []
 
 goldenModule :: [ExecutionFlag] -> String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
 goldenModule flags tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
