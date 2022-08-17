@@ -1,10 +1,13 @@
 (env-keys ["key"])
 (env-data {"k": {"keys":["key"], "pred":"keys-all" }})
 
+(begin-tx)
 (module ezfree G (defcap G () true) (defun ALLOW () true))
 
 (define-namespace 'free (create-user-guard (ALLOW)) (create-user-guard (ALLOW)))
+(commit-tx)
 
+(begin-tx)
 (namespace 'free)
 
 (define-keyset "free.k1" (read-keyset 'k))
@@ -31,3 +34,12 @@
     (step { 'name: n, 'value: 1 })
     (step { 'name: n, 'value: 2 }))
 )
+(create-table tbl)
+(readTbl)
+
+(insertTbl "a" 1)
+(commit-tx)
+
+(begin-tx)
+(free.nks.readTbl)
+(commit-tx)
