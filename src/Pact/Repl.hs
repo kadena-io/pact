@@ -217,7 +217,7 @@ parsedCompileEval src r = do
 
 handleCompile :: String -> Exp Parsed -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
 handleCompile src exp a =
-    case compile (mkStringInfo src) exp of
+    case compile def (mkStringInfo src) exp of
       Right t -> a t
       -- special case for `with-capability` bareword due to
       -- `with-capability` being a reserved word that fails to
