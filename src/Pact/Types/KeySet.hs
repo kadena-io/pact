@@ -171,7 +171,7 @@ instance FromJSON KeySetName where
     oldKs = withText "KeySetName" (pure . (`KeySetName` Nothing))
     newKs =
       withObject "KeySetName" $ \o -> KeySetName
-        <$> o .: "name"
+        <$> o .: "ksn"
         <*> (fromMaybe Nothing <$> o .:? "ns")
 
 instance ToJSON KeySetName where
