@@ -150,6 +150,31 @@ data ReplTopLevel name builtin info
   | RTLTerm (Term name builtin info)
   deriving Show
 
+{-
+
+V0 = Today's Pact
+V1 = Theme: simple, modular, more efficient
+     No user-observable changes, modulo:
+     - error messages
+     Able to replay from genesis, modulo:
+     - module serialization
+     - gas accounting
+     All V0 transactions must succeed V1, unless there is a compelling
+     rationale.
+V2 = Types
+V3 = Higher-kinded functions?
+V4 = Macros?
+
+Compilation pipeline:
+
+    Untyped source code
+==> Syntactic term, bijective with source
+==> Desugared
+==> Renamed
+==> Overload resolution
+==> Type-checked term, now with inferred types
+-}
+
 -- | Untyped pact core terms
 data Term name builtin info
   = Var name info
