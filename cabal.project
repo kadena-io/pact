@@ -11,3 +11,7 @@ constraints: unordered-containers <0.2.16
 
 -- test upper bounds
 constraints: hspec-golden <0.2
+
+-- Entropy 0.4.1.9 has a build error on a bad flag
+-- TODO: remove this as soon as entropy releases a fixed version
+constraints: entropy <0.4.1.9
