@@ -244,9 +244,8 @@ evalNamespace
     -> Eval e s
 evalNamespace info setter m = \case
     Nothing -> do
-      policy <- view eeNamespacePolicy
-      unless (allowRoot policy) $
-        evalError info "Definitions in default namespace are not authorized"
+      -- legacy: enforce root on install & upgrade
+      whenExecutionFlagSet FlagDisablePact44 $ enforceRootNamespacePolicy info
       return m
     Just (Namespace n _ _) -> return $ over setter (mangleModuleName n) m
   where
@@ -255,8 +254,16 @@ evalNamespace info setter m = \case
       case ns of
         Nothing -> ModuleName nn (Just n)
         Just {} -> mn
-    allowRoot (SimpleNamespacePolicy f) = f Nothing
+
+-- | Check namespace policy to allow root install.
+enforceRootNamespacePolicy :: HasInfo i => i -> Eval e ()
+enforceRootNamespacePolicy i = do
+    policy <- view eeNamespacePolicy
+    unless (allowRoot policy) $
+        evalError' i "Definitions in default namespace are not authorized"
+  where
     allowRoot (SmartNamespacePolicy ar _) = ar
+    allowRoot (SimpleNamespacePolicy f) = f Nothing
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
@@ -288,7 +295,7 @@ eval' (TModule _tm@(MDModule m) bod i) =
     preserveModuleNameBug <- isExecutionFlagSet FlagPreserveModuleNameBug
     oldM <- lookupModule i $ _mName $ if preserveModuleNameBug then m else mangledM
     case oldM of
-      Nothing -> enforceNamespaceUser i mNs
+      Nothing -> enforceNamespaceInstall i mNs
       Just (ModuleData omd _ _) ->
         case omd of
           MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
@@ -325,7 +332,7 @@ eval' (TModule _tm@(MDInterface m) bod i) =
 #endif
     checkAllowModule i
     mNs <- use $ evalRefs . rsNamespace
-    enforceNamespaceUser i mNs
+    enforceNamespaceInstall i mNs
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m mNs
     -- enforce no upgrades
@@ -341,13 +348,16 @@ eval' (TModule _tm@(MDInterface m) bod i) =
 #endif
 eval' t = enscope t >>= reduce
 
-enforceNamespaceUser
+-- | Enforce namespace/root access on install.
+enforceNamespaceInstall
     :: HasInfo i
     => i
     -> Maybe (Namespace (Term Name))
     -> Eval e ()
-enforceNamespaceUser _i Nothing = return () -- root ns policy enforced in ns entry
-enforceNamespaceUser i (Just ns) =
+enforceNamespaceInstall i Nothing =
+  unlessExecutionFlagSet FlagDisablePact44 $
+    enforceRootNamespacePolicy i
+enforceNamespaceInstall i (Just ns) =
   unlessExecutionFlagSet FlagDisablePact44 $ do
     enforceGuard i $ _nsUser ns
 
