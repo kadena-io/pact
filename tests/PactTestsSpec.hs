@@ -113,6 +113,10 @@ badErrors = M.fromList
     "Expected def")
   ,(pfx "bad-root-namespace.repl",
     "Definitions in default namespace are not authorized")
+  ,(pfx "bad-root-namespace-44.repl",
+    "Definitions in default namespace are not authorized")
+  ,(pfx "bad-root-namespace-upgrade.repl",
+    "Definitions in default namespace are not authorized")
   ,(pfx "bad-dupe-def.repl"
    ,"definition name conflict")
   ,(pfx "bad-modules-disabled.repl"

@@ -276,6 +276,18 @@
   (defcap G () true)
   (defun foo () 1))
 
-;; testing allow-root in bad-root-namespace.repl
+;; testing allow-root in bad-root-namespace.repl, plus legacy (-44.repl)
+
+;; testing root upgrade failure in bad-root-namespace-upgrade.repl
+
+;; upgrade succeeds post-44 with allow root false
+
+(env-namespace-policy false (manage))
+
+(module my-root-module G
+  (defcap G () true)
+  (defun foo () 2))
+
+
 
 (rollback-tx)
