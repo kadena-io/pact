@@ -60,6 +60,8 @@ spec = do
     goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
   describe "goldenNamespaced keysets" $
     goldenModule [] "goldenNamespacedKeysets" "golden/golden.nks.repl" "free.nks" []
+  describe "golden root ns module upgrade" $
+    goldenModule [] "goldenRootNamespace" "golden/golden.rootnamespace.repl" "nsupgrade" []
 
 goldenModule :: [ExecutionFlag] -> String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
 goldenModule flags tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
