@@ -83,6 +83,7 @@ import Pact.Types.Lang
 import Pact.Types.PactValue (toPactValueLenient, PactValue(..))
 import Pact.Types.RowData
 import Pact.Types.Runtime
+import Pact.Types.Namespace
 import Pact.Parse
 
 
@@ -90,7 +91,7 @@ import Pact.Parse
 compileCode :: T.Text -> IO [Term Name]
 compileCode m = do
   parsedCode <- parseCode m
-  eitherDie m $ compileExps
+  eitherDie m $ compileExps def
                 (mkTextInfo $ _pcCode parsedCode)
                 (_pcExps parsedCode)
 

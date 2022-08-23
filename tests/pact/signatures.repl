@@ -58,6 +58,7 @@
 
 (commit-tx)
 (begin-tx)
+(env-exec-config ["DisablePact44"])
 
 (define-keyset 'test-keyset (sig-keyset))
 (module mod-test1 'test-keyset

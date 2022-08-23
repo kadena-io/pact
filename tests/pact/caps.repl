@@ -1,5 +1,6 @@
 
 (begin-tx)
+(env-exec-config ["DisablePact44"])
 
 (env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
 (define-keyset 'kall)
@@ -792,4 +793,3 @@
     )))
 
 (go-recursive-caps) ;; Run recursive cap acquisition
-

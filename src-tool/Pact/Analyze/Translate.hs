@@ -1716,6 +1716,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr _ -> shimNative' node fn [] "principal" a'
     _ -> unexpectedNode astNode
 
+  AST_NFun node fn@"describe-namespace" [a] -> translateNode a >>= \case
+    -- assuming we have a namespace name as input, yield an empty object
+    Some SStr _ -> shimNative astNode node fn []
+    _ -> unexpectedNode astNode
+
   AST_NFun node fn as -> shimNative astNode node fn as
 
   _ -> unexpectedNode astNode

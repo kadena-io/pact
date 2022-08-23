@@ -135,6 +135,7 @@
 (expect "!= keyset keyset" true (!= (read-keyset "k1") (read-keyset "k2")))
 
 "===== keyset ref equality"
+(env-exec-config ["DisablePact44"])
 (env-data { "k1": ["k1"], "k2": ["k2"] })
 (env-keys ["k1" "k2"])
 (define-keyset 'k1 (read-keyset "k1"))

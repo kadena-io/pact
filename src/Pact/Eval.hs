@@ -35,6 +35,7 @@ module Pact.Eval
     ,reduce,reduceBody
     ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
+    ,enforceGuard
     ,deref
     ,liftTerm,apply
     ,acquireModuleAdmin
@@ -51,6 +52,7 @@ module Pact.Eval
 
 import Bound
 import Control.Lens hiding (DefName)
+import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -78,11 +80,12 @@ import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
 import Pact.Types.Capability
 import Pact.Types.PactValue
+import Pact.Types.KeySet
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
-import Control.DeepSeq
+import Pact.Types.Namespace
 
 #ifdef ADVICE
 import Pact.Types.Advice
@@ -104,20 +107,21 @@ evalCommitTx i = do
 {-# INLINE evalCommitTx #-}
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
-enforceKeySetName mi mksn = do
-  ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet mksn ks))
-  runSysOnly $ enforceKeySet mi (Just mksn) ks
+enforceKeySetName mi ksn = do
+  ks <- readRow mi KeySets ksn >>= \case
+      Nothing -> evalError mi $ "No such keyset: " <> pretty ksn
+      Just ks -> pure ks
+  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet ksn ks))
+  runSysOnly $ enforceKeySet mi (Just ksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn KeySet{..} = go
+enforceKeySet i ksn KeySet{..} = do
+  sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
+  sigs' <- checkSigCaps sigs
+  runPred (M.size sigs')
   where
-    go = do
-      sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
-      sigs' <- checkSigCaps sigs
-      runPred (M.size sigs')
     matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
@@ -140,6 +144,27 @@ enforceKeySet i ksn KeySet{..} = go
         runBuiltIn p | p count matched = return ()
                      | otherwise = failed
 {-# INLINE enforceKeySet #-}
+
+enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
+enforceGuard i g = case g of
+  GKeySet k -> runSysOnly $ enforceKeySet (getInfo i) Nothing k
+  GKeySetRef n -> enforceKeySetName (getInfo i) n
+  GPact PactGuard{..} -> do
+    pid <- getPactId i
+    unless (pid == _pgPactId) $
+      evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
+  GModule mg@ModuleGuard{..} -> do
+    md <- _mdModule <$> getModule i _mgModuleName
+    case md of
+      MDModule m@Module{..} -> calledByModule m >>= \r ->
+        if r then
+          return ()
+        else
+          void $ acquireModuleAdmin (getInfo i) _mName _mGovernance
+      MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
+  GUser UserGuard{..} ->
+    void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
+
 
 
 -- | Hoist Name back to ref
@@ -211,14 +236,16 @@ enforceModuleAdmin i modGov =
 -- 'namespace.modulename' is the name we will associate
 -- with a module unless the namespace policy is defined
 -- otherwise
-evalNamespace :: Info -> (Setter' s ModuleName) -> s -> Eval e s
-evalNamespace info setter m = do
-  mNs <- use $ evalRefs . rsNamespace
-  case mNs of
+evalNamespace
+    :: Info
+    -> (Setter' s ModuleName)
+    -> s
+    -> Maybe (Namespace (Term Name))
+    -> Eval e s
+evalNamespace info setter m = \case
     Nothing -> do
-      policy <- view eeNamespacePolicy
-      unless (allowRoot policy) $
-        evalError info "Definitions in default namespace are not authorized"
+      -- legacy: enforce root on install & upgrade
+      whenExecutionFlagSet FlagDisablePact44 $ enforceRootNamespacePolicy info
       return m
     Just (Namespace n _ _) -> return $ over setter (mangleModuleName n) m
   where
@@ -227,16 +254,28 @@ evalNamespace info setter m = do
       case ns of
         Nothing -> ModuleName nn (Just n)
         Just {} -> mn
-    allowRoot (SimpleNamespacePolicy f) = f Nothing
+
+-- | Check namespace policy to allow root install.
+enforceRootNamespacePolicy :: HasInfo i => i -> Eval e ()
+enforceRootNamespacePolicy i = do
+    policy <- view eeNamespacePolicy
+    unless (allowRoot policy) $
+        evalError' i "Definitions in default namespace are not authorized"
+  where
     allowRoot (SmartNamespacePolicy ar _) = ar
+    allowRoot (SimpleNamespacePolicy f) = f Nothing
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
-  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (eval' $!! stripped)
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (strippedEval t)
   where
-  stripped = case t of
-    TModule{} -> stripTermInfo t
-    _ -> t
+  strippedEval t' =
+    view eeInRepl >>= \case
+      True -> eval' $!! t'
+      False -> ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
+  stripOnlyModule t' = case t' of
+    TModule {} -> stripTermInfo t'
+    _ -> t'
 
 -- | Evaluate top-level term.
 eval' ::  Term Name ->  Eval e (Term Name)
@@ -249,13 +288,14 @@ eval' (TModule _tm@(MDModule m) bod i) =
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
 #endif
     checkAllowModule i
+    mNs <- use $ evalRefs . rsNamespace
     -- prepend namespace def to module name
-    mangledM <- evalNamespace i mName m
+    mangledM <- evalNamespace i mName m mNs
     -- enforce old module governance
     preserveModuleNameBug <- isExecutionFlagSet FlagPreserveModuleNameBug
     oldM <- lookupModule i $ _mName $ if preserveModuleNameBug then m else mangledM
     case oldM of
-      Nothing -> return ()
+      Nothing -> enforceNamespaceInstall i mNs
       Just (ModuleData omd _ _) ->
         case omd of
           MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
@@ -291,8 +331,10 @@ eval' (TModule _tm@(MDInterface m) bod i) =
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
 #endif
     checkAllowModule i
+    mNs <- use $ evalRefs . rsNamespace
+    enforceNamespaceInstall i mNs
      -- prepend namespace def to module name
-    mangledI <- evalNamespace i interfaceName m
+    mangledI <- evalNamespace i interfaceName m mNs
     -- enforce no upgrades
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
@@ -305,6 +347,19 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 #endif
 eval' t = enscope t >>= reduce
+
+-- | Enforce namespace/root access on install.
+enforceNamespaceInstall
+    :: HasInfo i
+    => i
+    -> Maybe (Namespace (Term Name))
+    -> Eval e ()
+enforceNamespaceInstall i Nothing =
+  unlessExecutionFlagSet FlagDisablePact44 $
+    enforceRootNamespacePolicy i
+enforceNamespaceInstall i (Just ns) =
+  unlessExecutionFlagSet FlagDisablePact44 $ do
+    enforceGuard i $ _nsUser ns
 
 
 #ifdef ADVICE
@@ -1226,13 +1281,14 @@ reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
-createNestedPactId _ pc@(PactContinuation (QName _) _) (PactId parent) =
-  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> (BL.toStrict (A.encode pc))
+createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
+  let pc = PactContinuation (QName qn{_qnInfo = def}) pvs
+  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
 createNestedPactId i n _ =
   evalError' i $ "Error creating nested pact id, name is not qualified: " <> pretty n
 
 initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
-initPact i app bod = view eePactStep >>= \es -> case es of
+initPact i app bod = view eePactStep >>= \case
   Just v@(PactStep step b parent _) -> do
     whenExecutionFlagSet FlagDisablePact43 $
       evalError i $ "initPact: internal error: step already in environment: " <> pretty v

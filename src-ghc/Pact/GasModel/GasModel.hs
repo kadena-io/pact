@@ -118,7 +118,7 @@ mockRuns
   :: GasUnitTests
   -> IO ()
 mockRuns tests = do
-  void $ mapOverGasUnitTests tests run run
+  void $ runGasUnitTests tests run run
   where
     run expr dbSetup = do
       putStrLn $ "Dry run for " ++ T.unpack (getDescription expr dbSetup)
@@ -134,7 +134,7 @@ mockRuns'
   :: GasUnitTests
   -> IO [GasTestResult (Either PactError [Term Name], EvalState)]
 mockRuns' tests = do
-  mapOverGasUnitTests tests run run
+  runGasUnitTests tests run run
   where
     run expr dbSetup = do
       bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
@@ -166,7 +166,7 @@ benchesOnce
   :: GasUnitTests
   -> IO [GasTestResult Average]
 benchesOnce tests =
-  mapOverGasUnitTests tests run run
+  runGasUnitTests tests run run
   where
     run expr setup = do
       means <- replicateM 1 $ bench expr setup
@@ -178,7 +178,7 @@ benchesMultiple
   :: (NativeDefName, GasUnitTests)
   -> IO (NativeDefName, [GasTestResult Average])
 benchesMultiple (funName, tests) = do
-  results <- mapOverGasUnitTests tests run run
+  results <- runGasUnitTests tests run run
   return (funName, results)
   where
     batchSize = 3

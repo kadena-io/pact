@@ -873,7 +873,7 @@ two capabilities, with TRANSFER being a "no-guard" capability that simply enclos
   (check-account-exists to))
 
 (defun transfer (from to amount)
-  (with-capability (TRANSFER to from amount)
+  (with-capability (TRANSFER from to amount)
     (debit from amount)
     (credit to amount)))
 

@@ -143,6 +143,14 @@ renderExamples h f es = do
               renderCompactString f ++ ": " ++ e ++ ": " ++ err
   hPutStrLn h "```"
   where
+  foldDbOverride =
+    ("fold-db"
+    , [LitExample "(let* \n\
+                  \ ((qry (lambda (k obj) true)) ;; select all rows\n\
+                  \  (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))\n\
+                  \ )\n\
+                  \ (fold-db people (qry) (f))\n\
+                  \)"])
   zipOverride =
     ( "zip"
     , [ "(zip (+) [1 2 3 4] [4 5 6 7])"
@@ -161,7 +169,7 @@ renderExamples h f es = do
       , LitExample "(create-principal (create-user-guard 'user-guard))"
       , LitExample "(create-principal (create-pact-guard 'pact-guard))"]
     )
-  overrideExamples = Map.fromList (over (mapped._1) NativeDefName [continueOverride, createPrincipalOveride, zipOverride])
+  overrideExamples = Map.fromList (over (mapped._1) NativeDefName [continueOverride, createPrincipalOveride, zipOverride, foldDbOverride])
 
 renderProperties :: Handle -> IO ()
 renderProperties h = do

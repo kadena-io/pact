@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE MultiWayIf #-}
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -51,6 +52,8 @@ module Pact.Native
     , atDef
     , chainDataSchema
     , cdChainId, cdBlockHeight, cdBlockTime, cdSender, cdGasLimit, cdGasPrice
+    , describeNamespaceSchema
+    , dnUserGuard, dnAdminGuard, dnNamespaceName
     , cdPrevBlockHash
     ) where
 
@@ -100,6 +103,7 @@ import Pact.Types.Pretty hiding (list)
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
+import Pact.Types.Namespace
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -155,18 +159,28 @@ enforceOneDef =
   ["(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])"]
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success."
   where
+    enforceBool i e = reduce e >>= \case
+      tl@(TLiteral (LBool cond) _) -> if cond then pure (Just tl) else pure Nothing
+      _ -> evalError' i "Failure: expected boolean result in enforce-one"
+    catchTxFailure :: PactError -> Eval e (Maybe (Term Name))
+    catchTxFailure e = case peType e of
+      TxFailure -> pure Nothing
+      _ -> throwM e
     enforceOne :: NativeFun e
     enforceOne i as@[msg,TList conds _ _] = runReadOnly i $
       gasUnreduced i as $ do
-        msg' <- reduce msg >>= \m -> case m of
+        msg' <- reduce msg >>= \case
           TLitString s -> return s
           _ -> argsError' i as
         let tryCond r@Just {} _ = return r
-            tryCond Nothing cond = catch
-              (Just <$> reduce cond)
-              -- TODO: instead of catching all here, make pure violations
-              -- independently catchable
-              (\(_ :: SomeException) -> return Nothing)
+            tryCond Nothing cond = isExecutionFlagSet FlagDisablePact44 >>= \case
+              True -> do
+                g <- getGas
+                catch (Just <$> reduce cond)
+                  -- TODO: instead of catching all here, make pure violations
+                  -- independently catchable
+                  (\(_ :: SomeException) -> putGas g *> return Nothing)
+              False -> catch (enforceBool i cond) catchTxFailure
         r <- foldM tryCond Nothing conds
         case r of
           Nothing -> failTx (_faInfo i) $ pretty msg'
@@ -185,12 +199,19 @@ tryDef =
   \to impure expressions such as reading and writing to a table."
   where
     try' :: NativeFun e
-    try' i as@[da, action] = gasUnreduced i as $ do
-      ra <- reduce da
-      -- TODO: instead of catching all here, make pure violations
-      -- independently catchable
-      catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) ->
-        return ra
+    try' i as@[da, action] = gasUnreduced i as $ isExecutionFlagSet FlagDisablePact44 >>= \case
+      True -> do
+        ra <- reduce da
+        g1 <- getGas
+        -- TODO: instead of catching all here, make pure violations
+        -- independently catchable
+        catch (runReadOnly i $ reduce action) $ \(_ :: SomeException) -> do
+          putGas g1
+          return ra
+      False -> do
+        catch (runReadOnly i $ reduce action) $ \(e :: PactError) -> case peType e of
+          TxFailure -> reduce da
+          _ -> throwM e
     try' i as = argsError' i as
 
 pactVersionDef :: NativeDef
@@ -222,23 +243,23 @@ formatDef =
   ["(format \"My {} has {}\" [\"dog\" \"fleas\"])"]
   "Interpolate VARS into TEMPLATE using {}."
   where
-
     format :: RNativeFun e
     format i [TLitString s,TList es _ _] = do
       let parts = T.splitOn "{}" s
           plen = length parts
-          rep (TLitString t) = t
-          rep t = renderCompactText t
-      if plen == 1
-      then return $ tStr s
-      else if plen - length es > 1
-           then evalError' i "format: not enough arguments for template"
-           else return $ tStr $
-                foldl'
-                  (\r (e,t) -> r <> rep e <> t)
-                  (head parts)
-                  (zip (V.toList es) (tail parts))
+      if | plen == 1 -> return $ tStr s
+         | plen - length es > 1 -> evalError' i "format: not enough arguments for template"
+         | otherwise -> do
+          let args = rep <$> V.toList es
+              !totalArgLen = sum (T.length <$> args)
+              inputLength = T.length s
+          unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
+          return $ tStr $ T.concat $ alternate parts (take (plen - 1) args)
     format i as = argsError i as
+    rep (TLitString t) = t
+    rep t = renderCompactText t
+    alternate (x:xs) ys = x : alternate ys xs
+    alternate _ _ = []
 
 strToListDef :: NativeDef
 strToListDef = defGasRNative "str-to-list" strToList
@@ -385,6 +406,48 @@ fromNamespacePactValue :: Namespace PactValue -> Namespace (Term Name)
 fromNamespacePactValue (Namespace n userg adming) =
   Namespace n (fromGuardPactValue userg) (fromGuardPactValue adming)
 
+dnUserGuard :: FieldKey
+dnUserGuard = "user-guard"
+
+dnAdminGuard :: FieldKey
+dnAdminGuard = "admin-guard"
+
+dnNamespaceName :: FieldKey
+dnNamespaceName = "namespace-name"
+
+describeNamespaceSchema :: NativeDef
+describeNamespaceSchema = defSchema "described-namespace"
+  "Schema type for data returned from 'describe-namespace'."
+  [ (dnUserGuard, tTyGuard Nothing)
+  , (dnAdminGuard, tTyGuard Nothing)
+  , (dnNamespaceName, tTyString)
+  ]
+
+describeNamespaceDef :: NativeDef
+describeNamespaceDef = setTopLevelOnly $ defGasRNative
+  "describe-namespace" describeNamespace
+  (funType (tTyObject dnTy) [("ns", tTyString)])
+  [LitExample "(describe-namespace 'my-namespace)"]
+  "Describe the namespace NS, returning a row object containing \
+  \the user and admin guards of the namespace, as well as its name."
+  where
+    dnTy = TyUser (snd describeNamespaceSchema)
+
+    describeNamespace :: GasRNativeFun e
+    describeNamespace g0 i as = case as of
+      [TLitString nsn] -> do
+        readRow (getInfo i) Namespaces (NamespaceName nsn) >>= \case
+          Just ns@(Namespace nsn' user admin) -> do
+            let guardTermOf g = TGuard (fromPactValue <$> g) def
+
+            computeGas' g0 i (GPostRead (ReadNamespace ns)) $
+              pure $ toTObject dnTy def
+                [ (dnUserGuard, guardTermOf user)
+                , (dnAdminGuard, guardTermOf admin)
+                , (dnNamespaceName, toTerm $ renderCompactText nsn')
+                ]
+          Nothing -> evalError' i $ "Namespace not defined: " <> pretty nsn
+      _ -> argsError i as
 
 defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
@@ -474,7 +537,12 @@ namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
         Just n@(Namespace ns' g _) -> do
           nsPactValue <- toNamespacePactValue info n
           computeGas' g0 fa (GPostRead (ReadNamespace nsPactValue)) $ do
-            enforceGuard fa g
+            -- Old behavior enforces ns at declaration.
+            -- New behavior enforces at ns-related action:
+            -- 1. Module install (NOT at module upgrade)
+            -- 2. Interface install (Interfaces non-upgradeable)
+            -- 3. Namespaced keyset definition (once #351 is in)
+            whenExecutionFlagSet FlagDisablePact44 $ enforceGuard fa g
             success ("Namespace set to " <> (asString ns')) $
               evalRefs . rsNamespace .= (Just n)
         Nothing  -> evalError info $
@@ -772,6 +840,7 @@ langDefs =
     ,intToStrDef
     ,hashDef
     ,defineNamespaceDef
+    ,describeNamespaceDef
     ,namespaceDef
     ,chainDataDef
     ,chainDataSchema
@@ -1253,7 +1322,7 @@ continueNested i as = gasUnreduced i as $ case as of
       (Just ps, Just pe) -> do
         contArgs <- traverse reduce args >>= enforcePactValue'
         let childName = QName (QualifiedName (_dModule d) (asString (_dDefName d)) def)
-            cont = PactContinuation childName contArgs
+            cont = PactContinuation childName (stripPactValueInfo <$> contArgs)
         newPactId <- createNestedPactId i cont (_psPactId ps)
         let newPs = PactStep (_psStep ps) (_psRollback ps) newPactId
         case _peNested pe ^. at newPactId of

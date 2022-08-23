@@ -23,14 +23,14 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
-   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
+   eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
-   evalGas,evalCapabilities,evalLogGas,evalEvents,
+   evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -62,6 +62,7 @@ import Control.Monad.State.Strict
 import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
+import Data.IORef(IORef)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -82,21 +83,8 @@ import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
+import Pact.Types.Namespace
 
-
--- | Governance of namespace use. Policy dictates:
--- 1. Whether a namespace can be created.
--- 2. Whether the default namespace can be used.
-data NamespacePolicy =
-  SimpleNamespacePolicy (Maybe (Namespace (Term Name)) -> Bool)
-  -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
-  |
-  SmartNamespacePolicy Bool QualifiedName
-  -- ^ Bool governs root usage, Name governs ns creation.
-  -- Def is (defun xxx:bool (ns:string ns-admin:guard))
-
-permissiveNamespacePolicy :: NamespacePolicy
-permissiveNamespacePolicy = SimpleNamespacePolicy $ const True
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -161,6 +149,8 @@ data ExecutionFlag
   | FlagDisablePact43
   -- | Disable pact 4.3 features
   | FlagDisablePact431
+  -- | Disable Pact 4.4 features
+  | FlagDisablePact44
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -216,6 +206,8 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
+      -- | Tallied gas
+    , _eeGas :: IORef Gas
       -- | Namespace Policy
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
@@ -226,6 +218,8 @@ data EvalEnv e = EvalEnv {
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
+      -- | Are we in the repl? If so, ignore info
+    , _eeInRepl :: Bool
     }
 makeLenses ''EvalEnv
 
@@ -269,8 +263,6 @@ data EvalState = EvalState {
     , _evalCallStack :: ![StackFrame]
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
-      -- | Gas tally
-    , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
@@ -280,7 +272,7 @@ data EvalState = EvalState {
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def 0 def def def
+instance Default EvalState where def = EvalState def def def def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =

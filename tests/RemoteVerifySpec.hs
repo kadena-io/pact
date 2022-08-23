@@ -74,6 +74,7 @@ testSingleModule :: Spec
 testSingleModule = do
   replState0 <- runIO $ either (error.show) id <$> loadCode
     [text|
+      (env-exec-config ["DisablePact44"])
       (env-keys ["admin"])
       (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
       (begin-tx)
@@ -117,6 +118,7 @@ testUnsortedModules = do
     (Right [])
   where
     code = [text|
+      (env-exec-config ["DisablePact44"])
       (env-keys ["admin"])
       (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
       (begin-tx)
