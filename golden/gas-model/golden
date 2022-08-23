@@ -486,6 +486,8 @@
   - 201
 - - (+ smallOjectMap smallOjectMap)
   - 21
+- - (describe-namespace "my-namespace")
+  - 101
 - - (define-namespace 'some-other-namespace some-loaded-keyset some-loaded-keyset)
   - 89
 - - '(define-namespace ''my-namespace some-loaded-keyset some-loaded-keyset): Defining

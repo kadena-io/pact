@@ -7,8 +7,13 @@ import Test.Hspec
 import Pact.Repl
 import Pact.Repl.Types
 import Data.Either
+import Data.Text (Text)
 import Control.Monad.State.Strict
+import Pact.Compile
+import Pact.Parse
+import Pact.Types.PactError
 import Pact.Types.Exp
+import Pact.Types.ExpParser
 import Pact.Types.Names
 import Pact.Types.Pretty
 import Pact.Types.Term
@@ -18,6 +23,7 @@ spec = do
   describe "loadBadParens" $ loadBadParens
   describe "runBadTests" $ runBadTests
   describe "prettyLit" $ prettyLit
+  describe "narrowTryBackCompat" $ narrowTryBackCompat
   parseNames
 
 evalString' :: String -> IO (Either String (Term Name), ReplState)
@@ -78,3 +84,15 @@ parseNames = do
     negative "a single dot" $ parseQualifiedName def "."
     negative "extra dots" $ parseQualifiedName def "a..b"
     negative "four components" $ parseQualifiedName def "a.b.c.d"
+
+parseCompile :: ParseEnv -> Text -> Either String (Either PactError [Term Name])
+parseCompile pe m = compileExps pe mkEmptyInfo <$> (parseExprs m)
+
+narrowTryBackCompat :: Spec
+narrowTryBackCompat = do
+  -- code from bad-term-in-list.repl
+  it "preserves old try bug" $
+    parseCompile (ParseEnv False) "[(module m g (defcap g () 1))]" `shouldSatisfy` rightRight
+  where
+    rightRight (Right Right {}) = True
+    rightRight _ = False

@@ -165,6 +165,19 @@ Create a namespace called NAMESPACE where ownership and use of the namespace is 
 Top level only: this function will fail if used in module code.
 
 
+### describe-namespace {#describe-namespace}
+
+*ns*&nbsp;`string` *&rarr;*&nbsp;`object:{described-namespace}`
+
+
+Describe the namespace NS, returning a row object containing the user and admin guards of the namespace, as well as its name.
+```lisp
+(describe-namespace 'my-namespace)
+```
+
+Top level only: this function will fail if used in module code.
+
+
 ### distinct {#distinct}
 
 *values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
@@ -754,7 +767,7 @@ Select rows from TABLE using QRY as a predicate with both key and value, and the
 ```lisp
 (let* 
  ((qry (lambda (k obj) true)) ;; select all rows
-  (f (lambda (x) [(at 'firstName x), (at 'b x)]))
+  (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
  )
  (fold-db people (qry) (f))
 )
@@ -1848,7 +1861,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

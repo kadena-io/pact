@@ -1,5 +1,5 @@
-
 (begin-tx)
+(env-exec-config ["DisablePact44"])
 (env-data { "kall": ["a" "b" "c"] })
 (define-keyset "k" (sig-keyset))
 (define-keyset 'kall (read-keyset "kall"))
@@ -25,10 +25,10 @@
     (enforce (enforce-keyset 'kall) "Fails with keyset"))
 
   (defun test-enforce-one ()
-    (enforce-one "Should work" [(enforce "should pass this" false) (enforce-keyset 'kall)]))
+    (enforce-one "Should work" [(enforce false "should pass this") (enforce-keyset 'kall)]))
 
   (defun test-enforce-one-fail ()
-    (enforce-one "Should fail" [(enforce "should pass this" false) (enforce "should fail this" false)]))
+    (enforce-one "Should fail" [(enforce false "should pass this") (enforce false "should fail this")]))
 
   )
 (commit-tx)
@@ -254,3 +254,192 @@
  "enforce kadena key format with flag: success 2"
  (constantly true)
  (read-keyset 'good2))
+
+(commit-tx)
+(begin-tx)
+
+;; wipe exec configs to test namespacing keysets
+(env-exec-config [])
+
+(env-data
+  { "alice-keys" : ["alice"]
+  , "bob-keys"   : ["bob"]
+  , "alice.alice-keys": ["alice"]
+  , "bob.bob-keys" : ["bob"]
+  })
+
+(env-keys ["alice", "bob"])
+
+; Define namespace using a keyset guard
+(define-namespace 'alice
+  (read-keyset 'alice-keys)
+  (read-keyset 'alice-keys))
+
+(define-namespace 'bob
+  (read-keyset 'bob-keys)
+  (read-keyset 'bob-keys))
+
+(expect-failure
+  "Defining un-namespaced keys fails - env keys, name failure"
+  "Cannot define keysets outside of a namespace"
+  (define-keyset 'alice-keys))
+
+;; Show failure on lookup for keys
+(expect-failure
+  "Defining un-namespaced keys fails - actual keys, name failure"
+  "Cannot define keysets outside of a namespace"
+  (define-keyset 'alice (read-keyset 'alice-keys)))
+
+(expect-failure
+  "Defining namespaced key fails - env keys, outside namespace"
+  "Cannot define keysets outside of a namespace"
+  (define-keyset "alice.alice-keys"))
+
+(namespace 'alice)
+(expect
+  "Defining namespaced key succeeds - env keys, in namespace"
+  "Keyset defined"
+  (define-keyset "alice.alice-keys"))
+
+(expect-failure
+  "Defining namespaced key fails - env keys, in wrong namespace"
+  (define-keyset "bob.bob-keys"))
+
+(define-keyset "alice.alice-keys")
+(expect
+  "Rotating keyset within namespace succeeds"
+  "Keyset defined"
+  (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
+
+(namespace 'bob)
+
+(expect-failure
+  "Rotating keyset in wrong namespace fails"
+  "Mismatching keyset namespaces"
+  (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
+
+(commit-tx)
+(begin-tx)
+;; parser tests
+
+(env-data
+  { "TEST <1>." : ["test"]
+  , "" : ["test"]
+  })
+(env-keys ["test"])
+(env-exec-config ['DisablePact44])
+
+(expect
+  "keyset definition parsing is permissive pre-pact-4.4 - define-keyset"
+  "Keyset defined"
+  (define-keyset "TEST <1>."))
+
+(expect
+  "keyset definition parsing is permissive pre-pact-4.4 - enforce-keyset"
+  true
+  (enforce-keyset "TEST <1>."))
+
+(expect
+  "keyset definition parsing is permissive pre-pact-4.4 - enforce-guard - keyset"
+  true
+  (enforce-guard (keyset-ref-guard "TEST <1>.")))
+
+(expect
+  "keyset name format is permissive pre-pact-4.4 - empty-keyset - define-keyset"
+  "Keyset defined"
+  (define-keyset ""))
+
+(expect
+  "keyset name format is permissive pre-pact-4.4 - empty-keyset - enforce-keyset"
+  true
+  (enforce-keyset ""))
+
+(expect
+  "keyset name format is permissive pre-pact-4.4 - empty keyset - enforce-guard - keyset"
+  true
+  (enforce-guard (keyset-ref-guard "")))
+
+(commit-tx)
+(begin-tx)
+
+(env-data
+  { "TEST <2>." : ["test"]
+  , "" : ["test"]
+  })
+(env-keys ["test"])
+
+;; clear env - post fork
+(env-exec-config [])
+
+(expect-failure
+  "keyset definition parsing is not permissive post-pact-4.4 - define-keyset"
+  "namespace"
+  (define-keyset "TEST <2>."))
+
+(expect-failure
+  "keyset definition parsing is permissive post-pact-4.4 - enforce-guard - keyset ref"
+  (enforce-guard (keyset-ref-guard "TEST <2>.")))
+
+(namespace 'alice)
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty-keyset - define-keyset"
+  "incorrect keyset name format"
+  (define-keyset ""))
+
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty-keyset - enforce-keyset"
+  "incorrect keyset name format"
+  (enforce-keyset ""))
+
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty keyset - enforce-guard - keyset ref"
+  "incorrect keyset name format"
+  (enforce-guard (keyset-ref-guard "")))
+
+(expect
+  "pre-defined keysets should be enforceable post-pact-4.4 - enforce-keyset"
+  true
+  (enforce-guard (keyset-ref-guard "TEST <1>.")))
+
+;; admin/user guard differentiation in keyset
+
+(commit-tx)
+(env-data
+  { "admin": ["a"]
+  , "user": ["u"]
+  })
+
+(env-keys ["a", "u"])
+(define-namespace 'ns (read-keyset "user") (read-keyset "admin"))
+(namespace 'ns)
+
+(env-data
+  { "ns.a": ["nsa"]
+  })
+(env-keys ["nsa"])
+
+(expect-failure
+  "Initial keyset definition fails when user guard not in scope"
+  "Keyset failure (keys-all): [u]"
+  (define-keyset "ns.a"))
+
+(env-keys ["nsa", "u"])
+
+(expect
+  "Initial keyset definition succeeds when user guard in scope"
+  "Keyset defined"
+  (define-keyset "ns.a"))
+
+(env-data
+  { "ns.a": ["rotated"]
+  })
+(env-keys ["nsa", "rotated"])
+(expect
+  "Subsequent keyset rotations succeed without user guard"
+  "Keyset defined"
+  (define-keyset "ns.a" (read-keyset "ns.a")))
+
+(expect
+  "Subsequent keyset rotations succeed without user guard - proof"
+  "KeySet {keys: [rotated],pred: keys-all}"
+  (format "{}" [(describe-keyset "ns.a")]))

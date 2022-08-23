@@ -93,11 +93,13 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     purity
     _eeHash
     _eeGasEnv
+    _eeGas
     permissiveNamespacePolicy
     _eeSPVSupport
     _eePublicData
     _eeExecutionConfig
     _eeAdvice
+    _eeInRepl
 
 -- | Operationally creates the sysread-only environment.
 -- Phantom type and typeclass assigned in "runXXX" functions.

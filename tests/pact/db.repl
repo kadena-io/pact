@@ -1,3 +1,4 @@
+(env-exec-config ["DisablePact44"])
 (env-data { "k": { "keys": ["admin"], "pred": "=" },
             "k2": { "keys": ["admin"], "pred": "=" } })
 (env-keys ["admin"])

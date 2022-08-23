@@ -1,3 +1,4 @@
+(env-exec-config ["DisablePact44"])
 (env-data
   { "module-admin-keyset": { "keys": ["admin"], "pred": "keys-all"},
     "module-operate-keyset": ["operate"],

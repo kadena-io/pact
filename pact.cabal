@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.3.1
+version:             4.4
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -128,10 +128,12 @@ library
     Pact.Types.Lang
     Pact.Types.Logger
     Pact.Types.Names
+    Pact.Types.Namespace
     Pact.Types.Native
     Pact.Types.PactError
     Pact.Types.PactValue
     Pact.Types.Parser
+    Pact.Types.Principal
     Pact.Types.Advice
     Pact.Types.Persistence
     Pact.Types.Pretty
@@ -233,7 +235,7 @@ library
     build-depends:
       , criterion >= 1.1.4 && < 1.6
       , cryptonite
-      , direct-sqlite == 2.3.26
+      , direct-sqlite == 2.3.27
       , http-client
       , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2
@@ -466,6 +468,7 @@ test-suite hspec
 
   build-depends:
     , aeson
+    , attoparsec
     , base
     , bound
     , bytestring
@@ -479,6 +482,7 @@ test-suite hspec
     Blake2Spec
     KeysetSpec
     RoundTripSpec
+    PrincipalSpec
 
   if !impl(ghcjs)
     other-modules:

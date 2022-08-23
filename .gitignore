@@ -31,3 +31,6 @@ coverage
 .pact-history
 */.pact-history
 */.pc-history
+hie.yaml
+commands.sqlite
+cabal.project.local*

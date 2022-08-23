@@ -53,7 +53,7 @@ import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof, alphaNum, between, char)
 
 
 import Pact.Types.Info
-import Pact.Types.Parser
+import Pact.Types.Parser ( style )
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util
@@ -312,7 +312,6 @@ nameParser i = (QName <$> qualifiedNameParser i <?> "qualifiedName") <|>
                (Name <$> bareNameParser <?> "bareName")
   where
     bareNameParser = BareName <$> ident style <*> pure i
-
 
 instance Hashable Name where
   hashWithSalt s (Name (BareName t _)) =

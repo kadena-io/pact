@@ -56,6 +56,7 @@ import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
 
 
+
 -- | Main parser for Pact expressions.
 expr :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
 expr = do
@@ -63,7 +64,7 @@ expr = do
   let inf = do
         end <- position
         let len = bytes end - bytes delt
-        return $ Parsed delt (fromIntegral len)
+        return $! Parsed delt (fromIntegral len)
       separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
   msum
     [ TF.try (ELiteral <$> (LiteralExp <$> token number <*> inf)) <?> "number"
