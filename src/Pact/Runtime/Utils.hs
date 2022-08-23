@@ -186,7 +186,7 @@ lookupModule i mn = do
     Just (m,_) ->
       return $ Just m
     Nothing -> do
-      stored <- readRow (getInfo i) Modules mn
+      stored <- {-# SCC "readStoredModule" #-} readRow (getInfo i) Modules mn
       case stored of
         Just mdStored -> do
           _ <- computeGas (Left ((getInfo i), "lookup module")) $ case (_mdModule mdStored) of

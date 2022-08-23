@@ -978,7 +978,7 @@ unsafeReduce :: Term Ref -> Eval e (Term Name)
 unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static term"))
 
 -- | Main function for reduction/evaluation.
-reduce :: Term Ref ->  Eval e (Term Name)
+reduce :: Term Ref -> Eval e (Term Name)
 reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
@@ -1011,13 +1011,10 @@ compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
   (renderCompactText t)
 
 reduceBody :: Term Ref -> Eval e (Term Name)
-reduceBody (TList bs _ i) =
+reduceBody (TList bs _ i)
   -- unsafe but only called in validated body contexts
-  V.mapM reduce bs >>= \vec -> case vec V.!? (V.length vec - 1) of
-    Just v ->
-      pure v
-    Nothing ->
-      evalError i "Expected non-empty function body"
+  | V.null bs = evalError i "Expected non-empty function body"
+  | otherwise = V.mapM_ reduce (V.init bs) >> reduce (V.last bs)
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)

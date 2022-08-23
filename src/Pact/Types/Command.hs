@@ -343,7 +343,7 @@ instance (ToJSON l) => ToJSON (CommandResult l) where
       , "metaData" .= _crMetaData ] ++
       [ "events" .= _crEvents | not (null _crEvents) ]
 instance (FromJSON l) => FromJSON (CommandResult l) where
-  parseJSON = withObject "CommandResult" $ \o -> CommandResult
+  parseJSON = withObject "CommandResult" $ \o -> ({-# SCC "decodeCommandResult" #-} (CommandResult
       <$> o .: "reqKey"
       <*> o .: "txId"
       <*> o .: "result"
@@ -351,7 +351,7 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
       <*> o .: "logs"
       <*> o .: "continuation"
       <*> o .: "metaData"
-      <*> (events <$> o .:? "events")
+      <*> (events <$> o .:? "events")))
     where
       events Nothing = []
       events (Just es) = es
