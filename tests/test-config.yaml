@@ -17,3 +17,4 @@ verbose: False
 
 execConfig:
   - DisablePact43
+  - DisablePact44

@@ -47,6 +47,7 @@ import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
 import qualified Data.Map.Strict as M
+import Data.IORef
 import Data.Maybe
 import qualified Data.Set as S
 import Data.Text (Text)
@@ -60,6 +61,7 @@ import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
 import Pact.Types.Command
+import Pact.Types.ExpParser
 import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.RPC
@@ -132,8 +134,10 @@ data EvalResult = EvalResult
 -- | Execute pact statements.
 evalExec :: Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
 evalExec runner evalEnv ParsedCode {..} = do
-  terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
+  terms <- throwEither $ compileExps (ParseEnv isNarrowTry) (mkTextInfo _pcCode) _pcExps
   interpret runner evalEnv (Right terms)
+  where
+    isNarrowTry = not $ S.member FlagDisablePact44 $ _ecFlags $ _eeExecutionConfig evalEnv
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
@@ -163,9 +167,10 @@ setupEvalEnv
   -> SPVSupport
   -> PublicData
   -> ExecutionConfig
-  -> EvalEnv e
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
-  EvalEnv {
+  -> IO (EvalEnv e)
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
+  gasRef <- newIORef 0
+  pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
   , _eeMsgBody = mdData msgData
@@ -177,11 +182,13 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec =
   , _eePurity = PImpure
   , _eeHash = mdHash msgData
   , _eeGasEnv = gasEnv
+  , _eeGas = gasRef
   , _eeNamespacePolicy = np
   , _eeSPVSupport = spv
   , _eePublicData = pd
   , _eeExecutionConfig = ec
   , _eeAdvice = def
+  , _eeInRepl = False
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss
@@ -218,8 +225,8 @@ interpret :: Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
 interpret runner evalEnv terms = do
   ((rs,logs,txid),state) <-
     runEval def evalEnv $ evalTerms runner terms
-  let gas = _evalGas state
-      gasLogs = _evalLogGas state
+  gas <- readIORef (_eeGas evalEnv)
+  let gasLogs = _evalLogGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
   -- output uses lenient conversion

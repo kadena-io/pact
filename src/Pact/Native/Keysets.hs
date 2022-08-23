@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE LambdaCase #-}
 -- |
 -- Module      :  Pact.Native.Keysets
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -17,13 +17,16 @@ module Pact.Native.Keysets
 where
 
 import Control.Lens
+
 import Data.Text (Text)
+import Data.Foldable (traverse_)
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.KeySet
 import Pact.Types.Purity
 import Pact.Types.Runtime
+import Pact.Types.Namespace
 
 readKeysetDef :: NativeDef
 readKeysetDef =
@@ -69,7 +72,7 @@ readKeySet' i key = do
   ks <- parseMsgKey i "read-keyset" key
   whenExecutionFlagSet FlagEnforceKeyFormats $
       enforceKeyFormats (const $ evalError' i "Invalid keyset") ks
-  return ks
+  pure ks
 
 defineKeyset :: GasRNativeFun e
 defineKeyset g0 fi as = case as of
@@ -78,11 +81,30 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      let ksn = KeySetName name
-          i = _faInfo fi
+      let i = _faInfo fi
+
+      (ksn, mug) <- ifExecutionFlagSet FlagDisablePact44
+        (pure (KeySetName name Nothing, Nothing))
+        (use (evalRefs . rsNamespace) >>= \case
+          Nothing ->
+            -- disallow creating keysets outside of a namespace
+            evalError' fi "Cannot define keysets outside of a namespace"
+          Just (Namespace nsn ug _ag) ->
+            case parseQualifiedKeySetName name of
+              Left {} ->
+                evalError' fi "incorrect keyset name format"
+              Right k@(KeySetName _ (Just nsn'))
+                | nsn == nsn' -> pure (k, Just ug)
+              _ -> evalError' fi "Mismatching keyset namespaces")
+
       old <- readRow i KeySets ksn
       case old of
         Nothing -> do
+          -- enforce the user guard on first definition
+          -- and make sure we have privs
+          unlessExecutionFlagSet FlagDisablePact44 $
+            traverse_ (enforceGuard i) mug
+
           computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
             writeRow i Write KeySets ksn ks & success "Keyset defined"
         Just oldKs -> do

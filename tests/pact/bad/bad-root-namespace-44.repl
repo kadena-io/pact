@@ -1,0 +1,14 @@
+(begin-tx)
+(module test-mgd-ns GOV
+  (defcap GOV () true)
+  (defun manage (ns guard) true))
+(commit-tx)
+(use test-mgd-ns)
+(env-namespace-policy false (manage))
+
+;; root install should fail, legacy
+
+(env-exec-config ['DisablePact44])
+(module my-bad-root G
+  (defcap G () true)
+  (defun foo () 1))

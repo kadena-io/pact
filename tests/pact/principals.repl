@@ -120,33 +120,41 @@
 
 ;; r: reference validation
 
-(define-keyset 'ks3)
+(env-data
+  { "ks3" : ['k]
+  , "ns.ks3" : ['k]
+  })
+(env-keys ['k])
+
+(define-namespace 'ns (read-keyset 'ks3) (read-keyset 'ks3))
+(namespace 'ns)
+(define-keyset "ns.ks3")
 
 (expect
  "creating principals using keyset references creates r: guards"
- "r:ks3"
- (create-principal (keyset-ref-guard 'ks3)))
+ "r:ns.ks3"
+ (create-principal (keyset-ref-guard "ns.ks3")))
 
 (expect
  "validating principals using created principal keyset refs passes"
  true
  (validate-principal
-  (keyset-ref-guard 'ks3)
-  "r:ks3"
+  (keyset-ref-guard "ns.ks3")
+  "r:ns.ks3"
   ))
 
 (expect
  "validating principal keyset refs roundtrips for all created principals"
  true
  (validate-principal
-  (keyset-ref-guard 'ks3)
-  (create-principal (keyset-ref-guard 'ks3))
+  (keyset-ref-guard "ns.ks3")
+  (create-principal (keyset-ref-guard "ns.ks3"))
   ))
 
 (expect
   "is-principal returns true for r: guards"
   true
-  (is-principal (create-principal (keyset-ref-guard 'ks3)))
+  (is-principal (create-principal (keyset-ref-guard "ns.ks3")))
   )
 
 (expect
@@ -157,7 +165,7 @@
 (expect
   "typeof-principal should return r: for r guards"
   "r:"
-  (typeof-principal (create-principal (keyset-ref-guard 'ks3))))
+  (typeof-principal (create-principal (keyset-ref-guard "ns.ks3"))))
 
 (expect
   "typeof-principal should fail for r: guards: improper keylength - empty"

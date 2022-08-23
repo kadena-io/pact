@@ -32,6 +32,7 @@ import Data.Aeson (eitherDecode,toJSON)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable
+import Data.IORef
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.Semigroup (Endo(..))
@@ -492,16 +493,14 @@ tx t fi as = do
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
   where
-
+    resetGas = views eeGas (`writeIORef` 0) >>= liftIO
     i = getInfo fi
-
     doBegin tname = do
       tid <- evalBeginTx i
       setLibState $ set rlsTx (tid,tname)
       return (tid,tname)
-
     resetTx = modifyLibState
-      (set rlsTx (Nothing,Nothing) &&& view rlsTx)
+      (set rlsTx (Nothing,Nothing) &&& view rlsTx) <* resetGas
 
 
 recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()
@@ -702,9 +701,9 @@ setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
 envGas _ [] = do
-  use evalGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
 envGas _ [TLitInteger g] = do
-  evalGas .= fromIntegral g
+  putGas $ fromIntegral g
   return $ tStr $ "Set gas to " <> tShow g
 envGas i as = argsError i as
 

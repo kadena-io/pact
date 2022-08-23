@@ -18,3 +18,4 @@ verbose: False
 execConfig:
   - DisablePact40
   - DisablePact43
+  - DisablePact44

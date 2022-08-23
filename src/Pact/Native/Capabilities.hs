@@ -33,7 +33,7 @@ import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-
+import Pact.Types.KeySet (parseAnyKeysetName)
 
 capDefs :: NativeModule
 capDefs =
@@ -261,7 +261,7 @@ createModuleGuard =
   "Defines a guard by NAME that enforces the current module admin predicate."
   where
     createModuleGuard' :: RNativeFun e
-    createModuleGuard' i [TLitString name] = findCallingModule >>= \m -> case m of
+    createModuleGuard' i [TLitString name] = findCallingModule >>= \case
       Just mn ->
         return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
       Nothing -> evalError' i "create-module-guard: must call within module"
@@ -278,9 +278,15 @@ keysetRefGuard =
   where
     keysetRefGuard' :: RNativeFun e
     keysetRefGuard' fa [TLitString kref] = do
-      let n = KeySetName kref
-          i = _faInfo fa
-      readRow i KeySets n >>= \t -> case t of
+      n <- ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName kref Nothing)
+        (case parseAnyKeysetName kref of
+           Left {} -> evalError' fa "incorrect keyset name format"
+           Right k -> pure k)
+
+      let i = _faInfo fa
+
+      readRow i KeySets n >>= \case
         Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
         Just _ -> return $ (`TGuard` i) $ GKeySetRef n
     keysetRefGuard' i as = argsError i as

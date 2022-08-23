@@ -43,7 +43,7 @@ import Pact.Types.SPV
 spec :: Spec
 spec = do
   describe "goldenAccounts" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "accounts-module" "golden/golden.accounts.repl" "accounts"
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
     ,("eventCR",eventCR)
@@ -51,18 +51,22 @@ spec = do
     ,("crossChainSendCRBackCompat",crossChainSendCR True)
     ]
   describe "goldenAutoCap" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
   describe "goldenLambdas" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43] "lambda-module" "golden/golden.lams.repl" "lams-test" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "lambda-module" "golden/golden.lams.repl" "lams-test" []
   describe "goldenModuleMemcheck" $
-    goldenModule [FlagDisablePact43] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
+    goldenModule [FlagDisablePact43, FlagDisablePact44] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
   describe "goldenFullyQuals" $
     goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
+  describe "goldenNamespaced keysets" $
+    goldenModule [] "goldenNamespacedKeysets" "golden/golden.nks.repl" "free.nks" []
+  describe "golden root ns module upgrade" $
+    goldenModule [] "goldenRootNamespace" "golden/golden.rootnamespace.repl" "nsupgrade" []
 
 goldenModule :: [ExecutionFlag] -> String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
 goldenModule flags tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
   let ec = mkExecutionConfig flags
-  (r,s) <- runIO $ execScriptF' Quiet fp (\st -> st & rEnv . eeExecutionConfig .~ ec)
+  (r,s) <- runIO $ execScriptF' Quiet fp (set (rEnv . eeExecutionConfig) ec . set (rEnv . eeInRepl) False)
   it ("loads " ++ fp) $ r `shouldSatisfy` isRight
   mr <- runIO $ replLookupModule s mn
   case mr of
@@ -80,8 +84,10 @@ subTestName tn n = tn ++ "-" ++ n
 acctsSuccessCR :: String -> ReplState -> Spec
 acctsSuccessCR tn s = doCRTest tn s "1"
 
+-- Needs disablePact44 here, accts failure cr
+-- results in `interactive:0:0` which is an info that has been stripped
 acctsFailureCR :: String -> ReplState -> Spec
-acctsFailureCR tn s = doCRTest tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
+acctsFailureCR tn s = doCRTest' (mkExecutionConfig [FlagDisablePact44]) tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> ReplState -> Spec
 eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]) tn s $

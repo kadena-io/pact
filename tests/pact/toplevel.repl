@@ -8,6 +8,8 @@
 
 (begin-tx)
 
+;; ease restrictions requiring namespaced keysets
+(env-exec-config ["DisablePact44"])
 ;; define-keyset success case
 (define-keyset 'k (sig-keyset))
 
@@ -50,7 +52,7 @@
 
 (env-enable-repl-natives true)
 (module repl-natives 'k
-  (defun f () (env-sigs [{"bob",[]}])))
+  (defun f () (env-sigs [{'key: "bob",'caps: []}])))
 (expect
  "env-sigs in module"
  "Setting transaction signatures/caps"

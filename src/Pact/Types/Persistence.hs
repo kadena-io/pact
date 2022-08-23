@@ -59,6 +59,7 @@ import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow)
+import Pact.Types.Namespace
 
 
 data PersistDirect =
