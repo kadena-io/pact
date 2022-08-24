@@ -38,7 +38,7 @@ import qualified Data.Map.Strict as Map
 data ModuleData b i
   = ModuleData
   { _mdModule :: EvalModule b i
-  , _mdDependencies :: Map FullyQualifiedName (EvalTerm b i)
+  , _mdDependencies :: Map FullyQualifiedName (EvalDef b i)
   } deriving Show
 
 type FQKS = KeySet FullyQualifiedName
@@ -72,7 +72,7 @@ data Loaded b i
   = Loaded
   { _loModules :: Map ModuleName (ModuleData b i)
   , _loToplevel :: Map Text FullyQualifiedName
-  , _loAllLoaded :: Map FullyQualifiedName (EvalTerm b i)
+  , _loAllLoaded :: Map FullyQualifiedName (EvalDef b i)
   } deriving Show
 
 makeLenses ''ModuleData

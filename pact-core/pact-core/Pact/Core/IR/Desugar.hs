@@ -487,7 +487,7 @@ lookupModuleMember modName name = do
   toDepMap mhash def = (rawDefName def, IRTopLevel modName mhash)
   toFqDep mhash def = let
     fqn = FullyQualifiedName modName (rawDefName def) mhash
-    in (fqn, Term.defTerm def)
+    in (fqn, def)
 
 -- Rename a term (that is part of a module)
 -- emitting the list of dependent calls

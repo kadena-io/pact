@@ -327,7 +327,6 @@ library pact-core
   build-depends:
     , criterion >= 1.1.4 && < 1.6
     , cryptonite
-    , direct-sqlite == 2.3.26
     , memory
     , safe-exceptions >= 0.1.5.0 && < 0.2
     , statistics >= 0.13.3 && < 0.16
@@ -397,6 +396,39 @@ library pact-core
     -- Repl
     Pact.Core.Repl.Utils
 
+library pact-core-experimental
+  import:  pact-core-common
+  hs-source-dirs: pact-core/experimental
+  build-depends:
+    , criterion >= 1.1.4 && < 1.6
+    , cryptonite
+    , memory
+    , safe-exceptions >= 0.1.5.0 && < 0.2
+    , statistics >= 0.13.3 && < 0.16
+    , parser-combinators
+    , yaml
+    , ralist
+    , primitive
+    , haskeline
+    , exceptions
+    , array
+  build-tool-depends:
+    , alex:alex
+    , happy:happy >= 1.19.12 && < 2.0
+  ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+  exposed-modules:
+    Pact.Core.Compile
+    Pact.Core.Builtin
+    Pact.Core.Names
+    Pact.Core.Literal
+    Pact.Core.Guards
+    Pact.Core.Imports
+    Pact.Core.Pacts.Types
+
+
 executable pact-core-repl
   import: pact-core-common
 
@@ -406,7 +438,6 @@ executable pact-core-repl
     , pact-core
     , criterion >= 1.1.4 && < 1.6
     , cryptonite
-    , direct-sqlite == 2.3.26
     , memory
     , safe-exceptions >= 0.1.5.0 && < 0.2
     , statistics >= 0.13.3 && < 0.16

@@ -90,7 +90,7 @@ eval = evalCEK Mt
       NTopLevel mname mh -> let
         !fqn = FullyQualifiedName mname (_nName n) mh
         in case Map.lookup fqn ?cekLoaded of
-          Just t -> evalCEK cont RAList.Nil t
+          Just d -> evalCEK cont RAList.Nil (defTerm d)
           Nothing -> failInvariant "top level name not in scope"
   evalCEK cont _env (Constant l _)=
     returnCEK cont (VLiteral l)

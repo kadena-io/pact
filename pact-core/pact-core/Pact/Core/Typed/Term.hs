@@ -32,9 +32,6 @@ module Pact.Core.Typed.Term
  , OverloadedModule
  , OverloadedTopLevel
  , OverloadedReplTopLevel
- -- Flexible Eval terms
- , EvalTerm
- , EvalModule
  -- On-chain eval terms
  , CoreEvalTerm
  , CoreEvalDefun
@@ -219,10 +216,6 @@ type OverloadedTopLevel b i =
   TopLevel (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
 type OverloadedReplTopLevel b i =
   ReplTopLevel (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
-
--- Ideally flexible eval types.
-type EvalTerm b i = Term Name NamedDeBruijn b i
-type EvalModule b i = Module Name NamedDeBruijn b i
 
 -- On-chain, core builtin-types
 type CoreEvalTerm i = Term Name NamedDeBruijn CoreBuiltin i

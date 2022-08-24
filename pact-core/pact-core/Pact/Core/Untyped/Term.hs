@@ -22,6 +22,7 @@ module Pact.Core.Untyped.Term
  , Term(..)
  , EvalTerm
  , EvalModule
+ , EvalDef
  , fromTypedTerm
  , fromTypedDef
  , fromTypedModule
@@ -200,6 +201,7 @@ data Term name builtin info
 
 -- Post Typecheck terms + modules
 type EvalTerm b i = Term Name b i
+type EvalDef b i = Def Name b i
 type EvalModule b i = Module Name b i
 
 fromTypedTerm :: Typed.Term name tyname b i -> Term name b i

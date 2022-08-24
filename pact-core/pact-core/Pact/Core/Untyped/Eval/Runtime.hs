@@ -63,7 +63,7 @@ import Pact.Core.Type
 import qualified Pact.Core.Pretty as P
 
 -- | The top level env map
-type CEKTLEnv b i = Map FullyQualifiedName (EvalTerm b i)
+type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 -- | Locally bound variables
 type CEKEnv b i = RAList (CEKValue b i)
 

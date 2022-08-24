@@ -199,7 +199,7 @@ interpretTopLevel (DesugarOutput desugared supply loaded deps) = do
       -- this is a trick copied over from desugar
       toFqDep modName mhash def = let
         fqn = FullyQualifiedName modName (defName def) mhash
-        in (fqn, defTerm def)
+        in (fqn, def)
 
     TLTerm resolved -> do
       (value, _) <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded) undefined resolved)
