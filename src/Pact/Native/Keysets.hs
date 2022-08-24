@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE MultiWayIf #-}
 -- |
 -- Module      :  Pact.Native.Keysets
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -19,7 +18,6 @@ where
 import Control.Lens
 
 import Data.Text (Text)
-import Data.Maybe
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -108,17 +106,11 @@ defineKeyset g0 fi as = case as of
             unlessExecutionFlagSet FlagDisablePact44 $
               enforceGuard i ug
 
-            ksn' <- if
+            ksn' <- if Just nsn == _ksnNamespace ksn
               -- if namespaces match, leave the keyset name alone
-              | Just nsn == _ksnNamespace ksn -> pure ksn
-              -- if no namespace is found, and user is definining
-              -- within a namespace, munge the keyset name for
-              -- better UX (confluent with module/interface defns)
-              | isNothing $ _ksnNamespace ksn ->
-                pure $ ksn { _ksnNamespace = Just nsn }
+              then pure ksn
               -- otherwise, assume mismatching keysets
-              | otherwise ->
-                evalError' fi "Mismatching keyset namespace"
+              else evalError' fi "Mismatching keyset namespace"
 
             computeGas' g0 fi (GPreWrite (WriteKeySet ksn' ks)) $
               writeRow i Write KeySets ksn' ks & success "Keyset defined"
