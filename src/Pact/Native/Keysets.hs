@@ -101,29 +101,30 @@ defineKeyset g0 fi as = case as of
             computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
               writeRow i Write KeySets ksn ks & success "Keyset defined"
           Just (Namespace nsn ug _ag) -> do
-            -- enforce the user guard on first definition
-            -- and make sure we have privs
-            unlessExecutionFlagSet FlagDisablePact44 $
-              enforceGuard i ug
-
-            ksn' <- if Just nsn == _ksnNamespace ksn
-              -- if namespaces match, leave the keyset name alone
-              then pure ksn
-              -- otherwise, assume mismatching keysets
-              else evalError' fi "Mismatching keyset namespace"
+            ksn' <- ifExecutionFlagSet FlagDisablePact44
+              (pure ksn)
+              (do
+                enforceGuard i ug
+                if Just nsn == _ksnNamespace ksn
+                  -- if namespaces match, leave the keyset name alone
+                  then pure ksn
+                  -- otherwise, assume mismatching keysets
+                  else evalError' fi "Mismatching keyset namespace")
 
             computeGas' g0 fi (GPreWrite (WriteKeySet ksn' ks)) $
               writeRow i Write KeySets ksn' ks & success "Keyset defined"
 
         Just oldKs -> do
-          -- allow rotation within a namespace, but only if
-          -- the keyset namespaces match
-          case mNs of
-            Just (Namespace nsn _ _)
-              | Just nsn' <- _ksnNamespace ksn
-              , nsn /= nsn' ->
-                evalError' fi "Mismatching keyset namespace"
-            _ -> pure ()
+
+          unlessExecutionFlagSet FlagDisablePact44 $
+            -- allow rotation within a namespace, but only if
+            -- the keyset namespaces match
+            case mNs of
+              Just (Namespace nsn _ _)
+                | Just nsn' <- _ksnNamespace ksn
+                , nsn /= nsn' ->
+                  evalError' fi "Mismatching keyset namespace"
+              _ -> pure ()
 
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
           computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks)) $ do
