@@ -281,18 +281,18 @@
 
 (expect-failure
   "Defining un-namespaced keys fails - env keys, name failure"
-  "Cannot define keysets outside of a namespace"
+  "Cannot define a keyset outside of a namespace"
   (define-keyset 'alice-keys))
 
 ;; Show failure on lookup for keys
 (expect-failure
   "Defining un-namespaced keys fails - actual keys, name failure"
-  "Cannot define keysets outside of a namespace"
+  "Cannot define a keyset outside of a namespace"
   (define-keyset 'alice (read-keyset 'alice-keys)))
 
 (expect-failure
   "Defining namespaced key fails - env keys, outside namespace"
-  "Cannot define keysets outside of a namespace"
+  "Cannot define a keyset outside of a namespace"
   (define-keyset "alice.alice-keys"))
 
 (namespace 'alice)
@@ -315,7 +315,7 @@
 
 (expect-failure
   "Rotating keyset in wrong namespace fails"
-  "Mismatching keyset namespaces"
+  "Mismatching keyset namespace"
   (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
 
 (commit-tx)
