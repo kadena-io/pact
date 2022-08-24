@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 -- |
 -- Module      :  Pact.Native.Keysets
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -19,7 +19,7 @@ where
 import Control.Lens
 
 import Data.Text (Text)
-import Data.Foldable (traverse_)
+import Data.Maybe
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -83,30 +83,46 @@ defineKeyset g0 fi as = case as of
     go name ks = do
       let i = _faInfo fi
 
-      (ksn, mug) <- ifExecutionFlagSet FlagDisablePact44
-        (pure (KeySetName name Nothing, Nothing))
-        (use (evalRefs . rsNamespace) >>= \case
-          Nothing ->
-            -- disallow creating keysets outside of a namespace
-            evalError' fi "Cannot define keysets outside of a namespace"
-          Just (Namespace nsn ug _ag) ->
-            case parseQualifiedKeySetName name of
-              Left {} ->
-                evalError' fi "incorrect keyset name format"
-              Right k@(KeySetName _ (Just nsn'))
-                | nsn == nsn' -> pure (k, Just ug)
-              _ -> evalError' fi "Mismatching keyset namespaces")
+      ksn <- ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName name Nothing)
+        (case parseAnyKeysetName name of
+           Left {} ->
+             evalError' fi "incorrect keyset name format"
+           Right ksn -> pure ksn)
 
+
+      mNs <- use $ evalRefs . rsNamespace
       old <- readRow i KeySets ksn
-      case old of
-        Nothing -> do
-          -- enforce the user guard on first definition
-          -- and make sure we have privs
-          unlessExecutionFlagSet FlagDisablePact44 $
-            traverse_ (enforceGuard i) mug
 
-          computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
-            writeRow i Write KeySets ksn ks & success "Keyset defined"
+      case old of
+        Nothing -> case mNs of
+          Nothing -> do
+            unlessExecutionFlagSet FlagDisablePact44 $
+              evalError' fi "Cannot define a keyset outside of a namespace"
+
+            computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
+              writeRow i Write KeySets ksn ks & success "Keyset defined"
+          Just (Namespace nsn ug _ag) -> do
+            ksn' <- if
+              -- if namespaces match, leave the keyset name alone
+              | Just nsn == _ksnNamespace ksn -> pure ksn
+              -- if no namespace is found, and user is definining
+              -- within a namespace, munge the keyset name for
+              -- better UX (confluent with module/interface defns)
+              | isNothing $ _ksnNamespace ksn ->
+                pure $ ksn { _ksnNamespace = Just nsn }
+              -- otherwise, assume mismatching keysets
+              | otherwise ->
+                evalError' fi "Mismatching keyset namespace"
+
+            -- enforce the user guard on first definition
+            -- and make sure we have privs
+            unlessExecutionFlagSet FlagDisablePact44 $
+              enforceGuard i ug
+
+            computeGas' g0 fi (GPreWrite (WriteKeySet ksn' ks)) $
+              writeRow i Write KeySets ksn' ks & success "Keyset defined"
+
         Just oldKs -> do
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
           computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks)) $ do
