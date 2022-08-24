@@ -327,6 +327,7 @@ library pact-core
   build-depends:
     , criterion >= 1.1.4 && < 1.6
     , cryptonite
+    , direct-sqlite == 2.3.27
     , memory
     , safe-exceptions >= 0.1.5.0 && < 0.2
     , statistics >= 0.13.3 && < 0.16
@@ -405,6 +406,7 @@ executable pact-core-repl
     , pact-core
     , criterion >= 1.1.4 && < 1.6
     , cryptonite
+    , direct-sqlite == 2.3.27
     , memory
     , safe-exceptions >= 0.1.5.0 && < 0.2
     , statistics >= 0.13.3 && < 0.16
