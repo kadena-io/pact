@@ -313,9 +313,9 @@
 
 (namespace 'bob)
 
-(expect-failure
-  "Rotating keyset in wrong namespace fails"
-  "Mismatching keyset namespace"
+(expect
+  "Rotating keyset in wrong namespace succeeds if keys are present"
+  "Keyset defined"
   (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
 
 (commit-tx)
@@ -404,6 +404,7 @@
 ;; admin/user guard differentiation in keyset
 
 (commit-tx)
+(begin-tx)
 (env-data
   { "admin": ["a"]
   , "user": ["u"]
@@ -430,12 +431,16 @@
   "Keyset defined"
   (define-keyset "ns.a"))
 
+(commit-tx)
+(begin-tx)
+
 (env-data
   { "ns.a": ["rotated"]
   })
 (env-keys ["nsa", "rotated"])
+
 (expect
-  "Subsequent keyset rotations succeed without user guard"
+  "Subsequent keyset rotations succeed without user guard, outside of namespace"
   "Keyset defined"
   (define-keyset "ns.a" (read-keyset "ns.a")))
 
