@@ -115,17 +115,6 @@ defineKeyset g0 fi as = case as of
               writeRow i Write KeySets ksn' ks & success "Keyset defined"
 
         Just oldKs -> do
-
-          unlessExecutionFlagSet FlagDisablePact44 $
-            -- allow rotation within a namespace, but only if
-            -- the keyset namespaces match
-            case mNs of
-              Just (Namespace nsn _ _)
-                | Just nsn' <- _ksnNamespace ksn
-                , nsn /= nsn' ->
-                  evalError' fi "Mismatching keyset namespace"
-              _ -> pure ()
-
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
           computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks)) $ do
             runSysOnly $ enforceKeySet i (Just ksn) oldKs
