@@ -405,12 +405,31 @@
 
 (commit-tx)
 (begin-tx)
+(env-exec-config ['DisablePact44])
+
 (env-data
   { "admin": ["a"]
   , "user": ["u"]
+  , "legacy": ["l"]
+  , "legacy-rotated" : ["lr"]
   })
 
-(env-keys ["a", "u"])
+(env-keys ["l"])
+
+(expect
+  "legacy keysets are definable pre-44"
+  "Keyset defined"
+  (define-keyset "legacy" (read-keyset "legacy")))
+
+(env-exec-config [])
+
+(env-keys ["a", "u", "l"])
+
+(expect
+  "Legacy keysets are rotatable post-44"
+  "Keyset defined"
+  (define-keyset "legacy" (read-keyset "legacy-rotated")))
+
 (define-namespace 'ns (read-keyset "user") (read-keyset "admin"))
 (namespace 'ns)
 
