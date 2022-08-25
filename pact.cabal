@@ -305,7 +305,8 @@ executable dlog
   main-is:             Main.hs
   build-depends:       base
                      , pact
-                     , QuickCheck
+                     , MonadRandom
+                     , random
                      , text
   hs-source-dirs:      dlog
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
