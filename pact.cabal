@@ -299,6 +299,23 @@ executable pact
   if os(darwin)
     ghc-options: -optP-Wno-nonportable-include-path
 
+executable dlog
+  if impl(ghcjs) || !flag(build-tool)
+    buildable: False
+  main-is:             Main.hs
+  build-depends:       base
+                     , pact
+                     , QuickCheck
+                     , text
+  hs-source-dirs:      dlog
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+  if os(darwin)
+    ghc-options: -optP-Wno-nonportable-include-path
+
+
 benchmark bench
   if impl(ghcjs) || !flag(build-tool)
     buildable: False
