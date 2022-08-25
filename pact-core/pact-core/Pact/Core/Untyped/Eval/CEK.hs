@@ -31,6 +31,7 @@ module Pact.Core.Untyped.Eval.CEK
  , runCoreCEK
  , Cont(..)
  , coreBuiltinRuntime
+ , rawBuiltinRuntime
  ) where
 
 import Control.Lens hiding (op)
@@ -568,6 +569,7 @@ asList :: CEKValue b i -> EvalT b (Vector (CEKValue b i))
 asList (VList l) = pure l
 asList _ = failInvariant "asList"
 
+-- Todo: Likely this using `throw` is not a good idea.
 unsafeEqLiteral :: Literal -> Literal -> Bool
 unsafeEqLiteral (LString i) (LString i') = i == i'
 unsafeEqLiteral (LInteger i) (LInteger i') = i == i'
@@ -883,7 +885,7 @@ coreB64Decode = mkBuiltinFn \case
 -- Core definitions
 -----------------------------------
 
-unimplemented :: BuiltinFn CoreBuiltin i
+unimplemented :: BuiltinFn b i
 unimplemented = error "unimplemented"
 
 failInvariant :: Text -> EvalT b a
@@ -1020,3 +1022,215 @@ coreBuiltinFn = \case
 
 coreBuiltinRuntime :: Array.Array (BuiltinFn CoreBuiltin i)
 coreBuiltinRuntime = Array.arrayFromList (coreBuiltinFn <$> [minBound .. maxBound])
+
+rawBuiltinFn :: RawBuiltin -> BuiltinFn RawBuiltin i
+rawBuiltinFn = \case
+  RawAdd -> addBuiltin RawAdd
+  -- Num -> unimplemented
+  RawSub -> subBuiltin RawSub
+  RawMultiply -> subBuiltin RawMultiply
+  RawDivide -> divBuiltin RawDivide
+  RawNegate -> negateBuiltin RawNegate
+  RawAbs -> absBuiltin RawAbs
+  -- Boolean Ops -> unimplemented
+  RawAnd -> unimplemented
+  RawOr -> unimplemented
+  RawNot -> unimplemented
+  -- Equality and Comparisons -> unimplemented
+  RawEq -> unimplemented
+  RawNeq -> unimplemented
+  -- Ord -> unimplemented
+  RawGT -> unimplemented
+  RawGEQ -> unimplemented
+  RawLT -> unimplemented
+  RawLEQ -> unimplemented
+  -- Bitwise Ops -> unimplemented
+  RawBitwiseAnd -> unimplemented
+  RawBitwiseOr -> unimplemented
+  RawBitwiseXor -> unimplemented
+  RawBitwiseFlip -> unimplemented
+  RawBitShift -> unimplemented
+  --  Rounding -> unimplemented
+  RawRound -> unimplemented
+  RawCeiling -> unimplemented
+  RawFloor -> unimplemented
+  -- Fractional -> unimplemented
+  RawExp -> unimplemented
+  RawLn -> unimplemented
+  RawSqrt -> unimplemented
+  RawLogBase -> unimplemented
+  -- List like -> unimplemented
+  RawLength -> unimplemented
+  RawTake -> unimplemented
+  RawDrop -> unimplemented
+  RawConcat -> unimplemented
+  RawReverse -> unimplemented
+  -- General -> unimplemented
+  RawMod -> unimplemented
+  RawMap -> unimplemented
+  RawFilter -> unimplemented
+  RawZip -> unimplemented
+  RawIf -> unimplemented
+  RawIntToStr -> unimplemented
+  RawStrToInt -> unimplemented
+  RawFold -> unimplemented
+  RawDistinct -> unimplemented
+  RawEnforce -> unimplemented
+  RawEnforceOne -> unimplemented
+  RawEnumerate -> unimplemented
+  RawEnumerateStepN -> unimplemented
+  -- Show -> unimplemented
+  RawShow -> unimplemented
+  RawReadInteger -> unimplemented
+  RawReadDecimal -> unimplemented
+  RawReadString -> unimplemented
+  RawReadKeyset -> unimplemented
+  RawEnforceGuard -> unimplemented
+  RawKeysetRefGuard -> unimplemented
+  RawCreateUserGuard -> unimplemented
+  RawListAccess -> unimplemented
+  RawB64Encode -> unimplemented
+  RawB64Decode -> unimplemented
+
+rawBuiltinRuntime :: Array.Array (BuiltinFn RawBuiltin i)
+rawBuiltinRuntime = Array.arrayFromList (rawBuiltinFn <$> [minBound .. maxBound])
+
+
+
+
+-- TODO: Coercions between int/double
+addBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+addBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (i + i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i + i')))
+  [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LString (i <> i')))
+  [VList l, VList r] -> pure (VList (l <> r))
+  _ -> failInvariant "add"
+
+-- TODO: Coercions between int/double
+-- Todo: factor defn
+subBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+subBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (i - i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i - i')))
+  _ -> failInvariant "sub"
+
+-- TODO: Coercions between int/double
+mulBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+mulBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (i * i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i * i')))
+  _ -> failInvariant "mul"
+
+divBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+divBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (quot i i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i / i')))
+  _ -> failInvariant "div"
+
+modBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+modBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (mod i i')))
+  _ -> failInvariant "div"
+
+-- TODO: much better error here
+eqLiteral (LInteger l) (LInteger r) = pure (VLiteral (LBool (l == r)))
+eqLiteral (LDecimal l) (LDecimal r) = pure (VLiteral (LBool (l == r)))
+eqLiteral (LBool l) (LBool r) = pure (VLiteral (LBool (l == r)))
+eqLiteral LUnit LUnit = pure (VLiteral (LBool True))
+eqLiteral (LString l) (LString r) = pure (VLiteral (LBool (l == r)))
+eqLiteral _l _r = failInvariant "Cannot compare literals of unequal types"
+
+eqBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+eqBuiltin = mkBuiltinFn \case
+  [l, r] -> pure (VLiteral (LBool (unsafeEqCEKValue l r)))
+  [] -> failInvariant "eq"
+
+neqBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+neqBuiltin = mkBuiltinFn \case
+  [l, r] -> pure (VLiteral (LBool (unsafeNeqCEKValue l r)))
+  [] -> failInvariant "neq"
+
+-- compareFn op = mkBuiltinFn \case
+--   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (op i i')))
+--   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (op i i')))
+--   [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (op i i')))
+--   _ -> failInvariant "cmp function"
+
+-- unaryNumericFn op = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] -> pure (VLiteral (LInteger (op i)))
+--   [VLiteral (LDecimal i)] -> pure (VLiteral (LInteger (op i)))
+--   _ -> failInvariant "cmp function"
+
+gtBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+gtBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i > i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i > i')))
+  [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (i > i')))
+  _ -> failInvariant "gt"
+
+ltBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+ltBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i < i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i < i')))
+  [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (i < i')))
+  _ -> failInvariant "lt"
+
+
+geqBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+geqBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i >= i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i >= i')))
+  [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (i >= i')))
+  _ -> failInvariant "geq"
+
+
+leqBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+leqBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i <= i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i <= i')))
+  [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (i <= i')))
+  _ -> failInvariant "lt"
+
+absBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+absBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i)] -> pure (VLiteral (LInteger (abs i)))
+  [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (abs i)))
+  _ -> failInvariant "cmp function"
+
+negateBuiltin :: BuiltinArity b => b -> BuiltinFn b i
+negateBuiltin = mkBuiltinFn \case
+  [VLiteral (LInteger i)] -> pure (VLiteral (LInteger (negate i)))
+  [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (negate i)))
+  _ -> failInvariant "cmp function"
+
+
+-- fractionalNumericFn op = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (op (fromIntegral i)))))
+
+--   _ -> failInvariant "expInt"
+
+-- expInt :: BuiltinArity b => b -> BuiltinFn b i
+-- expInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
+--   _ -> failInvariant "expInt"
+
+-- lnInt :: BuiltinArity b => b -> BuiltinFn b i
+-- lnInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
+--   _ -> failInvariant "lnInt"
+
+-- sqrtInt :: BuiltinArity b => b -> BuiltinFn b i
+-- sqrtInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
+--   _ -> failInvariant "sqrtInt"
+
+-- showInt :: BuiltinArity b => b -> BuiltinFn b i
+-- showInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LString (T.pack (show i))))
+--   _ -> failInvariant "showInt"

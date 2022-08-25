@@ -282,6 +282,74 @@ rawBuiltinToText = \case
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
 
+instance BuiltinArity RawBuiltin where
+  = RawAdd
+  -- Num
+  | RawSub
+  | RawMultiply
+  | RawDivide
+  | RawNegate
+  | RawAbs
+  -- Boolean Ops
+  | RawAnd
+  | RawOr
+  | RawNot
+  -- Equality and Comparisons
+  | RawEq
+  | RawNeq
+  -- Ord
+  | RawGT
+  | RawGEQ
+  | RawLT
+  | RawLEQ
+  -- Bitwise Ops
+  | RawBitwiseAnd
+  | RawBitwiseOr
+  | RawBitwiseXor
+  | RawBitwiseFlip
+  | RawBitShift
+  --  Rounding
+  | RawRound
+  | RawCeiling
+  | RawFloor
+  -- Fractional
+  RawExp
+  RawLn
+  RawSqrt
+  RawLogBase
+  -- List like
+  RawLength
+  RawTake
+  RawDrop
+  RawConcat
+  RawReverse
+  -- General
+  RawMod
+  RawMap
+  RawFilter
+  RawZip
+  RawIf
+  RawIntToStr
+  RawStrToInt
+  RawFold
+  RawDistinct
+  RawEnforce
+  RawEnforceOne
+  RawEnumerate
+  RawEnumerateStepN
+  -- Show
+  RawShow
+  RawReadInteger
+  RawReadDecimal
+  RawReadString
+  RawReadKeyset
+  RawEnforceGuard
+  RawKeysetRefGuard
+  RawCreateUserGuard
+  RawListAccess
+  RawB64Encode
+  RawB64Decode
+
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
 
