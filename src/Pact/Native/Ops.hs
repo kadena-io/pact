@@ -196,7 +196,7 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   dec2ToInt
     :: Functor f => (Decimal -> Decimal -> f Decimal)
     -> Integer -> Integer -> f Integer
-  dec2ToInt f x y = floor <$> f (fromIntegral x) (fromIntegral y)
+  dec2ToInt f x y = round <$> f (fromIntegral x) (fromIntegral y)
 
 sqrtDef :: NativeDef
 sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
