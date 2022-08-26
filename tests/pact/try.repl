@@ -95,6 +95,12 @@
 
   (defun successful-read:bool ()
     (try false (with-read test-table "emily" { "test" := t} t)))
+
+  (defcap ALWAYS_FAIL () false)
+
+  (defun enforce-cap ()
+    (enforce-one "does not boom" [(require-capability (ALWAYS_FAIL)) true]))
+
 )
 
 (commit-tx)
@@ -121,4 +127,7 @@
 
 ;; failure case for reads in pure context
 (expect "failure when on attempting to reads from the db" true (successful-read))
+
+;; require-cap works in enforce-one post-fork
+(expect "require-cap works sin enforce-one" true (enforce-cap))
 (commit-tx)

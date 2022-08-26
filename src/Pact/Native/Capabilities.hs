@@ -190,7 +190,9 @@ requireCapability =
     requireCapability' i [TApp a@App{} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
       granted <- capabilityAcquired cap
-      unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
+      unless granted $ ifExecutionFlagSet FlagDisablePact44
+        (evalError' i ("require-capability: not granted: " <> pretty cap))
+        (failTx (_faInfo i) ("require-capability: not granted: " <> pretty cap))
       return $ toTerm True
     requireCapability' i as = argsError' i as
 
