@@ -43,10 +43,8 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Native.Trans.TOps
 
-
-foreign import ccall unsafe "c_pow"
-  c'c_pow :: Double -> Double -> Double
 
 modDef :: NativeDef
 modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
@@ -134,7 +132,7 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 #if defined(ghcjs_HOST_OS)
     binop (\a' b' -> liftDecF i (**) a' b') intPow i as
 #else
-    decimalPow <- ifExecutionFlagSet' FlagDisableNewPow (liftDecF i (**)) (liftDecF i c'c_pow)
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewPow (liftDecF i (**)) ((pure .) . trans_pow)
     binop decimalPow intPow i as
 #endif
     where

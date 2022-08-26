@@ -50,14 +50,11 @@ library
   hs-source-dirs: src
   default-language: Haskell2010
   ghc-prof-options: -fprof-auto -fprof-auto-calls
-  c-sources:
-    cbits/pow/__math_invalid.c
-    cbits/pow/__math_oflow.c
-    cbits/pow/__math_uflow.c
-    cbits/pow/__math_xflow.c
-    cbits/pow/exp_data.c
-    cbits/pow/pow.c
-    cbits/pow/pow_data.c
+  extra-libraries:
+    mpfr
+  other-modules:
+    Pact.Native.Trans.Types
+    Pact.Native.Trans.Pow
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -75,6 +72,7 @@ library
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
+    Pact.Native.Trans.TOps
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
