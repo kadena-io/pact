@@ -27,7 +27,7 @@ extra-source-files:
 
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
-  default:     False
+  default:     True
   manual:      True
 
 flag build-tool
@@ -310,6 +310,13 @@ executable pact
 
   if os(darwin)
     ghc-options: -optP-Wno-nonportable-include-path
+
+executable powcheck
+  main-is: Main.hs
+  build-depends: base, pact, mwc-random, mtl, vector, hashes
+  hs-source-dirs: powcheck
+  ghc-options: -Wall -threaded -rtsopts -w
+  default-language: Haskell2010
 
 benchmark bench
   if impl(ghcjs) || !flag(build-tool)

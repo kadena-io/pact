@@ -28,6 +28,7 @@ module Pact.Native.Ops
     , roundDef, ceilDef, floorDef
     , gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
     , bitAndDef, bitOrDef, xorDef, complementDef, shiftDef
+    , c'c_pow
     ) where
 
 
