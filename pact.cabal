@@ -31,11 +31,6 @@ flag cryptonite-ed25519
   default:     False
   manual:      True
 
-flag ghc-flags
-  description: Generate .ghc.flags files during compilation
-  default:     False
-  manual:      True
-
 flag build-tool
   description: Include modules and deps for tests + executable
   default:     True
