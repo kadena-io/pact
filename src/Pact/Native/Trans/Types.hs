@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 
 -- |
@@ -11,17 +14,28 @@
 
 module Pact.Native.Trans.Types where
 
+import Data.Decimal (Decimal, normalizeDecimal)
 import Data.Int
 import Data.Word
+import Foreign.C.String (withCString, peekCString)
 import Foreign.C.Types
-import Foreign.Ptr
 import Foreign.ForeignPtr
+import Foreign.Marshal.Alloc (alloca, allocaBytes)
+import Foreign.Ptr
 import Foreign.Storable
+import System.IO.Unsafe (unsafePerformIO)
 
 type CPrecision = Int64
 type Sign = Int32
 type Exp = Int64
 type Limb = Word64
+
+data TransResult a
+  = TransNumber a
+  | TransNaN
+  | TransInf
+  | TransNegInf
+  deriving (Functor, Foldable, Traversable)
 
 data MPFR = MP {
   _precision :: {-# UNPACK #-} !CPrecision,
@@ -43,6 +57,17 @@ instance Storable MPFR where
 c'MPFR_RNDN :: CInt
 c'MPFR_RNDN = 0
 
+withFormattedNumber :: (Ptr CChar -> Ptr CChar -> IO a) -> IO a
+withFormattedNumber f =
+  allocaBytes 2048 $ \out ->
+    withCString "%.128R*f" $ \fmt -> f out fmt
+
+readResultNumber :: String -> TransResult Decimal
+readResultNumber "nan" = TransNaN
+readResultNumber "inf" = TransInf
+readResultNumber "-inf" = TransNegInf
+readResultNumber n = TransNumber (read (trimZeroes n))
+
 type Mpfr_t = Ptr MPFR
 
 foreign import ccall "mpfr_init"
@@ -51,8 +76,54 @@ foreign import ccall "mpfr_init"
 foreign import ccall "mpfr_set_str"
   c'mpfr_set_str :: Mpfr_t -> Ptr CChar -> CInt -> CInt -> IO ()
 
+foreign import ccall "mpfr_div"
+  c'mpfr_div :: Mpfr_t -> Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
 foreign import ccall "mpfr_pow"
   c'mpfr_pow :: Mpfr_t -> Mpfr_t -> Mpfr_t -> IO ()
 
+foreign import ccall "mpfr_log"
+  c'mpfr_log :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
+foreign import ccall "mpfr_log2"
+  c'mpfr_log2 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
+foreign import ccall "mpfr_log10"
+  c'mpfr_log10 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
+foreign import ccall "mpfr_exp"
+  c'mpfr_exp :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
+foreign import ccall "mpfr_exp2"
+  c'mpfr_exp2 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
+foreign import ccall "mpfr_exp10"
+  c'mpfr_exp10 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
+foreign import ccall "mpfr_sqrt"
+  c'mpfr_sqrt :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
+
 foreign import ccall "mpfr_sprintf"
   c'mpfr_sprintf :: Ptr CChar -> Ptr CChar -> CInt -> Mpfr_t -> IO ()
+
+trans_arity1
+  :: (Mpfr_t -> Mpfr_t -> CInt -> IO ()) -> Decimal -> TransResult Decimal
+trans_arity1 f x =
+  readResultNumber $ unsafePerformIO $
+    withCString (show (normalizeDecimal x)) $ \xstr ->
+    alloca $ \x' ->
+    alloca $ \y' ->
+    withFormattedNumber $ \out fmt -> do
+      c'mpfr_init x'
+      c'mpfr_set_str x' xstr 10 c'MPFR_RNDN
+      c'mpfr_init y'
+      f y' x' c'MPFR_RNDN
+      c'mpfr_sprintf out fmt c'MPFR_RNDN y'
+      peekCString out
+
+trimZeroes :: String -> String
+trimZeroes = reverse . go . reverse
+  where
+  go ('0':s) = go s
+  go ('.':s) = "0." ++ s
+  go s = s

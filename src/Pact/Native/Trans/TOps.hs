@@ -8,7 +8,11 @@
 --
 
 module Pact.Native.Trans.TOps
-    ( trans_pow
+    ( module X
     ) where
 
-import Pact.Native.Trans.Pow (trans_pow)
+import Pact.Native.Trans.Pow as X
+import Pact.Native.Trans.Log as X
+import Pact.Native.Trans.Sqrt as X
+import Pact.Native.Trans.Exp as X
+import Pact.Native.Trans.Types as X (TransResult(..))

@@ -55,6 +55,9 @@ library
   other-modules:
     Pact.Native.Trans.Types
     Pact.Native.Trans.Pow
+    Pact.Native.Trans.Log
+    Pact.Native.Trans.Exp
+    Pact.Native.Trans.Sqrt
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types

@@ -132,7 +132,7 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 #if defined(ghcjs_HOST_OS)
     binop (\a' b' -> liftDecF i (**) a' b') intPow i as
 #else
-    decimalPow <- ifExecutionFlagSet' FlagDisableNewPow (liftDecF i (**)) ((pure .) . trans_pow)
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewPow (liftDecF i (**)) (liftDecT i trans_pow)
     binop decimalPow intPow i as
 #endif
     where
@@ -180,19 +180,36 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
+#if defined(ghcjs_HOST_OS)
     binop (\a b -> liftDecF fi logBase a b)
           (\a b -> liftIntF fi logBase a b)
           fi
           as
+#else
+    decimalLogBase <-
+      ifExecutionFlagSet' FlagDisableNewPow (liftDecF fi logBase) (liftDecT fi trans_logBase)
+    integerLogBase <-
+      ifExecutionFlagSet' FlagDisableNewPow (liftIntF fi logBase) (dec2ToInt (liftDecT fi trans_logBase))
+    binop decimalLogBase integerLogBase fi as
+#endif
   log' fi as = argsError fi as
+  dec2ToInt
+    :: Functor f => (Decimal -> Decimal -> f Decimal)
+    -> Integer -> Integer -> f Integer
+  dec2ToInt f x y = floor <$> f (fromIntegral x) (fromIntegral y)
 
 sqrtDef :: NativeDef
 sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   where
-  sqrt' fi as@[TLiteral a _] = do
-    unlessExecutionFlagSet FlagDisablePact43 $
-      when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
-    (unopd sqrt) fi as
+  sqrt' fi as@[TLiteral _a _] = do
+    -- unlessExecutionFlagSet FlagDisablePact43 $
+    --   when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
+#if defined(ghcjs_HOST_OS)
+    unopd sqrt fi as
+#else
+    decimalSqrt <- ifExecutionFlagSet' FlagDisableNewPow (unopd sqrt) (unopd' fi trans_sqrt)
+    decimalSqrt fi as
+#endif
   sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
@@ -201,11 +218,24 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   ln' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
-    (unopd log) fi as
+#if defined(ghcjs_HOST_OS)
+    unopd log fi as
+#else
+    decimalLog <- ifExecutionFlagSet' FlagDisableNewPow (unopd log) (unopd' fi trans_log)
+    decimalLog fi as
+#endif
   ln' fi as = argsError fi as
 
 expDef :: NativeDef
-expDef = defRNative "exp" (unopd exp) unopTy ["(round (exp 3) 6)"] "Exp of X."
+expDef = defRNative "exp"
+#if defined(ghcjs_HOST_OS)
+  unopd exp
+#else
+  (\fi as -> do
+    decimalExp <- ifExecutionFlagSet' FlagDisableNewPow (unopd exp) (unopd' fi trans_exp)
+    decimalExp fi as)
+#endif
+  unopTy ["(round (exp 3) 6)"] "Exp of X."
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
@@ -457,6 +487,13 @@ int2F = fromIntegral
 f2Int :: Double -> Integer
 f2Int = round
 
+liftDecT :: HasInfo i => i -> (Decimal -> Decimal -> TransResult Decimal) -> Decimal -> Decimal -> Eval e Decimal
+liftDecT i f a b = do
+  let !out = (a `f` b)
+  case out of
+    TransNumber num -> pure num
+    _ -> evalError' i "Operation resulted in +- infinity or NaN"
+
 liftDecF :: HasInfo i => i -> (Double -> Double -> Double) -> Decimal -> Decimal -> Eval e Decimal
 liftDecF i f a b = do
   let !out = (dec2F a `f` dec2F b)
@@ -476,6 +513,17 @@ unopd :: (Double -> Double) -> RNativeFun e
 unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i
 unopd op _ [TLiteral (LDecimal n) _] = return $ toTerm $ f2Dec $ op $ dec2F n
 unopd _ i as = argsError i as
+
+unopd' :: HasInfo i => i -> (Decimal -> TransResult Decimal) -> RNativeFun e
+unopd' fi op _ [TLitInteger i] =
+  case op (fromIntegral i) of
+    TransNumber num -> return $ toTerm num
+    _ -> evalError' fi "Operation resulted in +- infinity or NaN"
+unopd' fi op _ [TLiteral (LDecimal n) _] =
+  case op n of
+    TransNumber num -> return $ toTerm num
+    _ -> evalError' fi "Operation resulted in +- infinity or NaN"
+unopd' _ _ i as = argsError i as
 
 
 doBits :: NativeDefName -> [Example] -> Text -> (Integer -> Integer -> Integer) -> NativeDef
