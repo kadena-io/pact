@@ -228,15 +228,16 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   ln' fi as = argsError fi as
 
 expDef :: NativeDef
-expDef = defRNative "exp"
-#if defined(ghcjs_HOST_OS)
-  (unopd exp)
-#else
-  (\fi as -> do
-    decimalExp <- ifExecutionFlagSet' FlagDisableNewPow (unopd exp) (unopd' fi trans_exp)
-    decimalExp fi as)
-#endif
+expDef = defRNative "exp" go
   unopTy ["(round (exp 3) 6)"] "Exp of X."
+  where
+#if defined(ghcjs_HOST_OS)
+  go = unopd exp
+#else
+  go fi as = do
+    decimalExp <- ifExecutionFlagSet' FlagDisableNewPow (unopd exp) (unopd' fi trans_exp)
+    decimalExp fi as
+#endif
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
