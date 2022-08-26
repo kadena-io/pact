@@ -22,7 +22,6 @@ extra-source-files:
     CHANGELOG.md
     cbits/pow/endian.h
     cbits/pow/exp_data.h
-    cbits/pow/features.h
     cbits/pow/libm.h
     cbits/pow/pow_data.h
 
