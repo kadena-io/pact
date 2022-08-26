@@ -1,12 +1,13 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Native.Ops
@@ -130,7 +131,11 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
   pow :: RNativeFun e
   pow i as@[TLiteral a _,TLiteral b _] = do
+#if defined(ghcjs_HOST_OS)
+    binop (\a' b' -> liftDecF i (**) a' b') intPow i as
+#else
     binop (\a' b' -> liftDecF i c'c_pow a' b') intPow i as
+#endif
     where
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
@@ -236,9 +241,10 @@ lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
 eqDef :: NativeDef
 eqDef = defRNative "=" (eq id) eqTy
   ["(= [1 2 3] [1 2 3])", "(= 'foo \"foo\")", "(= { 'a: 2 } { 'a: 2})"]
-  "Compare alike terms for equality, returning TRUE if X is equal to Y. \
-  \Equality comparisons will fail immediately on type mismatch, or if types \
-  \are not value types."
+  ( "Compare alike terms for equality, returning TRUE if X is equal to Y. "
+  <> "Equality comparisons will fail immediately on type mismatch, or if types "
+  <> "are not value types."
+  )
 
 neqDef :: NativeDef
 neqDef = defRNative "!=" (eq not) eqTy
@@ -504,9 +510,10 @@ shiftDef :: NativeDef
 shiftDef =  defRNative "shift" go
   (binTy tTyInteger tTyInteger tTyInteger)
   ["(shift 255 8)","(shift 255 -1)","(shift -255 8)","(shift -255 -1)"]
-  "Shift X Y bits left if Y is positive, or right by -Y bits otherwise. \
-  \Right shifts perform sign extension on signed number types; \
-  \i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise."
+  ( "Shift X Y bits left if Y is positive, or right by -Y bits otherwise. "
+  <> "Right shifts perform sign extension on signed number types; "
+  <> "i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise."
+  )
   where
     go _ [TLitInteger x,TLitInteger y] = return $ toTerm $ shift x (fromIntegral y)
     go i as = argsError i as
