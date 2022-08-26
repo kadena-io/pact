@@ -230,7 +230,7 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
 expDef :: NativeDef
 expDef = defRNative "exp"
 #if defined(ghcjs_HOST_OS)
-  unopd exp
+  (unopd exp)
 #else
   (\fi as -> do
     decimalExp <- ifExecutionFlagSet' FlagDisableNewPow (unopd exp) (unopd' fi trans_exp)
