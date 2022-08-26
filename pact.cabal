@@ -50,14 +50,15 @@ library
   hs-source-dirs: src
   default-language: Haskell2010
   ghc-prof-options: -fprof-auto -fprof-auto-calls
-  extra-libraries:
-    mpfr
-  other-modules:
-    Pact.Native.Trans.Types
-    Pact.Native.Trans.Pow
-    Pact.Native.Trans.Log
-    Pact.Native.Trans.Exp
-    Pact.Native.Trans.Sqrt
+  if !impl(ghcjs)
+    other-modules:
+      Pact.Native.Trans.Types
+      Pact.Native.Trans.Pow
+      Pact.Native.Trans.Log
+      Pact.Native.Trans.Exp
+      Pact.Native.Trans.Sqrt
+    exposed-modules:
+      Pact.Native.Trans.TOps
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -75,7 +76,6 @@ library
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
-    Pact.Native.Trans.TOps
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
@@ -136,6 +136,9 @@ library
     if !impl(ghcjs)
       build-depends:
         , integer-gmp
+  if !impl(ghcjs)
+    build-depends:
+      , mpfr
   build-depends:
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1
