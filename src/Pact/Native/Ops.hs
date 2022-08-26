@@ -189,10 +189,11 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
     decimalLogBase <-
       ifExecutionFlagSet' FlagDisableNewPow (liftDecF fi logBase) (liftDecT fi trans_logBase)
     integerLogBase <-
-      ifExecutionFlagSet' FlagDisableNewPow (liftIntF fi logBase) (dec2ToInt (liftDecT fi trans_logBase))
+      ifExecutionFlagSet' FlagDisableNewPow (liftIntF fi logBase) (liftIntT fi trans_logBase)
     binop decimalLogBase integerLogBase fi as
 #endif
   log' fi as = argsError fi as
+  liftIntT = (dec2ToInt .) . liftDecT
   dec2ToInt
     :: Functor f => (Decimal -> Decimal -> f Decimal)
     -> Integer -> Integer -> f Integer
