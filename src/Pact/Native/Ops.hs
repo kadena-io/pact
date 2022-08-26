@@ -43,7 +43,9 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+#if !defined(ghcjs_HOST_OS)
 import Pact.Native.Trans.TOps
+#endif
 
 
 modDef :: NativeDef
@@ -193,11 +195,13 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
     binop decimalLogBase integerLogBase fi as
 #endif
   log' fi as = argsError fi as
+#if !defined(ghcjs_HOST_OS)
   liftIntT = (dec2ToInt .) . liftDecT
   dec2ToInt
     :: Functor f => (Decimal -> Decimal -> f Decimal)
     -> Integer -> Integer -> f Integer
   dec2ToInt f x y = round <$> f (fromIntegral x) (fromIntegral y)
+#endif
 
 sqrtDef :: NativeDef
 sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
@@ -489,12 +493,14 @@ int2F = fromIntegral
 f2Int :: Double -> Integer
 f2Int = round
 
+#if !defined(ghcjs_HOST_OS)
 liftDecT :: HasInfo i => i -> (Decimal -> Decimal -> TransResult Decimal) -> Decimal -> Decimal -> Eval e Decimal
 liftDecT i f a b = do
   let !out = (a `f` b)
   case out of
     TransNumber num -> pure num
     _ -> evalError' i "Operation resulted in +- infinity or NaN"
+#endif
 
 liftDecF :: HasInfo i => i -> (Double -> Double -> Double) -> Decimal -> Decimal -> Eval e Decimal
 liftDecF i f a b = do
@@ -516,6 +522,7 @@ unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i
 unopd op _ [TLiteral (LDecimal n) _] = return $ toTerm $ f2Dec $ op $ dec2F n
 unopd _ i as = argsError i as
 
+#if !defined(ghcjs_HOST_OS)
 unopd' :: HasInfo i => i -> (Decimal -> TransResult Decimal) -> RNativeFun e
 unopd' fi op _ [TLitInteger i] =
   case op (fromIntegral i) of
@@ -526,6 +533,7 @@ unopd' fi op _ [TLiteral (LDecimal n) _] =
     TransNumber num -> return $ toTerm num
     _ -> evalError' fi "Operation resulted in +- infinity or NaN"
 unopd' _ _ i as = argsError i as
+#endif
 
 
 doBits :: NativeDefName -> [Example] -> Text -> (Integer -> Integer -> Integer) -> NativeDef
