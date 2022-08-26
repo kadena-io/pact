@@ -47,6 +47,14 @@ library
   hs-source-dirs: src
   default-language: Haskell2010
   ghc-prof-options: -fprof-auto -fprof-auto-calls
+  c-sources:
+    src/Pact/pow.c
+    src/Pact/pow_data.c
+    src/Pact/exp_data.c
+    src/Pact/__math_oflow.c
+    src/Pact/__math_xflow.c
+    src/Pact/__math_uflow.c
+    src/Pact/__math_invalid.c
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -182,6 +190,7 @@ library
   else
     hs-source-dirs: src-ghc
     ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+    cc-options: -w
     exposed-modules:
       Pact.ApiReq
       Pact.Coverage

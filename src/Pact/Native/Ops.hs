@@ -44,6 +44,9 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 
 
+foreign import ccall unsafe "c_pow"
+  c'c_pow :: Double -> Double -> Double
+
 modDef :: NativeDef
 modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
   ["(mod 13 8)"] "X modulo Y."
@@ -127,7 +130,7 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
   pow :: RNativeFun e
   pow i as@[TLiteral a _,TLiteral b _] = do
-    binop (\a' b' -> liftDecF i (**) a' b') intPow i as
+    binop (\a' b' -> liftDecF i c'c_pow a' b') intPow i as
     where
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
