@@ -134,7 +134,8 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 #if defined(ghcjs_HOST_OS)
     binop (\a' b' -> liftDecF i (**) a' b') intPow i as
 #else
-    binop (\a' b' -> liftDecF i c'c_pow a' b') intPow i as
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewPow (liftDecF i (**)) (liftDecF i c'c_pow)
+    binop decimalPow intPow i as
 #endif
     where
     oldIntPow  b' e = do
