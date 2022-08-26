@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -31,7 +32,7 @@ type Exp = Int64
 type Limb = Word64
 
 data TransResult a
-  = TransNumber a
+  = TransNumber !a
   | TransNaN
   | TransInf
   | TransNegInf
