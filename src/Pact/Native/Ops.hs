@@ -201,9 +201,9 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
 sqrtDef :: NativeDef
 sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   where
-  sqrt' fi as@[TLiteral _a _] = do
-    -- unlessExecutionFlagSet FlagDisablePact43 $
-    --   when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
+  sqrt' fi as@[TLiteral a _] = do
+    unlessExecutionFlagSet FlagDisablePact43 $
+      when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
 #if defined(ghcjs_HOST_OS)
     unopd sqrt fi as
 #else
