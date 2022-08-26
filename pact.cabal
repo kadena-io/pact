@@ -59,8 +59,6 @@ library
     cbits/pow/exp_data.c
     cbits/pow/pow.c
     cbits/pow/pow_data.c
-  include-dirs:
-    cbits/pow
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
