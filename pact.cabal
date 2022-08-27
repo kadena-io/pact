@@ -20,10 +20,6 @@ build-type:          Simple
 extra-source-files:
     README.md
     CHANGELOG.md
-    cbits/pow/endian.h
-    cbits/pow/exp_data.h
-    cbits/pow/libm.h
-    cbits/pow/pow_data.h
 
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
