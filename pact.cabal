@@ -67,8 +67,6 @@ library
       cbits/musl/pow_data.c
       cbits/musl/sqrt.c
       cbits/musl/sqrt_data.c
-    other-modules:
-      Pact.Native.Trans.Types
     exposed-modules:
       Pact.Native.Trans.TOps
   exposed-modules:
