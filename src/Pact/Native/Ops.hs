@@ -134,7 +134,7 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 #if defined(ghcjs_HOST_OS)
     binop (\a' b' -> liftDecF i (**) a' b') intPow i as
 #else
-    decimalPow <- ifExecutionFlagSet' FlagDisableNewPow (liftDecF i (**)) (liftDecT i trans_pow)
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecF i (**)) (liftDecT i trans_pow)
     binop decimalPow intPow i as
 #endif
     where
@@ -189,9 +189,9 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
           as
 #else
     decimalLogBase <-
-      ifExecutionFlagSet' FlagDisableNewPow (liftDecF fi logBase) (liftDecT fi trans_logBase)
+      ifExecutionFlagSet' FlagDisableNewTrans (liftDecF fi logBase) (liftDecT fi trans_logBase)
     integerLogBase <-
-      ifExecutionFlagSet' FlagDisableNewPow (liftIntF fi logBase) (liftIntT fi trans_logBase)
+      ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntT fi trans_logBase)
     binop decimalLogBase integerLogBase fi as
 #endif
   log' fi as = argsError fi as
@@ -212,7 +212,7 @@ sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
 #if defined(ghcjs_HOST_OS)
     unopd sqrt fi as
 #else
-    decimalSqrt <- ifExecutionFlagSet' FlagDisableNewPow (unopd sqrt) (unopd' fi trans_sqrt)
+    decimalSqrt <- ifExecutionFlagSet' FlagDisableNewTrans (unopd sqrt) (unopd' fi trans_sqrt)
     decimalSqrt fi as
 #endif
   sqrt' fi as = argsError fi as
@@ -226,7 +226,7 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
 #if defined(ghcjs_HOST_OS)
     unopd log fi as
 #else
-    decimalLog <- ifExecutionFlagSet' FlagDisableNewPow (unopd log) (unopd' fi trans_log)
+    decimalLog <- ifExecutionFlagSet' FlagDisableNewTrans (unopd log) (unopd' fi trans_log)
     decimalLog fi as
 #endif
   ln' fi as = argsError fi as
@@ -239,7 +239,7 @@ expDef = defRNative "exp" go
   go = unopd exp
 #else
   go fi as = do
-    decimalExp <- ifExecutionFlagSet' FlagDisableNewPow (unopd exp) (unopd' fi trans_exp)
+    decimalExp <- ifExecutionFlagSet' FlagDisableNewTrans (unopd exp) (unopd' fi trans_exp)
     decimalExp fi as
 #endif
 
