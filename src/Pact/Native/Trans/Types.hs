@@ -25,7 +25,6 @@ import Foreign.Marshal.Alloc (alloca, allocaBytes)
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe (unsafePerformIO)
-import Debug.Trace
 
 type CPrecision = Int64
 type Sign = Int32
