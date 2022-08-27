@@ -25,6 +25,7 @@ import Foreign.Marshal.Alloc (alloca, allocaBytes)
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe (unsafePerformIO)
+import Debug.Trace
 
 type CPrecision = Int64
 type Sign = Int32
@@ -60,10 +61,11 @@ c'MPFR_RNDN = 0
 
 withFormattedNumber :: (Ptr CChar -> Ptr CChar -> IO a) -> IO a
 withFormattedNumber f =
-  allocaBytes 2048 $ \out ->
-    withCString "%.256R*f" $ \fmt -> f out fmt
+  allocaBytes 1024 $ \out ->
+    withCString "%512.256R*f" $ \fmt -> f out fmt
 
 readResultNumber :: String -> TransResult Decimal
+readResultNumber (' ':s) = readResultNumber s
 readResultNumber "nan" = TransNaN
 readResultNumber "inf" = TransInf
 readResultNumber "-inf" = TransNegInf
@@ -104,23 +106,21 @@ foreign import ccall "mpfr_exp10"
 foreign import ccall "mpfr_sqrt"
   c'mpfr_sqrt :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
 
-foreign import ccall "mpfr_sprintf"
-  c'mpfr_sprintf :: Ptr CChar -> Ptr CChar -> CInt -> Mpfr_t -> IO ()
+foreign import ccall "mpfr_snprintf"
+  c'mpfr_snprintf :: Ptr CChar -> CInt -> Ptr CChar -> CInt -> Mpfr_t -> IO ()
 
 trans_arity1
   :: (Mpfr_t -> Mpfr_t -> CInt -> IO ()) -> Decimal -> TransResult Decimal
-trans_arity1 f x =
-  readResultNumber $ unsafePerformIO $
-    withCString (show (normalizeDecimal x)) $ \xstr ->
-    alloca $ \x' ->
-    alloca $ \y' ->
-    withFormattedNumber $ \out fmt -> do
-      c'mpfr_init x'
-      c'mpfr_set_str x' xstr 10 c'MPFR_RNDN
-      c'mpfr_init y'
-      f y' x' c'MPFR_RNDN
-      c'mpfr_sprintf out fmt c'MPFR_RNDN y'
-      peekCString out
+trans_arity1 f x = unsafePerformIO $ withFormattedNumber $ \out fmt ->
+  withCString (show (normalizeDecimal x)) $ \xstr ->
+  alloca $ \x' ->
+  alloca $ \y' -> do
+    c'mpfr_init x'
+    c'mpfr_set_str x' xstr 10 c'MPFR_RNDN
+    c'mpfr_init y'
+    f y' x' c'MPFR_RNDN
+    c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN y'
+    readResultNumber <$> peekCString out
 
 trimZeroes :: String -> String
 trimZeroes = reverse . go . reverse

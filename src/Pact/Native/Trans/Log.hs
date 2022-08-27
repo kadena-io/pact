@@ -22,7 +22,7 @@ import Pact.Native.Trans.Types
   , c'mpfr_log
   , c'mpfr_log2
   , c'mpfr_log10
-  , c'mpfr_sprintf
+  , c'mpfr_snprintf
   , TransResult
   , readResultNumber
   , trans_arity1
@@ -43,15 +43,14 @@ trans_log10 :: Decimal -> TransResult Decimal
 trans_log10 = trans_arity1 c'mpfr_log10
 
 trans_logBase :: Decimal -> Decimal -> TransResult Decimal
-trans_logBase x y = readResultNumber $ unsafePerformIO $
+trans_logBase x y = unsafePerformIO $ withFormattedNumber $ \out fmt ->
   withCString (show (normalizeDecimal x)) $ \xstr ->
   withCString (show (normalizeDecimal y)) $ \ystr ->
   alloca $ \x' ->
   alloca $ \x'' ->
   alloca $ \y' ->
   alloca $ \y'' ->
-  alloca $ \z' ->
-  withFormattedNumber $ \out fmt -> do
+  alloca $ \z' -> do
     c'mpfr_init x'
     c'mpfr_set_str x' xstr 10 c'MPFR_RNDN
     c'mpfr_init y'
@@ -62,5 +61,5 @@ trans_logBase x y = readResultNumber $ unsafePerformIO $
     c'mpfr_log y'' y' c'MPFR_RNDN
     c'mpfr_init z'
     c'mpfr_div z' y'' x'' c'MPFR_RNDN
-    c'mpfr_sprintf out fmt c'MPFR_RNDN z'
-    peekCString out
+    c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN z'
+    readResultNumber <$> peekCString out
