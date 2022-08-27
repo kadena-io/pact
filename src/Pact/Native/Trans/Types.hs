@@ -1,6 +1,6 @@
 -- |
 -- Module      :  Pact.Native.Trans.Types
--- Copyright   :  (C) 2016 Stuart Popejoy
+-- Copyright   :  (C) 2022 John Wiegley
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
