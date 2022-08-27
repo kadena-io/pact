@@ -61,7 +61,7 @@ c'MPFR_RNDN = 0
 withFormattedNumber :: (Ptr CChar -> Ptr CChar -> IO a) -> IO a
 withFormattedNumber f =
   allocaBytes 2048 $ \out ->
-    withCString "%.128R*f" $ \fmt -> f out fmt
+    withCString "%.256R*f" $ \fmt -> f out fmt
 
 readResultNumber :: String -> TransResult Decimal
 readResultNumber "nan" = TransNaN
