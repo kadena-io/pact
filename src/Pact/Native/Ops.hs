@@ -43,10 +43,10 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+#if !defined(ghcjs_HOST_OS)
+import Pact.Native.Trans.TOps
+#endif
 
-
-foreign import ccall unsafe "c_pow"
-  c'c_pow :: Double -> Double -> Double
 
 modDef :: NativeDef
 modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
@@ -134,7 +134,7 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 #if defined(ghcjs_HOST_OS)
     binop (\a' b' -> liftDecF i (**) a' b') intPow i as
 #else
-    decimalPow <- ifExecutionFlagSet' FlagDisableNewPow (liftDecF i (**)) (liftDecF i c'c_pow)
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecF i (**)) (liftDecF i trans_pow)
     binop decimalPow intPow i as
 #endif
     where
@@ -182,10 +182,18 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
+#if defined(ghcjs_HOST_OS)
     binop (\a b -> liftDecF fi logBase a b)
           (\a b -> liftIntF fi logBase a b)
           fi
           as
+#else
+    decimalLogBase <-
+      ifExecutionFlagSet' FlagDisableNewTrans (liftDecF fi logBase) (liftDecF fi trans_log)
+    integerLogBase <-
+      ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntF fi trans_log)
+    binop decimalLogBase integerLogBase fi as
+#endif
   log' fi as = argsError fi as
 
 sqrtDef :: NativeDef
@@ -194,7 +202,12 @@ sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   sqrt' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
-    (unopd sqrt) fi as
+#if defined(ghcjs_HOST_OS)
+    unopd sqrt fi as
+#else
+    decimalSqrt <- ifExecutionFlagSet' FlagDisableNewTrans (unopd sqrt) (unopd trans_sqrt)
+    decimalSqrt fi as
+#endif
   sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
@@ -203,11 +216,25 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   ln' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
-    (unopd log) fi as
+#if defined(ghcjs_HOST_OS)
+    unopd log fi as
+#else
+    decimalLog <- ifExecutionFlagSet' FlagDisableNewTrans (unopd log) (unopd trans_ln)
+    decimalLog fi as
+#endif
   ln' fi as = argsError fi as
 
 expDef :: NativeDef
-expDef = defRNative "exp" (unopd exp) unopTy ["(round (exp 3) 6)"] "Exp of X."
+expDef = defRNative "exp" go
+  unopTy ["(round (exp 3) 6)"] "Exp of X."
+  where
+#if defined(ghcjs_HOST_OS)
+  go = unopd exp
+#else
+  go fi as = do
+    decimalExp <- ifExecutionFlagSet' FlagDisableNewTrans (unopd exp) (unopd trans_exp)
+    decimalExp fi as
+#endif
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
