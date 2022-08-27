@@ -4,7 +4,7 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  John Wiegley <john@kadena.io>
 --
--- Operators and math built-ins.
+-- MUSL transcendental exports.
 --
 
 module Pact.Native.Trans.Types
