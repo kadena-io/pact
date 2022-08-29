@@ -44,11 +44,11 @@ jobs:
       uses: actions/checkout@v2
 
     # Non Haskell dependencies
-    - name: Install z3 (ubuntu-20.04)
+    - name: Install z3, mpfr (ubuntu-20.04)
       if: contains(matrix.os, 'ubuntu-20.04')
       run: |
         sudo apt-get update
-        sudo apt-get install -y z3
+        sudo apt-get install -y z3 libmpfr-dev
     - name: Install z3 (ubuntu-18.04)
       if: contains(matrix.os, 'ubuntu-18.04')
       uses: pavpanchekha/setup-z3@0.2.0
@@ -56,6 +56,11 @@ jobs:
         version: "4.8.10"
         architecture: "x64"
         distribution: "ubuntu-18.04"
+    - name: Install mpfr (ubuntu-18.04)
+      if: contains(matrix.os, 'ubuntu-18.04')
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libmpfr-dev
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
       uses: pavpanchekha/setup-z3@0.2.0

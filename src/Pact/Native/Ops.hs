@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -43,9 +41,7 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-#if !defined(ghcjs_HOST_OS)
 import Pact.Native.Trans.TOps
-#endif
 
 
 modDef :: NativeDef
@@ -131,12 +127,7 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
   pow :: RNativeFun e
   pow i as@[TLiteral a _,TLiteral b _] = do
-#if defined(ghcjs_HOST_OS)
-    binop (\a' b' -> liftDecF i (**) a' b') intPow i as
-#else
-    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecF i (**)) (liftDecF i trans_pow)
-    binop decimalPow intPow i as
-#endif
+    binop (trans_pow i) intPow i as
     where
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
@@ -182,18 +173,10 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
-#if defined(ghcjs_HOST_OS)
-    binop (\a b -> liftDecF fi logBase a b)
-          (\a b -> liftIntF fi logBase a b)
+    binop (trans_logBase fi)
+          (trans_logBaseInt fi)
           fi
           as
-#else
-    decimalLogBase <-
-      ifExecutionFlagSet' FlagDisableNewTrans (liftDecF fi logBase) (liftDecF fi trans_log)
-    integerLogBase <-
-      ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntF fi trans_log)
-    binop decimalLogBase integerLogBase fi as
-#endif
   log' fi as = argsError fi as
 
 sqrtDef :: NativeDef
@@ -202,12 +185,7 @@ sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   sqrt' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
-#if defined(ghcjs_HOST_OS)
-    unopd sqrt fi as
-#else
-    decimalSqrt <- ifExecutionFlagSet' FlagDisableNewTrans (unopd sqrt) (unopd trans_sqrt)
-    decimalSqrt fi as
-#endif
+    unopd trans_sqrt fi as
   sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
@@ -216,25 +194,11 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   ln' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
-#if defined(ghcjs_HOST_OS)
-    unopd log fi as
-#else
-    decimalLog <- ifExecutionFlagSet' FlagDisableNewTrans (unopd log) (unopd trans_ln)
-    decimalLog fi as
-#endif
+    unopd trans_ln fi as
   ln' fi as = argsError fi as
 
 expDef :: NativeDef
-expDef = defRNative "exp" go
-  unopTy ["(round (exp 3) 6)"] "Exp of X."
-  where
-#if defined(ghcjs_HOST_OS)
-  go = unopd exp
-#else
-  go fi as = do
-    decimalExp <- ifExecutionFlagSet' FlagDisableNewTrans (unopd exp) (unopd trans_exp)
-    decimalExp fi as
-#endif
+expDef = defRNative "exp" (unopd trans_exp) unopTy ["(round (exp 3) 6)"] "Exp of X."
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
@@ -477,33 +441,9 @@ binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
 binop _ _ fi as = argsError fi as
 {-# INLINE binop #-}
 
-dec2F :: Decimal -> Double
-dec2F = fromRational . toRational
-f2Dec :: Double -> Decimal
-f2Dec = fromRational . toRational
-int2F :: Integer -> Double
-int2F = fromIntegral
-f2Int :: Double -> Integer
-f2Int = round
-
-liftDecF :: HasInfo i => i -> (Double -> Double -> Double) -> Decimal -> Decimal -> Eval e Decimal
-liftDecF i f a b = do
-  let !out = (dec2F a `f` dec2F b)
-  unlessExecutionFlagSet FlagDisablePact43 $
-    when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
-  pure $ f2Dec out
-
-  -- Right $ f2Dec (dec2F a `f` dec2F b)
-liftIntF :: HasInfo i => i -> (Double -> Double -> Double) -> Integer -> Integer -> Eval e Integer
-liftIntF i f a b = do
-  let !out = (int2F a `f` int2F b)
-  unlessExecutionFlagSet FlagDisablePact43 $
-    when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
-  pure $ f2Int out
-
-unopd :: (Double -> Double) -> RNativeFun e
-unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i
-unopd op _ [TLiteral (LDecimal n) _] = return $ toTerm $ f2Dec $ op $ dec2F n
+unopd :: (forall i. HasInfo i => i -> Decimal -> Eval e Decimal) -> RNativeFun e
+unopd op fi [TLitInteger i] = toTerm <$> op fi (fromIntegral i)
+unopd op fi [TLiteral (LDecimal n) _] = toTerm <$> op fi n
 unopd _ i as = argsError i as
 
 

@@ -67,6 +67,13 @@ library
       cbits/musl/pow_data.c
       cbits/musl/sqrt.c
       cbits/musl/sqrt_data.c
+    other-modules:
+      Pact.Native.Trans.Types
+      Pact.Native.Trans.Musl
+      Pact.Native.Trans.Pow
+      Pact.Native.Trans.Log
+      Pact.Native.Trans.Exp
+      Pact.Native.Trans.Sqrt
     exposed-modules:
       Pact.Native.Trans.TOps
   exposed-modules:
@@ -146,6 +153,9 @@ library
     if !impl(ghcjs)
       build-depends:
         , integer-gmp
+  if !impl(ghcjs)
+    extra-libraries:
+      mpfr
   build-depends:
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1

@@ -130,7 +130,7 @@ runTest t = runGasUnitTests t run run
       let
         flags = mkExecutionConfig
                [ FlagDisableInlineMemCheck, FlagDisablePactEvents
-               , FlagDisablePact43, FlagDisablePact44]
+               , FlagDisablePact43, FlagDisablePact44, FlagDisableNewTrans ]
         r' = set eeExecutionConfig flags r
       pure (r', s)
 

@@ -70,6 +70,7 @@ in {
       };
       shellToolOverrides = ghc: super: {
         z3 = pkgs.z3;
+        mpfr = pkgs.mpfr;
         stack = pkgs.stack;
       };
       shells = {
@@ -77,6 +78,6 @@ in {
         ghcjs = ["pact"];
       };
 
-      passthru = { inherit (pkgs) z3;};
+      passthru = { inherit (pkgs) z3 mpfr;};
     });
 }
