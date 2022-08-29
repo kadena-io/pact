@@ -50,7 +50,7 @@ defaultSeeds =
     , 1886364755
     ]
 
-testCount = 100000
+testCount = 100000000
 
 main = do
     args <- getArgs
