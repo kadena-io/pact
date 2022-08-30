@@ -14,6 +14,7 @@ module Pact.Native.Trans.Sqrt
 import Pact.Native.Trans.Types
   ( c'MPFR_RNDN
   , c'mpfr_init
+  , c'mpfr_clear
   , c'mpfr_set_str
   , c'mpfr_sqrt
   , c'mpfr_snprintf
@@ -36,4 +37,6 @@ trans_sqrt x = unsafePerformIO $ withFormattedNumber $ \out fmt ->
     c'mpfr_init y'
     c'mpfr_sqrt y' x' c'MPFR_RNDN
     c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN y'
+    c'mpfr_clear x'
+    c'mpfr_clear y'
     readResultNumber <$> peekCString out

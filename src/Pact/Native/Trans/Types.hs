@@ -75,6 +75,9 @@ type Mpfr_t = Ptr MPFR
 foreign import ccall "mpfr_init"
   c'mpfr_init :: Mpfr_t -> IO ()
 
+foreign import ccall "mpfr_clear"
+  c'mpfr_clear :: Mpfr_t -> IO ()
+
 foreign import ccall "mpfr_set_str"
   c'mpfr_set_str :: Mpfr_t -> Ptr CChar -> CInt -> CInt -> IO ()
 
@@ -119,6 +122,8 @@ trans_arity1 f x = unsafePerformIO $ withFormattedNumber $ \out fmt ->
     c'mpfr_init y'
     f y' x' c'MPFR_RNDN
     c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN y'
+    c'mpfr_clear x'
+    c'mpfr_clear y'
     readResultNumber <$> peekCString out
 
 trimZeroes :: String -> String

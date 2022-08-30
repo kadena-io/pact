@@ -14,6 +14,7 @@ module Pact.Native.Trans.Pow
 import Pact.Native.Trans.Types
   ( c'MPFR_RNDN
   , c'mpfr_init
+  , c'mpfr_clear
   , c'mpfr_set_str
   , c'mpfr_pow
   , c'mpfr_snprintf
@@ -40,4 +41,7 @@ trans_pow x y = unsafePerformIO $ withFormattedNumber $ \out fmt ->
     c'mpfr_init z'
     c'mpfr_pow z' x' y'
     c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN z'
+    c'mpfr_clear x'
+    c'mpfr_clear y'
+    c'mpfr_clear z'
     readResultNumber <$> peekCString out
