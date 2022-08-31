@@ -31,8 +31,8 @@ computeGas i args = do
   let
     (info,name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),g1):)
   let gUsed = g0 + g1
+  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),g1):)
   putGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
@@ -72,7 +72,7 @@ computeGasCommit info name args = do
   g0 <- getGas
   let !g1 = runGasModel _geGasModel name args
       !gUsed = g0 + g1
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args),g1):)
+  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),g1):)
   putGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
