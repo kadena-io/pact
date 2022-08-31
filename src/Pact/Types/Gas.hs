@@ -35,6 +35,7 @@ import Data.Aeson
 import Data.Text (Text, unpack)
 import Data.Aeson.Types (Parser)
 import Data.Serialize
+import Data.Decimal
 
 import GHC.Generics
 
@@ -146,8 +147,9 @@ data GasArgs
   -- ^ The cost of the in-memory representation of the module
   | GPrincipal !Int
   -- ^ the cost of principal creation and validation
-  | GIntegerOpCost !Integer Integer
+  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer)
   -- ^ Integer costs
+  | GDecimalOpCost !Decimal !Decimal
 
 instance Pretty GasArgs where
   pretty g = case g of
@@ -169,6 +171,7 @@ instance Pretty GasArgs where
     GModuleMemory i -> "GModuleMemory: " <> pretty i
     GPrincipal i -> "GPrincipal: " <> pretty i
     GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
+    GDecimalOpCost i j -> "GDecimalOpCost:" <> pretty (show i) <> colon <> pretty (show j)
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
