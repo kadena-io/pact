@@ -1,12 +1,13 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Native.Ops
@@ -42,6 +43,9 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+#if !defined(ghcjs_HOST_OS)
+import Pact.Native.Trans.TOps
+#endif
 
 
 modDef :: NativeDef
@@ -127,7 +131,12 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
   pow :: RNativeFun e
   pow i as@[TLiteral a _,TLiteral b _] = do
+#if defined(ghcjs_HOST_OS)
     binop (\a' b' -> liftDecF i (**) a' b') intPow i as
+#else
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecF i (**)) (liftDecF i trans_pow)
+    binop decimalPow intPow i as
+#endif
     where
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
@@ -173,10 +182,18 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
+#if defined(ghcjs_HOST_OS)
     binop (\a b -> liftDecF fi logBase a b)
           (\a b -> liftIntF fi logBase a b)
           fi
           as
+#else
+    decimalLogBase <-
+      ifExecutionFlagSet' FlagDisableNewTrans (liftDecF fi logBase) (liftDecF fi trans_log)
+    integerLogBase <-
+      ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntF fi trans_log)
+    binop decimalLogBase integerLogBase fi as
+#endif
   log' fi as = argsError fi as
 
 sqrtDef :: NativeDef
@@ -185,7 +202,12 @@ sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   sqrt' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
-    (unopd sqrt) fi as
+#if defined(ghcjs_HOST_OS)
+    unopd sqrt fi as
+#else
+    decimalSqrt <- ifExecutionFlagSet' FlagDisableNewTrans (unopd sqrt) (unopd trans_sqrt)
+    decimalSqrt fi as
+#endif
   sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
@@ -194,11 +216,25 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   ln' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
-    (unopd log) fi as
+#if defined(ghcjs_HOST_OS)
+    unopd log fi as
+#else
+    decimalLog <- ifExecutionFlagSet' FlagDisableNewTrans (unopd log) (unopd trans_ln)
+    decimalLog fi as
+#endif
   ln' fi as = argsError fi as
 
 expDef :: NativeDef
-expDef = defRNative "exp" (unopd exp) unopTy ["(round (exp 3) 6)"] "Exp of X."
+expDef = defRNative "exp" go
+  unopTy ["(round (exp 3) 6)"] "Exp of X."
+  where
+#if defined(ghcjs_HOST_OS)
+  go = unopd exp
+#else
+  go fi as = do
+    decimalExp <- ifExecutionFlagSet' FlagDisableNewTrans (unopd exp) (unopd trans_exp)
+    decimalExp fi as
+#endif
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
@@ -233,9 +269,10 @@ lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
 eqDef :: NativeDef
 eqDef = defRNative "=" (eq id) eqTy
   ["(= [1 2 3] [1 2 3])", "(= 'foo \"foo\")", "(= { 'a: 2 } { 'a: 2})"]
-  "Compare alike terms for equality, returning TRUE if X is equal to Y. \
-  \Equality comparisons will fail immediately on type mismatch, or if types \
-  \are not value types."
+  ( "Compare alike terms for equality, returning TRUE if X is equal to Y. "
+  <> "Equality comparisons will fail immediately on type mismatch, or if types "
+  <> "are not value types."
+  )
 
 neqDef :: NativeDef
 neqDef = defRNative "!=" (eq not) eqTy
@@ -501,9 +538,10 @@ shiftDef :: NativeDef
 shiftDef =  defRNative "shift" go
   (binTy tTyInteger tTyInteger tTyInteger)
   ["(shift 255 8)","(shift 255 -1)","(shift -255 8)","(shift -255 -1)"]
-  "Shift X Y bits left if Y is positive, or right by -Y bits otherwise. \
-  \Right shifts perform sign extension on signed number types; \
-  \i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise."
+  ( "Shift X Y bits left if Y is positive, or right by -Y bits otherwise. "
+  <> "Right shifts perform sign extension on signed number types; "
+  <> "i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise."
+  )
   where
     go _ [TLitInteger x,TLitInteger y] = return $ toTerm $ shift x (fromIntegral y)
     go i as = argsError i as
