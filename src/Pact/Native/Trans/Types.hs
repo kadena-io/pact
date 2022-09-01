@@ -26,17 +26,17 @@ import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe (unsafePerformIO)
 
-type CPrecision = Int64
-type Sign = Int32
-type Exp = Int64
-type Limb = Word64
-
 data TransResult a
   = TransNumber !a
   | TransNaN
   | TransInf
   | TransNegInf
   deriving (Functor, Foldable, Traversable)
+
+type CPrecision = Int64
+type Sign = Int32
+type Exp = Int64
+type Limb = Word64
 
 data MPFR = MP {
   _precision :: {-# UNPACK #-} !CPrecision,
@@ -74,6 +74,9 @@ type Mpfr_t = Ptr MPFR
 
 foreign import ccall "mpfr_init"
   c'mpfr_init :: Mpfr_t -> IO ()
+
+foreign import ccall "mpfr_init2"
+  c'mpfr_init2 :: Mpfr_t -> CInt -> IO ()
 
 foreign import ccall "mpfr_clear"
   c'mpfr_clear :: Mpfr_t -> IO ()

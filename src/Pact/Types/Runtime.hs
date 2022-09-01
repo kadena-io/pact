@@ -153,6 +153,8 @@ data ExecutionFlag
   | FlagDisablePact44
   -- | Disable new transcendental impls
   | FlagDisableNewTrans
+  -- | Disable new transcendental impls via MPFR
+  | FlagDisableNewTransMPFR
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
