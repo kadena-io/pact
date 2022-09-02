@@ -19,6 +19,14 @@ module Pact.Native.Trans.TOps
     , trans_logBaseInt
     , trans_pow
     , trans_sqrt
+
+    , pow_double
+    , pow_musl
+    , pow_mpfr
+
+#if !defined(ghcjs_HOST_OS)
+    , c'mpfr_set_default_prec
+#endif
     ) where
 
 import Control.Monad
@@ -104,6 +112,15 @@ trans_logBaseInt i x y = go
   fp_mpfr = liftBinInt i f T.trans_logBase
   go = chooseFunction2 fp_double fp_musl fp_mpfr >>= (\k -> k x y)
 #endif
+
+pow_double :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
+pow_double i = liftBinDecF i (**)
+
+pow_musl :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
+pow_musl i = liftBinDecF i M.trans_pow
+
+pow_mpfr :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
+pow_mpfr i = liftBinDec i (**) T.trans_pow
 
 trans_pow :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
 trans_pow i x y = go

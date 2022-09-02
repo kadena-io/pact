@@ -12,36 +12,19 @@ module Pact.Native.Trans.Pow
     ) where
 
 import Pact.Native.Trans.Types
-  ( c'MPFR_RNDN
-  , c'mpfr_init
-  , c'mpfr_clear
-  , c'mpfr_set_str
-  , c'mpfr_pow
-  , c'mpfr_snprintf
-  , withFormattedNumber
+  ( c'mpfr_pow
+  , dec2Mpfr
+  , mpfr2Dec
+  , withTemp
   , TransResult
-  , readResultNumber
   )
-import Data.Decimal (Decimal, normalizeDecimal)
-import Foreign.C.String (withCString, peekCString)
-import Foreign.Marshal.Alloc (alloca)
+import Data.Decimal (Decimal)
 import System.IO.Unsafe (unsafePerformIO)
 
 trans_pow :: Decimal -> Decimal -> TransResult Decimal
-trans_pow x y = unsafePerformIO $ withFormattedNumber $ \out fmt ->
-  withCString (show (normalizeDecimal x)) $ \xstr ->
-  withCString (show (normalizeDecimal y)) $ \ystr ->
-  alloca $ \x' ->
-  alloca $ \y' ->
-  alloca $ \z' -> do
-    c'mpfr_init x'
-    c'mpfr_set_str x' xstr 10 c'MPFR_RNDN
-    c'mpfr_init y'
-    c'mpfr_set_str y' ystr 10 c'MPFR_RNDN
-    c'mpfr_init z'
+trans_pow x y = unsafePerformIO $
+  dec2Mpfr x $ \x' ->
+  dec2Mpfr y $ \y' ->
+  withTemp $ \z' -> do
     c'mpfr_pow z' x' y'
-    c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN z'
-    c'mpfr_clear x'
-    c'mpfr_clear y'
-    c'mpfr_clear z'
-    readResultNumber <$> peekCString out
+    mpfr2Dec z'

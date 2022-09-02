@@ -15,6 +15,7 @@
 
 module Pact.Native.Trans.Types where
 
+import Control.Exception
 import Data.Decimal (Decimal, normalizeDecimal)
 import Data.Int
 import Data.Word
@@ -60,8 +61,8 @@ c'MPFR_RNDN = 0
 
 withFormattedNumber :: (Ptr CChar -> Ptr CChar -> IO a) -> IO a
 withFormattedNumber f =
-  allocaBytes 1024 $ \out ->
-    withCString "%512.256R*f" $ \fmt -> f out fmt
+  allocaBytes 600 $ \out ->
+    withCString "%512.66R*f" $ \fmt -> f out fmt
 
 readResultNumber :: String -> TransResult Decimal
 readResultNumber (' ':s) = readResultNumber s
@@ -75,8 +76,8 @@ type Mpfr_t = Ptr MPFR
 foreign import ccall "mpfr_init"
   c'mpfr_init :: Mpfr_t -> IO ()
 
-foreign import ccall "mpfr_init2"
-  c'mpfr_init2 :: Mpfr_t -> CInt -> IO ()
+foreign import ccall "mpfr_set_default_prec"
+  c'mpfr_set_default_prec :: CInt -> IO ()
 
 foreign import ccall "mpfr_clear"
   c'mpfr_clear :: Mpfr_t -> IO ()
@@ -114,20 +115,30 @@ foreign import ccall "mpfr_sqrt"
 foreign import ccall "mpfr_snprintf"
   c'mpfr_snprintf :: Ptr CChar -> CInt -> Ptr CChar -> CInt -> Mpfr_t -> IO ()
 
+withTemp :: (Mpfr_t -> IO a) -> IO a
+withTemp k = alloca $ \x ->
+  bracket_ (c'mpfr_init x) (c'mpfr_clear x) (k x)
+
+dec2Mpfr :: Decimal -> (Mpfr_t -> IO a) -> IO a
+dec2Mpfr d k =
+  withCString (show (normalizeDecimal d)) $ \str ->
+    withTemp $ \x -> do
+      c'mpfr_set_str x str 10 c'MPFR_RNDN
+      k x
+
+mpfr2Dec :: Mpfr_t -> IO (TransResult Decimal)
+mpfr2Dec m =
+  withFormattedNumber $ \out fmt -> do
+    c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN m
+    readResultNumber <$> peekCString out
+
 trans_arity1
   :: (Mpfr_t -> Mpfr_t -> CInt -> IO ()) -> Decimal -> TransResult Decimal
-trans_arity1 f x = unsafePerformIO $ withFormattedNumber $ \out fmt ->
-  withCString (show (normalizeDecimal x)) $ \xstr ->
-  alloca $ \x' ->
-  alloca $ \y' -> do
-    c'mpfr_init x'
-    c'mpfr_set_str x' xstr 10 c'MPFR_RNDN
-    c'mpfr_init y'
-    f y' x' c'MPFR_RNDN
-    c'mpfr_snprintf out 1024 fmt c'MPFR_RNDN y'
-    c'mpfr_clear x'
-    c'mpfr_clear y'
-    readResultNumber <$> peekCString out
+trans_arity1 f x = unsafePerformIO $
+  dec2Mpfr x $ \x' ->
+    withTemp $ \y' -> do
+      f y' x' c'MPFR_RNDN
+      mpfr2Dec y'
 
 trimZeroes :: String -> String
 trimZeroes = reverse . go . reverse
