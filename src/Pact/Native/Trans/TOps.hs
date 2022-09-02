@@ -20,22 +20,22 @@ module Pact.Native.Trans.TOps
     , trans_pow
     , trans_sqrt
 
-    , pow_double
-    , pow_musl
-    , pow_mpfr
+    , mpfr_exp
+    , mpfr_ln
+    , mpfr_log
+    , mpfr_pow
+    , mpfr_sqrt
 
 #if !defined(ghcjs_HOST_OS)
     , c'mpfr_set_default_prec
+    , mpfr_arity1
+    , mpfr_arity2
 #endif
     ) where
 
 import Control.Monad
 import Data.Decimal
 #if !defined(ghcjs_HOST_OS)
-import qualified Pact.Native.Trans.Pow as T
-import qualified Pact.Native.Trans.Log as T
-import qualified Pact.Native.Trans.Sqrt as T
-import qualified Pact.Native.Trans.Exp as T
 import qualified Pact.Native.Trans.Musl as M
 import Pact.Native.Trans.Types
 #endif
@@ -65,87 +65,79 @@ trans_exp :: HasInfo i => i -> Decimal -> Eval e Decimal
 trans_exp i x = go
   where
   f = exp
-  fp_double = liftUnDecF i f
+  exp_double = liftUnDecF i f
 #if defined(ghcjs_HOST_OS)
-  go = fp_double x
+  go = exp_double i x
 #else
-  fp_musl = liftUnDecF i M.trans_exp
-  fp_mpfr = liftUnDec i f T.trans_exp
-  go = chooseFunction1 fp_double fp_musl fp_mpfr >>= ($ x)
+  exp_musl = liftUnDecF i M.trans_exp
+  exp_mpfr = liftUnDec i f mpfr_exp
+  go = chooseFunction1 exp_double exp_musl exp_mpfr >>= ($ x)
 #endif
 
 trans_ln :: HasInfo i => i -> Decimal -> Eval e Decimal
 trans_ln i x = go
   where
   f = log
-  fp_double = liftUnDecF i f
+  ln_double = liftUnDecF i f
 #if defined(ghcjs_HOST_OS)
-  go = fp_double x
+  go = ln_double i x
 #else
-  fp_musl = liftUnDecF i M.trans_ln
-  fp_mpfr = liftUnDec i f T.trans_ln
-  go = chooseFunction1 fp_double fp_musl fp_mpfr >>= ($ x)
+  ln_musl = liftUnDecF i M.trans_ln
+  ln_mpfr = liftUnDec i f mpfr_ln
+  go = chooseFunction1 ln_double ln_musl ln_mpfr >>= ($ x)
 #endif
 
 trans_logBase :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
 trans_logBase i x y = go
   where
   f = logBase
-  fp_double = liftBinDecF i f
+  logBase_double = liftBinDecF i f
 #if defined(ghcjs_HOST_OS)
-  go = fp_double x y
+  go = logBase_double i x y
 #else
-  fp_musl = liftBinDecF i M.trans_log
-  fp_mpfr = liftBinDec i f T.trans_logBase
-  go = chooseFunction2 fp_double fp_musl fp_mpfr >>= (\k -> k x y)
+  logBase_musl = liftBinDecF i M.trans_log
+  logBase_mpfr = liftBinDec i f mpfr_log
+  go = chooseFunction2 logBase_double logBase_musl logBase_mpfr
+    >>= (\k -> k x y)
 #endif
 
 trans_logBaseInt :: HasInfo i => i -> Integer -> Integer -> Eval e Integer
 trans_logBaseInt i x y = go
   where
   f = logBase
-  fp_double = liftBinIntF i f
+  logBase_double = liftBinIntF i f
 #if defined(ghcjs_HOST_OS)
-  go = fp_double x y
+  go = logBase_double x y
 #else
-  fp_musl = liftBinIntF i M.trans_log
-  fp_mpfr = liftBinInt i f T.trans_logBase
-  go = chooseFunction2 fp_double fp_musl fp_mpfr >>= (\k -> k x y)
+  logBase_musl = liftBinIntF i M.trans_log
+  logBase_mpfr = liftBinInt i f mpfr_log
+  go = chooseFunction2 logBase_double logBase_musl logBase_mpfr
+    >>= (\k -> k x y)
 #endif
-
-pow_double :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
-pow_double i = liftBinDecF i (**)
-
-pow_musl :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
-pow_musl i = liftBinDecF i M.trans_pow
-
-pow_mpfr :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
-pow_mpfr i = liftBinDec i (**) T.trans_pow
 
 trans_pow :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
 trans_pow i x y = go
   where
   f = (**)
-  fp_double = liftBinDecF i f
+  pow_double = liftBinDecF i f
 #if defined(ghcjs_HOST_OS)
-  go = fp_double x y
+  go = pow_double i x y
 #else
-  fp_musl = liftBinDecF i M.trans_pow
-  fp_mpfr = liftBinDec i f T.trans_pow
-  go = chooseFunction2 fp_double fp_musl fp_mpfr >>= (\k -> k x y)
+  pow_musl = liftBinDecF i M.trans_pow
+  pow_mpfr = liftBinDec i f mpfr_pow
+  go = chooseFunction2 pow_double pow_musl pow_mpfr >>= (\k -> k x y)
 #endif
 
 trans_sqrt :: HasInfo i => i -> Decimal -> Eval e Decimal
 trans_sqrt i x = go
   where
-  f = sqrt
-  fp_double = liftUnDecF i f
+  sqrt_double = liftUnDecF i sqrt
 #if defined(ghcjs_HOST_OS)
-  go = fp_double x
+  go = sqrt_double i x
 #else
-  fp_musl = liftUnDecF i M.trans_sqrt
-  fp_mpfr = liftUnDec i f T.trans_sqrt
-  go = chooseFunction1 fp_double fp_musl fp_mpfr >>= ($ x)
+  sqrt_musl = liftUnDecF i M.trans_sqrt
+  sqrt_mpfr = liftUnDec i sqrt mpfr_sqrt
+  go = chooseFunction1 sqrt_double sqrt_musl sqrt_mpfr >>= ($ x)
 #endif
 
 {-------------------------------------------------------------------------
@@ -239,3 +231,43 @@ int2F :: Integer -> Double
 int2F = fromIntegral
 f2Int :: Double -> Integer
 f2Int = round
+
+{-------------------------------------------------------------------------
+ -- OPERATIONS
+ -------------------------------------------------------------------------}
+
+#if !defined(ghcjs_HOST_OS)
+
+mpfr_exp :: Decimal -> TransResult Decimal
+mpfr_exp = mpfr_arity1 c'mpfr_exp
+
+_mpfr_exp2 :: Decimal -> TransResult Decimal
+_mpfr_exp2 = mpfr_arity1 c'mpfr_exp2
+
+_mpfr_exp10 :: Decimal -> TransResult Decimal
+_mpfr_exp10 = mpfr_arity1 c'mpfr_exp10
+
+mpfr_ln :: Decimal -> TransResult Decimal
+mpfr_ln = mpfr_arity1 c'mpfr_log
+
+_mpfr_log2 :: Decimal -> TransResult Decimal
+_mpfr_log2 = mpfr_arity1 c'mpfr_log2
+
+_mpfr_log10 :: Decimal -> TransResult Decimal
+_mpfr_log10 = mpfr_arity1 c'mpfr_log10
+
+mpfr_log :: Decimal -> Decimal -> TransResult Decimal
+mpfr_log = mpfr_arity2 $ \z' x' y' rnd ->
+  withTemp $ \x'' ->
+  withTemp $ \y'' -> do
+    c'mpfr_log x'' x' rnd
+    c'mpfr_log y'' y' rnd
+    c'mpfr_div z' y'' x'' rnd
+
+mpfr_pow :: Decimal -> Decimal -> TransResult Decimal
+mpfr_pow = mpfr_arity2 c'mpfr_pow
+
+mpfr_sqrt :: Decimal -> TransResult Decimal
+mpfr_sqrt = mpfr_arity1 c'mpfr_sqrt
+
+#endif

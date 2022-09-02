@@ -32,7 +32,7 @@ data TransResult a
   | TransNaN
   | TransInf
   | TransNegInf
-  deriving (Functor, Foldable, Traversable)
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 data MPZ = MPZ {
   _mpzAlloc :: {-# UNPACK #-} !Int32,
@@ -85,7 +85,22 @@ instance Storable MPFR where
       (\hsc_ptr -> pokeByteOff hsc_ptr 24) p fp
 
 c'MPFR_RNDN :: CInt
-c'MPFR_RNDN = 0
+c'MPFR_RNDN = 0    -- round to nearest, with ties to even
+c'MPFR_RNDZ :: CInt
+c'MPFR_RNDZ = 1    -- round toward zero
+c'MPFR_RNDU :: CInt
+c'MPFR_RNDU = 2    -- round toward +Inf
+c'MPFR_RNDD :: CInt
+c'MPFR_RNDD = 3    -- round toward -Inf
+c'MPFR_RNDA :: CInt
+c'MPFR_RNDA = 4    -- round away from zero
+c'MPFR_RNDF :: CInt
+c'MPFR_RNDF = 5    -- faithful rounding
+c'MPFR_RNDNA :: CInt
+c'MPFR_RNDNA = -1  -- round to nearest, with ties away from zero (mpfr_round)
+
+rounding :: CInt
+rounding = c'MPFR_RNDN
 
 readResultNumber :: String -> TransResult Decimal
 readResultNumber (' ':s) = readResultNumber s
@@ -144,7 +159,7 @@ foreign import ccall "mpfr_div"
   c'mpfr_div :: Mpfr_t -> Mpfr_t -> Mpfr_t -> CInt -> IO ()
 
 foreign import ccall "mpfr_pow"
-  c'mpfr_pow :: Mpfr_t -> Mpfr_t -> Mpfr_t -> IO ()
+  c'mpfr_pow :: Mpfr_t -> Mpfr_t -> Mpfr_t -> CInt -> IO ()
 
 foreign import ccall "mpfr_log"
   c'mpfr_log :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
@@ -188,7 +203,7 @@ dec2Mpfr d k =
   withTempq $ \q ->
   withTemp $ \x -> do
     c'mpq_set_str q r' 10
-    c'mpfr_set_q x q c'MPFR_RNDN
+    c'mpfr_set_q x q rounding
     k x
   where
   r = toRational d
@@ -205,13 +220,23 @@ mpfr2Dec m =
             (before, _:after) -> read before % read after
     pure $ TransNumber $ fromRational val
 
-trans_arity1
+mpfr_arity1
   :: (Mpfr_t -> Mpfr_t -> CInt -> IO ()) -> Decimal -> TransResult Decimal
-trans_arity1 f x = unsafePerformIO $
+mpfr_arity1 f x = unsafePerformIO $
   dec2Mpfr x $ \x' ->
-    withTemp $ \y' -> do
-      f y' x' c'MPFR_RNDN
-      mpfr2Dec y'
+  withTemp $ \y' -> do
+    f y' x' rounding
+    mpfr2Dec y'
+
+mpfr_arity2
+  :: (Mpfr_t -> Mpfr_t -> Mpfr_t -> CInt -> IO ())
+  -> Decimal -> Decimal -> TransResult Decimal
+mpfr_arity2 f x y = unsafePerformIO $
+  dec2Mpfr x $ \x' ->
+  dec2Mpfr y $ \y' ->
+  withTemp $ \z' -> do
+    f z' x' y' rounding
+    mpfr2Dec z'
 
 trimZeroes :: String -> String
 trimZeroes = reverse . go . reverse
