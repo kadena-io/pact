@@ -1028,7 +1028,7 @@ rawBuiltinFn = \case
   RawAdd -> addBuiltin RawAdd
   -- Num -> unimplemented
   RawSub -> subBuiltin RawSub
-  RawMultiply -> subBuiltin RawMultiply
+  RawMultiply -> mulBuiltin RawMultiply
   RawDivide -> divBuiltin RawDivide
   RawNegate -> negateBuiltin RawNegate
   RawAbs -> absBuiltin RawAbs
@@ -1037,13 +1037,13 @@ rawBuiltinFn = \case
   RawOr -> unimplemented
   RawNot -> unimplemented
   -- Equality and Comparisons -> unimplemented
-  RawEq -> unimplemented
-  RawNeq -> unimplemented
+  RawEq -> eqBuiltin RawEq
+  RawNeq -> neqBuiltin RawNeq
   -- Ord -> unimplemented
-  RawGT -> unimplemented
-  RawGEQ -> unimplemented
-  RawLT -> unimplemented
-  RawLEQ -> unimplemented
+  RawGT -> gtBuiltin RawGT
+  RawGEQ -> geqBuiltin RawGEQ
+  RawLT -> ltBuiltin RawLT
+  RawLEQ -> leqBuiltin RawLEQ
   -- Bitwise Ops -> unimplemented
   RawBitwiseAnd -> unimplemented
   RawBitwiseOr -> unimplemented
@@ -1066,7 +1066,7 @@ rawBuiltinFn = \case
   RawConcat -> unimplemented
   RawReverse -> unimplemented
   -- General -> unimplemented
-  RawMod -> unimplemented
+  RawMod -> modBuiltin RawMod
   RawMap -> unimplemented
   RawFilter -> unimplemented
   RawZip -> unimplemented
@@ -1133,34 +1133,16 @@ modBuiltin = mkBuiltinFn \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (mod i i')))
   _ -> failInvariant "div"
 
--- TODO: much better error here
-eqLiteral (LInteger l) (LInteger r) = pure (VLiteral (LBool (l == r)))
-eqLiteral (LDecimal l) (LDecimal r) = pure (VLiteral (LBool (l == r)))
-eqLiteral (LBool l) (LBool r) = pure (VLiteral (LBool (l == r)))
-eqLiteral LUnit LUnit = pure (VLiteral (LBool True))
-eqLiteral (LString l) (LString r) = pure (VLiteral (LBool (l == r)))
-eqLiteral _l _r = failInvariant "Cannot compare literals of unequal types"
-
 eqBuiltin :: BuiltinArity b => b -> BuiltinFn b i
 eqBuiltin = mkBuiltinFn \case
   [l, r] -> pure (VLiteral (LBool (unsafeEqCEKValue l r)))
-  [] -> failInvariant "eq"
+  _ -> failInvariant "eq"
 
+--
 neqBuiltin :: BuiltinArity b => b -> BuiltinFn b i
 neqBuiltin = mkBuiltinFn \case
   [l, r] -> pure (VLiteral (LBool (unsafeNeqCEKValue l r)))
-  [] -> failInvariant "neq"
-
--- compareFn op = mkBuiltinFn \case
---   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (op i i')))
---   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (op i i')))
---   [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (op i i')))
---   _ -> failInvariant "cmp function"
-
--- unaryNumericFn op = mkBuiltinFn \case
---   [VLiteral (LInteger i)] -> pure (VLiteral (LInteger (op i)))
---   [VLiteral (LDecimal i)] -> pure (VLiteral (LInteger (op i)))
---   _ -> failInvariant "cmp function"
+  _ -> failInvariant "neq"
 
 gtBuiltin :: BuiltinArity b => b -> BuiltinFn b i
 gtBuiltin = mkBuiltinFn \case

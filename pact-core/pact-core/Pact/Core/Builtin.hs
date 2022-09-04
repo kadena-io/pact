@@ -283,72 +283,73 @@ rawBuiltinToText = \case
   RawB64Decode -> "base64-decode"
 
 instance BuiltinArity RawBuiltin where
-  = RawAdd
-  -- Num
-  | RawSub
-  | RawMultiply
-  | RawDivide
-  | RawNegate
-  | RawAbs
-  -- Boolean Ops
-  | RawAnd
-  | RawOr
-  | RawNot
-  -- Equality and Comparisons
-  | RawEq
-  | RawNeq
-  -- Ord
-  | RawGT
-  | RawGEQ
-  | RawLT
-  | RawLEQ
-  -- Bitwise Ops
-  | RawBitwiseAnd
-  | RawBitwiseOr
-  | RawBitwiseXor
-  | RawBitwiseFlip
-  | RawBitShift
-  --  Rounding
-  | RawRound
-  | RawCeiling
-  | RawFloor
-  -- Fractional
-  RawExp
-  RawLn
-  RawSqrt
-  RawLogBase
-  -- List like
-  RawLength
-  RawTake
-  RawDrop
-  RawConcat
-  RawReverse
-  -- General
-  RawMod
-  RawMap
-  RawFilter
-  RawZip
-  RawIf
-  RawIntToStr
-  RawStrToInt
-  RawFold
-  RawDistinct
-  RawEnforce
-  RawEnforceOne
-  RawEnumerate
-  RawEnumerateStepN
-  -- Show
-  RawShow
-  RawReadInteger
-  RawReadDecimal
-  RawReadString
-  RawReadKeyset
-  RawEnforceGuard
-  RawKeysetRefGuard
-  RawCreateUserGuard
-  RawListAccess
-  RawB64Encode
-  RawB64Decode
+  builtinArity = \case
+    RawAdd -> 2
+    -- Num ->
+    RawSub -> 2
+    RawMultiply -> 2
+    RawDivide -> 2
+    RawNegate -> 1
+    RawAbs -> 1
+    -- Boolean Ops ->
+    RawAnd -> 2
+    RawOr -> 2
+    RawNot -> 2
+    -- Equality and Comparisons ->
+    RawEq -> 2
+    RawNeq -> 2
+    -- Ord ->
+    RawGT -> 2
+    RawGEQ -> 2
+    RawLT -> 2
+    RawLEQ -> 2
+    -- Bitwise Ops ->
+    RawBitwiseAnd -> 2
+    RawBitwiseOr -> 2
+    RawBitwiseXor -> 2
+    RawBitwiseFlip -> 1
+    RawBitShift -> 2
+    --  Rounding ->
+    RawRound -> 1
+    RawCeiling -> 1
+    RawFloor -> 1
+    -- Fractional ->
+    RawExp -> 1
+    RawLn -> 1
+    RawSqrt -> 1
+    RawLogBase -> 1
+    -- List like ->
+    RawLength -> 1
+    RawTake -> 2
+    RawDrop -> 2
+    RawConcat -> 1
+    RawReverse -> 1
+    -- General ->
+    RawMod -> 2
+    RawMap -> 2
+    RawFilter -> 2
+    RawZip -> 3
+    RawIf -> 3
+    RawIntToStr -> 2
+    RawStrToInt -> 2
+    RawFold -> 3
+    RawDistinct -> 1
+    RawEnforce -> 2
+    RawEnforceOne -> 2
+    RawEnumerate -> 2
+    RawEnumerateStepN -> 3
+    -- Show ->
+    RawShow -> 1
+    RawReadInteger -> 1
+    RawReadDecimal -> 1
+    RawReadString -> 1
+    RawReadKeyset -> 1
+    RawEnforceGuard -> 1
+    RawKeysetRefGuard -> 1
+    RawCreateUserGuard -> 1
+    RawListAccess -> 2
+    RawB64Encode -> 1
+    RawB64Decode -> 1
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
