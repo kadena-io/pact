@@ -186,6 +186,20 @@ will be rotated in its place.
 
 Top level only: this function will fail if used in module code.
 
+describe-namespace
+~~~~~~~~~~~~~~~~~~
+
+*ns* ``string`` *→* ``object:{described-namespace}``
+
+Describe the namespace NS, returning a row object containing the user
+and admin guards of the namespace, as well as its name.
+
+.. code:: lisp
+
+   (describe-namespace 'my-namespace)
+
+Top level only: this function will fail if used in module code.
+
 distinct
 ~~~~~~~~
 
@@ -503,7 +517,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "4.3"
+   "4.4"
 
 Top level only: this function will fail if used in module code.
 
@@ -832,7 +846,7 @@ by the ordering of keys.
 
 .. code:: lisp
 
-   (let* 
+   (let*
     ((qry (lambda (k obj) true)) ;; select all rows
      (f (lambda (x) [(at 'firstName x), (at 'b x)]))
     )
@@ -1732,21 +1746,6 @@ time ‘pact-id’ must return the same value. In effect this ensures that
 the guard will only succeed within the multi-transaction identified by
 the pact id.
 
-create-principal
-~~~~~~~~~~~~~~~~
-
-*guard* ``guard`` *→* ``string``
-
-Create a principal which unambiguously identifies GUARD.
-
-.. code:: lisp
-
-   (create-principal (read-keyset 'keyset))
-   (create-principal (keyset-ref-guard 'keyset))
-   (create-principal (create-module-guard 'module-guard))
-   (create-principal (create-user-guard 'user-guard))
-   (create-principal (create-pact-guard 'pact-guard))
-
 create-user-guard
 ~~~~~~~~~~~~~~~~~
 
@@ -1855,17 +1854,6 @@ found in environment.
 
    (require-capability (TRANSFER src dest))
 
-validate-principal
-~~~~~~~~~~~~~~~~~~
-
-*guard* ``guard`` *principal* ``string`` *→* ``bool``
-
-Validate that PRINCIPAL unambiguously identifies GUARD.
-
-.. code:: lisp
-
-   (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
-
 with-capability
 ~~~~~~~~~~~~~~~
 
@@ -1944,6 +1932,61 @@ are base-16 strings of length 32.
 .. code:: lisp
 
    (validate-keypair pubkey privkey)
+
+.. _Guards:
+
+Guards
+------
+
+create-principal
+~~~~~~~~~~~~~~~~
+
+*guard* ``guard`` *→* ``string``
+
+Create a principal which unambiguously identifies GUARD.
+
+.. code:: lisp
+
+   (create-principal (read-keyset 'keyset))
+   (create-principal (keyset-ref-guard 'keyset))
+   (create-principal (create-module-guard 'module-guard))
+   (create-principal (create-user-guard 'user-guard))
+   (create-principal (create-pact-guard 'pact-guard))
+
+is-principal
+~~~~~~~~~~~~
+
+*principal* ``string`` *→* ``bool``
+
+Tell whether PRINCIPAL string conforms to the principal format without
+proving validity.
+
+.. code:: lisp
+
+   (enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+
+typeof-principal
+~~~~~~~~~~~~~~~~
+
+*principal* ``string`` *→* ``string``
+
+Return the protocol type of a given PRINCIPAL value. If input value is
+not a principal type, then the empty string is returned.
+
+.. code:: lisp
+
+   (typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
+
+validate-principal
+~~~~~~~~~~~~~~~~~~
+
+*guard* ``guard`` *principal* ``string`` *→* ``bool``
+
+Validate that PRINCIPAL unambiguously identifies GUARD.
+
+.. code:: lisp
+
+   (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 
 .. _repl-lib:
 
@@ -2106,7 +2149,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
 
 .. code:: lisp
 
