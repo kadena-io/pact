@@ -9,13 +9,13 @@
 
 module Pact.Core.Compile
  ( InterpretOutput(..)
- , interpretExprNew
- , interpretProgramNew
- , interpretProgramFileNew
+--  , interpretExprNew
+--  , interpretProgramNew
+--  , interpretProgramFileNew
  , interpretExprLisp
  , interpretProgramLisp
  , interpretProgramFileLisp
- , newInterpretBundle
+--  , newInterpretBundle
  , lispInterpretBundle
 --  , interpretExprTypeNew
 --  , interpretExprTypeLisp
@@ -45,9 +45,6 @@ import Pact.Core.Untyped.Eval.CEK
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Untyped.Eval.CEK as Runtime
 
-import qualified Pact.Core.Syntax.New.Lexer as New
-import qualified Pact.Core.Syntax.New.Parser as New
-
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
@@ -65,12 +62,12 @@ data InterpretBundle
   , program :: ByteString -> ReplT RawBuiltin [InterpretOutput RawBuiltin LineInfo]
   }
 
-newInterpretBundle :: InterpretBundle
-newInterpretBundle =
-  InterpretBundle
-  { expr = interpretExprNew
-  -- , exprType = interpretExprTypeNew
-  , program = interpretProgramNew }
+-- newInterpretBundle :: InterpretBundle
+-- newInterpretBundle =
+--   InterpretBundle
+--   { expr = interpretExprNew
+--   -- , exprType = interpretExprTypeNew
+--   , program = interpretProgramNew }
 
 lispInterpretBundle :: InterpretBundle
 lispInterpretBundle =
@@ -79,16 +76,16 @@ lispInterpretBundle =
   -- , exprType = interpretExprTypeLisp
   , program = interpretProgramLisp }
 
-interpretExprNew :: ByteString -> ReplT RawBuiltin (CEKValue RawBuiltin LineInfo)
-interpretExprNew source = do
-  pactdb <- use replPactDb
-  loaded <- use replLoaded
-  lexx <- liftIO (New.runLexerIO source)
-  debugIfFlagSet DebugLexer lexx
-  parsed <- either throwM pure $ New.parseExpr lexx
-  debugIfFlagSet DebugParser parsed
-  desugared <- liftIO (runDesugarTermNew pactdb loaded parsed)
-  interpretExpr desugared
+-- interpretExprNew :: ByteString -> ReplT RawBuiltin (CEKValue RawBuiltin LineInfo)
+-- interpretExprNew source = do
+--   pactdb <- use replPactDb
+--   loaded <- use replLoaded
+--   lexx <- liftIO (New.runLexerIO source)
+--   debugIfFlagSet DebugLexer lexx
+--   parsed <- either throwM pure $ New.parseExpr lexx
+--   debugIfFlagSet DebugParser parsed
+--   desugared <- liftIO (runDesugarTermNew pactdb loaded parsed)
+--   interpretExpr desugared
 
 interpretExprLisp :: ByteString -> ReplT RawBuiltin (CEKValue RawBuiltin LineInfo)
 interpretExprLisp source = do
@@ -158,17 +155,17 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
 --   debugIfFlagSet DebugTypechecker typed
 --   pure ty
 
-interpretProgramFileNew :: FilePath -> ReplT RawBuiltin [InterpretOutput RawBuiltin LineInfo]
-interpretProgramFileNew source = liftIO (B.readFile source) >>= interpretProgramNew
+-- interpretProgramFileNew :: FilePath -> ReplT RawBuiltin [InterpretOutput RawBuiltin LineInfo]
+-- interpretProgramFileNew source = liftIO (B.readFile source) >>= interpretProgramNew
 
-interpretProgramNew :: ByteString -> ReplT RawBuiltin [InterpretOutput RawBuiltin LineInfo]
-interpretProgramNew source = do
-  loaded <- use replLoaded
-  pactdb <- use replPactDb
-  lexx <- liftIO (New.runLexerIO source)
-  debugIfFlagSet DebugLexer lexx
-  parsed <- either throwM pure $ New.parseProgram lexx
-  traverse (liftIO . runDesugarTopLevelNew pactdb loaded >=> interpretTopLevel) parsed
+-- interpretProgramNew :: ByteString -> ReplT RawBuiltin [InterpretOutput RawBuiltin LineInfo]
+-- interpretProgramNew source = do
+--   loaded <- use replLoaded
+--   pactdb <- use replPactDb
+--   lexx <- liftIO (New.runLexerIO source)
+--   debugIfFlagSet DebugLexer lexx
+--   parsed <- either throwM pure $ New.parseProgram lexx
+--   traverse (liftIO . runDesugarTopLevelNew pactdb loaded >=> interpretTopLevel) parsed
 
 interpretProgramFileLisp :: FilePath -> ReplT RawBuiltin [InterpretOutput RawBuiltin LineInfo]
 interpretProgramFileLisp source = liftIO (B.readFile source) >>= interpretProgramLisp
