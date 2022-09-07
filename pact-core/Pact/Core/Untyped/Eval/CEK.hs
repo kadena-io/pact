@@ -28,10 +28,8 @@ module Pact.Core.Untyped.Eval.CEK
  , CEKState(..)
  , CEKRuntime
  , runCEK
- , runCoreCEK
  , runRawCEK
  , Cont(..)
- , coreBuiltinRuntime
  , rawBuiltinRuntime
  ) where
 
@@ -44,7 +42,7 @@ import Data.Bits
 import Data.Char(isHexDigit)
 import Data.Decimal(roundTo', Decimal)
 import Data.Text(Text)
-import Data.Vector(Vector)
+-- import Data.Vector(Vector)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Primitive(Array, indexArray)
 import Data.Void
@@ -178,16 +176,16 @@ runCEK env builtins renv term = let
 
 -- | Run our CEK interpreter
 --   for only our core builtins
-runCoreCEK
-  :: CEKTLEnv CoreBuiltin i
-  -- ^ Top levels
-  -> RuntimeEnv CoreBuiltin i
-  -- ^ Runtime environment
-  -> EvalTerm CoreBuiltin i
-  -- ^ Term to evaluate
-  -> IO (CEKValue CoreBuiltin i, CEKState CoreBuiltin)
-runCoreCEK env =
-  runCEK env coreBuiltinRuntime
+-- runCoreCEK
+--   :: CEKTLEnv CoreBuiltin i
+--   -- ^ Top levels
+--   -> RuntimeEnv CoreBuiltin i
+--   -- ^ Runtime environment
+--   -> EvalTerm CoreBuiltin i
+--   -- ^ Term to evaluate
+--   -> IO (CEKValue CoreBuiltin i, CEKState CoreBuiltin)
+-- runCoreCEK env =
+--   runCEK env coreBuiltinRuntime
 
 
 -- | Run our CEK interpreter
@@ -240,11 +238,11 @@ unaryIntFn op = mkBuiltinFn \case
   _ -> failInvariant "unary int function"
 {-# INLINE unaryIntFn #-}
 
-unaryDecFn :: BuiltinArity b => (Decimal -> Decimal) -> b -> BuiltinFn b i
-unaryDecFn op = mkBuiltinFn \case
-  [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (op i)))
-  _ -> failInvariant "unary decimal function"
-{-# INLINE unaryDecFn #-}
+-- unaryDecFn :: BuiltinArity b => (Decimal -> Decimal) -> b -> BuiltinFn b i
+-- unaryDecFn op = mkBuiltinFn \case
+--   [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (op i)))
+--   _ -> failInvariant "unary decimal function"
+-- {-# INLINE unaryDecFn #-}
 
 binaryIntFn
   :: BuiltinArity b
@@ -256,11 +254,11 @@ binaryIntFn op = mkBuiltinFn \case
   _ -> failInvariant "binary int function"
 {-# INLINE binaryIntFn #-}
 
-binaryDecFn :: BuiltinArity b => (Decimal -> Decimal -> Decimal) -> b -> BuiltinFn b i
-binaryDecFn op = mkBuiltinFn \case
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (op i i')))
-  _ -> failInvariant "binary decimal function"
-{-# INLINE binaryDecFn #-}
+-- binaryDecFn :: BuiltinArity b => (Decimal -> Decimal -> Decimal) -> b -> BuiltinFn b i
+-- binaryDecFn op = mkBuiltinFn \case
+--   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (op i i')))
+--   _ -> failInvariant "binary decimal function"
+-- {-# INLINE binaryDecFn #-}
 
 binaryBoolFn :: BuiltinArity b => (Bool -> Bool -> Bool) -> b -> BuiltinFn b i
 binaryBoolFn op = mkBuiltinFn \case
@@ -268,23 +266,23 @@ binaryBoolFn op = mkBuiltinFn \case
   _ -> failInvariant "binary bool function"
 {-# INLINE binaryBoolFn #-}
 
-compareIntFn :: BuiltinArity b => (Integer -> Integer -> Bool) -> b -> BuiltinFn b i
-compareIntFn op = mkBuiltinFn \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (op i i')))
-  _ -> failInvariant "int cmp function"
-{-# INLINE compareIntFn #-}
+-- compareIntFn :: BuiltinArity b => (Integer -> Integer -> Bool) -> b -> BuiltinFn b i
+-- compareIntFn op = mkBuiltinFn \case
+--   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (op i i')))
+--   _ -> failInvariant "int cmp function"
+-- {-# INLINE compareIntFn #-}
 
-compareDecFn :: BuiltinArity b => (Decimal -> Decimal -> Bool) -> b -> BuiltinFn b i
-compareDecFn op = mkBuiltinFn \case
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (op i i')))
-  _ -> failInvariant "dec cmp function"
-{-# INLINE compareDecFn #-}
+-- compareDecFn :: BuiltinArity b => (Decimal -> Decimal -> Bool) -> b -> BuiltinFn b i
+-- compareDecFn op = mkBuiltinFn \case
+--   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (op i i')))
+--   _ -> failInvariant "dec cmp function"
+-- {-# INLINE compareDecFn #-}
 
-compareStrFn :: BuiltinArity b => (Text -> Text -> Bool) -> b -> BuiltinFn b i
-compareStrFn op = mkBuiltinFn \case
-  [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (op i i')))
-  _ -> failInvariant "str cmp function"
-{-# INLINE compareStrFn #-}
+-- compareStrFn :: BuiltinArity b => (Text -> Text -> Bool) -> b -> BuiltinFn b i
+-- compareStrFn op = mkBuiltinFn \case
+--   [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (op i i')))
+--   _ -> failInvariant "str cmp function"
+-- {-# INLINE compareStrFn #-}
 
 roundingFn :: BuiltinArity b => (Rational -> Integer) -> b -> BuiltinFn b i
 roundingFn op = mkBuiltinFn \case
@@ -295,41 +293,213 @@ roundingFn op = mkBuiltinFn \case
 ---------------------------------
 -- integer ops
 ------------------------------
-addInt :: BuiltinArity b => b -> BuiltinFn b i
-addInt = binaryIntFn (+)
+-- addInt :: BuiltinArity b => b -> BuiltinFn b i
+-- addInt = binaryIntFn (+)
 
-subInt :: BuiltinArity b => b -> BuiltinFn b i
-subInt = binaryIntFn (-)
+-- subInt :: BuiltinArity b => b -> BuiltinFn b i
+-- subInt = binaryIntFn (-)
 
-mulInt :: BuiltinArity b => b -> BuiltinFn b i
-mulInt = binaryIntFn (*)
+-- mulInt :: BuiltinArity b => b -> BuiltinFn b i
+-- mulInt = binaryIntFn (*)
 
-divInt :: BuiltinArity b => b -> BuiltinFn b i
-divInt = binaryIntFn quot
+-- divInt :: BuiltinArity b => b -> BuiltinFn b i
+-- divInt = binaryIntFn quot
 
-negateInt :: BuiltinArity b => b -> BuiltinFn b i
-negateInt = unaryIntFn negate
+-- negateInt :: BuiltinArity b => b -> BuiltinFn b i
+-- negateInt = unaryIntFn negate
 
-modInt :: BuiltinArity b => b -> BuiltinFn b i
-modInt = binaryIntFn mod
+-- modInt :: BuiltinArity b => b -> BuiltinFn b i
+-- modInt = binaryIntFn mod
 
-eqInt :: BuiltinArity b => b -> BuiltinFn b i
-eqInt = compareIntFn (==)
+-- eqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- eqInt = compareIntFn (==)
 
-neqInt :: BuiltinArity b => b -> BuiltinFn b i
-neqInt = compareIntFn (/=)
+-- neqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- neqInt = compareIntFn (/=)
 
-gtInt :: BuiltinArity b => b -> BuiltinFn b i
-gtInt = compareIntFn (>)
+-- gtInt :: BuiltinArity b => b -> BuiltinFn b i
+-- gtInt = compareIntFn (>)
 
-ltInt :: BuiltinArity b => b -> BuiltinFn b i
-ltInt = compareIntFn (<)
+-- ltInt :: BuiltinArity b => b -> BuiltinFn b i
+-- ltInt = compareIntFn (<)
 
-geqInt :: BuiltinArity b => b -> BuiltinFn b i
-geqInt = compareIntFn (>=)
+-- geqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- geqInt = compareIntFn (>=)
 
-leqInt :: BuiltinArity b => b -> BuiltinFn b i
-leqInt = compareIntFn (<=)
+-- leqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- leqInt = compareIntFn (<=)
+
+-- bitAndInt :: BuiltinArity b => b -> BuiltinFn b i
+-- bitAndInt = binaryIntFn (.&.)
+
+-- bitOrInt :: BuiltinArity b => b -> BuiltinFn b i
+-- bitOrInt = binaryIntFn (.|.)
+
+-- bitComplementInt :: BuiltinArity b => b -> BuiltinFn b i
+-- bitComplementInt = unaryIntFn complement
+
+-- bitXorInt :: BuiltinArity b => b -> BuiltinFn b i
+-- bitXorInt = binaryIntFn xor
+
+-- bitShiftInt :: BuiltinArity b => b -> BuiltinFn b i
+-- bitShiftInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i), VLiteral (LInteger s)] ->
+--     pure (VLiteral (LInteger (shift i (fromIntegral s))))
+--   _ -> failInvariant "bit-shift-int"
+
+-- absInt :: BuiltinArity b => b -> BuiltinFn b i
+-- absInt = unaryIntFn abs
+
+-- expInt :: BuiltinArity b => b -> BuiltinFn b i
+-- expInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
+--   _ -> failInvariant "expInt"
+
+-- lnInt :: BuiltinArity b => b -> BuiltinFn b i
+-- lnInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
+--   _ -> failInvariant "lnInt"
+
+-- sqrtInt :: BuiltinArity b => b -> BuiltinFn b i
+-- sqrtInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
+--   _ -> failInvariant "sqrtInt"
+
+-- showInt :: BuiltinArity b => b -> BuiltinFn b i
+-- showInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LString (T.pack (show i))))
+--   _ -> failInvariant "showInt"
+
+-- -------------------------
+-- double ops
+-- -------------------------
+
+-- addDec :: BuiltinArity b => b -> BuiltinFn b i
+-- addDec = binaryDecFn (+)
+
+-- subDec :: BuiltinArity b => b -> BuiltinFn b i
+-- subDec = binaryDecFn (-)
+
+-- mulDec :: BuiltinArity b => b -> BuiltinFn b i
+-- mulDec = binaryDecFn (*)
+
+-- divDec :: BuiltinArity b => b -> BuiltinFn b i
+-- divDec = binaryDecFn (/)
+
+-- negateDec :: BuiltinArity b => b -> BuiltinFn b i
+-- negateDec = unaryDecFn negate
+
+-- absDec :: BuiltinArity b => b -> BuiltinFn b i
+-- absDec = unaryDecFn abs
+
+-- eqDec :: BuiltinArity b => b -> BuiltinFn b i
+-- eqDec = compareDecFn (==)
+
+-- neqDec :: BuiltinArity b => b -> BuiltinFn b i
+-- neqDec = compareDecFn (/=)
+
+-- gtDec :: BuiltinArity b => b -> BuiltinFn b i
+-- gtDec = compareDecFn (>)
+
+-- geqDec :: BuiltinArity b => b -> BuiltinFn b i
+-- geqDec = compareDecFn (>=)
+
+-- ltDec :: BuiltinArity b => b -> BuiltinFn b i
+-- ltDec = compareDecFn (<)
+
+-- leqDec :: BuiltinArity b => b -> BuiltinFn b i
+-- leqDec = compareDecFn (<=)
+
+-- showDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- showDec = mkBuiltinFn \case
+--   [VLiteral (LDecimal i)] ->
+--     pure (VLiteral (LString (T.pack (show i))))
+--   _ -> failInvariant "showDec"
+
+dec2F :: Decimal -> Double
+dec2F = fromRational . toRational
+
+f2Dec :: Double -> Decimal
+f2Dec = fromRational . toRational
+
+roundDec :: BuiltinArity b => b -> BuiltinFn b i
+roundDec = roundingFn round
+floorDec :: BuiltinArity b => b -> BuiltinFn b i
+floorDec = roundingFn floor
+ceilingDec :: BuiltinArity b => b -> BuiltinFn b i
+ceilingDec = roundingFn ceiling
+
+-- expDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- expDec = unaryDecFn (f2Dec . exp . dec2F)
+
+-- lnDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- lnDec = unaryDecFn (f2Dec . log . dec2F)
+
+-- sqrtDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- sqrtDec = unaryDecFn (f2Dec . sqrt . dec2F)
+
+---------------------------
+-- bool ops
+---------------------------
+andBool :: BuiltinArity b => b -> BuiltinFn b i
+andBool = binaryBoolFn (&&)
+
+orBool :: BuiltinArity b => b -> BuiltinFn b i
+orBool = binaryBoolFn (||)
+
+notBool :: BuiltinArity b => b -> BuiltinFn b i
+notBool = mkBuiltinFn \case
+  [VLiteral (LBool i)] -> pure (VLiteral (LBool (not i)))
+  _ -> failInvariant "notBool"
+
+-- eqBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- eqBool = binaryBoolFn (==)
+
+-- neqBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- neqBool = binaryBoolFn (/=)
+
+-- showBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- showBool = mkBuiltinFn \case
+--   [VLiteral (LBool i)] -> do
+--     let out = if i then "true" else "false"addInt :: BuiltinArity b => b -> BuiltinFn b i
+-- addInt = binaryIntFn (+)
+
+-- subInt :: BuiltinArity b => b -> BuiltinFn b i
+-- subInt = binaryIntFn (-)
+
+-- mulInt :: BuiltinArity b => b -> BuiltinFn b i
+-- mulInt = binaryIntFn (*)
+
+-- divInt :: BuiltinArity b => b -> BuiltinFn b i
+-- divInt = binaryIntFn quot
+
+-- negateInt :: BuiltinArity b => b -> BuiltinFn b i
+-- negateInt = unaryIntFn negate
+
+-- modInt :: BuiltinArity b => b -> BuiltinFn b i
+-- modInt = binaryIntFn mod
+
+-- eqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- eqInt = compareIntFn (==)
+
+-- neqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- neqInt = compareIntFn (/=)
+
+-- gtInt :: BuiltinArity b => b -> BuiltinFn b i
+-- gtInt = compareIntFn (>)
+
+-- ltInt :: BuiltinArity b => b -> BuiltinFn b i
+-- ltInt = compareIntFn (<)
+
+-- geqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- geqInt = compareIntFn (>=)
+
+-- leqInt :: BuiltinArity b => b -> BuiltinFn b i
+-- leqInt = compareIntFn (<=)
 
 bitAndInt :: BuiltinArity b => b -> BuiltinFn b i
 bitAndInt = binaryIntFn (.&.)
@@ -349,225 +519,118 @@ bitShiftInt = mkBuiltinFn \case
     pure (VLiteral (LInteger (shift i (fromIntegral s))))
   _ -> failInvariant "bit-shift-int"
 
-absInt :: BuiltinArity b => b -> BuiltinFn b i
-absInt = unaryIntFn abs
+-- absInt :: BuiltinArity b => b -> BuiltinFn b i
+-- absInt = unaryIntFn abs
 
-expInt :: BuiltinArity b => b -> BuiltinFn b i
-expInt = mkBuiltinFn \case
-  [VLiteral (LInteger i)] ->
-    pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
-  _ -> failInvariant "expInt"
+-- expInt :: BuiltinArity b => b -> BuiltinFn b i
+-- expInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
+--   _ -> failInvariant "expInt"
 
-lnInt :: BuiltinArity b => b -> BuiltinFn b i
-lnInt = mkBuiltinFn \case
-  [VLiteral (LInteger i)] ->
-    pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
-  _ -> failInvariant "lnInt"
+-- lnInt :: BuiltinArity b => b -> BuiltinFn b i
+-- lnInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
+--   _ -> failInvariant "lnInt"
 
-sqrtInt :: BuiltinArity b => b -> BuiltinFn b i
-sqrtInt = mkBuiltinFn \case
-  [VLiteral (LInteger i)] ->
-    pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
-  _ -> failInvariant "sqrtInt"
+-- sqrtInt :: BuiltinArity b => b -> BuiltinFn b i
+-- sqrtInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
+--   _ -> failInvariant "sqrtInt"
 
-showInt :: BuiltinArity b => b -> BuiltinFn b i
-showInt = mkBuiltinFn \case
-  [VLiteral (LInteger i)] ->
-    pure (VLiteral (LString (T.pack (show i))))
-  _ -> failInvariant "showInt"
+-- showInt :: BuiltinArity b => b -> BuiltinFn b i
+-- showInt = mkBuiltinFn \case
+--   [VLiteral (LInteger i)] ->
+--     pure (VLiteral (LString (T.pack (show i))))
+--   _ -> failInvariant "showInt"
 
--- -------------------------
--- double ops
--- -------------------------
+-- geqStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- geqStr = compareStrFn (>=)
 
-addDec :: BuiltinArity b => b -> BuiltinFn b i
-addDec = binaryDecFn (+)
+-- ltStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- ltStr = compareStrFn (<)
 
-subDec :: BuiltinArity b => b -> BuiltinFn b i
-subDec = binaryDecFn (-)
+-- leqStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- leqStr = compareStrFn (<=)
 
-mulDec :: BuiltinArity b => b -> BuiltinFn b i
-mulDec = binaryDecFn (*)
+-- addStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- addStr =  mkBuiltinFn \case
+--   [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LString (i <> i')))
+--   _ -> failInvariant "addStr"
 
-divDec :: BuiltinArity b => b -> BuiltinFn b i
-divDec = binaryDecFn (/)
+-- takeStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- takeStr = mkBuiltinFn \case
+--   [VLiteral (LInteger i), VLiteral (LString t)] -> do
+--     pure (VLiteral (LString (T.take (fromIntegral i) t)))
+--   _ -> failInvariant "takeStr"
 
-negateDec :: BuiltinArity b => b -> BuiltinFn b i
-negateDec = unaryDecFn negate
+-- dropStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- dropStr = mkBuiltinFn \case
+--   [VLiteral (LInteger i), VLiteral (LString t)] -> do
+--     pure (VLiteral (LString (T.drop (fromIntegral i) t)))
+--   _ -> failInvariant "dropStr"
 
-absDec :: BuiltinArity b => b -> BuiltinFn b i
-absDec = unaryDecFn abs
+-- lengthStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- lengthStr = mkBuiltinFn \case
+--   [VLiteral (LString t)] -> do
+--     pure (VLiteral (LInteger (fromIntegral (T.length t))))
+--   _ -> failInvariant "lengthStr"
 
-eqDec :: BuiltinArity b => b -> BuiltinFn b i
-eqDec = compareDecFn (==)
+-- reverseStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- reverseStr = mkBuiltinFn \case
+--   [VLiteral (LString t)] -> do
+--     pure (VLiteral (LString (T.reverse t)))
+--   _ -> failInvariant "reverseStr"
 
-neqDec :: BuiltinArity b => b -> BuiltinFn b i
-neqDec = compareDecFn (/=)
+-- showStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- showStr = mkBuiltinFn \case
+--   [VLiteral (LString t)] -> do
+--     let out = "\"" <> t <> "\""
+--     pure (VLiteral (LString out))
+--   _ -> failInvariant "showStr"
 
-gtDec :: BuiltinArity b => b -> BuiltinFn b i
-gtDec = compareDecFn (>)
-
-geqDec :: BuiltinArity b => b -> BuiltinFn b i
-geqDec = compareDecFn (>=)
-
-ltDec :: BuiltinArity b => b -> BuiltinFn b i
-ltDec = compareDecFn (<)
-
-leqDec :: BuiltinArity b => b -> BuiltinFn b i
-leqDec = compareDecFn (<=)
-
-showDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-showDec = mkBuiltinFn \case
-  [VLiteral (LDecimal i)] ->
-    pure (VLiteral (LString (T.pack (show i))))
-  _ -> failInvariant "showDec"
-
-dec2F :: Decimal -> Double
-dec2F = fromRational . toRational
-
-f2Dec :: Double -> Decimal
-f2Dec = fromRational . toRational
-
-roundDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-roundDec = roundingFn round
-floorDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-floorDec = roundingFn floor
-ceilingDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-ceilingDec = roundingFn ceiling
-
-expDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-expDec = unaryDecFn (f2Dec . exp . dec2F)
-
-lnDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-lnDec = unaryDecFn (f2Dec . log . dec2F)
-
-sqrtDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-sqrtDec = unaryDecFn (f2Dec . sqrt . dec2F)
-
----------------------------
--- bool ops
----------------------------
-andBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-andBool = binaryBoolFn (&&)
-
-orBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-orBool = binaryBoolFn (||)
-
-notBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-notBool = mkBuiltinFn \case
-  [VLiteral (LBool i)] -> pure (VLiteral (LBool (not i)))
-  _ -> failInvariant "notBool"
-
-eqBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-eqBool = binaryBoolFn (==)
-
-neqBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-neqBool = binaryBoolFn (/=)
-
-showBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-showBool = mkBuiltinFn \case
-  [VLiteral (LBool i)] -> do
-    let out = if i then "true" else "false"
-    pure (VLiteral (LString out))
-  _ -> failInvariant "showBool"
-
----------------------------
--- string ops
----------------------------
-eqStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-eqStr = compareStrFn (==)
-
-neqStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-neqStr = compareStrFn (/=)
-
-gtStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-gtStr = compareStrFn (>)
-
-geqStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-geqStr = compareStrFn (>=)
-
-ltStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-ltStr = compareStrFn (<)
-
-leqStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-leqStr = compareStrFn (<=)
-
-addStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-addStr =  mkBuiltinFn \case
-  [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LString (i <> i')))
-  _ -> failInvariant "addStr"
-
-takeStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-takeStr = mkBuiltinFn \case
-  [VLiteral (LInteger i), VLiteral (LString t)] -> do
-    pure (VLiteral (LString (T.take (fromIntegral i) t)))
-  _ -> failInvariant "takeStr"
-
-dropStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-dropStr = mkBuiltinFn \case
-  [VLiteral (LInteger i), VLiteral (LString t)] -> do
-    pure (VLiteral (LString (T.drop (fromIntegral i) t)))
-  _ -> failInvariant "dropStr"
-
-lengthStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-lengthStr = mkBuiltinFn \case
-  [VLiteral (LString t)] -> do
-    pure (VLiteral (LInteger (fromIntegral (T.length t))))
-  _ -> failInvariant "lengthStr"
-
-reverseStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-reverseStr = mkBuiltinFn \case
-  [VLiteral (LString t)] -> do
-    pure (VLiteral (LString (T.reverse t)))
-  _ -> failInvariant "reverseStr"
-
-showStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-showStr = mkBuiltinFn \case
-  [VLiteral (LString t)] -> do
-    let out = "\"" <> t <> "\""
-    pure (VLiteral (LString out))
-  _ -> failInvariant "showStr"
-
-concatStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-concatStr = mkBuiltinFn \case
-  [VList li] -> do
-    li' <- traverse asString li
-    pure (VLiteral (LString (T.concat (V.toList li'))))
-  _ -> failInvariant "concatStr"
+-- concatStr :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- concatStr = mkBuiltinFn \case
+--   [VList li] -> do
+--     li' <- traverse asString li
+--     pure (VLiteral (LString (T.concat (V.toList li'))))
+--   _ -> failInvariant "concatStr"
 
 
 ---------------------------
 -- Unit ops
 ---------------------------
 
-eqUnit :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-eqUnit = mkBuiltinFn \case
-  [VLiteral LUnit, VLiteral LUnit] -> pure (VLiteral (LBool True))
-  _ -> failInvariant "eqUnit"
+-- eqUnit :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- eqUnit = mkBuiltinFn \case
+--   [VLiteral LUnit, VLiteral LUnit] -> pure (VLiteral (LBool True))
+--   _ -> failInvariant "eqUnit"
 
-neqUnit :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-neqUnit = mkBuiltinFn \case
-  [VLiteral LUnit, VLiteral LUnit] -> pure (VLiteral (LBool False))
-  _ -> failInvariant "neqUnit"
+-- neqUnit :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- neqUnit = mkBuiltinFn \case
+--   [VLiteral LUnit, VLiteral LUnit] -> pure (VLiteral (LBool False))
+--   _ -> failInvariant "neqUnit"
 
-showUnit :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-showUnit = mkBuiltinFn \case
-  [VLiteral LUnit] -> pure (VLiteral (LString "()"))
-  _ -> failInvariant "showUnit"
+-- showUnit :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- showUnit = mkBuiltinFn \case
+--   [VLiteral LUnit] -> pure (VLiteral (LString "()"))
+--   _ -> failInvariant "showUnit"
 
 ---------------------------
 -- Object ops
 ---------------------------
 
-eqObj :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-eqObj = mkBuiltinFn \case
-  [l@VObject{}, r@VObject{}] -> pure (VLiteral (LBool (unsafeEqCEKValue l r)))
-  _ -> failInvariant "eqObj"
+-- eqObj :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- eqObj = mkBuiltinFn \case
+--   [l@VObject{}, r@VObject{}] -> pure (VLiteral (LBool (unsafeEqCEKValue l r)))
+--   _ -> failInvariant "eqObj"
 
-neqObj :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-neqObj = mkBuiltinFn \case
-  [l@VObject{}, r@VObject{}] -> pure (VLiteral (LBool (unsafeNeqCEKValue l r)))
-  _ -> failInvariant "neqObj"
+-- neqObj :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- neqObj = mkBuiltinFn \case
+--   [l@VObject{}, r@VObject{}] -> pure (VLiteral (LBool (unsafeNeqCEKValue l r)))
+--   _ -> failInvariant "neqObj"
 
 
 ------------------------------
@@ -581,9 +644,9 @@ asString :: CEKValue b i -> EvalT b Text
 asString (VLiteral (LString b)) = pure b
 asString _ = failInvariant "asString"
 
-asList :: CEKValue b i -> EvalT b (Vector (CEKValue b i))
-asList (VList l) = pure l
-asList _ = failInvariant "asList"
+-- asList :: CEKValue b i -> EvalT b (Vector (CEKValue b i))
+-- asList (VList l) = pure l
+-- asList _ = failInvariant "asList"
 
 -- Todo: Likely this using `throw` is not a good idea.
 unsafeEqLiteral :: Literal -> Literal -> Bool
@@ -610,55 +673,55 @@ unsafeNeqCEKValue a b = not (unsafeEqCEKValue a b)
 
 ---------------------------
 -- list ops
----------------------------
-eqList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-eqList = mkBuiltinFn \case
-  [eqClo, VList l, VList r] ->
-    if V.length l /= V.length r then
-      pure (VLiteral (LBool False))
-    else do
-      v' <- V.zipWithM (\a b -> asBool =<< unsafeApplyTwo eqClo a b) l r
-      pure (VLiteral (LBool (and v')))
-  _ -> failInvariant "eqList"
+-- ---------------------------
+-- eqList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- eqList = mkBuiltinFn \case
+--   [eqClo, VList l, VList r] ->
+--     if V.length l /= V.length r then
+--       pure (VLiteral (LBool False))
+--     else do
+--       v' <- V.zipWithM (\a b -> asBool =<< unsafeApplyTwo eqClo a b) l r
+--       pure (VLiteral (LBool (and v')))
+--   _ -> failInvariant "eqList"
 
-neqList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-neqList = mkBuiltinFn \case
-  [neqClo, VList l, VList r] ->
-    if V.length l /= V.length r then
-      pure (VLiteral (LBool True))
-    else do
-      v' <- V.zipWithM (\a b -> asBool =<< unsafeApplyTwo neqClo a b) l r
-      pure (VLiteral (LBool (or v')))
-  _ -> failInvariant "neqList"
+-- neqList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- neqList = mkBuiltinFn \case
+--   [neqClo, VList l, VList r] ->
+--     if V.length l /= V.length r then
+--       pure (VLiteral (LBool True))
+--     else do
+--       v' <- V.zipWithM (\a b -> asBool =<< unsafeApplyTwo neqClo a b) l r
+--       pure (VLiteral (LBool (or v')))
+--   _ -> failInvariant "neqList"
 
-zipList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-zipList = mkBuiltinFn \case
+coreZip :: BuiltinArity b => b -> BuiltinFn b i
+coreZip = mkBuiltinFn \case
   [clo, VList l, VList r] -> do
     v' <- V.zipWithM (unsafeApplyTwo clo) l r
     pure (VList v')
   _ -> failInvariant "zipList"
 
-addList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-addList = mkBuiltinFn \case
-  [VList l, VList r] -> pure (VList (l <> r))
-  _ -> failInvariant "addList"
+-- addList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- addList = mkBuiltinFn \case
+--   [VList l, VList r] -> pure (VList (l <> r))
+--   _ -> failInvariant "addList"
 
-pcShowList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-pcShowList = mkBuiltinFn \case
-  [showFn, VList l1] -> do
-    strli <- traverse ((=<<) asString  . unsafeApplyOne showFn) (V.toList l1)
-    let out = "[" <> T.intercalate ", " strli <> "]"
-    pure (VLiteral (LString out))
-  _ -> failInvariant "showList"
+-- pcShowList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- pcShowList = mkBuiltinFn \case
+--   [showFn, VList l1] -> do
+--     strli <- traverse ((=<<) asString  . unsafeApplyOne showFn) (V.toList l1)
+--     let out = "[" <> T.intercalate ", " strli <> "]"
+--     pure (VLiteral (LString out))
+--   _ -> failInvariant "showList"
 
-coreMap :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreMap :: BuiltinArity b => b -> BuiltinFn b i
 coreMap = mkBuiltinFn \case
   [fn, VList li] -> do
     li' <- traverse (unsafeApplyOne fn) li
     pure (VList li')
   _ -> failInvariant "map"
 
-coreFilter :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreFilter :: BuiltinArity b => b -> BuiltinFn b i
 coreFilter = mkBuiltinFn \case
   [fn, VList li] -> do
     let applyOne' arg = unsafeApplyOne fn arg >>= asBool
@@ -666,35 +729,45 @@ coreFilter = mkBuiltinFn \case
     pure (VList li')
   _ -> failInvariant "filter"
 
-coreFold :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreFold :: BuiltinArity b => b -> BuiltinFn b i
 coreFold = mkBuiltinFn \case
   [fn, initElem, VList li] -> V.foldM' (unsafeApplyTwo fn) initElem li
   _ -> failInvariant "fold"
 
-lengthList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-lengthList = mkBuiltinFn \case
+
+coreLength :: BuiltinArity b => b -> BuiltinFn b i
+coreLength = mkBuiltinFn \case
+  [VLiteral (LString t)] -> do
+    pure (VLiteral (LInteger (fromIntegral (T.length t))))
   [VList li] -> pure (VLiteral (LInteger (fromIntegral (V.length li))))
-  _ -> failInvariant "lengthList"
+  [VObject o] -> pure (VLiteral (LInteger (fromIntegral (Map.size o))))
+  _ -> failInvariant "length"
 
-takeList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-takeList = mkBuiltinFn \case
-  [VLiteral (LInteger i), VList li] ->
-    pure (VList (V.take (fromIntegral i) li))
-  _ -> failInvariant "takeList"
 
-dropList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-dropList = mkBuiltinFn \case
-  [VLiteral (LInteger i), VList li] ->
-    pure (VList (V.drop (fromIntegral i) li))
-  _ -> failInvariant "dropList"
+-- lengthList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- lengthList = mkBuiltinFn \case
+--   [VList li] -> pure (VLiteral (LInteger (fromIntegral (V.length li))))
+--   _ -> failInvariant "lengthList"
 
-reverseList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-reverseList = mkBuiltinFn \case
-  [VList li] ->
-    pure (VList (V.reverse li))
-  _ -> failInvariant "takeList"
+-- takeList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- takeList = mkBuiltinFn \case
+--   [VLiteral (LInteger i), VList li] ->
+--     pure (VList (V.take (fromIntegral i) li))
+--   _ -> failInvariant "takeList"
 
-coreEnumerate :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- dropList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- dropList = mkBuiltinFn \case
+--   [VLiteral (LInteger i), VList li] ->
+--     pure (VList (V.drop (fromIntegral i) li))
+--   _ -> failInvariant "dropList"
+
+-- reverseList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+-- reverseList = mkBuiltinFn \case
+--   [VList li] ->
+--     pure (VList (V.reverse li))
+  -- _ -> failInvariant "takeList"
+
+coreEnumerate :: BuiltinArity b => b -> BuiltinFn b i
 coreEnumerate = mkBuiltinFn \case
   [VLiteral (LInteger from'), VLiteral (LInteger to')] -> enum' from' to'
   _ -> failInvariant "enumerate"
@@ -704,7 +777,7 @@ coreEnumerate = mkBuiltinFn \case
     | to' >= from' = pure $ toVecList $ V.enumFromN from' (fromIntegral (to' - from' + 1))
     | otherwise = pure $ toVecList $ V.enumFromStepN from' (-1) (fromIntegral (from' - to' + 1))
 
-coreEnumerateStepN :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreEnumerateStepN :: BuiltinArity b => b -> BuiltinFn b i
 coreEnumerateStepN = mkBuiltinFn \case
   [VLiteral (LInteger from'), VLiteral (LInteger to'), VLiteral (LInteger step)] -> enum' from' to' step
   _ -> failInvariant "enumerate-step"
@@ -716,22 +789,45 @@ coreEnumerateStepN = mkBuiltinFn \case
     | from' == to' && step == 0 = pure $ toVecList $ V.singleton from'
     | otherwise = throwM (EnumeratationError "enumerate outside interval bounds")
 
-concatList :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-concatList = mkBuiltinFn \case
-  [VList li] -> do
-    li' <- traverse asList li
-    pure (VList (V.concat (V.toList li')))
+coreTake :: BuiltinArity b => b -> BuiltinFn b i
+coreTake = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LString t)] -> do
+    pure (VLiteral (LString (T.take (fromIntegral i) t)))
+  [VLiteral (LInteger i), VList li] ->
+    pure (VList (V.take (fromIntegral i) li))
+  _ -> failInvariant "takeStr"
+
+coreDrop :: BuiltinArity b => b -> BuiltinFn b i
+coreDrop = mkBuiltinFn \case
+  [VLiteral (LInteger i), VLiteral (LString t)] -> do
+    pure (VLiteral (LString (T.drop (fromIntegral i) t)))
+  [VLiteral (LInteger i), VList li] ->
+    pure (VList (V.drop (fromIntegral i) li))
+  _ -> failInvariant "dropStr"
+
+coreReverse :: BuiltinArity b => b -> BuiltinFn b i
+coreReverse = mkBuiltinFn \case
+  [VList li] ->
+    pure (VList (V.reverse li))
+  [VLiteral (LString s)] ->
+    pure (VLiteral (LString (T.reverse s)))
   _ -> failInvariant "takeList"
 
+coreConcat :: BuiltinArity b => b -> BuiltinFn b i
+coreConcat = mkBuiltinFn \case
+  [VList li] -> do
+    li' <- traverse asString li
+    pure (VLiteral (LString (T.concat (V.toList li'))))
+  _ -> failInvariant "concatStr"
 
-coreEnforce :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreEnforce :: BuiltinArity b => b -> BuiltinFn b i
 coreEnforce = mkBuiltinFn \case
   [VLiteral (LBool b), VLiteral (LString s)] ->
     if b then pure (VLiteral LUnit)
     else throwM (EnforceException s)
   _ -> failInvariant "enforce"
 
-coreEnforceOne :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreEnforceOne :: BuiltinArity b => b -> BuiltinFn b i
 coreEnforceOne = mkBuiltinFn \case
   [VList v, VLiteral (LString msg)] ->
     enforceFail msg (V.toList v)
@@ -752,7 +848,7 @@ readError :: Text -> Text -> Text
 readError field expected =
   "invalid value at field " <> field <> " expected: " <> expected
 
-coreReadInteger :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreReadInteger :: BuiltinArity b => b -> BuiltinFn b i
 coreReadInteger = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
@@ -762,7 +858,7 @@ coreReadInteger = mkBuiltinFn \case
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-integer"
 
-coreReadString :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreReadString :: BuiltinArity b => b -> BuiltinFn b i
 coreReadString = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
@@ -772,7 +868,7 @@ coreReadString = mkBuiltinFn \case
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-string"
 
-coreReadDecimal :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreReadDecimal :: BuiltinArity b => b -> BuiltinFn b i
 coreReadDecimal = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
@@ -792,7 +888,7 @@ coreReadObject ty = \case
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "readObject"
 
-coreReadKeyset :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreReadKeyset :: BuiltinArity b => b -> BuiltinFn b i
 coreReadKeyset = mkBuiltinFn \case
   [VLiteral (LString s)] ->
     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
@@ -820,12 +916,12 @@ coreReadKeyset = mkBuiltinFn \case
     pure (KeySet ks kspred)
 
 
-coreKeysetRefGuard :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreKeysetRefGuard :: BuiltinArity b => b -> BuiltinFn b i
 coreKeysetRefGuard = mkBuiltinFn \case
   [VLiteral (LString s)] -> pure (VGuard (GKeySetRef (KeySetName s)))
   _ -> failInvariant "keyset-ref-guard"
 
-coreEnforceGuard :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreEnforceGuard :: BuiltinArity b => b -> BuiltinFn b i
 coreEnforceGuard = mkBuiltinFn \case
   [VGuard v] -> case v of
     GKeyset ks -> enforceKeySet ks
@@ -858,12 +954,12 @@ enforceUserGuard = \case
     _ -> failInvariant "expected a function returning unit"
   _ -> failInvariant "invalid type for user closure"
 
-createUserGuard :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+createUserGuard :: BuiltinArity b => b -> BuiltinFn b i
 createUserGuard = mkBuiltinFn \case
   [v@VClosure{}] -> pure (VGuard (GUserGuard v))
   _ -> failInvariant "create-user-guard"
 
-listAccess :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+listAccess :: BuiltinArity b => b -> BuiltinFn b i
 listAccess = mkBuiltinFn \case
   [VLiteral (LInteger i), VList vec] ->
     case vec V.!? fromIntegral i of
@@ -875,20 +971,20 @@ listAccess = mkBuiltinFn \case
 -- Other Core forms
 -----------------------------------
 
-coreIf :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreIf :: BuiltinArity b => b -> BuiltinFn b i
 coreIf = mkBuiltinFn \case
   [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
     if b then eval tenv tbody else  eval fenv fbody
   _ -> failInvariant "if"
 
-coreB64Encode :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreB64Encode :: BuiltinArity b => b -> BuiltinFn b i
 coreB64Encode = mkBuiltinFn \case
   [VLiteral (LString l)] ->
     pure $ VLiteral $ LString $ toB64UrlUnpaddedText $ T.encodeUtf8 l
   _ -> failInvariant "base64-encode"
 
 
-coreB64Decode :: CoreBuiltin -> BuiltinFn CoreBuiltin i
+coreB64Decode :: BuiltinArity b => b -> BuiltinFn b i
 coreB64Decode = mkBuiltinFn \case
   [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
     Left{} -> throwM (DecodeError "invalid b64 encoding")
@@ -908,211 +1004,76 @@ failInvariant :: Text -> EvalT b a
 failInvariant b =
   throwM (FatalExecutionError ("invariant failure, native arg failure: " <> b))
 
-coreBuiltinFn :: CoreBuiltin -> BuiltinFn CoreBuiltin i
-coreBuiltinFn = \case
-  -- Int Add + num ops
-  AddInt -> addInt AddInt
-  SubInt -> subInt SubInt
-  DivInt -> divInt DivInt
-  MulInt -> mulInt MulInt
-  NegateInt -> negateInt NegateInt
-  AbsInt -> absInt AbsInt
-  -- Int fractional
-  ExpInt -> expInt ExpInt
-  LnInt -> lnInt LnInt
-  SqrtInt -> sqrtInt SqrtInt
-  LogBaseInt -> unimplemented
-  -- Geenral int ops
-  ModInt -> modInt ModInt
-  BitAndInt -> bitAndInt BitAndInt
-  BitOrInt -> bitOrInt BitOrInt
-  BitXorInt ->  bitXorInt BitXorInt
-  BitShiftInt -> bitShiftInt BitShiftInt
-  BitComplementInt -> bitComplementInt BitComplementInt
-  -- Int Equality + Ord
-  EqInt -> eqInt EqInt
-  NeqInt -> neqInt NeqInt
-  GTInt -> gtInt GTInt
-  GEQInt -> geqInt GEQInt
-  LTInt -> ltInt LTInt
-  LEQInt -> leqInt LEQInt
-  -- IntShow inst
-  ShowInt -> showInt ShowInt
-  -- If
-  IfElse -> coreIf IfElse
-  -- Decimal ops
-  -- Add + Num
-  AddDec -> addDec AddDec
-  SubDec -> subDec SubDec
-  DivDec -> divDec DivDec
-  MulDec -> mulDec MulDec
-  NegateDec -> negateDec NegateDec
-  AbsDec -> absDec AbsDec
-  -- Decimal rounding ops
-  RoundDec -> roundDec RoundDec
-  CeilingDec -> ceilingDec CeilingDec
-  FloorDec -> floorDec FloorDec
-  -- Decimal fractional
-  ExpDec -> expDec ExpDec
-  LnDec -> lnDec LnDec
-  LogBaseDec -> unimplemented
-  SqrtDec -> sqrtDec SqrtDec
-  -- Decimal show
-  ShowDec -> showDec ShowDec
-  -- Decimal Equality + Ord
-  EqDec -> eqDec EqDec
-  NeqDec -> neqDec NeqDec
-  GTDec -> gtDec GTDec
-  GEQDec -> geqDec GEQDec
-  LTDec -> ltDec LTDec
-  LEQDec -> leqDec LEQDec
-  -- Bool Ops
-  AndBool -> andBool AndBool
-  OrBool -> orBool OrBool
-  NotBool -> notBool NotBool
-  -- Bool Equality
-  EqBool -> eqBool EqBool
-  NeqBool -> neqBool NeqBool
-  ShowBool -> showBool ShowBool
-  -- String Equality + Ord
-  EqStr -> eqStr EqStr
-  NeqStr -> neqStr NeqStr
-  GTStr -> gtStr GTStr
-  GEQStr -> geqStr GEQStr
-  LTStr -> ltStr LTStr
-  LEQStr -> leqStr LEQStr
-  -- String Ops
-  AddStr -> addStr AddStr
-  -- String listlike
-  ConcatStr -> concatStr ConcatStr
-  DropStr -> dropStr DropStr
-  TakeStr -> takeStr TakeStr
-  LengthStr -> lengthStr LengthStr
-  ReverseStr -> reverseStr ReverseStr
-  -- String show
-  ShowStr -> showStr ShowStr
-  -- Object equality
-  EqObj -> eqObj EqObj
-  NeqObj -> neqObj NeqObj
-  -- List Equality + Ord
-  EqList -> eqList EqList
-  NeqList -> neqList NeqList
-  GTList -> unimplemented
-  GEQList -> unimplemented
-  LTList -> unimplemented
-  LEQList -> unimplemented
-  -- List Show
-  ShowList -> pcShowList ShowList
-  -- ListAdd
-  AddList -> addList AddList
-  -- List ListlLike
-  TakeList -> takeList TakeList
-  DropList -> dropList DropList
-  LengthList -> lengthList LengthList
-  ConcatList -> concatList ConcatList
-  ReverseList -> reverseList ReverseList
-  -- misc list ops
-  FilterList -> coreFilter FilterList
-  DistinctList -> unimplemented
-  ZipList -> zipList ZipList
-  MapList -> coreMap MapList
-  FoldList -> coreFold FoldList
-  -- Unit ops
-  EqUnit -> eqUnit EqUnit
-  NeqUnit -> neqUnit NeqUnit
-  ShowUnit -> showUnit ShowUnit
-  Enforce -> coreEnforce Enforce
-  EnforceOne -> coreEnforceOne EnforceOne
-  Enumerate -> coreEnumerate Enumerate
-  EnumerateStepN -> coreEnumerateStepN EnumerateStepN
-  ReadInteger -> coreReadInteger ReadInteger
-  ReadDecimal -> coreReadDecimal ReadDecimal
-  ReadString -> coreReadString ReadString
-  ReadKeyset -> coreReadKeyset ReadKeyset
-  EnforceGuard -> coreEnforceGuard EnforceGuard
-  KeysetRefGuard -> coreKeysetRefGuard KeysetRefGuard
-  CreateUserGuard -> createUserGuard CreateUserGuard
-  ListAccess -> listAccess ListAccess
-  B64Encode -> coreB64Encode B64Encode
-  B64Decode -> coreB64Decode B64Decode
-
-coreBuiltinRuntime :: Array.Array (BuiltinFn CoreBuiltin i)
-coreBuiltinRuntime = Array.arrayFromList (coreBuiltinFn <$> [minBound .. maxBound])
-
 rawBuiltinFn :: RawBuiltin -> BuiltinFn RawBuiltin i
 rawBuiltinFn = \case
   RawAdd -> addBuiltin RawAdd
-  -- Num -> unimplemented
+  -- Num
   RawSub -> subBuiltin RawSub
   RawMultiply -> mulBuiltin RawMultiply
   RawDivide -> divBuiltin RawDivide
   RawNegate -> negateBuiltin RawNegate
   RawAbs -> absBuiltin RawAbs
-  -- Boolean Ops -> unimplemented
-  RawAnd -> unimplemented
-  RawOr -> unimplemented
-  RawNot -> unimplemented
-  -- Equality and Comparisons -> unimplemented
+  -- Boolean Ops
+  RawAnd -> andBool RawAnd
+  RawOr -> orBool RawOr
+  RawNot -> notBool RawNot
+  -- Equality and Comparisons
   RawEq -> eqBuiltin RawEq
   RawNeq -> neqBuiltin RawNeq
-  -- Ord -> unimplemented
+  -- Ord
   RawGT -> gtBuiltin RawGT
   RawGEQ -> geqBuiltin RawGEQ
   RawLT -> ltBuiltin RawLT
   RawLEQ -> leqBuiltin RawLEQ
-  -- Bitwise Ops -> unimplemented
-  RawBitwiseAnd -> unimplemented
-  RawBitwiseOr -> unimplemented
-  RawBitwiseXor -> unimplemented
-  RawBitwiseFlip -> unimplemented
-  RawBitShift -> unimplemented
-  --  Rounding -> unimplemented
-  RawRound -> unimplemented
-  RawCeiling -> unimplemented
-  RawFloor -> unimplemented
-  -- Fractional -> unimplemented
-  RawExp -> unimplemented
-  RawLn -> unimplemented
-  RawSqrt -> unimplemented
+  -- Bitwise Ops
+  RawBitwiseAnd -> bitAndInt RawBitwiseAnd
+  RawBitwiseOr -> bitOrInt RawBitwiseOr
+  RawBitwiseXor -> bitXorInt RawBitwiseXor
+  RawBitwiseFlip -> bitComplementInt RawBitwiseFlip
+  RawBitShift -> bitShiftInt RawBitShift
+  --  Rounding
+  RawRound -> roundDec RawRound
+  RawCeiling -> ceilingDec RawCeiling
+  RawFloor -> floorDec RawFloor
+  -- Fractional
+  RawExp -> coreExp RawExp
+  RawLn -> coreLn RawLn
+  RawSqrt -> coreSqrt RawSqrt
   RawLogBase -> unimplemented
-  -- List like -> unimplemented
-  RawLength -> unimplemented
-  RawTake -> unimplemented
-  RawDrop -> unimplemented
-  RawConcat -> unimplemented
-  RawReverse -> unimplemented
-  -- General -> unimplemented
+  -- List like
+  RawLength -> coreLength RawLength
+  RawTake -> coreTake RawTake
+  RawDrop -> coreDrop RawDrop
+  RawConcat -> coreConcat RawConcat
+  RawReverse -> coreReverse RawReverse
+  -- General
   RawMod -> modBuiltin RawMod
-  RawMap -> unimplemented
-  RawFilter -> unimplemented
-  RawZip -> unimplemented
-  RawIf -> unimplemented
+  RawMap -> coreMap RawMap
+  RawFilter -> coreFilter RawFilter
+  RawZip -> coreZip RawZip
+  RawIf -> coreIf RawIf
   RawIntToStr -> unimplemented
   RawStrToInt -> unimplemented
-  RawFold -> unimplemented
-  RawDistinct -> unimplemented
-  RawEnforce -> unimplemented
-  RawEnforceOne -> unimplemented
-  RawEnumerate -> unimplemented
-  RawEnumerateStepN -> unimplemented
-  -- Show -> unimplemented
+  RawFold -> coreFold RawFold
+  RawDistinct -> coreFold RawDistinct
+  RawEnforce -> coreEnforce RawEnforce
+  RawEnforceOne -> coreEnforceOne RawEnforceOne
+  RawEnumerate -> coreEnumerate RawEnumerate
+  RawEnumerateStepN -> coreEnumerateStepN RawEnumerateStepN
   RawShow -> unimplemented
-  RawReadInteger -> unimplemented
-  RawReadDecimal -> unimplemented
-  RawReadString -> unimplemented
-  RawReadKeyset -> unimplemented
-  RawEnforceGuard -> unimplemented
-  RawKeysetRefGuard -> unimplemented
-  RawCreateUserGuard -> unimplemented
-  RawListAccess -> unimplemented
-  RawB64Encode -> unimplemented
-  RawB64Decode -> unimplemented
+  RawReadInteger -> coreReadInteger RawReadInteger
+  RawReadDecimal -> coreReadDecimal RawReadDecimal
+  RawReadString -> coreReadString RawReadString
+  RawReadKeyset -> coreReadKeyset RawReadKeyset
+  RawEnforceGuard -> coreEnforceGuard RawEnforceGuard
+  RawKeysetRefGuard -> coreKeysetRefGuard RawKeysetRefGuard
+  RawCreateUserGuard -> createUserGuard RawCreateUserGuard
+  RawListAccess -> listAccess RawListAccess
+  RawB64Encode -> coreB64Encode RawB64Encode
+  RawB64Decode -> coreB64Decode RawB64Decode
 
 rawBuiltinRuntime :: Array.Array (BuiltinFn RawBuiltin i)
 rawBuiltinRuntime = Array.arrayFromList (rawBuiltinFn <$> [minBound .. maxBound])
-
-
-
 
 -- TODO: Coercions between int/double
 addBuiltin :: BuiltinArity b => b -> BuiltinFn b i
@@ -1202,11 +1163,35 @@ negateBuiltin = mkBuiltinFn \case
   [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (negate i)))
   _ -> failInvariant "cmp function"
 
+--------------------------------------------------------------------
+--- Transcendentals!!!
+-- Note: use musl
+----------------------------------------------------------------
+coreExp :: BuiltinArity b => b -> BuiltinFn b i
+coreExp = mkBuiltinFn \case
+  [VLiteral (LInteger i)] ->
+    pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
+  [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal ((f2Dec . exp . dec2F) i)))
+  _ -> failInvariant "expInt"
+
+coreLn :: BuiltinArity b => b -> BuiltinFn b i
+coreLn = mkBuiltinFn \case
+  [VLiteral (LInteger i)] ->
+    pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
+  [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal ((f2Dec . log . dec2F) i)))
+  _ -> failInvariant "lnInt"
+
+coreSqrt :: BuiltinArity b => b -> BuiltinFn b i
+coreSqrt = mkBuiltinFn \case
+  [VLiteral (LInteger i)] ->
+    pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
+  [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal ((f2Dec . sqrt . dec2F) i)))
+  _ -> failInvariant "sqrtInt"
+
 
 -- fractionalNumericFn op = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LDecimal (f2Dec (op (fromIntegral i)))))
-
 --   _ -> failInvariant "expInt"
 
 -- expInt :: BuiltinArity b => b -> BuiltinFn b i
