@@ -29,6 +29,7 @@ module Pact.Core.Untyped.Eval.CEK
  , CEKRuntime
  , runCEK
  , runCoreCEK
+ , runRawCEK
  , Cont(..)
  , coreBuiltinRuntime
  , rawBuiltinRuntime
@@ -187,6 +188,21 @@ runCoreCEK
   -> IO (CEKValue CoreBuiltin i, CEKState CoreBuiltin)
 runCoreCEK env =
   runCEK env coreBuiltinRuntime
+
+
+-- | Run our CEK interpreter
+--   for only our core builtins
+runRawCEK
+  :: CEKTLEnv RawBuiltin i
+  -- ^ Top levels
+  -> RuntimeEnv RawBuiltin i
+  -- ^ Runtime environment
+  -> EvalTerm RawBuiltin i
+  -- ^ Term to evaluate
+  -> IO (CEKValue RawBuiltin i, CEKState RawBuiltin)
+runRawCEK env =
+  runCEK env rawBuiltinRuntime
+
 
 ----------------------------------------------------------------------
 -- Our builtin definitions start here

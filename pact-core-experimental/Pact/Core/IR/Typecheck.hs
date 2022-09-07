@@ -975,8 +975,6 @@ inferTerm = \case
     pure (ty, term', preds)
   -- TODO: note,
   -- for this to work, we have to have proper bidirectionality working, including scoped type variables working fine
-  IR.DynAccess {} ->
-    error "todo: Dyn access"
   IR.Constant l i ->
     pure (typeOfLit l, Typed.Constant l i,[])
   -- note: object literals are closed rows.

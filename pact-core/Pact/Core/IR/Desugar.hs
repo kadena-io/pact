@@ -30,7 +30,6 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
-import Data.IORef
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
 import qualified Data.Map.Strict as Map
@@ -84,15 +83,15 @@ import qualified Pact.Core.Untyped.Term as Term
 
 data RenamerEnv b i
   = RenamerEnv
-  { _reBinds :: Map Text (IRNameKind, Unique)
-  , _reSupply :: IORef Supply
+  { _reBinds :: Map Text NameKind
+  , _reVarDepth :: DeBruijn
   , _rePactDb :: PactDb b i
   }
 makeLenses ''RenamerEnv
 
 data RenamerState b i
   = RenamerState
-  { _rsModuleBinds :: Map ModuleName (Map Text IRNameKind)
+  { _rsModuleBinds :: Map ModuleName (Map Text NameKind)
   , _rsLoaded :: Loaded b i
   , _rsDependencies :: Set ModuleName }
 
@@ -111,24 +110,13 @@ newtype RenamerM cb ci a =
 data DesugarOutput b i a
   = DesugarOutput
   { _dsOut :: a
-  , _dsSupply :: Supply
   , _dsLoaded :: Loaded b i
   , _dsDeps :: Set ModuleName
   } deriving (Show, Functor)
 
 dsOut :: Lens (DesugarOutput b i a) (DesugarOutput b i a') a a'
-dsOut f (DesugarOutput a s l d) =
-  f a <&> \a' -> DesugarOutput a' s l d
-
-newUnique' :: RenamerM cb ci Unique
-newUnique' = do
-  sup <- view reSupply
-  u <- liftIO (readIORef sup)
-  liftIO (modifyIORef' sup (+ 1))
-  pure u
-
-dummyTLUnique :: Unique
-dummyTLUnique = -1111
+dsOut f (DesugarOutput a l d) =
+  f a <&> \a' -> DesugarOutput a' l d
 
 class DesugarBuiltin b where
   builtinIf :: b
@@ -413,14 +401,14 @@ desugarBinary' = \case
 
 termSCC
   :: ModuleName
-  -> Term IRName b1 i1
+  -> Term Name b1 i1
   -> Set Text
 termSCC currM = conn
   where
   conn = \case
-    Var n _ -> case _irNameKind n of
-      IRTopLevel m _ | m == currM ->
-        Set.singleton (_irName n)
+    Var n _ -> case _nKind n of
+      NTopLevel m _ | m == currM ->
+        Set.singleton (_nName n)
       _ -> Set.empty
     Lam _ e _ -> conn e
     Let _ _ e1 e2 _ -> Set.union (conn e1) (conn e2)
@@ -428,23 +416,22 @@ termSCC currM = conn
       Set.union (conn fn) (foldMap conn apps)
     Block nel _ -> foldMap conn nel
     Builtin{} -> Set.empty
-    DynAccess{} -> Set.empty
     Constant{} -> Set.empty
     ObjectLit o _ -> foldMap conn o
     ListLit v _ -> foldMap conn v
     ObjectOp o _ -> foldMap conn o
 
 
-defunSCC :: ModuleName -> Defun IRName b i -> Set Text
+defunSCC :: ModuleName -> Defun Name b i -> Set Text
 defunSCC mn = termSCC mn . _dfunTerm
 
-defConstSCC :: ModuleName -> DefConst IRName b i -> Set Text
+defConstSCC :: ModuleName -> DefConst Name b i -> Set Text
 defConstSCC mn = termSCC mn . _dcTerm
 
-defCapSCC :: ModuleName -> DefCap IRName b i -> Set Text
+defCapSCC :: ModuleName -> DefCap Name b i -> Set Text
 defCapSCC mn = termSCC mn . _dcapTerm
 
-defSCC :: ModuleName -> Def IRName b i1 -> Set Text
+defSCC :: ModuleName -> Def Name b i1 -> Set Text
 defSCC mn = \case
   Dfun d -> defunSCC mn d
   DConst d -> defConstSCC mn d
@@ -459,7 +446,7 @@ defSCC mn = \case
 lookupModuleMember
   :: ModuleName
   -> Text
-  -> RenamerM cb ci IRName
+  -> RenamerM cb ci Name
 lookupModuleMember modName name = do
   view rePactDb >>= liftIO . (`_readModule` modName) >>= \case
     Just md -> let
@@ -476,7 +463,7 @@ lookupModuleMember modName name = do
           rsLoaded %= over loModules (Map.insert modName md) . over loAllLoaded (Map.union allDeps)
           rsModuleBinds %= Map.insert modName depMap
           rsDependencies %= Set.insert modName
-          pure (IRName name irtl dummyTLUnique)
+          pure (Name name irtl)
         -- Module exists, but it has no such member
         -- Todo: check whether the module name includes a namespace
         -- if it does not, we retry the lookup under the current namespace
@@ -484,7 +471,7 @@ lookupModuleMember modName name = do
     Nothing -> fail "no such module"
   where
   rawDefName def = Term.defName def
-  toDepMap mhash def = (rawDefName def, IRTopLevel modName mhash)
+  toDepMap mhash def = (rawDefName def, NTopLevel modName mhash)
   toFqDep mhash def = let
     fqn = FullyQualifiedName modName (rawDefName def) mhash
     in (fqn, def)
@@ -493,22 +480,31 @@ lookupModuleMember modName name = do
 -- emitting the list of dependent calls
 renameTerm
   :: Term ParsedName b i
-  -> RenamerM cb ci (Term IRName b i)
+  -> RenamerM cb ci (Term Name b i)
 renameTerm (Var n i) = (`Var` i) <$> resolveName n
 renameTerm (Lam nsts body i) = do
+  depth <- view reVarDepth
   let (pns, ts) = NE.unzip nsts
+      len = fromIntegral (NE.length nsts)
+      newDepth = depth + len
+      ixs = NE.fromList [depth .. newDepth - 1]
       ns = rawParsedName <$> pns
-  nUniques <- traverse (const newUnique') ns
-  let m = Map.fromList $ NE.toList $ NE.zip ns ((IRBound,) <$> nUniques)
-      ns' = NE.zipWith (`IRName` IRBound) ns nUniques
-  term' <- locally reBinds (Map.union m) (renameTerm body)
+  let m = Map.fromList $ NE.toList $ NE.zip ns (NBound <$> ixs)
+      ns' = NE.zipWith (\ix n -> Name n (NBound ix)) ixs ns
+  term' <- local (inEnv m newDepth) (renameTerm body)
   pure (Lam (NE.zip ns' ts) term' i)
+  where
+  inEnv m depth =
+    over reBinds (Map.union m) .
+    set reVarDepth depth
 renameTerm (Let name mt e1 e2 i) = do
-  nu <- newUnique'
+  depth <- view reVarDepth
   let rawName = rawParsedName name
-      name' = IRName rawName IRBound nu
+      name' = Name rawName (NBound depth)
+      inEnv = over reVarDepth succ .
+              over reBinds (Map.insert rawName (NBound depth))
   e1' <- renameTerm e1
-  e2' <- locally reBinds (Map.insert rawName (IRBound, nu)) (renameTerm e2)
+  e2' <- local inEnv (renameTerm e2)
   pure (Let name' mt e1' e2' i)
 renameTerm (App fn apps i) = do
   fn' <- renameTerm fn
@@ -518,7 +514,6 @@ renameTerm (Block exprs i) = do
   exprs' <- traverse renameTerm exprs
   pure (Block exprs' i)
 renameTerm (Builtin b i) = pure (Builtin b i)
-renameTerm DynAccess{} = fail "todo: implement"
 renameTerm (Constant l i) =
   pure (Constant l i)
 renameTerm (ObjectLit o i) =
@@ -530,7 +525,7 @@ renameTerm (ObjectOp o i) = do
 
 renameDefun
   :: Defun ParsedName b i
-  -> RenamerM cb ci (Defun IRName b i)
+  -> RenamerM cb ci (Defun Name b i)
 renameDefun (Defun n dty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   term' <- renameTerm term
@@ -538,7 +533,7 @@ renameDefun (Defun n dty term i) = do
 
 renameDefConst
   :: DefConst ParsedName b i
-  -> RenamerM cb ci (DefConst IRName b i)
+  -> RenamerM cb ci (DefConst Name b i)
 renameDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   term' <- renameTerm term
@@ -546,7 +541,7 @@ renameDefConst (DefConst n mty term i) = do
 
 renameDefCap
   :: DefCap ParsedName builtin info
-  -> RenamerM cb ci (DefCap IRName builtin info)
+  -> RenamerM cb ci (DefCap Name builtin info)
 renameDefCap (DefCap name args term capType ty i) = do
   term' <- renameTerm term
   capType' <- traverse resolveName capType
@@ -554,13 +549,13 @@ renameDefCap (DefCap name args term capType ty i) = do
 
 renameDef
   :: Def ParsedName b i
-  -> RenamerM cb ci (Def IRName b i)
+  -> RenamerM cb ci (Def Name b i)
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
   DCap d -> DCap <$> renameDefCap d
 
-resolveName :: ParsedName -> RenamerM b i IRName
+resolveName :: ParsedName -> RenamerM b i Name
 resolveName = \case
   BN b -> resolveBare b
   QN q -> resolveQualified q
@@ -568,38 +563,41 @@ resolveName = \case
 -- not in immediate binds, so it must be in the module
 -- Todo: resolve module ref within this model
 -- Todo: hierarchical namespace search
-resolveBare :: BareName -> RenamerM cb ci IRName
+resolveBare :: BareName -> RenamerM cb ci Name
 resolveBare (BareName bn) = views reBinds (Map.lookup bn) >>= \case
-  Just (irnk, u) ->
-    pure (IRName bn irnk u)
+  Just nk -> case nk of
+    NBound d -> do
+      depth <- view reVarDepth
+      pure (Name bn (NBound (depth - d - 1)))
+    _ -> pure (Name bn nk)
   Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
-    Just fqn -> pure (IRName bn (IRTopLevel (_fqModule fqn) (_fqHash fqn)) dummyTLUnique)
+    Just fqn -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)))
     Nothing -> fail $ "unbound free variable " <> show bn
 
-resolveBareName' :: Text -> RenamerM b i IRName
+resolveBareName' :: Text -> RenamerM b i Name
 resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
-  Just (irnk, u) -> pure (IRName bn irnk u)
+  Just irnk -> pure (Name bn irnk)
   Nothing -> fail $ "Expected identifier " <> T.unpack bn <> " in scope"
 
-resolveQualified :: QualifiedName -> RenamerM b i IRName
+resolveQualified :: QualifiedName -> RenamerM b i Name
 resolveQualified (QualifiedName qn qmn) = do
   uses rsModuleBinds (Map.lookup qmn) >>= \case
     Just binds -> case Map.lookup qn binds of
-      Just irnk -> pure (IRName qn irnk dummyTLUnique)
+      Just irnk -> pure (Name qn irnk)
       Nothing -> fail "bound module has no such member"
     Nothing -> lookupModuleMember qmn qn
 
 -- | Todo: support imports
 renameModule
   :: Module ParsedName b i
-  -> RenamerM cb ci (Module IRName b i)
+  -> RenamerM cb ci (Module Name b i)
 renameModule (Module mname mgov defs blessed imp implements mhash) = do
   let rawDefNames = defName <$> defs
-      defMap = Map.fromList $ (, (IRTopLevel mname mhash, dummyTLUnique)) <$> rawDefNames
+      defMap = Map.fromList $ (, NTopLevel mname mhash) <$> rawDefNames
       fqns = Map.fromList $ (\n -> (n, FullyQualifiedName mname n mhash)) <$> rawDefNames
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
-  rsModuleBinds %= Map.insert mname (fst <$> defMap)
+  rsModuleBinds %= Map.insert mname defMap
   rsLoaded . loToplevel %= Map.union fqns
   defs' <- locally reBinds (Map.union defMap) $ traverse renameDef defs
   let scc = mkScc <$> defs'
@@ -624,91 +622,77 @@ reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
   mbind md = let
     m = _mdModule md
     depNames = Term.defName <$> Term._mDefs m
-    in Map.fromList $ (,IRTopLevel (Term._mName m) (Term._mHash m)) <$> depNames
+    in Map.fromList $ (,NTopLevel (Term._mName m) (Term._mHash m)) <$> depNames
   mbinds = fmap mbind (_loModules loaded)
 
-loadedBinds :: Loaded b i -> Map Text (IRNameKind, Unique)
+loadedBinds :: Loaded b i -> Map Text NameKind
 loadedBinds loaded =
-  let f fqn  = (IRTopLevel (_fqModule fqn) (_fqHash fqn), dummyTLUnique)
+  let f fqn = NTopLevel (_fqModule fqn) (_fqHash fqn)
   in f <$> _loToplevel loaded
 
 runDesugar'
   :: PactDb b i
   -> Loaded b i
-  -> Supply
   -> RenamerM b i a
   -> IO (DesugarOutput b i a)
-runDesugar' pdb loaded supply act = do
-  ref <- newIORef supply
+runDesugar' pdb loaded act = do
   let reState = reStateFromLoaded loaded
       rTLBinds = loadedBinds loaded
-      rEnv = RenamerEnv rTLBinds ref pdb
+      rEnv = RenamerEnv rTLBinds 0 pdb
   (renamed, RenamerState _ loaded' deps) <- runRenamerT reState rEnv act
-  lastSupply <- readIORef ref
-  pure (DesugarOutput renamed lastSupply loaded' deps)
-
-runDesugarTerm'
-  :: (DesugarTerm term b' i)
-  => PactDb b i
-  -> Loaded b i
-  -> Supply
-  -> term
-  -> IO (DesugarOutput b i (Term IRName b' i))
-runDesugarTerm' pdb loaded supply e = let
-  desugared = desugarTerm e
-  in runDesugar' pdb loaded supply (renameTerm desugared)
+  pure (DesugarOutput renamed loaded' deps)
 
 runDesugarTerm
   :: (DesugarTerm term b' i)
   => PactDb b i
   -> Loaded b i
   -> term
-  -> IO (DesugarOutput b i (Term IRName b' i))
-runDesugarTerm pdb loaded = runDesugarTerm' pdb loaded 0
+  -> IO (DesugarOutput b i (Term Name b' i))
+runDesugarTerm pdb loaded e = let
+  desugared = desugarTerm e
+  in runDesugar' pdb loaded (renameTerm desugared)
 
 runDesugarModule'
   :: (DesugarTerm term b' i)
   => PactDb b i
   -> Loaded b i
-  -> Supply
   -> Common.Module term i
-  -> IO (DesugarOutput b i (Module IRName b' i))
-runDesugarModule' pdb loaded supply m  = let
+  -> IO (DesugarOutput b i (Module Name b' i))
+runDesugarModule' pdb loaded m  = let
   desugared = desugarModule m
-  in runDesugar' pdb loaded supply (renameModule desugared)
+  in runDesugar' pdb loaded (renameModule desugared)
 
 -- runDesugarModule
 --   :: (DesugarTerm term b' i)
 --   => Loaded b i
 --   -> Common.Module term i
---   -> IO (DesugarOutput b i (Module IRName TypeVar b' i))
+--   -> IO (DesugarOutput b i (Module Name TypeVar b' i))
 -- runDesugarModule loaded = runDesugarModule' loaded 0
-
-runDesugarTopLevel'
-  :: (DesugarTerm term b' i)
-  => PactDb b i
-  -> Loaded b i
-  -> Supply
-  -> Common.TopLevel term i
-  -> IO (DesugarOutput b i (TopLevel IRName b' i))
-runDesugarTopLevel' pdb loaded supply = \case
-  Common.TLModule m -> over dsOut TLModule <$> runDesugarModule' pdb loaded supply m
-  Common.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm' pdb loaded supply e
 
 runDesugarTopLevel
   :: (DesugarTerm term b' i)
   => PactDb b i
   -> Loaded b i
   -> Common.TopLevel term i
-  -> IO (DesugarOutput b i (TopLevel IRName b' i))
-runDesugarTopLevel pdb loaded = runDesugarTopLevel' pdb loaded 0
+  -> IO (DesugarOutput b i (TopLevel Name b' i))
+runDesugarTopLevel pdb loaded = \case
+  Common.TLModule m -> over dsOut TLModule <$> runDesugarModule' pdb loaded m
+  Common.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm pdb loaded e
+
+-- runDesugarTopLevel
+--   :: (DesugarTerm term b' i)
+--   => PactDb b i
+--   -> Loaded b i
+--   -> Common.TopLevel term i
+--   -> IO (DesugarOutput b i (TopLevel Name b' i))
+-- runDesugarTopLevel pdb loaded = runDesugarTopLevel' pdb loaded
 
 runDesugarTermNew
   :: (DesugarBuiltin b')
   => PactDb b i
   -> Loaded b i
   -> New.Expr ParsedName i
-  -> IO (DesugarOutput b i (Term IRName b' i))
+  -> IO (DesugarOutput b i (Term Name b' i))
 runDesugarTermNew = runDesugarTerm
 
 runDesugarTopLevelNew
@@ -716,7 +700,7 @@ runDesugarTopLevelNew
   => PactDb b i
   -> Loaded b i
   -> Common.TopLevel (New.Expr ParsedName i) i
-  -> IO (DesugarOutput b i (TopLevel IRName b' i))
+  -> IO (DesugarOutput b i (TopLevel Name b' i))
 runDesugarTopLevelNew = runDesugarTopLevel
 
 runDesugarTermLisp
@@ -724,7 +708,7 @@ runDesugarTermLisp
   => PactDb b i
   -> Loaded b i
   -> Lisp.Expr ParsedName i
-  -> IO (DesugarOutput b i (Term IRName b' i))
+  -> IO (DesugarOutput b i (Term Name b' i))
 runDesugarTermLisp = runDesugarTerm
 
 runDesugarTopLevelLisp
@@ -732,5 +716,5 @@ runDesugarTopLevelLisp
   => PactDb b i
   -> Loaded b i
   -> Common.TopLevel (Lisp.Expr ParsedName i) i
-  -> IO (DesugarOutput b i (TopLevel IRName b' i))
+  -> IO (DesugarOutput b i (TopLevel Name b' i))
 runDesugarTopLevelLisp = runDesugarTopLevel

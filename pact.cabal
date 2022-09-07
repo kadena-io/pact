@@ -323,7 +323,7 @@ library
 
 library pact-core
   import:  pact-core-common
-  hs-source-dirs: pact-core/pact-core
+  hs-source-dirs: pact-core
   build-depends:
     , criterion >= 1.1.4 && < 1.6
     , cryptonite
@@ -380,13 +380,13 @@ library pact-core
     -- Pact.Core.Repl
     -- Core IR modules
     Pact.Core.IR.Term
-    Pact.Core.IR.Typecheck
+    -- Pact.Core.IR.Typecheck
     Pact.Core.IR.Desugar
 
     -- Typed core modules
-    Pact.Core.Typed.Typecheck
-    Pact.Core.Typed.Term
-    Pact.Core.Typed.Overload
+    -- Pact.Core.Typed.Typecheck
+    -- Pact.Core.Typed.Term
+    -- Pact.Core.Typed.Overload
 
     -- Untyped core
     Pact.Core.Untyped.Term

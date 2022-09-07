@@ -55,9 +55,9 @@ data ReplDebugFlag
   = DebugLexer
   | DebugParser
   | DebugDesugar
-  | DebugTypechecker
-  | DebugTypecheckerType
-  | DebugSpecializer
+  -- | DebugTypechecker
+  -- | DebugTypecheckerType
+  -- | DebugSpecializer
   | DebugUntyped
   deriving (Show, Eq, Ord, Enum, Bounded)
 
@@ -66,9 +66,9 @@ prettyReplFlag = \case
   DebugLexer -> "lexer"
   DebugParser -> "parser"
   DebugDesugar -> "desugar"
-  DebugTypechecker -> "tc-term"
-  DebugTypecheckerType -> "tc-type"
-  DebugSpecializer -> "specializer"
+  -- DebugTypechecker -> "tc-term"
+  -- DebugTypecheckerType -> "tc-type"
+  -- DebugSpecializer -> "specializer"
   DebugUntyped -> "untyped-core"
 
 -- | Passed in repl environment
@@ -87,7 +87,7 @@ data ReplAction
   = RALoad Text
   | RASetLispSyntax
   | RASetNewSyntax
-  | RATypecheck Text
+  -- | RATypecheck Text
   | RASetFlag ReplDebugFlag
   | RADebugAll
   | RAExecuteExpr Text
@@ -100,9 +100,9 @@ replFlag =
   (DebugLexer <$ MP.chunk "lexer") <|>
   (DebugParser <$ MP.chunk "parser") <|>
   (DebugDesugar <$ MP.chunk "desugar") <|>
-  (DebugTypechecker <$ MP.chunk "tc-term") <|>
-  (DebugTypecheckerType <$ MP.chunk "tc-type") <|>
-  (DebugSpecializer <$ MP.chunk "specializer") <|>
+  -- (DebugTypechecker <$ MP.chunk "tc-term") <|>
+  -- (DebugTypecheckerType <$ MP.chunk "tc-type") <|>
+  -- (DebugSpecializer <$ MP.chunk "specializer") <|>
   (DebugUntyped <$ MP.chunk "untyped-core")
 
 replAction :: ReplParser ReplAction
@@ -114,15 +114,15 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    load <|> setLang <|> tc <|> setFlag
+    load <|> setLang <|> setFlag
   setFlag =
     cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all"))
   setLang = do
     cmdKw "syntax"
     (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
-  tc = do
-    cmdKw "type"
-    RATypecheck <$> MP.takeRest
+  -- tc = do
+  --   cmdKw "type"
+  --   RATypecheck <$> MP.takeRest
   load = do
     cmdKw "load"
     let c = MP.char '\"'
@@ -142,15 +142,15 @@ printDebug a = \case
   DebugDesugar -> do
     putStrLn "----------- Desugar output ------------"
     print (pretty a)
-  DebugTypechecker -> do
-    putStrLn "----------- Typechecker output --------"
-    print (pretty a)
-  DebugTypecheckerType -> do
-    putStrLn "----------- Inferred type output -------"
-    print (pretty a)
-  DebugSpecializer -> do
-    putStrLn "----------- Specializer output --------"
-    print (pretty a)
+  -- DebugTypechecker -> do
+  --   putStrLn "----------- Typechecker output --------"
+  --   print (pretty a)
+  -- DebugTypecheckerType -> do
+  --   putStrLn "----------- Inferred type output -------"
+  --   print (pretty a)
+  -- DebugSpecializer -> do
+  --   putStrLn "----------- Specializer output --------"
+  --   print (pretty a)
   DebugUntyped -> do
     putStrLn "----------- Untyped core output -------"
     print (pretty a)

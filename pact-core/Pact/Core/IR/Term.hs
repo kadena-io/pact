@@ -127,8 +127,6 @@ data Term name builtin info
   -- ^ error term , error "blah"
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
-  | DynAccess name name info
-  -- ^ For some module m, m::f
   | Constant Literal info
   -- ^ Literals
   | ObjectLit (Map Field (Term name builtin info)) info
@@ -152,7 +150,6 @@ termInfo f = \case
   App t1 t2 i -> App t1 t2 <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
-  DynAccess n1 n2 i -> DynAccess n1 n2 <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
   ObjectOp o i -> ObjectOp o <$> f i
   Block terms i -> Block terms <$> f i
@@ -166,7 +163,6 @@ instance Plated (Term name builtin info) where
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
-    DynAccess n1 n2 i -> pure (DynAccess n1 n2 i)
     ObjectLit m i -> ObjectLit <$> traverse f m <*> pure i
     ObjectOp o i -> ObjectOp <$> traverse f o <*> pure i
     Block terms i -> Block <$> traverse f terms <*> pure i

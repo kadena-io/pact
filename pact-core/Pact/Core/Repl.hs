@@ -65,10 +65,6 @@ main = do
               loop bundle ref
           RASetLispSyntax -> loop lispInterpretBundle ref
           RASetNewSyntax -> loop newInterpretBundle ref
-          RATypecheck txt -> catch' bundle ref $ do
-            out <- lift (exprType bundle (T.encodeUtf8 txt))
-            outputStrLn (show (pretty out))
-            loop bundle ref
           RASetFlag flag -> do
             liftIO (modifyIORef' ref (over replFlags (Set.insert flag)))
             outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]

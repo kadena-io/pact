@@ -23,10 +23,10 @@ module Pact.Core.Untyped.Term
  , EvalTerm
  , EvalModule
  , EvalDef
- , fromTypedTerm
- , fromTypedDef
- , fromTypedModule
- , fromTypedTopLevel
+ , fromIRTerm
+ , fromIRDef
+ , fromIRModule
+ , fromIRTopLevel
  , termInfo
  ) where
 
@@ -35,6 +35,7 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.List.NonEmpty(NonEmpty)
 import Data.Vector (Vector)
+import Data.Void
 import Data.Foldable(foldl')
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
@@ -51,7 +52,7 @@ import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
-import qualified Pact.Core.Typed.Term as Typed
+import qualified Pact.Core.IR.Term as IR
 
 data Defun name builtin info
   = Defun
@@ -154,21 +155,7 @@ data ReplTopLevel name builtin info
 {-
 
 V0 = Today's Pact
-V1 = Theme: simple, modular, more efficient
-     No user-observable changes, modulo:
-     - error messages
-     Able to replay from genesis, modulo:
-     - module serialization
-     - gas accounting
-     All V0 transactions must succeed V1, unless there is a compelling
-     rationale.
-V2 = Types
-V3 = Higher-kinded functions?
-V4 = Macros?
-
-Compilation pipeline:
-
-    Untyped source code
+V1 = Theme: simple, modular, more efficientNamedDeBruijn
 ==> Syntactic term, bijective with source
 ==> Desugared
 ==> Renamed
@@ -204,68 +191,69 @@ type EvalTerm b i = Term Name b i
 type EvalDef b i = Def Name b i
 type EvalModule b i = Module Name b i
 
-fromTypedTerm :: Typed.Term name tyname b i -> Term name b i
-fromTypedTerm = \case
-  Typed.Var n i -> Var n i
-  Typed.Lam args body i ->
-    foldr (\_ t -> Lam t i) (fromTypedTerm body) args
-  Typed.App fn apps i ->
-    foldl' (\f arg -> App f (fromTypedTerm arg) i) (fromTypedTerm fn) apps
-  Typed.Let _ e1 e2 i ->
-    App (Lam (fromTypedTerm e1) i) (fromTypedTerm e2) i
-  Typed.Builtin b i ->
+fromIRTerm :: IR.Term n b i -> Term n b i
+fromIRTerm = \case
+  IR.Var n i -> Var n i
+  IR.Lam nsts body i ->
+    foldr (\_ t -> Lam t i) (fromIRTerm body) nsts
+  IR.Let _ _ e1 e2 i ->
+    App (Lam (fromIRTerm e1) i) (fromIRTerm e2) i
+  IR.App fn apps i ->
+    foldl' (\f arg -> App f (fromIRTerm arg) i) (fromIRTerm fn) apps
+  IR.Builtin b i ->
     Builtin b i
-  Typed.Constant lit i -> Constant lit i
-  Typed.TyApp te _ _ -> fromTypedTerm te
-  Typed.TyAbs _ te _ -> fromTypedTerm te
-  Typed.Block nel i ->
-    Block (fromTypedTerm <$> nel) i
-  Typed.ObjectLit m i ->
-    ObjectLit (fromTypedTerm <$> m) i
-  Typed.ListLit _ vec i ->
-    ListLit (fromTypedTerm <$> vec) i
-  Typed.ObjectOp oo i ->
-    ObjectOp (fromTypedTerm <$> oo) i
+  IR.Constant lit i ->
+    Constant lit i
+  IR.Block nel i ->
+    Block (fromIRTerm <$> nel) i
+  IR.ListLit v i ->
+    ListLit (fromIRTerm <$> v) i
+  IR.ObjectLit m i ->
+    ObjectLit (fromIRTerm <$> m) i
+  IR.ObjectOp oo i ->
+    ObjectOp (fromIRTerm <$> oo) i
 
-fromTypedDefun
-  :: Typed.Defun name NamedDeBruijn builtin info
+---------
+
+fromIRDefun
+  :: IR.Defun name builtin info
   -> Defun name builtin info
-fromTypedDefun (Typed.Defun n ty term i) =
-  Defun n ty (fromTypedTerm term) i
+fromIRDefun (IR.Defun n ty term i) =
+  Defun n (fmap absurd ty) (fromIRTerm term) i
 
-fromTypedDConst
-  :: Typed.DefConst name NamedDeBruijn builtin info
+fromIRDConst
+  :: IR.DefConst name builtin info
   -> DefConst name builtin info
-fromTypedDConst (Typed.DefConst n ty term i) =
-  DefConst n ty (fromTypedTerm term) i
+fromIRDConst (IR.DefConst n ty term i) =
+  DefConst n (maybe TyUnit (fmap absurd) ty) (fromIRTerm term) i
 
-fromTypedDCap
-  :: Typed.DefCap name NamedDeBruijn builtin info
+fromIRDCap
+  :: IR.DefCap name builtin info
   -> DefCap name builtin info
-fromTypedDCap (Typed.DefCap name args term captype ty info) =
-  DefCap name args (fromTypedTerm term) captype ty info
+fromIRDCap (IR.DefCap name args term captype ty info) =
+  DefCap name args (fromIRTerm term) captype (absurd <$> ty) info
 
-fromTypedDef
-  :: Typed.Def name NamedDeBruijn builtin info
+fromIRDef
+  :: IR.Def name builtin info
   -> Def name builtin info
-fromTypedDef = \case
-  Typed.Dfun d -> Dfun (fromTypedDefun d)
-  Typed.DConst d -> DConst (fromTypedDConst d)
-  Typed.DCap d -> DCap (fromTypedDCap d)
+fromIRDef = \case
+  IR.Dfun d -> Dfun (fromIRDefun d)
+  IR.DConst d -> DConst (fromIRDConst d)
+  IR.DCap d -> DCap (fromIRDCap d)
 
-fromTypedModule
-  :: Typed.Module name NamedDeBruijn builtin info
+fromIRModule
+  :: IR.Module name builtin info
   -> Module name builtin info
-fromTypedModule (Typed.Module mn mgov defs blessed imports implements hs) =
-  Module mn mgov (fromTypedDef <$> defs) blessed imports implements hs
+fromIRModule (IR.Module mn mgov defs blessed imports implements hs) =
+  Module mn mgov (fromIRDef <$> defs) blessed imports implements hs
 
-fromTypedTopLevel
-  :: Typed.TopLevel name NamedDeBruijn builtin info
+fromIRTopLevel
+  :: IR.TopLevel name builtin info
   -> TopLevel name builtin info
-fromTypedTopLevel = \case
-  Typed.TLModule m -> TLModule (fromTypedModule m)
-  Typed.TLInterface _ -> error "todo: implement interfaces"
-  Typed.TLTerm e -> TLTerm (fromTypedTerm e)
+fromIRTopLevel = \case
+  IR.TLModule m -> TLModule (fromIRModule m)
+  IR.TLInterface _ -> error "todo: implement interfaces"
+  IR.TLTerm e -> TLTerm (fromIRTerm e)
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case
