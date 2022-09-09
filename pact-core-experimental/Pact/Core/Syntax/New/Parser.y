@@ -250,7 +250,7 @@ MultOp :: { BinaryOp }
 
 PrefixOp :: { UnaryOp }
   : '-' { NegateOp }
-  -- | '~' { FlipBitsOp }
+  -- | '~' { ComplementOp }
 
 Statement :: { ParsedExpr }
   : IfStmt { $1 }

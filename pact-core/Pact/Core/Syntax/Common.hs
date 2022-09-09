@@ -22,12 +22,12 @@ import qualified Data.Map.Strict as Map
 
 data UnaryOp
   = NegateOp
-  | FlipBitsOp
+  | ComplementOp
   deriving Show
 
 instance Pretty UnaryOp where
   pretty NegateOp = "-"
-  pretty FlipBitsOp = "~"
+  pretty ComplementOp = "~"
 
 data BinaryOp
   = AddOp
@@ -122,20 +122,20 @@ data Arg
   , _argType :: Type }
   deriving Show
 
-data Defun expr i
+data Defun e i
   = Defun
   { _dfunName :: !Text
   , _dfunArgs :: ![Arg]
   , _dfunRetType :: !Type
-  , _dfunTerm :: !expr
+  , _dfunTerm :: !e
   , _dfunInfo :: i
   } deriving Show
 
-data DefConst expr i
+data DefConst e i
   = DefConst
   { _dcName :: Text
   , _dcType :: Maybe Type
-  , _dcTerm :: expr
+  , _dcTerm :: e
   , _dcInfo :: i
   } deriving Show
 
@@ -144,19 +144,19 @@ data Managed
   | Managed Text ParsedName
   deriving (Show)
 
-data DefCap expr i
+data DefCap e i
   = DefCap
   { _dcapName :: Text
   , _dcapArgs :: ![Arg]
   , _dcapManaged :: Maybe Managed
-  , _dcapTerm :: expr
+  , _dcapTerm :: e
   , _dcapInfo :: i
   } deriving Show
 
-data Def expr i
-  = Dfun (Defun expr i)
-  | DConst (DefConst expr i)
-  | DCap (DefCap expr i)
+data Def e i
+  = Dfun (Defun e i)
+  | DConst (DefConst e i)
+  | DCap (DefCap e i)
   deriving Show
 
 data ExtDecl
@@ -165,30 +165,30 @@ data ExtDecl
   | ExtImplements ModuleName
   deriving Show
 
-data Module expr i
+data Module e i
   = Module
   { _mName :: ModuleName
   , _mGovernance :: Governance Text
   , _mExternal :: [ExtDecl]
-  , _mDefs :: NonEmpty (Def expr i)
+  , _mDefs :: NonEmpty (Def e i)
   } deriving Show
 
-data TopLevel expr i
-  = TLModule (Module expr i)
-  | TLTerm expr
+data TopLevel e i
+  = TLModule (Module e i)
+  | TLTerm e
   deriving Show
 
-data ReplTopLevel expr i
-  = RTLModule (Module expr i)
-  | RTLDefun (Defun expr i)
-  | RTLDefConst (DefConst expr i)
-  | RTLTerm expr
+data ReplTopLevel e i
+  = RTLModule (Module e i)
+  | RTLDefun (Defun e i)
+  | RTLDefConst (DefConst e i)
+  | RTLTerm e
   deriving Show
 
-data Interface expr i
+data Interface e i
   = Interface
   { _ifName :: Text
-  , _ifDefns :: [IfDef expr i]
+  , _ifDefns :: [IfDef e i]
   } deriving Show
 
 data IfDefun i
@@ -199,15 +199,16 @@ data IfDefun i
   , _ifdInfo :: i
   } deriving Show
 
-data IfDef expr i
+data IfDef e i
   = IfDfun (IfDefun i)
-  | IFDConst (DefConst expr i)
+  | IFDConst (DefConst e i)
   deriving Show
 
 instance Pretty Arg where
   pretty (Arg n ty) =
     pretty n <> ":" <+> pretty ty
 
-instance Pretty expr => Pretty (Defun expr i) where
+instance Pretty e => Pretty (Defun e i) where
   pretty (Defun n args rettype term _) =
-    "defun" <+> pretty n <+> parens (prettyCommaSep args) <> ":" <+> pretty rettype <+> "=" <+> pretty term
+    "defun" <+> pretty n <+> parens (prettyCommaSep args)
+      <> ":" <+> pretty rettype <+> "=" <+> pretty term

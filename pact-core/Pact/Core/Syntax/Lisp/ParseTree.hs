@@ -22,26 +22,26 @@ import Pact.Core.Pretty
 
 import Pact.Core.Syntax.Common
 
-data Binder name i =
-  Binder Text (Maybe Type) (Expr name i)
+data Binder i =
+  Binder Text (Maybe Type) (Expr i)
   deriving Show
 
-data Expr name i
-  = Var name i
-  | LetIn (NonEmpty (Binder name i)) (Expr name i) i
-  | Lam name (NonEmpty (Text, Maybe Type)) (Expr name i) i
-  | If (Expr name i) (Expr name i) (Expr name i) i
-  | App (Expr name i) [Expr name i] i
-  | Block (NonEmpty (Expr name i)) i
-  | Object (Map Field (Expr name i)) i
-  | UnaryOp UnaryOp (Expr name i) i
-  | BinaryOp BinaryOp (Expr name i) (Expr name i) i
-  | List [Expr name i] i
+data Expr i
+  = Var ParsedName i
+  | LetIn (NonEmpty (Binder i)) (Expr i) i
+  | Lam ParsedName (NonEmpty (Text, Maybe Type)) (Expr i) i
+  | If (Expr i) (Expr i) (Expr i) i
+  | App (Expr i) [Expr i] i
+  | Block (NonEmpty (Expr i)) i
+  | Object (Map Field (Expr i)) i
+  | UnaryOp UnaryOp (Expr i) i
+  | BinaryOp BinaryOp (Expr i) (Expr i) i
+  | List [Expr i] i
   | Constant Literal i
-  | ObjectOp (ObjectOp (Expr name i)) i
+  | ObjectOp (ObjectOp (Expr i)) i
   deriving Show
 
-termInfo :: Lens' (Expr name i) i
+termInfo :: Lens' (Expr i) i
 termInfo f = \case
   Var n i -> Var n <$> f i
   LetIn bnds e1 i ->
@@ -59,7 +59,7 @@ termInfo f = \case
   ObjectOp o i -> ObjectOp o <$> f i
   Constant l i -> Constant l <$> f i
 
-instance Pretty name => Pretty (Expr name i) where
+instance Pretty (Expr i) where
   pretty = \case
     Var n _ -> pretty n
     LetIn{} -> error "todo: implement"

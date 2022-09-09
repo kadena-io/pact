@@ -29,7 +29,6 @@ $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
-@decimal = [$digit]+
 @integer = [$digit]+
 
 
@@ -101,7 +100,7 @@ tokens :-
     \-\>         { token TokenTyArrow }
 
 {
--- Todo: non-horrible errors
+-- TODO: non-horrible errors
 scan :: LexerT PosToken
 scan = do
   input@(AlexInput _ _ _ bs) <- get

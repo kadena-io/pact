@@ -19,14 +19,13 @@ import Data.ByteString(ByteString)
 import qualified Data.ByteString as B
 
 import Pact.Core.Info
-import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.Common
 import Pact.Core.Syntax.Lisp.ParseTree
 
 type ParserT = Either PactErrorI
-type ParsedExpr = Expr ParsedName LineInfo
+type ParsedExpr = Expr LineInfo
 type ParsedDefun = Defun ParsedExpr LineInfo
 type ParsedDef = Def ParsedExpr LineInfo
 type ParsedDefConst = DefConst ParsedExpr LineInfo

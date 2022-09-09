@@ -137,12 +137,12 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
 class DesugarTerm term b i where
   desugarTerm  :: term -> Term ParsedName b i
 
-instance DesugarBuiltin b => DesugarTerm (Lisp.Expr ParsedName i) b i where
+instance DesugarBuiltin b => DesugarTerm (Lisp.Expr i) b i where
   desugarTerm = desugarLispTerm
 
 
 
-desugarLispTerm :: forall b i. DesugarBuiltin b => Lisp.Expr ParsedName i -> Term ParsedName b i
+desugarLispTerm :: forall b i. DesugarBuiltin b => Lisp.Expr i -> Term ParsedName b i
 desugarLispTerm = \case
   Lisp.Var (BN n) i | isReservedNative (_bnName n) ->
     Builtin (reservedNatives Map.! _bnName n) i
@@ -273,7 +273,7 @@ desugarType = \case
 desugarUnary' :: Common.UnaryOp -> RawBuiltin
 desugarUnary' = \case
   Common.NegateOp -> RawNegate
-  Common.FlipBitsOp -> RawBitwiseFlip
+  Common.ComplementOp -> RawBitwiseFlip
 
 desugarBinary' :: Common.BinaryOp -> RawBuiltin
 desugarBinary' = \case
@@ -589,7 +589,7 @@ runDesugarTermLisp
   :: (DesugarBuiltin b')
   => PactDb b i
   -> Loaded b i
-  -> Lisp.Expr ParsedName i
+  -> Lisp.Expr i
   -> IO (DesugarOutput b i (Term Name b' i))
 runDesugarTermLisp = runDesugarTerm
 
@@ -597,6 +597,6 @@ runDesugarTopLevelLisp
   :: (DesugarBuiltin b')
   => PactDb b i
   -> Loaded b i
-  -> Common.TopLevel (Lisp.Expr ParsedName i) i
+  -> Common.TopLevel (Lisp.Expr i) i
   -> IO (DesugarOutput b i (TopLevel Name b' i))
 runDesugarTopLevelLisp = runDesugarTopLevel
