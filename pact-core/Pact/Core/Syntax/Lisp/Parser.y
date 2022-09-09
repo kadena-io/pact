@@ -279,7 +279,7 @@ LamArgs :: { [(Text, Maybe Type)] }
 LetExpr :: { LineInfo -> ParsedExpr }
   : let '(' Binders ')' Block { LetIn (NE.fromList (reverse $3)) $5 }
 
-Binders :: { [Binder ParsedName LineInfo] }
+Binders :: { [Binder LineInfo] }
   : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5):$1 }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 
