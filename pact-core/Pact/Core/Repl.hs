@@ -40,7 +40,7 @@ main :: IO ()
 main = do
   pactDb <- mockPactDb
   ref <- newIORef (ReplState mempty emptyLoaded pactDb)
-  runReplT ref (runInputT replSettings (loop newInterpretBundle ref))
+  runReplT ref (runInputT replSettings (loop lispInterpretBundle ref))
   where
   replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
@@ -64,7 +64,7 @@ main = do
               traverse_ displayOutput vs
               loop bundle ref
           RASetLispSyntax -> loop lispInterpretBundle ref
-          RASetNewSyntax -> loop newInterpretBundle ref
+          RASetNewSyntax -> loop lispInterpretBundle ref
           RASetFlag flag -> do
             liftIO (modifyIORef' ref (over replFlags (Set.insert flag)))
             outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]

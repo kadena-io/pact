@@ -395,7 +395,7 @@ library pact-core
 executable pact-core-repl
   import: pact-core-common
 
-  main-is: pact-core/pact-core/Pact/Core/Repl.hs
+  main-is: pact-core/Pact/Core/Repl.hs
 
   build-depends:
     , pact-core
