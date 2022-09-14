@@ -909,11 +909,6 @@ enumerate g i = \case
       . toTListV tTyInteger def
       . fmap toTerm
 
-    step to' inc acc
-      | acc > to', inc > 0 = Nothing
-      | acc < to', inc < 0 = Nothing
-      | otherwise = Just (acc, acc + inc)
-
     createEnumerateList from' to' inc
       | from' == to' = computeList 1 (V.singleton from')
       | inc == 0 = computeList 1 mempty
@@ -923,7 +918,9 @@ enumerate g i = \case
         evalError' i "enumerate: increment diverges above from interval bounds."
       | otherwise = do
         let g' = succ $ (abs (from' - to')) `div` (abs inc)
-        computeList g' $ V.unfoldr (step to' inc) from'
+        computeList g' $ V.enumFromStepN from' inc (fromIntegral g')
+
+
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
