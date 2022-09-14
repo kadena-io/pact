@@ -1,8 +1,9 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -47,6 +48,7 @@ import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
 import Control.Lens (makePrisms,set)
 import Data.Aeson hiding (Value(..))
+import qualified Data.Aeson as A
 import Data.Default (def)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
@@ -61,6 +63,7 @@ import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
+import Pact.Types.Util (enableToJSON)
 
 -- | Determines how deep a generated PactValue _could_ be.
 -- Restricts how many times a recursive PactValue constructor (i.e. PObject, PList, and PGuard)
@@ -123,15 +126,23 @@ instance Arbitrary PactValue where
 instance NFData PactValue
 
 instance ToJSON PactValue where
-  toJSON (PLiteral l) = toJSON l
-  toJSON (PObject o) = toJSON o
-  toJSON (PList v) = toJSON v
-  toJSON (PGuard x) = toJSON x
-  toJSON (PModRef (ModRef refName refSpec refInfo)) = object $
-    [ "refName" .= refName
-    , "refSpec" .= refSpec
-    ] ++
-    [ "refInfo" .= refInfo | refInfo /= def ]
+  toJSON = enableToJSON "Pact.Types.PactValue.PactValue" . \case
+    (PLiteral l) -> toJSON l
+    (PObject o) -> toJSON o
+    (PList v) -> toJSON v
+    (PGuard x) -> toJSON x
+    (PModRef m) -> A.Object $ modRefProperties_ m
+      -- this uses a non-standard alternative JSON encoding for 'ModRef'
+
+  toEncoding (PLiteral l) = toEncoding l
+  toEncoding (PObject o) = toEncoding o
+  toEncoding (PList v) = toEncoding v
+  toEncoding (PGuard x) = toEncoding x
+  toEncoding (PModRef m) = pairs $ modRefProperties_ m
+    -- this uses a non-standard alternative JSON encoding for 'ModRef'
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON PactValue where
   parseJSON v =

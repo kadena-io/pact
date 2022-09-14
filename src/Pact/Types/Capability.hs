@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -69,11 +67,18 @@ instance NFData SigCapability
 instance Pretty SigCapability where
   pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
 
+sigCapabilityProperties :: JsonProperties SigCapability
+sigCapabilityProperties o =
+  [ "args" .= _scArgs o
+  , "name" .= _scName o
+  ]
+{-# INLINE sigCapabilityProperties #-}
+
 instance ToJSON SigCapability where
-  toJSON (SigCapability n args) = object $
-    [ "name" .=  n
-    , "args" .= args
-    ]
+  toJSON = enableToJSON "Pact.Types.Capability.SigCapability" . object . sigCapabilityProperties
+  toEncoding = pairs . mconcat . sigCapabilityProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON SigCapability where
   parseJSON = withObject "SigCapability" $ \o -> SigCapability

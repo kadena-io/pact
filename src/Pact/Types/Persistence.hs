@@ -1,16 +1,17 @@
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -41,6 +42,7 @@ import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
+import qualified Data.Aeson as A
 import Data.Default
 import Data.Hashable (Hashable)
 import Data.Maybe(fromMaybe)
@@ -58,7 +60,7 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Type
-import Pact.Types.Util (AsString(..), tShow)
+import Pact.Types.Util (AsString(..), tShow, JsonProperties, JsonMProperties, enableToJSON, (.?=))
 import Pact.Types.Namespace
 
 
@@ -71,9 +73,17 @@ data PersistDirect =
 instance NFData PersistDirect
 
 instance ToJSON PersistDirect where
-  toJSON (PDValue v) = object [ "pdval" .= v ]
-  toJSON (PDNative n) = object [ "pdnat" .= n ]
-  toJSON (PDFreeVar n) = object [ "pdfv" .= n]
+  toJSON = enableToJSON "Pact.Types.Persistence.PersistDirect" . object . \case
+    (PDValue v) -> [ "pdval" .= v ]
+    (PDNative n) -> [ "pdnat" .= n ]
+    (PDFreeVar n) -> [ "pdfv" .= n]
+
+  toEncoding (PDValue v) = pairs $ "pdval" .= v
+  toEncoding (PDNative n) = pairs $ "pdnat" .= n
+  toEncoding (PDFreeVar n) = pairs $ "pdfv" .= n
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON PersistDirect where
   parseJSON v =
@@ -120,9 +130,22 @@ makeLenses ''ModuleData
 
 instance NFData r => NFData (ModuleData r)
 
-instance (ToJSON r,FromJSON r) => ToJSON (ModuleData r) where
-  toJSON (ModuleData m rs deps) =
-    object $ [ "module" .= m, "refMap" .= rs] ++ [ "dependencies" .= deps | not (HM.null deps)]
+moduleDataProperties :: ToJSON r => JsonMProperties (ModuleData r)
+moduleDataProperties o = mconcat
+  [ "module" .= _mdModule o
+  , "refMap" .= _mdRefMap o
+  , "dependencies" .?= if HM.null deps then Nothing else Just deps
+  ]
+ where
+  deps = _mdDependencies o
+{-# INLINE moduleDataProperties #-}
+
+instance ToJSON r => ToJSON (ModuleData r) where
+  toJSON = enableToJSON "Pact.Types.Persistence.ModuleData r" . A.Object . moduleDataProperties
+  toEncoding = pairs . moduleDataProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance (ToJSON r, FromJSON r) => FromJSON (ModuleData r) where
   parseJSON =
     withObject "ModuleData" $ \o ->
@@ -134,8 +157,15 @@ instance (ToJSON r, FromJSON r) => FromJSON (ModuleData r) where
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 
 instance ToJSON (Ref' PersistDirect) where
-  toJSON (Ref t) = object [ "ref" .= t ]
-  toJSON (Direct pd) = object [ "direct" .= pd ]
+  toJSON = enableToJSON "Pact.Types.Persistence.ModuleData r" . object . \case
+    (Ref t) -> [ "ref" .= t ]
+    (Direct pd) -> [ "direct" .= pd ]
+
+  toEncoding (Ref t) = pairs $ "ref" .= t
+  toEncoding (Direct pd) = pairs $ "direct" .= pd
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON (Ref' PersistDirect) where
   parseJSON v =
@@ -145,7 +175,8 @@ instance FromJSON (Ref' PersistDirect) where
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Show,Pretty,Generic,NFData)
+    deriving (Eq,Ord,Generic)
+    deriving newtype (IsString,ToTerm,AsString,Show,Pretty,NFData)
 
 -- | Specify key and value types for database domains.
 data Domain k v where
@@ -176,14 +207,25 @@ data TxLog v =
       _txDomain :: !Text
     , _txKey :: !Text
     , _txValue :: !v
-    } deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
+    }
+    deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
+    deriving anyclass (Hashable, NFData)
 makeLenses ''TxLog
-instance Hashable v => Hashable (TxLog v)
-instance NFData v => NFData (TxLog v)
+
+txLogProperties :: (ToJSON v) => JsonProperties (TxLog v)
+txLogProperties o =
+  [ "value" .= _txValue o
+  , "key" .= _txKey o
+  , "table" .= _txDomain o
+  ]
+{-# INLINE txLogProperties #-}
 
 instance ToJSON v => ToJSON (TxLog v) where
-    toJSON (TxLog d k v) =
-        object ["table" .= d, "key" .= k, "value" .= v]
+  toJSON = enableToJSON "Pact.Types.Persistence.TxLog" . object . txLogProperties
+  toEncoding = pairs . mconcat . txLogProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON v => FromJSON (TxLog v) where
     parseJSON = withObject "TxLog" $ \o ->
                 TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"
@@ -218,7 +260,8 @@ instance Pretty WriteType where
 -- | Transaction ids are non-negative 64-bit integers and
 --   are expected to be monotonically increasing.
 newtype TxId = TxId Word64
-    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic)
+    deriving (Eq,Ord,Generic)
+    deriving newtype (Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON)
 
 instance NFData TxId
 instance Show TxId where

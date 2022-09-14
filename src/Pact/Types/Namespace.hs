@@ -9,7 +9,7 @@ module Pact.Types.Namespace
 ) where
 
 import Control.DeepSeq
-import Control.Lens
+import Control.Lens hiding ((.=))
 
 import Data.Aeson
 
@@ -44,8 +44,21 @@ instance (SizeOf n) => SizeOf (Namespace n) where
   sizeOf (Namespace name ug ag) =
     (constructorCost 3) + (sizeOf name) + (sizeOf ug) + (sizeOf ag)
 
-instance (ToJSON a, FromJSON a) => ToJSON (Namespace a) where toJSON = lensyToJSON 3
-instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
+namespaceProperties :: ToJSON a => JsonProperties (Namespace a)
+namespaceProperties o =
+  [ "admin" .= _nsAdmin o
+  , "user" .= _nsUser o
+  , "name" .= _nsName o
+  ]
+{-# INLINE namespaceProperties #-}
+
+instance ToJSON a => ToJSON (Namespace a) where
+  toJSON = enableToJSON "Pact.Types.Term.Namespace a" . lensyToJSON 3
+  toEncoding = pairs . mconcat . namespaceProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON a => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
 
 instance (NFData a) => NFData (Namespace a)
 

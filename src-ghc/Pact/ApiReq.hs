@@ -43,6 +43,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Data.Default (def)
+import qualified Data.HashMap.Strict as HM
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Set as S
@@ -77,7 +78,23 @@ data ApiKeyPair = ApiKeyPair {
   _akpScheme :: Maybe PPKScheme,
   _akpCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
-instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
+
+apiKeyPairProperties :: JsonProperties ApiKeyPair
+apiKeyPairProperties o =
+  [ "address" .= _akpAddress o
+  , "secret" .= _akpSecret o
+  , "scheme" .= _akpScheme o
+  , "caps" .= _akpCaps o
+  , "public" .= _akpPublic o
+  ]
+{-# INLINE apiKeyPairProperties #-}
+
+instance ToJSON ApiKeyPair where
+  toJSON = enableToJSON "Pact.ApiReq.ApiKeyPair" . lensyToJSON 4
+  toEncoding = pairs . mconcat . apiKeyPairProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
 
 -- | For unsigned commands
@@ -87,7 +104,22 @@ data ApiSigner = ApiSigner {
   _asScheme :: Maybe PPKScheme,
   _asCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
-instance ToJSON ApiSigner where toJSON = lensyToJSON 3
+
+apiSignerProperties :: JsonProperties ApiSigner
+apiSignerProperties o =
+  [ "address" .= _asAddress o
+  , "scheme" .= _asScheme o
+  , "caps" .= _asCaps o
+  , "public" .= _asPublic o
+  ]
+{-# INLINE apiSignerProperties #-}
+
+instance ToJSON ApiSigner where
+  toJSON = enableToJSON "Pact.ApiReq.ApiSigner" . lensyToJSON 3
+  toEncoding = pairs . mconcat . apiSignerProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
 
 data ApiPublicMeta = ApiPublicMeta
@@ -99,19 +131,22 @@ data ApiPublicMeta = ApiPublicMeta
   , _apmCreationTime :: Maybe TxCreationTime
   } deriving (Eq, Show, Generic)
 
+apiPublicMetaProperties :: Monoid kv => KeyValue kv => ApiPublicMeta -> [kv]
+apiPublicMetaProperties o =
+  [ "creationTime" .?= _apmCreationTime o
+  , "ttl" .?= _apmTTL o
+  , "gasLimit" .?= _apmGasLimit o
+  , "chainId" .?= _apmChainId o
+  , "gasPrice" .?= _apmGasPrice o
+  , "sender" .?= _apmSender o
+  ]
+{-# INLINE apiPublicMetaProperties #-}
+
 instance ToJSON ApiPublicMeta where
-  toJSON (ApiPublicMeta cid s gl gp ttl ct) = object $ concat
-    [ "chainId" .?= cid
-    , "sender" .?= s
-    , "gasLimit" .?= gl
-    , "gasPrice" .?= gp
-    , "ttl" .?= ttl
-    , "creationTime" .?= ct
-    ]
-    where
-      k .?= v = case v of
-        Nothing -> mempty
-        Just v' -> [k .= v']
+  toJSON = enableToJSON "Pact.ApiReq.ApiPublicMeta" . Data.Aeson.Object . mconcat . apiPublicMetaProperties
+  toEncoding = pairs . mconcat . apiPublicMetaProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 
 instance FromJSON ApiPublicMeta where
@@ -140,24 +175,77 @@ data ApiReq = ApiReq {
   _ylPublicMeta :: Maybe ApiPublicMeta,
   _ylNetworkId :: Maybe NetworkId
   } deriving (Eq,Show,Generic)
-instance ToJSON ApiReq where toJSON = lensyToJSON 3
-instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
+apiReqProperties :: JsonProperties ApiReq
+apiReqProperties o =
+  [ "publicMeta" .= _ylPublicMeta o
+  , "proof" .= _ylProof o
+  , "data" .= _ylData o
+  , "networkId" .= _ylNetworkId o
+  , "rollback" .= _ylRollback o
+  , "signers" .= _ylSigners o
+  , "step" .= _ylStep o
+  , "code" .= _ylCode o
+  , "pactTxHash" .= _ylPactTxHash o
+  , "type" .= _ylType o
+  , "codeFile" .= _ylCodeFile o
+  , "keyPairs" .= _ylKeyPairs o
+  , "dataFile" .= _ylDataFile o
+  , "nonce" .= _ylNonce o
+  ]
+{-# INLINE apiReqProperties #-}
+
+instance ToJSON ApiReq where
+  toJSON = enableToJSON "Pact.ApiReq.ApiReq" . lensyToJSON 3
+  toEncoding = pairs . mconcat . apiReqProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 data SignReq = SignReq
   { _srHash :: Hash
   , _srKeyPairs :: [ApiKeyPair]
   } deriving (Eq,Show,Generic)
-instance ToJSON SignReq where toJSON = lensyToJSON 3
-instance FromJSON SignReq where parseJSON = lensyParseJSON 3
 
+signReqProperties :: JsonProperties SignReq
+signReqProperties o =
+  [ "hash" .= _srHash o
+  , "keyPairs" .= _srKeyPairs o
+  ]
+{-# INLINE signReqProperties #-}
+
+instance ToJSON SignReq where
+  toJSON = enableToJSON "Pact.ApiReq.SignReq" . object . signReqProperties
+  toEncoding = pairs . mconcat . signReqProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON SignReq where
+    parseJSON = lensyParseJSON 3
 
 data AddSigsReq = AddSigsReq
   { _asrUnsigned :: Command Text
   , _asrSigs :: [UserSig]
   } deriving (Eq,Show,Generic)
-instance ToJSON AddSigsReq where toJSON = lensyToJSON 4
-instance FromJSON AddSigsReq where parseJSON = lensyParseJSON 4
+
+addSigsReqProperties :: JsonProperties AddSigsReq
+addSigsReqProperties o =
+  [ "sigs" .= _asrSigs o
+  , "unsigned" .= _asrUnsigned o
+  ]
+{-# INLINE addSigsReqProperties #-}
+
+instance ToJSON AddSigsReq where
+  toJSON = enableToJSON "Pact.ApiReq.AddSigsReq" . object . addSigsReqProperties
+  toEncoding = pairs . mconcat . addSigsReqProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON AddSigsReq where
+    parseJSON = withObject "AddSigsReq" $ \o -> AddSigsReq
+        <$> o .: "unsigned"
+        <*> o .: "sigs"
 
 combineSigs :: [FilePath] -> Bool -> IO ByteString
 combineSigs fs outputLocal = do
@@ -363,11 +451,10 @@ signCmd keyFiles bs = do
     Left e -> dieAR $ "stdin was not valid base64url: " <> e
     Right h -> do
       kps <- mapM importKeyFile keyFiles
-      let signSingle kp = do
+      -- FIXME: the sorting of the properties in the result is not stable
+      fmap (Y.encode . HM.fromList) $ forM kps $ \kp -> do
             sig <- signHash (fromUntypedHash $ Hash h) kp
-            return $ toB16Text (getPublic kp) .= _usSig sig
-      sigs <- mapM signSingle kps
-      return $ Y.encode $ object sigs
+            return (B16JsonBytes (getPublic kp), _usSig sig)
 
 withKeypairsOrSigner
   :: Bool
