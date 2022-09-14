@@ -259,7 +259,7 @@ combineSigDatas :: [SigData Text] -> Bool -> IO ByteString
 combineSigDatas [] _ = error "Nothing to combine"
 combineSigDatas sds outputLocal = do
   let hashes = S.fromList $ map _sigDataHash sds
-      cmds = S.fromList $ catMaybes $ map _sigDataCmd sds
+      cmds = S.fromList $ mapMaybe _sigDataCmd sds
   when (S.size hashes /= 1 || S.size cmds /= 1) $ do
     error "SigData files must contain exactly one unique hash and command.  Aborting..."
   let sigs = foldl1 f $ map _sigDataSigs sds
@@ -444,7 +444,7 @@ putJSON = BSL.putStrLn . encode
 signCmd
   :: [FilePath]
   -> ByteString
-  -- ^ Takse a base64url encoded ByteString
+  -- ^ Takes a base64url encoded ByteString
   -> IO ByteString
 signCmd keyFiles bs = do
   case decodeBase64UrlUnpadded bs of

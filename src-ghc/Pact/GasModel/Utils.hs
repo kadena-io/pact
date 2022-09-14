@@ -5,7 +5,6 @@
 module Pact.GasModel.Utils
   (
     compileCode
-  , printResult
   , eitherDie
 
   , sizes
@@ -80,7 +79,7 @@ import Pact.Compile (compileExps, mkTextInfo)
 import Pact.Types.Capability (SigCapability)
 import Pact.Types.Command
 import Pact.Types.Lang
-import Pact.Types.PactValue (toPactValueLenient, PactValue(..))
+import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.Namespace
@@ -98,12 +97,6 @@ compileCode m = do
 parseCode :: T.Text -> IO ParsedCode
 parseCode m = do
   ParsedCode m <$> eitherDie m (parseExprs m)
-
-
-printResult :: Either PactError [Term Name] -> IO ()
-printResult res = case res of
-  Left err -> print (show err)
-  Right ts -> print $ show (toJSON $ map (toJSON . toPactValueLenient) ts)
 
 eitherDie :: (Show b) => T.Text -> Either b a -> IO a
 eitherDie annot
@@ -284,9 +277,11 @@ toPactBinding  m = "{ " <> allKeys <> " }"
     allKeys = T.intercalate ", " $ map bindingFormat (HM.toList m)
     bindingFormat (key, _) = escapeText key <> " := " <> key
 
+-- Only use in testing: Pact.GasModel.GasTests
+--
 toPactKeyset :: T.Text -> T.Text -> Maybe T.Text -> A.Value
 toPactKeyset ksName ksValue predicate =
-  A.object [ksName A..= A.object ["keys" A..= [ksValue], "pred" A..= pred']]
+  toJSON $ HM.fromList [(ksName, A.object ["keys" A..= [ksValue], "pred" A..= pred'])]
   where pred' = maybe ">" id predicate
 
 
