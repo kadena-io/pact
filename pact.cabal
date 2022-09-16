@@ -424,7 +424,6 @@ test-suite hspec
         , intervals
         , mmorph
         , neat-interpolation
-        , prettyprinter
         , sbv
         , servant-client
         , yaml

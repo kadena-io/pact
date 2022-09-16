@@ -161,7 +161,10 @@ instance (ToJSON r, FromJSON r) => FromJSON (ModuleData r) where
       <*> (fromMaybe HM.empty <$> o .:? "dependencies")
 
 instance Arbitrary r => Arbitrary (ModuleData r) where
-  arbitrary = ModuleData <$> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary = ModuleData
+    <$> arbitrary
+    <*> scale (min 10) arbitrary
+    <*> scale (min 10) arbitrary
 
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 

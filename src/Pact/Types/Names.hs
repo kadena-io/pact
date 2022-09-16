@@ -37,7 +37,8 @@ module Pact.Types.Names
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
-import Data.Aeson (ToJSON(..), FromJSON(..), withText, pairs, (.=), FromJSONKey(..), ToJSONKey(..))
+import Data.Aeson (ToJSON(..), FromJSON(..), withText, pairs, (.=), FromJSONKey(..), ToJSONKey(..), ToJSONKeyFunction(..), FromJSONKeyFunction(..), Value(String))
+import Data.Aeson.Encoding (text)
 import qualified Data.Attoparsec.Text as AP
 import Data.Default
 import Data.Hashable
@@ -249,17 +250,25 @@ data FullyQualifiedName
 
 instance NFData FullyQualifiedName
 
+fqdnJsonText :: FullyQualifiedName -> T.Text
+fqdnJsonText (FullyQualifiedName n (ModuleName m ns) hsh) =
+    maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
+
 instance ToJSON FullyQualifiedName where
-  toJSON (FullyQualifiedName n (ModuleName m ns) hsh) =
-    toJSON $ maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
+  toJSON = toJSON . fqdnJsonText
+  toEncoding = toEncoding .fqdnJsonText
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON FullyQualifiedName where
   parseJSON = withText "FullyQualifiedName" $ \f -> case AP.parseOnly (fullyQualNameParser <* eof) f of
     Left s  -> fail s
     Right n -> return n
 
-instance FromJSONKey FullyQualifiedName
-instance ToJSONKey FullyQualifiedName
+instance FromJSONKey FullyQualifiedName where
+  fromJSONKey = FromJSONKeyTextParser $ parseJSON . String
+instance ToJSONKey FullyQualifiedName where
+  toJSONKey = ToJSONKeyText fqdnJsonText (text . fqdnJsonText)
 
 instance SizeOf FullyQualifiedName
 

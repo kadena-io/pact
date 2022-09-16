@@ -52,6 +52,12 @@ module Pact.Types.Util
   , arbitraryIdent
   ) where
 
+-- Enable to make legacy toJSON available (required for yaml encodings)
+#define ENABLE_TOJSON
+
+-- Enable to make trace calls to toJSON (only for debugging purposes)
+-- #define ENABLE_TOJSON_WARNING
+
 import Data.Aeson
 import Data.Aeson.Types
 import GHC.Generics
@@ -75,7 +81,9 @@ import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
 
+#ifdef ENABLE_TOJSON_WARNING
 import Debug.Trace
+#endif
 import GHC.Stack (HasCallStack)
 
 
@@ -236,12 +244,6 @@ k .?= v = case v of
   Just v' -> k .= v'
 {-# INLINE (.?=) #-}
 
--- Enable to make legacy toJSON available (required for yaml encodings)
-#define ENABLE_TOJSON
-
--- Enable to make trace calls to toJSON (only for debugging purposes)
--- #define ENABLE_TOJSON_WARNING
-
 -- | Support for 'toJSON' is required for YAML encodings, which is required by
 -- most Pact data types.
 --
@@ -253,18 +255,22 @@ k .?= v = case v of
 -- be to define a custom type for property names, which would allow to define
 -- backward compatile 'Ord' instances.
 --
-enableToJSON
-    :: HasCallStack
-    => String
-    -> Value
-    -> Value
 #ifdef ENABLE_TOJSON
+enableToJSON
+    :: String
+    -> Value
+    -> Value
 #ifdef ENABLE_TOJSON_WARNING
 enableToJSON t x = traceStack (t <> ": called 'toJSON'" <> show x) x
 #else
 enableToJSON _ a = a
 #endif
 #else
+enableToJSON
+    :: HasCallStack
+    => String
+    -> Value
+    -> Value
 enableToJSON t _ = error $ t <> ": encoding to Data.Aeson.Value is unstable and therefore not supported"
 #endif
 {-# INLINE enableToJSON #-}
