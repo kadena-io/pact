@@ -53,6 +53,8 @@ import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
+import Test.QuickCheck
+
 import Pact.Types.Continuation
 import Pact.Types.Exp
 import Pact.Types.PactValue
@@ -62,6 +64,7 @@ import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow, JsonProperties, JsonMProperties, enableToJSON, (.?=))
 import Pact.Types.Namespace
+import Pact.Utils.Json
 
 
 data PersistDirect =
@@ -96,6 +99,9 @@ instance Pretty PersistDirect where
   pretty (PDValue v) = pretty v
   pretty (PDNative n) = pretty $ "<native>" <> asString n
   pretty (PDFreeVar f) = pretty f
+
+instance Arbitrary PersistDirect where
+  arbitrary = oneof [PDValue <$> arbitrary, PDNative <$> arbitrary, PDFreeVar <$> arbitrary]
 
 toPersistDirect :: Term Name -> Either Text PersistDirect
 toPersistDirect (TNative n _ _ _ _ _ _) = pure $ PDNative n
@@ -132,12 +138,12 @@ instance NFData r => NFData (ModuleData r)
 
 moduleDataProperties :: ToJSON r => JsonMProperties (ModuleData r)
 moduleDataProperties o = mconcat
-  [ "module" .= _mdModule o
-  , "refMap" .= _mdRefMap o
-  , "dependencies" .?= if HM.null deps then Nothing else Just deps
+  [ "dependencies" .?= if HM.null deps then Nothing else Just deps
+  , "module" .= _mdModule o
+  , "refMap" .= legacyHashMap (_mdRefMap o)
   ]
  where
-  deps = _mdDependencies o
+  deps = legacyHashMap (_mdDependencies o)
 {-# INLINE moduleDataProperties #-}
 
 instance ToJSON r => ToJSON (ModuleData r) where
@@ -153,6 +159,9 @@ instance (ToJSON r, FromJSON r) => FromJSON (ModuleData r) where
       <$> o .: "module"
       <*> o .: "refMap"
       <*> (fromMaybe HM.empty <$> o .:? "dependencies")
+
+instance Arbitrary r => Arbitrary (ModuleData r) where
+  arbitrary = ModuleData <$> arbitrary <*> arbitrary <*> arbitrary
 
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 
@@ -177,6 +186,9 @@ instance FromJSON (Ref' PersistDirect) where
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,Generic)
     deriving newtype (IsString,ToTerm,AsString,Show,Pretty,NFData)
+
+instance Arbitrary RowKey where
+  arbitrary = RowKey <$> arbitrary
 
 -- | Specify key and value types for database domains.
 data Domain k v where
@@ -237,6 +249,9 @@ instance Pretty v => Pretty (TxLog v) where
     , "value: " <> pretty value
     ]
 
+instance Arbitrary v => Arbitrary (TxLog v) where
+  arbitrary = TxLog <$> arbitrary <*> arbitrary <*> arbitrary
+
 -- | Instruction for '_writeRow'.
 data WriteType =
   -- | Insert a new row, fail if key already found.
@@ -270,6 +285,9 @@ instance Pretty TxId where
   pretty (TxId s) = viaShow s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
 instance AsString TxId where asString = pack . show
+
+instance Arbitrary TxId where
+  arbitrary = TxId <$> arbitrary
 
 data ExecutionMode =
     Transactional |

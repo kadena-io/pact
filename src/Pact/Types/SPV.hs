@@ -31,6 +31,8 @@ import Data.Text.Encoding
 
 import GHC.Generics hiding (to)
 
+import Test.QuickCheck
+
 import Pact.Types.Continuation (PactExec)
 import Pact.Types.Pretty (Pretty(..), prettyString)
 import Pact.Types.Term (Object, Name)
@@ -44,10 +46,16 @@ instance Wrapped ContProof
 instance NFData ContProof
 instance ToJSON ContProof where
   toJSON (ContProof bs) = String (decodeUtf8 bs)
+  toEncoding (ContProof bs) = toEncoding (decodeUtf8 bs)
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 instance FromJSON ContProof where
   parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
 instance Pretty ContProof where
   pretty = prettyString . show
+
+instance Arbitrary ContProof where
+  arbitrary = ContProof . encodeUtf8 <$> arbitrary
 
 -- | Backend for SPV support
 data SPVSupport = SPVSupport

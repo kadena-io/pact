@@ -54,7 +54,7 @@ module Pact.Types.Runtime
 
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
-import Control.Lens hiding ((.=),DefName)
+import Control.Lens hiding ((.=),DefName, elements)
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -69,6 +69,7 @@ import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,pack)
 import GHC.Generics (Generic)
+import Test.QuickCheck
 
 import Pact.Types.Capability
 import Pact.Types.ChainMeta
@@ -166,11 +167,18 @@ flagReps = M.fromList $ map go [minBound .. maxBound]
 
 instance Pretty ExecutionFlag where
   pretty = pretty . flagRep
-instance ToJSON ExecutionFlag where toJSON = String . flagRep
+instance ToJSON ExecutionFlag where
+  toJSON = enableToJSON "Pact.Types.Runtime.ExecutionFlat" . String . flagRep
+  toEncoding = toEncoding . flagRep
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 instance FromJSON ExecutionFlag where
   parseJSON = withText "ExecutionFlag" $ \t -> case M.lookup t flagReps of
     Nothing -> fail "Invalid ExecutionFlag value"
     Just f -> return f
+
+instance Arbitrary ExecutionFlag where
+  arbitrary = elements [minBound .. maxBound]
 
 -- | Execution configuration flags, where empty is the "default".
 newtype ExecutionConfig = ExecutionConfig
@@ -252,8 +260,30 @@ data PactEvent = PactEvent
   , _eventModuleHash :: !ModuleHash
   } deriving (Eq, Show, Generic)
 instance NFData PactEvent
-instance ToJSON PactEvent where toJSON = lensyToJSON 6
+
+pactEventProperties :: JsonProperties PactEvent
+pactEventProperties o =
+  [ "params" .= _eventParams o
+  , "name" .= _eventName o
+  , "module" .= _eventModule o
+  , "moduleHash" .= _eventModuleHash o
+  ]
+
+instance ToJSON PactEvent where
+  toJSON = enableToJSON "Pact.Types.Runtime.PactEvent" . lensyToJSON 6
+  toEncoding = pairs . mconcat . pactEventProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
+
+instance Arbitrary PactEvent where
+  arbitrary = PactEvent
+    <$> arbitrary
+    <*> resize 20 arbitrary
+    <*> arbitrary
+    <*> arbitrary
+
 makeLenses ''PactEvent
 
 

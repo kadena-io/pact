@@ -45,6 +45,8 @@ import Data.Text
 import Pact.Time (getCurrentTime, toPosixTimestampMicros)
 import Data.Word (Word64)
 
+import Test.QuickCheck
+
 -- internal pact modules
 
 import Pact.Parse
@@ -57,17 +59,26 @@ newtype EntityName = EntityName Text
   deriving stock (Eq, Ord, Generic)
   deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString)
 
+instance Arbitrary EntityName where
+  arbitrary = EntityName <$> arbitrary
+
 -- | Wrapper for 'PublicMeta' ttl field in seconds since offset
 --
 newtype TTLSeconds = TTLSeconds ParsedInteger
   deriving stock (Eq, Ord, Generic)
   deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
 
+instance Arbitrary TTLSeconds where
+  arbitrary = TTLSeconds <$> arbitrary
+
 -- | Wrapper for 'PublicMeta' creation time field in seconds since POSIX epoch
 --
 newtype TxCreationTime = TxCreationTime ParsedInteger
   deriving stock (Eq, Ord, Generic)
   deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
+
+instance Arbitrary TxCreationTime where
+  arbitrary = TxCreationTime <$> arbitrary
 
 -- | Get current time as TxCreationTime
 getCurrentCreationTime :: IO TxCreationTime
@@ -85,6 +96,9 @@ data Address = Address
 
 instance NFData Address
 instance Serialize Address
+
+instance Arbitrary Address where
+  arbitrary = Address <$> arbitrary <*> arbitrary
 
 addressProperties :: JsonProperties Address
 addressProperties o =
@@ -108,6 +122,9 @@ newtype PrivateMeta = PrivateMeta { _pmAddress :: Maybe Address }
 makeLenses ''PrivateMeta
 
 instance Default PrivateMeta where def = PrivateMeta def
+
+instance Arbitrary PrivateMeta where
+  arbitrary = PrivateMeta <$> arbitrary
 
 privateMetaProperties :: JsonProperties PrivateMeta
 privateMetaProperties o = [ "address" .= _pmAddress o ]
@@ -142,6 +159,15 @@ data PublicMeta = PublicMeta
 makeLenses ''PublicMeta
 
 instance Default PublicMeta where def = PublicMeta "" "" 0 0 0 0
+
+instance Arbitrary PublicMeta where
+  arbitrary = PublicMeta
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
 
 publicMetaProperties :: JsonProperties PublicMeta
 publicMetaProperties o =
@@ -220,3 +246,10 @@ instance ToJSON PublicData where
 
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
 instance Default PublicData where def = PublicData def def def def
+
+instance Arbitrary PublicData where
+  arbitrary = PublicData
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary

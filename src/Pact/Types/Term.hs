@@ -706,7 +706,7 @@ instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
   (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
 instance Arbitrary ModRef where
-  arbitrary = ModRef <$> arbitrary <*> arbitrary <*> pure def
+  arbitrary = ModRef <$> arbitrary <*> scale (min 10) arbitrary <*> pure def
 instance SizeOf ModRef where
   sizeOf (ModRef n s _) = constructorCost 1 + sizeOf n + sizeOf s
 
@@ -1004,8 +1004,8 @@ instance Arbitrary g => Arbitrary (Module g) where
     <*> arbitrary
     <*> arbitrary
     <*> arbitrary
-    <*> arbitrary
-    <*> arbitrary
+    <*> scale (min 10) arbitrary
+    <*> scale (min 10) arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- Interface
@@ -1041,7 +1041,7 @@ instance NFData Interface
 instance SizeOf Interface
 
 instance Arbitrary Interface where
-  arbitrary = Interface <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary = Interface <$> arbitrary <*> arbitrary <*> arbitrary <*> scale (min 10) arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- ModuleDef
@@ -2124,7 +2124,7 @@ instance Arbitrary n => Arbitrary (Lam n) where
   arbitrary = Lam <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary n => Arbitrary (Object n) where
-  arbitrary = Object <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary = Object <$> arbitrary <*> arbitrary <*> scale (min 10) arbitrary <*> arbitrary
 
 instance Arbitrary n => Arbitrary (Term n) where
   arbitrary = sized $ \case

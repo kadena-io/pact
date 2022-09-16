@@ -25,19 +25,24 @@ import Test.QuickCheck
 
 -- internal modules
 
+import Pact.Parse
 import Pact.Types.Capability
+import Pact.Types.ChainId
 import Pact.Types.Command
 import Pact.Types.Continuation
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.Names
+import Pact.Types.Namespace
+import Pact.Types.PactError
 import Pact.Types.PactValue
+import Pact.Types.Persistence
 import Pact.Types.RPC
+import Pact.Types.Runtime
 import Pact.Types.Scheme
 import Pact.Types.SigData
-import Pact.Types.Term
-import Pact.Types.Type
+import Pact.Types.SPV
 
 spec :: Spec
 spec = describe "JSON encodings" $ do
@@ -49,6 +54,43 @@ spec = describe "JSON encodings" $ do
 
 spec_compat :: Spec
 spec_compat = describe "toJSON and toEncoding are equivalent" $ do
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.PactError" $ do
+    it "PactErrorType" $ property $ checkCompat @PactErrorType
+    it "StackFrame" $ property $ checkCompat @StackFrame
+    it "PactError" $ property $ checkCompat @PactError
+    it "OutputType" $ property $ checkCompat @OutputType
+    it "RenderedOutput" $ property $ checkCompat @RenderedOutput
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.ChainId" $ do
+    it "ChainId" $ property $ checkCompat @ChainId
+    it "NetworkId" $ property $ checkCompat @NetworkId
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Namespace" $ do
+    it "Namespace" $ property $ checkCompat @(Namespace ())
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Gas" $ do
+    it "GasLimit" $ property $ checkCompat @GasLimit
+    it "GasPrice" $ property $ checkCompat @GasPrice
+
+  -- ---------------------------------------------- --
+  describe "Pact.Parse" $ do
+    it "ParsedInteger" $ property $ checkCompat @ParsedInteger
+    it "ParsedDecimal" $ property $ checkCompat @ParsedDecimal
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.ChainMeta" $ do
+    it "EntityName" $ property $ checkCompat @EntityName
+    it "TTLSeconds" $ property $ checkCompat @TTLSeconds
+    it "TxCreationTime" $ property $ checkCompat @TxCreationTime
+    it "Address" $ property $ checkCompat @Address
+    it "PrivateMeta" $ property $ checkCompat @PrivateMeta
+    it "PublicMeta" $ property $ checkCompat @PublicMeta
+    it "PublicData" $ property $ checkCompat @PublicData
 
   -- ---------------------------------------------- --
   describe "Pact.Types.Info" $ do
@@ -149,9 +191,27 @@ spec_compat = describe "toJSON and toEncoding are equivalent" $ do
     it "PPKScheme" $ property $ checkCompat @PPKScheme
 
   -- ---------------------------------------------- --
+  describe "Pact.Types.Persistence" $ do
+    it "PersistDirect" $ property $ checkCompat @PersistDirect
+    it "ModuleData" $ property $ checkCompat @(ModuleData ())
+    it "PersistModuleData" $ property $ checkCompat @PersistModuleData
+    -- NO_JSON it "RowKey" $ property $ checkCompat @RowKey
+    it "(Ref' PersistDirect)" $ property $ checkCompat @(Ref' PersistDirect)
+    it "TxLog" $ property $ checkCompat @(TxLog ())
+    it "TxId" $ property $ checkCompat @TxId
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Runtime" $ do
+    it "PactEvent" $ property $ checkCompat @PactEvent
+    it "ExecutionFlag" $ property $ checkCompat @ExecutionFlag
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.SPV" $ do
+    it "ContProof" $ property $ checkCompat @ContProof
+
+  -- ---------------------------------------------- --
   describe "Pact.Types.Capability" $ do
     it "SigCapability" $ property $ checkCompat @SigCapability
-    -- TODO
 
   -- ---------------------------------------------- --
   describe "Pact.Types.RPC" $ do
@@ -165,6 +225,9 @@ spec_compat = describe "toJSON and toEncoding are equivalent" $ do
     it "Command" $ property $ checkCompat @(Command ())
     it "Signer" $ property $ checkCompat @Signer
     it "Payload" $ property $ checkCompat @(Payload () ())
+    it "PactResult" $ property $ checkCompat @PactResult
+    it "CommandResult" $ property $ checkCompat @(CommandResult ())
+    it "RequestKey" $ property $ checkCompat @RequestKey
 
   -- ---------------------------------------------- --
   describe "Pact.Types.SigData" $ do

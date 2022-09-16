@@ -1,12 +1,13 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  Pact.Compile
@@ -43,6 +44,7 @@ import Data.List
 import Data.Serialize (Serialize)
 import Data.Text (Text, unpack)
 import Data.Text.Encoding
+import Data.Scientific
 import GHC.Generics (Generic)
 import Prelude
 import Text.Trifecta as TF
@@ -54,6 +56,7 @@ import Pact.Types.Parser
 import Pact.Types.Pretty (Pretty(..),viaShow)
 import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
+import Test.QuickCheck (Arbitrary, arbitrary)
 
 
 
@@ -150,12 +153,18 @@ instance A.FromJSON ParsedDecimal where
 
 instance A.ToJSON ParsedDecimal where
   toJSON (ParsedDecimal d) = A.Number $ fromRational $ toRational d
+  toEncoding (ParsedDecimal d) = A.toEncoding @Scientific $ fromRational $ toRational d
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance Show ParsedDecimal where
   show (ParsedDecimal d) = show d
 
 instance Pretty ParsedDecimal where
   pretty (ParsedDecimal d) = viaShow d
+
+instance Arbitrary ParsedDecimal where
+  arbitrary = ParsedDecimal <$> arbitrary
 
 instance Wrapped ParsedDecimal
 
@@ -178,6 +187,12 @@ instance A.FromJSON ParsedInteger where
 
 instance A.ToJSON ParsedInteger where
   toJSON (ParsedInteger i) = A.Number (fromIntegral i)
+  toEncoding (ParsedInteger i) = A.toEncoding @Scientific (fromIntegral i)
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance Arbitrary ParsedInteger where
+  arbitrary = ParsedInteger <$> arbitrary
 
 instance Wrapped ParsedInteger
 

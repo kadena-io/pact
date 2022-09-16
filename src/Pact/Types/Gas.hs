@@ -38,6 +38,8 @@ import Data.Serialize
 
 import GHC.Generics
 
+import Test.QuickCheck
+
 import Pact.Types.Continuation
 import Pact.Types.Info
 import Pact.Types.Persistence
@@ -64,6 +66,9 @@ instance Show GasPrice where
 
 instance FromJSON GasPrice where
   parseJSON = fmap GasPrice . parseGT0
+
+instance Arbitrary GasPrice where
+  arbitrary = GasPrice <$> arbitrary
 
 instance Wrapped GasPrice
 
@@ -172,6 +177,9 @@ instance Pretty GasArgs where
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
+
+instance Arbitrary GasLimit where
+  arbitrary = GasLimit <$> arbitrary
 
 instance Show GasLimit where
   show (GasLimit (ParsedInteger i)) = show i

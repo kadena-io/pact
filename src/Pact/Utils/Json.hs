@@ -1,10 +1,12 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module: Pact.Utils.Json
@@ -23,6 +25,8 @@ module Pact.Utils.Json
 , legacyHashMapToEncoding
 , legacyMapToEncoding
 , LegacyHashed(..)
+, legacyHashMap
+, legacyMap
 
 -- * Testing
 , prop_legacyHashCompat
@@ -33,6 +37,7 @@ import Data.Aeson
 import Data.Bifunctor
 import Data.Bits
 import qualified Data.ByteString as B
+import Data.Coerce
 import Data.Hashable
 import qualified Data.HashMap.Strict as HM
 import Data.Int
@@ -41,7 +46,10 @@ import qualified Data.Map.Strict as M
 import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Typeable
 import Data.Word
+
+import GHC.Stack
 
 import Test.QuickCheck
 import Test.QuickCheck.Instances ()
@@ -52,9 +60,9 @@ import Test.QuickCheck.Instances ()
 newtype LegacyHashed a = LegacyHashed { getLegacyHashed :: a }
   deriving newtype (Show, Eq, Ord, ToJSON, FromJSON, ToJSONKey, FromJSONKey, IsString)
 
-instance Hashable (LegacyHashed T.Text) where
-  hash = legacyHash . getLegacyHashed
-  hashWithSalt salt = legacyHashWithSalt salt . getLegacyHashed
+instance Coercible a T.Text => Hashable (LegacyHashed a) where
+  hash = legacyHash . coerce . getLegacyHashed
+  hashWithSalt salt = legacyHashWithSalt salt . coerce . getLegacyHashed
   {-# INLINE hash #-}
   {-# INLINE hashWithSalt #-}
 
@@ -79,6 +87,48 @@ legacyMapToEncoding = toEncoding
   . fmap (first LegacyHashed)
   . M.toList
 {-# INLINE legacyMapToEncoding #-}
+
+-- | Convert a 'HM.HashMap' that has a textual JSON key into HashMap with a
+-- Legacy Key.
+--
+-- The 'ToJSON' instance for 'HM.HashMap' encodes maps with textual keys as
+-- 'Object', which internally is a 'HM.HashMap' with 'T.Text' as keys. For
+-- 'toEncoding' to preserve the legacy ordering of properties with convert the
+-- map into 'HM.HashMap' with 'LegacyHashed T.Text' as key type.
+--
+-- Apply this function to 'HM.HashMap' values in 'JsonProperties' functions.
+--
+legacyHashMap
+  :: forall a b
+  . HasCallStack
+  => Typeable a
+  => ToJSONKey a
+  => HM.HashMap a b
+  -> HM.HashMap (LegacyHashed T.Text) b
+legacyHashMap = case toJSONKey @a of
+  ToJSONKeyText f _ -> HM.mapKeys (LegacyHashed . f)
+  _ -> error $ "Pact.Utils.Json: failed to JSON encode HashMap with non-textual key of type " <> show (typeRep (Proxy @a))
+
+-- | Convert a 'M.Map' that has a textual JSON key into HashMap with a Legacy
+-- Key.
+--
+-- The 'ToJSON' instance for Map encodes maps with textual keys as 'Object',
+-- which internally is a 'HM.HashMap' with 'T.Text' as keys. For 'toEncoding' to
+-- preserve the legacy ordering of properties with convert the map into
+-- 'HM.HashMap' with 'LegacyHashed T.Text' as key type.
+--
+-- Apply this function to 'M.Map' values in 'JsonProperties' functions.
+--
+legacyMap
+  :: forall a b
+  . HasCallStack
+  => Typeable a
+  => ToJSONKey a
+  => M.Map a b
+  -> HM.HashMap (LegacyHashed T.Text) b
+legacyMap = case toJSONKey @a of
+  ToJSONKeyText f _ -> HM.fromList . fmap (first (LegacyHashed . f)) . M.toList
+  _ -> error $ "Pact.Utils.Json: failed to JSON encode Map with non-textual key of type " <> show (typeRep (Proxy @a))
 
 -- -------------------------------------------------------------------------- --
 -- Hashing of 'T.Text' for `text <2` and `hashable <1.3.1`

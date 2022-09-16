@@ -1,11 +1,12 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  Pact.Types.PactError
@@ -37,7 +38,7 @@ module Pact.Types.PactError
 
 
 import Control.Applicative
-import Control.Lens hiding ((.=),DefName)
+import Control.Lens hiding ((.=),DefName, elements)
 import Control.Monad
 import Control.Monad.Catch
 import Data.Aeson hiding (Object)
@@ -47,6 +48,8 @@ import Data.Text as T (Text, unpack, pack, init)
 import Control.DeepSeq (NFData)
 
 import GHC.Generics
+
+import Test.QuickCheck
 
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
@@ -58,7 +61,11 @@ data StackFrame = StackFrame {
     , _sfApp :: Maybe (FunApp,[Text])
     } deriving (Eq,Generic)
 instance NFData StackFrame
-instance ToJSON StackFrame where toJSON = toJSON . show
+instance ToJSON StackFrame where
+  toJSON = enableToJSON "Pact.Types.PactError.StackFrame" . toJSON . show
+  toEncoding = toEncoding . show
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 -- | BIG HUGE CAVEAT: Back compat requires maintaining the pre-existing
 -- 'ToJSON' instance, so this is ONLY for UX coming out of serialized
@@ -74,6 +81,9 @@ instance Show StackFrame where
     show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
       Nothing -> unpack n
       Just (_,as) -> "(" ++ unpack n ++ concatMap (\a -> " " ++ unpack (asString a)) as ++ ")"
+
+instance Arbitrary StackFrame where
+  arbitrary = StackFrame <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- | Attempt to parse 'Show' instance output. Intentionally avoids parsing app args,
 -- cramming all of the text into '_sfName'.
@@ -109,6 +119,9 @@ instance NFData PactErrorType
 instance ToJSON PactErrorType
 instance FromJSON PactErrorType
 
+instance Arbitrary PactErrorType where
+  arbitrary = elements [ EvalError, ArgsError, DbError, TxFailure, SyntaxError, GasError ]
+
 data PactError = PactError
   { peType :: !PactErrorType
   , peInfo :: !Info
@@ -118,9 +131,21 @@ data PactError = PactError
 
 instance NFData PactError
 instance Exception PactError
+
+pactErrorProperties :: JsonProperties PactError
+pactErrorProperties o =
+  [ "callStack" .= peCallStack o
+  , "type" .= peType o
+  , "message" .= show (peDoc o)
+  , "info" .= renderInfo (peInfo o)
+  ]
+
 instance ToJSON PactError where
-  toJSON (PactError t i s d) =
-    object [ "type" .= t, "info" .= renderInfo i, "callStack" .= s, "message" .= (show d)]
+  toJSON = enableToJSON "Pact.Types.PactError.PactError" . object . pactErrorProperties
+  toEncoding = pairs . mconcat . pactErrorProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 -- CAVEAT: this is "UX only" due to issues with Info, StackFrame, and that
 -- historically these were ignored here. As such this is a "lenient" parser returning
 -- the old values on failure.
@@ -136,6 +161,13 @@ instance FromJSON PactError where
       parseSFs sfs = case sequence (map (parseOnly parseStackFrame) sfs) of
         Left _e -> []
         Right ss -> ss
+
+instance Arbitrary PactError where
+  arbitrary = PactError
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> pure (pretty @String "PRETTY_PRINTER DOC")
 
 -- | Lenient info parser that is empty on error
 parseInfo :: Text -> Info
@@ -161,6 +193,9 @@ data OutputType =
 instance ToJSON OutputType
 instance FromJSON OutputType
 
+instance Arbitrary OutputType where
+  arbitrary = elements [OutputFailure, OutputWarning, OutputTrace]
+
 -- | Tool warning/error output.
 data RenderedOutput = RenderedOutput
   { _roText :: Text
@@ -171,16 +206,27 @@ data RenderedOutput = RenderedOutput
 instance Pretty RenderedOutput where
   pretty (RenderedOutput t i f) = pretty (renderInfo i) <> ":" <> pretty (show f) <> ": " <> pretty t
 
+renderedOutputProperties :: JsonProperties RenderedOutput
+renderedOutputProperties o =
+  [ "text" .= _roText o
+  , "type" .= _roType o
+  , "info" .= renderInfo (_roInfo o)
+  ]
+
 instance ToJSON RenderedOutput where
-  toJSON RenderedOutput {..} = object
-      [ "text" .= _roText
-      , "info" .= renderInfo _roInfo
-      , "type" .= _roType ]
+  toJSON = enableToJSON "Pact.Types.PactError.RenderedOutput" . object . renderedOutputProperties
+  toEncoding = pairs . mconcat . renderedOutputProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON RenderedOutput where
   parseJSON = withObject "RenderedOutput" $ \o -> RenderedOutput
       <$> o .: "text"
       <*> (parseInfo <$> o .: "info")
       <*> o .: "type"
+
+instance Arbitrary RenderedOutput where
+  arbitrary = RenderedOutput <$> arbitrary <*> arbitrary <*> arbitrary
 
 renderWarn, renderFatal :: Text -> RenderedOutput
 renderWarn t = RenderedOutput t def OutputWarning

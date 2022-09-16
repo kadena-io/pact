@@ -87,7 +87,7 @@ instance ToJSON c => ToJSON (ExecMsg c) where
     {-# INLINE toEncoding #-}
 
 instance Arbitrary c => Arbitrary (ExecMsg c) where
-  arbitrary = ExecMsg <$> arbitrary <*> arbitrary
+  arbitrary = ExecMsg <$> arbitrary <*> pure (String "JSON VALUE")
 
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
@@ -126,7 +126,7 @@ instance Arbitrary ContMsg where
     <$> arbitrary
     <*> arbitrary
     <*> arbitrary
-    <*> arbitrary
+    <*> pure (String "JSON VALUE")
     <*> arbitrary
 
 --

@@ -74,6 +74,9 @@ newtype NetworkId = NetworkId { _networkId :: Text }
 
 instance Wrapped NetworkId
 
+instance Arbitrary NetworkId where
+  arbitrary = NetworkId <$> genBareText
+
 -- | Lens into the value of 'NetworkId'
 --
 networkId :: Lens' NetworkId Text

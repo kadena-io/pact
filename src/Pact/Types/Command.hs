@@ -52,7 +52,7 @@ module Pact.Types.Command
 
 
 import Control.Applicative
-import Control.Lens hiding ((.=))
+import Control.Lens hiding ((.=), elements)
 import Control.DeepSeq
 
 import Data.ByteString (ByteString)
@@ -283,7 +283,7 @@ instance FromJSON Signer where
       listMay = fromMaybe []
 
 instance Arbitrary Signer where
-  arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> scale (min 5) arbitrary
 
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
@@ -313,12 +313,12 @@ instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
 
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
-instance Arbitrary (Payload m c) where
+instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
   arbitrary = Payload
     <$> arbitrary
     <*> arbitrary
     <*> arbitrary
-    <*> arbitrary
+    <*> scale (min 10) arbitrary
     <*> arbitrary
 
 newtype UserSig = UserSig { _usSig :: Text }
@@ -369,6 +369,9 @@ instance FromJSON PactResult where
                            ((Left <$> o .: "error") <|>
                             (Right <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
+
+instance Arbitrary PactResult where
+  arbitrary = PactResult <$> arbitrary
 
 -- | API result of attempting to execute a pact command, parametrized over level of logging type
 data CommandResult l = CommandResult {
@@ -426,11 +429,19 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
       events (Just es) = es
 instance NFData a => NFData (CommandResult a)
 
+instance Arbitrary l => Arbitrary (CommandResult l) where
+  arbitrary = CommandResult
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> elements [Nothing, Just (String "JSON VALUE")]
+    <*> scale (min 10) arbitrary
+
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
-
-
-
 
 type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
 type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
@@ -447,7 +458,8 @@ newtype RequestKey = RequestKey { unRequestKey :: Hash}
 instance Show RequestKey where
   show (RequestKey rk) = show rk
 
-
+instance Arbitrary RequestKey where
+  arbitrary = RequestKey <$> arbitrary
 
 makeLenses ''UserSig
 makeLenses ''Signer

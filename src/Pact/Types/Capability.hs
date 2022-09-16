@@ -88,7 +88,7 @@ instance FromJSON SigCapability where
     <*> o .: "args"
 
 instance Arbitrary SigCapability where
-  arbitrary = SigCapability <$> arbitrary <*> arbitrary
+  arbitrary = SigCapability <$> arbitrary <*> resize 10 arbitrary
 
 -- | Various results of evaluating a capability.
 -- Note: dupe managed install is an error, thus no case here.
