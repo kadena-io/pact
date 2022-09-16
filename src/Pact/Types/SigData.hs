@@ -28,6 +28,7 @@ import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import GHC.Generics
+import Test.QuickCheck
 
 import Pact.Parse
 import Pact.Types.Command
@@ -51,6 +52,9 @@ instance FromJSON PublicKeyHex where
     if T.length t == 64 && isRight (parseB16TextOnly t)
       then return $ PublicKeyHex t
       else fail "Public key must have 64 hex characters"
+
+instance Arbitrary PublicKeyHex where
+  arbitrary = PublicKeyHex . T.pack <$> vectorOf 64 (elements "0123456789abcdef")
 
 -- | This type is designed to represent signatures in all possible situations
 -- where they might be wanted. It must satisfy at least the following
@@ -94,6 +98,9 @@ instance FromJSON a => FromJSON (SigData a) where
     where
       f v = flip (withObject "SigData Pairs") v $ \_ ->
         fmap (bimap PublicKeyHex (fmap UserSig)) . HM.toList <$> parseJSON v
+
+instance Arbitrary a => Arbitrary (SigData a) where
+  arbitrary = SigData <$> arbitrary <*> arbitrary <*> arbitrary
 
 commandToSigData :: Command Text -> Either String (SigData Text)
 commandToSigData c = do

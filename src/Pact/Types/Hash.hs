@@ -154,6 +154,9 @@ instance ParseText (TypedHash h) where
   parseText s = TypedHash <$> parseB64UrlUnpaddedText s
   {-# INLINE parseText #-}
 
+instance Arbitrary (TypedHash a) where
+  arbitrary = fromUntypedHash <$> arbitrary
+
 typedHashToText :: TypedHash h -> Text
 typedHashToText (TypedHash h) = toB64UrlUnpaddedText h
 

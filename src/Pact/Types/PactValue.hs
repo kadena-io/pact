@@ -93,7 +93,7 @@ genTerminatingPactValueGuard =
   , GModule <$> arbitrary ]
 
 genPactValueObjectMap :: PactValueGeneratorSize -> Gen (ObjectMap PactValue)
-genPactValueObjectMap genSize = ObjectMap <$> M.fromList <$> genMap
+genPactValueObjectMap genSize = ObjectMap . M.fromList <$> genMap
   where genOneKeyValue = do
           f <- arbitrary :: Gen FieldKey
           pv <- genSomePactValue genSize

@@ -38,6 +38,8 @@ import Data.Text (Text)
 
 import GHC.Generics
 
+import Test.QuickCheck
+
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue
@@ -84,6 +86,9 @@ instance FromJSON SigCapability where
   parseJSON = withObject "SigCapability" $ \o -> SigCapability
     <$> o .: "name"
     <*> o .: "args"
+
+instance Arbitrary SigCapability where
+  arbitrary = SigCapability <$> arbitrary <*> arbitrary
 
 -- | Various results of evaluating a capability.
 -- Note: dupe managed install is an error, thus no case here.

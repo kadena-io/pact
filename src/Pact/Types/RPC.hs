@@ -29,6 +29,8 @@ import Data.Aeson as A
 
 import GHC.Generics
 
+import Test.QuickCheck
+
 import Pact.Types.Orphans ()
 import Pact.Types.Runtime
 import Pact.Types.SPV
@@ -56,6 +58,9 @@ instance ToJSON c => ToJSON (PactRPC c) where
     {-# INLINE toJSON #-}
     {-# INLINE toEncoding #-}
 
+instance Arbitrary c => Arbitrary (PactRPC c) where
+  arbitrary = oneof [Exec <$> arbitrary, Continuation <$> arbitrary]
+
 data ExecMsg c = ExecMsg
   { _pmCode :: c
   , _pmData :: Value
@@ -80,6 +85,9 @@ instance ToJSON c => ToJSON (ExecMsg c) where
     toEncoding = pairs . mconcat . execMsgProperties
     {-# INLINE toJSON #-}
     {-# INLINE toEncoding #-}
+
+instance Arbitrary c => Arbitrary (ExecMsg c) where
+  arbitrary = ExecMsg <$> arbitrary <*> arbitrary
 
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
@@ -112,6 +120,14 @@ instance ToJSON ContMsg where
     toEncoding = pairs . mconcat . contMsgProperties
     {-# INLINE toJSON #-}
     {-# INLINE toEncoding #-}
+
+instance Arbitrary ContMsg where
+  arbitrary = ContMsg
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
 
 --
 

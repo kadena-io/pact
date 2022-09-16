@@ -64,6 +64,7 @@ import Data.Maybe  (fromMaybe)
 
 import GHC.Generics
 
+import Test.QuickCheck
 
 import Pact.Parse (parsePact)
 import Pact.Types.Capability
@@ -118,6 +119,8 @@ instance (FromJSON a) => FromJSON (Command a) where
 
 instance NFData a => NFData (Command a)
 
+instance Arbitrary a => Arbitrary (Command a) where
+  arbitrary = Command <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- | Strict Either thing for attempting to deserialize a Command.
 data ProcessedCommand m a =
@@ -279,7 +282,8 @@ instance FromJSON Signer where
     where
       listMay = fromMaybe []
 
-
+instance Arbitrary Signer where
+  arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
@@ -309,7 +313,13 @@ instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
 
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
-
+instance Arbitrary (Payload m c) where
+  arbitrary = Payload
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
 
 newtype UserSig = UserSig { _usSig :: Text }
   deriving (Eq, Ord, Show, Generic)
@@ -330,6 +340,9 @@ instance ToJSON UserSig where
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
+
+instance Arbitrary UserSig where
+  arbitrary = UserSig <$> arbitrary
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue

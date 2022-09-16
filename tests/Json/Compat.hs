@@ -25,11 +25,19 @@ import Test.QuickCheck
 
 -- internal modules
 
-import Pact.Types.Type
+import Pact.Types.Capability
+import Pact.Types.Command
+import Pact.Types.Continuation
 import Pact.Types.Exp
-import Pact.Types.Names
+import Pact.Types.Hash
 import Pact.Types.Info
+import Pact.Types.Names
+import Pact.Types.PactValue
+import Pact.Types.RPC
+import Pact.Types.Scheme
+import Pact.Types.SigData
 import Pact.Types.Term
+import Pact.Types.Type
 
 spec :: Spec
 spec = describe "JSON encodings" $ do
@@ -118,6 +126,50 @@ spec_compat = describe "toJSON and toEncoding are equivalent" $ do
     it "Lam" $ property $ checkCompat @(Lam ())
     it "Object" $ property $ checkCompat @(Object ())
     it "Term" $ property $ checkCompat @(Term ())
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.PactValue" $
+    it "PactValue" $ property $ checkCompat @PactValue
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Continuation" $ do
+    it "Provenance" $ property $ checkCompat @Provenance
+    it "Yield" $ property $ checkCompat @Yield
+    it "PactContinuation" $ property $ checkCompat @PactContinuation
+    it "NestedPactExec" $ property $ checkCompat @NestedPactExec
+    it "PactExec" $ property $ checkCompat @PactExec
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Hash" $ do
+    it "Hash" $ property $ checkCompat @Hash
+    it "PactHash" $ property $ checkCompat @PactHash
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Scheme" $ do
+    it "PPKScheme" $ property $ checkCompat @PPKScheme
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Capability" $ do
+    it "SigCapability" $ property $ checkCompat @SigCapability
+    -- TODO
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.RPC" $ do
+    it "PactRPC" $ property $ checkCompat @(PactRPC ())
+    it "ExecMsg" $ property $ checkCompat @(ExecMsg ())
+    it "ContMsg" $ property $ checkCompat @ContMsg
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Command" $ do
+    it "UserSig" $ property $ checkCompat @UserSig
+    it "Command" $ property $ checkCompat @(Command ())
+    it "Signer" $ property $ checkCompat @Signer
+    it "Payload" $ property $ checkCompat @(Payload () ())
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.SigData" $ do
+    it "PublicKeyHex" $ property $ checkCompat @PublicKeyHex
+    it "SigData" $ property $ checkCompat @(SigData ())
 
 checkCompat :: ToJSON a => a -> Property
 checkCompat a = encode (toJSON a) === encodingToLazyByteString (toEncoding a)

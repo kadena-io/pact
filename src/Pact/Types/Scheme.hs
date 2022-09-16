@@ -17,6 +17,7 @@ import Control.DeepSeq
 import Data.Kind (Type)
 import Data.Serialize
 import Data.Aeson
+import Test.QuickCheck
 
 import Pact.Types.Util (ParseText(..))
 
@@ -41,6 +42,9 @@ instance ParseText PPKScheme where
     "ETH" -> return ETH
     _ -> fail $ "Unsupported PPKScheme: " ++ show s
   {-# INLINE parseText #-}
+
+instance Arbitrary PPKScheme where
+  arbitrary = elements [ED25519, ETH]
 
 
 defPPKScheme :: PPKScheme

@@ -44,6 +44,8 @@ import Control.DeepSeq (NFData)
 import Control.Lens hiding ((.=))
 
 import Data.Aeson
+import Data.Bifunctor
+import qualified Data.HashMap.Strict as HM
 import Data.Map.Strict(Map)
 import Data.Maybe(fromMaybe)
 import qualified Data.Map.Strict as Map
@@ -56,6 +58,7 @@ import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Util (lensyToJSON, lensyParseJSON, JsonProperties, JsonMProperties, enableToJSON, (.?=))
+import Pact.Utils.Json
 
 
 -- | Provenance datatype contains all of the necessary
@@ -106,9 +109,13 @@ data Yield = Yield
   } deriving (Eq, Show, Generic)
 
 instance Arbitrary Yield where
-  arbitrary = Yield <$> (genPactValueObjectMap RecurseTwice) <*> frequency
-    [ (1, pure Nothing)
-    , (4, Just <$> arbitrary) ] <*> pure Nothing
+  arbitrary = Yield
+    <$> resize 10 arbitrary
+    <*> frequency
+      [ (1, pure Nothing)
+      , (4, Just <$> arbitrary)
+      ]
+    <*> pure Nothing
 
 instance NFData Yield
 
@@ -163,6 +170,9 @@ instance Pretty PactContinuation where
 
 instance NFData PactContinuation
 
+instance Arbitrary PactContinuation where
+  arbitrary = PactContinuation <$> arbitrary <*> resize 10 arbitrary
+
 pactContinuationProperties :: JsonProperties PactContinuation
 pactContinuationProperties o =
   [ "args" .= _pcArgs o
@@ -201,9 +211,24 @@ data PactExec = PactExec
 
 instance NFData PactExec
 
-pactExecProperties :: JsonProperties PactExec
-pactExecProperties o =
-    [ "nested" .= _peNested o | not (Map.null (_peNested o))]
+instance Arbitrary PactExec where
+  arbitrary = PactExec
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> resize 2 arbitrary
+
+pactExecProperties
+  :: ToJSON x
+  => (Map PactId NestedPactExec -> x)
+    -- ^ adjust ordering of properties in the map for legacy JSON encoding
+  -> JsonProperties PactExec
+pactExecProperties f o =
+    [ "nested" .= f (_peNested o) | not (Map.null (_peNested o))]
     ++
     [ "executed" .= _peExecuted o
     , "pactId" .= _pePactId o
@@ -216,8 +241,10 @@ pactExecProperties o =
 {-# INLINE pactExecProperties #-}
 
 instance ToJSON PactExec where
-  toJSON = enableToJSON "Pact.Types.Continuation.PactExec" . object . pactExecProperties
-  toEncoding = pairs . mconcat . pactExecProperties
+  toJSON = enableToJSON "Pact.Types.Continuation.PactExec" . object . pactExecProperties id
+  toEncoding = pairs . mconcat . pactExecProperties f
+   where
+    f m = HM.fromList $ first (\(PactId t) -> LegacyHashed t) <$> Map.toList m
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
@@ -260,17 +287,30 @@ fromNestedPactExec :: Bool -> NestedPactExec -> PactExec
 fromNestedPactExec rollback (NestedPactExec stepCount yield exec step pid cont nested) =
   PactExec stepCount yield exec step pid cont rollback nested
 
+nestedPactExecProperties
+  :: ToJSON x
+  => (Map PactId NestedPactExec -> x)
+    -- ^ adjust ordering of properties in the map for legacy JSON encoding
+  -> JsonProperties NestedPactExec
+nestedPactExecProperties f o =
+  [ "nested" .= f (_npeNested o)
+  , "executed" .= _npeExecuted o
+  , "pactId" .= _npePactId o
+  , "step" .= _npeStep o
+  , "yield" .= _npeYield o
+  , "continuation" .= _npeContinuation o
+  , "stepCount" .= _npeStepCount o
+  ]
+{-# INLINE nestedPactExecProperties #-}
 
 instance ToJSON NestedPactExec where
-  toJSON NestedPactExec{..} = object $
-    [ "executed" .= _npeExecuted
-    , "pactId" .= _npePactId
-    , "yield" .= _npeYield
-    , "step" .= _npeStep
-    , "continuation" .= _npeContinuation
-    , "stepCount" .= _npeStepCount
-    , "nested" .= _npeNested
-    ]
+  toJSON = enableToJSON "Pact.Types.Continuation.NestedPactExec" . object . nestedPactExecProperties id
+  toEncoding = pairs. mconcat . nestedPactExecProperties f
+   where
+    f m = HM.fromList $ first (\(PactId t) -> LegacyHashed t) <$> Map.toList m
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON NestedPactExec where
   parseJSON = withObject "NestedPactExec" $ \o ->
     NestedPactExec
@@ -284,6 +324,17 @@ instance FromJSON NestedPactExec where
 instance NFData NestedPactExec
 instance Pretty NestedPactExec where pretty = viaShow
 
+instance Arbitrary NestedPactExec where
+  arbitrary = NestedPactExec
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> do
+      Positive k <- arbitrary
+      scale (`div` (k + 3)) arbitrary
 
 makeLenses ''PactExec
 makeLenses ''NestedPactExec
