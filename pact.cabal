@@ -137,6 +137,7 @@ library
     Pact.Types.Version
     Pact.Types.Typecheck
     Pact.Typechecker
+    Pact.Utils.Json
   if flag(with-integer-gmp)
     build-depends:
         , base >= 4.15.0.0
@@ -402,6 +403,7 @@ test-suite hspec
         GasModelSpec
         GoldenSpec
         HistoryServiceSpec
+        Json.Compat
         PactContinuationSpec
         PersistSpec
         RemoteVerifySpec

@@ -45,3 +45,4 @@ style = IdentifierStyle "atom"
         (HS.fromList ["true","false"])
         Symbol
         ReservedIdentifier
+

@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -55,6 +56,7 @@ import Control.DeepSeq
 import Data.Serialize (Serialize)
 import Data.String (IsString, fromString)
 import Test.QuickCheck
+import Test.QuickCheck.Instances ()
 
 import Pact.Types.Info
 import Pact.Types.Pretty
@@ -187,6 +189,9 @@ instance ToJSON ListDelimiter where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance Arbitrary ListDelimiter where
+  arbitrary = elements [ Parens, Brackets, Braces ]
+
 instance FromJSON ListDelimiter where
   parseJSON = withText "ListDelimiter" $ \t -> case t of
     "()" -> pure Parens
@@ -222,6 +227,9 @@ instance FromJSON Separator where
     "," -> pure Comma
     _ -> fail "Invalid separator"
 
+instance Arbitrary Separator where
+  arbitrary = elements [Colon, ColonEquals, Comma]
+
 expInfoField :: IsString a => a
 expInfoField = fromString "i"
 
@@ -232,6 +240,9 @@ data LiteralExp i = LiteralExp
 instance HasInfo (LiteralExp Info) where
   getInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
+
+instance Arbitrary i => Arbitrary (LiteralExp i) where
+  arbitrary = LiteralExp <$> arbitrary <*> arbitrary
 
 literalExpProperties :: ToJSON i => JsonProperties (LiteralExp i)
 literalExpProperties o =
@@ -262,6 +273,9 @@ data AtomExp i = AtomExp
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
+
+instance Arbitrary i => Arbitrary (AtomExp i) where
+  arbitrary = AtomExp <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 atomExpProperties :: ToJSON i => JsonMProperties (AtomExp i)
 atomExpProperties o = mconcat
@@ -297,6 +311,9 @@ instance HasInfo (ListExp Info) where
   getInfo = _listInfo
 instance NFData i => NFData (ListExp i)
 
+instance Arbitrary i => Arbitrary (ListExp i) where
+  arbitrary = ListExp <$> arbitrary <*> arbitrary <*> arbitrary
+
 listExpProperties :: ToJSON i => JsonProperties (ListExp i)
 listExpProperties o =
   [ "list" .= _listList o
@@ -327,6 +344,9 @@ data SeparatorExp i = SeparatorExp
 instance HasInfo (SeparatorExp Info) where
   getInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
+
+instance Arbitrary i => Arbitrary (SeparatorExp i) where
+  arbitrary = SeparatorExp <$> arbitrary <*> arbitrary
 
 separatorExpProperties :: ToJSON i => JsonProperties (SeparatorExp i)
 separatorExpProperties o =
@@ -406,6 +426,21 @@ instance FromJSON i => FromJSON (Exp i) where
     (EList <$> parseJSON v) <|>
     (ESeparator <$> parseJSON v)
 
+instance Arbitrary i => Arbitrary (Exp i) where
+  arbitrary = sized $ \case
+    0 -> oneof
+      [ ELiteral <$> arbitrary
+      , EAtom <$> arbitrary
+      , ESeparator <$> arbitrary
+      ]
+    s -> do
+      Positive k <- arbitrary
+      resize (s `div` k + 1) $ oneof
+        [ ELiteral <$> arbitrary
+        , EAtom <$> arbitrary
+        , EList <$> arbitrary
+        , ESeparator <$> arbitrary
+        ]
 
 makePrisms ''Exp
 

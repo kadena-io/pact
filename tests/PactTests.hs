@@ -6,6 +6,7 @@ import qualified Blake2Spec
 import qualified KeysetSpec
 import qualified RoundTripSpec
 import qualified PrincipalSpec
+import qualified Json.Compat
 
 #ifndef ghcjs_HOST_OS
 import qualified PactTestsSpec
@@ -37,6 +38,7 @@ main = hspec $ do
   describe "KeysetSpec" KeysetSpec.spec
   describe "RoundTripSpec" RoundTripSpec.spec
   describe "PrincipalSpec" PrincipalSpec.spec
+  describe "Json.Compat" Json.Compat.spec
 
 #ifndef ghcjs_HOST_OS
 

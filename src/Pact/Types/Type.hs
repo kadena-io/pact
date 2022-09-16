@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -74,7 +75,7 @@ module Pact.Types.Type
 
 import Control.Applicative
 import Control.DeepSeq
-import Control.Lens hiding ((.=))
+import Control.Lens hiding ((.=), elements)
 import Control.Monad
 import Data.Aeson
 import Data.Default (Default(..))
@@ -92,6 +93,9 @@ import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving
 
+import Test.QuickCheck
+import Test.QuickCheck.Instances ()
+
 import Pact.Types.Codec
 import Pact.Types.Info
 import Pact.Types.Pretty
@@ -104,6 +108,9 @@ newtype TypeName = TypeName Text
 
 instance SizeOf TypeName where
   sizeOf (TypeName n) = sizeOf n
+
+instance Arbitrary TypeName where
+  arbitrary = TypeName <$> arbitrary
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
@@ -121,6 +128,9 @@ instance HasInfo (Arg o) where getInfo = _aInfo
 
 instance (SizeOf o) => SizeOf (Arg o)
 
+instance Arbitrary o => Arbitrary (Arg o) where
+  arbitrary = Arg <$> arbitrary <*> arbitrary <*> arbitrary
+
 -- | Function type
 data FunType o = FunType {
   _ftArgs :: [Arg o],
@@ -135,6 +145,12 @@ instance ToJSON o => ToJSON (FunType o) where toJSON = lensyToJSON 3
 instance FromJSON o => FromJSON (FunType o) where parseJSON = lensyParseJSON 3
 
 instance (SizeOf o) => SizeOf (FunType o)
+
+instance Arbitrary o => Arbitrary (FunType o) where
+  -- Let's keep the number of arguments small
+  arbitrary = do
+    Positive k <- arbitrary
+    scale (`div` (k + 1)) $ FunType <$> (take 5 <$> arbitrary) <*> arbitrary
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
@@ -172,6 +188,9 @@ instance FromJSON GuardType where
 
 instance NFData GuardType
 
+instance Arbitrary GuardType where
+  arbitrary = elements [ GTyKeySet, GTyKeySetName, GTyPact, GTyUser, GTyModule ]
+
 -- | Primitive/unvarying types.
 -- Guard is lame Maybe to allow "wildcards".
 data PrimType =
@@ -206,6 +225,16 @@ instance FromJSON PrimType where
 
 instance SizeOf PrimType where
   sizeOf _ = 0
+
+instance Arbitrary PrimType where
+  arbitrary = oneof
+    [ pure TyInteger
+    , pure TyDecimal
+    , pure TyTime
+    , pure TyBool
+    , pure TyString
+    , TyGuard <$> arbitrary
+    ]
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,
   tyKeySet,tyTable,tyGuard :: Text
@@ -257,8 +286,14 @@ instance Pretty SchemaType where
 instance SizeOf SchemaType where
   sizeOf _ = 0
 
+instance Arbitrary SchemaType where
+  arbitrary = elements [TyTable, TyObject, TyBinding]
+
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
+
+instance Arbitrary TypeVarName where
+  arbitrary = TypeVarName <$> arbitrary
 
 instance Show TypeVarName where show (TypeVarName t) = show t
 
@@ -273,6 +308,12 @@ data TypeVar v =
 
 instance ToJSON v => ToJSON (TypeVar v) where toJSON = lensyToJSON 3
 instance FromJSON v => FromJSON (TypeVar v) where parseJSON = lensyParseJSON 3
+
+instance Arbitrary v => Arbitrary (TypeVar v) where
+  arbitrary = oneof
+    [ TypeVar <$> arbitrary <*> arbitrary
+    , SchemaVar <$> arbitrary
+    ]
 
 instance NFData v => NFData (TypeVar v)
 instance Eq (TypeVar v) where
@@ -317,6 +358,13 @@ instance FromJSON SchemaPartial where
 
 instance SizeOf SchemaPartial
 
+instance Arbitrary SchemaPartial where
+  arbitrary = oneof
+    [ pure FullSchema
+    , PartialSchema <$> arbitrary
+    , pure AnySubschema
+    ]
+
 showPartial :: SchemaPartial -> String
 showPartial FullSchema = ""
 showPartial (PartialSchema ks)
@@ -342,6 +390,22 @@ data Type v =
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance SizeOf v => SizeOf (Type v)
+
+instance Arbitrary v => Arbitrary (Type v) where
+  arbitrary = sized $ \case
+    0 -> oneof [ pure TyAny, TyPrim <$> arbitrary ]
+    s -> do
+      Positive k <- arbitrary
+      resize (s `div` (k + 1)) $ oneof
+        [ pure TyAny
+        , TyVar <$> arbitrary
+        , TyPrim <$> arbitrary
+        , TyList <$> arbitrary
+        , TySchema <$> arbitrary <*> arbitrary <*> arbitrary
+        , TyFun <$> arbitrary
+        , TyUser <$> arbitrary
+        , TyModule <$> (fmap (take 5) <$> scale (`div` 2) arbitrary)
+        ]
 
 instance NFData v => NFData (Type v)
 

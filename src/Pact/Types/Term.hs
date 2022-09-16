@@ -16,12 +16,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- Required for GHC >= 9
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.Term
@@ -96,7 +98,7 @@ module Pact.Types.Term
 import Bound
 import Control.Applicative
 import Control.DeepSeq
-import Control.Lens hiding ((.=), DefName(..))
+import Control.Lens hiding ((.=), DefName(..), elements)
 import Control.Monad
 #if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
@@ -105,6 +107,7 @@ import Data.Aeson hiding (pairs,Object)
 #endif
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as A
+import Data.Bifunctor
 import Data.Decimal
 import Data.Default
 import Data.Eq.Deriving
@@ -113,6 +116,7 @@ import Data.Functor.Classes (Eq1(..), Show1(..))
 import Data.Function
 import qualified Data.HashSet as HS
 import Data.Hashable
+import qualified Data.HashMap.Strict as HM
 import Data.Int (Int64)
 import Data.List
 import qualified Data.Map.Strict as M
@@ -141,6 +145,17 @@ import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Util
 
+import Pact.Utils.Json
+
+-- -------------------------------------------------------------------------- --
+-- Arbitrary Orphans for Scope
+
+instance Arbitrary (f (Var b (f a))) => Arbitrary (Scope b f a) where
+  arbitrary = Scope <$> arbitrary
+
+instance (Arbitrary b, Arbitrary a) => Arbitrary (Var b a) where
+  arbitrary = oneof [B <$> arbitrary, F <$> arbitrary]
+
 -- -------------------------------------------------------------------------- --
 -- Meta
 
@@ -148,6 +163,9 @@ data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
   , _mModel :: ![Exp Info]   -- ^ models
   } deriving (Eq, Show, Generic)
+
+instance Arbitrary Meta where
+    arbitrary = Meta <$> arbitrary <*> arbitrary
 
 instance Pretty Meta where
   pretty (Meta (Just doc) model) = dquotes (pretty doc) <> line <> prettyModel model
@@ -258,6 +276,9 @@ defTypeRep Defcap = "defcap"
 instance Pretty DefType where
   pretty = prettyString . defTypeRep
 
+instance Arbitrary DefType where
+  arbitrary = elements [Defun, Defpact, Defcap]
+
 -- -------------------------------------------------------------------------- --
 -- Gas
 
@@ -275,6 +296,9 @@ instance Semigroup Gas where
 
 instance Monoid Gas where
   mempty = 0
+
+instance Arbitrary Gas where
+  arbitrary = Gas <$> arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- BindType
@@ -310,6 +334,9 @@ instance NFData n => NFData (BindType n)
 
 instance (SizeOf n) => SizeOf (BindType n)
 
+instance Arbitrary n => Arbitrary (BindType n) where
+  arbitrary = oneof [ pure BindLet, BindSchema <$> arbitrary ]
+
 -- -------------------------------------------------------------------------- --
 -- BindPair
 
@@ -342,6 +369,9 @@ instance ToJSON n => ToJSON (BindPair n) where
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
 instance (SizeOf n) => SizeOf (BindPair n)
+
+instance Arbitrary n => Arbitrary (BindPair n) where
+  arbitrary = BindPair <$> arbitrary <*> arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- App
@@ -377,6 +407,9 @@ instance NFData t => NFData (App t)
 
 instance (SizeOf t) => SizeOf (App t)
 
+instance Arbitrary t => Arbitrary (App t) where
+  arbitrary = App <$> arbitrary <*> arbitrary <*> arbitrary
+
 -- -------------------------------------------------------------------------- --
 -- Governance
 
@@ -405,6 +438,9 @@ instance FromJSON g => FromJSON (Governance g) where
   parseJSON = withObject "Governance" $ \o ->
     Governance <$> (Left <$> o .: "keyset" <|>
                     Right <$> o .: "capability")
+
+instance Arbitrary g => Arbitrary (Governance g) where
+  arbitrary = Governance <$> arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- ModuleHash
@@ -473,6 +509,12 @@ instance FromJSON n => FromJSON (DefcapMeta n) where
 
 instance (SizeOf a) => SizeOf (DefcapMeta a)
 
+instance Arbitrary n => Arbitrary (DefcapMeta n) where
+  arbitrary = oneof
+    [ DefcapManaged <$> arbitrary
+    , pure DefcapEvent
+    ]
+
 -- | Def metadata specific to 'DefType'.
 -- Currently only specified for Defcap.
 data DefMeta n =
@@ -490,6 +532,9 @@ instance FromJSON n => FromJSON (DefMeta n) where
   parseJSON = fmap DMDefcap . parseJSON
 
 instance (SizeOf a) => SizeOf (DefMeta a)
+
+instance Arbitrary n => Arbitrary (DefMeta n) where
+  arbitrary = DMDefcap <$> arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- ConstVal
@@ -527,6 +572,12 @@ constTerm (CVEval _raw eval) = eval
 
 instance (SizeOf n) => SizeOf (ConstVal n)
 
+instance Arbitrary n => Arbitrary (ConstVal n) where
+  arbitrary = oneof
+    [ CVRaw <$> arbitrary
+    , CVEval <$> arbitrary <*> arbitrary
+    ]
+
 -- -------------------------------------------------------------------------- --
 -- Example
 
@@ -551,6 +602,13 @@ instance IsString Example where
 instance NFData Example
 
 instance SizeOf Example
+
+instance Arbitrary Example where
+  arbitrary = oneof
+    [ ExecExample <$> arbitrary
+    , ExecErrExample <$> arbitrary
+    , LitExample <$> arbitrary
+    ]
 
 -- -------------------------------------------------------------------------- --
 -- FieldKey
@@ -607,6 +665,9 @@ instance Pretty n => Pretty (Step n) where
       ]
 
 instance (SizeOf n) => SizeOf (Step n)
+
+instance Arbitrary n => Arbitrary (Step n) where
+  arbitrary = Step <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- ModRef
@@ -748,14 +809,14 @@ instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 -- ObjectMap
 
 -- | Simple dictionary for object values.
-newtype ObjectMap v = ObjectMap { _objectMap :: (M.Map FieldKey v) }
+newtype ObjectMap v = ObjectMap { _objectMap :: M.Map FieldKey v }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable,Generic,SizeOf)
 
 instance NFData v => NFData (ObjectMap v)
 
 -- potentially long output due to constrained recursion of PactValue
-instance (Eq v, FromJSON v, ToJSON v, Arbitrary v) => Arbitrary (ObjectMap v) where
-  arbitrary = ObjectMap <$> M.fromList <$> listOf1 arbitrary
+instance (Arbitrary v) => Arbitrary (ObjectMap v) where
+  arbitrary = ObjectMap . M.fromList <$> listOf1 arbitrary
 
 -- | O(n) conversion to list. Adapted from 'M.toAscList'
 objectMapToListWith :: (FieldKey -> v -> r) -> ObjectMap v -> [r]
@@ -765,9 +826,15 @@ instance Pretty v => Pretty (ObjectMap v) where
   pretty om = annotate Val $ commaBraces $
     objectMapToListWith (\k v -> pretty k <> ": " <> pretty v) om
 
+-- FIXME the order depends on the hash function that is used by HM.HashMap in
+-- aeson.
+--
 instance ToJSON v => ToJSON (ObjectMap v) where
   toJSON (ObjectMap om) = toJSON $ M.mapKeys asString om
-  toEncoding (ObjectMap om) = toEncoding $ M.mapKeys asString om
+  toEncoding (ObjectMap om) = toEncoding
+    $ HM.fromList
+    $ first (LegacyHashed . asString)
+    <$> M.toList om
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
@@ -818,6 +885,9 @@ instance FromJSON Use where
 
 instance NFData Use
 instance SizeOf Use
+
+instance Arbitrary Use where
+  arbitrary = Use <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 -- -------------------------------------------------------------------------- --
 -- Guard
@@ -926,6 +996,17 @@ instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
 instance (SizeOf g) => SizeOf (Module g)
 
+instance Arbitrary g => Arbitrary (Module g) where
+  arbitrary = Module
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+
 -- -------------------------------------------------------------------------- --
 -- Interface
 
@@ -959,6 +1040,9 @@ instance NFData Interface
 
 instance SizeOf Interface
 
+instance Arbitrary Interface where
+  arbitrary = Interface <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
 -- -------------------------------------------------------------------------- --
 -- ModuleDef
 
@@ -988,6 +1072,9 @@ instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
 
 instance (SizeOf g) => SizeOf (ModuleDef g)
+
+instance Arbitrary g => Arbitrary (ModuleDef g) where
+  arbitrary = oneof [ MDModule <$> arbitrary, MDInterface <$> arbitrary]
 
 moduleDefName :: ModuleDef g -> ModuleName
 moduleDefName (MDModule m) = _mName m
@@ -1194,6 +1281,7 @@ instance FromJSON n => FromJSON (Lam n) where
   parseJSON = lensyParseJSON 2
 
 instance (SizeOf n) => SizeOf (Lam n)
+
 -- -------------------------------------------------------------------------- --
 -- Object
 
@@ -1531,6 +1619,7 @@ data TermProperties
   | TermHash
   | TermDynRef
   | TermDynMem
+  deriving (Show, Enum)
 
 prop :: IsString a => TermProperties -> a
 prop TermModuleDef = "module"
@@ -1562,6 +1651,8 @@ prop TermDynMem = "dmem"
 instance ToJSON n => ToJSON (Term n) where
     toJSON = termEnc object toJSON
     toEncoding = termEnc (A.pairs . mconcat) toEncoding
+    {-# INLINE toJSON #-}
+    {-# INLINE toEncoding #-}
 
 termEnc
   :: KeyValue kv
@@ -1572,29 +1663,32 @@ termEnc
   -> e
 termEnc kv val = \case
   (TModule d b i) -> kv
-    [ p TermModuleDef .= d
-    , p TermBody .= b, inf i
+    [ p TermBody .= b
+    , p TermModuleDef .= d
+    , inf i
     ]
   (TList ts ty i) -> kv
     [ p TermList .= ts
-    , p TermType .= ty, inf i
+    , p TermType .= ty
+    , inf i
     ]
   (TDef d _i) -> val d
   -- TNative intentionally not marshallable
   (TNative n _fn tys _exs d tl i) -> kv
-    [ p TermNatName .= n
+    [ p TermNatFunTypes .= tys
+    , p TermNatName .= n
     , p TermNatFun .= Null {- TODO fn -}
-    , p TermNatFunTypes .= tys
+    , p TermNatTopLevel .= tl
     , p TermNatExamples .= Null {- TODO exs -}
     , p TermNatDocs .= d
-    , p TermNatTopLevel .= tl
     , inf i
     ]
   (TConst d m c met i) -> kv
-    [ p TermConstArg .= d
-    , p TermModName .= m
+    [ p TermModName .= m
+    , p TermConstArg .= d
+    , p TermMeta .= met
     , p TermConstVal .= c
-    , p TermMeta .= met, inf i
+    , inf i
     ]
   (TApp a _i) -> val a
   (TVar n i) -> kv
@@ -1602,15 +1696,15 @@ termEnc kv val = \case
     , inf i
     ]
   (TBinding bs b c i) -> kv
-    [ p TermPairs .= bs
-    , p TermBody .= b
+    [ p TermBody .= b
+    , p TermPairs .= bs
     , p TermType .= c
     , inf i
     ]
   (TObject o _i) -> val o
   (TLiteral l i) -> kv
-    [ p TermLiteral .= l
-    , inf i
+    [ inf i
+    , p TermLiteral .= l
     ]
   (TLam tlam _i) -> val tlam
   (TGuard k i) -> kv
@@ -1624,29 +1718,29 @@ termEnc kv val = \case
     , inf i
     ]
   (TSchema sn smod smeta sfs i) -> kv
-    [ p TermSchemaName .= sn
-    , p TermModName .= smod
+    [ p TermModName .= smod
+    , p TermSchemaName .= sn
     , p TermMeta .= smeta
-    , p TermFields .= sfs
     , inf i
+    , p TermFields .= sfs
     ]
   (TTable tn tmod th tty tmeta i) -> kv
-    [ p TermTblName .= tn
+    [ p TermHash .= th
     , p TermModName .= tmod
-    , p TermHash .= th
-    , p TermType .= tty
+    , p TermTblName .= tn
     , p TermMeta .= tmeta
+    , p TermType .= tty
     , inf i
     ]
   (TDynamic r m i) -> kv
    [ p TermDynRef .= r
-   , p TermDynMem .= m
    , inf i
+   , p TermDynMem .= m
    ]
   (TModRef mr _i) -> val mr
  where
-  p = prop
-  inf i = "i" .= i
+  p = prop @T.Text
+  inf i = ("i" :: T.Text) .= i
 
 instance FromJSON n => FromJSON (Term n) where
   parseJSON v
@@ -1992,3 +2086,74 @@ instance Show1 Object where
   liftShowsPrec = $(makeLiftShowsPrec ''Object)
 instance Show1 Term where
   liftShowsPrec = $(makeLiftShowsPrec ''Term)
+
+-- -------------------------------------------------------------------------- --
+-- Arbitrary Instances for Term and related Types
+
+instance Arbitrary FunApp where
+  arbitrary = FunApp
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+
+instance Arbitrary d => Arbitrary (Ref' d) where
+  arbitrary = oneof [Direct <$> arbitrary, Ref <$> arbitrary]
+
+instance Arbitrary NativeDFun where
+  arbitrary = do
+    n <- arbitrary
+    g <- arbitrary
+    t <- arbitrary
+    return $ NativeDFun n $ \_ _ -> return (g,t)
+
+instance Arbitrary n => Arbitrary (Def n) where
+  arbitrary = Def
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+
+instance Arbitrary n => Arbitrary (Lam n) where
+  arbitrary = Lam <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
+instance Arbitrary n => Arbitrary (Object n) where
+  arbitrary = Object <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
+instance Arbitrary n => Arbitrary (Term n) where
+  arbitrary = sized $ \case
+    0 -> oneof
+      [ TLiteral <$> arbitrary <*> arbitrary
+      , TVar <$> arbitrary <*> arbitrary
+      , TUse <$> arbitrary <*> arbitrary
+      ]
+    s -> do
+      Positive k <- arbitrary
+      resize (s `div` (k + 1)) $ oneof
+        [ TModule <$> arbitrary <*> arbitrary <*> arbitrary
+        , TList <$> arbitrary <*> arbitrary <*> arbitrary
+        , TDef <$> arbitrary <*> arbitrary
+        -- TNative intentionally not marshallable
+        , TNative <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        , TConst <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        , TApp <$> arbitrary <*> arbitrary
+        , TVar <$> arbitrary <*> arbitrary
+        , TBinding <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        , TObject <$> arbitrary <*> arbitrary
+        , TLiteral <$> arbitrary <*> arbitrary
+        , TLam <$> arbitrary <*> arbitrary
+        , TGuard <$> arbitrary <*> arbitrary
+        , TUse <$> arbitrary <*> arbitrary
+        , TStep <$> arbitrary <*> arbitrary <*> arbitrary
+        , TSchema <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        , TTable <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        , TDynamic <$> arbitrary <*> arbitrary <*> arbitrary
+        , TModRef <$> arbitrary <*> arbitrary
+        ]
+

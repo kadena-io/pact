@@ -49,6 +49,7 @@ module Pact.Types.Util
   , rewrap, rewrapping, wrap, unwrap
   -- | Arbitrary generator utils
   , genBareText
+  , arbitraryIdent
   ) where
 
 import Data.Aeson
@@ -69,7 +70,7 @@ import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Applicative ((<|>))
 import Control.Concurrent
-import Control.Lens hiding (Empty, (.=))
+import Control.Lens hiding (Empty, elements, (.=))
 import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
@@ -401,3 +402,15 @@ genBareText = genText
         -- Uses same character set for start of text as for rest of it.
         -- Useful when randomly generating texts character by character.
         style' = style { Trifecta._styleStart = Trifecta.letter <|> Trifecta.digit <|> symbols }
+
+-- | Less general than 'genBarText', but probably faster
+--
+arbitraryIdent :: Gen Text
+arbitraryIdent = cons
+  <$> elements (syms <> letters)
+  <*> (pack <$> listOf (elements (syms <> letters <> digits)))
+ where
+  syms = "%#+-_&$@<>=^?*!|/~"
+  letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZñûüùúūÛÜÙÚŪß"
+  digits = "0123456789"
+

@@ -59,7 +59,6 @@ import Pact.Types.SizeOf
 import Pact.Types.Util
 import Pact.Types.Hash
 
-
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf)
 
@@ -136,6 +135,9 @@ newtype DefName = DefName { _unDefName :: Text }
 
 instance SizeOf DefName where
   sizeOf (DefName n) = sizeOf n
+
+instance Arbitrary DefName where
+  arbitrary = DefName <$> genBareText
 
 data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
@@ -273,6 +275,9 @@ instance Ord FullyQualifiedName where
   (FullyQualifiedName fq fm fh) `compare` (FullyQualifiedName fq' fm' fh') =
     (fq, fm, fh) `compare` (fq', fm', fh')
 
+instance Arbitrary FullyQualifiedName where
+  arbitrary = FullyQualifiedName <$> genBareText <*> arbitrary <*> arbitrary
+
 -- | A named reference from source.
 data Name
   = QName QualifiedName
@@ -285,7 +290,10 @@ instance Arbitrary Name where
   -- assumes most names are qualified names
   arbitrary = frequency
     [ (4, QName <$> arbitrary)
-    , (1, Name <$> arbitrary) ]
+    , (1, Name <$> arbitrary)
+    , (1, DName <$> arbitrary)
+    , (1, FQName <$> arbitrary)
+    ]
 
 instance HasInfo Name where
   getInfo (QName q) = getInfo q
@@ -391,12 +399,18 @@ instance Pretty NativeDefName where
 instance SizeOf NativeDefName where
   sizeOf (NativeDefName n) = sizeOf n
 
+instance Arbitrary NativeDefName where
+  arbitrary = NativeDefName <$> genBareText
+
 newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,AsString,Hashable,Show,NFData,ToJSON,FromJSON)
 instance Pretty TableName where pretty (TableName s) = pretty s
 
 instance SizeOf TableName where
   sizeOf (TableName t) = sizeOf t
+
+instance Arbitrary TableName where
+  arbitrary = TableName <$> genBareText
 
 makeLenses ''ModuleName
 makeLenses ''DynamicName
