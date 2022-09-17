@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -99,11 +98,7 @@ import Control.Applicative
 import Control.DeepSeq
 import Control.Lens hiding ((.=), DefName(..), elements)
 import Control.Monad
-#if MIN_VERSION_aeson(1,4,3)
 import Data.Aeson hiding (pairs,Object, (<?>))
-#else
-import Data.Aeson hiding (pairs,Object)
-#endif
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as A
 import Data.Decimal
