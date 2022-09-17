@@ -134,6 +134,7 @@ library
     Pact.Types.SPV
     Pact.Types.Term
     Pact.Types.Term.Arbitrary
+    Pact.Types.Term.Internal
     Pact.Types.Type
     Pact.Types.Util
     Pact.Types.Version
