@@ -283,8 +283,8 @@ instance ToJSON n => ToJSON (BindType n) where
   toEncoding BindLet = toEncoding ("let" :: String)
   toEncoding (BindSchema s) = A.pairs ("bind" .= s)
 
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (BindType n) where
   parseJSON v =
@@ -321,8 +321,8 @@ bindPairProperties o =
 instance ToJSON n => ToJSON (BindPair n) where
   toJSON = enableToJSON "Pact.Types.Term.BindPair n" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . bindPairProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
@@ -350,8 +350,8 @@ appProperties o =
 instance ToJSON t => ToJSON (App t) where
   toJSON = enableToJSON "Pact.Types.Term.App t" . lensyToJSON 4
   toEncoding = A.pairs . mconcat . appProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON t => FromJSON (App t) where parseJSON = lensyParseJSON 4
 
@@ -383,8 +383,8 @@ governanceProperties (Governance (Right c)) = [ "capability" .= c ]
 instance ToJSON g => ToJSON (Governance g) where
   toJSON = enableToJSON "Pact.Types.Term.Governance g" . object . governanceProperties
   toEncoding = A.pairs . mconcat . governanceProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON g => FromJSON (Governance g) where
   parseJSON = withObject "Governance" $ \o ->
@@ -436,8 +436,8 @@ instance ToJSON n => ToJSON (DefcapMeta n) where
     DefcapEvent -> "event"
   toEncoding (DefcapManaged c) = A.pairs . mconcat $ defcapMetaManagedProperties c
   toEncoding DefcapEvent = toEncoding ("event" :: String)
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (DefcapMeta n) where
   parseJSON v = parseUser v <|> parseAuto v <|> parseEvent v
@@ -470,8 +470,8 @@ instance Pretty n => Pretty (DefMeta n) where
 instance ToJSON n => ToJSON (DefMeta n) where
   toJSON (DMDefcap m) = toJSON m
   toEncoding (DMDefcap m) = toEncoding m
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (DefMeta n) where
   parseJSON = fmap DMDefcap . parseJSON
@@ -497,8 +497,8 @@ constValProperties (CVEval n m) = [ "raw" .= n, "eval" .= m ]
 instance ToJSON n => ToJSON (ConstVal n) where
   toJSON = enableToJSON "Pact.Types.Term.ConstVal n" . object . constValProperties
   toEncoding = A.pairs . mconcat . constValProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (ConstVal n) where
   parseJSON v =
@@ -571,8 +571,8 @@ stepProperties o =
 instance ToJSON n => ToJSON (Step n) where
   toJSON = enableToJSON "Pact.Types.Term.Step n" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . stepProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (Step n) where parseJSON = lensyParseJSON 2
 instance HasInfo (Step n) where getInfo = _sInfo
@@ -622,8 +622,8 @@ modRefProperties o =
 instance ToJSON ModRef where
   toJSON = enableToJSON "Pact.Types.Term.ModRef" . lensyToJSON 4
   toEncoding = A.pairs . mconcat . modRefProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
@@ -648,7 +648,7 @@ modRefProperties_ o = mconcat
     ]
  where
   refInfo = _modRefInfo o
-{-# INLINE modRefProperties_ #-}
+{-# INLINEABLE modRefProperties_ #-}
 
 -- -------------------------------------------------------------------------- --
 -- ModuleGuard
@@ -675,13 +675,13 @@ moduleGuardProperties o =
   [ "moduleName" .= _mgModuleName o
   , "name" .= _mgName o
   ]
-{-# INLINE moduleGuardProperties #-}
+{-# INLINEABLE moduleGuardProperties #-}
 
 instance ToJSON ModuleGuard where
   toJSON = enableToJSON "Pact.Types.Term.ModuleGuard" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . moduleGuardProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
@@ -715,8 +715,8 @@ pactGuardProperties o =
 instance ToJSON PactGuard where
   toJSON = enableToJSON "Pact.Types.Term.PactGuard" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . pactGuardProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 
@@ -746,8 +746,8 @@ instance ToJSON v => ToJSON (ObjectMap v) where
     $ HM.fromList
     $ first (LegacyHashed . asString)
     <$> M.toList om
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON v => FromJSON (ObjectMap v)
   where parseJSON v = flip (withObject "ObjectMap") v $ \_ ->
@@ -784,8 +784,8 @@ useProperties o =
 instance ToJSON Use where
   toJSON = enableToJSON "Pact.Types.Term.Use" . object . useProperties
   toEncoding = A.pairs . mconcat . useProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON Use where
   parseJSON = withObject "Use" $ \o ->
@@ -840,8 +840,8 @@ instance ToJSON a => ToJSON (Guard a) where
   toEncoding (GModule g) = toEncoding g
   toEncoding (GUser g) = toEncoding g
 
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON a => FromJSON (Guard a) where
   parseJSON v =
@@ -850,7 +850,7 @@ instance FromJSON a => FromJSON (Guard a) where
       (GPact <$> parseJSON v) <|>
       (GModule <$> parseJSON v) <|>
       (GUser <$> parseJSON v)
-  {-# INLINE parseJSON #-}
+  {-# INLINEABLE parseJSON #-}
 
 -- -------------------------------------------------------------------------- --
 -- Module
@@ -888,8 +888,8 @@ moduleProperties o =
 instance ToJSON g => ToJSON (Module g) where
   toJSON = enableToJSON "Pact.Types.Term.Module g" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . moduleProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
@@ -919,8 +919,8 @@ interfaceProperties o =
 instance ToJSON Interface where
   toJSON = enableToJSON "Pact.Types.Term.Interface" . lensyToJSON 10
   toEncoding = A.pairs . mconcat . interfaceProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
@@ -950,8 +950,8 @@ instance ToJSON g => ToJSON (ModuleDef g) where
   toEncoding (MDModule m) = toEncoding m
   toEncoding (MDInterface i) = toEncoding i
 
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v

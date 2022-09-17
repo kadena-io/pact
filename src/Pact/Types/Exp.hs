@@ -325,8 +325,8 @@ listExpProperties o =
 instance ToJSON i => ToJSON (ListExp i) where
   toJSON = enableToJSON "Pact.Types.Exp.ListExp i" . object . listExpProperties
   toEncoding = pairs . mconcat . listExpProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON i => FromJSON (ListExp i) where
   parseJSON = withObject "ListExp" $ \o ->
@@ -415,9 +415,6 @@ instance ToJSON i => ToJSON (Exp i) where
   toEncoding (EAtom a) = toEncoding a
   toEncoding (EList a) = toEncoding a
   toEncoding (ESeparator a) = toEncoding a
-
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
 
 instance FromJSON i => FromJSON (Exp i) where
   parseJSON v =

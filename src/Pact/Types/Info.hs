@@ -182,9 +182,6 @@ instance ToJSON Info where
     ]
    where pl = _pLength
 
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-
 instance FromJSON Info where
   parseJSON Null = pure $ Info Nothing
   parseJSON v = withObject "Info" go v

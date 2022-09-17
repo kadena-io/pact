@@ -80,9 +80,6 @@ instance ToJSON PactValue where
   toEncoding (PModRef m) = pairs $ modRefProperties_ m
     -- this uses a non-standard alternative JSON encoding for 'ModRef'
 
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-
 instance FromJSON PactValue where
   parseJSON v =
     (PLiteral <$> parseJSON v) <|>

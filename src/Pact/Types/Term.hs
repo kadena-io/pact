@@ -149,13 +149,13 @@ import Pact.Types.Term.Internal
 
 -- | Capture function application metadata
 data FunApp = FunApp
-    { _faInfo :: !Info
-    , _faName :: !Text
-    , _faModule :: !(Maybe ModuleName)
-    , _faDefType :: !DefType
-    , _faTypes :: !(FunTypes (Term Name))
-    , _faDocs :: !(Maybe Text)
-    } deriving (Generic)
+  { _faInfo :: !Info
+  , _faName :: !Text
+  , _faModule :: !(Maybe ModuleName)
+  , _faDefType :: !DefType
+  , _faTypes :: !(FunTypes (Term Name))
+  , _faDocs :: !(Maybe Text)
+  } deriving (Generic)
 
 deriving instance (Show1 Term) => Show FunApp
 deriving instance (Eq1 Term) => Eq FunApp
@@ -175,8 +175,8 @@ funAppProperties o =
 instance ToJSON FunApp where
   toJSON = enableToJSON "Pact.Types.Term.FunApp" . lensyToJSON 3
   toEncoding = A.pairs . mconcat . funAppProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance HasInfo FunApp where getInfo = _faInfo
@@ -272,8 +272,8 @@ defProperties o =
 instance ToJSON n => ToJSON (Def n) where
   toJSON = enableToJSON "Pact.Types.Term.Def n" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . defProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (Def n) where parseJSON = lensyParseJSON 2
 
@@ -318,8 +318,8 @@ lamProperties o =
 instance ToJSON n => ToJSON (Lam n) where
   toJSON = enableToJSON "Pact.Types.Term.Lam n" . lensyToJSON 2
   toEncoding = A.pairs . mconcat . lamProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (Lam n) where
   parseJSON = lensyParseJSON 2
@@ -365,8 +365,8 @@ objectProperties o = mconcat
 instance ToJSON n => ToJSON (Object n) where
   toJSON = enableToJSON "Pact.Types.Term.Object n" . A.Object . objectProperties
   toEncoding = A.pairs . objectProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
 
 instance FromJSON n => FromJSON (Object n) where
   parseJSON = withObject "Object" $ \o ->
@@ -690,13 +690,10 @@ prop TermTblName = "name"
 prop TermHash = "hash"
 prop TermDynRef = "dref"
 prop TermDynMem = "dmem"
-{-# INLINE prop #-}
 
 instance ToJSON n => ToJSON (Term n) where
-    toJSON = termEnc object toJSON
-    toEncoding = termEnc (A.pairs . mconcat) toEncoding
-    {-# INLINE toJSON #-}
-    {-# INLINE toEncoding #-}
+  toJSON = termEnc object toJSON
+  toEncoding = termEnc (A.pairs . mconcat) toEncoding
 
 termEnc
   :: KeyValue kv
