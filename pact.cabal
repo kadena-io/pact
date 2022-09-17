@@ -381,8 +381,10 @@ test-suite hspec
       ParserSpec
       SchemeSpec
       SignatureSpec
+      Json.Compat
 
     build-depends:
+      , QuickCheck
       , base16-bytestring
       , directory
       , errors
@@ -407,7 +409,6 @@ test-suite hspec
         GasModelSpec
         GoldenSpec
         HistoryServiceSpec
-        Json.Compat
         PactContinuationSpec
         PersistSpec
         RemoteVerifySpec
@@ -417,7 +418,6 @@ test-suite hspec
 
       build-depends:
         , Decimal
-        , QuickCheck
         , deepseq
         , exceptions
         , hedgehog >= 1.0.1 && < 1.2
