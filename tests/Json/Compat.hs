@@ -37,12 +37,14 @@ import Pact.Types.Names
 import Pact.Types.Namespace
 import Pact.Types.PactError
 import Pact.Types.PactValue
+import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.Scheme
 import Pact.Types.SigData
 import Pact.Types.SPV
+import Pact.Types.Term.Arbitrary ()
 
 spec :: Spec
 spec = describe "JSON encodings" $ do

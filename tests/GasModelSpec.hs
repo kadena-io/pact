@@ -32,6 +32,7 @@ import GoldenSpec (cleanupActual)
 import Pact.Types.Exp
 import Pact.Types.SizeOf
 import Pact.Types.PactValue
+import Pact.Types.PactValue.Arbitrary
 import Pact.Types.Runtime
 import Pact.GasModel.GasModel
 import Pact.GasModel.Types

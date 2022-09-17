@@ -32,6 +32,7 @@ import Test.QuickCheck
 
 import Pact.Types.Exp
 import Pact.Types.PactValue
+import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.Term
 import Pact.Types.Util

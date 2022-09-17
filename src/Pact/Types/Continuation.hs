@@ -54,6 +54,7 @@ import Test.QuickCheck
 
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.PactValue
+import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term

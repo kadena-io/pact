@@ -118,6 +118,7 @@ library
     Pact.Types.Native
     Pact.Types.PactError
     Pact.Types.PactValue
+    Pact.Types.PactValue.Arbitrary
     Pact.Types.Parser
     Pact.Types.Principal
     Pact.Types.Advice
@@ -132,6 +133,7 @@ library
     Pact.Types.SizeOf
     Pact.Types.SPV
     Pact.Types.Term
+    Pact.Types.Term.Arbitrary
     Pact.Types.Type
     Pact.Types.Util
     Pact.Types.Version

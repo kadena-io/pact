@@ -16,6 +16,7 @@ import Data.Aeson
 
 import Pact.Types.Names
 import Pact.Types.Term
+import Pact.Types.Term.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Util
