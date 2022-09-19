@@ -27,6 +27,7 @@ module Pact.Utils.Json
 , LegacyHashed(..)
 , legacyHashMap
 , legacyMap
+, LegacyValue(..)
 
 -- * Testing
 , prop_legacyHashCompat
@@ -169,6 +170,22 @@ hashable_fnv1 = hashable_fnv1_withSalt hashable_default_salt
   hashable_default_salt :: Int64
   hashable_default_salt = -2578643520546668380
 {-# INLINE hashable_fnv1 #-}
+
+-- -------------------------------------------------------------------------- --
+--
+
+newtype LegacyValue = LegacyValue { getLegacyValue :: Value }
+  deriving (Show)
+
+instance ToJSON LegacyValue where
+  toJSON v = error $ "Pact.Utils.Json.LegacyValue: attempt to call toJSON on " <> show v
+
+  toEncoding (LegacyValue (Object o)) = toEncoding $ LegacyValue <$> legacyHashMap o
+  toEncoding (LegacyValue (Array a)) = toEncoding $ LegacyValue <$> a
+  toEncoding (LegacyValue v) = toEncoding v
+
+instance FromJSON LegacyValue where
+  parseJSON = fmap LegacyValue . parseJSON
 
 -- -------------------------------------------------------------------------- --
 -- Properties
