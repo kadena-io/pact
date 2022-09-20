@@ -54,6 +54,7 @@ import Pact.Repl.Types
 import Pact.Types.Version
 import Pact.Types.Crypto
 import Pact.Types.SPV
+import Pact.Types.ZK
 import Pact.ApiReq
 
 
@@ -153,7 +154,7 @@ _testArgs = O.execParserPure O.defaultPrefs argParser . words
 main :: IO ()
 main = O.execParser argParser >>= \as -> case as of
 
-    OServer conf -> serve conf noSPVSupport
+    OServer conf -> serve conf noSPVSupport noZKSupport
 
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
 

@@ -55,7 +55,7 @@ import Pact.Types.Logger (neverLog, Loggers(..))
 import Pact.Types.Runtime
 import Pact.Types.SQLite (SQLiteConfig(..),fastNoJournalPragmas)
 import Pact.Types.SPV
-
+import Pact.Types.ZK
 
 type SQLiteDb = DbEnv PSL.SQLite
 
@@ -228,7 +228,7 @@ getLoadedState code = do
 defEvalEnv :: PactDbEnv e -> IO (EvalEnv e)
 defEvalEnv db = do
   setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-    initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def noPact44EC
+    initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport noZKSupport def noPact44EC
   where entity = Just $ EntityName "entity"
         prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
         noPact44EC = mkExecutionConfig [FlagDisablePact44]

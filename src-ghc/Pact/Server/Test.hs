@@ -26,7 +26,7 @@ import qualified Control.Exception as Exception
 import qualified Network.HTTP.Client as HTTP
 
 import Pact.Types.SPV
-
+import Pact.Types.ZK
 
 genKeys :: IO SomeKeyPair
 genKeys = genKeyPair defaultScheme
@@ -58,11 +58,11 @@ serverBaseUrl = parseBaseUrl serverRootPath
 
 
 startServer :: FilePath -> IO (Async ())
-startServer configFile = startServer' configFile noSPVSupport
+startServer configFile = startServer' configFile noSPVSupport noZKSupport
 
-startServer' :: FilePath -> SPVSupport -> IO (Async ())
-startServer' configFile spv = do
-  asyncServer <- async $ serve configFile spv
+startServer' :: FilePath -> SPVSupport -> ZKSupport -> IO (Async ())
+startServer' configFile spv zk = do
+  asyncServer <- async $ serve configFile spv zk
   waitUntilStarted 0
   return asyncServer
 

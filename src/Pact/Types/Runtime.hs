@@ -25,7 +25,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eeAdvice,
+   eeAdvice,eeZKSupport,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
@@ -84,7 +84,7 @@ import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
 import Pact.Types.Namespace
-
+import Pact.Types.ZK
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -214,6 +214,8 @@ data EvalEnv e = EvalEnv {
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
     , _eeSPVSupport :: SPVSupport
+      -- | ZK backend
+    , _eeZKSupport :: ZKSupport
       -- | Env public data
     , _eePublicData :: PublicData
       -- | Execution configuration flags

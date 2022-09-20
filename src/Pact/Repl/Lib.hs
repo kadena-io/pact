@@ -90,7 +90,7 @@ initLibState loggers verifyUri = do
 initLibState' :: LibDb -> Maybe String -> IO LibState
 initLibState' ldb@(LibDb db') verifyUri = do
   createSchema db'
-  return (LibState ldb Noop def def verifyUri M.empty def)
+  return (LibState ldb Noop def def verifyUri M.empty M.empty def)
 
 
 -- | Native function with no gas consumption.

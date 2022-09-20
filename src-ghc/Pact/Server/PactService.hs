@@ -37,14 +37,15 @@ import Pact.Types.Server
 import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.SPV
-
+import Pact.Types.ZK
 
 initPactService
   :: CommandConfig
   -> Loggers
   -> SPVSupport
+  -> ZKSupport
   -> IO (CommandExecInterface PublicMeta ParsedCode Hash)
-initPactService CommandConfig {..} loggers spv = do
+initPactService CommandConfig {..} loggers spv zk = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
       gasRate = fromMaybe 0 _ccGasRate
@@ -60,12 +61,12 @@ initPactService CommandConfig {..} loggers spv = do
           { _ceiApplyCmd = \eMode cmd ->
               applyCmd logger _ccEntity p gasModel
                 blockHeight blockTime prevBlockHash
-                spv _ccExecutionConfig
+                spv zk _ccExecutionConfig
                 eMode cmd (verifyCommand cmd)
           , _ceiApplyPPCmd =
             applyCmd logger _ccEntity p gasModel
             blockHeight blockTime prevBlockHash
-            spv _ccExecutionConfig
+            spv zk _ccExecutionConfig
           }
   case _ccSqlite of
     Nothing -> do
@@ -84,17 +85,18 @@ applyCmd :: Logger ->
             Int64 ->
             Text ->
             SPVSupport ->
+            ZKSupport ->
             ExecutionConfig ->
             ExecutionMode ->
             Command a ->
             ProcessedCommand PublicMeta ParsedCode ->
             IO (CommandResult Hash)
-applyCmd _ _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
+applyCmd _ _ _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
   return $ resultFailure
            Nothing
            (cmdToRequestKey cmd)
            (PactError TxFailure def def . viaShow $ s)
-applyCmd logger conf dbv gasModel bh bt pbh spv exConfig exMode _ (ProcSucc cmd) = do
+applyCmd logger conf dbv gasModel bh bt pbh spv zk exConfig exMode _ (ProcSucc cmd) = do
   let payload = _cmdPayload cmd
       gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
       pd = PublicData pubMeta bh bt pbh
@@ -103,7 +105,7 @@ applyCmd logger conf dbv gasModel bh bt pbh spv exConfig exMode _ (ProcSucc cmd)
 
 
   res <- catchesPactError $ runCommand
-                            (CommandEnv conf exMode dbv logger gasEnv pd spv nid exConfig)
+                            (CommandEnv conf exMode dbv logger gasEnv pd spv zk nid exConfig)
                             (runPayload cmd)
   case res of
     Right cr -> do
@@ -151,7 +153,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
     <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
         (MsgData edata Nothing (toUntypedHash hsh) signers)
         initRefStore _ceGasEnv permissiveNamespacePolicy
-        _ceSPVSupport _cePublicData _ceExecutionConfig
+        _ceSPVSupport _ceZKSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
@@ -163,6 +165,6 @@ applyContinuation rk hsh signers cm = do
   -- Setup environment and get result
   evalEnv <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) initRefStore
-                _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
+                _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _ceZKSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

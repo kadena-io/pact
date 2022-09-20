@@ -40,6 +40,7 @@ import Pact.Types.SQLite
 import Pact.Types.Server
 import Pact.Types.Logger
 import Pact.Types.SPV
+import Pact.Types.ZK
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
 import Pact.Server.PactService
@@ -72,8 +73,8 @@ usage =
   \flags      - Pact runtime execution flags \n\
   \\n"
 
-serve :: FilePath -> SPVSupport -> IO ()
-serve configFile spv = do
+serve :: FilePath -> SPVSupport -> ZKSupport -> IO ()
+serve configFile spv zk = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
@@ -92,7 +93,7 @@ serve configFile spv = do
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
 
   -- Must be individually killed with uninterruptibleCancel if parent thread not killed.
-  asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn spv)
+  asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn spv zk)
   -- Must be individually killed with uninterruptibleCancel if parent thread not killed.
   asyncHist <- async (runHistoryService histConf Nothing)
   let runServer = runApiServer histC inC debugFn (fromIntegral _port) _logDir
@@ -114,9 +115,10 @@ startCmdThread
   -> ReplayFromDisk
   -> (String -> IO ())
   -> SPVSupport
+  -> ZKSupport
   -> IO ()
-startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn spv = do
-  CommandExecInterface {..} <- initPactService cmdConfig (initLoggers debugFn doLog def) spv
+startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn spv zk = do
+  CommandExecInterface {..} <- initPactService cmdConfig (initLoggers debugFn doLog def) spv zk
   -- we wait for the history service to light up, possibly giving us backups from disk to replay
   replayFromDisk' <- liftIO $ takeMVar rp
   when (null replayFromDisk') $ liftIO $ debugFn "[disk replay]: No replay found"

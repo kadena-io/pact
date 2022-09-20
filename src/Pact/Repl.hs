@@ -88,6 +88,7 @@ import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
 import Pact.Types.SPV
+import Pact.Types.ZK
 import Pact.Repl.Types
 import Pact.Gas
 
@@ -151,9 +152,11 @@ initEvalEnv ls = do
     , _eeExecutionConfig = def
     , _eeAdvice = def
     , _eeInRepl = True
+    , _eeZKSupport = setZKSupport mv
     }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport
+    setZKSupport mv = set zkSupport (zk mv) noZKSupport
 
 spv :: MVar LibState -> Text -> Object Name -> IO (Either Text (Object Name))
 spv mv ty pay = go <$> readMVar mv
@@ -161,6 +164,13 @@ spv mv ty pay = go <$> readMVar mv
     go st = case M.lookup (SPVMockKey (ty, pay)) (_rlsMockSPV st) of
       Nothing -> Left "SPV verification failure"
       Just o -> Right o
+
+zk :: MVar LibState -> Text -> Text -> IO (Either Text Bool)
+zk mv ty p = go <$> readMVar mv
+  where
+    go st = case M.lookup (ZKMockKey (ty, p)) $ _rlsMockZK st of
+      Nothing -> Left "ZK verification failure"
+      Just b -> Right b
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a

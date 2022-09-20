@@ -136,6 +136,7 @@ library
     Pact.Types.Util
     Pact.Types.Version
     Pact.Types.Typecheck
+    Pact.Types.ZK
     Pact.Typechecker
   if flag(with-integer-gmp)
     build-depends:

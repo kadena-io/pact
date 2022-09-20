@@ -27,7 +27,7 @@ module Pact.Types.Server
   , ccExecutionConfig
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger
   , cePublicData, ceGasEnv, ceSPVSupport, ceNetworkId
-  , ceExecutionConfig
+  , ceExecutionConfig, ceZKSupport
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -60,6 +60,7 @@ import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Interpreter
 import Pact.Types.SPV
+import Pact.Types.ZK
 
 -- | Grab "runtime" public key from Signer, which is address
 -- if specified, otherwise pubkey
@@ -92,6 +93,7 @@ data CommandEnv p = CommandEnv {
     , _ceGasEnv :: GasEnv
     , _cePublicData :: PublicData
     , _ceSPVSupport :: SPVSupport
+    , _ceZKSupport :: ZKSupport
     , _ceNetworkId :: Maybe NetworkId
     , _ceExecutionConfig :: ExecutionConfig
     }

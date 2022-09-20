@@ -7,10 +7,11 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsDb,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsDynEnv
+  , LibState(..),rlsDb,rlsOp,rlsTx,rlsTests,rlsVerifyUri,rlsMockSPV,rlsDynEnv,rlsMockZK
   , LibDb(..)
   , Tx(..)
   , SPVMockKey(..)
+  , ZKMockKey(..)
   , getAllModules
   ) where
 
@@ -93,6 +94,17 @@ instance Eq SPVMockKey where
 instance Ord SPVMockKey where
   a `compare` b = renderCompactText a `compare` renderCompactText b
 
+newtype ZKMockKey = ZKMockKey (Text, Text)
+  deriving Show
+
+instance Pretty ZKMockKey where
+  pretty (ZKMockKey (t,o)) = pretty t <> pretty o
+
+instance Eq ZKMockKey where
+  a == b = renderCompactText a == renderCompactText b
+instance Ord ZKMockKey where
+  a `compare` b = renderCompactText a `compare` renderCompactText b
+
 data LibDb = forall e . LibDb (MVar (DbEnv e))
 
 data LibState = LibState
@@ -102,6 +114,7 @@ data LibState = LibState
   , _rlsTests :: [TestResult]
   , _rlsVerifyUri :: Maybe String
   , _rlsMockSPV :: M.Map SPVMockKey (Object Name)
+  , _rlsMockZK :: M.Map ZKMockKey Bool
   , _rlsDynEnv :: DynEnv
   }
 

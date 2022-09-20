@@ -96,6 +96,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     _eeGas
     permissiveNamespacePolicy
     _eeSPVSupport
+    _eeZKSupport
     _eePublicData
     _eeExecutionConfig
     _eeAdvice

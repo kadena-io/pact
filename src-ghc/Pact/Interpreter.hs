@@ -67,6 +67,7 @@ import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.ZK
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
@@ -165,10 +166,11 @@ setupEvalEnv
   -> GasEnv
   -> NamespacePolicy
   -> SPVSupport
+  -> ZKSupport
   -> PublicData
   -> ExecutionConfig
   -> IO (EvalEnv e)
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv zk pd ec = do
   gasRef <- newIORef 0
   pure EvalEnv {
     _eeRefStore = refStore
@@ -185,6 +187,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   , _eeGas = gasRef
   , _eeNamespacePolicy = np
   , _eeSPVSupport = spv
+  , _eeZKSupport = zk
   , _eePublicData = pd
   , _eeExecutionConfig = ec
   , _eeAdvice = def
