@@ -38,6 +38,7 @@ import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.SPV
 
+import Pact.Utils.Json
 
 initPactService
   :: CommandConfig
@@ -125,7 +126,7 @@ resultSuccess :: Maybe TxId ->
                  Gas ->
                  PactValue ->
                  Maybe PactExec ->
-                 [TxLog Value] ->
+                 [TxLog LegacyValue] ->
                  [PactEvent] ->
                  CommandResult Hash
 resultSuccess tx cmd gas a pe l evs =
@@ -133,7 +134,7 @@ resultSuccess tx cmd gas a pe l evs =
     gas (Just hshLog) pe Nothing evs
   where hshLog = fullToHashLogCr l
 
-fullToHashLogCr :: [TxLog Value] -> Hash
+fullToHashLogCr :: [TxLog LegacyValue] -> Hash
 fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
 
 

@@ -1,11 +1,12 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Pact.Persist.Pure
   (
@@ -24,6 +25,7 @@ import Data.Aeson
 import Control.Monad.Reader ()
 import Control.Monad.State
 import Data.Default
+import Data.Proxy
 import Data.Typeable
 
 import Pact.Types.Persistence
@@ -124,9 +126,10 @@ qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
 {-# INLINE qry #-}
 
 
-conv :: (PactDbValue v) => PValue -> IO v
+conv :: forall v . (PactDbValue v) => PValue -> IO v
 conv (PValue v) = case cast v of
-  Nothing -> throwDbError $ "Failed to reify DB value: " <> prettyPactDbValue v
+  Nothing -> throwDbError $
+    "Failed to reify DB value: " <> prettyPactDbValue v <> " as " <> pretty (show (typeRep (Proxy @v)))
   Just s -> return s
 {-# INLINE conv #-}
 

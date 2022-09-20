@@ -27,12 +27,17 @@ module Pact.Utils.Json
 , LegacyHashed(..)
 , legacyHashMap
 , legacyMap
+
+-- LegacyValue
 , LegacyValue(..)
+, toLegacyJson
 
 -- * Testing
 , prop_legacyHashCompat
 , prop_legacyHashInstance
 ) where
+
+import Control.DeepSeq
 
 import Data.Aeson
 import Data.Bifunctor
@@ -175,7 +180,7 @@ hashable_fnv1 = hashable_fnv1_withSalt hashable_default_salt
 --
 
 newtype LegacyValue = LegacyValue { getLegacyValue :: Value }
-  deriving (Show)
+  deriving (Show, Eq, NFData)
 
 instance ToJSON LegacyValue where
   toJSON v = error $ "Pact.Utils.Json.LegacyValue: attempt to call toJSON on " <> show v
@@ -186,6 +191,10 @@ instance ToJSON LegacyValue where
 
 instance FromJSON LegacyValue where
   parseJSON = fmap LegacyValue . parseJSON
+
+toLegacyJson :: ToJSON a => a -> LegacyValue
+toLegacyJson = LegacyValue . toJSON
+{-# INLINE toLegacyJson #-}
 
 -- -------------------------------------------------------------------------- --
 -- Properties

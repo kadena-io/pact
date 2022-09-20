@@ -8,6 +8,8 @@ import Data.String
 import Data.Default
 import Pact.Interpreter
 
+import Pact.Utils.Json
+
 rc :: a -> Method e a
 rc = const . return
 
@@ -29,7 +31,7 @@ newtype MockGetUserTableInfo =
 instance Default MockGetUserTableInfo where def = MockGetUserTableInfo (\_t -> rc "")
 
 newtype MockCommitTx =
-  MockCommitTx (Method () [TxLog Value])
+  MockCommitTx (Method () [TxLog LegacyValue])
 instance Default MockCommitTx where def = MockCommitTx (rc [])
 
 newtype MockGetTxLog =

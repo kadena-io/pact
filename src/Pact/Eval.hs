@@ -57,7 +57,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Monoid (Sum(..))
-import Data.Aeson (Value)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as A
 import Data.Default
@@ -87,6 +86,8 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
 
+import Pact.Utils.Json
+
 #ifdef ADVICE
 import Pact.Types.Advice
 #endif
@@ -99,7 +100,7 @@ evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx :: Info -> Eval e [TxLog Value]
+evalCommitTx :: Info -> Eval e [TxLog LegacyValue]
 evalCommitTx i = do
   revokeAllCapabilities
   -- backend now handles local exec

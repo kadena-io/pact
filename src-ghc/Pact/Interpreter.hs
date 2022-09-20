@@ -68,6 +68,8 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 
+import Pact.Utils.Json
+
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
   pdPactDb :: !(PactDb e),
@@ -94,7 +96,7 @@ initMsgData h = MsgData Null def h def
 type EvalInput = Either (Maybe PactExec) [Term Name]
 
 -- | Captures results of execution
-type EvalOutput = ([Term Name],[TxLog Value],Maybe TxId)
+type EvalOutput = ([Term Name],[TxLog LegacyValue],Maybe TxId)
 
 -- | Interpreter indirection for executing user action.
 newtype Interpreter e = Interpreter
@@ -115,7 +117,7 @@ data EvalResult = EvalResult
     -- ^ compiled user input
   , _erOutput :: ![PactValue]
     -- ^ Output values
-  , _erLogs :: ![TxLog Value]
+  , _erLogs :: ![TxLog LegacyValue]
     -- ^ Transaction logs
   , _erExec :: !(Maybe PactExec)
     -- ^ Result of defpact execution if any

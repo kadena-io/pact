@@ -29,6 +29,7 @@ import Pact.Repl.Types
 import Pact.Native (nativeDefs)
 import Pact.Types.RowData
 
+import Pact.Utils.Json
 
 loadModule :: IO (ModuleName, ModuleData Ref, PersistModuleData)
 loadModule = do
@@ -61,8 +62,12 @@ runRegression p = do
   createUserTable' v user1 "free.some-Module"
   assertEquals' "output of commit 2"
     [TxLog "SYS_usertables" "user1" $
-     object [ ("utModule" .= object [ ("name" .= String "some-Module"), ("namespace" .= String "free")])
-            ]
+     LegacyValue $ object
+       [ "utModule" .= object
+         [ "name" .= String "some-Module"
+         , "namespace" .= String "free"
+         ]
+       ]
      ]
     (commit v)
   void $ begin v
@@ -85,19 +90,19 @@ runRegression p = do
 
     [ TxLog { _txDomain = "SYS_keysets"
             , _txKey = "ks1"
-            , _txValue = toJSON ks
+            , _txValue = toLegacyJson ks
             }
     , TxLog { _txDomain = "SYS_modules"
             , _txKey = asString modName
-            , _txValue = toJSON mod'
+            , _txValue = toLegacyJson mod'
             }
     , TxLog { _txDomain = "USER_user1"
             , _txKey = "key1"
-            , _txValue = toJSON row
+            , _txValue = toLegacyJson row
             }
     , TxLog { _txDomain = "USER_user1"
             , _txKey = "key1"
-            , _txValue = toJSON row'
+            , _txValue = toLegacyJson row'
             }
     ]
     (commit v)
@@ -126,7 +131,7 @@ toTerm' = toTerm
 begin :: MVar (DbEnv p) -> IO (Maybe TxId)
 begin v = _beginTx pactdb Transactional v
 
-commit :: MVar (DbEnv p) -> IO [TxLog Value]
+commit :: MVar (DbEnv p) -> IO [TxLog LegacyValue]
 commit v = _commitTx pactdb v
 
 throwFail :: String -> IO a

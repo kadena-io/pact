@@ -86,6 +86,8 @@ import Pact.Types.SPV
 import Pact.Types.Util
 import Pact.Types.Namespace
 
+import Pact.Utils.Json (LegacyValue(..))
+
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -401,7 +403,7 @@ beginTx :: Info -> ExecutionMode -> Eval e (Maybe TxId)
 beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx
-commitTx :: Info -> Eval e [TxLog Value]
+commitTx :: Info -> Eval e [TxLog LegacyValue]
 commitTx i = method i $ \db -> _commitTx db
 
 -- | Invoke _rollbackTx

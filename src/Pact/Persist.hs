@@ -31,6 +31,8 @@ import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.Namespace
 
+import Pact.Utils.Json
+
 type Persist s a = s -> IO (s,a)
 
 newtype DataKey = DataKey Text
@@ -124,6 +126,8 @@ instance PactDbKey DataKey
 class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactDbValue v where
   prettyPactDbValue :: v -> Doc
 
+instance PactDbValue LegacyValue where
+  prettyPactDbValue (LegacyValue v) = prettyPactDbValue v
 instance PactDbValue v => PactDbValue (TxLog v) where
   prettyPactDbValue = pretty . fmap (SomeDoc . prettyPactDbValue)
 instance PactDbValue RowData where

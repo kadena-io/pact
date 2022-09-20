@@ -74,6 +74,8 @@ import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 
+import Pact.Utils.Json
+
 
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteString.Lazy as BSL
@@ -402,7 +404,7 @@ commandResultProperties o = mconcat
     , "events" .?= case _crEvents o of
       [] -> Nothing
       l -> Just l
-    , "metaData" .= _crMetaData o
+    , "metaData" .= toLegacyJson (_crMetaData o)
     , "continuation" .= _crContinuation o
     , "txId" .= _crTxId o
     ]
