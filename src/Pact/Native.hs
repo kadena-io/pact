@@ -93,6 +93,7 @@ import Pact.Native.Internal
 import Pact.Native.Keysets
 import Pact.Native.Ops
 import Pact.Native.SPV
+import Pact.Native.ZK
 import Pact.Native.Time
 import Pact.Parse
 import Pact.Runtime.Utils(lookupFreeVar)
@@ -117,6 +118,7 @@ natives =
   , spvDefs
   , decryptDefs
   , guardDefs
+  , zkDefs
   ]
 
 

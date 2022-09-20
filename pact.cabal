@@ -86,6 +86,7 @@ library
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
+    Pact.Native.ZK
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist

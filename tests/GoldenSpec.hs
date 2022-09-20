@@ -39,6 +39,7 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.ZK
 
 spec :: Spec
 spec = do
@@ -123,7 +124,7 @@ doCRTest' ec tn s code = do
       parsedCode = either error id $ parsePact code
       exec = Exec $ ExecMsg parsedCode Null
   r <- runIO $ applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 ""
-       noSPVSupport ec Local cmd (ProcSucc cmd)
+       noSPVSupport noZKSupport ec Local cmd (ProcSucc cmd)
   -- StackFrame and Info have pathological instances which impacts failure JSON
   -- out of CommandResult. Therefore this golden does not ensure equality of
   -- de-serialized CRs, but instead that

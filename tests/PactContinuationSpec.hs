@@ -40,7 +40,7 @@ import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Types.SPV
-
+import Pact.Types.ZK
 #if ! MIN_VERSION_servant_client(0,16,0)
 type ClientError = ServantError
 #endif
@@ -69,7 +69,7 @@ testElideModRefEvents :: HTTP.Manager -> Spec
 testElideModRefEvents mgr = before_ flushDb $ after_ flushDb $ do
   it "elides modref infos" $ do
     cmd <- mkExec code Null def [] Nothing Nothing
-    results <- runAll' mgr [cmd] noSPVSupport testConfigFilePath
+    results <- runAll' mgr [cmd] noSPVSupport noZKSupport testConfigFilePath
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
@@ -77,7 +77,7 @@ testElideModRefEvents mgr = before_ flushDb $ after_ flushDb $ do
 
   it "doesn't elide on backcompat" $ do
     cmd <- mkExec code Null def [] Nothing Nothing
-    results <- runAll' mgr [cmd] noSPVSupport backCompatConfig
+    results <- runAll' mgr [cmd] noSPVSupport noZKSupport backCompatConfig
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
@@ -233,7 +233,7 @@ testCorrectNextStep mgr code command cfg = do
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contNextStepCmd <- makeContCmdWith 1 "test3"
   checkStateCmd   <- makeContCmdWith 1 "test4"
-  allResults      <- runAll' mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd] noSPVSupport cfg
+  allResults      <- runAll' mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd] noSPVSupport noZKSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -323,7 +323,7 @@ testIncorrectNextStep mgr code command cfg = do
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   incorrectStepCmd  <- makeContCmdWith 2 "test3"
   checkStateCmd     <- makeContCmdWith 1 "test4"
-  allResults        <- runAll' mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd] noSPVSupport cfg
+  allResults        <- runAll' mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd] noSPVSupport noZKSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -345,7 +345,7 @@ testLastStep mgr code command cfg = do
   contNextStep2Cmd <- makeContCmdWith 2 "test4"
   checkStateCmd    <- makeContCmdWith 3 "test5"
   allResults       <- runAll' mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
-                              contNextStep2Cmd, checkStateCmd] noSPVSupport cfg
+                              contNextStep2Cmd, checkStateCmd] noSPVSupport noZKSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -368,7 +368,7 @@ testErrStep mgr code command cfg = do
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contErrStepCmd   <- makeContCmdWith 1 "test3"
   checkStateCmd    <- makeContCmdWith 2 "test4"
-  allResults       <- runAll' mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd] noSPVSupport cfg
+  allResults       <- runAll' mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd] noSPVSupport noZKSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -632,7 +632,7 @@ testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"jose\")"
 
       chain0Results <-
-        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport testConfigNDPFilePath
+        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport noZKSupport testConfigNDPFilePath
 
       mhash <- mkModuleHash "mGbCL-I0xXho_dxYfYAVmHfSfj3o43gbJ3ZgLHpaq14"
 
@@ -686,7 +686,7 @@ testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
       flushDb
 
       chain1Results <-
-        runAll' mgr [moduleCmd, chain1Cont,chain1ContDupe] spv testConfigFilePath
+        runAll' mgr [moduleCmd, chain1Cont,chain1ContDupe] spv noZKSupport testConfigFilePath
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
 
@@ -718,7 +718,7 @@ testValidYield moduleName mgr mkCode cfg = do
   resumeOnlyCmd      <- makeContCmdWith 2 "test4"
   checkStateCmd      <- makeContCmdWith 3 "test5"
   allResults         <- runAll' mgr [moduleCmd, executePactCmd, resumeAndYieldCmd,
-                                resumeOnlyCmd, checkStateCmd] noSPVSupport cfg
+                                resumeOnlyCmd, checkStateCmd] noSPVSupport noZKSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -801,7 +801,7 @@ testNoYield moduleName mgr mkCode cfg = do
   resumeErrCmd   <- makeContCmdWith 2 "test3"
   checkStateCmd  <- makeContCmdWith 1 "test5"
   allResults     <- runAll' mgr [moduleCmd, executePactCmd, noYieldStepCmd,
-                           resumeErrCmd, checkStateCmd] noSPVSupport cfg
+                           resumeErrCmd, checkStateCmd] noSPVSupport noZKSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -872,7 +872,7 @@ testResetYield moduleName mgr mkCode cfg = do
   resumeStepCmd    <- makeContCmdWith 2 "test4"
   checkStateCmd    <- makeContCmdWith 3 "test5"
   allResults       <- runAll' mgr [moduleCmd, executePactCmd, yieldSameKeyCmd,
-                              resumeStepCmd, checkStateCmd] noSPVSupport cfg
+                              resumeStepCmd, checkStateCmd] noSPVSupport noZKSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -956,7 +956,7 @@ testCrossChainYield mgr blessCode succeeds backCompat = step0
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
 
       chain0Results <-
-        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport $
+        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport noZKSupport $
         if backCompat then backCompatConfig else testConfigFilePath
 
       mhash <- mkModuleHash "_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc"
@@ -1013,7 +1013,7 @@ testCrossChainYield mgr blessCode succeeds backCompat = step0
       flushDb
 
       chain1Results <-
-        runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv testConfigFilePath
+        runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv noZKSupport testConfigFilePath
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
           provenanceFailedMsg = "enforceYield: yield provenance"
@@ -1390,16 +1390,17 @@ makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{} expect = CommandResultCheck (cmdToRequestKey c) expect
 
 runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll mgr cmds = runAll' mgr cmds noSPVSupport testConfigFilePath
+runAll mgr cmds = runAll' mgr cmds noSPVSupport noZKSupport testConfigFilePath
 
 runAll'
   :: Manager
   -> [Command T.Text]
   -> SPVSupport
+  -> ZKSupport
   -> FilePath
   -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll' mgr cmds spv config = Exception.bracket
-              (startServer' config spv)
+runAll' mgr cmds spv zk config = Exception.bracket
+              (startServer' config spv zk)
                stopServer
               (const (run mgr cmds))
 
