@@ -345,6 +345,22 @@ executable gasmodel
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+executable gasmodel2
+  if impl(ghcjs) || !flag(build-tool)
+    buildable: False
+  main-is:             GasModel2.hs
+  build-depends:       base
+                     , Decimal
+                     , pact
+                     , hedgehog >= 1.0.1 && < 1.3
+                     , tasty >=0.11 && <1.5
+                     , tasty-hedgehog >= 1.3.0.0 && < 1.4
+                     , time
+  hs-source-dirs:      executables
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
 test-suite hspec
   main-is:          PactTests.hs
   type:             exitcode-stdio-1.0
@@ -414,7 +430,7 @@ test-suite hspec
         , QuickCheck
         , deepseq
         , exceptions
-        , hedgehog >= 1.0.1 && < 1.2
+        , hedgehog >= 1.0.1 && < 1.3
         , hspec-golden >= 0.1.0.2
         , http-client
         , hw-hspec-hedgehog == 0.1.*
