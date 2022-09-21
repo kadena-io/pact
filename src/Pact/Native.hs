@@ -1345,3 +1345,13 @@ continueNested i as = gasUnreduced i as $ case as of
   unTVar = \case
     TVar (Ref d) _ -> unTVar d
     d -> d
+
+-- zkScalarMult :: RNativeFun e
+-- zkScalarMult i as = gasUnreduced i as $ case as of
+--   [TLiteral (LInteger p), TLiteral (LInteger s)] -> undefined
+--   _ -> argsError' i as
+
+-- zkAdd :: RNativeFun e
+-- zkAdd i as = gasUnreduced i as $ case as of
+--   [TLiteral (LInteger p), TLiteral (LInteger s)] -> undefined
+--   _ -> argsError' i as
