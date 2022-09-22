@@ -172,6 +172,7 @@ defaultGasTable =
   ,("validate-keypair", 29)
   ,("validate-principal", 1)
   ,("verify-spv", 100) -- deprecated
+  ,("verify-zk",100)
   ,("where", 2)
   ,("with-capability", 2)
   ,("with-default-read", 14)

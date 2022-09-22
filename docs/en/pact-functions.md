@@ -1718,6 +1718,18 @@ Validate that PRINCIPAL unambiguously identifies GUARD.
 (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 ```
 
+## ZK {#ZK}
+
+### verify-zk {#verify-zk}
+
+*type*&nbsp;`string` *payload*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Performs a platform-specific zk proof of type TYPE on PAYLOAD. The format of the PAYLOAD object is TODO. Platforms such as Chainweb will document the specific payload types.
+```lisp
+(verify-zk "ELECTRON" (read-msg "proof"))
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -1861,7 +1873,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

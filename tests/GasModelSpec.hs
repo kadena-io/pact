@@ -57,6 +57,7 @@ untestedNativesCheck = do
      [ "CHARSET_ASCII"
      , "CHARSET_LATIN1"
      , "verify-spv"
+     , "verify-zk"
      , "public-chain-data"
      , "list"
      , "continue"
