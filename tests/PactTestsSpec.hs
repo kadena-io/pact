@@ -58,7 +58,7 @@ errForceTest = do
     let md = initMsgData pactInitialHash
     db <- mkMockEnv def
     let refStore = over rsNatives (HM.insert "blah" nNative) initRefStore
-    env' <- setupEvalEnv db Nothing Transactional md refStore freeGasEnv permissiveNamespacePolicy (error "c") def def
+    env' <- setupEvalEnv db Nothing Transactional md refStore freeGasEnv permissiveNamespacePolicy undefined def def
     let expr = either undefined id $ parsePact "(blah)"
         interp = defaultInterpreter
         pactAction = catchesPactError $ evalExec interp env' expr
