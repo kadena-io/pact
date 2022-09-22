@@ -1,15 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
+
 module PactTestsSpec (spec) where
 
 
 import Test.Hspec
 
+import Control.Lens
 import Control.Concurrent
 import Control.Monad.State.Strict
 
 import Data.Either (isLeft, isRight)
 import Data.List
+import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Maybe
@@ -25,12 +29,21 @@ import Pact.Persist.SQLite as SQLite
 import Pact.Interpreter
 import Pact.Parse (parsePact, legacyParsePact)
 
+import Pact.Gas
+import Pact.MockDb
+import Pact.Types.Native
+import Pact.Types.Type
+import Pact.Native.Internal
 
 import System.Directory
 import System.FilePath
 
+import Control.DeepSeq
+import Control.Exception
+
 spec :: Spec
 spec = do
+  errForceTest
   pactTests
   badTests
   accountsTest
@@ -38,6 +51,24 @@ spec = do
   verifiedAccountsTest
   prodParserTests
   legacyProdParserTests
+
+errForceTest :: Spec
+errForceTest = do
+  describe "error force tests" $ runIO $ do
+    let md = initMsgData pactInitialHash
+    db <- mkMockEnv def
+    let refStore = over rsNatives (HM.insert "blah" nNative) initRefStore
+    env' <- setupEvalEnv db Nothing Transactional md refStore freeGasEnv permissiveNamespacePolicy (error "c") def def
+    let expr = either undefined id $ parsePact "(blah)"
+        interp = defaultInterpreter
+        pactAction = catchesPactError $ evalExec interp env' expr
+    (print =<< pactAction) `shouldThrow` anyException
+    (fmap (set _Left defaultError) pactAction) `shouldReturn` (Left defaultError)
+    where
+    defaultError = PactError ArgsError def [] ""
+    nNative = Direct $ snd $ defZRNative "blah" blahDef (funType TyAny []) [] ""
+    blahDef :: RNativeFun e
+    blahDef i as = argsError i ([error "boom!"] ++ as)
 
 
 pactTests :: Spec
