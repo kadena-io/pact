@@ -5,6 +5,7 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- #define GAS_MODEL 1
 
@@ -63,25 +64,22 @@ main = do
     Gen.sample $
       replicateM 10 $
         flip runReaderT defaultEnv $
-          genBuiltin "+" =<< gen_plus_argType
+          genBuiltin "+" TAny
   forM_ xs3 $ \x3 -> do
     -- print x3
     putStrLn $ toLisp x3
 
 #if defined(GAS_MODEL)
-  plus_tests <- do
-    fmap (gasTest "<int>") $
-      Gen.sample $
-        replicateM 1 $
-          flip runReaderT defaultEnv $
-            genBuiltin "+" =<< gen_plus_argType
+  let genTest name = do
+        (Pact.NativeDefName (T.pack name),)
+            <$> fmap (gasTest name)
+                  (Gen.sample $
+                    replicateM 1 $
+                      flip runReaderT defaultEnv $
+                        genBuiltin name TAny)
 
   -- opt <- O.execParser options
-  let tests :: [(Pact.NativeDefName, GasUnitTests)] =
-        [ ( Pact.NativeDefName "<int>",
-            plus_tests
-          )
-        ]
+  tests <- mapM genTest ["+", "-"]
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
@@ -705,6 +703,7 @@ canCmp TTime = True
 canCmp _ = False
 
 gen_neq :: PactGen
+gen_neq TAny = gen_neq =<< Gen.element [TBool]
 gen_neq TBool = do
   t <- genType
   guard (canEq t)
@@ -712,23 +711,25 @@ gen_neq TBool = do
 gen_neq _ = mzero
 
 gen_bitwise_and :: PactGen
-gen_bitwise_and _ = mzero -- jww (2022-09-26): TODO
+gen_bitwise_and TAny = gen_bitwise_and =<< Gen.element [TInt]
+gen_bitwise_and t@TInt = arity2 "&" t
+gen_bitwise_and _ = mzero
 
 gen_mult :: PactGen
+gen_mult TAny = gen_mult =<< Gen.element [TDec, TInt]
 gen_mult t@TDec = arity2_int_or_dec "*" t
 gen_mult t@TInt = arity2 "*" t
 gen_mult _ = mzero
 
-gen_plus_argType :: MonadGen m => m ExprType
-gen_plus_argType =
-  Gen.choice
-    [ pure TStr,
-      pure TInt,
-      pure TDec,
-      TList <$> genLitType
-    ]
-
 gen_plus :: PactGen
+gen_plus TAny =
+  gen_plus
+    =<< Gen.choice
+      [ pure TStr,
+        pure TInt,
+        pure TDec,
+        TList <$> genLitType
+      ]
 gen_plus t@TDec = arity2_int_or_dec "+" t
 gen_plus t@TInt = arity2 "+" t
 gen_plus t@TStr = arity2 "+" t
@@ -738,16 +739,19 @@ gen_plus t@(TList _) = arity2 "+" t
 gen_plus _ = mzero
 
 gen_minus :: PactGen
+gen_minus TAny = gen_minus =<< Gen.element [TDec, TInt]
 gen_minus t@TDec = arity2_int_or_dec "-" t
 gen_minus t@TInt = arity2 "-" t
 gen_minus _ = mzero
 
 gen_divide :: PactGen
+gen_divide TAny = gen_divide =<< Gen.element [TDec, TInt]
 gen_divide t@TDec = arity2_int_or_dec "/" t
 gen_divide t@TInt = arity2 "/" t
 gen_divide _ = mzero
 
 gen_lt :: PactGen
+gen_lt TAny = gen_lt =<< Gen.element [TBool]
 gen_lt TBool = do
   t <- genType
   guard (canCmp t)
@@ -755,6 +759,7 @@ gen_lt TBool = do
 gen_lt _ = mzero
 
 gen_lte :: PactGen
+gen_lte TAny = gen_lte =<< Gen.element [TBool]
 gen_lte TBool = do
   t <- genType
   guard (canCmp t)
@@ -762,6 +767,7 @@ gen_lte TBool = do
 gen_lte _ = mzero
 
 gen_eq :: PactGen
+gen_eq TAny = gen_eq =<< Gen.element [TBool]
 gen_eq TBool = do
   t <- genType
   guard (canEq t)
@@ -769,6 +775,7 @@ gen_eq TBool = do
 gen_eq _ = mzero
 
 gen_gt :: PactGen
+gen_gt TAny = gen_gt =<< Gen.element [TBool]
 gen_gt TBool = do
   t <- genType
   guard (canCmp t)
@@ -776,6 +783,7 @@ gen_gt TBool = do
 gen_gt _ = mzero
 
 gen_gte :: PactGen
+gen_gte TAny = gen_gte =<< Gen.element [TBool]
 gen_gte TBool = do
   t <- genType
   guard (canCmp t)
@@ -783,16 +791,19 @@ gen_gte TBool = do
 gen_gte _ = mzero
 
 gen_pow :: PactGen
+gen_pow TAny = gen_pow =<< Gen.element [TInt, TDec]
 gen_pow t@TInt = arity2 "^" t
 gen_pow t@TDec = arity2_int_or_dec "^" t
 gen_pow _ = mzero
 
 gen_abs :: PactGen
+gen_abs TAny = gen_abs =<< Gen.element [TInt, TDec]
 gen_abs t@TInt = arity1 "abs" t
 gen_abs t@TDec = arity1 "abs" t
 gen_abs _ = mzero
 
 gen_and :: PactGen
+gen_and TAny = gen_and =<< Gen.element [TBool]
 gen_and t@TBool = arity1 "and" t
 gen_and _ = mzero
 
@@ -800,31 +811,38 @@ gen_and_question :: PactGen
 gen_and_question _ = mzero -- jww (2022-09-26): TODO
 
 gen_ceiling :: PactGen
+gen_ceiling TAny = gen_ceiling =<< Gen.element [TInt]
 gen_ceiling TInt = arity1 "ceiling" TDec
 gen_ceiling _ = mzero
 
 gen_exp :: PactGen
+gen_exp TAny = gen_exp =<< Gen.element [TDec]
 gen_exp t@TDec = arity1_int_or_dec "exp" t
 gen_exp _ = mzero
 
 gen_floor :: PactGen
+gen_floor TAny = gen_floor =<< Gen.element [TInt]
 gen_floor TInt = arity1 "floor" TDec
 gen_floor _ = mzero
 
 gen_ln :: PactGen
+gen_ln TAny = gen_ln =<< Gen.element [TDec]
 gen_ln t@TDec = arity1_int_or_dec "ln" t
 gen_ln _ = mzero
 
 gen_log :: PactGen
+gen_log TAny = gen_log =<< Gen.element [TInt, TDec]
 gen_log t@TInt = arity2 "log" t
 gen_log t@TDec = arity2_int_or_dec "log" t
 gen_log _ = mzero
 
 gen_mod :: PactGen
+gen_mod TAny = gen_mod =<< Gen.element [TInt]
 gen_mod t@TInt = arity2 "mod" t
 gen_mod _ = mzero
 
 gen_not :: PactGen
+gen_not TAny = gen_not =<< Gen.element [TBool]
 gen_not t@TBool = arity1 "not" t
 gen_not _ = mzero
 
@@ -832,6 +850,7 @@ gen_not_question :: PactGen
 gen_not_question _ = mzero -- jww (2022-09-26): TODO
 
 gen_or :: PactGen
+gen_or TAny = gen_or =<< Gen.element [TBool]
 gen_or t@TBool = arity2 "or" t
 gen_or _ = mzero
 
@@ -839,26 +858,32 @@ gen_or_question :: PactGen
 gen_or_question _ = mzero -- jww (2022-09-26): TODO
 
 gen_round :: PactGen
+gen_round TAny = gen_round =<< Gen.element [TInt]
 gen_round TInt = arity1 "round" TDec
 gen_round _ = mzero
 
 gen_shift :: PactGen
+gen_shift TAny = gen_shift =<< Gen.element [TInt]
 gen_shift t@TInt = arity2 "shift" t
 gen_shift _ = mzero
 
 gen_sqrt :: PactGen
+gen_sqrt TAny = gen_sqrt =<< Gen.element [TInt, TDec]
 gen_sqrt t@TInt = arity1 "sqrt" t
 gen_sqrt t@TDec = arity1 "sqrt" t
 gen_sqrt _ = mzero
 
 gen_xor :: PactGen
+gen_xor TAny = gen_xor =<< Gen.element [TInt]
 gen_xor t@TInt = arity2 "xor" t
 gen_xor _ = mzero
 
 gen_bitwise_or :: PactGen
+gen_bitwise_or TAny = gen_bitwise_or =<< Gen.element [TInt]
 gen_bitwise_or t@TInt = arity2 "|" t
 gen_bitwise_or _ = mzero
 
 gen_bitwise_complement :: PactGen
+gen_bitwise_complement TAny = gen_bitwise_complement =<< Gen.element [TInt]
 gen_bitwise_complement t@TInt = arity1 "~" t
 gen_bitwise_complement _ = mzero
