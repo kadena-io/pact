@@ -1,12 +1,13 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
--- import Control.Lens hiding (lifted)
 import Control.Monad
 import Control.Monad.Trans.Reader
 import Data.Decimal
@@ -17,10 +18,21 @@ import Data.Time
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
-
--- import Test.Tasty
-
--- import Test.Tasty.Hedgehog
+#if defined(GAS_MODEL)
+import Control.Exception (bracket)
+import Criterion qualified as C
+import Criterion.Types qualified as C
+import Data.IORef
+import Data.List.NonEmpty qualified as NE
+import Data.Text qualified as T
+import Pact.GasModel.GasModel hiding (bench, benchesOnce, main)
+import Pact.GasModel.Types
+import Pact.GasModel.Utils
+import Pact.Types.Lang qualified as Pact
+import Pact.Types.Runtime (EvalEnv (_eeGas))
+import Pact.Types.Term (Gas)
+import Statistics.Types (Estimate (..))
+#endif
 
 main :: IO ()
 main = do
@@ -54,15 +66,102 @@ main = do
     -- print x3
     putStrLn $ toLisp x3
 
-{-
-main = defaultMain tests
+#if defined(GAS_MODEL)
+  plus_tests <- do
+    fmap (gasTest "<int>") $
+      Gen.sample $
+        replicateM 1 $
+          flip runReaderT defaultEnv $
+            genBuiltin "+" TAny
 
-tests :: TestTree
-tests = undefined
+  -- opt <- O.execParser options
+  let tests :: [(Pact.NativeDefName, GasUnitTests)] =
+        [ ( Pact.NativeDefName "<int>",
+            plus_tests
+          )
+        ]
 
-basicExpr :: Property
-basicExpr = undefined
--}
+  -- Enforces that unit tests succeed
+  putStrLn "Doing dry run of benchmark tests"
+  mapM_ (mockRuns . snd) tests
+
+  putStrLn "Running benchmark(s)"
+  if True -- _oBenchOnly opt
+    then
+      let displayGasPrice (funName, t) = do
+            res <- benchesOnce t
+            putStrLn $
+              (T.unpack (Pact.asString funName))
+                ++ ": "
+                ++ show (map _gasTestResultSqliteDb res)
+            putStrLn ""
+       in mapM_ displayGasPrice tests
+    else do
+      let testsSorted = sortOn fst tests
+      allBenches <- mapM benchesMultiple testsSorted
+
+      putStrLn "Exporting raw benchmarks data"
+      writeRawCSV (concatMap snd allBenches)
+
+      putStrLn "Exporting data-driven gas prices"
+      writeGasPriceCSV allBenches
+
+      putStrLn "Reporting coverage"
+      coverageReport
+#endif
+
+#if defined(GAS_MODEL)
+
+bench ::
+  PactExpression ->
+  GasSetup e ->
+  IO (Gas, NanoSeconds)
+bench expr dbSetup = do
+  terms <- compileCode (_pactExpressionFull expr)
+  putStrLn $ T.unpack (getDescription expr dbSetup)
+  (gas, rep) <- bracket setup teardown $ \s@(NoopNFData (env, state)) -> do
+    _ <- exec state env terms
+    gas <- readIORef (_eeGas env)
+    rep <- C.benchmark' (run terms s)
+    pure (gas, rep)
+  return
+    ( gas,
+      secToNs $
+        estPoint $
+          C.anMean $
+            C.reportAnalysis rep
+    )
+  where
+    setup = do
+      s <- setupEnv dbSetup
+      return $ NoopNFData s
+    teardown (NoopNFData env) = do
+      (gasSetupCleanup dbSetup) env
+    run terms ~(NoopNFData (env, state)) =
+      C.nfIO (exec state env terms)
+
+benchesOnce ::
+  GasUnitTests ->
+  IO [GasTestResult (Gas, NanoSeconds)]
+benchesOnce tests = runGasUnitTests tests bench mockFun
+  where
+    mockFun :: PactExpression -> GasSetup () -> IO (Gas, NanoSeconds)
+    mockFun _ _ = pure (0, 0)
+
+gasTest :: String -> [LispExpr] -> GasUnitTests
+gasTest name exprs =
+  defGasUnitTests
+    ( NE.fromList
+        ( map
+            ( \expr ->
+                PactExpression (T.pack (toLisp expr)) Nothing
+            )
+            exprs
+        )
+    )
+    (Pact.NativeDefName (T.pack name))
+
+#endif
 
 type PactGen = ExprType -> ReaderT Env Gen LispExpr
 
@@ -202,20 +301,23 @@ genBool = EBool <$> Gen.bool
 genSchema :: MonadGen m => m Schema
 genSchema = pure []
 
+genLitType :: MonadGen m => m ExprType
+genLitType = Gen.element [TStr, TInt, TDec, TBool]
+
 genType :: MonadGen m => m ExprType
-genType =
-  Gen.frequency
-    [ (1, pure TAny),
-      (1, pure TStr),
-      (1, pure TInt),
-      (1, pure TDec),
-      (1, pure TBool),
-      (1, pure TTime),
-      (1, pure TKeyset),
-      (1, TList <$> genType),
-      (1, TObj <$> genSchema),
-      (1, TTable <$> genSchema)
-    ]
+genType = go (2 :: Int)
+  where
+    go n =
+      Gen.frequency
+        [ (1, pure TAny),
+          (1, genLitType),
+          -- Do not generate lists of lists greater than depth 2
+          (if n > 0 then 1 else 0, TList <$> go (pred n))
+          -- jww (2022-09-26): TODO
+          -- (1, pure TKeyset),
+          -- (1, TObj <$> genSchema),
+          -- (1, TTable <$> genSchema)
+        ]
 
 genUTCTime :: MonadGen m => m UTCTime
 genUTCTime = do
@@ -225,7 +327,7 @@ genUTCTime = do
 
 genExpr :: PactGen
 genExpr = \case
-  TAny -> genExpr =<< Gen.element [TStr, TInt, TDec, TBool]
+  TAny -> genExpr =<< genLitType
   TStr -> genStr
   TInt -> genInt
   TDec -> genDec
@@ -306,7 +408,7 @@ builtins =
       ("where", gen_where),
       ("yield", gen_yield),
       -- Operators native functions
-      ("!=", gen_not_equal),
+      ("!=", gen_neq),
       ("&", gen_bitwise_and),
       ("*", gen_mult),
       ("+", gen_plus),
@@ -553,8 +655,45 @@ gen_where _ = mzero -- jww (2022-09-26): TODO
 gen_yield :: PactGen
 gen_yield _ = mzero -- jww (2022-09-26): TODO
 
-gen_not_equal :: PactGen
-gen_not_equal _ = mzero -- jww (2022-09-26): TODO
+arity1 :: String -> PactGen
+arity1 name t = do
+  n <- genExpr t
+  pure $ EParens [ESym name, n]
+
+arity2 :: String -> PactGen
+arity2 name t = do
+  n <- genExpr t
+  m <- genExpr t
+  pure $ EParens [ESym name, n, m]
+
+canEq :: ExprType -> Bool
+canEq TList {} = True
+canEq TObj {} = True
+canEq TStr = True
+canEq TInt = True
+canEq TDec = True
+canEq TBool = True
+canEq TTime = True
+canEq TTable {} = True
+-- canEq TSchema {} TSchema {} = True
+-- canEq TGuard {} TGuard {} = True
+-- canEq TModRef {} TModRef {} = True
+canEq _ = False
+
+canCmp :: ExprType -> Bool
+canCmp TStr = True
+canCmp TInt = True
+canCmp TDec = True
+canCmp TBool = True
+canCmp TTime = True
+canCmp _ = False
+
+gen_neq :: PactGen
+gen_neq TBool = do
+  t <- genType
+  guard (canEq t)
+  arity2 "!=" t
+gen_neq _ = mzero
 
 gen_bitwise_and :: PactGen
 gen_bitwise_and _ = mzero -- jww (2022-09-26): TODO
@@ -569,8 +708,9 @@ gen_plus TAny =
       [ pure TDec,
         pure TInt,
         pure TStr,
-        TList <$> genType,
-        TObj <$> genSchema
+        TList <$> genType
+        -- jww (2022-09-26): TODO
+        -- TObj <$> genSchema
       ]
 gen_plus TDec = do
   (n, m) <-
@@ -580,17 +720,12 @@ gen_plus TDec = do
         (,) <$> genDec <*> genInt
       ]
   pure $ EParens [ESym "+", n, m]
-gen_plus t@TInt = gen_plus_work t
-gen_plus t@TStr = gen_plus_work t
-gen_plus t@(TList _) = gen_plus_work t
-gen_plus t@(TObj _) = gen_plus_work t
+gen_plus t@TInt = arity2 "+" t
+gen_plus t@TStr = arity2 "+" t
+gen_plus t@(TList _) = arity2 "+" t
+-- jww (2022-09-26): TODO
+-- gen_plus t@(TObj _) = arity2 "+" t
 gen_plus _ = mzero
-
-gen_plus_work :: PactGen
-gen_plus_work t = do
-  n <- genExpr t
-  m <- genExpr t
-  pure $ EParens [ESym "+", n, m]
 
 gen_minus :: PactGen
 gen_minus _ = mzero -- jww (2022-09-26): TODO
@@ -599,19 +734,39 @@ gen_divide :: PactGen
 gen_divide _ = mzero -- jww (2022-09-26): TODO
 
 gen_lt :: PactGen
-gen_lt _ = mzero -- jww (2022-09-26): TODO
+gen_lt TBool = do
+  t <- genType
+  guard (canCmp t)
+  arity2 "<" t
+gen_lt _ = mzero
 
 gen_lte :: PactGen
-gen_lte _ = mzero -- jww (2022-09-26): TODO
+gen_lte TBool = do
+  t <- genType
+  guard (canCmp t)
+  arity2 "<=" t
+gen_lte _ = mzero
 
 gen_eq :: PactGen
-gen_eq _ = mzero -- jww (2022-09-26): TODO
+gen_eq TBool = do
+  t <- genType
+  guard (canEq t)
+  arity2 "==" t
+gen_eq _ = mzero
 
 gen_gt :: PactGen
-gen_gt _ = mzero -- jww (2022-09-26): TODO
+gen_gt TBool = do
+  t <- genType
+  guard (canCmp t)
+  arity2 ">" t
+gen_gt _ = mzero
 
 gen_gte :: PactGen
-gen_gte _ = mzero -- jww (2022-09-26): TODO
+gen_gte TBool = do
+  t <- genType
+  guard (canCmp t)
+  arity2 ">=" t
+gen_gte _ = mzero
 
 gen_pow :: PactGen
 gen_pow _ = mzero -- jww (2022-09-26): TODO
@@ -644,7 +799,8 @@ gen_mod :: PactGen
 gen_mod _ = mzero -- jww (2022-09-26): TODO
 
 gen_not :: PactGen
-gen_not _ = mzero -- jww (2022-09-26): TODO
+gen_not TBool = arity1 "not" TBool
+gen_not _ = mzero
 
 gen_not_question :: PactGen
 gen_not_question _ = mzero -- jww (2022-09-26): TODO
