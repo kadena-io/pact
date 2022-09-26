@@ -6,6 +6,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- #define GAS_MODEL 1
+
 module Main where
 
 import Control.Monad
@@ -61,7 +63,7 @@ main = do
     Gen.sample $
       replicateM 10 $
         flip runReaderT defaultEnv $
-          genBuiltin "+" TAny
+          genBuiltin "+" =<< gen_plus_argType
   forM_ xs3 $ \x3 -> do
     -- print x3
     putStrLn $ toLisp x3
@@ -72,7 +74,7 @@ main = do
       Gen.sample $
         replicateM 1 $
           flip runReaderT defaultEnv $
-            genBuiltin "+" TAny
+            genBuiltin "+" =<< gen_plus_argType
 
   -- opt <- O.execParser options
   let tests :: [(Pact.NativeDefName, GasUnitTests)] =
@@ -660,10 +662,24 @@ arity1 name t = do
   n <- genExpr t
   pure $ EParens [ESym name, n]
 
+arity1_int_or_dec :: String -> PactGen
+arity1_int_or_dec name _t =
+  arity1 name =<< Gen.element [TInt, TDec]
+
 arity2 :: String -> PactGen
 arity2 name t = do
   n <- genExpr t
   m <- genExpr t
+  pure $ EParens [ESym name, n, m]
+
+arity2_int_or_dec :: String -> PactGen
+arity2_int_or_dec name _t = do
+  (n, m) <-
+    Gen.choice
+      [ (,) <$> genDec <*> genDec,
+        (,) <$> genInt <*> genDec,
+        (,) <$> genDec <*> genInt
+      ]
   pure $ EParens [ESym name, n, m]
 
 canEq :: ExprType -> Bool
@@ -699,27 +715,21 @@ gen_bitwise_and :: PactGen
 gen_bitwise_and _ = mzero -- jww (2022-09-26): TODO
 
 gen_mult :: PactGen
-gen_mult _ = mzero -- jww (2022-09-26): TODO
+gen_mult t@TDec = arity2_int_or_dec "*" t
+gen_mult t@TInt = arity2 "*" t
+gen_mult _ = mzero
+
+gen_plus_argType :: MonadGen m => m ExprType
+gen_plus_argType =
+  Gen.choice
+    [ pure TStr,
+      pure TInt,
+      pure TDec,
+      TList <$> genLitType
+    ]
 
 gen_plus :: PactGen
-gen_plus TAny =
-  gen_plus
-    =<< Gen.choice
-      [ pure TDec,
-        pure TInt,
-        pure TStr,
-        TList <$> genType
-        -- jww (2022-09-26): TODO
-        -- TObj <$> genSchema
-      ]
-gen_plus TDec = do
-  (n, m) <-
-    Gen.choice
-      [ (,) <$> genDec <*> genDec,
-        (,) <$> genInt <*> genDec,
-        (,) <$> genDec <*> genInt
-      ]
-  pure $ EParens [ESym "+", n, m]
+gen_plus t@TDec = arity2_int_or_dec "+" t
 gen_plus t@TInt = arity2 "+" t
 gen_plus t@TStr = arity2 "+" t
 gen_plus t@(TList _) = arity2 "+" t
@@ -728,10 +738,14 @@ gen_plus t@(TList _) = arity2 "+" t
 gen_plus _ = mzero
 
 gen_minus :: PactGen
-gen_minus _ = mzero -- jww (2022-09-26): TODO
+gen_minus t@TDec = arity2_int_or_dec "-" t
+gen_minus t@TInt = arity2 "-" t
+gen_minus _ = mzero
 
 gen_divide :: PactGen
-gen_divide _ = mzero -- jww (2022-09-26): TODO
+gen_divide t@TDec = arity2_int_or_dec "/" t
+gen_divide t@TInt = arity2 "/" t
+gen_divide _ = mzero
 
 gen_lt :: PactGen
 gen_lt TBool = do
@@ -769,62 +783,82 @@ gen_gte TBool = do
 gen_gte _ = mzero
 
 gen_pow :: PactGen
-gen_pow _ = mzero -- jww (2022-09-26): TODO
+gen_pow t@TInt = arity2 "^" t
+gen_pow t@TDec = arity2_int_or_dec "^" t
+gen_pow _ = mzero
 
 gen_abs :: PactGen
-gen_abs _ = mzero -- jww (2022-09-26): TODO
+gen_abs t@TInt = arity1 "abs" t
+gen_abs t@TDec = arity1 "abs" t
+gen_abs _ = mzero
 
 gen_and :: PactGen
-gen_and _ = mzero -- jww (2022-09-26): TODO
+gen_and t@TBool = arity1 "and" t
+gen_and _ = mzero
 
 gen_and_question :: PactGen
 gen_and_question _ = mzero -- jww (2022-09-26): TODO
 
 gen_ceiling :: PactGen
-gen_ceiling _ = mzero -- jww (2022-09-26): TODO
+gen_ceiling TInt = arity1 "ceiling" TDec
+gen_ceiling _ = mzero
 
 gen_exp :: PactGen
-gen_exp _ = mzero -- jww (2022-09-26): TODO
+gen_exp t@TDec = arity1_int_or_dec "exp" t
+gen_exp _ = mzero
 
 gen_floor :: PactGen
-gen_floor _ = mzero -- jww (2022-09-26): TODO
+gen_floor TInt = arity1 "floor" TDec
+gen_floor _ = mzero
 
 gen_ln :: PactGen
-gen_ln _ = mzero -- jww (2022-09-26): TODO
+gen_ln t@TDec = arity1_int_or_dec "ln" t
+gen_ln _ = mzero
 
 gen_log :: PactGen
-gen_log _ = mzero -- jww (2022-09-26): TODO
+gen_log t@TInt = arity2 "log" t
+gen_log t@TDec = arity2_int_or_dec "log" t
+gen_log _ = mzero
 
 gen_mod :: PactGen
-gen_mod _ = mzero -- jww (2022-09-26): TODO
+gen_mod t@TInt = arity2 "mod" t
+gen_mod _ = mzero
 
 gen_not :: PactGen
-gen_not TBool = arity1 "not" TBool
+gen_not t@TBool = arity1 "not" t
 gen_not _ = mzero
 
 gen_not_question :: PactGen
 gen_not_question _ = mzero -- jww (2022-09-26): TODO
 
 gen_or :: PactGen
-gen_or _ = mzero -- jww (2022-09-26): TODO
+gen_or t@TBool = arity2 "or" t
+gen_or _ = mzero
 
 gen_or_question :: PactGen
 gen_or_question _ = mzero -- jww (2022-09-26): TODO
 
 gen_round :: PactGen
-gen_round _ = mzero -- jww (2022-09-26): TODO
+gen_round TInt = arity1 "round" TDec
+gen_round _ = mzero
 
 gen_shift :: PactGen
-gen_shift _ = mzero -- jww (2022-09-26): TODO
+gen_shift t@TInt = arity2 "shift" t
+gen_shift _ = mzero
 
 gen_sqrt :: PactGen
-gen_sqrt _ = mzero -- jww (2022-09-26): TODO
+gen_sqrt t@TInt = arity1 "sqrt" t
+gen_sqrt t@TDec = arity1 "sqrt" t
+gen_sqrt _ = mzero
 
 gen_xor :: PactGen
-gen_xor _ = mzero -- jww (2022-09-26): TODO
+gen_xor t@TInt = arity2 "xor" t
+gen_xor _ = mzero
 
 gen_bitwise_or :: PactGen
-gen_bitwise_or _ = mzero -- jww (2022-09-26): TODO
+gen_bitwise_or t@TInt = arity2 "|" t
+gen_bitwise_or _ = mzero
 
 gen_bitwise_complement :: PactGen
-gen_bitwise_complement _ = mzero -- jww (2022-09-26): TODO
+gen_bitwise_complement t@TInt = arity1 "~" t
+gen_bitwise_complement _ = mzero
