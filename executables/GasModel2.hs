@@ -6,9 +6,8 @@
 
 module Main where
 
-import Control.Lens hiding (lifted)
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.Cont
+-- import Control.Lens hiding (lifted)
+import Control.Monad
 import Control.Monad.Trans.Reader
 import Data.Decimal
 import Data.HashMap.Strict (HashMap)
@@ -25,21 +24,35 @@ import Hedgehog.Range qualified as Range
 
 main :: IO ()
 main = do
-  x1 <-
-    Gen.sample $
-      flip runReaderT [] $
-        genExpr TInt
   putStrLn "x1:"
-  print x1
-  putStrLn $ toLisp (expr x1)
-
-  x2 <-
+  xs1 <-
     Gen.sample $
-      flip runReaderT [] $
-        genBuiltin "at"
+      replicateM 10 $
+        flip runReaderT [] $
+          genExpr TInt
+  forM_ xs1 $ \x1 -> do
+    -- print x1
+    putStrLn $ toLisp x1
+
   putStrLn "x2:"
-  print x2
-  putStrLn $ toLisp (expr x2)
+  xs2 <-
+    Gen.sample $
+      replicateM 10 $
+        flip runReaderT [] $
+          genBuiltin "at" TInt
+  forM_ xs2 $ \x2 -> do
+    -- print x2
+    putStrLn $ toLisp x2
+
+  putStrLn "x3:"
+  xs3 <-
+    Gen.sample $
+      replicateM 10 $
+        flip runReaderT [] $
+          genBuiltin "+" TAny
+  forM_ xs3 $ \x3 -> do
+    -- print x3
+    putStrLn $ toLisp x3
 
 {-
 main = defaultMain tests
@@ -51,25 +64,72 @@ basicExpr :: Property
 basicExpr = undefined
 -}
 
-type Schema = [(String, ExprType)]
+type PactGen = ExprType -> ReaderT Env Gen LispExpr
+
+type Scope = HashMap String LispExpr
+
+-- jww (2022-09-26): More things needed here
+data Env = Env
+  { scopes :: [Scope]
+  }
 
 -- Although "any" is technically a valid type, we only generate values in this
 -- module whose type we know at time of generation.
 data ExprType
-  = TStr
+  = TAny
+  | TStr
   | TInt
   | TDec
   | TBool
   | TTime
   | TKeyset
-  | TList (Maybe ExprType)
-  | TObject Schema
+  | TList ExprType
+  | TObj Schema
   | TTable Schema
-  | TFunction
-      { funName :: String,
-        funArity :: Int
-      }
   deriving (Eq, Show)
+
+-- jww (2022-09-26): Is this all that a scheme needs to be?
+type Schema = [(String, ExprType)]
+
+isTAny :: ExprType -> Bool
+isTAny TAny = True
+isTAny _ = False
+
+isTStr :: ExprType -> Bool
+isTStr TStr = True
+isTStr _ = False
+
+isTInt :: ExprType -> Bool
+isTInt TInt = True
+isTInt _ = False
+
+isTDec :: ExprType -> Bool
+isTDec TDec = True
+isTDec _ = False
+
+isTBool :: ExprType -> Bool
+isTBool TBool = True
+isTBool _ = False
+
+isTTime :: ExprType -> Bool
+isTTime TTime = True
+isTTime _ = False
+
+isTKeyset :: ExprType -> Bool
+isTKeyset TKeyset = True
+isTKeyset _ = False
+
+isTList :: ExprType -> Bool
+isTList (TList _) = True
+isTList _ = False
+
+isTObj :: ExprType -> Bool
+isTObj (TObj _) = True
+isTObj _ = False
+
+isTTable :: ExprType -> Bool
+isTTable (TTable _) = True
+isTTable _ = False
 
 data LispExpr
   = EStr String
@@ -78,30 +138,13 @@ data LispExpr
   | EBool Bool
   | ETime UTCTime
   | EKeyset
-  | EList [TypedExpr]
-  | EObject Schema
+  | EList [LispExpr]
+  | EObject Schema -- jww (2022-09-26): should data corresponding to a scheme
   | ETable Schema
   | EModule
   | ESym String
-  | EParens [TypedExpr]
+  | EParens [LispExpr]
   deriving (Eq, Show)
-
-data TypedExpr = TypedExpr
-  { exprType :: ExprType,
-    expr :: LispExpr
-  }
-  deriving (Eq, Show)
-
-typeOf :: TypedExpr -> ExprType
-typeOf (TypedExpr ty _) = ty
-
-listOf :: TypedExpr -> [TypedExpr]
-listOf (TypedExpr _ (EList xs)) = xs
-listOf t = error $ "Expected list, but got: " ++ show t
-
-data Scope = Scope
-  { symbols :: HashMap String TypedExpr
-  }
 
 toLisp :: LispExpr -> String
 toLisp = \case
@@ -111,279 +154,518 @@ toLisp = \case
   EDec d -> show d
   EBool True -> "true"
   EBool False -> "false"
-  ETime _ -> undefined
-  EKeyset -> undefined
-  EList xs -> "[" ++ intercalate ", " (map (toLisp . expr) xs) ++ "]"
-  EObject _ -> undefined
-  ETable _ -> undefined
-  EModule -> undefined
+  ETime _ -> "!time!" -- jww (2022-09-26): TODO
+  EKeyset -> "!keyset!" -- jww (2022-09-26): TODO
+  EList xs -> "[" ++ intercalate ", " (map toLisp xs) ++ "]"
+  EObject _ -> "!object!" -- jww (2022-09-26): TODO
+  ETable _ -> "!table!" -- jww (2022-09-26): TODO
+  EModule -> "!module!" -- jww (2022-09-26): TODO
   ESym s -> s
-  EParens xs -> "(" ++ intercalate " " (map (toLisp . expr) xs) ++ ")"
+  EParens xs -> "(" ++ intercalate " " (map toLisp xs) ++ ")"
 
-type PactGen = ReaderT [Scope] Gen
+pickField :: MonadGen m => Schema -> m String
+pickField = Gen.element . map fst
 
-type PactGenCPS a = ContT a PactGen (PactGen TypedExpr)
-
-lifted :: PactGen a -> PactGenCPS a
-lifted = ContT . const
-
-runCPS :: PactGenCPS a -> (PactGen TypedExpr -> PactGen a) -> PactGen a
-runCPS = runContT
-
-pickField :: Schema -> Gen String
-pickField fields = Gen.element (map fst fields)
-
-genIdent :: Gen String
+genIdent :: MonadGen m => m String
 genIdent =
   (:)
     <$> Gen.alpha
-    <*> Gen.string (Range.linear 0 16) Gen.alphaNum
+    <*> Gen.string (Range.constant 0 16) Gen.alphaNum
 
-genStr :: Gen TypedExpr
-genStr = TypedExpr TStr . EStr <$> Gen.string (Range.linear 0 8192) Gen.alpha
+genStr :: MonadGen m => m LispExpr
+genStr = EStr <$> Gen.string (Range.linear 0 32) Gen.alpha
 
-genInt :: Gen TypedExpr
+genInt :: MonadGen m => m LispExpr
 genInt =
-  TypedExpr TInt . EInt
-    <$> Gen.integral
+  EInt
+    <$> Gen.integral_
       ( Range.linear
           (-1_000_000)
           1_000_000
       )
 
-genDec :: Gen TypedExpr
+genDec :: MonadGen m => m LispExpr
 genDec =
-  TypedExpr TDec . EDec
+  EDec
     <$> Gen.realFrac_
       ( Range.linearFrac
           (-1_000_000)
           1_000_000
       )
 
-genBool :: Gen TypedExpr
-genBool = TypedExpr TBool . EBool <$> Gen.bool
+genBool :: MonadGen m => m LispExpr
+genBool = EBool <$> Gen.bool
 
--- A functional expression has the form (FUNCTION ARGS..), while a data
--- expression has the form (EXPR...). A generated symbol should always refer
--- to a bound name, but value arguments can appear anywhere.
-data ExprKind = Functional | Value
+genSchema :: MonadGen m => m Schema
+genSchema = pure []
 
-genExpr :: ExprType -> PactGen TypedExpr
-genExpr TStr = lift genStr
-genExpr TInt = lift genInt
-genExpr TDec = lift genDec
-genExpr TBool = lift genBool
-genExpr TTime = undefined
-genExpr TKeyset = undefined
-genExpr (TList Nothing) = genList
-genExpr (TList (Just ty)) = genArray ty
-genExpr (TObject _sch) = undefined
-genExpr (TTable _sch) = undefined
-genExpr (TFunction name _) = genBuiltin name
+genType :: MonadGen m => m ExprType
+genType =
+  Gen.frequency
+    [ (1, pure TAny),
+      (1, pure TStr),
+      (1, pure TInt),
+      (1, pure TDec),
+      (1, pure TBool),
+      (1, pure TTime),
+      (1, pure TKeyset),
+      (1, TList <$> genType),
+      (1, TObj <$> genSchema),
+      (1, TTable <$> genSchema)
+    ]
 
-genAtomType :: Gen ExprType
-genAtomType = Gen.element [TStr, TInt, TDec, TBool]
+genUTCTime :: MonadGen m => m UTCTime
+genUTCTime = do
+  day <- Gen.integral_ $ Range.linear 0 (10000 :: Integer)
+  sec <- Gen.integral_ $ Range.linear 0 (10_000_000 :: Integer)
+  pure $ UTCTime (ModifiedJulianDay day) (fromIntegral sec)
+
+genExpr :: PactGen
+genExpr = \case
+  TAny -> genExpr =<< Gen.element [TStr, TInt, TDec, TBool]
+  TStr -> genStr
+  TInt -> genInt
+  TDec -> genDec
+  TBool -> genBool
+  TTime -> ETime <$> genUTCTime
+  TKeyset -> pure EKeyset -- jww (2022-09-26): TODO
+  TList t -> genList t
+  TObj sch -> pure $ EObject sch -- jww (2022-09-26): TODO
+  TTable sch -> pure $ ETable sch -- jww (2022-09-26): TODO
 
 listRange :: Range Int
-listRange = Range.linear 0 10
+listRange = Range.constant 0 10
 
-genArray :: ExprType -> PactGen TypedExpr
-genArray t = do
-  TypedExpr (TList (Just t)) . EList
-    <$> Gen.list listRange (genExpr t)
+genList :: PactGen
+genList t = EList <$> Gen.list listRange (genExpr t)
 
-genList :: PactGen TypedExpr
-genList = do
-  TypedExpr (TList Nothing) . EList
-    <$> Gen.list
-      listRange
-      ( do
-          t <- lift genAtomType
-          genExpr t
-      )
+genBuiltin :: String -> PactGen
+genBuiltin name t = case M.lookup name builtins of
+  Just gen -> gen t
+  Nothing -> fail $ "Unknown builtin: " ++ name
 
-genBuiltin :: String -> PactGen TypedExpr
-genBuiltin name = builtins ^?! ix name . _2
+------------------------------------------------------------------------
+-- Builtins
 
-builtins :: HashMap String (ExprType, PactGen TypedExpr)
-builtins = go [(builtin_at, at_impl)]
-  where
-    go =
-      M.fromList
-        . map
-          ( \x@(t, _) -> case t of
-              TFunction name _ -> (name, x)
-              _ -> error "unexpected"
-          )
+-- The builtins map is a mapping from function names to generators and a
+-- function that report what the return type will be for a given set of
+-- arguments.
+builtins :: HashMap String PactGen
+builtins =
+  M.fromList
+    [ -- General native functions
+      ("at", gen_at),
+      ("base64-decode", gen_base64_decode),
+      ("base64-encode", gen_base64_encode),
+      ("bind", gen_bind),
+      ("chain-data", gen_chain_data),
+      ("compose", gen_compose),
+      ("concat", gen_concat),
+      ("constantly", gen_constantly),
+      ("contains", gen_contains),
+      ("define-namespace", gen_define_namespace),
+      ("drop", gen_drop),
+      ("enforce", gen_enforce),
+      ("enforce-one", gen_enforce_one),
+      ("enforce-pact-version", gen_enforce_pact_version),
+      ("enumerate", gen_enumerate),
+      ("filter", gen_filter),
+      ("fold", gen_fold),
+      ("format", gen_format),
+      ("hash", gen_hash),
+      ("identity", gen_identity),
+      ("if", gen_if),
+      ("int-to-str", gen_int_to_str),
+      ("is-charset", gen_is_charset),
+      ("length", gen_length),
+      ("list-modules", gen_list_modules),
+      ("make-list", gen_make_list),
+      ("map", gen_map),
+      ("zip", gen_zip),
+      ("namespace", gen_namespace),
+      ("pact-id", gen_pact_id),
+      ("pact-version", gen_pact_version),
+      ("read-decimal", gen_read_decimal),
+      ("read-integer", gen_read_integer),
+      ("read-msg", gen_read_msg),
+      ("read-string", gen_read_string),
+      ("remove", gen_remove),
+      ("resume", gen_resume),
+      ("reverse", gen_reverse),
+      ("sort", gen_sort),
+      ("str-to-int", gen_str_to_int),
+      ("str-to-list", gen_str_to_list),
+      ("take", gen_take),
+      ("try", gen_try),
+      ("tx-hash", gen_tx_hash),
+      ("typeof", gen_typeof),
+      ("distinct", gen_distinct),
+      ("where", gen_where),
+      ("yield", gen_yield),
+      -- Operators native functions
+      ("!=", gen_not_equal),
+      ("&", gen_bitwise_and),
+      ("*", gen_mult),
+      ("+", gen_plus),
+      ("-", gen_minus),
+      ("/", gen_divide),
+      ("<", gen_lt),
+      ("<=", gen_lte),
+      ("=", gen_eq),
+      (">", gen_gt),
+      (">=", gen_gte),
+      ("^", gen_pow),
+      ("abs", gen_abs),
+      ("and", gen_and),
+      ("and?", gen_and_question),
+      ("ceiling", gen_ceiling),
+      ("exp", gen_exp),
+      ("floor", gen_floor),
+      ("ln", gen_ln),
+      ("log", gen_log),
+      ("mod", gen_mod),
+      ("not", gen_not),
+      ("not?", gen_not_question),
+      ("or", gen_or),
+      ("or?", gen_or_question),
+      ("round", gen_round),
+      ("shift", gen_shift),
+      ("sqrt", gen_sqrt),
+      ("xor", gen_xor),
+      ("|", gen_bitwise_or),
+      ("~", gen_bitwise_complement)
+      -- Time native functions
+      -- "add-time"    -> Just $ addTimeTests nativeName
+      -- "days"        -> Just $ daysTests nativeName
+      -- "diff-time"   -> Just $ diffTimeTests nativeName
+      -- "format-time" -> Just $ formatTimeTests nativeName
+      -- "hours"       -> Just $ hoursTests nativeName
+      -- "minutes"     -> Just $ minutesTests nativeName
+      -- "parse-time"  -> Just $ parseTimeTests nativeName
+      -- "time"        -> Just $ timeTests nativeName
 
--- General native functions
--- "at"                   -> Just $ atTests nativeName
--- "base64-decode"        -> Just $ base64DecodeTests nativeName
--- "base64-encode"        -> Just $ base64EncodeTests nativeName
--- "bind"                 -> Just $ bindTests nativeName
--- "chain-data"           -> Just $ chainDataTests nativeName
--- "compose"              -> Just $ composeTests nativeName
--- "concat"               -> Just $ concatTests nativeName
--- "constantly"           -> Just $ constantlyTests nativeName
--- "contains"             -> Just $ containsTests nativeName
--- "define-namespace"     -> Just $ defineNamespaceTests nativeName
--- "drop"                 -> Just $ dropTests nativeName
--- "enforce"              -> Just $ enforceTests nativeName
--- "enforce-one"          -> Just $ enforceOneTests nativeName
--- "enforce-pact-version" -> Just $ enforcePactVersionTests nativeName
--- "enumerate"            -> Just $ enumerateTests nativeName
--- "filter"               -> Just $ filterTests nativeName
--- "fold"                 -> Just $ foldTests nativeName
--- "format"               -> Just $ formatTests nativeName
--- "hash"                 -> Just $ hashTests nativeName
--- "identity"             -> Just $ identityTests nativeName
--- "if"                   -> Just $ ifTests nativeName
--- "int-to-str"           -> Just $ intToStrTests nativeName
--- "is-charset"           -> Just $ isCharsetTests nativeName
--- "length"               -> Just $ lengthTests nativeName
--- "list-modules"         -> Just $ listModulesTests nativeName
--- "make-list"            -> Just $ makeListTests nativeName
--- "map"                  -> Just $ mapTests nativeName
--- "zip"                  -> Just $ zipTests nativeName
--- "namespace"            -> Just $ namespaceTests nativeName
--- "pact-id"              -> Just $ pactIdTests nativeName
--- "pact-version"         -> Just $ pactVersionTests nativeName
--- "read-decimal"         -> Just $ readDecimalTests nativeName
--- "read-integer"         -> Just $ readIntegerTests nativeName
--- "read-msg"             -> Just $ readMsgTests nativeName
--- "read-string"          -> Just $ readStringTests nativeName
--- "remove"               -> Just $ removeTests nativeName
--- "resume"               -> Just $ resumeTests nativeName
--- "reverse"              -> Just $ reverseTests nativeName
--- "sort"                 -> Just $ sortTests nativeName
--- "str-to-int"           -> Just $ strToIntTests nativeName
--- "str-to-list"          -> Just $ strToListTests nativeName
--- "take"                 -> Just $ takeTests nativeName
--- "try"                  -> Just $ tryTests nativeName
--- "tx-hash"              -> Just $ txHashTests nativeName
--- "typeof"               -> Just $ typeOfTests nativeName
--- "distinct"             -> Just $ distinctTests nativeName
--- "where"                -> Just $ whereTests nativeName
--- "yield"                -> Just $ yieldTests nativeName
+      -- Commitments native functions
+      -- "decrypt-cc20p1305" -> Just $ decryptCc20p1305Tests nativeName
+      -- "validate-keypair"  -> Just $ validateKeypairTests nativeName
 
--- -- Operators native functions
--- "!="      -> Just $ notEqualOptTests nativeName
--- "&"       -> Just $ bitwiseOptTests nativeName
--- "*"       -> Just $ multOptTests nativeName
--- "+"       -> Just $ addOptTests nativeName
--- "-"       -> Just $ subOptTests nativeName
--- "/"       -> Just $ divOptTests nativeName
--- "<"       -> Just $ lessThanOptTests nativeName
--- "<="      -> Just $ lessThanEqualOptTests nativeName
--- "="       -> Just $ equalOptTests nativeName
--- ">"       -> Just $ greaterThanOptTests nativeName
--- ">="      -> Just $ greaterThanEqOptTests nativeName
--- "^"       -> Just $ raiseOptTests nativeName
--- "abs"     -> Just $ absOptTests nativeName
--- "and"     -> Just $ andOptTests nativeName
--- "and?"    -> Just $ andFuncOptTests nativeName
--- "ceiling" -> Just $ ceilingOptTests nativeName
--- "exp"     -> Just $ expOptTests nativeName
--- "floor"   -> Just $ floorOptTests nativeName
--- "ln"      -> Just $ lnOptTests nativeName
--- "log"     -> Just $ logOptTests nativeName
--- "mod"     -> Just $ modOptTests nativeName
--- "not"     -> Just $ notOptTests nativeName
--- "not?"    -> Just $ notFuncOptTests nativeName
--- "or"      -> Just $ orOptTests nativeName
--- "or?"     -> Just $ orFuncOptTests nativeName
--- "round"   -> Just $ roundOptTests nativeName
--- "shift"   -> Just $ shiftOptTests nativeName
--- "sqrt"    -> Just $ sqrtOptTests nativeName
--- "xor"     -> Just $ xorOptTests nativeName
--- "|"       -> Just $ bitwiseOrOptTests nativeName
--- "~"       -> Just $ reverseBitsOptTests nativeName
+      -- Keyset native functions
+      -- "define-keyset"  -> Just $ defineKeysetTests nativeName
+      -- "enforce-keyset" -> Just $ enforceKeysetTests nativeName
+      -- "keys-2"         -> Just $ keys2Tests nativeName
+      -- "keys-all"       -> Just $ keysAllTests nativeName
+      -- "keys-any"       -> Just $ keysAnyTests nativeName
+      -- "read-keyset"    -> Just $ readKeysetTests nativeName
 
--- -- Time native functions
--- "add-time"    -> Just $ addTimeTests nativeName
--- "days"        -> Just $ daysTests nativeName
--- "diff-time"   -> Just $ diffTimeTests nativeName
--- "format-time" -> Just $ formatTimeTests nativeName
--- "hours"       -> Just $ hoursTests nativeName
--- "minutes"     -> Just $ minutesTests nativeName
--- "parse-time"  -> Just $ parseTimeTests nativeName
--- "time"        -> Just $ timeTests nativeName
+      -- Database native functions
+      -- "create-table"       -> Just $ createTableTests nativeName
+      -- "describe-keyset"    -> Just $ describeKeysetTests nativeName
+      -- "describe-module"    -> Just $ describeModuleTests nativeName
+      -- "describe-table"     -> Just $ describeTableTests nativeName
+      -- "describe-namespace" -> Just $ describeNamespaceTests nativeName
+      -- "insert"             -> Just $ insertTests nativeName
+      -- "keylog"             -> Just $ keylogTests nativeName
+      -- "keys"               -> Just $ keysTests nativeName
+      -- "read"               -> Just $ readTests nativeName
+      -- "select"             -> Just $ selectTests nativeName
+      -- "txids"              -> Just $ txidsTests nativeName
+      -- "txlog"              -> Just $ txlogTests nativeName
+      -- "update"             -> Just $ updateTests nativeName
+      -- "with-default-read"  -> Just $ withDefaultReadTests nativeName
+      -- "with-read"          -> Just $ withReadTests nativeName
+      -- "write"              -> Just $ writeTests nativeName
+      -- "fold-db"            -> Just $ foldDBTests nativeName
 
--- -- Commitments native functions
--- "decrypt-cc20p1305" -> Just $ decryptCc20p1305Tests nativeName
--- "validate-keypair"  -> Just $ validateKeypairTests nativeName
+      -- Capabilities native functions
+      -- "compose-capability"  -> Just $ composeCapabilityTests nativeName
+      -- "create-module-guard" -> Just $ createModuleGuardTests nativeName
+      -- "create-pact-guard"   -> Just $ createPactGuardTests nativeName
+      -- "create-user-guard"   -> Just $ createUserGuardTests nativeName
+      -- "enforce-guard"       -> Just $ enforceGuardTests nativeName
+      -- "install-capability"  -> Just $ installCapabilityTests nativeName
+      -- "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
+      -- "require-capability"  -> Just $ requireCapabilityTests nativeName
+      -- "with-capability"     -> Just $ withCapabilityTests nativeName
+      -- "emit-event"          -> Just $ emitEventTests nativeName
 
--- -- Keyset native functions
--- "define-keyset"  -> Just $ defineKeysetTests nativeName
--- "enforce-keyset" -> Just $ enforceKeysetTests nativeName
--- "keys-2"         -> Just $ keys2Tests nativeName
--- "keys-all"       -> Just $ keysAllTests nativeName
--- "keys-any"       -> Just $ keysAnyTests nativeName
--- "read-keyset"    -> Just $ readKeysetTests nativeName
+      -- Principal creation and validation
+      -- "create-principal"   -> Just $ createPrincipalTests nativeName
+      -- "validate-principal" -> Just $ validatePrincipalTests nativeName
+      -- "is-principal"       -> Just $ isPrincipalTests nativeName
+      -- "typeof-principal"   -> Just $ typeofPrincipalTests nativeName
 
--- -- Database native functions
--- "create-table"       -> Just $ createTableTests nativeName
--- "describe-keyset"    -> Just $ describeKeysetTests nativeName
--- "describe-module"    -> Just $ describeModuleTests nativeName
--- "describe-table"     -> Just $ describeTableTests nativeName
--- "describe-namespace" -> Just $ describeNamespaceTests nativeName
--- "insert"             -> Just $ insertTests nativeName
--- "keylog"             -> Just $ keylogTests nativeName
--- "keys"               -> Just $ keysTests nativeName
--- "read"               -> Just $ readTests nativeName
--- "select"             -> Just $ selectTests nativeName
--- "txids"              -> Just $ txidsTests nativeName
--- "txlog"              -> Just $ txlogTests nativeName
--- "update"             -> Just $ updateTests nativeName
--- "with-default-read"  -> Just $ withDefaultReadTests nativeName
--- "with-read"          -> Just $ withReadTests nativeName
--- "write"              -> Just $ writeTests nativeName
--- "fold-db"            -> Just $ foldDBTests nativeName
-
--- -- Capabilities native functions
--- "compose-capability"  -> Just $ composeCapabilityTests nativeName
--- "create-module-guard" -> Just $ createModuleGuardTests nativeName
--- "create-pact-guard"   -> Just $ createPactGuardTests nativeName
--- "create-user-guard"   -> Just $ createUserGuardTests nativeName
--- "enforce-guard"       -> Just $ enforceGuardTests nativeName
--- "install-capability"  -> Just $ installCapabilityTests nativeName
--- "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
--- "require-capability"  -> Just $ requireCapabilityTests nativeName
--- "with-capability"     -> Just $ withCapabilityTests nativeName
--- "emit-event"          -> Just $ emitEventTests nativeName
-
--- -- Principal creation and validation
--- "create-principal"   -> Just $ createPrincipalTests nativeName
--- "validate-principal" -> Just $ validatePrincipalTests nativeName
--- "is-principal"       -> Just $ isPrincipalTests nativeName
--- "typeof-principal"   -> Just $ typeofPrincipalTests nativeName
-
--- -- Non-native concepts to benchmark
--- "use"       -> Just $ useTests nativeName
--- "module"    -> Just $ moduleTests nativeName
--- "interface" -> Just $ interfaceTests nativeName
-
-builtin_at :: ExprType
-builtin_at =
-  TFunction
-    { funName = "at",
-      funArity = 2
-    }
-
-at_impl :: PactGen TypedExpr
-at_impl = do
-  Gen.frequency
-    [ ( 1,
-        do
-          t <- lift genAtomType
-          x <- genArray t
-          i <- Gen.integral $ Range.linear 0 (genericLength (listOf x))
-          pure $
-            TypedExpr t $
-              EParens
-                [ TypedExpr builtin_at (ESym "at"),
-                  TypedExpr TInt (EInt i),
-                  x
-                ]
-      )
+      -- Non-native concepts to benchmark
+      -- "use"       -> Just $ useTests nativeName
+      -- "module"    -> Just $ moduleTests nativeName
+      -- "interface" -> Just $ interfaceTests nativeName
     ]
+
+gen_at :: PactGen
+gen_at t = do
+  l@(EList xs) <- genList t
+  guard $ length xs > 0
+  i <- Gen.integral $ Range.constant 0 (pred (length xs))
+  pure $ EParens [ESym "at", EInt (fromIntegral i), l]
+
+gen_base64_decode :: PactGen
+gen_base64_decode t@TStr = do
+  x <- genExpr t
+  pure $ EParens [ESym "base64-decode", x]
+gen_base64_decode _ = mzero
+
+gen_base64_encode :: PactGen
+gen_base64_encode _ = mzero -- jww (2022-09-26): TODO
+
+gen_bind :: PactGen
+gen_bind _ = mzero -- jww (2022-09-26): TODO
+
+gen_chain_data :: PactGen
+gen_chain_data _ = mzero -- jww (2022-09-26): TODO
+
+gen_compose :: PactGen
+gen_compose _ = mzero -- jww (2022-09-26): TODO
+
+gen_concat :: PactGen
+gen_concat _ = mzero -- jww (2022-09-26): TODO
+
+gen_constantly :: PactGen
+gen_constantly _ = mzero -- jww (2022-09-26): TODO
+
+gen_contains :: PactGen
+gen_contains _ = mzero -- jww (2022-09-26): TODO
+
+gen_define_namespace :: PactGen
+gen_define_namespace _ = mzero -- jww (2022-09-26): TODO
+
+gen_drop :: PactGen
+gen_drop _ = mzero -- jww (2022-09-26): TODO
+
+gen_enforce :: PactGen
+gen_enforce _ = mzero -- jww (2022-09-26): TODO
+
+gen_enforce_one :: PactGen
+gen_enforce_one _ = mzero -- jww (2022-09-26): TODO
+
+gen_enforce_pact_version :: PactGen
+gen_enforce_pact_version _ = mzero -- jww (2022-09-26): TODO
+
+gen_enumerate :: PactGen
+gen_enumerate _ = mzero -- jww (2022-09-26): TODO
+
+gen_filter :: PactGen
+gen_filter _ = mzero -- jww (2022-09-26): TODO
+
+gen_fold :: PactGen
+gen_fold _ = mzero -- jww (2022-09-26): TODO
+
+gen_format :: PactGen
+gen_format _ = mzero -- jww (2022-09-26): TODO
+
+gen_hash :: PactGen
+gen_hash _ = mzero -- jww (2022-09-26): TODO
+
+gen_identity :: PactGen
+gen_identity _ = mzero -- jww (2022-09-26): TODO
+
+gen_if :: PactGen
+gen_if _ = mzero -- jww (2022-09-26): TODO
+
+gen_int_to_str :: PactGen
+gen_int_to_str _ = mzero -- jww (2022-09-26): TODO
+
+gen_is_charset :: PactGen
+gen_is_charset _ = mzero -- jww (2022-09-26): TODO
+
+gen_length :: PactGen
+gen_length _ = mzero -- jww (2022-09-26): TODO
+
+gen_list_modules :: PactGen
+gen_list_modules _ = mzero -- jww (2022-09-26): TODO
+
+gen_make_list :: PactGen
+gen_make_list _ = mzero -- jww (2022-09-26): TODO
+
+gen_map :: PactGen
+gen_map _ = mzero -- jww (2022-09-26): TODO
+
+gen_zip :: PactGen
+gen_zip _ = mzero -- jww (2022-09-26): TODO
+
+gen_namespace :: PactGen
+gen_namespace _ = mzero -- jww (2022-09-26): TODO
+
+gen_pact_id :: PactGen
+gen_pact_id _ = mzero -- jww (2022-09-26): TODO
+
+gen_pact_version :: PactGen
+gen_pact_version _ = mzero -- jww (2022-09-26): TODO
+
+gen_read_decimal :: PactGen
+gen_read_decimal _ = mzero -- jww (2022-09-26): TODO
+
+gen_read_integer :: PactGen
+gen_read_integer _ = mzero -- jww (2022-09-26): TODO
+
+gen_read_msg :: PactGen
+gen_read_msg _ = mzero -- jww (2022-09-26): TODO
+
+gen_read_string :: PactGen
+gen_read_string _ = mzero -- jww (2022-09-26): TODO
+
+gen_remove :: PactGen
+gen_remove _ = mzero -- jww (2022-09-26): TODO
+
+gen_resume :: PactGen
+gen_resume _ = mzero -- jww (2022-09-26): TODO
+
+gen_reverse :: PactGen
+gen_reverse _ = mzero -- jww (2022-09-26): TODO
+
+gen_sort :: PactGen
+gen_sort _ = mzero -- jww (2022-09-26): TODO
+
+gen_str_to_int :: PactGen
+gen_str_to_int _ = mzero -- jww (2022-09-26): TODO
+
+gen_str_to_list :: PactGen
+gen_str_to_list _ = mzero -- jww (2022-09-26): TODO
+
+gen_take :: PactGen
+gen_take _ = mzero -- jww (2022-09-26): TODO
+
+gen_try :: PactGen
+gen_try _ = mzero -- jww (2022-09-26): TODO
+
+gen_tx_hash :: PactGen
+gen_tx_hash _ = mzero -- jww (2022-09-26): TODO
+
+gen_typeof :: PactGen
+gen_typeof _ = mzero -- jww (2022-09-26): TODO
+
+gen_distinct :: PactGen
+gen_distinct _ = mzero -- jww (2022-09-26): TODO
+
+gen_where :: PactGen
+gen_where _ = mzero -- jww (2022-09-26): TODO
+
+gen_yield :: PactGen
+gen_yield _ = mzero -- jww (2022-09-26): TODO
+
+gen_not_equal :: PactGen
+gen_not_equal _ = mzero -- jww (2022-09-26): TODO
+
+gen_bitwise_and :: PactGen
+gen_bitwise_and _ = mzero -- jww (2022-09-26): TODO
+
+gen_mult :: PactGen
+gen_mult _ = mzero -- jww (2022-09-26): TODO
+
+gen_plus :: PactGen
+gen_plus TAny =
+  gen_plus
+    =<< Gen.choice
+      [ pure TDec,
+        pure TInt,
+        pure TStr,
+        TList <$> genType,
+        TObj <$> genSchema
+      ]
+gen_plus TDec = do
+  (n, m) <-
+    Gen.choice
+      [ (,) <$> genDec <*> genDec,
+        (,) <$> genInt <*> genDec,
+        (,) <$> genDec <*> genInt
+      ]
+  pure $ EParens [ESym "+", n, m]
+gen_plus t@TInt = gen_plus_work t
+gen_plus t@TStr = gen_plus_work t
+gen_plus t@(TList _) = gen_plus_work t
+gen_plus t@(TObj _) = gen_plus_work t
+gen_plus _ = mzero
+
+gen_plus_work :: PactGen
+gen_plus_work t = do
+  n <- genExpr t
+  m <- genExpr t
+  pure $ EParens [ESym "+", n, m]
+
+gen_minus :: PactGen
+gen_minus _ = mzero -- jww (2022-09-26): TODO
+
+gen_divide :: PactGen
+gen_divide _ = mzero -- jww (2022-09-26): TODO
+
+gen_lt :: PactGen
+gen_lt _ = mzero -- jww (2022-09-26): TODO
+
+gen_lte :: PactGen
+gen_lte _ = mzero -- jww (2022-09-26): TODO
+
+gen_eq :: PactGen
+gen_eq _ = mzero -- jww (2022-09-26): TODO
+
+gen_gt :: PactGen
+gen_gt _ = mzero -- jww (2022-09-26): TODO
+
+gen_gte :: PactGen
+gen_gte _ = mzero -- jww (2022-09-26): TODO
+
+gen_pow :: PactGen
+gen_pow _ = mzero -- jww (2022-09-26): TODO
+
+gen_abs :: PactGen
+gen_abs _ = mzero -- jww (2022-09-26): TODO
+
+gen_and :: PactGen
+gen_and _ = mzero -- jww (2022-09-26): TODO
+
+gen_and_question :: PactGen
+gen_and_question _ = mzero -- jww (2022-09-26): TODO
+
+gen_ceiling :: PactGen
+gen_ceiling _ = mzero -- jww (2022-09-26): TODO
+
+gen_exp :: PactGen
+gen_exp _ = mzero -- jww (2022-09-26): TODO
+
+gen_floor :: PactGen
+gen_floor _ = mzero -- jww (2022-09-26): TODO
+
+gen_ln :: PactGen
+gen_ln _ = mzero -- jww (2022-09-26): TODO
+
+gen_log :: PactGen
+gen_log _ = mzero -- jww (2022-09-26): TODO
+
+gen_mod :: PactGen
+gen_mod _ = mzero -- jww (2022-09-26): TODO
+
+gen_not :: PactGen
+gen_not _ = mzero -- jww (2022-09-26): TODO
+
+gen_not_question :: PactGen
+gen_not_question _ = mzero -- jww (2022-09-26): TODO
+
+gen_or :: PactGen
+gen_or _ = mzero -- jww (2022-09-26): TODO
+
+gen_or_question :: PactGen
+gen_or_question _ = mzero -- jww (2022-09-26): TODO
+
+gen_round :: PactGen
+gen_round _ = mzero -- jww (2022-09-26): TODO
+
+gen_shift :: PactGen
+gen_shift _ = mzero -- jww (2022-09-26): TODO
+
+gen_sqrt :: PactGen
+gen_sqrt _ = mzero -- jww (2022-09-26): TODO
+
+gen_xor :: PactGen
+gen_xor _ = mzero -- jww (2022-09-26): TODO
+
+gen_bitwise_or :: PactGen
+gen_bitwise_or _ = mzero -- jww (2022-09-26): TODO
+
+gen_bitwise_complement :: PactGen
+gen_bitwise_complement _ = mzero -- jww (2022-09-26): TODO
