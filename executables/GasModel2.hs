@@ -28,7 +28,7 @@ main = do
   xs1 <-
     Gen.sample $
       replicateM 10 $
-        flip runReaderT [] $
+        flip runReaderT defaultEnv $
           genExpr TInt
   forM_ xs1 $ \x1 -> do
     -- print x1
@@ -38,7 +38,7 @@ main = do
   xs2 <-
     Gen.sample $
       replicateM 10 $
-        flip runReaderT [] $
+        flip runReaderT defaultEnv $
           genBuiltin "at" TInt
   forM_ xs2 $ \x2 -> do
     -- print x2
@@ -48,7 +48,7 @@ main = do
   xs3 <-
     Gen.sample $
       replicateM 10 $
-        flip runReaderT [] $
+        flip runReaderT defaultEnv $
           genBuiltin "+" TAny
   forM_ xs3 $ \x3 -> do
     -- print x3
@@ -72,6 +72,9 @@ type Scope = HashMap String LispExpr
 data Env = Env
   { scopes :: [Scope]
   }
+
+defaultEnv :: Env
+defaultEnv = Env []
 
 -- Although "any" is technically a valid type, we only generate values in this
 -- module whose type we know at time of generation.
