@@ -13,19 +13,19 @@
 
 module Pact.Native.Pairing where
 
-import Prelude hiding ((+), (-), (*), fromIntegral)
+import Prelude hiding ((+), (-), (*), fromIntegral, negate, (^))
 
 import Control.Lens
 import Control.Monad
 import Control.Monad.ST
 
--- import Data.Field(Field)
+import Data.Bits((.&.))
+import Data.Foldable(foldl')
 import Data.Vector(Vector)
 import Data.Semiring
 import qualified Data.Vector.Mutable as MV
 import qualified Data.Vector as V
 import qualified Data.Semiring as SR
--- import qualified Data.Euclidean as E
 
 newtype FQ = FQ { _unFQ :: Integer }
   deriving (Eq, Ord, Show)
@@ -48,20 +48,20 @@ fqDiv :: FQ -> FQ -> FQ
 fqNegate :: FQ -> FQ
 fqNegate (FQ a) = FQ (inv a fieldModulus)
 
-fqPow :: FQ -> Integer -> FQ
-fqPow a p
-  | p == 0 = FQ 1
-  | p == 1 = a
-  | otherwise = evens a p
-  where
-  evens x y
-    | even y = evens (x * x) (y `div` 2)
-    | y == 1 = x
-    | otherwise = odds (x * x) (y `div` 2) x
-  odds x y z
-    | even y = odds (x * x) (y `div` 2) x
-    | y == 1 = x * z
-    | otherwise = odds (x * x) (y `div` 2) (x * z)
+-- fqPow :: FQ -> Integer -> FQ
+-- fqPow a p
+--   | p == 0 = FQ 1
+--   | p == 1 = a
+--   | otherwise = evens a p
+--   where
+--   evens x y
+--     | even y = evens (x * x) (y `div` 2)
+--     | y == 1 = x
+--     | otherwise = odds (x * x) (y `div` 2) x
+--   odds x y z
+--     | even y = odds (x * x) (y `div` 2) x
+--     | y == 1 = x * z
+--     | otherwise = odds (x * x) (y `div` 2) (x * z)
 
 inv :: Integer -> Integer -> Integer
 inv a n
@@ -87,7 +87,10 @@ instance Semiring FQ where
 instance Ring FQ where
   negate (FQ r) = (FQ (-r))
 
+instance Euclidean FQ where
+  equot = fqDiv
 
+instance Field FQ
 
 deg :: Vector FQ -> Int
 deg p =
@@ -102,26 +105,39 @@ class ExtensionField p where
   fieldDegree :: p -> Int
   fieldModulusCoeffs :: p -> CoeffVector
 
-
 newtype FQ2 =
   FQ2 { _fq2Coeffs :: FQVector }
   deriving (Eq, Show)
 
 makeLenses ''FQ2
 
-instance ExtensionField FQ2 where
-  fieldCoeffs = fq2Coeffs
-  fieldDegree _ = 2
-  fieldModulusCoeffs _ = V.fromList (fmap FQ [1, 0])
-
-mkFQ2 :: [Integer] -> FQ2
-mkFQ2 li = FQ2 (V.fromList $ fmap FQ li)
-
 newtype FQ12 =
   FQ12 { _fq12Coeffs :: FQVector }
   deriving (Eq, Show)
 
 makeLenses ''FQ12
+
+instance ExtensionField FQ2 where
+  fieldCoeffs = fq2Coeffs
+  fieldDegree _ = 2
+  fieldModulusCoeffs _ = V.fromList (fmap FQ [1, 0])
+
+instance Semiring FQ2 where
+  plus = fqpAdd
+  zero = mkFQ2 [0, 0]
+  times = fqpMul
+  one = mkFQ2 [1, 0]
+
+instance Ring FQ2 where
+  negate (FQ2 r) = FQ2 (fmap negate r)
+
+instance Euclidean FQ2 where
+  equot = fqpDiv
+
+instance Field FQ2
+
+mkFQ2 :: [Integer] -> FQ2
+mkFQ2 li = FQ2 (V.fromList $ fmap FQ li)
 
 instance ExtensionField FQ12 where
   fieldCoeffs = fq12Coeffs
@@ -132,8 +148,15 @@ instance Semiring FQ12 where
   plus = fqpAdd
   zero = mkFQ12 (replicate 12 0)
   times = fqpMul
-  one = mkFQ12 ([1] ++ replicate 11 0)
+  one = mkFQ12 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
+instance Ring FQ12 where
+  negate (FQ12 r) = FQ12 (fmap negate r)
+
+instance Euclidean FQ12 where
+  equot = fqpDiv
+
+instance Field FQ12
 
 mkFQ12 :: [Integer] -> FQ12
 mkFQ12 li = FQ12 (V.fromList $ fmap FQ li)
@@ -153,7 +176,6 @@ fqpMul l r = runST $ do
   b <- MV.replicate blen (FQ 0)
   forM_ [0 .. deg' - 1] (\i -> forM_ [0 .. deg' - 1] $ \j ->
     MV.modify b (\a' -> a' + (coeff i l * coeff j r)) (i + j))
-  -- out :: STVector s FQ <- MV.new deg'
   forM_ (reverse [deg' + 1 .. blen - 1]) $ \i -> do
     let exp' = blen - deg' - 1
     top <- MV.read b i
@@ -202,7 +224,7 @@ fqpInv fqp1 = runST $ do
           lmi <- MV.read lm i
           rj <- MV.read r' j
           lowi <- MV.read low i
-          MV.modify nm (\nmij -> nmij -. (lmi * rj)) (i + j)
+          MV.modify nm (\nmij -> nmij - (lmi * rj)) (i + j)
           MV.modify new (\nij -> nij * (lowi * rj)) (i + j)
       go nm lm new low
     else do
@@ -226,17 +248,16 @@ fqpInv fqp1 = runST $ do
         MV.modify temp (\a' -> a' -. c') (c + i)
     degO <- mdeg o
     pure (MV.take (degO + 1) o)
-  -- mdeg :: MV.MVector s FQ -> ST s Int
   mdeg p = do
     let d = MV.length p - 1
     go' d
     where
     go' d
       | d >= 0 = MV.read p d >>= \d' ->
-        if d' == FQ 0 then go' (d - 1)
-        else pure d
+        if d' == FQ 0
+          then go' (d - 1)
+          else pure d
       | otherwise = pure d
-
 
 fqpDiv :: ExtensionField p => p -> p -> p
 fqpDiv l r =
@@ -273,11 +294,11 @@ data CurvePoint a
 double :: Field a => CurvePoint a -> CurvePoint a
 double CurveInf = CurveInf
 double (Point x y) = let
-  y1 = y SR.+ y
-  x1 = x SR.* x
-  l = (x1 SR.+ x1 SR.+ x1) `equot` y1
-  newx = (l SR.* l) SR.- (x SR.+ x)
-  newy = SR.times  (SR.negate l) newx SR.+ (SR.times l x) SR.- y
+  y1 = y + y
+  x1 = x * x
+  l = (x1 + x1 + x1) `equot` y1
+  newx = (l * l) - (x + x)
+  newy = SR.times (negate l) newx + (SR.times l x) - y
   in Point newx newy
 
 add :: (Field a, Eq a) => CurvePoint a -> CurvePoint a -> CurvePoint a
@@ -288,11 +309,11 @@ add p1@(Point x1 y1) (Point x2 y2)
   | x2 == x1 = CurveInf
   | otherwise = let
     l = (y2 SR.- y1) `equot` (x2 SR.- x1)
-    newx = (SR.times l l) SR.- x1 SR.- x2
-    newy = SR.times (SR.negate l) newx SR.+ SR.times l x1 SR.- y1
+    newx = (SR.times l l) - x1 - x2
+    newy = SR.times (SR.negate l) newx + SR.times l x1 - y1
     in Point newx newy
 
-multiply :: (Field a, Eq a) => CurvePoint a -> Int -> CurvePoint a
+multiply :: (Field a, Eq a) => CurvePoint a -> Integer -> CurvePoint a
 multiply pt n
   | n == 0 = CurveInf
   | n == 1 = pt
@@ -306,7 +327,7 @@ negatePt (Point x y) =
 negatePt CurveInf = CurveInf
 
 w :: FQ12
-w = mkFQ12 ([0, 1] ++ replicate 10 0)
+w = mkFQ12 [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 twist :: CurvePoint FQ2 -> CurvePoint FQ12
 twist CurveInf = CurveInf
@@ -323,3 +344,80 @@ twist (Point x y) = let
 
 g12 :: CurvePoint FQ12
 g12 = twist g2
+
+curveOrder :: Integer
+curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
+ate_loop_count :: Integer
+ate_loop_count = 29793968203157093288
+
+log_ate_loop_count :: Integer
+log_ate_loop_count = 63
+
+lineFunc :: (Eq a, Ring a, Euclidean a) => CurvePoint a -> CurvePoint a -> CurvePoint a -> a
+lineFunc (Point x1 y1) (Point x2 y2) (Point xt yt)
+  | x1 /= x2 = let
+    -- if x1 != x2:
+    -- m = (y2 - y1) / (x2 - x1)
+    -- return m * (xt - x1) - (yt - y1)
+    m = (y2 - y1) `equot` (x2 - x1)
+    in m * (xt - x1) - (yt - y1)
+    --  elif y1 == y2:
+    --     m = 3 * x1**2 / (2 * y1)
+    --     return m * (xt - x1) - (yt - y1)
+  | y1 == y2 = let
+    x = (x1 * x2)
+    m = (x + x + x) `equot` (y1 + y1)
+    in m * (xt - x1) - (yt - y1)
+  | otherwise = xt - x1
+lineFunc _ _ _ = error "boom"
+
+juan :: CurvePoint FQ
+juan = g1
+
+two :: CurvePoint FQ
+two = double g1
+
+three :: CurvePoint FQ
+three = multiply g1 3
+
+negone :: CurvePoint FQ
+negone = multiply g1 (curveOrder - 1)
+
+negtwo :: CurvePoint FQ
+negtwo = multiply g1 (curveOrder - 2)
+
+negthree :: CurvePoint FQ
+negthree = multiply g1 (curveOrder - 3)
+
+millerLoop :: CurvePoint FQ12 -> CurvePoint FQ12 -> FQ12
+millerLoop _ CurveInf = (one :: FQ12)
+millerLoop CurveInf _ = (one :: FQ12)
+millerLoop q@(Point x1 y1) p = let
+  f = (one :: FQ12)
+  loop (f', r') i = let
+    f'' = f' * f' * lineFunc r' r' p
+    r'' = double r'
+    in if ate_loop_count .&. (2 ^ i) /= 0 then (f'' * lineFunc r'' q p, add r'' q)
+       else (f'', r'')
+  (f1, r1) = foldl' loop (f, q) (reverse [0 .. ate_loop_count])
+  q1x = (x1 ^ fieldModulus)
+  q1y = (y1 ^ fieldModulus)
+  q1 = Point q1x q1y
+  nQ2 = Point (q1x ^ fieldModulus) (negate q1y ^ fieldModulus)
+  f2 = f1 * lineFunc r1 q1 p
+  r2 = add r1 q1
+  f3 = f2 * lineFunc r2 nQ2 p
+  in f3 ^ ((fieldModulus ^ (12 :: Int) - 1) `div` curveOrder)
+
+
+castToFq12 :: CurvePoint FQ -> CurvePoint FQ12
+castToFq12 CurveInf = CurveInf
+castToFq12 (Point (FQ x) (FQ y)) =
+  Point
+    (mkFQ12 [x, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    (mkFQ12 [y, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+pairing :: CurvePoint FQ2 -> CurvePoint FQ -> FQ12
+pairing q p =
+  millerLoop (twist q) (castToFq12 p)
