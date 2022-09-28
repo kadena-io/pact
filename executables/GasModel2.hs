@@ -298,6 +298,15 @@ genDec =
 genBool :: MonadGen m => m LispExpr
 genBool = EBool <$> Gen.bool
 
+genUTCTime :: MonadGen m => m UTCTime
+genUTCTime = do
+  day <- Gen.integral_ $ Range.linear 0 (10000 :: Integer)
+  sec <- Gen.integral_ $ Range.linear 0 (10_000_000 :: Integer)
+  pure $ UTCTime (ModifiedJulianDay day) (fromIntegral sec)
+
+genTime :: MonadGen m => m LispExpr
+genTime = ETime <$> genUTCTime
+
 genSchema :: MonadGen m => m Schema
 genSchema = pure []
 
@@ -319,20 +328,25 @@ genType = go (2 :: Int)
           -- (1, TTable <$> genSchema)
         ]
 
-genUTCTime :: MonadGen m => m UTCTime
-genUTCTime = do
-  day <- Gen.integral_ $ Range.linear 0 (10000 :: Integer)
-  sec <- Gen.integral_ $ Range.linear 0 (10_000_000 :: Integer)
-  pure $ UTCTime (ModifiedJulianDay day) (fromIntegral sec)
-
 genExpr :: PactGen
 genExpr = \case
-  TAny -> genExpr =<< genLitType
+  TAny ->
+    Gen.recursive
+      Gen.choice
+      -- non-recursive
+      [genStr, genInt, genDec, genBool, genTime]
+      -- recursive
+      [ genExpr TStr,
+        genExpr TInt,
+        genExpr TDec,
+        genExpr TBool,
+        genExpr TTime
+      ]
   TStr -> genStr
   TInt -> genInt
   TDec -> genDec
   TBool -> genBool
-  TTime -> ETime <$> genUTCTime
+  TTime -> genTime
   TKeyset -> pure EKeyset -- jww (2022-09-26): TODO
   TList t -> genList t
   TObj sch -> pure $ EObject sch -- jww (2022-09-26): TODO
