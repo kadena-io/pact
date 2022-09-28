@@ -411,6 +411,7 @@ test-suite hspec
         TypecheckSpec
         SizeOfSpec
         PactCLISpec
+        PairingSpec
 
       build-depends:
         , Decimal
