@@ -48,30 +48,15 @@ fqDiv :: FQ -> FQ -> FQ
 fqNegate :: FQ -> FQ
 fqNegate (FQ a) = FQ (inv a fieldModulus)
 
--- fqPow :: FQ -> Integer -> FQ
--- fqPow a p
---   | p == 0 = FQ 1
---   | p == 1 = a
---   | otherwise = evens a p
---   where
---   evens x y
---     | even y = evens (x * x) (y `div` 2)
---     | y == 1 = x
---     | otherwise = odds (x * x) (y `div` 2) x
---   odds x y z
---     | even y = odds (x * x) (y `div` 2) x
---     | y == 1 = x * z
---     | otherwise = odds (x * x) (y `div` 2) (x * z)
-
 inv :: Integer -> Integer -> Integer
 inv a n
   | a == 0 = 0
   | otherwise = go 1 0 (a `mod` n) n
   where
   go !lm !hm !low !high | low > 1 = let
-    r = high `div` low
-    nm = hm - lm * r
-    new = high - low * r
+    !r = high `div` low
+    !nm = hm - lm * r
+    !new = high - low * r
     in go nm lm new low
   go !lm _ _ _ = lm `mod` n
 
@@ -193,7 +178,7 @@ fqpCoeffDiv :: ExtensionField p => p -> FQ -> p
 fqpCoeffDiv l coeff =
   over (fieldCoeffs.mapped) (`fqDiv` coeff) l
 
---- Todo: list concat + vec maybe instead?
+-- Todo: list concat + vec maybe instead?
 fqpInv :: ExtensionField p => p -> p
 fqpInv fqp1 = runST $ do
   lm <- MV.replicate (degree + 1) (FQ 0)
@@ -372,8 +357,8 @@ lineFunc (Point x1 y1) (Point x2 y2) (Point xt yt)
   | otherwise = xt - x1
 lineFunc _ _ _ = error "boom"
 
-juan :: CurvePoint FQ
-juan = g1
+one' :: CurvePoint FQ
+one' = g1
 
 two :: CurvePoint FQ
 two = double g1
