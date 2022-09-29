@@ -412,6 +412,7 @@ test-suite hspec
         SizeOfSpec
         PactCLISpec
         ZkSpec
+        PairingSpec
 
       build-depends:
         , Decimal
