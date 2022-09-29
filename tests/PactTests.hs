@@ -27,6 +27,7 @@ import qualified RemoteVerifySpec
 import qualified TypecheckSpec
 import qualified SizeOfSpec
 import qualified PactCLISpec
+import qualified ZkSpec
 # endif
 #endif
 
@@ -60,6 +61,7 @@ main = hspec $ do
   describe "TypecheckSpec" TypecheckSpec.spec
   describe "SizeOfSpec" SizeOfSpec.spec
   describe "PactCLISpec" PactCLISpec.spec
+  describe "ZkSpec" ZkSpec.spec
 
 # endif
 #endif

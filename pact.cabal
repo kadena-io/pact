@@ -411,6 +411,7 @@ test-suite hspec
         TypecheckSpec
         SizeOfSpec
         PactCLISpec
+        ZkSpec
 
       build-depends:
         , Decimal
@@ -419,11 +420,17 @@ test-suite hspec
         , exceptions
         , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2
+        , hspec-expectations
+        , hspec-hedgehog
+        , groups
         , http-client
         , hw-hspec-hedgehog == 0.1.*
         , intervals
         , mmorph
         , neat-interpolation
+        , galois-field >= 1.0.4
+        , elliptic-curve >= 0.3.1
+        , pairing >= 1.1.0
         , prettyprinter
         , sbv
         , servant-client
