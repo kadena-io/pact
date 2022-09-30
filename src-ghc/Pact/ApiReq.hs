@@ -14,6 +14,8 @@
 module Pact.ApiReq
     (
      ApiKeyPair(..)
+    ,ApiSigner(..)
+    ,ApiPublicMeta(..)
     ,ApiReq(..)
     ,apiReq
     ,uapiReq
@@ -23,7 +25,8 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
-    ,AddSigsReq(..),addSigsReq
+    ,AddSigsReq(..)
+    ,addSigsReq
     ,combineSigs
     ,combineSigDatas
     ,signCmd
@@ -142,14 +145,6 @@ data ApiReq = ApiReq {
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
-
-
-data SignReq = SignReq
-  { _srHash :: Hash
-  , _srKeyPairs :: [ApiKeyPair]
-  } deriving (Eq,Show,Generic)
-instance ToJSON SignReq where toJSON = lensyToJSON 3
-instance FromJSON SignReq where parseJSON = lensyParseJSON 3
 
 
 data AddSigsReq = AddSigsReq
