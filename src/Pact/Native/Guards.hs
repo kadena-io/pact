@@ -16,17 +16,10 @@ module Pact.Native.Guards
 ( guardDefs
 ) where
 
-import Data.Aeson (encode)
 import Data.Attoparsec.Text
-import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
-import Data.Foldable
-import Data.Functor (void)
 import Data.Text (Text)
 
-import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types.Hash
 import Pact.Types.Principal
 import Pact.Types.Runtime
 
@@ -55,7 +48,7 @@ createPrincipalDef =
     createPrincipal' i as = argsError i as
 
 createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
-createPrincipal i = mkPrincipalIdent <$> guardToPrincipal i
+createPrincipal i = fmap mkPrincipalIdent . guardToPrincipal i
 
 validatePrincipalDef :: NativeDef
 validatePrincipalDef =
