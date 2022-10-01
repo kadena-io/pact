@@ -17,12 +17,14 @@ import Control.Lens
 import Data.Aeson (encode)
 import Data.Attoparsec.Text
 import Data.ByteString.Lazy (toStrict)
+import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.Functor (void)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
+import Pact.Gas (computeGasCommit)
 import Pact.Eval (enforcePactValue')
 import Pact.Types.Hash
 import Pact.Types.Info
@@ -64,12 +66,12 @@ instance Show Principal where
 --
 mkPrincipalIdent :: Principal -> Text
 mkPrincipalIdent = \case
-  P pid n -> "p:" <> asString pid <> ":" <> asString n
+  P pid n -> "p:" <> asString pid <> ":" <> n
   K pk -> "k:" <> asString pk
-  W ph n -> "w:" <> ph <> ":" <> asString n
+  W ph n -> "w:" <> ph <> ":" <> n
   R n -> "r:" <> asString n
-  U n ph -> "u:" <> asString n <> ":" <> asString ph
-  M mn n -> "m:" <> asString mn <> ":" <> asString n
+  U n ph -> "u:" <> n <> ":" <> ph
+  M mn n -> "m:" <> asString mn <> ":" <> n
 
 -- | Show a principal guard type as a textual value
 --
@@ -158,20 +160,32 @@ principalParser (getInfo -> i) = kParser
 
 -- | Given a pact guard, convert to a principal type
 --
-guardToPrincipal :: Guard (Term Name) -> Eval e Principal
-guardToPrincipal = \case
-  GPact (PactGuard pid n) -> pure $ P pid n
-  -- TODO later: revisit structure of principal k and w accounts in light of namespaces
+guardToPrincipal :: Info -> Guard (Term Name) -> Eval e Principal
+guardToPrincipal i = \case
+  GPact (PactGuard pid n) -> do
+    chargeGas 1
+    pure $ P pid n
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
-    ([k],"keys-all") -> pure $ K k
-    (l,fun) -> pure $ W (asString $ mkHash $ map _pubKey l) fun
-  GKeySetRef ksn -> pure $ R ksn
-  GModule (ModuleGuard mn n) -> pure $ M mn n
+    ([k],"keys-all") -> do
+      chargeGas 1
+      pure $ K k
+    (l,fun) -> do
+      h <- mkHash $ map _pubKey l
+      pure $ W (asString h) fun
+  GKeySetRef ksn -> do
+    chargeGas 1
+    pure $ R ksn
+  GModule (ModuleGuard mn n) -> do
+    chargeGas 1
+    pure $ M mn n
   GUser (UserGuard f args) -> do
     args' <- enforcePactValue' args
-    let a = asString $ mkHash $ map toJSONPactValue args'
-        f' = asString  f
-    pure $ U f' a
+    a <- mkHash $ map toJSONPactValue args'
+    pure $ U (asString f) (asString a)
   where
-    mkHash bs = pactHash $ mconcat bs
+    chargeGas amt = void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
+    mkHash bss = do
+      let bs = mconcat bss
+      chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
+      return $ pactHash bs
     toJSONPactValue = toStrict . encode
