@@ -17,20 +17,14 @@ module Pact.Native.Guards
 ( guardDefs
 ) where
 
-import Data.Aeson (encode)
 import Data.Attoparsec.Text
-import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
-import Data.Foldable
 import Data.Functor (void)
 import Data.Text (Text)
-import Data.Text.Encoding
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Runtime.Utils
 import Pact.Types.Capability
-import Pact.Types.Hash
 import Pact.Types.KeySet
 import Pact.Types.Pretty
 import Pact.Types.Principal
@@ -179,40 +173,12 @@ createPrincipalDef =
     createPrincipal' i as = argsError i as
 
 createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
-createPrincipal i = \case
-  GPact (PactGuard pid n) -> do
-    chargeGas 1
-    pure $ "p:" <> asString pid <> ":" <> n
-  GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
-    ([k],"keys-all") -> do
-      chargeGas 1
-      pure $ "k:" <> asString k
-    (l,fun) -> do
-      a <- mkHash $ map _pubKey l
-      pure $ "w:" <> asString a <> ":" <> fun
-  GKeySetRef kref -> do
-    chargeGas 1
-    pure $ "r:" <> asString kref
-  GModule (ModuleGuard mn n) -> do
-    chargeGas 1
-    pure $ "m:" <> asString mn <> ":" <> n
-  GUser (UserGuard uf args) -> do
-    args' <- enforcePactValue' args
-    a <- mkHash $ map toJSONPactValue args'
-    pure $ "u:" <> asString uf <> ":" <> asString a
-  GCapability (CapabilityGuard f args pid) -> do
-    args' <- map toJSONPactValue <$> enforcePactValue' args
-    let f' = encodeUtf8 $ asString f
-        pid' = encodeUtf8 . asString <$> pid
-    h <- mkHash $ (f':args') ++ maybe [] pure pid'
-    pure $ "c:" <> asString h
+createPrincipal i =
+    fmap mkPrincipalIdent . guardToPrincipal enforcePactValue' chargeGas
   where
-    chargeGas amt = void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
-    mkHash bss = do
-      let bs = mconcat bss
-      chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
-      return $ pactHash bs
-    toJSONPactValue = toStrict . encode
+    chargeGas amt =
+      void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
+
 
 validatePrincipalDef :: NativeDef
 validatePrincipalDef =
