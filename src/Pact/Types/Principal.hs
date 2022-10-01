@@ -52,6 +52,8 @@ data Principal
     -- ^ format: `m:fq module name:fqn of module guard function
   | P PactId Text
     -- ^ format: `p:pactid:fqn of pact function
+  | C Text
+    -- ^ format: `c:hash of cap name + cap params + pactId if any
   deriving Eq
 makePrisms ''Principal
 
@@ -70,6 +72,7 @@ mkPrincipalIdent = \case
   R n -> "r:" <> asString n
   U n ph -> "u:" <> asString n <> ":" <> asString ph
   M mn n -> "m:" <> asString mn <> ":" <> asString n
+  C c -> "c:" <> c
 
 -- | Show a principal guard type as a textual value
 --
@@ -81,6 +84,7 @@ showPrincipalType = \case
   U{} -> "u:"
   M{} -> "m:"
   P{} -> "p:"
+  C{} -> "c:"
 
 -- | Parser producing a principal value from a textual representation.
 --
@@ -91,6 +95,7 @@ principalParser (getInfo -> i) = kParser
   <|> uParser
   <|> mParser
   <|> pParser
+  <|> cParser
   where
     base64UrlUnpaddedAlphabet :: String
     base64UrlUnpaddedAlphabet =
@@ -156,6 +161,13 @@ principalParser (getInfo -> i) = kParser
       eof'
       pure $ U n h
 
+    cParser = do
+      char' 'c'
+      char' ':'
+      h <- base64UrlHashParser
+      eof'
+      pure $ C h
+
 -- | Given a pact guard, convert to a principal type
 --
 guardToPrincipal :: Guard (Term Name) -> Eval e Principal
@@ -172,6 +184,11 @@ guardToPrincipal = \case
     let a = asString $ mkHash $ map toJSONPactValue args'
         f' = asString  f
     pure $ U f' a
+  GCapability (CapabilityGuard f args pid) -> do
+    args' <- map toJSONPactValue <$> enforcePactValue' args
+    let f' = T.encodeUtf8 $ asString f
+        pid' = T.encodeUtf8 . asString <$> pid
+    pure $ C $ asString $ mkHash $ (f':args') ++ maybe [] pure pid'
   where
     mkHash bs = pactHash $ mconcat bs
     toJSONPactValue = toStrict . encode
