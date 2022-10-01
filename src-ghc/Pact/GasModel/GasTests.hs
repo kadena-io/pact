@@ -67,162 +67,161 @@ unitTests = HM.fromList $ foldl' getUnitTest [] allNatives
 
 
 unitTestFromDef :: NativeDefName -> Maybe GasUnitTests
-unitTestFromDef nativeName = tests
-  where
-    tests = case (asString nativeName) of
+unitTestFromDef nativeName = ($ nativeName) <$> HM.lookup nativeName allTests
+
+allTests :: HM.HashMap NativeDefName (NativeDefName -> GasUnitTests)
+allTests = HM.fromList
       -- General native functions
-      "at"                   -> Just $ atTests nativeName
-      "base64-decode"        -> Just $ base64DecodeTests nativeName
-      "base64-encode"        -> Just $ base64EncodeTests nativeName
-      "bind"                 -> Just $ bindTests nativeName
-      "chain-data"           -> Just $ chainDataTests nativeName
-      "compose"              -> Just $ composeTests nativeName
-      "concat"               -> Just $ concatTests nativeName
-      "constantly"           -> Just $ constantlyTests nativeName
-      "contains"             -> Just $ containsTests nativeName
-      "define-namespace"     -> Just $ defineNamespaceTests nativeName
-      "drop"                 -> Just $ dropTests nativeName
-      "enforce"              -> Just $ enforceTests nativeName
-      "enforce-one"          -> Just $ enforceOneTests nativeName
-      "enforce-pact-version" -> Just $ enforcePactVersionTests nativeName
-      "enumerate"            -> Just $ enumerateTests nativeName
-      "filter"               -> Just $ filterTests nativeName
-      "fold"                 -> Just $ foldTests nativeName
-      "format"               -> Just $ formatTests nativeName
-      "hash"                 -> Just $ hashTests nativeName
-      "identity"             -> Just $ identityTests nativeName
-      "if"                   -> Just $ ifTests nativeName
-      "int-to-str"           -> Just $ intToStrTests nativeName
-      "is-charset"           -> Just $ isCharsetTests nativeName
-      "length"               -> Just $ lengthTests nativeName
-      "list-modules"         -> Just $ listModulesTests nativeName
-      "make-list"            -> Just $ makeListTests nativeName
-      "map"                  -> Just $ mapTests nativeName
-      "zip"                  -> Just $ zipTests nativeName
-      "namespace"            -> Just $ namespaceTests nativeName
-      "pact-id"              -> Just $ pactIdTests nativeName
-      "pact-version"         -> Just $ pactVersionTests nativeName
-      "read-decimal"         -> Just $ readDecimalTests nativeName
-      "read-integer"         -> Just $ readIntegerTests nativeName
-      "read-msg"             -> Just $ readMsgTests nativeName
-      "read-string"          -> Just $ readStringTests nativeName
-      "remove"               -> Just $ removeTests nativeName
-      "resume"               -> Just $ resumeTests nativeName
-      "reverse"              -> Just $ reverseTests nativeName
-      "sort"                 -> Just $ sortTests nativeName
-      "str-to-int"           -> Just $ strToIntTests nativeName
-      "str-to-list"          -> Just $ strToListTests nativeName
-      "take"                 -> Just $ takeTests nativeName
-      "try"                  -> Just $ tryTests nativeName
-      "tx-hash"              -> Just $ txHashTests nativeName
-      "typeof"               -> Just $ typeOfTests nativeName
-      "distinct"             -> Just $ distinctTests nativeName
-      "where"                -> Just $ whereTests nativeName
-      "yield"                -> Just $ yieldTests nativeName
+    [ ("at", atTests)
+    , ("base64-decode", base64DecodeTests)
+    , ("base64-encode", base64EncodeTests)
+    , ("bind", bindTests)
+    , ("chain-data", chainDataTests)
+    , ("compose", composeTests)
+    , ("concat", concatTests)
+    , ("constantly", constantlyTests)
+    , ("contains", containsTests)
+    , ("define-namespace", defineNamespaceTests)
+    , ("drop", dropTests)
+    , ("enforce", enforceTests)
+    , ("enforce-one", enforceOneTests)
+    , ("enforce-pact-version", enforcePactVersionTests)
+    , ("enumerate", enumerateTests)
+    , ("filter", filterTests)
+    , ("fold", foldTests)
+    , ("format", formatTests)
+    , ("hash", hashTests)
+    , ("identity", identityTests)
+    , ("if", ifTests)
+    , ("int-to-str", intToStrTests)
+    , ("is-charset", isCharsetTests)
+    , ("length", lengthTests)
+    , ("list-modules", listModulesTests)
+    , ("make-list", makeListTests)
+    , ("map", mapTests)
+    , ("zip", zipTests)
+    , ("namespace", namespaceTests)
+    , ("pact-id", pactIdTests)
+    , ("pact-version", pactVersionTests)
+    , ("read-decimal", readDecimalTests)
+    , ("read-integer", readIntegerTests)
+    , ("read-msg", readMsgTests)
+    , ("read-string", readStringTests)
+    , ("remove", removeTests)
+    , ("resume", resumeTests)
+    , ("reverse", reverseTests)
+    , ("sort", sortTests)
+    , ("str-to-int", strToIntTests)
+    , ("str-to-list", strToListTests)
+    , ("take", takeTests)
+    , ("try", tryTests)
+    , ("tx-hash", txHashTests)
+    , ("typeof", typeOfTests)
+    , ("distinct", distinctTests)
+    , ("where", whereTests)
+    , ("yield", yieldTests)
 
       -- Operators native functions
-      "!="      -> Just $ notEqualOptTests nativeName
-      "&"       -> Just $ bitwiseOptTests nativeName
-      "*"       -> Just $ multOptTests nativeName
-      "+"       -> Just $ addOptTests nativeName
-      "-"       -> Just $ subOptTests nativeName
-      "/"       -> Just $ divOptTests nativeName
-      "<"       -> Just $ lessThanOptTests nativeName
-      "<="      -> Just $ lessThanEqualOptTests nativeName
-      "="       -> Just $ equalOptTests nativeName
-      ">"       -> Just $ greaterThanOptTests nativeName
-      ">="      -> Just $ greaterThanEqOptTests nativeName
-      "^"       -> Just $ raiseOptTests nativeName
-      "abs"     -> Just $ absOptTests nativeName
-      "and"     -> Just $ andOptTests nativeName
-      "and?"    -> Just $ andFuncOptTests nativeName
-      "ceiling" -> Just $ ceilingOptTests nativeName
-      "exp"     -> Just $ expOptTests nativeName
-      "floor"   -> Just $ floorOptTests nativeName
-      "ln"      -> Just $ lnOptTests nativeName
-      "log"     -> Just $ logOptTests nativeName
-      "mod"     -> Just $ modOptTests nativeName
-      "not"     -> Just $ notOptTests nativeName
-      "not?"    -> Just $ notFuncOptTests nativeName
-      "or"      -> Just $ orOptTests nativeName
-      "or?"     -> Just $ orFuncOptTests nativeName
-      "round"   -> Just $ roundOptTests nativeName
-      "shift"   -> Just $ shiftOptTests nativeName
-      "sqrt"    -> Just $ sqrtOptTests nativeName
-      "xor"     -> Just $ xorOptTests nativeName
-      "|"       -> Just $ bitwiseOrOptTests nativeName
-      "~"       -> Just $ reverseBitsOptTests nativeName
+    , ("!=", notEqualOptTests)
+    , ("&", bitwiseOptTests)
+    , ("*", multOptTests)
+    , ("+", addOptTests)
+    , ("-", subOptTests)
+    , ("/", divOptTests)
+    , ("<", lessThanOptTests)
+    , ("<=", lessThanEqualOptTests)
+    , ("=", equalOptTests)
+    , (">", greaterThanOptTests)
+    , (">=", greaterThanEqOptTests)
+    , ("^", raiseOptTests)
+    , ("abs", absOptTests)
+    , ("and", andOptTests)
+    , ("and?", andFuncOptTests)
+    , ("ceiling", ceilingOptTests)
+    , ("exp", expOptTests)
+    , ("floor", floorOptTests)
+    , ("ln", lnOptTests)
+    , ("log", logOptTests)
+    , ("mod", modOptTests)
+    , ("not", notOptTests)
+    , ("not?", notFuncOptTests)
+    , ("or", orOptTests)
+    , ("or?", orFuncOptTests)
+    , ("round", roundOptTests)
+    , ("shift", shiftOptTests)
+    , ("sqrt", sqrtOptTests)
+    , ("xor", xorOptTests)
+    , ("|", bitwiseOrOptTests)
+    , ("~", reverseBitsOptTests)
 
       -- Time native functions
-      "add-time"    -> Just $ addTimeTests nativeName
-      "days"        -> Just $ daysTests nativeName
-      "diff-time"   -> Just $ diffTimeTests nativeName
-      "format-time" -> Just $ formatTimeTests nativeName
-      "hours"       -> Just $ hoursTests nativeName
-      "minutes"     -> Just $ minutesTests nativeName
-      "parse-time"  -> Just $ parseTimeTests nativeName
-      "time"        -> Just $ timeTests nativeName
+    , ("add-time", addTimeTests)
+    , ("days", daysTests)
+    , ("diff-time", diffTimeTests)
+    , ("format-time", formatTimeTests)
+    , ("hours", hoursTests)
+    , ("minutes", minutesTests)
+    , ("parse-time", parseTimeTests)
+    , ("time", timeTests)
 
       -- Commitments native functions
-      "decrypt-cc20p1305" -> Just $ decryptCc20p1305Tests nativeName
-      "validate-keypair"  -> Just $ validateKeypairTests nativeName
+    , ("decrypt-cc20p1305", decryptCc20p1305Tests)
+    , ("validate-keypair", validateKeypairTests)
 
       -- Keyset native functions
-      "define-keyset"  -> Just $ defineKeysetTests nativeName
-      "enforce-keyset" -> Just $ enforceKeysetTests nativeName
-      "keys-2"         -> Just $ keys2Tests nativeName
-      "keys-all"       -> Just $ keysAllTests nativeName
-      "keys-any"       -> Just $ keysAnyTests nativeName
-      "read-keyset"    -> Just $ readKeysetTests nativeName
+    , ("define-keyset", defineKeysetTests)
+    , ("enforce-keyset", enforceKeysetTests)
+    , ("keys-2", keys2Tests)
+    , ("keys-all", keysAllTests)
+    , ("keys-any", keysAnyTests)
+    , ("read-keyset", readKeysetTests)
 
       -- Database native functions
-      "create-table"       -> Just $ createTableTests nativeName
-      "describe-keyset"    -> Just $ describeKeysetTests nativeName
-      "describe-module"    -> Just $ describeModuleTests nativeName
-      "describe-table"     -> Just $ describeTableTests nativeName
-      "describe-namespace" -> Just $ describeNamespaceTests nativeName
-      "insert"             -> Just $ insertTests nativeName
-      "keylog"             -> Just $ keylogTests nativeName
-      "keys"               -> Just $ keysTests nativeName
-      "read"               -> Just $ readTests nativeName
-      "select"             -> Just $ selectTests nativeName
-      "txids"              -> Just $ txidsTests nativeName
-      "txlog"              -> Just $ txlogTests nativeName
-      "update"             -> Just $ updateTests nativeName
-      "with-default-read"  -> Just $ withDefaultReadTests nativeName
-      "with-read"          -> Just $ withReadTests nativeName
-      "write"              -> Just $ writeTests nativeName
-      "fold-db"            -> Just $ foldDBTests nativeName
+    , ("create-table", createTableTests)
+    , ("describe-keyset", describeKeysetTests)
+    , ("describe-module", describeModuleTests)
+    , ("describe-table", describeTableTests)
+    , ("describe-namespace", describeNamespaceTests)
+    , ("insert", insertTests)
+    , ("keylog", keylogTests)
+    , ("keys", keysTests)
+    , ("read", readTests)
+    , ("select", selectTests)
+    , ("txids", txidsTests)
+    , ("txlog", txlogTests)
+    , ("update", updateTests)
+    , ("with-default-read", withDefaultReadTests)
+    , ("with-read", withReadTests)
+    , ("write", writeTests)
+    , ("fold-db", foldDBTests)
 
       -- Capabilities native functions
-      "compose-capability"  -> Just $ composeCapabilityTests nativeName
-      "install-capability"  -> Just $ installCapabilityTests nativeName
-      "require-capability"  -> Just $ requireCapabilityTests nativeName
-      "with-capability"     -> Just $ withCapabilityTests nativeName
-      "emit-event"          -> Just $ emitEventTests nativeName
+    , ("compose-capability", composeCapabilityTests)
+    , ("install-capability", installCapabilityTests)
+    , ("require-capability", requireCapabilityTests)
+    , ("with-capability", withCapabilityTests)
+    , ("emit-event", emitEventTests)
 
       -- Guard native tests
-      "create-module-guard" -> Just $ createModuleGuardTests nativeName
-      "create-pact-guard"   -> Just $ createPactGuardTests nativeName
-      "create-user-guard"   -> Just $ createUserGuardTests nativeName
-      "create-capability-guard" -> Just $ createCapabilityGuardTests nativeName
-      "create-capability-pact-guard" -> Just $ createCapabilityPactGuardTests nativeName
-      "enforce-guard"       -> Just $ enforceGuardTests nativeName
-      "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
+    , ("create-module-guard", createModuleGuardTests)
+    , ("create-pact-guard", createPactGuardTests)
+    , ("create-user-guard", createUserGuardTests)
+    , ("create-capability-guard", createCapabilityGuardTests)
+    , ("create-capability-pact-guard", createCapabilityPactGuardTests)
+    , ("enforce-guard", enforceGuardTests)
+    , ("keyset-ref-guard", keysetRefGuardTests)
 
       -- Principal creation and validation
-      "create-principal"   -> Just $ createPrincipalTests nativeName
-      "validate-principal" -> Just $ validatePrincipalTests nativeName
-      "is-principal"       -> Just $ isPrincipalTests nativeName
-      "typeof-principal"   -> Just $ typeofPrincipalTests nativeName
+    , ("create-principal", createPrincipalTests)
+    , ("validate-principal", validatePrincipalTests)
+    , ("is-principal", isPrincipalTests)
+    , ("typeof-principal", typeofPrincipalTests)
 
       -- Non-native concepts to benchmark
-      "use"       -> Just $ useTests nativeName
-      "module"    -> Just $ moduleTests nativeName
-      "interface" -> Just $ interfaceTests nativeName
-
-      _ -> Nothing
-
+    , ("use", useTests)
+    , ("module", moduleTests)
+    , ("interface", interfaceTests)
+    ]
 
 -- | Non-native concepts tests
 interfaceTests :: NativeDefName -> GasUnitTests
