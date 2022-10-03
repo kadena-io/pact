@@ -20,6 +20,7 @@ module Pact.Types.RPC
     PactRPC(..)
   , ExecMsg(..)
   , ContMsg(..)
+  , contMsgJsonPairs
   ) where
 
 import Control.Applicative
@@ -129,5 +130,7 @@ instance Arbitrary ContMsg where
     <*> pure (String "JSON VALUE")
     <*> arbitrary
 
---
+contMsgJsonPairs :: (Monoid a, KeyValue a) => ContMsg -> a
+contMsgJsonPairs = mconcat . contMsgProperties
+{-# INLINE contMsgJsonPairs #-}
 

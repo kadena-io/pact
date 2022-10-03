@@ -21,7 +21,7 @@ import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word64)
 import Data.Default
-import Data.Aeson (Value, encode)
+import Data.Aeson (encode)
 import qualified Data.ByteString.Lazy  as BSL
 import Data.Text (Text)
 

@@ -14,6 +14,8 @@
 module Pact.ApiReq
     (
      ApiKeyPair(..)
+    ,ApiSigner(..)
+    ,ApiPublicMeta(..)
     ,ApiReq(..)
     ,apiReq
     ,uapiReq
@@ -23,7 +25,8 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
-    ,AddSigsReq(..),addSigsReq
+    ,AddSigsReq(..)
+    ,addSigsReq
     ,combineSigs
     ,combineSigDatas
     ,signCmd
@@ -202,27 +205,6 @@ instance ToJSON ApiReq where
   {-# INLINE toEncoding #-}
 
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
-
-data SignReq = SignReq
-  { _srHash :: Hash
-  , _srKeyPairs :: [ApiKeyPair]
-  } deriving (Eq,Show,Generic)
-
-signReqProperties :: JsonProperties SignReq
-signReqProperties o =
-  [ "hash" .= _srHash o
-  , "keyPairs" .= _srKeyPairs o
-  ]
-{-# INLINE signReqProperties #-}
-
-instance ToJSON SignReq where
-  toJSON = enableToJSON "Pact.ApiReq.SignReq" . object . signReqProperties
-  toEncoding = pairs . mconcat . signReqProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-
-instance FromJSON SignReq where
-    parseJSON = lensyParseJSON 3
 
 data AddSigsReq = AddSigsReq
   { _asrUnsigned :: Command Text
