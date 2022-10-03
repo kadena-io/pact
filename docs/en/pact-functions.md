@@ -2004,10 +2004,11 @@ pact> (expect "Sanity prevails." 4 (+ 2 2))
 
 
 Evaluate EXP and succeed only if it throws an error.
+When err is provided, it will succeed if err is contained within the thrown error.
 ```lisp
 pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 "Expect failure: success: Enforce fails on false"
-pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Expected error"))
+pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Behold, an Expected error!"))
 "Expect failure: success: Enforce fails with message"
 ```
 
