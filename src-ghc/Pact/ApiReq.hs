@@ -423,6 +423,10 @@ decodeYaml fp = either (dieAR . show) return =<<
 putJSON :: ToJSON b => b -> IO ()
 putJSON = BSL.putStrLn . encode
 
+-- | The formatting of the result and in particular the sorting items in the
+-- result is not specified. Do not use this function if deterministc and
+-- repeatble formatting is needed.
+--
 signCmd
   :: [FilePath]
   -> ByteString
@@ -433,7 +437,6 @@ signCmd keyFiles bs = do
     Left e -> dieAR $ "stdin was not valid base64url: " <> e
     Right h -> do
       kps <- mapM importKeyFile keyFiles
-      -- FIXME: the sorting of the properties in the result is not stable
       fmap (Y.encode . HM.fromList) $ forM kps $ \kp -> do
             sig <- signHash (fromUntypedHash $ Hash h) kp
             return (B16JsonBytes (getPublic kp), _usSig sig)

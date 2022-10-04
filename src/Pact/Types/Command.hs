@@ -1,6 +1,7 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -395,8 +396,12 @@ data CommandResult l = CommandResult {
   , _crEvents :: [PactEvent]
   } deriving (Eq,Show,Generic)
 
-commandResultProperties :: ToJSON l => JsonMProperties (CommandResult l)
-commandResultProperties o = mconcat
+commandResultProperties
+  :: ToJSON l
+  => ToJSON a
+  => (Value -> a)
+  -> JsonMProperties (CommandResult l)
+commandResultProperties toVal o = mconcat
     [ "gas" .= _crGas o
     , "result" .= _crResult o
     , "reqKey" .= _crReqKey o
@@ -404,15 +409,15 @@ commandResultProperties o = mconcat
     , "events" .?= case _crEvents o of
       [] -> Nothing
       l -> Just l
-    , "metaData" .= toLegacyJson (_crMetaData o)
+    , "metaData" .= fmap toVal (_crMetaData o)
     , "continuation" .= _crContinuation o
     , "txId" .= _crTxId o
     ]
 {-# INLINE commandResultProperties #-}
 
 instance (ToJSON l) => ToJSON (CommandResult l) where
-  toJSON = enableToJSON "Pact.Types.Command.CommandResult l" . A.Object . commandResultProperties
-  toEncoding = pairs . commandResultProperties
+  toJSON = enableToJSON "Pact.Types.Command.CommandResult l" . A.Object . commandResultProperties id
+  toEncoding = pairs . commandResultProperties toLegacyJson
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 

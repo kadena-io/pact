@@ -737,15 +737,16 @@ instance Pretty v => Pretty (ObjectMap v) where
   pretty om = annotate Val $ commaBraces $
     objectMapToListWith (\k v -> pretty k <> ": " <> pretty v) om
 
--- FIXME the order depends on the hash function that is used by HM.HashMap in
--- aeson.
+-- The order depends on the hash function that is used by HM.HashMap in aeson
+-- when serialzing maps via Value.
 --
 instance ToJSON v => ToJSON (ObjectMap v) where
-  toJSON (ObjectMap om) = toJSON $ M.mapKeys asString om
+  toJSON (ObjectMap om) = enableToJSON "Pact.Types.Term.Internal.ObjectMap"
+    $ toJSON
+    $ M.mapKeys asString om
   toEncoding (ObjectMap om) = toEncoding
-    $ HM.fromList
-    $ first (LegacyHashed . asString)
-    <$> M.toList om
+    $ legacyMap
+    $ M.mapKeys asString om
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 

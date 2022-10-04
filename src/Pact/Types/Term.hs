@@ -304,7 +304,7 @@ instance Pretty n => Pretty (Lam n) where
 
 instance NFData n => NFData (Lam n)
 
--- FIXME Is the prefix correct?
+-- The "am" prefix for property names is legacy.
 --
 lamProperties :: ToJSON n => JsonProperties (Lam n)
 lamProperties o =

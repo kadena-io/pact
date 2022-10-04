@@ -33,6 +33,7 @@ import Test.QuickCheck
 import Pact.Parse
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Utils.Json (legacyHashMap)
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
   deriving (Eq,Ord,Show,Generic)
@@ -77,8 +78,9 @@ data SigData a = SigData
 sigDataProperties :: ToJSON a => JsonMProperties (SigData a)
 sigDataProperties o = mconcat
   [ "hash" .= _sigDataHash o
-  , "sigs" .= HM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
-    -- FIXME fix order independently of hashable package
+  , "sigs" .= legacyHashMap (HM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o))
+    -- FIXME: this instance seems to violate the comment on the respective
+    -- constructor field. Is that fine? Is it required for backward compat?
   , "cmd" .?= _sigDataCmd o
   ]
 {-# INLINE sigDataProperties #-}
