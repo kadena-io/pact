@@ -8,15 +8,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
--- |
--- Module: Pact.Utils.Json
--- Copyright: Copyright © 2022 Kadena LLC.
--- License: MIT
--- Maintainer: Lars Kuhtz <lars@kadena.io>
--- Stability: experimental
---
--- TODO
---
 module Pact.Utils.Json
 ( legacyHash
 , legacyHashWithSalt

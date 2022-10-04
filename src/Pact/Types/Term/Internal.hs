@@ -8,13 +8,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- |
--- Module: Pact.Types.Term.Internal
--- Copyright: Copyright © 2022 Kadena LLC.
--- License: MIT
--- Maintainer: Lars Kuhtz <lars@kadena.io>
--- Stability: experimental
---
 module Pact.Types.Term.Internal
 ( Meta(..)
 , mDocs

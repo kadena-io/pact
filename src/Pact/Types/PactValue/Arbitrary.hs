@@ -2,15 +2,6 @@
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module: Pact.Types.PactValue.Arbitrary
--- Copyright: Copyright © 2022 Kadena LLC.
--- License: MIT
--- Maintainer: Lars Kuhtz <lars@kadena.io>
--- Stability: experimental
---
--- TODO
---
 module Pact.Types.PactValue.Arbitrary
 (
 -- * Helper functions for generating arbitrary pact values

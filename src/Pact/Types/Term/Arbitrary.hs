@@ -5,15 +5,6 @@
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- Module: Pact.Type.Term.Arbitrary
--- Copyright: Copyright © 2022 Kadena LLC.
--- License: MIT
--- Maintainer: Lars Kuhtz <lars@kadena.io>
--- Stability: experimental
---
--- TODO
---
 module Pact.Types.Term.Arbitrary
 (
 ) where
