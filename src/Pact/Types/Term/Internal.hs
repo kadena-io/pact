@@ -98,7 +98,6 @@ import Control.Lens hiding ((.=), DefName(..), elements)
 import Control.Monad
 import Data.Aeson hiding (pairs,Object, (<?>))
 import qualified Data.Aeson as A
-import Data.Bifunctor
 import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
@@ -106,7 +105,6 @@ import Data.Function
 import Data.Functor.Classes (Eq1(..), Show1(..))
 import qualified Data.HashSet as HS
 import Data.Hashable
-import qualified Data.HashMap.Strict as HM
 import Data.Int (Int64)
 import Data.List
 import qualified Data.Map.Strict as M
