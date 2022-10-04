@@ -115,16 +115,10 @@ timeCodec = Codec enc dec encValue
     enc t
       | 1 == denom t = pairs ( field .= formatTime pactISO8601Format t )
       | otherwise = pairs ( highprec .= formatTime highPrecFormat t )
-      where
-            denom :: UTCTime -> Integer
-            denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
     {-# INLINE enc #-}
     encValue t
       | 1 == denom t = object [ field .= formatTime pactISO8601Format t ]
       | otherwise = object [ highprec .= formatTime highPrecFormat t ]
-      where
-            denom :: UTCTime -> Integer
-            denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
     {-# INLINE encValue #-}
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>
@@ -137,6 +131,9 @@ timeCodec = Codec enc dec encValue
     {-# INLINE dec #-}
     field = "time"
     highprec = "timep"
+
+    denom :: UTCTime -> Integer
+    denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
 
 valueCodec :: Codec Value
 valueCodec = Codec enc dec encVal
