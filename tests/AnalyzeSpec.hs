@@ -29,7 +29,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
 import           Prelude                      hiding (read)
-import           Test.Hspec
+import Test.Hspec hiding (xdescribe)
 
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
@@ -302,6 +302,9 @@ pattern Abort' = PropSpecific Abort
 
 pattern Result' :: Prop t
 pattern Result' = PropSpecific Result
+
+xdescribeWith :: HasCallStack => String -> String -> SpecWith a -> SpecWith a
+xdescribeWith reason label = before_ (pendingWith reason) . describe label
 
 spec :: Spec
 spec = describe "analyze" $ do
@@ -1016,6 +1019,59 @@ spec = describe "analyze" $ do
               (create-user-guard (enforce-impossible)))
           |]
     expectPass code $ Valid Success'
+
+
+  describe "create-capability-guard: success" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                (enforce-guard (create-capability-guard (CAP 1)))))
+          |]
+    expectPass code $ Valid Success'
+
+  describe "create-capability-guard: failure" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 2)
+                (enforce-guard (create-capability-guard (CAP 1)))))
+          |]
+    expectPass code $ Valid Abort'
+
+  -- sadly doesn't look like pact guard func can really do much in FV.
+  xdescribeWith "TODO fix pact guard FV" "create-capability-pact-guard: failure" $ do
+    expectFalsified [text|
+        (defcap CAP (i:integer)
+          true)
+
+        (defpact testpact ()
+          (step
+            (with-capability (CAP 2)
+              (enforce-guard
+                (create-capability-pact-guard (CAP 1)))))
+          (step true))
+        |]
+
+  -- same issue here. TODO make pact guards work in FV.
+  xdescribeWith "TODO fix pact guard FV" "create-capability-pact-guard: failure, not in pact" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                (enforce-guard (create-capability-pact-guard (CAP 1)))))
+          |]
+    expectPass code $ Valid Abort'
+
 
   describe "call-by-value semantics for inlining" $ do
     let code =
@@ -4104,7 +4160,7 @@ spec = describe "analyze" $ do
               "bar")))
         |]
 
-    xdescribe "defpact property timeout on 2nd step only" $
+    xdescribeWith "disabled, for exercising timeout" "defpact property timeout on 2nd step only" $
       expectVerified [text|
 
         (defpact foo (a:string)
