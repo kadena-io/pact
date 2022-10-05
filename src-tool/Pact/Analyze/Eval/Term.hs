@@ -626,7 +626,7 @@ evalTerm = \case
   --
   MkKsRefGuard nameT -> resolveGuard =<< symRegistryName <$> evalTerm nameT
 
-  MkPactGuard _nameT -> do
+  MkPactGuard _nameT -> do -- pactID not enforced, but this is perhaps "not running the guard"
     whetherInPact <- view inPact
     succeeds %= (.&& whetherInPact)
     view aeTrivialGuard
@@ -648,6 +648,14 @@ evalTerm = \case
 
   MkModuleGuard _nameT ->
     view moduleGuard
+
+  MkCapabilityGuard cap (unzip -> (_, vids)) isPact -> do
+    when isPact $ do
+      whetherInPact <- view inPact
+      succeeds %= (.&& whetherInPact)
+    granted <- isGranted =<< capabilityAppToken cap vids
+    succeeds %= (.&& granted)
+    view aeTrivialGuard
 
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT
