@@ -626,7 +626,8 @@ evalTerm = \case
   --
   MkKsRefGuard nameT -> resolveGuard =<< symRegistryName <$> evalTerm nameT
 
-  MkPactGuard _nameT -> do -- TODO doesn't really work, and doesn't handle pact ID
+  -- TODO doesn't really work, and doesn't handle pact ID
+  MkPactGuard _nameT -> do
     whetherInPact <- view inPact
     succeeds %= (.&& whetherInPact)
     view aeTrivialGuard
