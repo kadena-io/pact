@@ -176,13 +176,11 @@ principalParser (getInfo -> i) = kParser
 -- Parameterized for use with non-Eval contexts.
 guardToPrincipal
     :: Monad m
-    => (forall f . Traversable f => f n -> m (f PactValue))
-    -- ^ pact value coerce
-    -> (Int -> m ())
+    => (Int -> m ())
     -- ^ gas charger
-    -> Guard n
+    -> Guard PactValue
     -> m Principal
-guardToPrincipal toPactValue chargeGas = \case
+guardToPrincipal chargeGas = \case
   GPact (PactGuard pid n) -> chargeGas 1 >> pure (P pid n)
   -- TODO later: revisit structure of principal k and w accounts in light of namespaces
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
@@ -193,12 +191,11 @@ guardToPrincipal toPactValue chargeGas = \case
   GKeySetRef ksn -> chargeGas 1 >> pure (R ksn)
   GModule (ModuleGuard mn n) -> chargeGas 1 >> pure (M mn n)
   GUser (UserGuard f args) -> do
-    args' <- toPactValue args
-    a <- mkHash $ map toJSONPactValue args'
+    a <- mkHash $ map toJSONPactValue args
     pure $ U (asString f) (asString a)
   GCapability (CapabilityGuard f args pid) -> do
-    args' <- map toJSONPactValue <$> toPactValue args
-    let f' = T.encodeUtf8 $ asString f
+    let args' = map toJSONPactValue args
+        f' = T.encodeUtf8 $ asString f
         pid' = T.encodeUtf8 . asString <$> pid
     h <- mkHash $ (f':args') ++ maybe [] pure pid'
     pure $ C $ asString h

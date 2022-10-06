@@ -173,8 +173,9 @@ createPrincipalDef =
     createPrincipal' i as = argsError i as
 
 createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
-createPrincipal i =
-    fmap mkPrincipalIdent . guardToPrincipal enforcePactValue' chargeGas
+createPrincipal i g = do
+  g' <- traverse enforcePactValue g
+  mkPrincipalIdent <$> guardToPrincipal chargeGas g'
   where
     chargeGas amt =
       void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
