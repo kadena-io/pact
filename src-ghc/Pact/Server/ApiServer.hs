@@ -18,6 +18,8 @@
 
 module Pact.Server.ApiServer
   ( runApiServer
+  , runApiServerLocal
+  , runApiServerSettings
   , ApiEnv(..), aiLog, aiHistoryChan
   , sendHandler, pollHandler, listenHandler, localHandler, versionHandler
   ) where
@@ -41,7 +43,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 
-import Network.Wai.Handler.Warp (run)
+import Network.Wai.Handler.Warp (runSettings, Settings, defaultSettings, setPort, getPort, setHost)
 import Network.Wai.Middleware.Cors
 import Servant
 
@@ -68,10 +70,25 @@ makeLenses ''ApiEnv
 type Api a = ReaderT ApiEnv (ExceptT ServerError IO) a
 
 runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int -> FilePath -> IO ()
-runApiServer histChan inbChan logFn port _logDir = do
-  logFn $ "[api] starting on port " ++ show port
+runApiServer h i f port = runApiServerSettings (setPort port defaultSettings) h i f
+
+-- | Runs an API server that binds only to localhost.
+--
+-- This is more secure when only local access is needed. It also prevents the
+-- firewall configuration window from popping up on MacOSX.
+--
+runApiServerLocal :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int -> FilePath -> IO ()
+runApiServerLocal h i f port = runApiServerSettings settings h i f
+  where
+    settings = defaultSettings
+        & setPort port
+        & setHost "127.0.0.1"
+
+runApiServerSettings :: Settings -> HistoryChannel -> InboundPactChan -> (String -> IO ()) -> FilePath -> IO ()
+runApiServerSettings settings histChan inbChan logFn _logDir = do
+  logFn $ "[api] starting on port " ++ show (getPort settings)
   let conf' = ApiEnv logFn histChan inbChan
-  run port $ cors (const policy) $ serve pactServerAPI (servantServer conf')
+  runSettings settings $ cors (const policy) $ serve pactServerAPI (servantServer conf')
   where
     policy = Just CorsResourcePolicy
       { corsOrigins = Nothing

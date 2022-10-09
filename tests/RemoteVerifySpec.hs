@@ -25,7 +25,7 @@ import qualified Network.HTTP.Client as HTTP
 
 import Servant.Client
 
-import Pact.Analyze.Remote.Server (runServantServer)
+import Pact.Analyze.Remote.Server (runServantServerLocal)
 import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Repl
 import Pact.Repl.Types
@@ -57,7 +57,7 @@ stateModuleData :: ModuleName -> ReplState -> IO (Either String (ModuleData Ref)
 stateModuleData nm replState = replLookupModule replState nm
 
 serve :: Int -> IO ThreadId
-serve port = forkIO $ runServantServer port
+serve port = forkIO $ runServantServerLocal port
 
 serveAndRequest :: Int -> Remote.Request -> IO (Either ClientError Remote.Response)
 serveAndRequest port body = do
