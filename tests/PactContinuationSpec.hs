@@ -20,8 +20,6 @@ import qualified Data.List.NonEmpty as NEL
 import Data.Text (Text, unpack)
 import qualified Data.Text as T
 import NeatInterpolation (text)
-import Network.HTTP.Client (Manager)
-import qualified Network.HTTP.Client as HTTP
 import Prelude hiding (concat)
 import Servant.Client
 import System.Environment (withArgs)
@@ -41,6 +39,8 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Types.SPV
 
+import Utils
+
 #if ! MIN_VERSION_servant_client(0,16,0)
 type ClientError = ServantError
 #endif
@@ -49,27 +49,21 @@ type ClientError = ServantError
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
-  mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
-  describe "testPactContinuation" $ testPactContinuation mgr
-  describe "testPactRollback" $ testPactRollback mgr
-  describe "testPactYield" $ testPactYield mgr
-  describe "testTwoPartyEscrow" $ testTwoPartyEscrow mgr
-  describe "testOldNestedPacts" $ testOldNestedPacts mgr
-  describe "testManagedCaps" $ testManagedCaps mgr
-  describe "testElideModRefEvents" $ testElideModRefEvents mgr
-  describe "testNestedPactContinuation" $ testNestedPactContinuation mgr
-  describe "testNestedPactYield" $ testNestedPactYield mgr
+  describe "testPactContinuation" testPactContinuation
+  describe "testPactRollback" testPactRollback
+  describe "testPactYield" testPactYield
+  describe "testTwoPartyEscrow" testTwoPartyEscrow
+  describe "testOldNestedPacts" testOldNestedPacts
+  describe "testManagedCaps" testManagedCaps
+  describe "testElideModRefEvents" testElideModRefEvents
+  describe "testNestedPactContinuation" testNestedPactContinuation
+  describe "testNestedPactYield" testNestedPactYield
 
-_runOne :: (HTTP.Manager -> Spec) -> Spec
-_runOne test = do
-  mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
-  test mgr
-
-testElideModRefEvents :: HTTP.Manager -> Spec
-testElideModRefEvents mgr = before_ flushDb $ after_ flushDb $ do
+testElideModRefEvents :: Spec
+testElideModRefEvents = before_ flushDb $ after_ flushDb $ do
   it "elides modref infos" $ do
     cmd <- mkExec code Null def [] Nothing Nothing
-    results <- runAll' mgr [cmd] noSPVSupport testConfigFilePath
+    results <- runAll' [cmd] noSPVSupport testConfigFilePath
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
@@ -77,7 +71,7 @@ testElideModRefEvents mgr = before_ flushDb $ after_ flushDb $ do
 
   it "doesn't elide on backcompat" $ do
     cmd <- mkExec code Null def [] Nothing Nothing
-    results <- runAll' mgr [cmd] noSPVSupport backCompatConfig
+    results <- runAll' [cmd] noSPVSupport backCompatConfig
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
@@ -111,8 +105,8 @@ mkModuleHash :: Text -> IO ModuleHash
 mkModuleHash =
   either (fail . show) (return . ModuleHash . Hash) . parseB64UrlUnpaddedText'
 
-testManagedCaps :: HTTP.Manager -> Spec
-testManagedCaps mgr = before_ flushDb $ after_ flushDb $
+testManagedCaps :: Spec
+testManagedCaps = before_ flushDb $ after_ flushDb $
   it "exercises managed PAY cap" $ do
     let setupPath = testDir ++ "cont-scripts/setup-"
         testPath = testDir ++ "cont-scripts/managed-"
@@ -123,7 +117,7 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
     (_, managedPay) <- mkApiReq (testPath ++ "01-pay.yaml")
     (_, managedPayFails) <- mkApiReq (testPath ++ "02-pay-fails.yaml")
     let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
-    allResults <- runAll mgr allCmds
+    allResults <- runAll allCmds
 
     mhash <- mkModuleHash "HniQBJ-NUJan20k4t6MiqpzhqkSsKmIzN5ef76pcLCU"
 
@@ -144,15 +138,15 @@ testManagedCaps mgr = before_ flushDb $ after_ flushDb $
 _runArgs :: String -> IO ()
 _runArgs args = withArgs (words args) $ hspec spec
 
-testOldNestedPacts :: HTTP.Manager -> Spec
-testOldNestedPacts mgr = before_ flushDb $ after_ flushDb $
+testOldNestedPacts :: Spec
+testOldNestedPacts = before_ flushDb $ after_ flushDb $
   it "throws error when multiple defpact executions occur in same transaction" $ do
     adminKeys <- genKeys
     let makeExecCmdWith = makeExecCmd adminKeys
 
     moduleCmd <- makeExecCmdWith (threeStepPactCode "nestedPact")
     nestedExecPactCmd <- makeExecCmdWith ("(nestedPact.tester)" <> " (nestedPact.tester)")
-    allResults <- runAll mgr [moduleCmd, nestedExecPactCmd]
+    allResults <- runAll [moduleCmd, nestedExecPactCmd]
 
     runResults allResults $ do
       moduleCmd `succeedsWith`  Nothing
@@ -161,70 +155,70 @@ testOldNestedPacts mgr = before_ flushDb $ after_ flushDb $
 
 -- CONTINUATIONS TESTS
 
-testPactContinuation :: HTTP.Manager -> Spec
-testPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
+testPactContinuation :: Spec
+testPactContinuation = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
     let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
         --expRes = Just $ CommandResult _ ((Just . TxId) 0) cmdData (Gas 0)
-    cr <- testSimpleServerCmd mgr
+    cr <- testSimpleServerCmd
     (_crResult <$> cr)`shouldBe` Just cmdData
 
   context "when provided with correct next step" $
     it "executes the next step and updates pact's state" $ do
       let mname1 = "testCorrectNextStep"
-      testCorrectNextStep mgr (threeStepPactCode mname1) ("(" <> mname1 <> ".tester)") testConfigFilePath
+      testCorrectNextStep (threeStepPactCode mname1) ("(" <> mname1 <> ".tester)") testConfigFilePath
 
   context "when provided with incorrect next step" $
     it "throws error and does not update pact's state" $ do
       let mname2 = "testIncorrectNextStep"
-      testIncorrectNextStep mgr (threeStepPactCode mname2) ("(" <> mname2 <> ".tester)") testConfigFilePath
+      testIncorrectNextStep (threeStepPactCode mname2) ("(" <> mname2 <> ".tester)") testConfigFilePath
 
   context "when last step of a pact executed" $
     it "deletes pact from the state" $ do
       let mname3 = "testLastStep"
-      testLastStep mgr (threeStepPactCode mname3) ("(" <> mname3 <> ".tester)") testConfigFilePath
+      testLastStep (threeStepPactCode mname3) ("(" <> mname3 <> ".tester)") testConfigFilePath
 
   context "when error occurs when executing pact step" $
     it "throws error and does not update pact's state" $ do
       let mname4 = "testErrStep"
-      testErrStep mgr (errorStepPactCode mname4) ("(" <> mname4 <> ".tester)") testConfigFilePath
+      testErrStep (errorStepPactCode mname4) ("(" <> mname4 <> ".tester)") testConfigFilePath
 
-testNestedPactContinuation :: HTTP.Manager -> Spec
-testNestedPactContinuation mgr = before_ flushDb $ after_ flushDb $ do
+testNestedPactContinuation :: Spec
+testNestedPactContinuation = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
     let cmdData = (PactResult . Right . PLiteral . LDecimal) 3
-    cr <- testSimpleServerCmd mgr
+    cr <- testSimpleServerCmd
     (_crResult <$> cr)`shouldBe` Just cmdData
 
   context "when provided with correct next step" $
     it "executes the next step and updates nested pact's state" $ do
     let mname1 = "testCorrectNextNestedStep"
-    testCorrectNextStep mgr (threeStepNestedPactCode mname1) ("(" <> mname1 <> "-nested.nestedTester " <> mname1 <> "-2)") testConfigNDPFilePath
+    testCorrectNextStep (threeStepNestedPactCode mname1) ("(" <> mname1 <> "-nested.nestedTester " <> mname1 <> "-2)") testConfigNDPFilePath
 
   context "when provided with incorrect next step" $
     it "throws error and does not update nested pact's state" $ do
       let mname2 = "testIncorrectNextNestedStep"
-      testIncorrectNextStep mgr (threeStepNestedPactCode mname2) ("(" <> mname2 <> "-nested.nestedTester " <> mname2 <> "-2)") testConfigNDPFilePath
+      testIncorrectNextStep (threeStepNestedPactCode mname2) ("(" <> mname2 <> "-nested.nestedTester " <> mname2 <> "-2)") testConfigNDPFilePath
   context "when last step of a pact executed" $
     it "deletes pact from the state" $ do
       let mname3 = "testNestedLastStep"
-      testLastStep mgr (threeStepNestedPactCode mname3) ("(" <> mname3 <> "-nested.nestedTester " <> mname3 <> "-2)") testConfigNDPFilePath
+      testLastStep (threeStepNestedPactCode mname3) ("(" <> mname3 <> "-nested.nestedTester " <> mname3 <> "-2)") testConfigNDPFilePath
 
   context "when error occurs when executing pact step" $
     it "throws error and does not update pact's state" $ do
       let mname4 = "testNestedErrStep"
-      testErrStep mgr (errorStepNestedPactCode mname4) ("(" <> mname4 <> "-nested.nestedTester)") testConfigNDPFilePath
+      testErrStep (errorStepNestedPactCode mname4) ("(" <> mname4 <> "-nested.nestedTester)") testConfigNDPFilePath
 
-testSimpleServerCmd :: HTTP.Manager -> IO (Maybe (CommandResult Hash))
-testSimpleServerCmd mgr = do
+testSimpleServerCmd :: IO (Maybe (CommandResult Hash))
+testSimpleServerCmd = do
   simpleKeys <- genKeys
   cmd <- mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] Nothing (Just "test1")
-  allResults <- runAll mgr [cmd]
+  allResults <- runAll [cmd]
   return $ HM.lookup (cmdToRequestKey cmd) allResults
 
 
-testCorrectNextStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
-testCorrectNextStep mgr code command cfg = do
+testCorrectNextStep :: Text -> Text -> FilePath -> Expectation
+testCorrectNextStep code command cfg = do
   adminKeys <- genKeys
   let makeExecCmdWith = makeExecCmd adminKeys
   moduleCmd       <- makeExecCmdWith code
@@ -233,7 +227,7 @@ testCorrectNextStep mgr code command cfg = do
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contNextStepCmd <- makeContCmdWith 1 "test3"
   checkStateCmd   <- makeContCmdWith 1 "test4"
-  allResults      <- runAll' mgr [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd] noSPVSupport cfg
+  allResults      <- runAll' [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -312,8 +306,8 @@ threeStepNestedPactCode moduleName =
        |]
 
 
-testIncorrectNextStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
-testIncorrectNextStep mgr code command cfg = do
+testIncorrectNextStep :: Text -> Text -> FilePath -> Expectation
+testIncorrectNextStep code command cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
@@ -323,7 +317,7 @@ testIncorrectNextStep mgr code command cfg = do
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   incorrectStepCmd  <- makeContCmdWith 2 "test3"
   checkStateCmd     <- makeContCmdWith 1 "test4"
-  allResults        <- runAll' mgr [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd] noSPVSupport cfg
+  allResults        <- runAll' [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -332,8 +326,8 @@ testIncorrectNextStep mgr code command cfg = do
     checkStateCmd `succeedsWith` textVal "step 1"
 
 
-testLastStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
-testLastStep mgr code command cfg = do
+testLastStep :: Text -> Text -> FilePath -> Expectation
+testLastStep code command cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
@@ -344,7 +338,7 @@ testLastStep mgr code command cfg = do
   contNextStep1Cmd <- makeContCmdWith 1 "test3"
   contNextStep2Cmd <- makeContCmdWith 2 "test4"
   checkStateCmd    <- makeContCmdWith 3 "test5"
-  allResults       <- runAll' mgr [moduleCmd, executePactCmd, contNextStep1Cmd,
+  allResults       <- runAll' [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
@@ -357,8 +351,8 @@ testLastStep mgr code command cfg = do
 
 
 
-testErrStep :: HTTP.Manager -> Text -> Text -> FilePath -> Expectation
-testErrStep mgr code command cfg = do
+testErrStep :: Text -> Text -> FilePath -> Expectation
+testErrStep code command cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
@@ -368,7 +362,7 @@ testErrStep mgr code command cfg = do
   let makeContCmdWith = makeContCmd adminKeys False Null executePactCmd
   contErrStepCmd   <- makeContCmdWith 1 "test3"
   checkStateCmd    <- makeContCmdWith 2 "test4"
-  allResults       <- runAll' mgr [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd] noSPVSupport cfg
+  allResults       <- runAll' [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
     moduleCmd `succeedsWith`  Nothing
@@ -422,27 +416,27 @@ errorStepNestedPactCode moduleName =
 
 -- ROLLBACK TESTS
 
-testPactRollback :: HTTP.Manager -> Spec
-testPactRollback mgr = before_ flushDb $ after_ flushDb $ do
+testPactRollback :: Spec
+testPactRollback = before_ flushDb $ after_ flushDb $ do
   context "when provided with correct rollback step" $
-    it "executes the rollback function and deletes pact from state" $
-      testCorrectRollbackStep mgr
+    it "executes the rollback function and deletes pact from state"
+      testCorrectRollbackStep
 
   context "when provided with incorrect rollback step" $
-    it "throws error and does not delete pact from state" $
-      testIncorrectRollbackStep mgr
+    it "throws error and does not delete pact from state"
+      testIncorrectRollbackStep
 
   context "when error occurs when executing rollback function" $
-    it "throws error and does not delete pact from state" $
-      testRollbackErr mgr
+    it "throws error and does not delete pact from state"
+      testRollbackErr
 
   context "when trying to rollback a step without a rollback function" $
-    it "outputs a rollback failure and doesn't change the pact's state" $
-      testNoRollbackFunc mgr
+    it "outputs a rollback failure and doesn't change the pact's state"
+      testNoRollbackFunc
 
 
-testCorrectRollbackStep :: HTTP.Manager -> Expectation
-testCorrectRollbackStep mgr = do
+testCorrectRollbackStep :: Expectation
+testCorrectRollbackStep = do
   let moduleName = "testCorrectRollbackStep"
   adminKeys <- genKeys
 
@@ -455,7 +449,7 @@ testCorrectRollbackStep mgr = do
   contNextStepCmd <- makeContCmdWith 1 "test3"
   rollbackStepCmd <- makeContCmdWithRollback 1 "test4" -- rollback = True
   checkStateCmd   <- makeContCmdWith 2 "test5"
-  allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
                              rollbackStepCmd, checkStateCmd]
 
   runResults allResults $ do
@@ -480,8 +474,8 @@ pactWithRollbackCode moduleName =
         |]
 
 
-testIncorrectRollbackStep :: HTTP.Manager -> Expectation
-testIncorrectRollbackStep mgr = do
+testIncorrectRollbackStep :: Expectation
+testIncorrectRollbackStep = do
   let moduleName = "testIncorrectRollbackStep"
   adminKeys <- genKeys
 
@@ -494,7 +488,7 @@ testIncorrectRollbackStep mgr = do
   contNextStepCmd <- makeContCmdWith 1 "test3"
   incorrectRbCmd  <- makeContCmdWithRollback 2 "test4"
   checkStateCmd   <- makeContCmdWith 2 "test5"
-  allResults      <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
                              incorrectRbCmd, checkStateCmd]
 
   runResults allResults $ do
@@ -505,8 +499,8 @@ testIncorrectRollbackStep mgr = do
     checkStateCmd `succeedsWith` textVal "step 2"
 
 
-testRollbackErr :: HTTP.Manager -> Expectation
-testRollbackErr mgr = do
+testRollbackErr :: Expectation
+testRollbackErr = do
   let moduleName = "testRollbackErr"
   adminKeys <- genKeys
 
@@ -519,7 +513,7 @@ testRollbackErr mgr = do
   contNextStepCmd  <- makeContCmdWith 1 "test3"
   rollbackErrCmd   <- makeContCmdWithRollback 1 "test4"
   checkStateCmd    <- makeContCmdWith 2 "test5"
-  allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults       <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
                               rollbackErrCmd, checkStateCmd]
 
   runResults allResults $ do
@@ -542,8 +536,8 @@ pactWithRollbackErrCode moduleName =
         |]
 
 
-testNoRollbackFunc :: HTTP.Manager -> Expectation
-testNoRollbackFunc mgr = do
+testNoRollbackFunc :: Expectation
+testNoRollbackFunc = do
   let moduleName = "testNoRollbackFunc"
   adminKeys <- genKeys
 
@@ -556,7 +550,7 @@ testNoRollbackFunc mgr = do
   contNextStepCmd  <- makeContCmdWith 1 "test3"
   noRollbackCmd    <- makeContCmdWithRollback 1 "test4"
   checkStateCmd    <- makeContCmdWith 2 "test5"
-  allResults       <- runAll mgr [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults       <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
                               noRollbackCmd, checkStateCmd]
 
   runResults allResults $ do
@@ -570,52 +564,52 @@ testNoRollbackFunc mgr = do
 
 -- YIELD / RESUME TESTS
 
-testPactYield :: HTTP.Manager -> Spec
-testPactYield mgr = before_ flushDb $ after_ flushDb $ do
+testPactYield :: Spec
+testPactYield = before_ flushDb $ after_ flushDb $ do
   context "when previous step yields value" $
     it "resumes value" $ do
       let mname1 = "testValidYield"
-      testValidYield mname1 mgr pactWithYield testConfigFilePath
+      testValidYield mname1 pactWithYield testConfigFilePath
 
   context "when previous step does not yield value" $
     it "throws error when trying to resume, and does not delete pact from state" $ do
       let mname2 = "testNoYield"
-      testNoYield mname2 mgr pactWithYieldErr testConfigFilePath
+      testNoYield mname2 pactWithYieldErr testConfigFilePath
 
   it "resets yielded values after each step" $ do
     let mname3 = "testResetYield"
-    testResetYield mname3 mgr pactWithSameNameYield testConfigFilePath
+    testResetYield mname3 pactWithSameNameYield testConfigFilePath
 
   it "testCrossChainYield:succeeds with same module" $
-      testCrossChainYield mgr "" True False
+      testCrossChainYield "" True False
 
   it "testCrossChainYield:succeeds with back compat" $
-      testCrossChainYield mgr "" True True
+      testCrossChainYield "" True True
 
   it "testCrossChainYield:fails with different module" $
-      testCrossChainYield mgr ";;1" False False
+      testCrossChainYield ";;1" False False
 
   it "testCrossChainYield:succeeds with blessed module" $
-      testCrossChainYield mgr "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True False
+      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True False
 
 
-testNestedPactYield :: HTTP.Manager -> Spec
-testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
+testNestedPactYield :: Spec
+testNestedPactYield = before_ flushDb $ after_ flushDb $ do
   context "when previous step yields value" $
     it "resumes value" $ do
       let mname1 = "testNestedValidYield"
-      testValidYield mname1 mgr nestedPactWithYield testConfigNDPFilePath
+      testValidYield mname1 nestedPactWithYield testConfigNDPFilePath
 
   context "when previous step does not yield value" $
     it "throws error when trying to resume, and does not delete pact from state" $ do
       let mname2 = "testNestedNoYield"
-      testNoYield mname2 mgr nestedPactWithYieldErr testConfigNDPFilePath
+      testNoYield mname2 nestedPactWithYieldErr testConfigNDPFilePath
 
   it "resets yielded values after each step" $ do
     let mname3 = "testNestedResetYield"
-    testResetYield mname3 mgr nestedPactWithSameNameYield testConfigNDPFilePath
+    testResetYield mname3 nestedPactWithSameNameYield testConfigNDPFilePath
 
-  it "testCrossChainYield:succeeds with same module" $
+  it "testCrossChainYield:succeeds with same module"
       testNestedCrossChainYield
   where
   testNestedCrossChainYield = step0
@@ -632,7 +626,7 @@ testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"jose\")"
 
       chain0Results <-
-        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport testConfigNDPFilePath
+        runAll' [moduleCmd,executePactCmd] noSPVSupport testConfigNDPFilePath
 
       mhash <- mkModuleHash "mGbCL-I0xXho_dxYfYAVmHfSfj3o43gbJ3ZgLHpaq14"
 
@@ -673,9 +667,9 @@ testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
           spv = noSPVSupport {
             _spvVerifyContinuation = \cp ->
                 if cp == proof then
-                  return $ Right $ pe
+                  return $ Right pe
                 else
-                  return $ Left $ "Invalid proof"
+                  return $ Left "Invalid proof"
             }
 
       chain1Cont <- makeContCmdWith 1 "chain1Cont"
@@ -686,7 +680,7 @@ testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
       flushDb
 
       chain1Results <-
-        runAll' mgr [moduleCmd, chain1Cont,chain1ContDupe] spv testConfigFilePath
+        runAll' [moduleCmd, chain1Cont,chain1ContDupe] spv testConfigFilePath
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
 
@@ -704,8 +698,8 @@ testNestedPactYield mgr = before_ flushDb $ after_ flushDb $ do
         chain1ContDupe `failsWith` Just completedPactMsg
 
 
-testValidYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
-testValidYield moduleName mgr mkCode cfg = do
+testValidYield :: Text -> (Text -> Text) -> FilePath -> Expectation
+testValidYield moduleName mkCode cfg = do
   adminKeys <- genKeys
 
   let makeExecCmdWith = makeExecCmd adminKeys
@@ -717,7 +711,7 @@ testValidYield moduleName mgr mkCode cfg = do
   resumeAndYieldCmd  <- makeContCmdWith 1 "test3"
   resumeOnlyCmd      <- makeContCmdWith 2 "test4"
   checkStateCmd      <- makeContCmdWith 3 "test5"
-  allResults         <- runAll' mgr [moduleCmd, executePactCmd, resumeAndYieldCmd,
+  allResults         <- runAll' [moduleCmd, executePactCmd, resumeAndYieldCmd,
                                 resumeOnlyCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
@@ -787,8 +781,8 @@ nestedPactWithYield moduleName =
 
 
 
-testNoYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
-testNoYield moduleName mgr mkCode cfg = do
+testNoYield :: Text -> (Text -> Text) -> FilePath -> Expectation
+testNoYield moduleName mkCode cfg = do
   -- let moduleName = "testNoYield"
   adminKeys <- genKeys
 
@@ -800,7 +794,7 @@ testNoYield moduleName mgr mkCode cfg = do
   noYieldStepCmd <- makeContCmdWith 1 "test3"
   resumeErrCmd   <- makeContCmdWith 2 "test3"
   checkStateCmd  <- makeContCmdWith 1 "test5"
-  allResults     <- runAll' mgr [moduleCmd, executePactCmd, noYieldStepCmd,
+  allResults     <- runAll' [moduleCmd, executePactCmd, noYieldStepCmd,
                            resumeErrCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
@@ -858,8 +852,8 @@ nestedPactWithYieldErr moduleName =
             |]
 
 
-testResetYield :: Text -> HTTP.Manager -> (Text -> Text) -> FilePath -> Expectation
-testResetYield moduleName mgr mkCode cfg = do
+testResetYield :: Text -> (Text -> Text) -> FilePath -> Expectation
+testResetYield moduleName mkCode cfg = do
   -- let moduleName = "testResetYield"
   adminKeys <- genKeys
 
@@ -871,7 +865,7 @@ testResetYield moduleName mgr mkCode cfg = do
   yieldSameKeyCmd  <- makeContCmdWith 1 "test3"
   resumeStepCmd    <- makeContCmdWith 2 "test4"
   checkStateCmd    <- makeContCmdWith 3 "test5"
-  allResults       <- runAll' mgr [moduleCmd, executePactCmd, yieldSameKeyCmd,
+  allResults       <- runAll' [moduleCmd, executePactCmd, yieldSameKeyCmd,
                               resumeStepCmd, checkStateCmd] noSPVSupport cfg
 
   runResults allResults $ do
@@ -939,8 +933,8 @@ nestedPactWithSameNameYield moduleName =
             |]
 
 
-testCrossChainYield :: HTTP.Manager -> T.Text -> Bool -> Bool -> Expectation
-testCrossChainYield mgr blessCode succeeds backCompat = step0
+testCrossChainYield :: T.Text -> Bool -> Bool -> Expectation
+testCrossChainYield blessCode succeeds backCompat = step0
   where
 
     -- STEP 0: runs on server for "chain0results"
@@ -956,7 +950,7 @@ testCrossChainYield mgr blessCode succeeds backCompat = step0
       executePactCmd   <- makeExecCmdWith "(cross-chain-tester.cross-chain \"emily\")"
 
       chain0Results <-
-        runAll' mgr [moduleCmd,executePactCmd] noSPVSupport $
+        runAll' [moduleCmd,executePactCmd] noSPVSupport $
         if backCompat then backCompatConfig else testConfigFilePath
 
       mhash <- mkModuleHash "_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc"
@@ -1000,9 +994,9 @@ testCrossChainYield mgr blessCode succeeds backCompat = step0
           spv = noSPVSupport {
             _spvVerifyContinuation = \cp ->
                 if cp == proof then
-                  return $ Right $ pe
+                  return $ Right pe
                 else
-                  return $ Left $ "Invalid proof"
+                  return $ Left "Invalid proof"
             }
 
       chain1Cont <- makeContCmdWith 1 "chain1Cont"
@@ -1013,7 +1007,7 @@ testCrossChainYield mgr blessCode succeeds backCompat = step0
       flushDb
 
       chain1Results <-
-        runAll' mgr [moduleCmd,chain1Cont,chain1ContDupe] spv testConfigFilePath
+        runAll' [moduleCmd,chain1Cont,chain1ContDupe] spv testConfigFilePath
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
           provenanceFailedMsg = "enforceYield: yield provenance"
@@ -1101,38 +1095,37 @@ nestedPactCrossChainYield =
 
 -- TWO PARTY ESCROW TESTS
 
-testTwoPartyEscrow :: HTTP.Manager -> Spec
-testTwoPartyEscrow mgr = before_ flushDb $ after_ flushDb $ do
+testTwoPartyEscrow :: Spec
+testTwoPartyEscrow = before_ flushDb $ after_ flushDb $ do
   context "when debtor tries to cancel pre-timeout" $
-    it "throws error and money still escrowed" $
-      testDebtorPreTimeoutCancel mgr
+    it "throws error and money still escrowed"
+      testDebtorPreTimeoutCancel
 
   context "when debtor tries to cancel after timeout" $
-    it "cancels escrow and deposits escrowed amount back to debtor" $
-      testDebtorPostTimeoutCancel mgr
+    it "cancels escrow and deposits escrowed amount back to debtor"
+      testDebtorPostTimeoutCancel
 
-  it "cancels escrow immediately if creditor cancels" $
-    testCreditorCancel mgr
+  it "cancels escrow immediately if creditor cancels"
+    testCreditorCancel
 
-  it "throws error when creditor or debtor try to finish alone" $
-    testFinishAlone mgr
+  it "throws error when creditor or debtor try to finish alone"
+    testFinishAlone
 
-  it "throws error when final price negotiated up" $
-    testPriceNegUp mgr
+  it "throws error when final price negotiated up"
+    testPriceNegUp
 
   context "when both debtor and creditor finish together" $ do
-    it "finishes escrow if final price stays the same or negotiated down" $
-      testValidEscrowFinish mgr
-    it "with valid price, still fails if bad cap is on a signature" $
-      testPriceNegDownBadCaps mgr
+    it "finishes escrow if final price stays the same or negotiated down"
+      testValidEscrowFinish
+    it "with valid price, still fails if bad cap is on a signature"
+      testPriceNegDownBadCaps
 
 
 twoPartyEscrow
   :: [Command Text]
-  -> HTTP.Manager
   -> (PactHash -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ())
   -> Expectation
-twoPartyEscrow testCmds mgr act = do
+twoPartyEscrow testCmds act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
 
   (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
@@ -1144,7 +1137,7 @@ twoPartyEscrow testCmds mgr act = do
   (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
   let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
-  allResults <- runAll mgr allCmds
+  allResults <- runAll allCmds
 
   runResults allResults $ do
     sysModuleCmd `succeedsWith` textVal "system module loaded"
@@ -1176,8 +1169,8 @@ checkContHash reqs act hsh = forM_ reqs $ \req ->
             | otherwise -> liftIO $ toExpectationFailure' ("checkContHash for req " ++ desc ++ ": ") ph hsh
 
 
-testDebtorPreTimeoutCancel :: HTTP.Manager -> Expectation
-testDebtorPreTimeoutCancel mgr = do
+testDebtorPreTimeoutCancel :: Expectation
+testDebtorPreTimeoutCancel = do
   let testPath = testDir ++ "cont-scripts/fail-deb-cancel-"
 
   (req, tryCancelCmd)        <- mkApiReq (testPath ++ "01-rollback.yaml")
@@ -1188,13 +1181,13 @@ testDebtorPreTimeoutCancel mgr = do
   let cancelMsg = "Cancel can only be effected by" <>
                   " creditor, or debitor after timeout"
 
-  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
+  twoPartyEscrow allCmds $ checkContHash [req] $ do
     tryCancelCmd `failsWith` Just cancelMsg
     checkStillEscrowCmd `succeedsWith` decValue 98.00
 
 
-testDebtorPostTimeoutCancel :: HTTP.Manager -> Expectation
-testDebtorPostTimeoutCancel mgr = do
+testDebtorPostTimeoutCancel :: Expectation
+testDebtorPostTimeoutCancel = do
   let testPath = testDir ++ "cont-scripts/pass-deb-cancel-"
 
   (_, setTimeCmd)          <- mkApiReq (testPath ++ "01-set-time.yaml")
@@ -1202,14 +1195,14 @@ testDebtorPostTimeoutCancel mgr = do
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
   let allCmds = [setTimeCmd, tryCancelCmd, checkStillEscrowCmd]
 
-  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
+  twoPartyEscrow allCmds $ checkContHash [req] $ do
     setTimeCmd `succeedsWith`  Nothing
     tryCancelCmd `succeedsWith`  Nothing
     checkStillEscrowCmd `succeedsWith` decValue 100.00
 
 
-testCreditorCancel :: HTTP.Manager -> Expectation
-testCreditorCancel mgr = do
+testCreditorCancel :: Expectation
+testCreditorCancel = do
   let testPath = testDir ++ "cont-scripts/pass-cred-cancel-"
 
   (_, resetTimeCmd)        <- mkApiReq (testPath ++ "01-reset.yaml")
@@ -1217,14 +1210,14 @@ testCreditorCancel mgr = do
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
   let allCmds = [resetTimeCmd, credCancelCmd, checkStillEscrowCmd]
 
-  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
+  twoPartyEscrow allCmds $ checkContHash [req] $ do
     resetTimeCmd `succeedsWith`  Nothing
     credCancelCmd `succeedsWith`  Nothing
     checkStillEscrowCmd `succeedsWith` decValue 100.00
 
 
-testFinishAlone :: HTTP.Manager -> Expectation
-testFinishAlone mgr = do
+testFinishAlone :: Expectation
+testFinishAlone = do
   let testPathCred  = testDir ++ "cont-scripts/fail-cred-finish-"
       testPathDeb   = testDir ++ "cont-scripts/fail-deb-finish-"
 
@@ -1232,24 +1225,24 @@ testFinishAlone mgr = do
   (r2, tryDebAloneCmd)  <- mkApiReq (testPathDeb ++ "01-cont.yaml")
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
 
-  twoPartyEscrow allCmds mgr $ checkContHash [r1, r2] $ do
+  twoPartyEscrow allCmds $ checkContHash [r1, r2] $ do
     tryCredAloneCmd `failsWith`
       (Just "Keyset failure (keys-all): [7d0c9ba1...]")
     tryDebAloneCmd `failsWith`
       (Just "Keyset failure (keys-all): [ac69d985...]")
 
 
-testPriceNegUp :: HTTP.Manager -> Expectation
-testPriceNegUp mgr = do
+testPriceNegUp :: Expectation
+testPriceNegUp = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
 
   (req, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
-  twoPartyEscrow [tryNegUpCmd] mgr $ checkContHash [req] $ do
+  twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
     tryNegUpCmd `failsWith` (Just "Price cannot negotiate up")
 
 
-testValidEscrowFinish :: HTTP.Manager -> Expectation
-testValidEscrowFinish mgr = do
+testValidEscrowFinish :: Expectation
+testValidEscrowFinish = do
   let testPath = testDir ++ "cont-scripts/pass-both-price-down-"
 
   (req, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
@@ -1257,18 +1250,18 @@ testValidEscrowFinish mgr = do
   (_, debBalanceCmd)  <- mkApiReq (testPath ++ "03-deb-balance.yaml")
   let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
 
-  twoPartyEscrow allCmds mgr $ checkContHash [req] $ do
+  twoPartyEscrow allCmds $ checkContHash [req] $ do
     tryNegDownCmd `succeedsWith`
                          (textVal "Escrow completed with 1.75 paid and 0.25 refunded")
     credBalanceCmd `succeedsWith` decValue 1.75
     debBalanceCmd `succeedsWith` decValue 98.25
 
-testPriceNegDownBadCaps :: HTTP.Manager -> Expectation
-testPriceNegDownBadCaps mgr = do
+testPriceNegDownBadCaps :: Expectation
+testPriceNegDownBadCaps = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-down-"
 
   (req, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont-badcaps.yaml")
-  twoPartyEscrow [tryNegUpCmd] mgr $ checkContHash [req] $ do
+  twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
     tryNegUpCmd `failsWith` (Just "Keyset failure (keys-all): [7d0c9ba1...]")
 
 
@@ -1310,11 +1303,11 @@ succeedsWith cmd r = succeedsWith' cmd ((,[]) <$> r)
 
 succeedsWith' :: HasCallStack => Command Text -> Maybe (PactValue,[PactEvent]) ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right $ r)
+succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right r)
 
 failsWith :: HasCallStack => Command Text -> Maybe String ->
              ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-failsWith cmd r = shouldMatch cmd (resultShouldBe $ Left $ r)
+failsWith cmd r = shouldMatch cmd (resultShouldBe $ Left r)
 
 runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs
@@ -1389,25 +1382,24 @@ data CommandResultCheck = CommandResultCheck
 makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{} expect = CommandResultCheck (cmdToRequestKey c) expect
 
-runAll :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll mgr cmds = runAll' mgr cmds noSPVSupport testConfigFilePath
+runAll :: [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
+runAll cmds = runAll' cmds noSPVSupport testConfigFilePath
 
 runAll'
-  :: Manager
-  -> [Command T.Text]
+  :: [Command T.Text]
   -> SPVSupport
   -> FilePath
   -> IO (HM.HashMap RequestKey (CommandResult Hash))
-runAll' mgr cmds spv config = Exception.bracket
+runAll' cmds spv config = Exception.bracket
               (startServer' config spv)
                stopServer
-              (const (run mgr cmds))
+              (const (run cmds))
 
 
 
-run :: Manager -> [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
-run mgr cmds = do
-  sendResp <- doSend mgr . SubmitBatch $ NEL.fromList cmds
+run :: [Command T.Text] -> IO (HM.HashMap RequestKey (CommandResult Hash))
+run cmds = do
+  sendResp <- doSend . SubmitBatch $ NEL.fromList cmds
   case sendResp of
     Left servantErr -> Exception.evaluate (error $ show servantErr)
     Right RequestKeys{..} -> do
@@ -1417,7 +1409,7 @@ run mgr cmds = do
         Just res -> return res
 
   where helper reqKeys = do
-          pollResp <- doPoll mgr $ Poll reqKeys
+          pollResp <- doPoll $ Poll reqKeys
           case pollResp of
             Left servantErr -> Exception.evaluate (error $ show servantErr)
             Right (PollResponses apiResults) ->
@@ -1426,15 +1418,15 @@ run mgr cmds = do
 
 
 
-doSend :: Manager -> SubmitBatch -> IO (Either ClientError RequestKeys)
-doSend mgr req = do
+doSend :: SubmitBatch -> IO (Either ClientError RequestKeys)
+doSend req = do
   baseUrl <- serverBaseUrl
-  runClientM (sendClient req) (mkClientEnv mgr baseUrl)
+  runClientM (sendClient req) (mkClientEnv testMgr baseUrl)
 
-doPoll :: Manager -> Poll -> IO (Either ClientError PollResponses)
-doPoll mgr req = do
+doPoll :: Poll -> IO (Either ClientError PollResponses)
+doPoll req = do
   baseUrl <- serverBaseUrl
-  runClientM (pollClient req) (mkClientEnv mgr baseUrl)
+  runClientM (pollClient req) (mkClientEnv testMgr baseUrl)
 
 
 resultShouldBe
