@@ -9,6 +9,7 @@
 module Pact.Analyze.Remote.Server
   ( verifyHandler
   , runServantServer
+  , runServantServerLocal
   ) where
 
 import           Control.Lens               ((^.), (.~), (&))
@@ -23,7 +24,7 @@ import qualified Data.HashMap.Strict        as HM
 import           Data.String                (IsString, fromString)
 import qualified Data.Text                  as T
 import           Data.Void                  (Void)
-import           Network.Wai.Handler.Warp   (run)
+import           Network.Wai.Handler.Warp   (runSettings, Settings, defaultSettings, setPort, setHost)
 import           Servant
 import qualified Text.Megaparsec            as MP
 import qualified Text.Megaparsec.Char       as MP
@@ -40,8 +41,16 @@ type VerifyAPI = "verify" :> ReqBody '[JSON] Request :> Post '[JSON] Response
 verifyAPI :: Proxy VerifyAPI
 verifyAPI = Proxy
 
+runServantServerLocal :: Int -> IO ()
+runServantServerLocal port = runServantServerSettings $ defaultSettings
+    & setPort port
+    & setHost "127.0.0.1"
+
 runServantServer :: Int -> IO ()
-runServantServer port = run port $ serve verifyAPI verifyHandler
+runServantServer port = runServantServerSettings $ setPort port defaultSettings
+
+runServantServerSettings :: Settings -> IO ()
+runServantServerSettings settings = runSettings settings $ serve verifyAPI verifyHandler
 
 verifyHandler :: Request -> Handler Response
 verifyHandler req = do
