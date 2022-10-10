@@ -27,6 +27,7 @@ import System.Timeout
 import qualified Data.Vector as V
 
 import Test.Hspec
+import Test.Hspec.Core.Spec
 
 import Pact.ApiReq
 import Pact.Server.API
@@ -49,15 +50,15 @@ type ClientError = ServantError
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
-  describe "testPactContinuation" testPactContinuation
-  describe "testPactRollback" testPactRollback
-  describe "testPactYield" testPactYield
-  describe "testTwoPartyEscrow" testTwoPartyEscrow
-  describe "testOldNestedPacts" testOldNestedPacts
-  describe "testManagedCaps" testManagedCaps
-  describe "testElideModRefEvents" testElideModRefEvents
-  describe "testNestedPactContinuation" testNestedPactContinuation
-  describe "testNestedPactYield" testNestedPactYield
+  describe "testPactContinuation" $ sequential testPactContinuation
+  describe "testPactRollback" $ sequential testPactRollback
+  describe "testPactYield" $ sequential testPactYield
+  describe "testTwoPartyEscrow" $ sequential testTwoPartyEscrow
+  describe "testOldNestedPacts" $ sequential testOldNestedPacts
+  describe "testManagedCaps" $ sequential testManagedCaps
+  describe "testElideModRefEvents" $ sequential testElideModRefEvents
+  describe "testNestedPactContinuation" $ sequential testNestedPactContinuation
+  describe "testNestedPactYield" $sequential testNestedPactYield
 
 testElideModRefEvents :: Spec
 testElideModRefEvents = before_ flushDb $ after_ flushDb $ do

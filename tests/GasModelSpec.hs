@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -22,7 +23,7 @@ import Control.Monad (when, forM_)
 import Data.Aeson
 import Data.IORef
 import Data.Int (Int64)
-import Data.List (foldl')
+import Data.List (foldl', sortOn)
 import Test.QuickCheck
 import Test.QuickCheck.Gen (Gen(..))
 import Test.QuickCheck.Random (mkQCGen)
@@ -41,8 +42,7 @@ import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
 
--- import Test.Hspec.Core.Spec
-
+import Test.Hspec.Core.Spec
 
 spec :: Spec
 spec = describe "gas model tests" $ do
@@ -72,17 +72,20 @@ allGasTestsAndGoldenShouldPass =
 -- | Calling directly is useful as it doesn't clean up, so you can use the actual
 -- as a new golden on expected changes.
 allGasTestsAndGoldenShouldPass' :: Spec
-allGasTestsAndGoldenShouldPass' = beforeAll (newIORef []) $ do
+allGasTestsAndGoldenShouldPass' = beforeAll (newIORef []) $ sequential $ do
 
   -- fails if one of the gas tests throws a pact error
-  forM_ (HM.toList unitTests) $ \(n, t) -> do
-    it (show n) $ \ref -> do
-      r <- runTest t
-      atomicModifyIORef' ref (\x -> (r:x, ()))
+  parallel $ do
+    forM_ ([0::Int ..] `zip` HM.toList unitTests) $ \(i, (n, t)) -> do
+      it (show n) $ \ref -> do
+        !r <- runTest t
+        atomicModifyIORef' ref (\x -> ((i,r):x, ()))
 
-  beforeAllWith (fmap (map toGoldenOutput . concat . reverse) . readIORef) $
+  beforeAllWith (fmap formatResults . readIORef) $
     it "gas model tests should not return a PactError, but should pass golden" $
       golden "gas-model"
+ where
+   formatResults = fmap toGoldenOutput . concatMap snd . sortOn fst
 
 golden :: (FromJSON a,ToJSON a) => String -> a -> Golden a
 golden name obj = Golden
