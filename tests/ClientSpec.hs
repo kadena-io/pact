@@ -19,6 +19,7 @@ import Pact.Server.Test
 import Servant.Client
 import Pact.Types.Runtime
 import Pact.Types.PactValue
+import System.IO.Temp
 
 import Utils
 
@@ -26,18 +27,28 @@ import Utils
 type ClientError = ServantError
 #endif
 
-_testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
-_testLogDir = testDir ++ "test-log/"
-_testConfigFilePath = testDir ++ "test-config.yaml"
+testPort :: Int
+testPort = 8080
 
-_testPort = "8080"
-_serverPath = "http://localhost:" ++ _testPort
+serverPath :: String
+serverPath = "http://localhost:" ++ show testPort
+
+withTestConfig :: (FilePath -> IO a) -> IO a
+withTestConfig inner = withSystemTempDirectory "pact-test-clientspec" $ \dir -> do
+  let confFilePath = dir <> "/" <> "test-config.yaml"
+  encodeFile confFilePath $ object
+    [ "port" .= testPort
+    , "logDir" .= dir
+    , "persistDir" .= dir
+    , "pragmas" .= ([] :: [String])
+    , "verbose" .= False
+    , "execConfig" .= ([ "DisablePact43", "DisablePact44" ] :: [String])
+    ]
+  inner confFilePath
 
 bracket :: IO a -> IO a
-bracket action = Exception.bracket
-  (flushDb >> startServer _testConfigFilePath)
-  (\a -> stopServer a >> flushDb)
-  (const action)
+bracket action = withTestConfig $ \fp ->
+  Exception.bracket (startServer fp) stopServer (const action)
 
 simpleServerCmd :: IO (Command Text)
 simpleServerCmd = do
@@ -100,7 +111,7 @@ spec = describe "Servant API client tests" $
           ListenTimeout _ -> expectationFailure "timeout"
           ListenResponse lr -> Right (_crResult lr) `shouldSatisfy` failWith ArgsError
  where
-  mkClient = mkClientEnv testMgr <$> parseBaseUrl _serverPath
+  mkClient = mkClientEnv testMgr <$> parseBaseUrl serverPath
 
 
 failWith :: PactErrorType -> Either ClientError PactResult -> Bool
