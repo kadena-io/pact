@@ -162,7 +162,7 @@ jobs:
       run: cabal build
     - name: Test
       shell: bash
-      run: cabal test
+      run: cabal test +RTS -N
     - name: Benchmark
       shell: bash
       if: "!contains(matrix.flags, '-build-tool')"
