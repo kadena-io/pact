@@ -35,11 +35,15 @@ import Data.Mod
 import Data.Poly
 import GHC.Real(Ratio(..))
 import GHC.Exts(IsList(..))
+import GHC.TypeLits(Nat)
 
 import Control.DeepSeq (NFData)
+import Numeric.Natural(Natural)
 
 type Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583
-type Fq = Mod Q
+
+newtype Fq = P (Mod Q)
+  deriving (Eq, Ord, Num, Fractional, Euclidean, Field, GcdDomain, Ring, Semiring, Bounded, Enum, NFData)
 
 fieldModulus :: Integer
 fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
@@ -48,7 +52,27 @@ newtype Extension p k
   = Extension { _extension :: VPoly k }
   deriving (Show, Eq, Ord, NFData)
 
-class (Field k, Fractional k, Ord k, Show k) => ExtensionField p k | p -> k where
+class (Field k, Fractional k, Ord k, Show k) => GaloisField k where
+  -- | The characteristic of the field
+  characteristic :: k -> Natural
+
+  -- | The degree of the finite field
+  degree :: k -> Word
+
+  frobenius :: k -> k
+
+  order :: k -> Natural
+  order = (^) <$> char <*> deg
+  {-# INLINABLE order #-}
+
+instance GaloisField Fq where
+  char = 21888242871839275222246405745257275088696311157297823662689037894645226208583
+
+  deg _ = 1
+
+  frob = id
+
+class GaloisField k => ExtensionField p k | p -> k where
   fieldDegree :: Extension p k -> Word
   fieldPoly :: Extension p k -> VPoly k
 
@@ -158,6 +182,10 @@ instance ExtensionField F3 Fq6 where
   fieldPoly _ = fromList [fromList [0, -1], 0, 1]
   {-# INLINABLE fieldPoly #-}
 
+-----------------------------------------------------------------------------------
+-- Curve implementation
+-----------------------------------------------------------------------------------
+
 -- Curve is y**2 = x**3 + 3
 curveB :: Fq
 curveB = 3
@@ -241,81 +269,87 @@ twist (Point x y) = let
   -- ([fromList ([ycoeffs !! 0] ++ replicate 5 0) (fromList ([ycoeffs !! 1] ++ replicate 5 0))])
   in Point (nx * (w * w)) (ny  * (w * w * w))
 
-g12 :: CurvePoint Fq12
-g12 = twist g2
+-- g12 :: CurvePoint Fq12
+-- g12 = twist g2
 
-curveOrder :: Integer
-curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+-- curveOrder :: Integer
+-- curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
-ate_loop_count :: Integer
-ate_loop_count = 29793968203157093288
+-- ate_loop_count :: Integer
+-- ate_loop_count = 29793968203157093288
 
-log_ate_loop_count :: Integer
-log_ate_loop_count = 63
+-- log_ate_loop_count :: Integer
+-- log_ate_loop_count = 63
 
-lineFunc :: (Eq a, Euclidean a, Num a) => CurvePoint a -> CurvePoint a -> CurvePoint a -> a
-lineFunc (Point x1 y1) (Point x2 y2) (Point xt yt)
-  | x1 /= x2 = let
-    -- if x1 != x2:
-    -- m = (y2 - y1) / (x2 - x1)
-    -- return m * (xt - x1) - (yt - y1)
-    m = (y2 - y1) `E.quot` (x2 - x1)
-    in m * (xt - x1) - (yt - y1)
-    --  elif y1 == y2:
-    --     m = 3 * x1**2 / (2 * y1)
-    --     return m * (xt - x1) - (yt - y1)
-  | y1 == y2 = let
-    x = (x1 * x2)
-    m = (x + x + x) `E.quot` (y1 + y1)
-    in m * (xt - x1) - (yt - y1)
-  | otherwise = xt - x1
-lineFunc _ _ _ = error "boom"
+-- lineFunc :: (Eq a, Euclidean a, Num a) => CurvePoint a -> CurvePoint a -> CurvePoint a -> a
+-- lineFunc (Point x1 y1) (Point x2 y2) (Point xt yt)
+--   | x1 /= x2 = let
+--     -- if x1 != x2:
+--     -- m = (y2 - y1) / (x2 - x1)
+--     -- return m * (xt - x1) - (yt - y1)
+--     m = (y2 - y1) `E.quot` (x2 - x1)
+--     in m * (xt - x1) - (yt - y1)
+--     --  elif y1 == y2:
+--     --     m = 3 * x1**2 / (2 * y1)
+--     --     return m * (xt - x1) - (yt - y1)
+--   | y1 == y2 = let
+--     x = (x1 * x2)
+--     m = (x + x + x) `E.quot` (y1 + y1)
+--     in m * (xt - x1) - (yt - y1)
+--   | otherwise = xt - x1
+-- lineFunc _ _ _ = error "boom"
 
-one' :: CurvePoint Fq
-one' = g1
+-- one' :: CurvePoint Fq
+-- one' = g1
 
-two :: CurvePoint Fq
-two = double g1
+-- two :: CurvePoint Fq
+-- two = double g1
 
-three :: CurvePoint Fq
-three = multiply g1 3
+-- three :: CurvePoint Fq
+-- three = multiply g1 3
 
-negone :: CurvePoint Fq
-negone = multiply g1 (curveOrder - 1)
+-- negone :: CurvePoint Fq
+-- negone = multiply g1 (curveOrder - 1)
 
-negtwo :: CurvePoint Fq
-negtwo = multiply g1 (curveOrder - 2)
+-- negtwo :: CurvePoint Fq
+-- negtwo = multiply g1 (curveOrder - 2)
 
-negthree :: CurvePoint Fq
-negthree = multiply g1 (curveOrder - 3)
+-- negthree :: CurvePoint Fq
+-- negthree = multiply g1 (curveOrder - 3)
 
-millerLoop :: CurvePoint Fq12 -> CurvePoint Fq12 -> Fq12
-millerLoop _ CurveInf = 1
-millerLoop CurveInf _ = 1
-millerLoop q@(Point x1 y1) p = let
-  f = 1
-  loop (f', r') i = let
-    f'' = f' * f' * lineFunc r' r' p
-    r'' = double r'
-    in if ate_loop_count .&. (2 ^ i) /= 0 then (f'' * lineFunc r'' q p, add r'' q)
-       else (f'', r'')
-  (f1, r1) = foldl' loop (f, q) (reverse [0 .. ate_loop_count])
-  q1x = (x1 ^ fieldModulus)
-  q1y = (y1 ^ fieldModulus)
-  q1 = Point q1x q1y
-  nQ2 = Point (q1x ^ fieldModulus) (negate q1y ^ fieldModulus)
-  f2 = f1 * lineFunc r1 q1 p
-  r2 = add r1 q1
-  f3 = f2 * lineFunc r2 nQ2 p
-  in f3 ^ ((fieldModulus ^ (12 :: Int) - 1) `div` curveOrder)
+-- millerLoop :: CurvePoint Fq12 -> CurvePoint Fq12 -> Fq12
+-- millerLoop _ CurveInf = 1
+-- millerLoop CurveInf _ = 1
+-- millerLoop q@(Point x1 y1) p = let
+--   f = 1
+--   loop (f', r') i = let
+--     f'' = f' * f' * lineFunc r' r' p
+--     r'' = double r'
+--     in if ate_loop_count .&. (2 ^ i) /= 0 then (f'' * lineFunc r'' q p, add r'' q)
+--        else (f'', r'')
+--   (f1, r1) = foldl' loop (f, q) (reverse [0 .. ate_loop_count])
+--   q1x = (x1 ^ fieldModulus)
+--   q1y = (y1 ^ fieldModulus)
+--   q1 = Point q1x q1y
+--   nQ2 = Point (q1x ^ fieldModulus) (negate q1y ^ fieldModulus)
+--   f2 = f1 * lineFunc r1 q1 p
+--   r2 = add r1 q1
+--   f3 = f2 * lineFunc r2 nQ2 p
+--   in f3 ^ ((fieldModulus ^ (12 :: Int) - 1) `div` curveOrder)
 
-castToFq12 :: CurvePoint Fq -> CurvePoint Fq12
-castToFq12 CurveInf = CurveInf
-castToFq12 (Point x y) =
-  Point
-    (fromList [fromList [fromList [x]], 0])
-    (fromList [fromList [fromList [y]], 0])
+-- castToFq12 :: CurvePoint Fq -> CurvePoint Fq12
+-- castToFq12 CurveInf = CurveInf
+-- castToFq12 (Point x y) =
+--   Point
+--     (fromList [fromList [fromList [x]], 0])
+--     (fromList [fromList [fromList [y]], 0])
 
-pairing :: CurvePoint Fq2 -> CurvePoint Fq -> Fq12
-pairing q p =
-  millerLoop (twist q) (castToFq12 p)
+-- pairing :: CurvePoint Fq2 -> CurvePoint Fq -> Fq12
+-- pairing q p =
+--   millerLoop (twist q) (castToFq12 p)
+
+-- frobTwisted xi (CurvePoint x y) = A (F.frob x * pow xi tx) (F.frob y * pow xi ty)
+--   where
+--     tx = quot (F.char (witness :: Prime q) - 1) 3
+--     ty = shiftR (F.char (witness :: Prime q)) 1
+-- frobTwisted _ _        = O
