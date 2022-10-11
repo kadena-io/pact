@@ -14,6 +14,7 @@
 module Pact.Coverage
   ( mkCoverageAdvice
   , writeCovReport
+  , writeCovReportInDir
   , writeCovReport'
   ) where
 
@@ -124,6 +125,9 @@ parseInf inf = case getInfo inf of
 
 writeCovReport :: IORef LcovReport -> IO ()
 writeCovReport = writeCovReport' True "coverage/lcov.info"
+
+writeCovReportInDir :: FilePath -> IORef LcovReport -> IO ()
+writeCovReportInDir dir = writeCovReport' True (dir </> "coverage/lcov.info")
 
 writeCovReport' :: Bool -> FilePath -> IORef LcovReport -> IO ()
 writeCovReport' mkParentDir reportFile ref = do

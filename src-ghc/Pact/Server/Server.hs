@@ -15,10 +15,12 @@
 module Pact.Server.Server
   ( serve
   , serveLocal
+  , withTestServe
+  , Port
   ) where
 
 import Control.Concurrent
-import Control.Concurrent.Async (async, link)
+import Control.Concurrent.Async (async, link, withAsync)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Exception
@@ -112,6 +114,29 @@ serve_ isLocal configFile spv = do
   link asyncCmd
   link asyncHist
   runServer histC inC debugFn (fromIntegral _port) _logDir
+
+withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
+withTestServe configFile spv app = do
+  Config {..} <- Y.decodeFileEither configFile >>= \case
+    Left e -> do
+      putStrLn usage
+      throwIO (userError ("Error loading config file: " ++ show e))
+    Right v -> return v
+  (inC,histC) <- initChans
+  replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
+  debugFn <- if _verbose then initFastLogger else return (return . const ())
+  let cmdConfig = CommandConfig
+          (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
+          _entity
+          _gasLimit
+          _gasRate
+          (fromMaybe def _execConfig)
+  let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
+      cmd = startCmdThread cmdConfig inC histC replayFromDisk' debugFn spv
+      hist = runHistoryService histConf Nothing
+  withAsync cmd $ \_->
+    withAsync hist $ \_->
+      withTestApiServer histC inC debugFn app
 
 initFastLogger :: IO (String -> IO ())
 initFastLogger = do

@@ -223,7 +223,6 @@ library
       , criterion >= 1.1.4 && < 1.6
       , cryptonite
       , direct-sqlite == 2.3.27
-      , http-client
       , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2
       , servant-client
@@ -278,7 +277,6 @@ library
         Pact.Server.History.Service
         Pact.Server.History.Types
         Pact.Server.Server
-        Pact.Server.Test
         Pact.GasModel.GasModel
         Pact.GasModel.Types
         Pact.GasModel.Utils
@@ -415,6 +413,7 @@ test-suite hspec
         , Decimal
         , QuickCheck
         , deepseq
+        , directory
         , exceptions
         , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2
