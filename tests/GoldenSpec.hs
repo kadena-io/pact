@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -6,7 +6,6 @@ module GoldenSpec
 
   (
       spec
-    , golden
     , cleanupActual
 
   )
@@ -15,10 +14,10 @@ module GoldenSpec
 
 import Control.Exception
 import Control.Lens
+import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
-import Data.Either
 import Data.Text (Text)
 import System.Directory
 
@@ -63,34 +62,51 @@ spec = do
   describe "golden root ns module upgrade" $
     goldenModule [] "goldenRootNamespace" "golden/golden.rootnamespace.repl" "nsupgrade" []
 
-goldenModule :: [ExecutionFlag] -> String -> FilePath -> ModuleName -> [(String, String -> ReplState -> Spec)] -> Spec
+goldenModule
+    :: [ExecutionFlag]
+    -> String
+    -> FilePath
+    -> ModuleName
+    -> [(String, String -> SpecWith ReplState)]
+    -> Spec
 goldenModule flags tn fp mn tests = after_ (cleanupActual tn (map fst tests)) $ do
-  let ec = mkExecutionConfig flags
-  (r,s) <- runIO $ execScriptF' Quiet fp (set (rEnv . eeExecutionConfig) ec . set (rEnv . eeInRepl) False)
-  it ("loads " ++ fp) $ r `shouldSatisfy` isRight
-  mr <- runIO $ replLookupModule s mn
-  case mr of
-    Left e -> it "module load failed" $ expectationFailure e
-    Right m -> case traverse (traverse toPersistDirect) m of
-      Left e -> it "failed to convert to PersistDirect" $ expectationFailure (show e)
-      Right m' -> do
-        it "matches golden" $ golden tn m'
-        (`mapM_` tests) $ \(n,f) -> do
-          describe n $ f (subTestName tn n) s
+  beforeAll loadModule $ do
+    beforeAllWith lookupModule $ do
+      it (fp <> " loaded module") $ \case
+        Left e -> expectationFailure $ "module load failed: " <> e
+        Right m -> case traverse (traverse toPersistDirect) m of
+          Left e -> expectationFailure $ "failed to convert to PersistDirect: " <> show e
+          Right _ -> return ()
+      it (fp <> " matches golden") $ \case
+        Left e -> error $ "module load failed: " <> e
+        Right m -> case traverse (traverse toPersistDirect) m of
+          Left e -> error $ "failed to convert to PersistDirect: " <> show e
+          Right m' -> golden tn m'
+    forM_ tests $ \(n,f) -> describe n $ do
+      f (subTestName tn n)
+ where
+  ec = mkExecutionConfig flags
+
+  loadModule :: IO ReplState
+  loadModule = do
+    (_,s) <- execScriptF' Quiet fp (set (rEnv . eeExecutionConfig) ec . set (rEnv . eeInRepl) False)
+    return s
+
+  lookupModule s = replLookupModule s mn
 
 subTestName :: String -> String -> String
 subTestName tn n = tn ++ "-" ++ n
 
-acctsSuccessCR :: String -> ReplState -> Spec
-acctsSuccessCR tn s = doCRTest tn s "1"
+acctsSuccessCR :: String -> SpecWith ReplState
+acctsSuccessCR tn = doCRTest tn "1"
 
 -- Needs disablePact44 here, accts failure cr
 -- results in `interactive:0:0` which is an info that has been stripped
-acctsFailureCR :: String -> ReplState -> Spec
-acctsFailureCR tn s = doCRTest' (mkExecutionConfig [FlagDisablePact44]) tn s "(accounts.transfer \"a\" \"b\" 1.0 true)"
+acctsFailureCR :: String -> SpecWith ReplState
+acctsFailureCR tn = doCRTest' (mkExecutionConfig [FlagDisablePact44]) tn "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
-eventCR :: String -> ReplState -> Spec
-eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]) tn s $
+eventCR :: String -> SpecWith ReplState
+eventCR tn = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]) tn
     "(module events-test G \
     \  (defcap G () true) \
     \  (defcap CAP (name:string amount:decimal) @managed \
@@ -100,8 +116,8 @@ eventCR tn s = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisa
     \    (with-capability (CAP name amount) 1))) \
     \ (events-test.f \"Alice\" 10.1)"
 
-crossChainSendCR :: Bool -> String -> ReplState -> Spec
-crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
+crossChainSendCR :: Bool -> String -> SpecWith ReplState
+crossChainSendCR backCompat tn = doCRTest' (ec backCompat) tn
     "(module xchain G (defcap G () true) \
     \ (defpact p (a:integer) \
     \  (step (yield { 'a: a } \"1\")) \
@@ -111,47 +127,48 @@ crossChainSendCR backCompat tn s = doCRTest' (ec backCompat) tn s $
     ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck, FlagDisablePact43]
     ec False = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]
 
-doCRTest :: String -> ReplState -> Text -> Spec
-doCRTest tn s code = doCRTest' def tn s code
+doCRTest :: String -> Text -> SpecWith ReplState
+doCRTest = doCRTest' def
 
-doCRTest' :: ExecutionConfig -> String -> ReplState -> Text -> Spec
-doCRTest' ec tn s code = do
-  let dbEnv = PactDbEnv (view (rEnv . eePactDb) s) (view (rEnv . eePactDbVar) s)
-      cmd = Command payload [] initialHash
-      payload = Payload exec "" pubMeta [] Nothing
-      pubMeta = def
-      parsedCode = either error id $ parsePact code
-      exec = Exec $ ExecMsg parsedCode Null
-  r <- runIO $ applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 ""
-       noSPVSupport ec Local cmd (ProcSucc cmd)
-  -- StackFrame and Info have pathological instances which impacts failure JSON
-  -- out of CommandResult. Therefore this golden does not ensure equality of
-  -- de-serialized CRs, but instead that
-  -- a) ToJSON instances are backward-compat
-  -- b) "Output roundtrip": A de-serialized CR will result in the same ToJSON output.
-  -- NOTE: an implication of "output roundtrip" is, on a golden failure, expected
-  -- and actual are reversed, as the golden is read with 'readFromFile' which roundtrips.
-  it "matches golden encoded" $ Golden
-    { output = encode r
-    , encodePretty = show
-    , writeToFile = BL.writeFile
-    , readFromFile = readOutputRoundtrip
-    , testName = tn
-    , directory = "golden"
-    , failFirstTime = False
-    }
-  where
-    -- hacks 'readFromFile' to run the golden value through the roundtrip.
-    readOutputRoundtrip = fmap (tryEncode . eitherDecode) . BL.readFile
-    tryEncode :: Either String (CommandResult Hash) -> BL.ByteString
-    tryEncode (Left e) = error e
-    tryEncode (Right cr) = encode cr
+doCRTest' :: ExecutionConfig -> String -> Text -> SpecWith ReplState
+doCRTest' ec tn code = beforeAllWith initRes $
 
+    -- StackFrame and Info have pathological instances which impacts failure JSON
+    -- out of CommandResult. Therefore this golden does not ensure equality of
+    -- de-serialized CRs, but instead that
+    -- a) ToJSON instances are backward-compat
+    -- b) "Output roundtrip": A de-serialized CR will result in the same ToJSON output.
+    -- NOTE: an implication of "output roundtrip" is, on a golden failure, expected
+    -- and actual are reversed, as the golden is read with 'readFromFile' which roundtrips.
+    it "matches golden encoded" $ \r -> Golden
+      { output = encode r
+      , encodePretty = show
+      , writeToFile = BL.writeFile
+      , readFromFile = readOutputRoundtrip
+      , testName = tn
+      , directory = "golden"
+      , failFirstTime = False
+      }
+ where
+  initRes s = do
+    let dbEnv = PactDbEnv (view (rEnv . eePactDb) s) (view (rEnv . eePactDbVar) s)
+        cmd = Command payload [] initialHash
+        payload = Payload exec "" pubMeta [] Nothing
+        pubMeta = def
+        parsedCode = either error id $ parsePact code
+        exec = Exec $ ExecMsg parsedCode Null
+    applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 "" noSPVSupport ec Local cmd (ProcSucc cmd)
+
+  -- hacks 'readFromFile' to run the golden value through the roundtrip.
+  readOutputRoundtrip = fmap (tryEncode . eitherDecode) . BL.readFile
+  tryEncode :: Either String (CommandResult Hash) -> BL.ByteString
+  tryEncode (Left e) = error e
+  tryEncode (Right cr) = encode cr
 
 cleanupActual :: String -> [String] -> IO ()
 cleanupActual testname subs = do
   go testname
-  mapM_ (\n -> go (subTestName testname n)) subs
+  mapM_ (go . subTestName testname) subs
   where
     go tn = catch (removeFile $ "golden/" ++ tn ++ "/actual")
             (\(_ :: SomeException) -> return ())

@@ -42,9 +42,12 @@ import NeatInterpolation (text)
 import System.Directory (removeFile)
 
 
+import qualified Data.ByteString.Char8 as B8
+import qualified Data.ByteString.Base16 as B16
 import qualified Data.HashMap.Strict as HM
 import qualified Pact.Persist.SQLite as PSL
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 
 import Pact.Eval (eval)
@@ -158,7 +161,7 @@ createGasUnitTests sqliteUpdate mockUpdate pactExprs funName =
   where
     createTest expr =
       GasTest funName expr
-      (sqliteUpdate defSqliteGasSetup,
+      (sqliteUpdate (defSqliteGasSetup funName),
        mockUpdate defMockGasSetup)
 
 
@@ -168,15 +171,17 @@ defGasTest expr funName =
   GasTest
   funName
   expr
-  (defSqliteGasSetup, defMockGasSetup)
+  (defSqliteGasSetup funName, defMockGasSetup)
 
-defSqliteGasSetup :: GasSetup SQLiteDb
-defSqliteGasSetup =
+defSqliteGasSetup :: NativeDefName -> GasSetup SQLiteDb
+defSqliteGasSetup n =
   GasSetup
-  defSqliteBackend
+  (defSqliteBackend encName)
   defEvalState
   "SQLiteDb"
-  sqliteSetupCleanup
+  (sqliteSetupCleanup encName)
+ where
+  encName = B8.unpack $ B16.encode $ T.encodeUtf8 $ asString n
 
 defMockGasSetup :: GasSetup ()
 defMockGasSetup =
@@ -262,13 +267,13 @@ defMockDb = mockdb
 
 -- SQLite Db
 --
-sqliteFile :: String
-sqliteFile = "gasmodel.sqlite"
+sqliteFile :: Maybe String -> String
+sqliteFile s = "gasmodel" <> maybe "" ('.':) s <> ".sqlite"
 
-defSqliteBackend :: IO (EvalEnv SQLiteDb)
-defSqliteBackend = do
+defSqliteBackend :: String -> IO (EvalEnv SQLiteDb)
+defSqliteBackend name = do
   sqliteDb <- mkSQLiteEnv (newLogger neverLog "")
-              True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
+              True (SQLiteConfig dbFileName fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   state <- defEvalState
   env <- defEvalEnv sqliteDb
@@ -284,16 +289,20 @@ defSqliteBackend = do
         |]
   setupTerms <- compileCode setupExprs
   (res,_) <- runEval' state env $ mapM eval setupTerms
-  _ <- onException (eitherDie "Sqlite setup expressions" res) (sqliteSetupCleanup (env,state))
+  _ <- onException (eitherDie "Sqlite setup expressions" res) (sqliteSetupCleanup name (env,state))
   return env
+ where
+  dbFileName = sqliteFile $ Just name
 
 
 -- | Default GasSetup cleanup
 mockSetupCleanup :: (EvalEnv (), EvalState) -> IO ()
 mockSetupCleanup (_, _) = return ()
 
-sqliteSetupCleanup :: (EvalEnv SQLiteDb, EvalState) -> IO ()
-sqliteSetupCleanup (env, _) = do
+sqliteSetupCleanup :: String -> (EvalEnv SQLiteDb, EvalState) -> IO ()
+sqliteSetupCleanup name (env, _) = do
   c <- readMVar $ _eePactDbVar env
   _ <- PSL.closeSQLite $ _db c
-  removeFile sqliteFile
+  removeFile dbFileName
+ where
+  dbFileName = sqliteFile $ Just name

@@ -1317,21 +1317,20 @@ spec = describe "analyze" $ do
     expectCapGovPass code $ Satisfiable Abort'
 
   describe "property language can describe whether cap-based governance passes" $ do
-      res <- runIO $ runVerification $
-        [text|
-          (begin-tx)
-          (module test GOV
-              (defcap GOV ()
-                true)
+      it "passes in-code checks" $ do
+        res <- runVerification
+          [text|
+            (begin-tx)
+            (module test GOV
+                (defcap GOV ()
+                  true)
 
-              (defun test:bool ()
-                @model [(property governance-passes)]
-                (enforce-guard (create-module-guard "governance")))
-            )
-          (commit-tx)
-        |]
-
-      it "passes in-code checks" $
+                (defun test:bool ()
+                  @model [(property governance-passes)]
+                  (enforce-guard (create-module-guard "governance")))
+              )
+            (commit-tx)
+          |]
         handlePositiveTestResult res
 
   describe "property language can describe whether ks-based governance passes without mentioning the keyset" $ do
@@ -1962,48 +1961,49 @@ spec = describe "analyze" $ do
                 (update accounts to   { "balance": (+ to-bal amount) })))
           |]
 
-    eModuleData <- runIO $ compile $ wrapNoTable code
-    case eModuleData of
-      Left err -> it "failed to compile" $ expectationFailure (show err)
-      Right moduleData -> do
-        results <- runIO $
-          verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
-        case results of
-          Left failure -> it "unexpectedly failed verification" $
-            expectationFailure $ show failure
-          Right (ModuleChecks propResults _stepResults invariantResults _) -> do
-            it "should have no prop results" $
-              propResults `shouldBe` HM.singleton "test" []
+    let prep = do
+          eModuleData <- compile $ wrapNoTable code
+          case eModuleData of
+            Left err -> error $ "failed to compile: " <> show err
+            Right moduleData -> do
+              results <- verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
+              case results of
+                Left failure -> error $ "unexpectedly failed verification: " <> show failure
+                Right x -> return x
 
-            case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
-              -- see https://github.com/Z3Prover/z3/issues/1819
-              [CheckFailure _ (SmtFailure (SortMismatch msg))] ->
-                it "...nevermind..." $ pendingWith msg
-              [CheckFailure _ (SmtFailure (Invalid model))] -> do
-                let (Model args ModelTags{_mtWrites} ksProvs _) = model
+    beforeAll prep $ do
+      it "should have no prop results" $ \(ModuleChecks propResults _ _ _) ->
+        propResults `shouldBe` HM.singleton "test" []
 
-                it "should have a negative amount" $
-                  case find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse of
-                    Just (Located _ (_, (_, AVal _prov amount))) ->
-                      (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
-                    _ -> fail "Failed pattern match"
+      it "has valid invariantResults" $ \(ModuleChecks _ _ invariantResults _) -> do
+        case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
+          -- see https://github.com/Z3Prover/z3/issues/1819
+          [CheckFailure _ (SmtFailure (SortMismatch msg))] ->
+            pendingWith $ "... nevermind:" <> msg
+          [CheckFailure _ (SmtFailure (Invalid model))] -> do
+            let (Model args ModelTags{_mtWrites} ksProvs _) = model
 
-                let negativeWrite (UObject m) = case m Map.! "balance" of
-                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
-                      _                   -> False
+            -- it "should have a negative amount"
+            case find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse of
+             Just (Located _ (_, (_, AVal _prov amount))) ->
+               (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+             _ -> fail "Failed pattern match"
 
-                balanceWrite <- pure $ find negativeWrite
-                  $ _mtWrites ^.. traverse . located . accObject
+            let negativeWrite (UObject m) = case m Map.! "balance" of
+                  (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                  _                   -> False
 
-                it "should have a negative write" $
-                  balanceWrite `shouldSatisfy` isJust
+                balanceWrite = find negativeWrite $ _mtWrites ^.. traverse . located . accObject
 
-                it "should have no keyset provenance" $ do
-                  ksProvs `shouldBe` Map.empty
+            -- it "should have a negative write"
+            balanceWrite `shouldSatisfy` isJust
 
-              [] -> runIO $ expectationFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+            -- it "should have no keyset provenance"
+            ksProvs `shouldBe` Map.empty
 
-              other -> runIO $ expectationFailure $ show other
+          [] -> expectationFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+
+          other -> expectationFailure $ show other
 
   describe "cell-delta.integer" $ do
     let code =
@@ -4257,27 +4257,29 @@ spec = describe "analyze" $ do
       "(defun test:bool (x:integer) (enforce (> x 0) \"\"))"
 
   describe "scope-checking interfaces" $ do
-    res <- runIO $ checkInterface [text|
-      (interface coin-sig
-        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
-          @model [ (property (> amount 0.0))
-                   (property (not (= sender reciever)))
-                 ]
-          )
-      )
-      |]
-    it "flags reciever != receiver" $ isJust res
+    it "flags reciever != receiver" $ do
+      res <- checkInterface [text|
+        (interface coin-sig
+          (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+            @model [ (property (> amount 0.0))
+                     (property (not (= sender reciever)))
+                   ]
+            )
+        )
+        |]
+      res `shouldSatisfy` isJust
 
-    res' <- runIO $ checkInterface [text|
-      (interface coin-sig
-        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
-          @model [ (property (> amount 0.0))
-                   (property (not (= sender receiver)))
-                 ]
-          )
-      )
-      |]
-    it "checks when spelled correctly" $ isNothing res'
+    it "checks when spelled correctly" $ do
+      res' <- checkInterface [text|
+        (interface coin-sig
+          (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+            @model [ (property (> amount 0.0))
+                     (property (not (= sender receiver)))
+                   ]
+            )
+        )
+        |]
+      res' `shouldSatisfy` isNothing
 
   describe "vacuous property produces error" $ do
     expectFalsifiedMessage [text|

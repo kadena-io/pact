@@ -14,6 +14,7 @@
 
 module Pact.Server.Server
   ( serve
+  , serveLocal
   ) where
 
 import Control.Concurrent
@@ -73,7 +74,18 @@ usage =
   \\n"
 
 serve :: FilePath -> SPVSupport -> IO ()
-serve configFile spv = do
+serve = serve_ False
+
+-- | Runs server that binds only to localhost.
+--
+-- This is more secure when only local access is needed. It also prevents the
+-- firewall configuration window from popping up on MacOSX.
+--
+serveLocal :: FilePath -> SPVSupport -> IO ()
+serveLocal = serve_ True
+
+serve_ :: Bool -> FilePath -> SPVSupport -> IO ()
+serve_ isLocal configFile spv = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
@@ -95,11 +107,11 @@ serve configFile spv = do
   asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn spv)
   -- Must be individually killed with uninterruptibleCancel if parent thread not killed.
   asyncHist <- async (runHistoryService histConf Nothing)
-  let runServer = runApiServer histC inC debugFn (fromIntegral _port) _logDir
+  let runServer = if isLocal then runApiServerLocal else runApiServer
 
   link asyncCmd
   link asyncHist
-  runServer
+  runServer histC inC debugFn (fromIntegral _port) _logDir
 
 initFastLogger :: IO (String -> IO ())
 initFastLogger = do
