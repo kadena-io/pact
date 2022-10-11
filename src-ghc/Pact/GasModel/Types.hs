@@ -1,8 +1,9 @@
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 
 module Pact.GasModel.Types
@@ -18,7 +19,11 @@ module Pact.GasModel.Types
 
   , NoopNFData(..)
 
+  , defGasUnitTest
   , defGasUnitTests
+  , defPactExpGasTest
+  , defPactExpGasTests
+
   , createGasUnitTests
 
   , setState
@@ -32,7 +37,6 @@ import Control.DeepSeq (NFData(..))
 import Control.Exception (onException)
 import Control.Lens hiding ((.=),DefName)
 import Data.Default (def)
-import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import NeatInterpolation (text)
 import System.Directory (removeFile)
@@ -41,7 +45,6 @@ import System.Directory (removeFile)
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.HashMap.Strict as HM
-import qualified Data.List.NonEmpty  as NEL
 import qualified Pact.Persist.SQLite as PSL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -95,18 +98,11 @@ getDescription expr testSetup =
                    (_pactExpressionAbridged expr)
 
 
-newtype GasUnitTests = GasUnitTests (NEL.NonEmpty GasTest)
-instance Semigroup GasUnitTests where
-  (GasUnitTests g) <> (GasUnitTests g') =
-    GasUnitTests (g <> g')
+newtype GasUnitTests = GasUnitTests { gasUnitTests :: [GasTest] }
+    deriving Semigroup
 
-concatGasUnitTests :: NEL.NonEmpty GasUnitTests -> GasUnitTests
-concatGasUnitTests listOfTests =
-  foldl' (<>) baseCase rest
-  where
-    baseCase = NEL.head listOfTests
-    rest = NEL.tail listOfTests
-
+concatGasUnitTests :: [GasUnitTests] -> GasUnitTests
+concatGasUnitTests = GasUnitTests . concat . map gasUnitTests
 
 
 runGasUnitTests
@@ -115,7 +111,7 @@ runGasUnitTests
   -> (PactExpression -> GasSetup () -> IO a)
   -> IO [GasTestResult a]
 runGasUnitTests (GasUnitTests tests) sqliteFun mockFun = do
-  mapM run (NEL.toList tests)
+  mapM run tests
   where
     description (PactExpression full abrid) =
       fromMaybe full abrid
@@ -135,24 +131,33 @@ newtype NoopNFData a = NoopNFData a
 instance NFData (NoopNFData a) where
   rnf _ = ()
 
-
+defGasUnitTest
+  :: PactExpression
+  -> NativeDefName
+  -> GasUnitTests
+defGasUnitTest pe = defGasUnitTests [pe]
 
 defGasUnitTests
-  :: NEL.NonEmpty PactExpression
+  :: [PactExpression]
   -> NativeDefName
   -> GasUnitTests
 defGasUnitTests pactExprs funName =
-  GasUnitTests $ NEL.map (\e -> defGasTest e funName) pactExprs
+  GasUnitTests $ map (\e -> defGasTest e funName) pactExprs
 
+defPactExpGasTest :: T.Text -> NativeDefName -> GasUnitTests
+defPactExpGasTest code = defPactExpGasTests [code]
+
+defPactExpGasTests :: [T.Text] -> NativeDefName -> GasUnitTests
+defPactExpGasTests codes = defGasUnitTests (map defPactExpression codes)
 
 createGasUnitTests
   :: (GasSetup SQLiteDb -> GasSetup SQLiteDb)
   -> (GasSetup () -> GasSetup ())
-  -> NEL.NonEmpty PactExpression
+  -> [PactExpression]
   -> NativeDefName
   -> GasUnitTests
 createGasUnitTests sqliteUpdate mockUpdate pactExprs funName =
-  GasUnitTests $ NEL.map createTest pactExprs
+  GasUnitTests $ map createTest pactExprs
   where
     createTest expr =
       GasTest funName expr

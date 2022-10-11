@@ -101,6 +101,8 @@ defaultGasTable =
   ,("create-pact-guard", 1)
   ,("create-principal", 1)
   ,("create-user-guard", 1)
+  ,("create-capability-guard", 1)
+  ,("create-capability-pact-guard", 1)
   ,("days", 4)
   ,("decrypt-cc20p1305", 33)
   ,("diff-time", 8)

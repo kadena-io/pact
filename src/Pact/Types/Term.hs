@@ -42,6 +42,7 @@ module Pact.Types.Term
    PactId(..),
    UserGuard(..),
    ModuleGuard(..),
+   CapabilityGuard(..),
    Guard(..),_GPact,_GKeySet,_GKeySetRef,_GModule,_GUser,
    DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
@@ -656,6 +657,39 @@ instance NFData Use
 instance SizeOf Use
 
 -- -------------------------------------------------------------------------- --
+-- CapabilityGuard
+
+-- | Capture a capability to be required as a guard,
+-- with option to be further constrained to a defpact execution context.
+data CapabilityGuard n = CapabilityGuard
+    { _cgName :: !QualifiedName
+    , _cgArgs :: ![n]
+    , _cgPactId :: !(Maybe PactId)
+    }
+  deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
+
+instance NFData a => NFData (CapabilityGuard a)
+
+instance (Arbitrary a) => Arbitrary (CapabilityGuard a) where
+  arbitrary = CapabilityGuard <$> arbitrary <*> arbitrary <*> arbitrary
+
+instance Pretty a => Pretty (CapabilityGuard a) where
+  pretty CapabilityGuard{..} = "CapabilityGuard" <+> commaBraces
+    [ "name: " <> pretty _cgName
+    , "args: " <> pretty _cgArgs
+    , "pactId: " <> pretty _cgPactId
+    ]
+
+instance (SizeOf a) => SizeOf (CapabilityGuard a) where
+  sizeOf CapabilityGuard{..} =
+    (constructorCost 2) + (sizeOf _cgName) + (sizeOf _cgArgs) + (sizeOf _cgPactId)
+
+instance ToJSON a => ToJSON (CapabilityGuard a) where
+  toJSON = lensyToJSON 1
+instance FromJSON a => FromJSON (CapabilityGuard a) where
+  parseJSON = lensyParseJSON 1
+
+-- -------------------------------------------------------------------------- --
 -- Guard
 
 data Guard a
@@ -664,6 +698,7 @@ data Guard a
   | GKeySetRef !KeySetName
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
+  | GCapability !(CapabilityGuard a)
   deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 -- potentially long output due to constrained recursion of PactValue
@@ -673,16 +708,19 @@ instance (Arbitrary a) => Arbitrary (Guard a) where
     , GKeySet <$> arbitrary
     , GKeySetRef <$> arbitrary
     , GModule <$> arbitrary
-    , GUser <$> arbitrary ]
+    , GUser <$> arbitrary
+    , GCapability <$> arbitrary
+    ]
 
 instance NFData a => NFData (Guard a)
 
 instance Pretty a => Pretty (Guard a) where
-  pretty (GPact g)      = pretty g
-  pretty (GKeySet g)    = pretty g
+  pretty (GPact g) = pretty g
+  pretty (GKeySet g) = pretty g
   pretty (GKeySetRef g) = pretty g
-  pretty (GUser g)      = pretty g
-  pretty (GModule g)    = pretty g
+  pretty (GUser g) = pretty g
+  pretty (GModule g) = pretty g
+  pretty (GCapability g) = pretty g
 
 instance (SizeOf p) => SizeOf (Guard p) where
   sizeOf (GPact pg) = (constructorCost 1) + (sizeOf pg)
@@ -690,6 +728,7 @@ instance (SizeOf p) => SizeOf (Guard p) where
   sizeOf (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ksr)
   sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
   sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
+  sizeOf (GCapability g) = (constructorCost 1) + (sizeOf g)
 
 guardCodec :: (ToJSON a, FromJSON a) => Codec (Guard a)
 guardCodec = Codec enc dec
@@ -699,13 +738,15 @@ guardCodec = Codec enc dec
     enc (GPact g) = toJSON g
     enc (GModule g) = toJSON g
     enc (GUser g) = toJSON g
+    enc (GCapability g) = toJSON g
     {-# INLINE enc #-}
     dec v =
       (GKeySet <$> parseJSON v) <|>
       (withObject "KeySetRef" $ \o -> GKeySetRef <$> o .: keyNamef) v <|>
       (GPact <$> parseJSON v) <|>
       (GModule <$> parseJSON v) <|>
-      (GUser <$> parseJSON v)
+      (GUser <$> parseJSON v) <|>
+      (GCapability <$> parseJSON v)
     {-# INLINE dec #-}
     keyNamef = "keysetref"
 
@@ -1401,6 +1442,7 @@ guardTypeOf g = case g of
   GPact {} -> GTyPact
   GUser {} -> GTyUser
   GModule {} -> GTyModule
+  GCapability {} -> GTyCapability
 
 -- | Return a Pact type, or a String description of non-value Terms.
 -- Does not handle partial schema types.
@@ -1527,6 +1569,8 @@ instance Eq1 Guard where
   liftEq = $(makeLiftEq ''Guard)
 instance Eq1 UserGuard where
   liftEq = $(makeLiftEq ''UserGuard)
+instance Eq1 CapabilityGuard where
+  liftEq = $(makeLiftEq ''CapabilityGuard)
 instance Eq1 BindPair where
   liftEq = $(makeLiftEq ''BindPair)
 instance Eq1 App where
@@ -1564,6 +1608,8 @@ instance Eq1 Term where
 
 instance Show1 Guard where
   liftShowsPrec = $(makeLiftShowsPrec ''Guard)
+instance Show1 CapabilityGuard where
+  liftShowsPrec = $(makeLiftShowsPrec ''CapabilityGuard)
 instance Show1 UserGuard where
   liftShowsPrec = $(makeLiftShowsPrec ''UserGuard)
 instance Show1 BindPair where
