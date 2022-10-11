@@ -9,8 +9,6 @@ module RemoteVerifySpec (spec) where
 
 import Test.Hspec
 
-import Control.Concurrent
-import Control.Exception (finally)
 import Control.Lens
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Except
@@ -23,7 +21,7 @@ import NeatInterpolation (text)
 
 import Servant.Client
 
-import Pact.Analyze.Remote.Server (runServantServerLocal)
+import Pact.Analyze.Remote.Server (withTestServantServer)
 import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Repl
 import Pact.Repl.Types
@@ -56,18 +54,11 @@ loadCode code = do
 stateModuleData :: ModuleName -> ReplState -> IO (Either String (ModuleData Ref))
 stateModuleData nm replState = replLookupModule replState nm
 
-serve :: Int -> IO ThreadId
-serve port = forkIO $ runServantServerLocal port
-
-serveAndRequest :: Int -> Remote.Request -> IO (Either ClientError Remote.Response)
-serveAndRequest port body = do
-  let url = "http://localhost:" ++ show port
-  verifyBaseUrl <- parseBaseUrl url
-  let clientEnv = mkClientEnv testMgr verifyBaseUrl
-  tid <- serve port
-  finally
-    (runClientM (verifyClient body) clientEnv)
-    (killThread tid)
+serveAndRequest :: Remote.Request -> IO (Either ClientError Remote.Response)
+serveAndRequest body =
+  withTestServantServer $ \port -> do
+    verifyBaseUrl <- parseBaseUrl $ "http://localhost:" ++ show port
+    runClientM (verifyClient body) (mkClientEnv testMgr verifyBaseUrl)
 
 testSingleModule :: Spec
 testSingleModule = beforeAll load $ do
@@ -76,7 +67,7 @@ testSingleModule = beforeAll load $ do
 
   it "verifies over the network" $ \replState0 -> do
     (ModuleData mod1 _refs _) <- either error id <$> stateModuleData "mod1" replState0
-    resp <- serveAndRequest 3000 $ Remote.Request [derefDef <$> mod1] "mod1"
+    resp <- serveAndRequest $ Remote.Request [derefDef <$> mod1] "mod1"
     fmap (view Remote.responseLines) resp `shouldBe` Right []
  where
    load = either (error.show) id <$> loadCode
@@ -106,7 +97,7 @@ testUnsortedModules = beforeAll load $ do
     resp <- runExceptT $ do
       ModuleData mod1 _refs _ <- ExceptT $ stateModuleData "mod1" replState0
       ModuleData mod2 _refs _ <- ExceptT $ stateModuleData "mod2" replState0
-      ExceptT . fmap (first show) . serveAndRequest 3001 $
+      ExceptT . fmap (first show) . serveAndRequest $
         Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
     fmap (view Remote.responseLines) resp `shouldBe` Right []
  where
