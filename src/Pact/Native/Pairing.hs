@@ -174,6 +174,7 @@ b12 = fromList [fromList [3, 0], 0]
 
 g1 :: CurvePoint Fq
 g1 = Point 1 2
+{-# INLINABLE g1 #-}
 
 g2 :: CurvePoint Fq2
 g2 = Point
