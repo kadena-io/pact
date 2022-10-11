@@ -366,6 +366,7 @@ test-suite hspec
     , containers
     , data-default
     , hspec
+    , hspec-core
     , pact
     , unordered-containers
 
@@ -415,6 +416,7 @@ test-suite hspec
         TypecheckSpec
         SizeOfSpec
         PactCLISpec
+        Utils
 
       build-depends:
         , Decimal
@@ -429,4 +431,5 @@ test-suite hspec
         , neat-interpolation
         , sbv
         , servant-client
+        , temporary >= 1.3
         , yaml

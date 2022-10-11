@@ -230,7 +230,7 @@ testSigNonMalleability = do
     shouldBeProcFail (verifyCommand cmdWithWrongNumSig)
 
 testSigsRoundtrip :: Spec
-testSigsRoundtrip = runIO $ do
+testSigsRoundtrip = it "SigsRoundtrip succeeds" $ do
   uapiReq "tests/sign-scripts/unsigned-exec.yaml"
   uapiReq "tests/sign-scripts/unsigned-cont.yaml"
 

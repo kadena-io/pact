@@ -17,12 +17,12 @@ spec = do
 
 
 regressSQLite :: Spec
-regressSQLite = do
+regressSQLite = it "SQLite successfully closes" $ do
   let f = "deleteme.sqllite"
-  db <- runIO $ do
+  db <- do
     doesFileExist f >>= \b -> when b (removeFile f)
     sl <- SQLite.initSQLite (SQLite.SQLiteConfig "deleteme.sqllite" []) neverLog
     mv <- runRegression (initDbEnv neverLog SQLite.persister sl)
     _db <$> readMVar mv
-  it "SQLite successfully closes" $ SQLite.closeSQLite db `shouldReturn` (Right ())
-  runIO $ removeFile f
+  SQLite.closeSQLite db `shouldReturn` Right ()
+  removeFile f

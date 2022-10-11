@@ -12,7 +12,7 @@ module Pact.Server.Test
   , testDir
   , serverBaseUrl
   ) where
-import Pact.Server.Server (serve)
+import Pact.Server.Server (serveLocal)
 import Pact.Server.API
 import Pact.Types.Crypto as Crypto
 
@@ -62,7 +62,7 @@ startServer configFile = startServer' configFile noSPVSupport
 
 startServer' :: FilePath -> SPVSupport -> IO (Async ())
 startServer' configFile spv = do
-  asyncServer <- async $ serve configFile spv
+  asyncServer <- async $ serveLocal configFile spv
   waitUntilStarted 0
   return asyncServer
 

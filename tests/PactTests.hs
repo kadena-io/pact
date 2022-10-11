@@ -32,7 +32,7 @@ import qualified PactCLISpec
 #endif
 
 main :: IO ()
-main = hspec $ do
+main = hspec $ parallel $ do
 
   describe "Blake2Spec" Blake2Spec.spec
   describe "KeysetSpec" KeysetSpec.spec

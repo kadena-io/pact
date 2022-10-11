@@ -4,4 +4,4 @@ import qualified Pact.Docgen as Docgen
 import           Test.Hspec
 
 spec :: Spec
-spec = runIO Docgen.main
+spec = it "runs Docgen.main"  Docgen.main
