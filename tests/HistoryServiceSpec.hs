@@ -4,15 +4,15 @@ module HistoryServiceSpec (spec) where
 
 
 import Control.Concurrent.MVar
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
 import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
-import System.Directory
 import Test.Hspec
+import Test.Hspec.Core.Spec
 import Data.Default
+import System.IO.Temp (withSystemTempDirectory)
 
 import Pact.Server.History.Persistence as DB
 import Pact.Server.History.Service
@@ -25,26 +25,12 @@ import Pact.Types.Runtime (PactError(..),PactErrorType(..))
 import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue
 
-histFile :: FilePath
-histFile = fp ++ "/commands.sqlite"
-
 spec :: Spec
-spec = describe "roundtrip"
-  $ beforeAll_ deleteTempFile
-  $ afterAll_ deleteTempFile testHistoryDB
-
-deleteTempFile :: IO ()
-deleteTempFile = do
-  isFile <- doesFileExist histFile
-  when isFile $ removeFile histFile
-
+spec = describe "roundtrip" testHistoryDB
 
 dbg :: String -> IO ()
 -- dbg = putStrLn   -- <- USE THIS TO DEBUG HISTORY STUFF
 dbg = const $ return ()
-
-fp :: FilePath
-fp = "tests/test-log"
 
 cmd :: Command ByteString
 cmd = Command "" [] initialHash
@@ -61,26 +47,27 @@ cr = CommandResult rq Nothing (PactResult res) (Gas 0) Nothing Nothing Nothing [
 results :: HashMap.HashMap RequestKey (CommandResult Hash)
 results = HashMap.fromList [(rq, cr)]
 
-initHistory :: IO (HistoryEnv,HistoryState)
-initHistory = do
+initHistory :: FilePath -> IO (HistoryEnv,HistoryState)
+initHistory dir = do
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
-  let env = initHistoryEnv histC inC (Just fp) dbg replayFromDisk'
-  pers <- setupPersistence dbg (Just fp) replayFromDisk'
+  let env = initHistoryEnv histC inC (Just dir) dbg replayFromDisk'
+  pers <- setupPersistence dbg (Just dir) replayFromDisk'
   let hstate = HistoryState { _registeredListeners = HashMap.empty, _persistence = pers }
   return (env,hstate)
 
-testHistoryDB :: Spec
-testHistoryDB = do
+withDir :: SpecWith FilePath -> Spec
+withDir = aroundAll $ withSystemTempDirectory  "historyservicespec"
 
-  it "should have results" $ do
-    (env,hstate) <- initHistory
+testHistoryDB :: Spec
+testHistoryDB = withDir $ sequential $ do
+  it "should have results" $ \dir -> do
+    (env,hstate) <- initHistory dir
     (pirs,_,_) <- runRWST startup env hstate
     DB.closeDB $ dbConn (_persistence hstate)
     pirs `shouldBe` PossiblyIncompleteResults results
 
-  beforeAll initHistory $ do
-
+  beforeAllWith initHistory $ sequential $ do
     it "should replay command" $ \(env, _) -> do
       replay <- takeMVar $ case _replayFromDisk env of ReplayFromDisk d -> d
       replay `shouldBe` [cmd]

@@ -20,8 +20,10 @@ module Pact.Server.ApiServer
   ( runApiServer
   , runApiServerLocal
   , runApiServerSettings
+  , withTestApiServer
   , ApiEnv(..), aiLog, aiHistoryChan
   , sendHandler, pollHandler, listenHandler, localHandler, versionHandler
+  , Port
   ) where
 
 import Prelude hiding (log)
@@ -43,7 +45,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 
-import Network.Wai.Handler.Warp (runSettings, Settings, defaultSettings, setPort, getPort, setHost)
+import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
 import Servant
 
@@ -69,7 +71,7 @@ makeLenses ''ApiEnv
 
 type Api a = ReaderT ApiEnv (ExceptT ServerError IO) a
 
-runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int -> FilePath -> IO ()
+runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Port -> FilePath -> IO ()
 runApiServer h i f port = runApiServerSettings (setPort port defaultSettings) h i f
 
 -- | Runs an API server that binds only to localhost.
@@ -77,12 +79,37 @@ runApiServer h i f port = runApiServerSettings (setPort port defaultSettings) h 
 -- This is more secure when only local access is needed. It also prevents the
 -- firewall configuration window from popping up on MacOSX.
 --
-runApiServerLocal :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int -> FilePath -> IO ()
+runApiServerLocal :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Port -> FilePath -> IO ()
 runApiServerLocal h i f port = runApiServerSettings settings h i f
   where
     settings = defaultSettings
         & setPort port
         & setHost "127.0.0.1"
+
+-- | Runs an API server for testing.
+--
+-- A free port is randomly chosen by the operating system and given to the inner
+-- computation.
+--
+-- The server only binds to localhost. This is more secure when only local
+-- access is needed. It also prevents the firewall configuration window from
+-- popping up on MacOSX.
+--
+-- Any exception in the server application is rethrown on the calling thread.
+--
+withTestApiServer
+  :: HistoryChannel
+  -> InboundPactChan
+  -> (String -> IO ())
+  -> (Port -> IO a)
+  -> IO a
+withTestApiServer histChan inbChan logFn =
+  testWithApplicationSettings settings $ do
+    logFn $ "[api] starting on port " ++ show (getPort settings)
+    return $ serve pactServerAPI (servantServer conf')
+ where
+  conf' = ApiEnv logFn histChan inbChan
+  settings = setHost "127.0.0.1" defaultSettings
 
 runApiServerSettings :: Settings -> HistoryChannel -> InboundPactChan -> (String -> IO ()) -> FilePath -> IO ()
 runApiServerSettings settings histChan inbChan logFn _logDir = do

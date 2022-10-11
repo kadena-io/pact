@@ -10,6 +10,7 @@ module Pact.Analyze.Remote.Server
   ( verifyHandler
   , runServantServer
   , runServantServerLocal
+  , withTestServantServer
   ) where
 
 import           Control.Lens               ((^.), (.~), (&))
@@ -24,7 +25,7 @@ import qualified Data.HashMap.Strict        as HM
 import           Data.String                (IsString, fromString)
 import qualified Data.Text                  as T
 import           Data.Void                  (Void)
-import           Network.Wai.Handler.Warp   (runSettings, Settings, defaultSettings, setPort, setHost)
+import           Network.Wai.Handler.Warp   (runSettings, Settings, defaultSettings, setPort, setHost, Port, testWithApplicationSettings)
 import           Servant
 import qualified Text.Megaparsec            as MP
 import qualified Text.Megaparsec.Char       as MP
@@ -51,6 +52,11 @@ runServantServer port = runServantServerSettings $ setPort port defaultSettings
 
 runServantServerSettings :: Settings -> IO ()
 runServantServerSettings settings = runSettings settings $ serve verifyAPI verifyHandler
+
+withTestServantServer :: (Port -> IO a) -> IO a
+withTestServantServer = testWithApplicationSettings
+  (setHost "127.0.01" defaultSettings)
+  (return $ serve verifyAPI verifyHandler)
 
 verifyHandler :: Request -> Handler Response
 verifyHandler req = do
