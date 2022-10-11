@@ -12,41 +12,41 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (findOf, ix, matching, (&),
-                                               (.~), (^..), _Left)
-import           Control.Monad                (unless)
-import           Control.Monad.Except         (runExceptT)
-import           Control.Monad.State.Strict   (runStateT)
-import           Data.Either                  (isLeft, isRight)
-import           Data.Foldable                (asum, find, for_)
-import qualified Data.HashMap.Strict          as HM
-import           Data.Map                     (Map)
-import qualified Data.Map                     as Map
-import           Data.Maybe
-import           Data.SBV                     (isConcretely)
-import           Data.SBV.Internals           (SBV (SBV))
-import           Data.Text                    (Text)
-import qualified Data.Text                    as T
-import           NeatInterpolation            (text)
-import           Prelude                      hiding (read)
+import Control.Lens (findOf, ix, matching, (&),
+                     (.~), (^..), _Left)
+import Control.Monad (unless)
+import Control.Monad.Except (runExceptT)
+import Control.Monad.State.Strict (runStateT)
+import Data.Either (isLeft, isRight)
+import Data.Foldable (asum, find, for_)
+import qualified Data.HashMap.Strict as HM
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Maybe
+import Data.SBV (isConcretely)
+import Data.SBV.Internals (SBV (SBV))
+import Data.Text (Text)
+import qualified Data.Text as T
+import NeatInterpolation (text)
+import Prelude hiding (read)
 import Test.Hspec hiding (xdescribe)
 
-import           Pact.Parse                   (parseExprs)
-import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
-import           Pact.Repl.Types              (ReplMode (StringEval))
-import           Pact.Types.Runtime           (Exp, Info, ModuleData(..), Ref, ModuleName)
-import           Pact.Runtime.Utils
-import           Pact.Types.Pretty
-import           Pact.Types.Util              (tShow)
+import Pact.Parse (parseExprs)
+import Pact.Repl (evalRepl', initReplState, replLookupModule)
+import Pact.Repl.Types (ReplMode (StringEval))
+import Pact.Types.Runtime (Exp, Info, ModuleData(..), Ref, ModuleName)
+import Pact.Runtime.Utils
+import Pact.Types.Pretty
+import Pact.Types.Util (tShow)
 
-import           Pact.Analyze.Check
-import           Pact.Analyze.Eval.Numerical  (banker'sMethodS)
-import qualified Pact.Analyze.Model           as Model
-import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
-                                               expToProp, inferProp)
-import           Pact.Analyze.PrenexNormalize (prenexConvert)
-import           Pact.Analyze.Types
-import           Pact.Analyze.Util
+import Pact.Analyze.Check
+import Pact.Analyze.Eval.Numerical (banker'sMethodS)
+import qualified Pact.Analyze.Model as Model
+import Pact.Analyze.Parse (PreProp (..), TableEnv,
+                           expToProp, inferProp)
+import Pact.Analyze.PrenexNormalize (prenexConvert)
+import Pact.Analyze.Types
+import Pact.Analyze.Util
 
 wrap :: Text -> Text -> Text
 wrap code model =
@@ -1045,8 +1045,8 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Abort'
 
-  -- sadly doesn't look like pact guard func can really do much in FV.
-  xdescribeWith "TODO fix pact guard FV" "create-capability-pact-guard: failure" $ do
+  -- sadly doesn't look like pact guard func can really do much in FV. #1061
+  xdescribeWith "TODO fix pact guard FV #1061" "create-capability-pact-guard: failure" $ do
     expectFalsified [text|
         (defcap CAP (i:integer)
           true)
@@ -1059,8 +1059,8 @@ spec = describe "analyze" $ do
           (step true))
         |]
 
-  -- same issue here. TODO make pact guards work in FV.
-  xdescribeWith "TODO fix pact guard FV" "create-capability-pact-guard: failure, not in pact" $ do
+  -- same issue here. TODO make pact guards work in FV. #1061
+  xdescribeWith "TODO fix pact guard FV #1061" "create-capability-pact-guard: failure, not in pact" $ do
     let code =
           [text|
             (defcap CAP (i:integer)

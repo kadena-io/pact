@@ -162,7 +162,7 @@ enforceGuard i g = case g of
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
   GCapability CapabilityGuard{..} -> do
-    maybe (return ()) (enforcePactId True) _cgPactId
+    traverse_ (enforcePactId True) _cgPactId
     args <- enforcePactValue' _cgArgs
     acquired <- capabilityAcquired $ SigCapability _cgName args
     unless acquired $ failTx' i "Capability not acquired"
