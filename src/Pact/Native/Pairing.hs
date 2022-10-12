@@ -16,7 +16,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
+{-# LANGUAGE Strict #-}
 
 module Pact.Native.Pairing where
 
@@ -24,7 +24,6 @@ import Prelude
 import qualified Prelude as P
 
 import Data.Bits((.&.))
-import Data.Foldable(foldl')
 import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
 import Data.Semiring (Semiring, Ring)
@@ -48,9 +47,9 @@ newtype Extension p k
   = Extension { _extension :: VPoly k }
   deriving (Show, Eq, Ord, NFData)
 
-class (Field k, Fractional k, Ord k, Show k) => ExtensionField p k | p -> k where
+class (Field k, Fractional k, Ord k, Show k) => ExtensionField p k | p -> k, k -> p where
   fieldDegree :: Extension p k -> Word
-  fieldPoly :: Extension p k -> VPoly k
+  fieldPoly :: VPoly k
 
 -----------------------------------------------------------------
 -- Num instances
@@ -58,7 +57,7 @@ class (Field k, Fractional k, Ord k, Show k) => ExtensionField p k | p -> k wher
 instance ExtensionField p k => Num (Extension p k) where
   (Extension x) + (Extension y) = Extension (x + y)
   {-# INLINE (+) #-}
-  (Extension x) * (Extension y) = Extension (E.rem (x * y) (fieldPoly (undefined :: Extension p k)))
+  (Extension x) * (Extension y) = Extension (E.rem (x * y) fieldPoly)
   {-# INLINABLE (*) #-}
   (Extension x) - (Extension y) = Extension (x - y)
   {-# INLINE (-) #-}
@@ -70,9 +69,11 @@ instance ExtensionField p k => Num (Extension p k) where
   signum       = error "signum not implemented for Field Extensions"
 
 instance ExtensionField p k => Fractional (Extension p k) where
-  recip (Extension vp) = case E.gcdExt vp (fieldPoly (undefined :: Extension p k)) of
-    (1, vp') -> Extension vp'
+  recip (Extension vp) = case leading g of
+    Just (0, vp') -> Extension $ scale 0 (recip vp') y
     _ -> error "Division by zero: Extension"
+    where
+      (g, y) = E.gcdExt vp fieldPoly
   {-# INLINABLE recip #-}
   fromRational (x :% y) = fromInteger x / fromInteger y
   {-# INLINABLE fromRational #-}
@@ -138,7 +139,7 @@ type Fq2 = Extension F1 Fq
 
 instance ExtensionField F1 Fq where
   fieldDegree _ = 2
-  fieldPoly _ = fromList [1, 0, 1]
+  fieldPoly = fromList [1, 0, 1]
 
 xi :: Fq2
 xi = fromList [9, 1]
@@ -148,14 +149,14 @@ type Fq6 = Extension F2 Fq2
 
 instance ExtensionField F2 Fq2 where
   fieldDegree _ = 6
-  fieldPoly _ = fromList [-xi, 0, 0, 1]
+  fieldPoly = fromList [-xi, 0, 0, 1]
   {-# INLINABLE fieldPoly #-}
 
 type Fq12 = Extension F3 Fq6
 
 instance ExtensionField F3 Fq6 where
   fieldDegree _ = 12
-  fieldPoly _ = fromList [fromList [0, -1], 0, 1]
+  fieldPoly = fromList [fromList [0, -1], 0, 1]
   {-# INLINABLE fieldPoly #-}
 
 -- Curve is y**2 = x**3 + 3
@@ -295,14 +296,16 @@ millerLoop _ CurveInf = 1
 millerLoop CurveInf _ = 1
 millerLoop q@(Point x1 y1) p = let
   f = 1
-  loop (f', r') i = let
+  loop x !i | i < 0 = x
+  loop (f', r') !i = let
     f'' = f' * f' * lineFunc r' r' p
     r'' = double r'
-    in if ate_loop_count .&. (2 ^ i) /= 0 then (f'' * lineFunc r'' q p, add r'' q)
-       else (f'', r'')
-  (f1, r1) = foldl' loop (f, q) (reverse [0 .. ate_loop_count])
-  q1x = (x1 ^ fieldModulus)
-  q1y = (y1 ^ fieldModulus)
+    in if ate_loop_count .&. (2 ^ i) /= 0
+       then loop (f'' * lineFunc r'' q p, add r'' q) (i - 1)
+       else loop (f'', r'') (i - 1)
+  (f1, r1) = loop (f, q) log_ate_loop_count
+  q1x = x1 ^ fieldModulus
+  q1y = y1 ^ fieldModulus
   q1 = Point q1x q1y
   nQ2 = Point (q1x ^ fieldModulus) (negate q1y ^ fieldModulus)
   f2 = f1 * lineFunc r1 q1 p
@@ -314,8 +317,8 @@ castToFq12 :: CurvePoint Fq -> CurvePoint Fq12
 castToFq12 CurveInf = CurveInf
 castToFq12 (Point x y) =
   Point
-    (fromList [fromList [fromList [x]], 0])
-    (fromList [fromList [fromList [y]], 0])
+    (fromList [fromList [fromList [x]]])
+    (fromList [fromList [fromList [y]]])
 
 pairing :: CurvePoint Fq2 -> CurvePoint Fq -> Fq12
 pairing q p =
