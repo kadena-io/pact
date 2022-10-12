@@ -5,20 +5,20 @@
 
 module ZkSpec (spec) where
 
-import Control.Monad (void)
+-- import Control.Monad (void)
 import Data.Curve.Weierstrass as C
 import Data.Field.Galois as F hiding (pow)
 import Data.Group (pow)
 import Data.Pairing.BN254 hiding (pairing, Fq2, Fq12, Fq)
 import Data.Pairing.BN254 qualified as Pairing
-import qualified Data.Pairing.Ate as Ate
-import Data.Vector qualified as V
-import Hedgehog
-import Hedgehog.Gen qualified as Gen
-import Hedgehog.Range qualified as Range
+-- import qualified Data.Pairing.Ate as Ate
+-- import Data.Vector qualified as V
+-- import Hedgehog
+-- import Hedgehog.Gen qualified as Gen
+-- import Hedgehog.Range qualified as Range
 import Pact.Native.Pairing hiding (g1, g2)
 import Test.Hspec
-import Test.Hspec.Hedgehog
+-- import Test.Hspec.Hedgehog
 
 g1 :: G1 BN254
 g1 =
@@ -109,30 +109,20 @@ gt' =
 spec :: Spec
 spec =
   describe "pairing tests" $ do
-    it "passes basic tests" $
-      hedgehog $ do
-        -- x1 <- forAll $ Gen.integral_ (Range.linear 0 1000)
-        -- x2 <- forAll $ Gen.integral_ (Range.linear 0 1000)
-        -- y1 <- forAll $ Gen.integral_ (Range.linear 0 1000)
-        -- y2 <- forAll $ Gen.integral_ (Range.linear 0 1000)
-        -- y3 <- forAll $ Gen.integral_ (Range.linear 0 1000)
-        -- y4 <- forAll $ Gen.integral_ (Range.linear 0 1000)
+    it "pairing smoke test" $ do
+      let a :: Integer = 2
+      let b :: Integer = 3
 
-        let a :: Integer = 2
-        let b :: Integer = 3
+      let p :: G1 BN254 = g1
+      let q :: G2 BN254 = g2
 
-        let p :: G1 BN254 = g1
-        let q :: G2 BN254 = g2
+      Pairing.pairing p q `shouldBe` gt
 
-        Pairing.pairing p q === gt
+      Pairing.pairing (mul' p a) (mul' q b)
+        `shouldBe` pow (Pairing.pairing p q) (a * b)
 
-        Pairing.pairing (mul' p a) (mul' q b)
-          === pow (Pairing.pairing p q) (a * b)
+      let p' :: CurvePoint Fq = g1'
+      let q' :: CurvePoint Fq2 = g2'
 
-        let p' :: CurvePoint Fq = g1'
-        let q' :: CurvePoint Fq2 = g2'
-
-        -- pairing (multiply p a) (multiply q b)
-        --   === pow (pairing p q) (a * b)
-        -- p1 === p2
-        pairing p' q' === gt'
+      pairing p' q' `shouldBe` gt'
+      return ()
