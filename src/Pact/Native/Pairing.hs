@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -23,8 +24,7 @@ module Pact.Native.Pairing where
 import Prelude
 import qualified Prelude as P
 
-import Data.Bits((.&.))
-import Data.Foldable(foldl')
+import Data.Bits(shiftR)
 import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
 import Data.Semiring (Semiring, Ring)
@@ -33,25 +33,17 @@ import qualified Data.Semiring as SR
 import qualified Data.Euclidean as E
 import Data.Mod
 import Data.Poly
+import Data.Vector(Vector)
+import Data.Int(Int8)
 import GHC.Real(Ratio(..))
 import GHC.Exts(IsList(..))
-import GHC.TypeLits(Nat)
 
 import Control.DeepSeq (NFData)
 import Numeric.Natural(Natural)
 
-type Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583
-
-newtype Fq = P (Mod Q)
-  deriving (Eq, Ord, Num, Fractional, Euclidean, Field, GcdDomain, Ring, Semiring, Bounded, Enum, NFData)
-
-fieldModulus :: Integer
-fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
-
-newtype Extension p k
-  = Extension { _extension :: VPoly k }
-  deriving (Show, Eq, Ord, NFData)
-
+-----------------------------------------------------
+-- Galois fields and field extensions
+------------------------------------------------------
 class (Field k, Fractional k, Ord k, Show k) => GaloisField k where
   -- | The characteristic of the field
   characteristic :: k -> Natural
@@ -61,20 +53,65 @@ class (Field k, Fractional k, Ord k, Show k) => GaloisField k where
 
   frobenius :: k -> k
 
+  -- | order of a field p^k
   order :: k -> Natural
-  order = (^) <$> char <*> deg
+  order k = characteristic k ^ degree k
   {-# INLINABLE order #-}
 
+
+class GaloisField k => ExtensionField p k | p -> k, k -> p where
+  -- | The degree of the
+  -- fieldDegree :: Extension p k -> Word
+  fieldPoly :: VPoly k
+
+
+type Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583
+
+newtype Fq = P (Mod Q)
+  deriving (Eq, Show, Ord, Num, Fractional, Euclidean, Field, GcdDomain, Ring, Semiring, Bounded, Enum, NFData)
+
+fieldModulus :: Integer
+fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
+
+newtype Extension p k
+  = Extension { _extension :: VPoly k }
+  deriving (Show, Eq, Ord, NFData)
+
+
 instance GaloisField Fq where
-  char = 21888242871839275222246405745257275088696311157297823662689037894645226208583
+  characteristic _ = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 
-  deg _ = 1
+  degree _ = 1
 
-  frob = id
+  frobenius = id
 
-class GaloisField k => ExtensionField p k | p -> k where
-  fieldDegree :: Extension p k -> Word
-  fieldPoly :: Extension p k -> VPoly k
+-- | Frobenius endomorphism precomputation.
+frobenius' :: GaloisField k => Vector k -> Vector k -> Maybe (Vector k)
+frobenius' [ ] _ = Just []
+frobenius' [a] _ = Just [frobenius a]
+frobenius' [a, b] [x, 0, 1]
+  | degree x == 2  = Just [a, negate b]
+  | characteristic x == 2 = Just [frobenius a - frobenius b * x]
+  | otherwise   = Just [frobenius a, frobenius b * nxq]
+  where
+    nxq = negate x ^ shiftR (characteristic x) 1
+frobenius' [a, b] [x, 0, 0, 1]
+  | characteristic x == 3 = Just [frobenius a - frobenius b * x]
+  | r == 1      = Just [frobenius a, frobenius b * nxq]
+  | otherwise   = Just [frobenius a, 0, frobenius b * nxq]
+  where
+    (q, r) = quotRem (characteristic x) 3
+    nxq    = negate x ^ q
+frobenius' [a, b, c] [x, 0, 0, 1]
+  | characteristic x == 3 = Just [frobenius a - (frobenius b - frobenius c * x) * x]
+  | r == 1      = Just [frobenius a, frobenius b * nxq, frobenius c * nxq * nxq]
+  | otherwise   = Just [frobenius a, frobenius c * nx * nxq * nxq, frobenius b * nxq]
+  where
+    (q, r) = quotRem (characteristic x) 3
+    nx     = negate x
+    nxq    = nx ^ q
+frobenius' _ _   = Nothing
+{-# INLINABLE frobenius' #-}
 
 -----------------------------------------------------------------
 -- Num instances
@@ -82,7 +119,7 @@ class GaloisField k => ExtensionField p k | p -> k where
 instance ExtensionField p k => Num (Extension p k) where
   (Extension x) + (Extension y) = Extension (x + y)
   {-# INLINE (+) #-}
-  (Extension x) * (Extension y) = Extension (E.rem (x * y) (fieldPoly (undefined :: Extension p k)))
+  (Extension x) * (Extension y) = Extension (E.rem (x * y) fieldPoly)
   {-# INLINABLE (*) #-}
   (Extension x) - (Extension y) = Extension (x - y)
   {-# INLINE (-) #-}
@@ -94,12 +131,15 @@ instance ExtensionField p k => Num (Extension p k) where
   signum       = error "signum not implemented for Field Extensions"
 
 instance ExtensionField p k => Fractional (Extension p k) where
-  recip (Extension vp) = case E.gcdExt vp (fieldPoly (undefined :: Extension p k)) of
-    (1, vp') -> Extension vp'
+  recip (Extension vp) = case leading g of
+    Just (0, vp') -> Extension $ scale 0 (recip vp') y
     _ -> error "Division by zero: Extension"
+    where
+      (g, y) = E.gcdExt vp fieldPoly
   {-# INLINABLE recip #-}
   fromRational (x :% y) = fromInteger x / fromInteger y
   {-# INLINABLE fromRational #-}
+
 
 -----------------------------------------------------------------
 -- Group instances
@@ -127,6 +167,15 @@ instance ExtensionField p k => Euclidean (Extension p k) where
 
 instance ExtensionField p k => Field (Extension p k)
 
+instance ExtensionField p k => GaloisField (Extension p k) where
+  characteristic _ = characteristic (undefined :: k)
+  degree _ = degree (undefined :: k) * deg'
+    where
+    deg' = pred (fromIntegral (E.degree (fieldPoly :: VPoly k)))
+  frobenius y@(Extension x) = case frobenius' (unPoly x) (unPoly fieldPoly) of
+    Just f -> Extension (toPoly f)
+    Nothing -> pow y (characteristic y)
+
 instance ExtensionField p k => GcdDomain (Extension p k)
 
 instance ExtensionField p k => Ring (Extension p k) where
@@ -145,12 +194,6 @@ instance ExtensionField p k => Semiring (Extension p k) where
   zero        = Extension 0
   {-# INLINE zero #-}
 
-data F1
-
-data F2
-
-data F3
-
 instance ExtensionField p k => IsList (Extension p k) where
   type instance Item (Extension p k) = k
   fromList     = Extension . fromList
@@ -158,28 +201,38 @@ instance ExtensionField p k => IsList (Extension p k) where
   toList (Extension x) = toList $ unPoly x
   {-# INLINABLE toList #-}
 
+--------------------------------------------------------------------------------------
+-- Curve implementation
+--------------------------------------------------------------------------------------
+
+data F1
+
+data F2
+
+data F3
+
 type Fq2 = Extension F1 Fq
 
 instance ExtensionField F1 Fq where
-  fieldDegree _ = 2
-  fieldPoly _ = fromList [1, 0, 1]
+  -- fieldDegree _ = 2
+  fieldPoly = fromList [1, 0, 1]
 
-xi :: Fq2
-xi = fromList [9, 1]
-{-# INLINABLE xi #-}
+xiFq2 :: Fq2
+xiFq2 = fromList [9, 1]
+{-# INLINABLE xiFq2 #-}
 
 type Fq6 = Extension F2 Fq2
 
 instance ExtensionField F2 Fq2 where
-  fieldDegree _ = 6
-  fieldPoly _ = fromList [-xi, 0, 0, 1]
+  -- fieldDegree _ = 6
+  fieldPoly = fromList [-xiFq2, 0, 0, 1]
   {-# INLINABLE fieldPoly #-}
 
 type Fq12 = Extension F3 Fq6
 
 instance ExtensionField F3 Fq6 where
-  fieldDegree _ = 12
-  fieldPoly _ = fromList [fromList [0, -1], 0, 1]
+  -- fieldDegree _ = 12
+  fieldPoly = fromList [fromList [0, -1], 0, 1]
   {-# INLINABLE fieldPoly #-}
 
 -----------------------------------------------------------------------------------
@@ -214,15 +267,17 @@ data CurvePoint a
   deriving (Eq, Show)
 
 -- todo: sort of scuffed, num instance?
-double :: (Field a, Num a) => CurvePoint a -> CurvePoint a
+double :: (Field a, Num a, Eq a) => CurvePoint a -> CurvePoint a
 double CurveInf = CurveInf
-double (Point x y) = let
-  y1 = y + y
-  x1 = x * x
-  l = (x1 + x1 + x1) `E.quot` y1
-  newx = (l * l) - (x + x)
-  newy = SR.times (negate l) newx + (SR.times l x) - y
-  in Point newx newy
+double (Point x y)
+  | y == 0 = CurveInf
+  | otherwise = let
+    y1 = y + y
+    x1 = x * x
+    l = (x1 + x1 + x1) `E.quot` y1
+    newx = (l * l) - (x + x)
+    newy = l * (x - newx) - y
+    in Point newx newy
 
 add :: (Field a, Eq a, Num a) => CurvePoint a -> CurvePoint a -> CurvePoint a
 add CurveInf r = r
@@ -232,42 +287,42 @@ add p1@(Point x1 y1) (Point x2 y2)
   | x2 == x1 = CurveInf
   | otherwise = let
     l = (y2 - y1) `E.quot` (x2 - x1)
-    newx = (SR.times l l) - x1 - x2
-    newy = SR.times (SR.negate l) newx + SR.times l x1 - y1
+    newx = (l * l) - x1 - x2
+    newy =  l * (x1 - newx) - y1
     in Point newx newy
 
-multiply :: (Field a, Eq a, Num a) => CurvePoint a -> Integer -> CurvePoint a
-multiply pt n
-  | n == 0 = CurveInf
-  | n == 1 = pt
-  | even n = multiply (double pt) (n `div` 2)
-  | otherwise =
-    add (multiply (double pt) (n `div` 2)) pt
+-- multiply :: (Field a, Eq a, Num a) => CurvePoint a -> Integer -> CurvePoint a
+-- multiply pt n
+--   | n == 0 = CurveInf
+--   | n == 1 = pt
+--   | even n = multiply (double pt) (n `div` 2)
+--   | otherwise =
+--     add (multiply (double pt) (n `div` 2)) pt
 
-negatePt :: SR.Ring a => CurvePoint a -> CurvePoint a
+negatePt :: Num a => CurvePoint a -> CurvePoint a
 negatePt (Point x y) =
-  Point x (SR.negate y)
+  Point x (negate y)
 negatePt CurveInf = CurveInf
 
-w :: Fq12
-w = fromList [fromList [0, 1], 0]
+-- w :: Fq12
+-- w = fromList [fromList [0, 1], 0]
 
-twist :: CurvePoint Fq2 -> CurvePoint Fq12
-twist CurveInf = CurveInf
-twist (Point x y) = let
-  -- Elements of Fq
-  x' = toList x
-  y' = toList y
-  -- Single Fq element
-  x1 = (x' !! 0 :: Fq)
-  x2 = x' !! 1
-  y1 = (y' !! 0 :: Fq)
-  y2 = y' !! 1
-  nx = fromList [fromList [fromList [x1 - x2 * 9]], fromList [fromList [x2]]]
-    -- fromList ([xcoeffs !! 0] ++ replicate 5 0 ++ [xcoeffs !! 1] ++ replicate 5 0)
-  ny = fromList [fromList [fromList [y1 - y2 * 9]], fromList [fromList [y2]]]
-  -- ([fromList ([ycoeffs !! 0] ++ replicate 5 0) (fromList ([ycoeffs !! 1] ++ replicate 5 0))])
-  in Point (nx * (w * w)) (ny  * (w * w * w))
+-- twist :: CurvePoint Fq2 -> CurvePoint Fq12
+-- twist CurveInf = CurveInf
+-- twist (Point x y) = let
+--   -- Elements of Fq
+--   x' = toList x
+--   y' = toList y
+--   -- Single Fq element
+--   x1 = (x' !! 0 :: Fq)
+--   x2 = x' !! 1
+--   y1 = (y' !! 0 :: Fq)
+--   y2 = y' !! 1
+--   nx = fromList [fromList [fromList [x1 - x2 * 9]], fromList [fromList [x2]]]
+--     -- fromList ([xcoeffs !! 0] ++ replicate 5 0 ++ [xcoeffs !! 1] ++ replicate 5 0)
+--   ny = fromList [fromList [fromList [y1 - y2 * 9]], fromList [fromList [y2]]]
+--   -- ([fromList ([ycoeffs !! 0] ++ replicate 5 0) (fromList ([ycoeffs !! 1] ++ replicate 5 0))])
+--   in Point (nx * (w * w)) (ny  * (w * w * w))
 
 -- g12 :: CurvePoint Fq12
 -- g12 = twist g2
@@ -348,8 +403,85 @@ twist (Point x y) = let
 -- pairing q p =
 --   millerLoop (twist q) (castToFq12 p)
 
--- frobTwisted xi (CurvePoint x y) = A (F.frob x * pow xi tx) (F.frob y * pow xi ty)
---   where
---     tx = quot (F.char (witness :: Prime q) - 1) 3
---     ty = shiftR (F.char (witness :: Prime q)) 1
--- frobTwisted _ _        = O
+frobTwisted
+  :: Fq2
+  -> CurvePoint Fq2
+  -> CurvePoint Fq2
+frobTwisted xi (Point x y) = Point (frobenius x * pow xi tx) (frobenius y * pow xi ty)
+  where
+    tx = quot (characteristic (undefined :: Fq) - 1) 3
+    ty = shiftR (characteristic (undefined :: Fq)) 1
+frobTwisted _ _        = CurveInf
+
+lineFunction
+  :: CurvePoint Fq  -- ^ Point @P@.
+  -> CurvePoint Fq2 -- ^ Point @T@.
+  -> CurvePoint Fq2 -- ^ Point @Q@.
+  -> (CurvePoint Fq2, Fq12)   -- ^ Points @T + Q@ and @Line(T, Q, P)@.
+lineFunction (Point x y) (Point x1 y1) (Point x2 y2)
+  | x1 /= x2       = (Point x3 y3 , [embedFqToFq6 (-y), [scalarEmbed x l , y1 - l  * x1]])
+  | y1 + y2 == 0   = (CurveInf , [embedFqToFq6 x, embedFq2ToFq6 (-x1)])
+  | otherwise      = (Point x3' y3', [embedFqToFq6 (-y), [scalarEmbed x l', y1 - l' * x1]])
+  where
+    scalarEmbed e1 e2 = embedFqToFq2 e1 * e2
+    embedFqToFq2 q = Extension (monomial 0 q)
+    embedFqToFq6 q = embedFq2ToFq6 (Extension (monomial 0 q))
+    embedFq2ToFq6 q = Extension (monomial 0 q) :: Fq6
+    l   = (y2 - y1) / (x2 - x1)
+    x3  = l * l - x1 - x2
+    y3  = l * (x1 - x3) - y1
+    x12 = x1 * x1
+    l'  = (x12 + x12 + x12) / (y1 + y1)
+    x3' = l' * l' - x1 - x2
+    y3' = l' * (x1 - x3') - y1
+lineFunction _ _ _ = (CurveInf, mempty)
+{-# INLINABLE lineFunction #-}
+
+powUnitary :: ExtensionField p k
+  => Extension p k -- ^ Element @x@ in cyclotomic subgroup.
+  -> Integer       -- ^ Integer @n@.
+  -> Extension p k -- ^ Element @x ^ n@.
+powUnitary x n
+  | n < 0     = pow (conj x) (negate n)
+  | otherwise = pow x n
+{-# INLINE powUnitary #-}
+
+-- | Complex conjugation @a+bi -> a-bi@ of quadratic extension field.
+conj :: forall p k. ExtensionField p k => Extension p k -> Extension p k
+conj (Extension x) = case unPoly (fieldPoly @p @k) of
+  [_, 0, 1] -> case x of
+    [a, b] -> [a, negate b]
+    [a]    -> [a]
+    _      -> []
+  _         -> error "conj: extension degree is not two."
+{-# INLINABLE conj #-}
+
+-- | [Miller algorithm for Barreto-Naehrig curves]
+-- (https://eprint.iacr.org/2010/354.pdf).
+millerAlgorithm
+  :: CurvePoint Fq
+  -> CurvePoint Fq2
+  -> Fq12
+millerAlgorithm p q = finalStepBN $
+  millerLoop parameterBin (q, mempty)
+  where
+  millerLoop []     tf = tf
+  millerLoop (x:xs) tf = case doublingStep p tf of
+    tf2
+      | x == 0    -> millerLoop xs tf2
+      | x == 1    -> millerLoop xs $ additionStep p q tf2
+      | otherwise -> millerLoop xs $ additionStep p (negatePt q) tf2
+  additionStep p' q' (t, f) = (<>) f <$> lineFunction p' q' t
+  doublingStep p' (t, f) = (<>) f . (<>) f <$> lineFunction p' t t
+  finalStepBN (t, f) = case lineFunction p t q1 of
+                  (t', f') -> case lineFunction p t' q2 of
+                    (_, f'') -> f <> f' <> f''
+    where
+      q1 = frobTwisted xiFq2 q
+      q2 = negatePt $ frobTwisted xiFq2 q1
+  parameterBin :: [Int8]
+  parameterBin = [ 1, 0, 1, 0, 0,-1, 0, 1, 1, 0, 0, 0,-1, 0, 0, 1
+                 , 1, 0, 0,-1, 0, 0, 0, 0, 0, 1, 0, 0,-1, 0, 0, 1
+                 , 1, 1, 0, 0, 0, 0,-1, 0, 1, 0, 0,-1, 0, 1, 1, 0
+                 , 0, 1, 0, 0,-1, 1, 0, 0,-1, 0, 1, 0, 1, 0, 0, 0 ]
+{-# INLINABLE millerAlgorithm #-}
