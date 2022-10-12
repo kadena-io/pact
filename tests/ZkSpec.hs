@@ -5,19 +5,20 @@
 
 module ZkSpec (spec) where
 
-import Control.Monad (void)
+-- import Control.Monad (void)
 import Data.Curve.Weierstrass as C
 import Data.Field.Galois as F hiding (pow)
 import Data.Group (pow)
 import Data.Pairing.BN254 hiding (pairing, Fq2, Fq12, Fq)
 import Data.Pairing.BN254 qualified as Pairing
-import Data.Vector qualified as V
-import Hedgehog
-import Hedgehog.Gen qualified as Gen
-import Hedgehog.Range qualified as Range
+-- import Data.Vector qualified as V
+-- import Hedgehog
+-- import Hedgehog.Gen qualified as Gen
+-- import Hedgehog.Range qualified as Range
 import Pact.Native.Pairing hiding (g1, g2)
 import Test.Hspec
-import Test.Hspec.Hedgehog
+-- import Test.Hspec.Expectations
+-- import Test.Hspec.Hedgehog
 
 g1 :: G1 BN254
 g1 =
@@ -108,7 +109,26 @@ gt' =
 spec :: Spec
 spec =
   describe "pairing tests" $ do
-    it "passes basic tests" $
+    it "pairing smoke test" $ do
+      let a :: Integer = 2
+      let b :: Integer = 3
+
+      let p :: G1 BN254 = g1
+      let q :: G2 BN254 = g2
+
+      Pairing.pairing p q `shouldBe` gt
+
+      Pairing.pairing (mul' p a) (mul' q b)
+        `shouldBe` pow (Pairing.pairing p q) (a * b)
+
+      let p' :: CurvePoint Fq = g1'
+      let q' :: CurvePoint Fq2 = g2'
+
+      pairing q' p' `shouldBe` gt'
+      return ()
+
+{-
+    it "basic generation test" $
       hedgehog $ do
         -- x1 <- forAll $ Gen.integral_ (Range.linear 0 1000)
         -- x2 <- forAll $ Gen.integral_ (Range.linear 0 1000)
@@ -135,3 +155,4 @@ spec =
         --   === pow (pairing p q) (a * b)
         -- p1 === p2
         pairing q' p' === gt'
+-}
