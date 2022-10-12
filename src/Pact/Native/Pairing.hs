@@ -24,6 +24,7 @@ module Pact.Native.Pairing where
 import Prelude
 import qualified Prelude as P
 
+import Control.Monad(join)
 import Data.Bits(shiftR)
 import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
@@ -74,7 +75,7 @@ fieldModulus :: Integer
 fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 
 newtype Extension p k
-  = Extension { _extension :: VPoly k }
+  = Extension (VPoly k)
   deriving (Show, Eq, Ord, NFData)
 
 
@@ -157,11 +158,11 @@ instance ExtensionField p k => Group (Extension p k) where
   {-# INLINE invert #-}
   pow x n
     | n >= 0    = x ^ n
-    | otherwise = recip x ^ negate n
+    | otherwise = recip x ^ P.negate n
   {-# INLINE pow #-}
 
 instance ExtensionField p k => Euclidean (Extension p k) where
-  degree  = undefined
+  degree  = error "Not Defined: Euclidean degree for Extension"
   quotRem l r = (l / r, 0)
   {-# INLINE quotRem #-}
 
@@ -171,10 +172,15 @@ instance ExtensionField p k => GaloisField (Extension p k) where
   characteristic _ = characteristic (undefined :: k)
   degree _ = degree (undefined :: k) * deg'
     where
-    deg' = pred (fromIntegral (E.degree (fieldPoly :: VPoly k)))
-  frobenius y@(Extension x) = case frobenius' (unPoly x) (unPoly fieldPoly) of
+    deg' = fromIntegral (E.degree (fieldPoly :: VPoly k))
+  frobenius y@(Extension x) = case frobenius' (unPoly x) (unPoly (fieldPoly :: VPoly k)) of
     Just f -> Extension (toPoly f)
     Nothing -> pow y (characteristic y)
+
+{-# RULES "Extension.pow"
+  forall (k :: ExtensionField p k => Extension p k) n . (^) k n = pow k n
+  #-}
+
 
 instance ExtensionField p k => GcdDomain (Extension p k)
 
@@ -214,7 +220,6 @@ data F3
 type Fq2 = Extension F1 Fq
 
 instance ExtensionField F1 Fq where
-  -- fieldDegree _ = 2
   fieldPoly = fromList [1, 0, 1]
 
 xiFq2 :: Fq2
@@ -224,15 +229,13 @@ xiFq2 = fromList [9, 1]
 type Fq6 = Extension F2 Fq2
 
 instance ExtensionField F2 Fq2 where
-  -- fieldDegree _ = 6
   fieldPoly = fromList [-xiFq2, 0, 0, 1]
   {-# INLINABLE fieldPoly #-}
 
 type Fq12 = Extension F3 Fq6
 
 instance ExtensionField F3 Fq6 where
-  -- fieldDegree _ = 12
-  fieldPoly = fromList [fromList [0, -1], 0, 1]
+  fieldPoly = fromList [[0, -1], 0, 1]
   {-# INLINABLE fieldPoly #-}
 
 -----------------------------------------------------------------------------------
@@ -292,117 +295,18 @@ add p1@(Point x1 y1) (Point x2 y2)
     newy =  l * (x1 - newx) - y1
     in Point newx newy
 
--- multiply :: (Field a, Eq a, Num a) => CurvePoint a -> Integer -> CurvePoint a
--- multiply pt n
---   | n == 0 = CurveInf
---   | n == 1 = pt
---   | even n = multiply (double pt) (n `div` 2)
---   | otherwise =
---     add (multiply (double pt) (n `div` 2)) pt
+multiply :: (Field a, Eq a, Num a) => CurvePoint a -> Integer -> CurvePoint a
+multiply pt n
+  | n == 0 = CurveInf
+  | n == 1 = pt
+  | even n = multiply (double pt) (n `div` 2)
+  | otherwise =
+    add (multiply (double pt) (n `div` 2)) pt
 
 negatePt :: Num a => CurvePoint a -> CurvePoint a
 negatePt (Point x y) =
   Point x (negate y)
 negatePt CurveInf = CurveInf
-
--- w :: Fq12
--- w = fromList [fromList [0, 1], 0]
-
--- twist :: CurvePoint Fq2 -> CurvePoint Fq12
--- twist CurveInf = CurveInf
--- twist (Point x y) = let
---   -- Elements of Fq
---   x' = toList x
---   y' = toList y
---   -- Single Fq element
---   x1 = (x' !! 0 :: Fq)
---   x2 = x' !! 1
---   y1 = (y' !! 0 :: Fq)
---   y2 = y' !! 1
---   nx = fromList [fromList [fromList [x1 - x2 * 9]], fromList [fromList [x2]]]
---     -- fromList ([xcoeffs !! 0] ++ replicate 5 0 ++ [xcoeffs !! 1] ++ replicate 5 0)
---   ny = fromList [fromList [fromList [y1 - y2 * 9]], fromList [fromList [y2]]]
---   -- ([fromList ([ycoeffs !! 0] ++ replicate 5 0) (fromList ([ycoeffs !! 1] ++ replicate 5 0))])
---   in Point (nx * (w * w)) (ny  * (w * w * w))
-
--- g12 :: CurvePoint Fq12
--- g12 = twist g2
-
--- curveOrder :: Integer
--- curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
-
--- ate_loop_count :: Integer
--- ate_loop_count = 29793968203157093288
-
--- log_ate_loop_count :: Integer
--- log_ate_loop_count = 63
-
--- lineFunc :: (Eq a, Euclidean a, Num a) => CurvePoint a -> CurvePoint a -> CurvePoint a -> a
--- lineFunc (Point x1 y1) (Point x2 y2) (Point xt yt)
---   | x1 /= x2 = let
---     -- if x1 != x2:
---     -- m = (y2 - y1) / (x2 - x1)
---     -- return m * (xt - x1) - (yt - y1)
---     m = (y2 - y1) `E.quot` (x2 - x1)
---     in m * (xt - x1) - (yt - y1)
---     --  elif y1 == y2:
---     --     m = 3 * x1**2 / (2 * y1)
---     --     return m * (xt - x1) - (yt - y1)
---   | y1 == y2 = let
---     x = (x1 * x2)
---     m = (x + x + x) `E.quot` (y1 + y1)
---     in m * (xt - x1) - (yt - y1)
---   | otherwise = xt - x1
--- lineFunc _ _ _ = error "boom"
-
--- one' :: CurvePoint Fq
--- one' = g1
-
--- two :: CurvePoint Fq
--- two = double g1
-
--- three :: CurvePoint Fq
--- three = multiply g1 3
-
--- negone :: CurvePoint Fq
--- negone = multiply g1 (curveOrder - 1)
-
--- negtwo :: CurvePoint Fq
--- negtwo = multiply g1 (curveOrder - 2)
-
--- negthree :: CurvePoint Fq
--- negthree = multiply g1 (curveOrder - 3)
-
--- millerLoop :: CurvePoint Fq12 -> CurvePoint Fq12 -> Fq12
--- millerLoop _ CurveInf = 1
--- millerLoop CurveInf _ = 1
--- millerLoop q@(Point x1 y1) p = let
---   f = 1
---   loop (f', r') i = let
---     f'' = f' * f' * lineFunc r' r' p
---     r'' = double r'
---     in if ate_loop_count .&. (2 ^ i) /= 0 then (f'' * lineFunc r'' q p, add r'' q)
---        else (f'', r'')
---   (f1, r1) = foldl' loop (f, q) (reverse [0 .. ate_loop_count])
---   q1x = (x1 ^ fieldModulus)
---   q1y = (y1 ^ fieldModulus)
---   q1 = Point q1x q1y
---   nQ2 = Point (q1x ^ fieldModulus) (negate q1y ^ fieldModulus)
---   f2 = f1 * lineFunc r1 q1 p
---   r2 = add r1 q1
---   f3 = f2 * lineFunc r2 nQ2 p
---   in f3 ^ ((fieldModulus ^ (12 :: Int) - 1) `div` curveOrder)
-
--- castToFq12 :: CurvePoint Fq -> CurvePoint Fq12
--- castToFq12 CurveInf = CurveInf
--- castToFq12 (Point x y) =
---   Point
---     (fromList [fromList [fromList [x]], 0])
---     (fromList [fromList [fromList [y]], 0])
-
--- pairing :: CurvePoint Fq2 -> CurvePoint Fq -> Fq12
--- pairing q p =
---   millerLoop (twist q) (castToFq12 p)
 
 frobTwisted
   :: Fq2
@@ -457,32 +361,126 @@ conj (Extension x) = case unPoly (fieldPoly @p @k) of
   _         -> error "conj: extension degree is not two."
 {-# INLINABLE conj #-}
 
+additionStep
+  :: CurvePoint Fq
+  -> CurvePoint Fq2
+  -> (CurvePoint Fq2, Fq12)
+  -> (CurvePoint Fq2, Fq12)
+additionStep p q (t, f) = (<>) f <$> lineFunction p q t
+{-# INLINABLE additionStep #-}
+
+-- Doubling step, line 4.
+doublingStep
+  :: CurvePoint Fq
+  -> (CurvePoint Fq2, Fq12)
+  -> (CurvePoint Fq2, Fq12)
+doublingStep p (t, f) = (<>) f . (<>) f <$> lineFunction p t t
+{-# INLINABLE doublingStep #-}
+
+parameterHex :: Integer
+parameterHex = 0x44e992b44a6909f1
+
+-- | [Final exponentiation for Barreto-Lynn-Scott degree 12 curves]
+-- (https://eprint.iacr.org/2016/130.pdf).
+finalExponentiate :: Integer -> Fq12 -> Fq12
+finalExponentiate u = hardPart . easyPart
+  where
+    easyPart = p2 . p6
+      where
+        p6 = (*) <$> conj <*> recip              -- f^(p^6 - 1)
+        p2 = (*) <$> id <*> frobenius . frobenius -- f^(p^2 + 1)
+    hardPart !f = p4
+      where
+        !fu  = powUnitary f u                      -- f^u
+        !fu2 = powUnitary fu u                     -- f^(u^2)
+        !fu3 = powUnitary fu2 u                    -- f^(u^3)
+        !fpu = frobenius fu2                          -- f^(pu^2)
+        !y0  = frobenius (f * frobenius (f * frobenius f))  -- f^(p + p^2 + p^3)
+        !y1  = conj f                              -- f^(-1)
+        !y2  = frobenius fpu                          -- f^(p^2u^2)
+        !y3  = conj $ frobenius fu                    -- f^(-pu)
+        !y4  = conj $ fu * fpu                     -- f^(-u - pu^2)
+        !y5  = conj fu2                            -- f^(-u^2)
+        !y6  = conj $ fu3 * frobenius fu3             -- f^(-u^3 - pu^3)
+        !p4  = p4' * y0 * join (*) (p4' * y1)      -- f^((p^4 - p^2 + 1) / r)
+          where
+            p4'  = join (*) $ p4'' * y2 * join (*) (p4'' * y3 * y5)
+            p4'' = y4 * y5 * join (*) y6
+{-# INLINABLE finalExponentiate #-}
+
+
 -- | [Miller algorithm for Barreto-Naehrig curves]
 -- (https://eprint.iacr.org/2010/354.pdf).
-millerAlgorithm
+pairing
   :: CurvePoint Fq
   -> CurvePoint Fq2
   -> Fq12
-millerAlgorithm p q = finalStepBN $
+pairing p q =
+  finalExponentiate parameterHex $
+  finalStepBN $
   millerLoop parameterBin (q, mempty)
   where
+
   millerLoop []     tf = tf
   millerLoop (x:xs) tf = case doublingStep p tf of
     tf2
       | x == 0    -> millerLoop xs tf2
       | x == 1    -> millerLoop xs $ additionStep p q tf2
       | otherwise -> millerLoop xs $ additionStep p (negatePt q) tf2
-  additionStep p' q' (t, f) = (<>) f <$> lineFunction p' q' t
-  doublingStep p' (t, f) = (<>) f . (<>) f <$> lineFunction p' t t
   finalStepBN (t, f) = case lineFunction p t q1 of
                   (t', f') -> case lineFunction p t' q2 of
                     (_, f'') -> f <> f' <> f''
     where
       q1 = frobTwisted xiFq2 q
       q2 = negatePt $ frobTwisted xiFq2 q1
+
   parameterBin :: [Int8]
   parameterBin = [ 1, 0, 1, 0, 0,-1, 0, 1, 1, 0, 0, 0,-1, 0, 0, 1
                  , 1, 0, 0,-1, 0, 0, 0, 0, 0, 1, 0, 0,-1, 0, 0, 1
                  , 1, 1, 0, 0, 0, 0,-1, 0, 1, 0, 0,-1, 0, 1, 1, 0
                  , 0, 1, 0, 0,-1, 1, 0, 0,-1, 0, 1, 0, 1, 0, 0, 0 ]
-{-# INLINABLE millerAlgorithm #-}
+{-# INLINABLE pairing #-}
+
+g1' :: CurvePoint Fq
+g1' =
+  Point
+    0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
+    0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4
+
+g2' :: CurvePoint Fq2
+g2' =
+  Point
+    (
+        [ 0x6064e784db10e9051e52826e192715e8d7e478cb09a5e0012defa0694fbc7f5,
+          0x1014772f57bb9742735191cd5dcfe4ebbc04156b6878a0a7c9824f32ffb66e85
+        ]
+    )
+    (   [ 0x58e1d5681b5b9e0074b0f9c8d2c68a069b920d74521e79765036d57666c5597,
+          0x21e2335f3354bb7922ffcc2f38d3323dd9453ac49b55441452aeaca147711b2
+        ]
+    )
+
+_gt' :: Fq12
+_gt' =
+    [ [ [ 0x10227b2606c11f22f4b2dec3f69cee4332ebe2e8f869ea8ca9e6d45ce15bd110,
+          0x27d1c9dae835182b272bb25b47b0d871382c9c2765fd1f42e07edbe852830157
+        ],
+        [ 0x1f5919cf59b218135aaeb137ac84c6ecf282feda6a8752ca291b7ec1d2f8bab4,
+          0x2b7e44680d35a6676223538d54abcd7bc2c54281bf0f5277c81cf5b114d3a345
+        ],
+        [ 0x17e6d213292c2aa12ef3cc75aca8cb9cbd47d05086227db2dbd1262d3e89dbf0,
+          0x291a53fea204b470bb901fb184155facd6e3b44fad848d536386b73d6c31fd52
+        ]
+      ],
+      [ [ 0x2844ed362ecf2c491a471a18c2875fd727126a62c8151c356f81e02cff52f045,
+          0x2a8245d55a3b3f9deae9cca372912a31b88dc77cee06dfa10a717acbf758cbd5
+        ],
+        [ 0x222ff2e20c4578e886027953a035cbd8784a9764bbcd353051ba9f02c4dce8ad,
+          0x8532a0a75fb0acdf508c3bdd4c7700efb3a9ae403818daad5937d9ffffaca45
+        ],
+        [ 0x2e7e3a4aaef17a53de3c528319b426e35f53455107f49d7fe52de95849e7dcf6,
+          0x2ba2bc83434031012424aad830a35c459c40a0b7ce87735010db68c10b61ddcb
+        ]
+      ]
+    ]
+

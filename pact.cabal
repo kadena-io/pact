@@ -194,6 +194,7 @@ library
     , semirings
     , mod
     , poly
+    , galois-field
 
   -- GHCJS
   if impl(ghcjs)

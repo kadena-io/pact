@@ -11,6 +11,7 @@ import Data.Field.Galois as F hiding (pow)
 import Data.Group (pow)
 import Data.Pairing.BN254 hiding (pairing, Fq2, Fq12, Fq)
 import Data.Pairing.BN254 qualified as Pairing
+import qualified Data.Pairing.Ate as Ate
 import Data.Vector qualified as V
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
@@ -25,11 +26,11 @@ g1 =
     0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
     0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4
 
-g1' :: CurvePoint Fq
-g1' =
-  Point
-    0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
-    0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4
+-- g1' :: CurvePoint Fq
+-- g1' =
+--   Point
+--     0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
+--     0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4
 
 g2 :: G2 BN254
 g2 =
@@ -43,18 +44,18 @@ g2 =
       ]
     )
 
-g2' :: CurvePoint Fq2
-g2' =
-  Point
-    (
-        [ 0x6064e784db10e9051e52826e192715e8d7e478cb09a5e0012defa0694fbc7f5,
-          0x1014772f57bb9742735191cd5dcfe4ebbc04156b6878a0a7c9824f32ffb66e85
-        ]
-    )
-    (   [ 0x58e1d5681b5b9e0074b0f9c8d2c68a069b920d74521e79765036d57666c5597,
-          0x21e2335f3354bb7922ffcc2f38d3323dd9453ac49b55441452aeaca147711b2
-        ]
-    )
+-- g2' :: CurvePoint Fq2
+-- g2' =
+--   Point
+--     (
+--         [ 0x6064e784db10e9051e52826e192715e8d7e478cb09a5e0012defa0694fbc7f5,
+--           0x1014772f57bb9742735191cd5dcfe4ebbc04156b6878a0a7c9824f32ffb66e85
+--         ]
+--     )
+--     (   [ 0x58e1d5681b5b9e0074b0f9c8d2c68a069b920d74521e79765036d57666c5597,
+--           0x21e2335f3354bb7922ffcc2f38d3323dd9453ac49b55441452aeaca147711b2
+--         ]
+    -- )
 
 gt :: GT BN254
 gt =
@@ -134,4 +135,4 @@ spec =
         -- pairing (multiply p a) (multiply q b)
         --   === pow (pairing p q) (a * b)
         -- p1 === p2
-        pairing q' p' === gt'
+        pairing p' q' === gt'
