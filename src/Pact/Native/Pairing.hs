@@ -69,9 +69,11 @@ instance ExtensionField p k => Num (Extension p k) where
   signum       = error "signum not implemented for Field Extensions"
 
 instance ExtensionField p k => Fractional (Extension p k) where
-  recip (Extension vp) = case E.gcdExt vp fieldPoly of
-    (1, vp') -> Extension vp'
+  recip (Extension vp) = case leading g of
+    Just (0, vp') -> Extension $ scale 0 (recip vp') y
     _ -> error "Division by zero: Extension"
+    where
+      (g, y) = E.gcdExt vp fieldPoly
   {-# INLINABLE recip #-}
   fromRational (x :% y) = fromInteger x / fromInteger y
   {-# INLINABLE fromRational #-}
@@ -294,16 +296,16 @@ millerLoop _ CurveInf = 1
 millerLoop CurveInf _ = 1
 millerLoop q@(Point x1 y1) p = let
   f = 1
-  loop x 0 = x
-  loop (f', r') i = let
+  loop x !i | i < 0 = x
+  loop (f', r') !i = let
     f'' = f' * f' * lineFunc r' r' p
     r'' = double r'
     in if ate_loop_count .&. (2 ^ i) /= 0
        then loop (f'' * lineFunc r'' q p, add r'' q) (i - 1)
        else loop (f'', r'') (i - 1)
-  (f1, r1) = loop (f, q) ate_loop_count
-  q1x = (x1 ^ fieldModulus)
-  q1y = (y1 ^ fieldModulus)
+  (f1, r1) = loop (f, q) log_ate_loop_count
+  q1x = x1 ^ fieldModulus
+  q1y = y1 ^ fieldModulus
   q1 = Point q1x q1y
   nQ2 = Point (q1x ^ fieldModulus) (negate q1y ^ fieldModulus)
   f2 = f1 * lineFunc r1 q1 p
@@ -315,8 +317,8 @@ castToFq12 :: CurvePoint Fq -> CurvePoint Fq12
 castToFq12 CurveInf = CurveInf
 castToFq12 (Point x y) =
   Point
-    (fromList [fromList [fromList [x]], 0])
-    (fromList [fromList [fromList [y]], 0])
+    (fromList [fromList [fromList [x]]])
+    (fromList [fromList [fromList [y]]])
 
 pairing :: CurvePoint Fq2 -> CurvePoint Fq -> Fq12
 pairing q p =
