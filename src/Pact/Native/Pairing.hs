@@ -68,7 +68,7 @@ class GaloisField k => ExtensionField p k | p -> k, k -> p where
 
 type Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 
-newtype Fq = P (Mod Q)
+newtype Fq = Fq (Mod Q)
   deriving (Eq, Show, Ord, Num, Fractional, Euclidean, Field, GcdDomain, Ring, Semiring, Bounded, Enum, NFData)
 
 fieldModulus :: Integer
