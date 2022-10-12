@@ -192,8 +192,8 @@ library
     , vector-space >= 0.10.4 && < 0.17
     , groups
     , semirings
-    , mod
-    , poly
+    , mod >= 0.1.2 && < 0.2
+    , poly >= 0.5.0 && < 0.6
 
   -- GHCJS
   if impl(ghcjs)

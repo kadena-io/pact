@@ -420,7 +420,6 @@ pairing p q =
   finalStepBN $
   millerLoop parameterBin (q, mempty)
   where
-
   millerLoop []     tf = tf
   millerLoop (x:xs) tf = case doublingStep p tf of
     tf2
