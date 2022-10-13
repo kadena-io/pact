@@ -18,8 +18,17 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module Pact.Native.Pairing where
+module Pact.Native.Pairing
+  ( pairing
+  , CurvePoint(..)
+  , Fq
+  , Fq2
+  , Fq6
+  , Fq12
+  )
+  where
 
 import Prelude
 import qualified Prelude as P

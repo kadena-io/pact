@@ -16,7 +16,7 @@ import Data.Pairing.BN254 qualified as Pairing
 -- import Hedgehog
 -- import Hedgehog.Gen qualified as Gen
 -- import Hedgehog.Range qualified as Range
-import Pact.Native.Pairing hiding (g1, g2)
+import Pact.Native.Pairing
 import Test.Hspec
 -- import Test.Hspec.Hedgehog
 
@@ -109,7 +109,7 @@ gt' =
 spec :: Spec
 spec =
   describe "pairing tests" $ do
-    it "pairing smoke test" $ do
+    it "pairing lib smoke test" $ do
       let a :: Integer = 2
       let b :: Integer = 3
 
@@ -121,8 +121,8 @@ spec =
       Pairing.pairing (mul' p a) (mul' q b)
         `shouldBe` pow (Pairing.pairing p q) (a * b)
 
+    it "pairing smoke test" $ do
       let p' :: CurvePoint Fq = g1'
       let q' :: CurvePoint Fq2 = g2'
 
       pairing p' q' `shouldBe` gt'
-      return ()
