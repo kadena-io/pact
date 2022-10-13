@@ -86,7 +86,7 @@ library
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
-    Pact.Native.ZK
+    Pact.Native.Pairing
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
@@ -191,6 +191,10 @@ library
     , vector >= 0.11.0.0 && < 0.13
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
+    , groups
+    , semirings
+    , mod >= 0.1.2 && < 0.2
+    , poly >= 0.5.0 && < 0.6
 
   -- GHCJS
   if impl(ghcjs)
@@ -410,6 +414,8 @@ test-suite hspec
         TypecheckSpec
         SizeOfSpec
         PactCLISpec
+        ZkSpec
+        PairingSpec
 
       build-depends:
         , Decimal
@@ -418,11 +424,17 @@ test-suite hspec
         , exceptions
         , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2
+        , hspec-expectations
+        , hspec-hedgehog
+        , groups
         , http-client
         , hw-hspec-hedgehog == 0.1.*
         , intervals
         , mmorph
         , neat-interpolation
+        , galois-field >= 1.0.4
+        , elliptic-curve >= 0.3.1
+        , pairing >= 1.1.0
         , prettyprinter
         , sbv
         , servant-client

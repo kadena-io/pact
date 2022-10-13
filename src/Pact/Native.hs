@@ -93,7 +93,7 @@ import Pact.Native.Internal
 import Pact.Native.Keysets
 import Pact.Native.Ops
 import Pact.Native.SPV
-import Pact.Native.ZK
+import Pact.Native.Pairing
 import Pact.Native.Time
 import Pact.Parse
 import Pact.Runtime.Utils(lookupFreeVar)
@@ -1347,3 +1347,13 @@ continueNested i as = gasUnreduced i as $ case as of
   unTVar = \case
     TVar (Ref d) _ -> unTVar d
     d -> d
+
+-- zkScalarMult :: RNativeFun e
+-- zkScalarMult i as = gasUnreduced i as $ case as of
+--   [TLiteral (LInteger p), TLiteral (LInteger s)] -> undefined
+--   _ -> argsError' i as
+
+-- zkAdd :: RNativeFun e
+-- zkAdd i as = gasUnreduced i as $ case as of
+--   [TLiteral (LInteger p), TLiteral (LInteger s)] -> undefined
+--   _ -> argsError' i as
