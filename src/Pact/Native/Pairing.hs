@@ -27,7 +27,16 @@
 --
 -- Builtins for working with ZK proofs.
 --
-module Pact.Native.Pairing where
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+module Pact.Native.Pairing
+  ( pairing
+  , zkDefs
+  , CurvePoint(..)
+  , Fq
+  , Fq2
+  , Fq6
+  , Fq12
+  ) where
 
 import Prelude
 import qualified Prelude as P
