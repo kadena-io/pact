@@ -30,8 +30,12 @@ import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
 import Data.Semiring (Semiring, Ring)
 import Data.Field (Field)
+import Data.Foldable (forM_, foldl')
+import qualified Data.Vector as G
+import qualified Data.Vector.Mutable as MG
 import qualified Data.Semiring as SR
 import qualified Data.Euclidean as E
+import Control.Monad.ST
 import Data.Mod
 import Data.Poly
 import Data.Vector(Vector)
@@ -58,7 +62,6 @@ class (Field k, Fractional k, Ord k, Show k) => GaloisField k where
   order :: k -> Natural
   order k = characteristic k ^ degree k
   {-# INLINABLE order #-}
-
 
 class GaloisField k => ExtensionField p k | p -> k, k -> p where
   -- | The degree of the
@@ -113,6 +116,10 @@ frobenius' [a, b, c] [x, 0, 0, 1]
     nxq    = nx ^ q
 frobenius' _ _   = Nothing
 {-# INLINABLE frobenius' #-}
+{-# SPECIALIZE frobenius' :: Vector Fq -> Vector Fq -> Maybe (Vector Fq) #-}
+{-# SPECIALIZE frobenius' :: Vector Fq2 -> Vector Fq2 -> Maybe (Vector Fq2) #-}
+{-# SPECIALIZE frobenius' :: Vector Fq6 -> Vector Fq6 -> Maybe (Vector Fq6) #-}
+{-# SPECIALIZE frobenius' :: Vector Fq12 -> Vector Fq12 -> Maybe (Vector Fq12) #-}
 
 -----------------------------------------------------------------
 -- Num instances
@@ -120,7 +127,8 @@ frobenius' _ _   = Nothing
 instance ExtensionField p k => Num (Extension p k) where
   (Extension x) + (Extension y) = Extension (x + y)
   {-# INLINE (+) #-}
-  (Extension x) * (Extension y) = Extension (E.rem (x * y) fieldPoly)
+  (Extension x) * (Extension y) =
+    Extension (E.rem (toPoly (karatsuba (unPoly x) (unPoly y))) fieldPoly)
   {-# INLINABLE (*) #-}
   (Extension x) - (Extension y) = Extension (x - y)
   {-# INLINE (-) #-}
@@ -130,6 +138,106 @@ instance ExtensionField p k => Num (Extension p k) where
   {-# INLINABLE fromInteger #-}
   abs          = error "abs not implemented for Field Extensions"
   signum       = error "signum not implemented for Field Extensions"
+
+karatsubaThreshold :: Int
+karatsubaThreshold = 32
+
+plusPoly
+  :: Num a
+  => Vector a
+  -> Vector a
+  -> Vector a
+plusPoly xs ys = runST $ do
+  zs <- MG.unsafeNew lenMx
+  forM_ ([0 .. lenMn - 1] :: [Int]) $ \i ->
+    MG.unsafeWrite zs i (G.unsafeIndex xs i + G.unsafeIndex ys i)
+  G.unsafeCopy
+    (MG.unsafeSlice lenMn (lenMx - lenMn) zs)
+    (G.unsafeSlice  lenMn (lenMx - lenMn) (if lenXs <= lenYs then ys else xs))
+
+  G.unsafeFreeze zs
+  where
+  lenXs :: Int = G.length xs
+  lenYs :: Int = G.length ys
+  lenMn :: Int = lenXs `min` lenYs
+  lenMx :: Int = lenXs `max` lenYs
+{-# INLINE plusPoly #-}
+{-# SPECIALIZE plusPoly :: Vector Fq -> Vector Fq -> Vector Fq #-}
+{-# SPECIALIZE plusPoly :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
+{-# SPECIALIZE plusPoly :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
+{-# SPECIALIZE plusPoly :: Vector Fq12 -> Vector Fq12 -> Vector Fq12 #-}
+
+karatsuba
+  :: (Eq a, Num a)
+  => Vector a
+  -> Vector a
+  -> Vector a
+karatsuba xs ys
+  | lenXs <= karatsubaThreshold || lenYs <= karatsubaThreshold
+  = convolution xs ys
+  | otherwise = runST $ do
+    zs <- MG.unsafeNew lenZs
+    forM_ ([0 .. lenZs - 1] :: [Int]) $ \k -> do
+      let z0 = if k < G.length zs0
+               then G.unsafeIndex zs0 k
+               else 0
+          z11 = if k - m >= 0 && k - m < G.length zs11
+               then G.unsafeIndex zs11 (k - m)
+               else 0
+          z10 = if k - m >= 0 && k - m < G.length zs0
+               then G.unsafeIndex zs0 (k - m)
+               else 0
+          z12 = if k - m >= 0 && k - m < G.length zs2
+               then G.unsafeIndex zs2 (k - m)
+               else 0
+          z2 = if k - 2 * m >= 0 && k - 2 * m < G.length zs2
+               then G.unsafeIndex zs2 (k - 2 * m)
+               else 0
+      MG.unsafeWrite zs k (z0 + (z11 - z10 - z12) + z2)
+    G.unsafeFreeze zs
+  where
+    lenXs = G.length xs
+    lenYs = G.length ys
+    lenZs = lenXs + lenYs - 1
+
+    m    = ((lenXs `min` lenYs) + 1) `shiftR` 1
+
+    xs0  = G.slice 0 m xs
+    xs1  = G.slice m (lenXs - m) xs
+    ys0  = G.slice 0 m ys
+    ys1  = G.slice m (lenYs - m) ys
+
+    xs01 = plusPoly xs0 xs1
+    ys01 = plusPoly ys0 ys1
+    zs0  = karatsuba xs0 ys0
+    zs2  = karatsuba xs1 ys1
+    zs11 = karatsuba xs01 ys01
+{-# INLINABLE karatsuba #-}
+{-# SPECIALIZE karatsuba :: Vector Fq -> Vector Fq -> Vector Fq #-}
+{-# SPECIALIZE karatsuba :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
+{-# SPECIALIZE karatsuba :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
+{-# SPECIALIZE karatsuba :: Vector Fq12 -> Vector Fq12 -> Vector Fq12 #-}
+
+convolution
+  :: Num a
+  => Vector a
+  -> Vector a
+  -> Vector a
+convolution xs ys
+  | lenXs == 0 || lenYs == 0 = G.empty
+  | otherwise = G.generate lenZs $ \k -> foldl'
+    (\acc i -> acc + (G.unsafeIndex xs i * G.unsafeIndex ys (k - i)))
+    0
+    ([max (k - lenYs + 1) 0 .. min k (lenXs - 1)] :: [Int])
+  where
+    lenXs = G.length xs
+    lenYs = G.length ys
+    lenZs = lenXs + lenYs - 1
+{-# INLINE convolution #-}
+{-# SPECIALIZE convolution :: Vector Fq -> Vector Fq -> Vector Fq #-}
+{-# SPECIALIZE convolution :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
+{-# SPECIALIZE convolution :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
+{-# SPECIALIZE convolution :: Vector Fq12 -> Vector Fq12 -> Vector Fq12 #-}
 
 instance ExtensionField p k => Fractional (Extension p k) where
   recip (Extension vp) = case leading g of
@@ -282,6 +390,10 @@ double (Point x y)
     newx = (l * l) - (x + x)
     newy = l * (x - newx) - y
     in Point newx newy
+{-# SPECIALIZE double :: CurvePoint Fq -> CurvePoint Fq #-}
+{-# SPECIALIZE double :: CurvePoint Fq2 -> CurvePoint Fq2 #-}
+{-# SPECIALIZE double :: CurvePoint Fq6 -> CurvePoint Fq6 #-}
+{-# SPECIALIZE double :: CurvePoint Fq12 -> CurvePoint Fq12 #-}
 
 add :: (Field a, Eq a, Num a) => CurvePoint a -> CurvePoint a -> CurvePoint a
 add CurveInf r = r
@@ -294,6 +406,10 @@ add p1@(Point x1 y1) (Point x2 y2)
     newx = (l * l) - x1 - x2
     newy =  l * (x1 - newx) - y1
     in Point newx newy
+{-# SPECIALIZE add :: CurvePoint Fq -> CurvePoint Fq -> CurvePoint Fq #-}
+{-# SPECIALIZE add :: CurvePoint Fq2 -> CurvePoint Fq2 -> CurvePoint Fq2 #-}
+{-# SPECIALIZE add :: CurvePoint Fq6 -> CurvePoint Fq6 -> CurvePoint Fq6 #-}
+{-# SPECIALIZE add :: CurvePoint Fq12 -> CurvePoint Fq12 -> CurvePoint Fq12 #-}
 
 multiply :: (Field a, Eq a, Num a) => CurvePoint a -> Integer -> CurvePoint a
 multiply pt n
@@ -302,11 +418,19 @@ multiply pt n
   | even n = multiply (double pt) (n `div` 2)
   | otherwise =
     add (multiply (double pt) (n `div` 2)) pt
+{-# SPECIALIZE multiply :: CurvePoint Fq -> Integer -> CurvePoint Fq #-}
+{-# SPECIALIZE multiply :: CurvePoint Fq2 -> Integer -> CurvePoint Fq2 #-}
+{-# SPECIALIZE multiply :: CurvePoint Fq6 -> Integer -> CurvePoint Fq6 #-}
+{-# SPECIALIZE multiply :: CurvePoint Fq12 -> Integer -> CurvePoint Fq12 #-}
 
 negatePt :: Num a => CurvePoint a -> CurvePoint a
 negatePt (Point x y) =
   Point x (negate y)
 negatePt CurveInf = CurveInf
+{-# SPECIALIZE negatePt :: CurvePoint Fq -> CurvePoint Fq #-}
+{-# SPECIALIZE negatePt :: CurvePoint Fq2 -> CurvePoint Fq2 #-}
+{-# SPECIALIZE negatePt :: CurvePoint Fq6 -> CurvePoint Fq6 #-}
+{-# SPECIALIZE negatePt :: CurvePoint Fq12 -> CurvePoint Fq12 #-}
 
 frobTwisted
   :: Fq2
@@ -350,6 +474,9 @@ powUnitary x n
   | n < 0     = pow (conj x) (negate n)
   | otherwise = pow x n
 {-# INLINE powUnitary #-}
+{-# SPECIALIZE powUnitary :: Extension F1 Fq -> Integer -> Extension F1 Fq #-}
+{-# SPECIALIZE powUnitary :: Extension F2 Fq2 -> Integer -> Extension F2 Fq2 #-}
+{-# SPECIALIZE powUnitary :: Extension F3 Fq6 -> Integer -> Extension F3 Fq6 #-}
 
 -- | Complex conjugation @a+bi -> a-bi@ of quadratic extension field.
 conj :: forall p k. ExtensionField p k => Extension p k -> Extension p k
@@ -360,6 +487,9 @@ conj (Extension x) = case unPoly (fieldPoly @p @k) of
     _      -> []
   _         -> error "conj: extension degree is not two."
 {-# INLINABLE conj #-}
+{-# SPECIALIZE conj :: Extension F1 Fq -> Extension F1 Fq #-}
+{-# SPECIALIZE conj :: Extension F2 Fq2 -> Extension F2 Fq2 #-}
+{-# SPECIALIZE conj :: Extension F3 Fq6 -> Extension F3 Fq6 #-}
 
 additionStep
   :: CurvePoint Fq
