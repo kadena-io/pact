@@ -163,7 +163,6 @@ plusPoly xs ys = runST $ do
   G.unsafeCopy
     (MG.unsafeSlice lenMn (lenMx - lenMn) zs)
     (G.unsafeSlice  lenMn (lenMx - lenMn) (if lenXs <= lenYs then ys else xs))
-
   G.unsafeFreeze zs
   where
     lenXs = G.length xs
