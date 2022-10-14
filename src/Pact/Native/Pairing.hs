@@ -240,6 +240,15 @@ convolution xs ys
     (\acc i -> acc + (G.unsafeIndex xs i * G.unsafeIndex ys (k - i)))
     0
     ([max (k - lenYs + 1) 0 .. min k (lenXs - 1)] :: [Int])
+{-
+  | otherwise =
+    G.generate lenZs $ \k ->
+      let !b = max (k - lenYs + 1) 0
+          !e = min k (lenXs - 1)
+          !l = (e - b) + 1 in
+      sum (zipWith (*) (G.toList (G.unsafeSlice b l xs))
+                       (G.toList (G.reverse (G.unsafeSlice (k - e) l ys))))
+-}
   where
     !lenXs = G.length xs
     !lenYs = G.length ys
