@@ -213,10 +213,10 @@ karatsuba xs ys
 
     m    = ((lenXs `min` lenYs) + 1) `shiftR` 1
 
-    xs0  = G.slice 0 m xs
-    xs1  = G.slice m (lenXs - m) xs
-    ys0  = G.slice 0 m ys
-    ys1  = G.slice m (lenYs - m) ys
+    xs0  = G.unsafeSlice 0 m xs
+    xs1  = G.unsafeSlice m (lenXs - m) xs
+    ys0  = G.unsafeSlice 0 m ys
+    ys1  = G.unsafeSlice m (lenYs - m) ys
 
     xs01 = plusPoly xs0 xs1
     ys01 = plusPoly ys0 ys1
