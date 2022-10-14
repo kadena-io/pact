@@ -166,11 +166,11 @@ plusPoly xs ys = runST $ do
 
   G.unsafeFreeze zs
   where
-  lenXs :: Int = G.length xs
-  lenYs :: Int = G.length ys
-  lenMn :: Int = lenXs `min` lenYs
-  lenMx :: Int = lenXs `max` lenYs
-{-# INLINE plusPoly #-}
+  lenXs = G.length xs
+  lenYs = G.length ys
+  lenMn = lenXs `min` lenYs
+  lenMx = lenXs `max` lenYs
+{-# INLINABLE plusPoly #-}
 {-# SPECIALIZE plusPoly :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE plusPoly :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE plusPoly :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
@@ -186,20 +186,23 @@ karatsuba xs ys
   = convolution xs ys
   | otherwise = runST $ do
     zs <- MG.unsafeNew lenZs
+    let lzs0 = G.length zs0
+        lzs11 = G.length zs11
+        lzs2 = G.length zs2
     forM_ ([0 .. lenZs - 1] :: [Int]) $ \k -> do
-      let z0 = if k < G.length zs0
+      let z0 = if k < lzs0
                then G.unsafeIndex zs0 k
                else 0
-          z11 = if k - m >= 0 && k - m < G.length zs11
+          z11 = if k - m >= 0 && k - m < lzs11
                then G.unsafeIndex zs11 (k - m)
                else 0
-          z10 = if k - m >= 0 && k - m < G.length zs0
+          z10 = if k - m >= 0 && k - m < lzs0
                then G.unsafeIndex zs0 (k - m)
                else 0
-          z12 = if k - m >= 0 && k - m < G.length zs2
+          z12 = if k - m >= 0 && k - m < lzs2
                then G.unsafeIndex zs2 (k - m)
                else 0
-          z2 = if k - 2 * m >= 0 && k - 2 * m < G.length zs2
+          z2 = if k - 2 * m >= 0 && k - 2 * m < lzs2
                then G.unsafeIndex zs2 (k - 2 * m)
                else 0
       MG.unsafeWrite zs k (z0 + (z11 - z10 - z12) + z2)
@@ -239,10 +242,10 @@ convolution xs ys
     0
     ([max (k - lenYs + 1) 0 .. min k (lenXs - 1)] :: [Int])
   where
-    lenXs = G.length xs
-    lenYs = G.length ys
-    lenZs = lenXs + lenYs - 1
-{-# INLINE convolution #-}
+    !lenXs = G.length xs
+    !lenYs = G.length ys
+    !lenZs = lenXs + lenYs - 1
+{-# INLINABLE convolution #-}
 {-# SPECIALIZE convolution :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE convolution :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE convolution :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
