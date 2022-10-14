@@ -166,10 +166,10 @@ plusPoly xs ys = runST $ do
 
   G.unsafeFreeze zs
   where
-  lenXs = G.length xs
-  lenYs = G.length ys
-  lenMn = lenXs `min` lenYs
-  lenMx = lenXs `max` lenYs
+    lenXs = G.length xs
+    lenYs = G.length ys
+    lenMn = lenXs `min` lenYs
+    lenMx = lenXs `max` lenYs
 {-# INLINABLE plusPoly #-}
 {-# SPECIALIZE plusPoly :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE plusPoly :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
