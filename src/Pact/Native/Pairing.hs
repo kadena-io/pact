@@ -79,7 +79,7 @@ class (Field k, Fractional k, Ord k, Show k) => GaloisField k where
   -- | order of a field p^k
   order :: k -> Natural
   order k = characteristic k ^ degree k
-  {-# INLINABLE order #-}
+  {-# INLINE order #-}
 
 class GaloisField k => ExtensionField p k | p -> k, k -> p where
   -- | The degree of the
@@ -130,7 +130,7 @@ frobenius' [a, b, c] [x, 0, 0, 1]
     nx     = negate x
     nxq    = nx ^ q
 frobenius' _ _   = Nothing
-{-# INLINABLE frobenius' #-}
+{-# INLINE frobenius' #-}
 {-# SPECIALIZE frobenius' :: Vector Fq -> Vector Fq -> Maybe (Vector Fq) #-}
 {-# SPECIALIZE frobenius' :: Vector Fq2 -> Vector Fq2 -> Maybe (Vector Fq2) #-}
 {-# SPECIALIZE frobenius' :: Vector Fq6 -> Vector Fq6 -> Maybe (Vector Fq6) #-}
@@ -144,13 +144,13 @@ instance ExtensionField p k => Num (Extension p k) where
   {-# INLINE (+) #-}
   (Extension x) * (Extension y) =
     Extension (E.rem (toPoly (karatsuba (unPoly x) (unPoly y))) fieldPoly)
-  {-# INLINABLE (*) #-}
+  {-# INLINE (*) #-}
   (Extension x) - (Extension y) = Extension (x - y)
   {-# INLINE (-) #-}
   negate (Extension x) = Extension (P.negate x)
   {-# INLINE negate #-}
   fromInteger  = Extension . fromInteger
-  {-# INLINABLE fromInteger #-}
+  {-# INLINE fromInteger #-}
   abs          = error "abs not implemented for Field Extensions"
   signum       = error "signum not implemented for Field Extensions"
 
@@ -175,7 +175,7 @@ plusPoly xs ys = runST $ do
     lenYs = G.length ys
     lenMn = lenXs `min` lenYs
     lenMx = lenXs `max` lenYs
-{-# INLINABLE plusPoly #-}
+{-# INLINE plusPoly #-}
 {-# SPECIALIZE plusPoly :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE plusPoly :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE plusPoly :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
@@ -219,17 +219,17 @@ karatsuba xs ys
 
     m    = ((lenXs `min` lenYs) + 1) `shiftR` 1
 
-    xs0  = G.slice 0 m xs
-    xs1  = G.slice m (lenXs - m) xs
-    ys0  = G.slice 0 m ys
-    ys1  = G.slice m (lenYs - m) ys
+    xs0  = G.unsafeSlice 0 m xs
+    xs1  = G.unsafeSlice m (lenXs - m) xs
+    ys0  = G.unsafeSlice 0 m ys
+    ys1  = G.unsafeSlice m (lenYs - m) ys
 
     xs01 = plusPoly xs0 xs1
     ys01 = plusPoly ys0 ys1
     zs0  = karatsuba xs0 ys0
     zs2  = karatsuba xs1 ys1
     zs11 = karatsuba xs01 ys01
-{-# INLINABLE karatsuba #-}
+{-# INLINE karatsuba #-}
 {-# SPECIALIZE karatsuba :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE karatsuba :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE karatsuba :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
@@ -246,11 +246,20 @@ convolution xs ys
     (\acc i -> acc + (G.unsafeIndex xs i * G.unsafeIndex ys (k - i)))
     0
     ([max (k - lenYs + 1) 0 .. min k (lenXs - 1)] :: [Int])
+{-
+  | otherwise =
+    G.generate lenZs $ \k ->
+      let !b = max (k - lenYs + 1) 0
+          !e = min k (lenXs - 1)
+          !l = (e - b) + 1 in
+      sum (zipWith (*) (G.toList (G.unsafeSlice b l xs))
+                       (G.toList (G.reverse (G.unsafeSlice (k - e) l ys))))
+-}
   where
     !lenXs = G.length xs
     !lenYs = G.length ys
-    !lenZs = lenXs + lenYs - 1
-{-# INLINABLE convolution #-}
+    lenZs = lenXs + lenYs - 1
+{-# INLINE convolution #-}
 {-# SPECIALIZE convolution :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE convolution :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE convolution :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
@@ -262,9 +271,9 @@ instance ExtensionField p k => Fractional (Extension p k) where
     _ -> error "Division by zero: Extension"
     where
       (g, y) = E.gcdExt vp fieldPoly
-  {-# INLINABLE recip #-}
+  {-# INLINE recip #-}
   fromRational (x :% y) = fromInteger x / fromInteger y
-  {-# INLINABLE fromRational #-}
+  {-# INLINE fromRational #-}
 
 
 -----------------------------------------------------------------
@@ -315,7 +324,7 @@ instance ExtensionField p k => Ring (Extension p k) where
 
 instance ExtensionField p k => Semiring (Extension p k) where
   fromNatural = fromIntegral
-  {-# INLINABLE fromNatural #-}
+  {-# INLINE fromNatural #-}
   one         = Extension 1
   {-# INLINE one #-}
   plus        = (+)
@@ -328,9 +337,9 @@ instance ExtensionField p k => Semiring (Extension p k) where
 instance ExtensionField p k => IsList (Extension p k) where
   type instance Item (Extension p k) = k
   fromList     = Extension . fromList
-  {-# INLINABLE fromList #-}
+  {-# INLINE fromList #-}
   toList (Extension x) = toList $ unPoly x
-  {-# INLINABLE toList #-}
+  {-# INLINE toList #-}
 
 --------------------------------------------------------------------------------------
 -- Curve implementation
@@ -349,19 +358,19 @@ instance ExtensionField F1 Fq where
 
 xiFq2 :: Fq2
 xiFq2 = fromList [9, 1]
-{-# INLINABLE xiFq2 #-}
+{-# INLINE xiFq2 #-}
 
 type Fq6 = Extension F2 Fq2
 
 instance ExtensionField F2 Fq2 where
   fieldPoly = fromList [-xiFq2, 0, 0, 1]
-  {-# INLINABLE fieldPoly #-}
+  {-# INLINE fieldPoly #-}
 
 type Fq12 = Extension F3 Fq6
 
 instance ExtensionField F3 Fq6 where
   fieldPoly = fromList [[0, -1], 0, 1]
-  {-# INLINABLE fieldPoly #-}
+  {-# INLINE fieldPoly #-}
 
 -----------------------------------------------------------------------------------
 -- Curve implementation
@@ -383,7 +392,7 @@ b12 = [3]
 
 g1 :: CurvePoint Fq
 g1 = Point 1 2
-{-# INLINABLE g1 #-}
+{-# INLINE g1 #-}
 
 g2 :: CurvePoint Fq2
 g2 = Point
@@ -481,7 +490,7 @@ lineFunction (Point x y) (Point x1 y1) (Point x2 y2)
     x3' = l' * l' - x1 - x2
     y3' = l' * (x1 - x3') - y1
 lineFunction _ _ _ = (CurveInf, mempty)
-{-# INLINABLE lineFunction #-}
+{-# INLINE lineFunction #-}
 
 powUnitary :: ExtensionField p k
   => Extension p k -- ^ Element @x@ in cyclotomic subgroup.
@@ -503,7 +512,7 @@ conj (Extension x) = case unPoly (fieldPoly @p @k) of
     [a]    -> [a]
     _      -> []
   _         -> error "conj: extension degree is not two."
-{-# INLINABLE conj #-}
+{-# INLINE conj #-}
 {-# SPECIALIZE conj :: Extension F1 Fq -> Extension F1 Fq #-}
 {-# SPECIALIZE conj :: Extension F2 Fq2 -> Extension F2 Fq2 #-}
 {-# SPECIALIZE conj :: Extension F3 Fq6 -> Extension F3 Fq6 #-}
@@ -514,7 +523,7 @@ additionStep
   -> (CurvePoint Fq2, Fq12)
   -> (CurvePoint Fq2, Fq12)
 additionStep p q (t, f) = (<>) f <$> lineFunction p q t
-{-# INLINABLE additionStep #-}
+{-# INLINE additionStep #-}
 
 -- Doubling step, line 4.
 doublingStep
@@ -522,7 +531,7 @@ doublingStep
   -> (CurvePoint Fq2, Fq12)
   -> (CurvePoint Fq2, Fq12)
 doublingStep p (t, f) = (<>) f . (<>) f <$> lineFunction p t t
-{-# INLINABLE doublingStep #-}
+{-# INLINE doublingStep #-}
 
 parameterHex :: Integer
 parameterHex = 0x44e992b44a6909f1
@@ -553,7 +562,7 @@ finalExponentiate u = hardPart . easyPart
           where
             p4'  = join (*) $ p4'' * y2 * join (*) (p4'' * y3 * y5)
             p4'' = y4 * y5 * join (*) y6
-{-# INLINABLE finalExponentiate #-}
+{-# INLINE finalExponentiate #-}
 
 
 -- | [Miller algorithm for Barreto-Naehrig curves]
