@@ -102,6 +102,9 @@ pt' =
 fieldModulus :: Integer
 fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 
+curveOrder :: Integer
+curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
 -- Tests from:
 -- https://github.com/ethereum/py_pairing/blob/master/tests/test_bn128.py
 pairingLibTest :: Spec
@@ -130,9 +133,50 @@ pairingLibTest =
       1 / f + x / f `shouldBe` (1 + x) / f
       1 * f + x * f `shouldBe` (1 + x) * f
       x ^ (fieldModulus ^ (2 :: Int) - 1) `shouldBe` 1
-    it "passes basic elliptic curve operations for the generator in group 1" $ do
+    it "passes basic elliptic curve operations for G1" $ do
       add (add (double g1) g1) g1 `shouldBe` double (double g1)
       double g1 `shouldNotBe` g1
+      add (multiply g1 9) (multiply g1 5) `shouldBe` add (multiply g1 12) (multiply g1 2)
+      multiply g1 curveOrder `shouldBe` CurveInf
+    it "passes basic elliptic curve operations for G2" $ do
+      add (add (double g2) g2) g2 `shouldBe` double (double g2)
+      double g2 `shouldNotBe` g2
+      add (multiply g2 9) (multiply g2 5) `shouldBe` add (multiply g2 12) (multiply g2 2)
+      multiply g2 curveOrder `shouldBe` CurveInf
+      multiply g2 (2 * fieldModulus - curveOrder) `shouldNotBe` CurveInf
+      isOnCurve (multiply g2 9) b2 `shouldBe` True
+    it "passes basic pairing tests" $ do
+      -- Pairing operation on negated g1
+      let pp1 = pairing g1 g2
+      let pn1 = pairing (negatePt g1) g2
+      pp1 * pn1 `shouldBe` 1
+
+      -- Pairing op negated in g2
+      let np1 = pairing g1 (negatePt g2)
+      pp1 * np1 `shouldBe` 1
+      np1 `shouldBe` pn1
+
+      -- Pairing output has correct order
+      pp1 ^ curveOrder `shouldBe` 1
+
+      -- Pairing bilinearity in g1
+      let pp2 = pairing (multiply g1 2) g2
+      pp1 * pp1 `shouldBe` pp2
+
+      -- Pairing is non-degenerate
+      (pp1 /= pp2) && (pp1 /= np1) && (pp2 /= np1) `shouldBe` True
+
+      -- Pairing bilinearity in G2
+      let po2 = pairing g1 (multiply g2 2)
+      pp1 * pp1 `shouldBe` po2
+
+      -- Composite check
+      let p3 = pairing (multiply g1 37) (multiply g2 27)
+      let po3 = pairing (multiply g1 999) g2
+      p3 `shouldBe` po3
+
+
+
 
 spec :: Spec
 spec = do
