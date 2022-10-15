@@ -6,7 +6,7 @@
 module ZkSpec (spec) where
 
 -- import Control.Monad (void)
-import Data.Curve.Weierstrass as C
+import qualified Data.Curve.Weierstrass as C
 import Data.Field.Galois as F hiding (pow)
 import Data.Group (pow)
 import Data.Pairing.BN254 hiding (pairing, Fq2, Fq12, Fq)
@@ -20,21 +20,24 @@ import Pact.Native.Pairing
 import Test.Hspec
 -- import Test.Hspec.Hedgehog
 
-g1 :: G1 BN254
-g1 =
-  A
+-- y^2 = x^3 + b
+isOnCurve :: (Num a, Eq a) => CurvePoint a -> a -> Bool
+isOnCurve CurveInf _ = True
+isOnCurve (Point x y) b =
+  ((y ^ (2 :: Int)) - (x ^ (3 :: Int))) == b
+
+pairingP1 :: G1 BN254
+pairingP1 =
+  C.A
     0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
     0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4
 
-g1' :: CurvePoint Fq
-g1' =
-  Point
-    0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
-    0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4
+p1 :: CurvePoint Fq
+p1 = multiply g1 2
 
-g2 :: G2 BN254
-g2 =
-  A
+pairingP2 :: G2 BN254
+pairingP2 =
+  C.A
     ( [ 0x6064e784db10e9051e52826e192715e8d7e478cb09a5e0012defa0694fbc7f5,
         0x1014772f57bb9742735191cd5dcfe4ebbc04156b6878a0a7c9824f32ffb66e85
       ]
@@ -44,21 +47,11 @@ g2 =
       ]
     )
 
-g2' :: CurvePoint Fq2
-g2' =
-  Point
-    (
-        [ 0x6064e784db10e9051e52826e192715e8d7e478cb09a5e0012defa0694fbc7f5,
-          0x1014772f57bb9742735191cd5dcfe4ebbc04156b6878a0a7c9824f32ffb66e85
-        ]
-    )
-    (   [ 0x58e1d5681b5b9e0074b0f9c8d2c68a069b920d74521e79765036d57666c5597,
-          0x21e2335f3354bb7922ffcc2f38d3323dd9453ac49b55441452aeaca147711b2
-        ]
-    )
+p2 :: CurvePoint Fq2
+p2 = multiply g2 3
 
-gt :: GT BN254
-gt =
+pairingGtPt:: GT BN254
+pairingGtPt =
   toU'
     [ [ [ 0x10227b2606c11f22f4b2dec3f69cee4332ebe2e8f869ea8ca9e6d45ce15bd110,
           0x27d1c9dae835182b272bb25b47b0d871382c9c2765fd1f42e07edbe852830157
@@ -82,8 +75,8 @@ gt =
       ]
     ]
 
-gt' :: Fq12
-gt' =
+pt' :: Fq12
+pt' =
     [ [ [ 0x10227b2606c11f22f4b2dec3f69cee4332ebe2e8f869ea8ca9e6d45ce15bd110,
           0x27d1c9dae835182b272bb25b47b0d871382c9c2765fd1f42e07edbe852830157
         ],
@@ -106,23 +99,62 @@ gt' =
       ]
     ]
 
+fieldModulus :: Integer
+fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
+
+-- Tests from:
+-- https://github.com/ethereum/py_pairing/blob/master/tests/test_bn128.py
+pairingLibTest :: Spec
+pairingLibTest =
+  describe "pairing lib tests" $ do
+    it "passes basic field arithmetic for Fq" $ do
+      Fq 2 * Fq 2 `shouldBe` Fq 4
+      Fq 2 / Fq 7 + Fq 9 / Fq 7 `shouldBe` Fq 11 / Fq 7
+      Fq 2 * Fq 7 + Fq 9 * Fq 7 `shouldBe` Fq 11 * Fq 7
+      Fq 9 ^ fieldModulus `shouldBe` Fq 9
+    it "passes basic field arithmetic for Fq2" $ do
+      let x :: Fq2 = [1, 0]
+      let f :: Fq2 = [1, 2]
+      let fpx :: Fq2 = [2, 2]
+      x + f `shouldBe` fpx
+      f / f `shouldBe` 1
+      1 / f + x / f `shouldBe` (1 + x) / f
+      1 * f + x * f `shouldBe` (1 + x) * f
+      x ^ (fieldModulus ^ (2 :: Int) - 1) `shouldBe` 1
+    it "passes basic field arithmetic for FQ12" $ do
+      let x :: Fq12 = [1]
+          f :: Fq12 = [[[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]]]
+          fpx :: Fq12 = [[[2, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]]]
+      x + f `shouldBe` fpx
+      f / f `shouldBe` 1
+      1 / f + x / f `shouldBe` (1 + x) / f
+      1 * f + x * f `shouldBe` (1 + x) * f
+      x ^ (fieldModulus ^ (2 :: Int) - 1) `shouldBe` 1
+    it "passes basic elliptic curve operations for the generator in group 1" $ do
+      add (add (double g1) g1) g1 `shouldBe` double (double g1)
+      double g1 `shouldNotBe` g1
+
 spec :: Spec
-spec =
+spec = do
+  pairingLibTest
   describe "pairing tests" $ do
     it "pairing lib smoke test" $ do
       let a :: Integer = 2
       let b :: Integer = 3
 
-      let p :: G1 BN254 = g1
-      let q :: G2 BN254 = g2
+      let p :: G1 BN254 = pairingP1
+      let q :: G2 BN254 = pairingP2
 
-      Pairing.pairing p q `shouldBe` gt
+      Pairing.pairing p q `shouldBe` pairingGtPt
 
-      Pairing.pairing (mul' p a) (mul' q b)
+      Pairing.pairing (C.mul' p a) (C.mul' q b)
         `shouldBe` pow (Pairing.pairing p q) (a * b)
 
     it "pairing smoke test" $ do
-      let p' :: CurvePoint Fq = g1'
-      let q' :: CurvePoint Fq2 = g2'
+      let a :: Integer = 2
+      let b :: Integer = 3
 
-      pairing p' q' `shouldBe` gt'
+      pairing p1 p2 `shouldBe` pt'
+
+      pairing (multiply p1 a) (multiply p2 b)
+        `shouldBe` pow (pairing p1 p2) (a * b)

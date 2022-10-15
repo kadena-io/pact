@@ -23,10 +23,19 @@
 module Pact.Native.Pairing
   ( pairing
   , CurvePoint(..)
-  , Fq
+  , Fq(..)
   , Fq2
   , Fq6
   , Fq12
+  , g1
+  , g2
+  , multiply
+  , add
+  , double
+  , negatePt
+  , b1
+  , b2
+  , b12
   )
   where
 
@@ -82,9 +91,6 @@ type Q = 21888242871839275222246405745257275088696311157297823662689037894645226
 
 newtype Fq = Fq (Mod Q)
   deriving (Eq, Show, Ord, Num, Fractional, Euclidean, Field, GcdDomain, Ring, Semiring, Bounded, Enum, NFData)
-
-fieldModulus :: Integer
-fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 
 newtype Extension p k
   = Extension (VPoly k)
@@ -362,8 +368,8 @@ instance ExtensionField F3 Fq6 where
 -----------------------------------------------------------------------------------
 
 -- Curve is y**2 = x**3 + 3
-curveB :: Fq
-curveB = 3
+b1 :: Fq
+b1 = 3
 
 -- Twisted curve over FQ**2
 b2 :: Fq2
@@ -373,7 +379,7 @@ b2 = let
   in v1 / v2
 
 b12 :: Fq12
-b12 = fromList [fromList [3, 0], 0]
+b12 = [3]
 
 g1 :: CurvePoint Fq
 g1 = Point 1 2
