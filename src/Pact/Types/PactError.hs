@@ -158,7 +158,7 @@ instance FromJSON PactError where
     pure $ PactError typ inf sf (prettyString doc)
     where
       parseSFs :: [Text] -> [StackFrame]
-      parseSFs sfs = case sequence (map (parseOnly parseStackFrame) sfs) of
+      parseSFs sfs = case mapM (parseOnly parseStackFrame) sfs of
         Left _e -> []
         Right ss -> ss
 

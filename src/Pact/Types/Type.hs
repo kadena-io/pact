@@ -1,12 +1,12 @@
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |
@@ -122,9 +122,28 @@ data Arg o = Arg {
 instance NFData o => NFData (Arg o)
 instance Pretty o => Pretty (Arg o) where
   pretty (Arg n t _) = pretty n <> colon <> pretty t
-instance ToJSON o => ToJSON (Arg o) where toJSON = lensyToJSON 2
-instance FromJSON o => FromJSON (Arg o) where parseJSON = lensyParseJSON 2
 instance HasInfo (Arg o) where getInfo = _aInfo
+
+argProperties :: ToJSON o => JsonProperties (Arg o)
+argProperties o =
+  [ "name" .= _aName o
+  , "type" .= _aType o
+  , "info" .= _aInfo o
+  ]
+{-# INLINE argProperties #-}
+
+instance ToJSON o => ToJSON (Arg o) where
+  toJSON = enableToJSON "Pact.Types.Type.Arg" . object . argProperties
+  toEncoding = pairs . mconcat . argProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON o => FromJSON (Arg o) where
+  parseJSON = withObject "Arg" $ \o -> Arg
+    <$> o .: "name"
+    <*> o .: "type"
+    <*> o .: "info"
+  {-# INLINE parseJSON #-}
 
 instance (SizeOf o) => SizeOf (Arg o)
 
@@ -141,8 +160,24 @@ instance NFData o => NFData (FunType o)
 instance (Pretty o) => Pretty (FunType o) where
   pretty (FunType as t) = hsep (map pretty as) <+> "->" <+> pretty t
 
-instance ToJSON o => ToJSON (FunType o) where toJSON = lensyToJSON 3
-instance FromJSON o => FromJSON (FunType o) where parseJSON = lensyParseJSON 3
+funTypeProperties :: ToJSON o => JsonProperties (FunType o)
+funTypeProperties o =
+  [ "args" .= _ftArgs o
+  , "return" .= _ftReturn o
+  ]
+{-# INLINE funTypeProperties #-}
+
+instance ToJSON o => ToJSON (FunType o) where
+  toJSON = enableToJSON "Pact.Types.Type.FunType" . object . funTypeProperties
+  toEncoding = pairs . mconcat . funTypeProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON o => FromJSON (FunType o) where
+  parseJSON = withObject "FunType" $ \o -> FunType
+    <$> o .: "args"
+    <*> o .: "return"
+  {-# INLINE parseJSON #-}
 
 instance (SizeOf o) => SizeOf (FunType o)
 
@@ -172,15 +207,25 @@ data GuardType
   deriving (Eq,Ord,Generic,Show)
 
 instance ToJSON GuardType where
-  toJSON g = case g of
+  toJSON = enableToJSON "Pact.Types.Type.GuardType" . \case
     GTyKeySet -> "keyset"
     GTyKeySetName -> "keysetref"
     GTyPact -> "pact"
     GTyUser -> "user"
     GTyModule -> "module"
     GTyCapability -> "capability"
+  toEncoding = \case
+    GTyKeySet -> toEncoding @Text "keyset"
+    GTyKeySetName -> toEncoding @Text "keysetref"
+    GTyPact -> toEncoding @Text "pact"
+    GTyUser -> toEncoding @Text "user"
+    GTyModule -> toEncoding @Text "module"
+    GTyCapability -> toEncoding @Text "capability"
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON GuardType where
-  parseJSON = withText "GuardType" $ \t -> case t of
+  parseJSON = withText "GuardType" $ \case
     "keyset" -> pure GTyKeySet
     "keysetref" -> pure GTyKeySetName
     "pact" -> pure GTyPact
@@ -188,6 +233,7 @@ instance FromJSON GuardType where
     "module" -> pure GTyModule
     "capability" -> pure GTyCapability
     _ -> fail "Unrecognized guard type"
+  {-# INLINE parseJSON #-}
 
 instance NFData GuardType
 
@@ -207,13 +253,23 @@ data PrimType =
 
 instance NFData PrimType
 instance ToJSON PrimType where
-  toJSON a = case a of
+  toJSON = enableToJSON "Pact.Types.Type.PrimType" . \case
     TyInteger -> String tyInteger
     TyDecimal -> String tyDecimal
     TyTime -> String tyTime
     TyBool -> String tyBool
     TyString -> String tyString
     TyGuard g -> object [ "guard" .= g ]
+  toEncoding = \case
+    TyInteger -> toEncoding tyInteger
+    TyDecimal -> toEncoding tyDecimal
+    TyTime -> toEncoding tyTime
+    TyBool -> toEncoding tyBool
+    TyString -> toEncoding tyString
+    TyGuard g -> pairs ("guard" .= g)
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON PrimType where
   parseJSON v = withText "PrimType" doStr v <|> withObject "PrimType" doObj v
     where
@@ -225,6 +281,7 @@ instance FromJSON PrimType where
         | s == tyString = pure TyString
         | otherwise = fail "Bad PrimType Value"
       doObj o = TyGuard <$> o .: "guard"
+  {-# INLINE parseJSON #-}
 
 instance SizeOf PrimType where
   sizeOf _ = 0
@@ -270,15 +327,25 @@ data SchemaType =
   deriving (Eq,Ord,Generic,Show)
 
 instance ToJSON SchemaType where
-  toJSON TyTable = "table"
-  toJSON TyObject = "object"
-  toJSON TyBinding = "binding"
+  toJSON = enableToJSON "Pact.Types.Type.SchemaType" . \case
+    TyTable -> "table"
+    TyObject -> "object"
+    TyBinding -> "binding"
+
+  toEncoding TyTable = toEncoding @Text "table"
+  toEncoding TyObject = toEncoding @Text "object"
+  toEncoding TyBinding = toEncoding @Text "binding"
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON SchemaType where
-  parseJSON = withText "SchemaType" $ \t -> case t of
+  parseJSON = withText "SchemaType" $ \case
     "table" -> pure TyTable
     "object" -> pure TyObject
     "binding" -> pure TyBinding
     _ -> fail "Bad SchemaType value"
+  {-# INLINE parseJSON #-}
 
 instance NFData SchemaType
 instance Pretty SchemaType where
@@ -309,8 +376,29 @@ data TypeVar v =
   SchemaVar { _tvName :: TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic,Show)
 
-instance ToJSON v => ToJSON (TypeVar v) where toJSON = lensyToJSON 3
-instance FromJSON v => FromJSON (TypeVar v) where parseJSON = lensyParseJSON 3
+typeVarProperties :: ToJSON v => JsonProperties (TypeVar v)
+typeVarProperties o@TypeVar{} =
+  [ "tag" .= ("TypeVar" :: Text)
+  , "name" .= _tvName o
+  , "constraint" .= _tvConstraint o
+  ]
+typeVarProperties o@SchemaVar{} =
+  [ "tag" .= ("SchemaVar" :: Text)
+  , "name" .= _tvName o
+  ]
+
+instance ToJSON v => ToJSON (TypeVar v) where
+  toJSON = enableToJSON "Pact.Types.Type.TypeVar" . object . typeVarProperties
+  toEncoding = pairs . mconcat . typeVarProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance FromJSON v => FromJSON (TypeVar v) where
+  parseJSON = withObject "TypeVar" $ \o -> (o .: "tag") >>= \case
+    ("TypeVar" :: Text) -> TypeVar <$> o .: "name" <*> o .: "constraint"
+    "SchemaVar" -> SchemaVar <$> o .: "name"
+    t -> fail ("unexpected constructor tag: " <> unpack t)
+  {-# INLINE parseJSON #-}
 
 instance Arbitrary v => Arbitrary (TypeVar v) where
   arbitrary = oneof
@@ -350,14 +438,23 @@ instance Pretty SchemaPartial where
   pretty sp = viaShow sp
 
 instance ToJSON SchemaPartial where
-  toJSON FullSchema = "full"
-  toJSON AnySubschema = "any"
-  toJSON (PartialSchema s) = toJSON s
+  toJSON = enableToJSON "Pact.Types.Type.SchemaPartial" . \case
+    FullSchema -> "full"
+    AnySubschema -> "any"
+    (PartialSchema s) -> toJSON s
+  toEncoding = \case
+    FullSchema -> toEncoding @Text "full"
+    AnySubschema -> toEncoding @Text "any"
+    (PartialSchema s) -> toEncoding s
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON SchemaPartial where
   parseJSON v =
-    (withThisText "FullSchema" "full" v $ pure FullSchema) <|>
-    (withThisText "AnySubschema" "any" v $ pure AnySubschema) <|>
+    withThisText "FullSchema" "full" v (pure FullSchema) <|>
+    withThisText "AnySubschema" "any" v (pure AnySubschema) <|>
     (PartialSchema <$> parseJSON v)
+  {-# INLINE parseJSON #-}
 
 instance SizeOf SchemaPartial
 
@@ -425,7 +522,7 @@ instance (Pretty o) => Pretty (Type o) where
 
 
 instance ToJSON v => ToJSON (Type v) where
-  toJSON t = case t of
+  toJSON = enableToJSON "Pact.Types.Type.Type" . \case
     TyAny -> "*"
     TyVar n -> toJSON n
     TyPrim pt -> toJSON pt
@@ -434,27 +531,34 @@ instance ToJSON v => ToJSON (Type v) where
     TyFun f -> toJSON f
     TyUser v -> toJSON v
     TyModule is -> object [ "modspec" .= is ]
+  toEncoding t = case t of
+    TyAny -> toEncoding @Text "*"
+    TyVar n -> toEncoding n
+    TyPrim pt -> toEncoding pt
+    TyList l -> pairs ("list" .= l)
+    TySchema st ty p -> pairs $ mconcat [ "schema" .= st, "type" .= ty, "partial" .= p ]
+    TyFun f -> toEncoding f
+    TyUser v -> toEncoding v
+    TyModule is -> pairs ("modspec" .= is)
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance FromJSON v => FromJSON (Type v) where
   parseJSON v =
-    (withThisText "TyAny" "*" v $ pure TyAny) <|>
+    withThisText "TyAny" "*" v (pure TyAny) <|>
     (TyVar <$> parseJSON v) <|>
     (TyPrim <$> parseJSON v) <|>
     (TyFun <$> parseJSON v) <|>
-    (TyUser <$> parseJSON v) <|>
-    (withObject "TyList"
-      (\o -> TyList <$> o .: "list") v) <|>
-    (withObject "TySchema"
+    withObject "TyList" (\o -> TyList <$> o .: "list") v <|>
+    withObject "TySchema"
       (\o -> TySchema
         <$> o .: "schema"
         <*> o .: "type"
         <*> o .: "partial")
-      v) <|>
-    (withObject "TyModule"
-      (\o -> TyModule <$> o .: "modspec") v)
-
-
-
+      v <|>
+    withObject "TyModule" (\o -> TyModule <$> o .: "modspec") v <|>
+    (TyUser <$> parseJSON v)
+  {-# INLINE parseJSON #-}
 
 mkTyVar :: TypeVarName -> [Type n] -> Type n
 mkTyVar n cs = TyVar (TypeVar n cs)

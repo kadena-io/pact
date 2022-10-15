@@ -27,6 +27,7 @@ import System.Timeout
 import qualified Data.Vector as V
 
 import Test.Hspec
+import Test.Hspec.Core.Spec
 
 import Pact.ApiReq
 import Pact.Server.API
@@ -51,7 +52,7 @@ spec = describe "pacts in dev server" $ do
   describe "testPactContinuation" testPactContinuation
   describe "testPactRollback" testPactRollback
   describe "testPactYield" testPactYield
-  describe "testTwoPartyEscrow" testTwoPartyEscrow
+  describe "testTwoPartyEscrow" $ sequential testTwoPartyEscrow
   describe "testOldNestedPacts" testOldNestedPacts
   describe "testManagedCaps" testManagedCaps
   describe "testElideModRefEvents" testElideModRefEvents

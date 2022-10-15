@@ -87,6 +87,9 @@ instance FromJSON PublicKey where
   parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
 instance ToJSON PublicKey where
   toJSON = toJSON . decodeUtf8 . _pubKey
+  toEncoding = toEncoding . decodeUtf8 . _pubKey
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance Pretty PublicKey where
   pretty (PublicKey s) = prettyString (BSU.toString s)
@@ -139,11 +142,17 @@ instance FromJSON KeySet where
           <$> parseJSON v
           <*> pure defPred
 
+keySetProperties :: JsonProperties KeySet
+keySetProperties o =
+  [ "pred" .= _ksPredFun o
+  , "keys" .= S.toList (_ksKeys o)
+  ]
+
 instance ToJSON KeySet where
-    toJSON (KeySet k f) = object
-      [ "keys" .= k
-      , "pred" .= f
-      ]
+  toJSON = enableToJSON "Pact.Types.KeySet.KeySet" . object . keySetProperties
+  toEncoding = pairs . mconcat . keySetProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 -- -------------------------------------------------------------------------- --
 -- KeySetName
@@ -174,10 +183,24 @@ instance FromJSON KeySetName where
         <$> o .: "ksn"
         <*> (fromMaybe Nothing <$> o .:? "ns")
 
+keySetNameProperties :: JsonProperties KeySetName
+keySetNameProperties o =
+  [ "ns" .= _ksnNamespace o
+  , "ksn" .= _ksnName o
+  ]
+
 instance ToJSON KeySetName where
-  toJSON (KeySetName k n) = case n of
+
+  toJSON ks@(KeySetName k n) = enableToJSON "Pact.Types.KeySet.KeySetName" $ case n of
     Nothing -> toJSON k
-    Just ns -> object [ "ksn" .= k , "ns" .= ns ]
+    Just{} -> object $ keySetNameProperties ks
+
+  toEncoding ks@(KeySetName k n) = case n of
+    Nothing -> toEncoding k
+    Just{} -> pairs $ mconcat $ keySetNameProperties ks
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance AsString KeySetName where
   asString (KeySetName n mns) = case mns of

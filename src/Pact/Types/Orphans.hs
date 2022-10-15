@@ -4,7 +4,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      :  Pact.Types.Orphans
@@ -27,13 +27,12 @@ import Data.Text (Text)
 import Data.Text.Encoding
 import Pact.Time.Internal (NominalDiffTime(..), UTCTime(..))
 import Data.Default
-import Data.Hashable
-import Data.Set (Set)
-import qualified Data.Set as S
 import Control.DeepSeq
 import Bound
 import Control.Applicative ((<|>))
 import Test.QuickCheck (Arbitrary(..))
+
+import Pact.Types.Util
 
 
 instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
@@ -74,31 +73,34 @@ instance Serialize Text where
 
 ------ Bound/Scope/Var instances ------
 
-instance (A.ToJSON a, A.ToJSON b) =>
-  A.ToJSON (Var b a) where
-  toJSON (B b) = A.object [ "b" A..= b ]
-  toJSON (F a) = A.object [ "f" A..= a ]
+instance (A.ToJSON a, A.ToJSON b) => A.ToJSON (Var b a) where
+  toJSON = enableToJSON "Pact.Types.Orphans.Var" . \case
+    (B b) -> A.object [ "b" A..= b ]
+    (F a) -> A.object [ "f" A..= a ]
+
+  toEncoding (B b) = A.pairs ("b" A..= b)
+  toEncoding (F a) = A.pairs ("f" A..= a)
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance (A.FromJSON a, A.FromJSON b) =>
   A.FromJSON (Var b a) where
   parseJSON = A.withObject "Var" $ \v ->
-    ((B <$> v A..: "b") <|> (F <$> v A..: "f"))
+    (B <$> v A..: "b") <|> (F <$> v A..: "f")
+  {-# INLINE parseJSON #-}
 
-instance (A.ToJSON b, Functor f, A.ToJSON (f A.Value), A.ToJSON (f a)) =>
-  A.ToJSON (Scope b f a) where
-  toJSON (Scope s) = A.object [ "scope" A..= (fmap A.toJSON s) ]
+instance (Functor f, A.ToJSON (f (Var b (f a)))) => A.ToJSON (Scope b f a) where
+  toJSON (Scope s) = A.object [ "scope" A..= s ]
+  toEncoding (Scope s) = A.pairs ("scope" A..= s)
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 
 instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value), A.FromJSON (f a)) =>
   A.FromJSON (Scope b f a) where
   parseJSON = A.withObject "Scope" $ \o -> do
     f <- o A..: "scope"
     Scope <$> traverse A.parseJSON f
-
--- -------------------------------------------------------------------- --
--- Set's Hashable orphan
-
-instance Hashable a => Hashable (Set a) where
-  hashWithSalt n = hashWithSalt n . S.toList
+  {-# INLINE parseJSON #-}
 
 -- -------------------------------------------------------------------------- --
 -- Time Orphans

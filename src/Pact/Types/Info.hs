@@ -162,12 +162,12 @@ instance HasInfo Info where getInfo = id
 instance ToJSON Info where
   toJSON (Info Nothing) = Null
   toJSON (Info (Just (code,Parsed{..}))) = object
-    [ "c" .= code
-    , case _pDelta of
+    [ case _pDelta of
       (Directed a b c d e) -> "d" .= (pl, decodeUtf8 a, b, c, d, e)
       (Lines a b c d) -> "d" .= (pl, a, b, c, d)
       (Columns a b) -> "d" .= (pl, a, b)
       (Tab a b c) -> "d" .= (pl, a, b, c)
+    , "c" .= code
     ]
    where pl = _pLength
 

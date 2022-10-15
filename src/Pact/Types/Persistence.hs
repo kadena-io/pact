@@ -62,10 +62,9 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Type
-import Pact.Types.Util (AsString(..), tShow, JsonProperties, JsonMProperties, enableToJSON, (.?=))
+import Pact.Types.Util (AsString(..), tShow, JsonProperties, enableToJSON, (.?=))
 import Pact.Types.Namespace
 import Pact.Utils.Json
-
 
 data PersistDirect =
     PDValue PactValue
@@ -136,19 +135,21 @@ makeLenses ''ModuleData
 
 instance NFData r => NFData (ModuleData r)
 
-moduleDataProperties :: ToJSON r => JsonMProperties (ModuleData r)
-moduleDataProperties o = mconcat
-  [ "dependencies" .?= if HM.null deps then Nothing else Just deps
-  , "module" .= _mdModule o
-  , "refMap" .= legacyHashMap (_mdRefMap o)
-  ]
- where
-  deps = legacyHashMap (_mdDependencies o)
-{-# INLINE moduleDataProperties #-}
-
 instance ToJSON r => ToJSON (ModuleData r) where
-  toJSON = enableToJSON "Pact.Types.Persistence.ModuleData r" . A.Object . moduleDataProperties
-  toEncoding = pairs . moduleDataProperties
+  toJSON o = enableToJSON "Pact.Types.Persistence.ModuleData r" $ A.Object $ mconcat
+    [ "dependencies" .?= if HM.null (_mdDependencies o)
+      then Nothing
+      else Just (_mdDependencies o)
+    , "module" .= _mdModule o
+    , "refMap" .= _mdRefMap o
+    ]
+  toEncoding o = pairs $ mconcat
+    [ "dependencies" .?= if HM.null (_mdDependencies o)
+      then Nothing
+      else Just (legacyHashMap $ _mdDependencies o)
+    , "module" .= _mdModule o
+    , "refMap" .= legacyHashMap (_mdRefMap o)
+    ]
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
@@ -173,8 +174,8 @@ instance ToJSON (Ref' PersistDirect) where
     (Ref t) -> [ "ref" .= t ]
     (Direct pd) -> [ "direct" .= pd ]
 
-  toEncoding (Ref t) = pairs $ "ref" .= t
-  toEncoding (Direct pd) = pairs $ "direct" .= pd
+  toEncoding (Ref t) = pairs ("ref" .= t)
+  toEncoding (Direct pd) = pairs ("direct" .= pd)
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -183,7 +184,7 @@ instance FromJSON (Ref' PersistDirect) where
   parseJSON v =
     withObject "Ref" (\o -> Ref <$> o .: "ref") v <|>
     withObject "Direct" (\o -> Direct <$> o .: "direct") v
-
+  {-# INLINE parseJSON #-}
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
