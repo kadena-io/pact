@@ -38,6 +38,7 @@ module Pact.Native.Pairing
   , b12
   , G1
   , G2
+  , pairingCheck
   )
   where
 
@@ -570,24 +571,26 @@ finalExponentiate u = hardPart . easyPart
             p4'' = y4 * y5 * join (*) y6
 {-# INLINE finalExponentiate #-}
 
+pairing :: G1 -> G2 -> Fq12
+pairing p1 p2 =
+  finalExponentiate parameterHex (millerLoop p1 p2)
 
 -- | [Miller algorithm for Barreto-Naehrig curves]
 -- (https://eprint.iacr.org/2010/354.pdf).
-pairing
+millerLoop
   :: G1
   -> G2
   -> Fq12
-pairing p q =
-  finalExponentiate parameterHex $
+millerLoop p q =
   finalStepBN $
-  millerLoop parameterBin (q, mempty)
+  millerLoop' parameterBin (q, mempty)
   where
-  millerLoop []     tf = tf
-  millerLoop (x:xs) tf = case doublingStep p tf of
+  millerLoop' []     tf = tf
+  millerLoop' (x:xs) tf = case doublingStep p tf of
     tf2
-      | x == 0    -> millerLoop xs tf2
-      | x == 1    -> millerLoop xs $ additionStep p q tf2
-      | otherwise -> millerLoop xs $ additionStep p (negatePt q) tf2
+      | x == 0    -> millerLoop' xs tf2
+      | x == 1    -> millerLoop' xs $ additionStep p q tf2
+      | otherwise -> millerLoop' xs $ additionStep p (negatePt q) tf2
   finalStepBN (t, f) = case lineFunction p t q1 of
                   (t', f') -> case lineFunction p t' q2 of
                     (_, f'') -> f <> f' <> f''
@@ -601,3 +604,11 @@ pairing p q =
                  , 1, 1, 0, 0, 0, 0,-1, 0, 1, 0, 0,-1, 0, 1, 1, 0
                  , 0, 1, 0, 0,-1, 1, 0, 0,-1, 0, 1, 0, 1, 0, 0, 0 ]
 {-# INLINABLE pairing #-}
+
+pairingCheck :: [(G1, G2)] -> Bool
+pairingCheck = go 1
+  where
+  go acc ((p1, p2):rest)
+    | p1 == CurveInf || p2 == CurveInf = go acc rest
+    | otherwise = go (acc * millerLoop p1 p2) rest
+  go acc [] = finalExponentiate parameterHex acc == 1
