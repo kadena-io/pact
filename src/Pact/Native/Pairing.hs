@@ -36,6 +36,8 @@ module Pact.Native.Pairing
   , b1
   , b2
   , b12
+  , G1
+  , G2
   )
   where
 
@@ -372,6 +374,9 @@ instance ExtensionField F3 Fq6 where
   fieldPoly = fromList [[0, -1], 0, 1]
   {-# INLINE fieldPoly #-}
 
+type G1 = CurvePoint Fq
+type G2 = CurvePoint Fq2
+
 -----------------------------------------------------------------------------------
 -- Curve implementation
 -----------------------------------------------------------------------------------
@@ -439,11 +444,12 @@ add p1@(Point x1 y1) (Point x2 y2)
 
 multiply :: (Field a, Eq a, Num a) => CurvePoint a -> Integer -> CurvePoint a
 multiply pt n
+  | n < 0 = multiply (negatePt pt) (-n)
   | n == 0 = CurveInf
   | n == 1 = pt
   | even n = multiply (double pt) (n `div` 2)
   | otherwise =
-    add (multiply (double pt) (n `div` 2)) pt
+      add (multiply (double pt) (n `div` 2)) pt
 {-# SPECIALIZE multiply :: CurvePoint Fq -> Integer -> CurvePoint Fq #-}
 {-# SPECIALIZE multiply :: CurvePoint Fq2 -> Integer -> CurvePoint Fq2 #-}
 {-# SPECIALIZE multiply :: CurvePoint Fq6 -> Integer -> CurvePoint Fq6 #-}
@@ -568,8 +574,8 @@ finalExponentiate u = hardPart . easyPart
 -- | [Miller algorithm for Barreto-Naehrig curves]
 -- (https://eprint.iacr.org/2010/354.pdf).
 pairing
-  :: CurvePoint Fq
-  -> CurvePoint Fq2
+  :: G1
+  -> G2
   -> Fq12
 pairing p q =
   finalExponentiate parameterHex $

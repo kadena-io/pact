@@ -9,16 +9,17 @@ module ZkSpec (spec) where
 import qualified Data.Curve.Weierstrass as C
 import Data.Field.Galois as F hiding (pow)
 import Data.Group (pow)
-import Data.Pairing.BN254 hiding (pairing, Fq2, Fq12, Fq)
+import Data.Pairing.BN254 hiding (pairing, Fq2, Fq12, Fq, G1, G2)
 import Data.Pairing.BN254 qualified as Pairing
+import Data.Field(Field)
 -- import qualified Data.Pairing.Ate as Ate
 -- import Data.Vector qualified as V
--- import Hedgehog
--- import Hedgehog.Gen qualified as Gen
--- import Hedgehog.Range qualified as Range
+import Hedgehog
+import Hedgehog.Gen qualified as Gen
+import Hedgehog.Range qualified as Range
 import Pact.Native.Pairing
 import Test.Hspec
--- import Test.Hspec.Hedgehog
+import Test.Hspec.Hedgehog
 
 -- y^2 = x^3 + b
 isOnCurve :: (Num a, Eq a) => CurvePoint a -> a -> Bool
@@ -26,7 +27,7 @@ isOnCurve CurveInf _ = True
 isOnCurve (Point x y) b =
   ((y ^ (2 :: Int)) - (x ^ (3 :: Int))) == b
 
-pairingP1 :: G1 BN254
+pairingP1 :: Pairing.G1 BN254
 pairingP1 =
   C.A
     0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
@@ -35,7 +36,7 @@ pairingP1 =
 p1 :: CurvePoint Fq
 p1 = multiply g1 2
 
-pairingP2 :: G2 BN254
+pairingP2 :: Pairing.G2 BN254
 pairingP2 =
   C.A
     ( [ 0x6064e784db10e9051e52826e192715e8d7e478cb09a5e0012defa0694fbc7f5,
@@ -104,6 +105,35 @@ fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894
 
 curveOrder :: Integer
 curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
+
+genCurvePoint
+  :: (Field a, Eq a, Num a)
+  => CurvePoint a -- Generator
+  -> Gen (CurvePoint a)
+genCurvePoint gen' = do
+  r <- Gen.integral $ Range.constant 0 (curveOrder - 1)
+  pure (multiply gen' r)
+
+genG1 :: Gen G1
+genG1 = genCurvePoint g1
+
+genG2 :: Gen G2
+genG2 = genCurvePoint g2
+
+pairingGenTest :: Spec
+pairingGenTest = modifyMaxSuccess (const 20) $
+  describe "Curve generated tests" $ do
+    it "Generates a point on the curve, and obeys the pairing function" $ hedgehog $ do
+      p1' <- forAll genG1
+      assert (isOnCurve g1 b1)
+
+      p2' <- forAll genG2
+      assert (isOnCurve g2 b2)
+
+      r1 <- forAll $ Gen.integral (Range.constant 0 1000)
+      r2 <- forAll $ Gen.integral (Range.constant 0 1000)
+      pairing (multiply p1' r1)  (multiply p2' r2) === pow (pairing p1' p2') (r1 * r2)
 
 -- Tests from:
 -- https://github.com/ethereum/py_pairing/blob/master/tests/test_bn128.py
@@ -181,13 +211,14 @@ pairingLibTest =
 spec :: Spec
 spec = do
   pairingLibTest
+  pairingGenTest
   describe "pairing tests" $ do
     it "pairing lib smoke test" $ do
       let a :: Integer = 2
       let b :: Integer = 3
 
-      let p :: G1 BN254 = pairingP1
-      let q :: G2 BN254 = pairingP2
+      let p :: Pairing.G1 BN254 = pairingP1
+      let q :: Pairing.G2 BN254 = pairingP2
 
       Pairing.pairing p q `shouldBe` pairingGtPt
 
