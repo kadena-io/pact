@@ -39,6 +39,7 @@ import Control.DeepSeq
 import Control.Lens (makeLenses)
 import Data.Aeson (ToJSON(..), FromJSON(..), withText, pairs, (.=), FromJSONKey(..), ToJSONKey(..), ToJSONKeyFunction(..), FromJSONKeyFunction(..), Value(String))
 import Data.Aeson.Encoding (text)
+import qualified Data.Aeson.Key as AK
 import qualified Data.Attoparsec.Text as AP
 import Data.Default
 import Data.Hashable
@@ -59,6 +60,7 @@ import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util
 import Pact.Types.Hash
+import Pact.Utils.LegacyHashable
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf)
@@ -268,7 +270,7 @@ instance FromJSON FullyQualifiedName where
 instance FromJSONKey FullyQualifiedName where
   fromJSONKey = FromJSONKeyTextParser $ parseJSON . String
 instance ToJSONKey FullyQualifiedName where
-  toJSONKey = ToJSONKeyText fqdnJsonText (text . fqdnJsonText)
+  toJSONKey = ToJSONKeyText (AK.fromText . fqdnJsonText) (text . fqdnJsonText)
 
 instance SizeOf FullyQualifiedName
 
@@ -400,7 +402,7 @@ instance Ord Name where
 
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData,Hashable)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData,Hashable,LegacyHashable)
 
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name

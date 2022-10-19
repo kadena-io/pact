@@ -44,8 +44,6 @@ import Control.DeepSeq (NFData)
 import Control.Lens hiding ((.=))
 
 import Data.Aeson
-import Data.Bifunctor
-import qualified Data.HashMap.Strict as HM
 import Data.Map.Strict(Map)
 import Data.Maybe(fromMaybe)
 import qualified Data.Map.Strict as Map
@@ -59,7 +57,7 @@ import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Util (lensyToJSON, lensyParseJSON, JsonProperties, JsonMProperties, enableToJSON, (.?=))
-import Pact.Utils.Json
+import Pact.Utils.LegacyValue
 
 
 -- | Provenance datatype contains all of the necessary
@@ -243,9 +241,7 @@ pactExecProperties f o =
 
 instance ToJSON PactExec where
   toJSON = enableToJSON "Pact.Types.Continuation.PactExec" . object . pactExecProperties id
-  toEncoding = pairs . mconcat . pactExecProperties f
-   where
-    f m = HM.fromList $ first (\(PactId t) -> LegacyHashed t) <$> Map.toList m
+  toEncoding = pairs . mconcat . pactExecProperties legacyMap
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
@@ -306,9 +302,7 @@ nestedPactExecProperties f o =
 
 instance ToJSON NestedPactExec where
   toJSON = enableToJSON "Pact.Types.Continuation.NestedPactExec" . object . nestedPactExecProperties id
-  toEncoding = pairs. mconcat . nestedPactExecProperties f
-   where
-    f m = HM.fromList $ first (\(PactId t) -> LegacyHashed t) <$> Map.toList m
+  toEncoding = pairs. mconcat . nestedPactExecProperties legacyMap
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 

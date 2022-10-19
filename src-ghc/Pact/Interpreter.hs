@@ -68,7 +68,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 
-import Pact.Utils.Json
+import Pact.Utils.LegacyValue
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {

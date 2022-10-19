@@ -29,7 +29,7 @@ import Pact.Repl.Types
 import Pact.Native (nativeDefs)
 import Pact.Types.RowData
 
-import Pact.Utils.Json
+import Pact.Utils.LegacyValue
 
 loadModule :: IO (ModuleName, ModuleData Ref, PersistModuleData)
 loadModule = do

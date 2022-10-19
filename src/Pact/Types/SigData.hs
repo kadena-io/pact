@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
@@ -33,7 +34,7 @@ import Test.QuickCheck
 import Pact.Parse
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (PublicKey)
-import Pact.Utils.Json (legacyHashMap)
+import qualified Pact.Utils.LegacyHashMap as LHM
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
   deriving (Eq,Ord,Show,Generic)
@@ -75,10 +76,10 @@ data SigData a = SigData
   , _sigDataCmd :: Maybe a
   } deriving (Eq,Show,Generic)
 
-sigDataProperties :: ToJSON a => JsonMProperties (SigData a)
-sigDataProperties o = mconcat
+sigDataProperties :: ToJSON a => ToJSON x => ([(Text, Maybe Text)] -> x) -> JsonMProperties (SigData a)
+sigDataProperties f o = mconcat
   [ "hash" .= _sigDataHash o
-  , "sigs" .= legacyHashMap (HM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o))
+  , "sigs" .= f (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
     -- FIXME: this instance seems to violate the comment on the respective
     -- constructor field. Is that fine? Is it required for backward compat?
   , "cmd" .?= _sigDataCmd o
@@ -86,8 +87,8 @@ sigDataProperties o = mconcat
 {-# INLINE sigDataProperties #-}
 
 instance ToJSON a => ToJSON (SigData a) where
-  toJSON = enableToJSON "Pact.Types.SigData.SigData" . Data.Aeson.Object . sigDataProperties
-  toEncoding = pairs . sigDataProperties
+  toJSON = enableToJSON "Pact.Types.SigData.SigData" . Data.Aeson.Object . sigDataProperties HM.fromList
+  toEncoding = pairs . sigDataProperties LHM.fromList
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 

@@ -43,6 +43,7 @@ import Bound
 import Control.Lens hiding (Fold)
 import Control.Monad
 import Data.Aeson hiding (Object)
+import qualified Data.Aeson.Key as AK
 import qualified Data.Aeson.Lens as A
 import Data.Default
 import Data.Foldable
@@ -84,7 +85,7 @@ parseMsgKey' i msg key = do
                    <> prettyString e <> ": " <> pretty v
   case key of
     Nothing -> go b
-    Just k -> case preview (A.key k) b of
+    Just k -> case preview (A.key $ AK.fromText k) b of
       Nothing -> evalError' i $ "No such key in message: " <> pretty k
       Just v -> go v
 

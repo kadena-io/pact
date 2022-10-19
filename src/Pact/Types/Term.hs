@@ -93,7 +93,6 @@ module Pact.Types.Term
    module Pact.Types.Names
    ) where
 
-
 import Bound
 import Control.Applicative
 import Control.DeepSeq
@@ -101,6 +100,7 @@ import Control.Lens hiding ((.=), DefName(..), elements)
 import Control.Monad
 import Data.Aeson hiding (pairs,Object, (<?>))
 import qualified Data.Aeson as A
+import qualified Data.Aeson.Key as A
 import qualified Data.Aeson.Types as A
 import Data.Decimal
 import Data.Default
@@ -781,12 +781,13 @@ termEnc kv val = \case
    ]
   (TModRef mr _i) -> val mr
  where
-  p = prop @T.Text
-  inf i = ("i" :: T.Text) .= i
+  -- p = prop @T.Text
+  p = prop @AesonKey
+  inf i = ("i" :: AesonKey) .= i
 
 instance FromJSON n => FromJSON (Term n) where
-  parseJSON v
-    = wo "Module"
+  parseJSON v =
+    ( wo "Module"
       (\o -> TModule
         <$> o .: p TermModuleDef
         <*> o .: p TermBody
@@ -865,6 +866,7 @@ instance FromJSON n => FromJSON (Term n) where
           <*> inf o
         )
     <|> parseWithInfo TModRef
+    ) A.<?> A.Key (A.fromText "Term")
    where
     p = prop
     inf o = o .: "i"

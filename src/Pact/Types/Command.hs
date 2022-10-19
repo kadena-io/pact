@@ -76,7 +76,7 @@ import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 
-import Pact.Utils.Json
+import Pact.Utils.LegacyValue
 
 
 #if !defined(ghcjs_HOST_OS)

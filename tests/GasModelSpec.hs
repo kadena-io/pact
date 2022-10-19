@@ -13,7 +13,6 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Set as S
 import qualified Data.Text as T
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 import qualified Data.Yaml as Y
 
@@ -42,6 +41,9 @@ import Pact.GasModel.Utils
 import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
+
+import Pact.Utils.LegacyValue
+import qualified Pact.Utils.LegacyHashMap as LHM
 
 import Test.Hspec.Core.Spec
 
@@ -77,7 +79,9 @@ allGasTestsAndGoldenShouldPass' = beforeAll (newIORef []) $ sequential $ do
 
   -- fails if one of the gas tests throws a pact error
   parallel $ do
-    forM_ ([0::Int ..] `zip` HM.toList unitTests) $ \(i, (n, t)) -> do
+    -- TODO: make the use of legacy sorting nicer
+    -- Update golden once the PR is complete!
+    forM_ ([0::Int ..] `zip` LHM.toList (legacyHashMap_ unitTests)) $ \(i, (n, t)) -> do
       it (show n) $ \ref -> do
         !r <- runTest t
         atomicModifyIORef' ref (\x -> ((i,r):x, ()))

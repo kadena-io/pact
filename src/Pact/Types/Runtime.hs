@@ -89,7 +89,7 @@ import Pact.Types.SPV
 import Pact.Types.Util
 import Pact.Types.Namespace
 
-import Pact.Utils.Json (LegacyValue(..))
+import Pact.Utils.LegacyValue (LegacyValue(..))
 
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)

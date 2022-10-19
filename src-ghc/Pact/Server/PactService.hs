@@ -38,7 +38,7 @@ import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.SPV
 
-import Pact.Utils.Json
+import Pact.Utils.LegacyValue
 
 initPactService
   :: CommandConfig

@@ -124,7 +124,8 @@ import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Util
 
-import Pact.Utils.Json
+import Pact.Utils.LegacyHashable
+import Pact.Utils.LegacyValue
 
 -- -------------------------------------------------------------------------- --
 -- Meta
@@ -174,7 +175,7 @@ instance Monoid Meta where
 -- PactId
 
 newtype PactId = PactId Text
-    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON, FromJSONKey, ToJSONKey, Generic,NFData,SizeOf)
+    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON, FromJSONKey, ToJSONKey, Generic,NFData,SizeOf,LegacyHashable)
 
 -- -------------------------------------------------------------------------- --
 -- UserGuard
@@ -536,7 +537,7 @@ instance SizeOf Example
 
 -- | Label type for objects.
 newtype FieldKey = FieldKey Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey,SizeOf)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey,SizeOf,LegacyHashable)
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
@@ -733,18 +734,15 @@ instance Pretty v => Pretty (ObjectMap v) where
 -- when serialzing maps via Value.
 --
 instance ToJSON v => ToJSON (ObjectMap v) where
-  toJSON (ObjectMap om) = enableToJSON "Pact.Types.Term.Internal.ObjectMap"
-    $ toJSON
-    $ M.mapKeys asString om
-  toEncoding (ObjectMap om) = toEncoding
-    $ legacyMap
-    $ M.mapKeys asString om
+  toJSON (ObjectMap om) = enableToJSON "Pact.Types.Term.Internal.ObjectMap" $ toJSON om
+  toEncoding (ObjectMap om) = toEncoding $ legacyMap om
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
-instance FromJSON v => FromJSON (ObjectMap v)
-  where parseJSON v = flip (withObject "ObjectMap") v $ \_ ->
-          ObjectMap . M.mapKeys FieldKey <$> parseJSON v
+instance FromJSON v => FromJSON (ObjectMap v) where
+  parseJSON v = flip (withObject "ObjectMap") v $ \_ ->
+    ObjectMap . M.mapKeys FieldKey <$> parseJSON v
+  {-# INLINE parseJSON #-}
 
 instance Default (ObjectMap v) where
   def = ObjectMap M.empty

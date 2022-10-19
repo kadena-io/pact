@@ -145,7 +145,9 @@ library
     Pact.Types.Version
     Pact.Types.Typecheck
     Pact.Typechecker
-    Pact.Utils.Json
+    Pact.Utils.LegacyHashable
+    Pact.Utils.LegacyHashMap
+    Pact.Utils.LegacyValue
   if flag(with-integer-gmp)
     build-depends:
         , base >= 4.15.0.0
@@ -158,7 +160,7 @@ library
   build-depends:
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1
-    , aeson >= 0.11.3.0 && < 1.6
+    , aeson >= 2
     , attoparsec >= 0.13.0.2 && < 0.15
     -- note: this is the real constraint, but due to base changes
     -- we split for compat.
@@ -177,7 +179,7 @@ library
     , errors >= 2.3
     , exceptions >= 0.8.3 && < 0.11
     , filepath >= 1.4.1.0 && < 1.5
-    , hashable >= 1.2.4.0 && < 1.3.3.0
+    , hashable >= 1.4
     , lens >= 4.14 && < 5.2
     , lens-aeson >= 1.0.0.5 && < 1.3
     , megaparsec >= 9
@@ -193,10 +195,10 @@ library
     , servant
     , text >= 1.2.2.1 && < 2
     , transformers >= 0.5.2.0 && < 0.7
-    , trifecta >= 2.1
-    , unordered-containers >= 0.2.7.2 && <= 0.2.16
+    , trifecta >=2.1.1.1
+    , unordered-containers >= 0.2.19
     , utf8-string >= 1.0.1.1 && < 1.1
-    , vector >= 0.11.0.0 && < 0.13
+    , vector >= 0.11.0.0
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
 
@@ -393,7 +395,10 @@ test-suite hspec
       ParserSpec
       SchemeSpec
       SignatureSpec
-      Json.Compat
+      Test.Pact.Utils.LegacyHashable
+      Test.Pact.Utils.LegacyHashMap
+      Test.Pact.Utils.LegacyValue
+      Utils
 
     build-depends:
       , QuickCheck
@@ -401,10 +406,12 @@ test-suite hspec
       , directory
       , errors
       , filepath
+      , hashable
       , lens
       , mtl
       , text
       , transformers
+      , quickcheck-instances
       , vector
 
     if flag(build-tool)

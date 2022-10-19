@@ -53,7 +53,7 @@ import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger
 
-import Pact.Utils.Json
+import Pact.Utils.LegacyValue
 
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
@@ -239,7 +239,7 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn Pacts = TxTable pactsTable
     tn (UserTables t) = userTxRecord t
     convLog :: TxLog LegacyValue -> MVState p (TxLog v)
-    convLog tl = case fromJSON (getLegacyValue $ _txValue tl) of
+    convLog tl = case fromJSON (_getLegacyValue $ _txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl
 {-# INLINE getLogs #-}

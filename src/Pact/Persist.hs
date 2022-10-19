@@ -31,7 +31,7 @@ import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.Namespace
 
-import Pact.Utils.Json
+import Pact.Utils.LegacyValue
 
 type Persist s a = s -> IO (s,a)
 
