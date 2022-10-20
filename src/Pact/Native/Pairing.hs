@@ -45,6 +45,7 @@ module Pact.Native.Pairing
 import Prelude
 import qualified Prelude as P
 
+import Control.Lens
 import Control.Monad(join)
 import Data.Bits(shiftR)
 import Data.Group(Group(..))
@@ -56,16 +57,25 @@ import qualified Data.Vector as G
 import qualified Data.Vector.Mutable as MG
 import qualified Data.Semiring as SR
 import qualified Data.Euclidean as E
+import qualified Data.Text as T
+import qualified Data.Map.Strict as HM
 import Control.Monad.ST
 import Data.Mod
 import Data.Poly
 import Data.Vector(Vector)
+import Data.Default(def)
 import Data.Int(Int8)
 import GHC.Real(Ratio(..))
+import GHC.Natural(naturalToInteger)
 import GHC.Exts(IsList(..))
 
 import Control.DeepSeq (NFData)
 import Numeric.Natural(Natural)
+
+import Pact.Native.Internal
+import Pact.Types.Type
+import Pact.Types.Term
+import Pact.Types.Runtime
 
 -----------------------------------------------------
 -- Galois fields and field extensions
@@ -94,6 +104,13 @@ type Q = 21888242871839275222246405745257275088696311157297823662689037894645226
 
 newtype Fq = Fq (Mod Q)
   deriving (Eq, Show, Ord, Num, Fractional, Euclidean, Field, GcdDomain, Ring, Semiring, Bounded, Enum, NFData)
+
+instance Real Fq where
+  toRational = fromIntegral
+
+instance Integral Fq where
+  quotRem = E.quotRem
+  toInteger (Fq m) = naturalToInteger (unMod m)
 
 newtype Extension p k
   = Extension (VPoly k)
@@ -612,3 +629,53 @@ pairingCheck = go 1
     | p1 == CurveInf || p2 == CurveInf = go acc rest
     | otherwise = go (acc * millerLoop p1 p2) rest
   go acc [] = finalExponentiate parameterHex acc == 1
+
+pointAdditionDef :: NativeDef
+pointAdditionDef =
+  defRNative "point-add" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("point2", a)])
+  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
+  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
+   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
+  ] "beep boop"
+  where
+  a = mkTyVar "a" []
+  pactPointAdd :: RNativeFun e
+  pactPointAdd i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TObject p2 _) :: Term Name] =
+    case T.toLower ptTy of
+      "g1" -> do
+        p1' <- toG1 p1
+        p2' <- toG1 p2
+        let p3' = add p1' p2'
+        pure $ TObject (fromG1 p3') def
+      "g2" -> do
+        p1' <- toG2 p1
+        p2' <- toG2 p2
+        let p3' = add p1' p2'
+        pure $ TObject (fromG2 p3') def
+      _ -> argsError i as
+    where
+    toG1 :: Object Name -> Eval e G1
+    toG1 obj = maybe (evalError' i "unable to decode point in g1") pure $ do
+      let om = _objectMap (_oObject obj)
+      px <- preview (ix "x" . _TLiteral . _1 . _LInteger) om
+      py <- preview (ix "y" . _TLiteral . _1 . _LInteger) om
+      pure (Point (fromIntegral px) (fromIntegral py))
+    fromG1 :: G1 -> Object Name
+    fromG1 CurveInf = Object (ObjectMap mempty) TyAny Nothing def
+    fromG1 (Point x y) = Object pts TyAny Nothing def
+      where
+      pts = ObjectMap $
+        HM.fromList
+        [ ("x", TLiteral (LInteger (fromIntegral x)) def)
+        , ("y", TLiteral (LInteger (fromIntegral y)) def)]
+    toG2 :: Object Name -> Eval e G2
+    toG2 obj = maybe (evalError' i "unable to decode point in g1") pure $ do
+      let om = _objectMap (_oObject obj)
+      pxl <- preview (ix "x" . _TList . _1 ) om
+      px <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pxl
+      pyl <- preview (ix "y" . _TList . _1) om
+      py <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pyl
+      pure (Point (fromList (G.toList px)) (fromList (G.toList py)))
+    fromG2 = undefined
+  pactPointAdd i as = argsError i as
+
