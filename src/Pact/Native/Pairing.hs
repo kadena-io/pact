@@ -39,6 +39,8 @@ module Pact.Native.Pairing
   , G1
   , G2
   , pairingCheck
+  , zkDefs
+  , isOnCurve
   )
   where
 
@@ -46,7 +48,7 @@ import Prelude
 import qualified Prelude as P
 
 import Control.Lens
-import Control.Monad(join)
+import Control.Monad(join, unless)
 import Data.Bits(shiftR)
 import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
@@ -126,7 +128,7 @@ instance GaloisField Fq where
 
 -- | Frobenius endomorphism precomputation.
 frobenius' :: GaloisField k => Vector k -> Vector k -> Maybe (Vector k)
-frobenius' [ ] _ = Just []
+frobenius' []  _ = Just []
 frobenius' [a] _ = Just [frobenius a]
 frobenius' [a, b] [x, 0, 1]
   | degree x == 2  = Just [a, negate b]
@@ -399,6 +401,12 @@ type G2 = CurvePoint Fq2
 -- Curve implementation
 -----------------------------------------------------------------------------------
 
+-- y^2 = x^3 + b
+isOnCurve :: (Num a, Eq a) => CurvePoint a -> a -> Bool
+isOnCurve CurveInf _ = True
+isOnCurve (Point x y) b =
+  ((y ^ (2 :: Int)) - (x ^ (3 :: Int))) == b
+
 -- Curve is y**2 = x**3 + 3
 b1 :: Fq
 b1 = 3
@@ -630,6 +638,11 @@ pairingCheck = go 1
     | otherwise = go (acc * millerLoop p1 p2) rest
   go acc [] = finalExponentiate parameterHex acc == 1
 
+zkDefs :: NativeModule
+zkDefs = ("Zk",
+  [ pointAdditionDef
+  ])
+
 pointAdditionDef :: NativeDef
 pointAdditionDef =
   defRNative "point-add" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("point2", a)])
@@ -643,39 +656,91 @@ pointAdditionDef =
   pactPointAdd i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TObject p2 _) :: Term Name] =
     case T.toLower ptTy of
       "g1" -> do
-        p1' <- toG1 p1
-        p2' <- toG1 p2
+        p1' <- toG1 i p1
+        p2' <- toG1 i p2
+        unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ evalError' i "Point not on curve"
         let p3' = add p1' p2'
         pure $ TObject (fromG1 p3') def
       "g2" -> do
-        p1' <- toG2 p1
-        p2' <- toG2 p2
+        p1' <- toG2 i p1
+        p2' <- toG2 i p2
+        unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ evalError' i "Point not on curve"
         let p3' = add p1' p2'
         pure $ TObject (fromG2 p3') def
       _ -> argsError i as
-    where
-    toG1 :: Object Name -> Eval e G1
-    toG1 obj = maybe (evalError' i "unable to decode point in g1") pure $ do
-      let om = _objectMap (_oObject obj)
-      px <- preview (ix "x" . _TLiteral . _1 . _LInteger) om
-      py <- preview (ix "y" . _TLiteral . _1 . _LInteger) om
-      pure (Point (fromIntegral px) (fromIntegral py))
-    fromG1 :: G1 -> Object Name
-    fromG1 CurveInf = Object (ObjectMap mempty) TyAny Nothing def
-    fromG1 (Point x y) = Object pts TyAny Nothing def
-      where
-      pts = ObjectMap $
-        HM.fromList
-        [ ("x", TLiteral (LInteger (fromIntegral x)) def)
-        , ("y", TLiteral (LInteger (fromIntegral y)) def)]
-    toG2 :: Object Name -> Eval e G2
-    toG2 obj = maybe (evalError' i "unable to decode point in g1") pure $ do
-      let om = _objectMap (_oObject obj)
-      pxl <- preview (ix "x" . _TList . _1 ) om
-      px <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pxl
-      pyl <- preview (ix "y" . _TList . _1) om
-      py <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pyl
-      pure (Point (fromList (G.toList px)) (fromList (G.toList py)))
-    fromG2 = undefined
   pactPointAdd i as = argsError i as
 
+scalarMultDef :: NativeDef
+scalarMultDef =
+  defRNative "point-mul" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("scalar", tTyInteger)])
+  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
+  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
+   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
+  ] "beep boop"
+  where
+  a = mkTyVar "a" []
+  pactPointAdd :: RNativeFun e
+  pactPointAdd i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TObject p2 _) :: Term Name] =
+    case T.toLower ptTy of
+      "g1" -> do
+        p1' <- toG1 i p1
+        p2' <- toG1 i p2
+        unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ evalError' i "Point not on curve"
+        let p3' = add p1' p2'
+        pure $ TObject (fromG1 p3') def
+      "g2" -> do
+        p1' <- toG2 i p1
+        p2' <- toG2 i p2
+        unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ evalError' i "Point not on curve"
+        let p3' = add p1' p2'
+        pure $ TObject (fromG2 p3') def
+      _ -> argsError i as
+  pactPointAdd i as = argsError i as
+
+toG1 :: HasInfo i => i -> Object Name -> Eval e G1
+toG1 i obj = maybe (evalError' i "unable to decode point in g1") pure $ do
+  let om = _objectMap (_oObject obj)
+  px <- fromIntegral <$> preview (ix "x" . _TLiteral . _1 . _LInteger) om
+  py <- fromIntegral <$> preview (ix "y" . _TLiteral . _1 . _LInteger) om
+  if px == 0 && py == 0 then pure CurveInf
+  else pure (Point px py)
+
+fromG1 :: G1 -> Object Name
+fromG1 CurveInf = Object (ObjectMap mempty) TyAny Nothing def
+fromG1 (Point x y) = Object pts TyAny Nothing def
+  where
+  pts = ObjectMap $
+    HM.fromList
+    [ ("x", TLiteral (LInteger (fromIntegral x)) def)
+    , ("y", TLiteral (LInteger (fromIntegral y)) def)]
+
+toG2 ::  HasInfo i => i -> Object Name -> Eval e G2
+toG2 i obj = maybe (evalError' i "unable to decode point in g1") pure $ do
+  let om = _objectMap (_oObject obj)
+  pxl <- preview (ix "x" . _TList . _1 ) om
+  px <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pxl
+  pyl <- preview (ix "y" . _TList . _1) om
+  py <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pyl
+  let px' = fromList (G.toList px)
+      py' = fromList (G.toList py)
+  if px' == 0 && py' == 0 then pure CurveInf
+  else pure (Point px' py')
+  
+fromG2 :: G2 -> Object Name
+fromG2 CurveInf = Object pts TyAny Nothing def
+  where
+  pts = ObjectMap $
+    HM.fromList
+    [ ("x", TList (G.fromList [TLiteral (LInteger 0) def]) TyAny def)
+    , ("y", TList (G.fromList [TLiteral (LInteger 0) def]) TyAny def)]
+fromG2 (Point x y) = Object pts TyAny Nothing def
+  where
+  toPactPt (Extension e) = let
+    elems' = fmap ((`TLiteral` def) . LInteger . fromIntegral) (unPoly e)
+    in TList elems' TyAny def
+  x' = toPactPt x
+  y' = toPactPt y
+  pts = ObjectMap $
+    HM.fromList
+    [ ("x", x')
+    , ("y", y')]

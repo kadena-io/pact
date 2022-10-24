@@ -22,12 +22,6 @@ import Pact.Native.Pairing
 import Test.Hspec
 import Test.Hspec.Hedgehog
 
--- y^2 = x^3 + b
-isOnCurve :: (Num a, Eq a) => CurvePoint a -> a -> Bool
-isOnCurve CurveInf _ = True
-isOnCurve (Point x y) b =
-  ((y ^ (2 :: Int)) - (x ^ (3 :: Int))) == b
-
 pairingP1 :: Pairing.G1 BN254
 pairingP1 =
   C.A
@@ -279,7 +273,7 @@ data Proof
 -- Verifying key from Solidity code
 -- NOTE: When porting over solidity code,
 -- their representation of points in Fq2 are backwards (that is, 5+2x is represented as [2, 5] and not [5, 2]).
--- 
+--
 solVerifyingKey :: VerifyingKey
 solVerifyingKey =
   VerifyingKey a1 b2 g2 d2 ic
