@@ -63,12 +63,8 @@ import           Bound.Var
 import           Data.Aeson           (Value(..))
 import qualified Data.ByteString.UTF8 as UTF8
 import           Data.Foldable        (toList)
-#if MIN_VERSION_aeson(2,0,0)
 import qualified Data.Aeson.KeyMap  as HM
 import           Data.Aeson.Key       (toText)
-#else
-import qualified Data.HashMap.Strict  as HM
-#endif
 import           Data.Int
 import           Data.Text            (Text, pack, unpack)
 import qualified Data.Text            as Text
@@ -210,12 +206,8 @@ renderPrettyString' = renderString' $ layoutPretty defaultLayoutOptions
 instance Pretty Value where
   pretty = \case
     Object hm -> commaBraces
-#if MIN_VERSION_aeson(2,0,0)
-      $ fmap (\(k, v) -> dquotes (pretty $ toText k) <> ": " <> pretty v)
-#else
-      $ fmap (\(k, v) -> dquotes (pretty k) <> ": " <> pretty v)
-#endif
-      $ HM.toList hm
+      $ (\(k, v) -> dquotes (pretty $ toText k) <> ": " <> pretty v)
+      <$> HM.toList hm
     Array values -> bracketsSep $ pretty <$> toList values
     String str -> dquotes $ pretty str
     Number scientific -> viaShow scientific

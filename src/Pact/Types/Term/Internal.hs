@@ -848,7 +848,7 @@ instance (SizeOf p) => SizeOf (Guard p) where
   sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
   sizeOf (GCapability g) = (constructorCost 1) + (sizeOf g)
 
-keyNamef :: AesonKey
+keyNamef :: Key
 keyNamef = "keysetref"
 
 instance ToJSON a => ToJSON (Guard a) where

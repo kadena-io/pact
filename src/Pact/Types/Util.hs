@@ -24,7 +24,6 @@ module Pact.Types.Util
   , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
-  , type AesonKey
   , type JsonProperties
   , type JsonMProperties
   , enableToJSON
@@ -183,12 +182,6 @@ maybeToEither :: String -> Maybe a -> Either String a
 maybeToEither err Nothing = Left err
 maybeToEither _ (Just a)  = Right a
 
-#if MIN_VERSION_aeson(2,0,0)
-type AesonKey = Key
-#else
-type AesonKey = Text
-#endif
-
 -- | Type of JSON properties that can be used efficiently with both 'toJSON' and
 -- 'toEncoding'. Functions of this type should be inlined.
 --
@@ -238,7 +231,7 @@ type JsonMProperties a = forall kv . Monoid kv => KeyValue kv => a -> kv
 -- | Declare a JSON property where 'Nothing' values are omitted in the result.
 -- To be used along with 'JsonMProperties'.
 --
-(.?=) :: ToJSON v => Monoid kv => KeyValue kv => AesonKey -> Maybe v -> kv
+(.?=) :: ToJSON v => Monoid kv => KeyValue kv => Key -> Maybe v -> kv
 k .?= v = case v of
   Nothing -> mempty
   Just v' -> k .= v'

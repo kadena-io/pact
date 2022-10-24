@@ -782,8 +782,8 @@ termEnc kv val = \case
   (TModRef mr _i) -> val mr
  where
   -- p = prop @T.Text
-  p = prop @AesonKey
-  inf i = ("i" :: AesonKey) .= i
+  p = prop @Key
+  inf i = ("i" :: Key) .= i
 
 instance FromJSON n => FromJSON (Term n) where
   parseJSON v =

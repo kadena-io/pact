@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -25,15 +24,15 @@ module Pact.Analyze.Util
 , snocConsList
 , Boolean(..)
 
--- * SBV backward compatibility
-, sbvForall
-, sbvForall_
-, sbvExists
-, sbvExists_
-, universal
-, universal_
-, existential
-, existential_
+-- * SBV reexports
+, SBV.sbvForall
+, SBV.sbvForall_
+, SBV.sbvExists
+, SBV.sbvExists_
+, SBV.universal
+, SBV.universal_
+, SBV.existential
+, SBV.existential_
 ) where
 
 import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,
@@ -174,39 +173,3 @@ instance Boolean (SBV.SBV Bool) where
   (.<=>)   = (SBV..<=>)
   fromBool = SBV.fromBool
 
--- SBV backward compat
---
-sbvForall :: SBV.SymVal a => String -> SBV.Symbolic (SBV.SBV a)
-sbvForall_ :: SBV.SymVal a => SBV.Symbolic (SBV.SBV a)
-sbvExists :: SBV.SymVal a => String -> SBV.Symbolic (SBV.SBV a)
-sbvExists_ :: SBV.SymVal a => SBV.Symbolic (SBV.SBV a)
-universal :: SBV.Provable a => [String] -> a -> SBV.Symbolic SBV.SBool
-universal_ :: SBV.Provable a => a -> SBV.Symbolic SBV.SBool
-existential :: SBV.Provable a => [String] -> a -> SBV.Symbolic SBV.SBool
-existential_ :: SBV.Provable a => a -> SBV.Symbolic SBV.SBool
-
-#if !MIN_VERSION_sbv(8,17,5)
-sbvForall = SBV.forall
-sbvForall_ = SBV.forall_
-
-sbvExists = SBV.exists
-sbvExists_ = SBV.exists_
-
-universal = SBV.forAll
-universal_ = SBV.forAll_
-
-existential = SBV.forSome
-existential_ = SBV.forSome_
-#else
-sbvForall = SBV.sbvForall
-sbvForall_ = SBV.sbvForall_
-
-sbvExists = SBV.sbvExists
-sbvExists_ = SBV.sbvExists_
-
-universal = SBV.universal
-universal_ = SBV.universal_
-
-existential = SBV.existential
-existential_ = SBV.existential_
-#endif

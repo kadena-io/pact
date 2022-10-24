@@ -237,8 +237,8 @@ library
       , direct-sqlite == 2.3.27
       , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2
-      , servant-client
-      , servant-client-core
+      , servant-client >= 0.16
+      , servant-client-core >= 0.16
       , statistics >= 0.13.3 && < 0.17
       , yaml
     if flag(build-tool)

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -40,10 +39,6 @@ import Pact.Types.Runtime
 import Pact.Types.SPV
 
 import Utils
-
-#if ! MIN_VERSION_servant_client(0,16,0)
-type ClientError = ServantError
-#endif
 
 ---- TESTS -----
 
