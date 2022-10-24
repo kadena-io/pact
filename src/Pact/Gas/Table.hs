@@ -209,7 +209,11 @@ defaultGasTable =
   ,("txids", 100000)
   ,("txlog", 100000)
 
-
+  -- Zk entries
+  -- TODO: adjust gas, this is purely for testing purposes
+  ,("scalar-mult", 1)
+  ,("point-add", 1)
+  ,("pairing-check", 1)
   ]
 
 {-# NOINLINE defaultGasTable #-}

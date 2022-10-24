@@ -641,15 +641,18 @@ pairingCheck = go 1
 zkDefs :: NativeModule
 zkDefs = ("Zk",
   [ pointAdditionDef
+  , scalarMultDef
+  , pairingCheckDef
   ])
 
+-- | Pointwise addition on two points on the curve BN254,
+-- either from G1 or G2.
+-- TODO: Gas
 pointAdditionDef :: NativeDef
 pointAdditionDef =
   defRNative "point-add" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("point2", a)])
-  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
-  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
-   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
-  ] "beep boop"
+  [ "(point-add 'g1 {'x: 1, 'y: 2}  {'x: 1, 'y: 2})"
+  ] "Add two points together that lie on the curve BN254. Point addition either in Fq or in Fq2"
   where
   a = mkTyVar "a" []
   pactPointAdd :: RNativeFun e
@@ -670,32 +673,54 @@ pointAdditionDef =
       _ -> argsError i as
   pactPointAdd i as = argsError i as
 
+-- | Scalar multiplication of two points.
+-- TODO: Gas for this function
 scalarMultDef :: NativeDef
 scalarMultDef =
-  defRNative "point-mul" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("scalar", tTyInteger)])
-  ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
-  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
-   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
-  ] "beep boop"
+  defRNative "scalar-mult" scalarMul (funType a [("type", tTyString), ("point1", a), ("scalar", tTyInteger)])
+  [ "(scalar-mult 'g1 {'x: 1, 'y: 2} 2)" ]
+  "Multiply a point that lies on the curve BN254 by an integer value"
   where
   a = mkTyVar "a" []
-  pactPointAdd :: RNativeFun e
-  pactPointAdd i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TObject p2 _) :: Term Name] =
+  curveOrder :: Integer
+  curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+  scalarMul :: RNativeFun e
+  scalarMul i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TLiteral (LInteger scalar) _) :: Term Name] = do
+    let scalar' = scalar `mod` curveOrder
     case T.toLower ptTy of
       "g1" -> do
         p1' <- toG1 i p1
-        p2' <- toG1 i p2
-        unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ evalError' i "Point not on curve"
-        let p3' = add p1' p2'
-        pure $ TObject (fromG1 p3') def
+        unless (isOnCurve p1' b1) $ evalError' i "Point not on curve"
+        let p2' = multiply p1' scalar'
+        pure $ TObject (fromG1 p2') def
       "g2" -> do
         p1' <- toG2 i p1
-        p2' <- toG2 i p2
-        unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ evalError' i "Point not on curve"
-        let p3' = add p1' p2'
-        pure $ TObject (fromG2 p3') def
+        unless (isOnCurve p1' b2) $ evalError' i "Point not on curve"
+        let p2' = multiply p1' scalar'
+        pure $ TObject (fromG2 p2') def
       _ -> argsError i as
-  pactPointAdd i as = argsError i as
+  scalarMul i as = argsError i as
+
+pairingCheckDef :: NativeDef
+pairingCheckDef =
+  defRNative "pairing-check" pairingCheck' (funType tTyBool [("points-g1", a), ("points-g2", b)])
+  []
+  "Perform pairing and final exponentiation points in G1 and G2 in BN254, check if the result is 1"
+  where
+  a = mkTyVar "a" []
+  b = mkTyVar "b" []
+  pairingCheck':: RNativeFun e
+  pairingCheck' i [TList p1s _ _, TList p2s _ _] = do
+    g1s <- traverse termToG1 $ G.toList p1s
+    g2s <- traverse termToG2 $ G.toList p2s
+    pure $ toTerm $ pairingCheck (zip g1s g2s)
+      where
+      termToG1 (TObject o _) = toG1 i o
+      termToG1 _ = evalError' i "not a point"
+      termToG2 (TObject o _) = toG2 i o
+      termToG2 _ = evalError' i "not a point"
+  pairingCheck' i as = argsError i as
+
 
 toG1 :: HasInfo i => i -> Object Name -> Eval e G1
 toG1 i obj = maybe (evalError' i "unable to decode point in g1") pure $ do
@@ -725,7 +750,7 @@ toG2 i obj = maybe (evalError' i "unable to decode point in g1") pure $ do
       py' = fromList (G.toList py)
   if px' == 0 && py' == 0 then pure CurveInf
   else pure (Point px' py')
-  
+
 fromG2 :: G2 -> Object Name
 fromG2 CurveInf = Object pts TyAny Nothing def
   where
