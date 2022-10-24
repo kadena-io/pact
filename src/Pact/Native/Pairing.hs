@@ -94,7 +94,7 @@ class (Field k, Fractional k, Ord k, Show k) => GaloisField k where
   -- | order of a field p^k
   order :: k -> Natural
   order k = characteristic k ^ degree k
-  {-# INLINE order #-}
+  {-# INLINABLE order #-}
 
 class GaloisField k => ExtensionField p k | p -> k, k -> p where
   -- | The degree of the
@@ -152,7 +152,7 @@ frobenius' [a, b, c] [x, 0, 0, 1]
     nx     = negate x
     nxq    = nx ^ q
 frobenius' _ _   = Nothing
-{-# INLINE frobenius' #-}
+{-# INLINABLE frobenius' #-}
 {-# SPECIALIZE frobenius' :: Vector Fq -> Vector Fq -> Maybe (Vector Fq) #-}
 {-# SPECIALIZE frobenius' :: Vector Fq2 -> Vector Fq2 -> Maybe (Vector Fq2) #-}
 {-# SPECIALIZE frobenius' :: Vector Fq6 -> Vector Fq6 -> Maybe (Vector Fq6) #-}
@@ -163,16 +163,16 @@ frobenius' _ _   = Nothing
 -----------------------------------------------------------------
 instance ExtensionField p k => Num (Extension p k) where
   (Extension x) + (Extension y) = Extension (x + y)
-  {-# INLINE (+) #-}
+  {-# INLINABLE (+) #-}
   (Extension x) * (Extension y) =
     Extension (E.rem (toPoly (karatsuba (unPoly x) (unPoly y))) fieldPoly)
-  {-# INLINE (*) #-}
+  {-# INLINABLE (*) #-}
   (Extension x) - (Extension y) = Extension (x - y)
-  {-# INLINE (-) #-}
+  {-# INLINABLE (-) #-}
   negate (Extension x) = Extension (P.negate x)
-  {-# INLINE negate #-}
+  {-# INLINABLE negate #-}
   fromInteger  = Extension . fromInteger
-  {-# INLINE fromInteger #-}
+  {-# INLINABLE fromInteger #-}
   abs          = error "abs not implemented for Field Extensions"
   signum       = error "signum not implemented for Field Extensions"
 
@@ -197,7 +197,7 @@ plusPoly xs ys = runST $ do
     lenYs = G.length ys
     lenMn = lenXs `min` lenYs
     lenMx = lenXs `max` lenYs
-{-# INLINE plusPoly #-}
+{-# INLINABLE plusPoly #-}
 {-# SPECIALIZE plusPoly :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE plusPoly :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE plusPoly :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
@@ -251,7 +251,7 @@ karatsuba xs ys
     zs0  = karatsuba xs0 ys0
     zs2  = karatsuba xs1 ys1
     zs11 = karatsuba xs01 ys01
-{-# INLINE karatsuba #-}
+{-# INLINABLE karatsuba #-}
 {-# SPECIALIZE karatsuba :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE karatsuba :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE karatsuba :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
@@ -281,7 +281,7 @@ convolution xs ys
     !lenXs = G.length xs
     !lenYs = G.length ys
     lenZs = lenXs + lenYs - 1
-{-# INLINE convolution #-}
+{-# INLINABLE convolution #-}
 {-# SPECIALIZE convolution :: Vector Fq -> Vector Fq -> Vector Fq #-}
 {-# SPECIALIZE convolution :: Vector Fq2 -> Vector Fq2 -> Vector Fq2 #-}
 {-# SPECIALIZE convolution :: Vector Fq6 -> Vector Fq6 -> Vector Fq6 #-}
@@ -293,9 +293,9 @@ instance ExtensionField p k => Fractional (Extension p k) where
     _ -> error "Division by zero: Extension"
     where
       (g, y) = E.gcdExt vp fieldPoly
-  {-# INLINE recip #-}
+  {-# INLINABLE recip #-}
   fromRational (x :% y) = fromInteger x / fromInteger y
-  {-# INLINE fromRational #-}
+  {-# INLINABLE fromRational #-}
 
 
 -----------------------------------------------------------------
@@ -303,24 +303,24 @@ instance ExtensionField p k => Fractional (Extension p k) where
 -----------------------------------------------------------------
 instance ExtensionField p k => Semigroup (Extension p k) where
   (<>)   = (*)
-  {-# INLINE (<>) #-}
+  {-# INLINABLE (<>) #-}
 
 instance ExtensionField p k => Monoid (Extension p k) where
   mempty = Extension 1
-  {-# INLINE mempty #-}
+  {-# INLINABLE mempty #-}
 
 instance ExtensionField p k => Group (Extension p k) where
   invert  = recip
-  {-# INLINE invert #-}
+  {-# INLINABLE invert #-}
   pow x n
     | n >= 0    = x ^ n
     | otherwise = recip x ^ P.negate n
-  {-# INLINE pow #-}
+  {-# INLINABLE pow #-}
 
 instance ExtensionField p k => Euclidean (Extension p k) where
   degree  = error "Not Defined: Euclidean degree for Extension"
   quotRem l r = (l / r, 0)
-  {-# INLINE quotRem #-}
+  {-# INLINABLE quotRem #-}
 
 instance ExtensionField p k => Field (Extension p k)
 
@@ -342,26 +342,26 @@ instance ExtensionField p k => GcdDomain (Extension p k)
 
 instance ExtensionField p k => Ring (Extension p k) where
   negate = P.negate
-  {-# INLINE negate #-}
+  {-# INLINABLE negate #-}
 
 instance ExtensionField p k => Semiring (Extension p k) where
   fromNatural = fromIntegral
-  {-# INLINE fromNatural #-}
+  {-# INLINABLE fromNatural #-}
   one         = Extension 1
-  {-# INLINE one #-}
+  {-# INLINABLE one #-}
   plus        = (+)
-  {-# INLINE plus #-}
+  {-# INLINABLE plus #-}
   times       = (*)
-  {-# INLINE times #-}
+  {-# INLINABLE times #-}
   zero        = Extension 0
-  {-# INLINE zero #-}
+  {-# INLINABLE zero #-}
 
 instance ExtensionField p k => IsList (Extension p k) where
   type instance Item (Extension p k) = k
   fromList     = Extension . fromList
-  {-# INLINE fromList #-}
+  {-# INLINABLE fromList #-}
   toList (Extension x) = toList $ unPoly x
-  {-# INLINE toList #-}
+  {-# INLINABLE toList #-}
 
 --------------------------------------------------------------------------------------
 -- Curve implementation
@@ -380,19 +380,19 @@ instance ExtensionField F1 Fq where
 
 xiFq2 :: Fq2
 xiFq2 = fromList [9, 1]
-{-# INLINE xiFq2 #-}
+{-# INLINABLE xiFq2 #-}
 
 type Fq6 = Extension F2 Fq2
 
 instance ExtensionField F2 Fq2 where
   fieldPoly = fromList [-xiFq2, 0, 0, 1]
-  {-# INLINE fieldPoly #-}
+  {-# INLINABLE fieldPoly #-}
 
 type Fq12 = Extension F3 Fq6
 
 instance ExtensionField F3 Fq6 where
   fieldPoly = fromList [[0, -1], 0, 1]
-  {-# INLINE fieldPoly #-}
+  {-# INLINABLE fieldPoly #-}
 
 type G1 = CurvePoint Fq
 type G2 = CurvePoint Fq2
@@ -423,7 +423,7 @@ b12 = [3]
 
 g1 :: CurvePoint Fq
 g1 = Point 1 2
-{-# INLINE g1 #-}
+{-# INLINABLE g1 #-}
 
 g2 :: CurvePoint Fq2
 g2 = Point
@@ -522,7 +522,7 @@ lineFunction (Point x y) (Point x1 y1) (Point x2 y2)
     x3' = l' * l' - x1 - x2
     y3' = l' * (x1 - x3') - y1
 lineFunction _ _ _ = (CurveInf, mempty)
-{-# INLINE lineFunction #-}
+{-# INLINABLE lineFunction #-}
 
 powUnitary :: ExtensionField p k
   => Extension p k -- ^ Element @x@ in cyclotomic subgroup.
@@ -531,7 +531,7 @@ powUnitary :: ExtensionField p k
 powUnitary x n
   | n < 0     = pow (conj x) (negate n)
   | otherwise = pow x n
-{-# INLINE powUnitary #-}
+{-# INLINABLE powUnitary #-}
 {-# SPECIALIZE powUnitary :: Extension F1 Fq -> Integer -> Extension F1 Fq #-}
 {-# SPECIALIZE powUnitary :: Extension F2 Fq2 -> Integer -> Extension F2 Fq2 #-}
 {-# SPECIALIZE powUnitary :: Extension F3 Fq6 -> Integer -> Extension F3 Fq6 #-}
@@ -544,7 +544,7 @@ conj (Extension x) = case unPoly (fieldPoly @p @k) of
     [a]    -> [a]
     _      -> []
   _         -> error "conj: extension degree is not two."
-{-# INLINE conj #-}
+{-# INLINABLE conj #-}
 {-# SPECIALIZE conj :: Extension F1 Fq -> Extension F1 Fq #-}
 {-# SPECIALIZE conj :: Extension F2 Fq2 -> Extension F2 Fq2 #-}
 {-# SPECIALIZE conj :: Extension F3 Fq6 -> Extension F3 Fq6 #-}
@@ -555,7 +555,7 @@ additionStep
   -> (CurvePoint Fq2, Fq12)
   -> (CurvePoint Fq2, Fq12)
 additionStep p q (t, f) = (<>) f <$> lineFunction p q t
-{-# INLINE additionStep #-}
+{-# INLINABLE additionStep #-}
 
 -- Doubling step, line 4.
 doublingStep
@@ -563,7 +563,7 @@ doublingStep
   -> (CurvePoint Fq2, Fq12)
   -> (CurvePoint Fq2, Fq12)
 doublingStep p (t, f) = (<>) f . (<>) f <$> lineFunction p t t
-{-# INLINE doublingStep #-}
+{-# INLINABLE doublingStep #-}
 
 parameterHex :: Integer
 parameterHex = 0x44e992b44a6909f1
@@ -594,7 +594,7 @@ finalExponentiate u = hardPart . easyPart
           where
             p4'  = join (*) $ p4'' * y2 * join (*) (p4'' * y3 * y5)
             p4'' = y4 * y5 * join (*) y6
-{-# INLINE finalExponentiate #-}
+{-# INLINABLE finalExponentiate #-}
 
 pairing :: G1 -> G2 -> Fq12
 pairing p1 p2 =
