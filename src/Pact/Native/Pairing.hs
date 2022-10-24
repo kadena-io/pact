@@ -731,7 +731,12 @@ toG1 i obj = maybe (evalError' i "unable to decode point in g1") pure $ do
   else pure (Point px py)
 
 fromG1 :: G1 -> Object Name
-fromG1 CurveInf = Object (ObjectMap mempty) TyAny Nothing def
+fromG1 CurveInf = Object pts TyAny Nothing def
+  where
+  pts = ObjectMap $
+    HM.fromList
+    [ ("x", TLiteral (LInteger 0) def)
+    , ("y", TLiteral (LInteger 0) def)]
 fromG1 (Point x y) = Object pts TyAny Nothing def
   where
   pts = ObjectMap $
@@ -740,7 +745,7 @@ fromG1 (Point x y) = Object pts TyAny Nothing def
     , ("y", TLiteral (LInteger (fromIntegral y)) def)]
 
 toG2 ::  HasInfo i => i -> Object Name -> Eval e G2
-toG2 i obj = maybe (evalError' i "unable to decode point in g1") pure $ do
+toG2 i obj = maybe (evalError' i "unable to decode point in g2") pure $ do
   let om = _objectMap (_oObject obj)
   pxl <- preview (ix "x" . _TList . _1 ) om
   px <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pxl

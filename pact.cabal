@@ -432,9 +432,6 @@ test-suite hspec
         , mmorph
         , neat-interpolation
         , semirings
-        , galois-field >= 1.0.4
-        , elliptic-curve >= 0.3.1
-        , pairing >= 1.1.0
         , prettyprinter
         , sbv
         , servant-client

@@ -5,16 +5,9 @@
 
 module ZkSpec (spec) where
 
--- import Control.Monad (void)
-import qualified Data.Curve.Weierstrass as C
-import Data.Field.Galois as F hiding (pow)
 import Data.Group (pow)
-import Data.Pairing.BN254 hiding (pairing, Fq2, Fq12, Fq, G1, G2)
-import Data.Pairing.BN254 qualified as Pairing
 import Data.Field(Field)
 import Data.Foldable(foldl')
--- import qualified Data.Pairing.Ate as Ate
--- import Data.Vector qualified as V
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -22,54 +15,11 @@ import Pact.Native.Pairing
 import Test.Hspec
 import Test.Hspec.Hedgehog
 
-pairingP1 :: Pairing.G1 BN254
-pairingP1 =
-  C.A
-    0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3
-    0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4
-
 p1 :: CurvePoint Fq
 p1 = multiply g1 2
 
-pairingP2 :: Pairing.G2 BN254
-pairingP2 =
-  C.A
-    ( [ 0x6064e784db10e9051e52826e192715e8d7e478cb09a5e0012defa0694fbc7f5,
-        0x1014772f57bb9742735191cd5dcfe4ebbc04156b6878a0a7c9824f32ffb66e85
-      ]
-    )
-    ( [ 0x58e1d5681b5b9e0074b0f9c8d2c68a069b920d74521e79765036d57666c5597,
-        0x21e2335f3354bb7922ffcc2f38d3323dd9453ac49b55441452aeaca147711b2
-      ]
-    )
-
 p2 :: CurvePoint Fq2
 p2 = multiply g2 3
-
-pairingGtPt:: GT BN254
-pairingGtPt =
-  toU'
-    [ [ [ 0x10227b2606c11f22f4b2dec3f69cee4332ebe2e8f869ea8ca9e6d45ce15bd110,
-          0x27d1c9dae835182b272bb25b47b0d871382c9c2765fd1f42e07edbe852830157
-        ],
-        [ 0x1f5919cf59b218135aaeb137ac84c6ecf282feda6a8752ca291b7ec1d2f8bab4,
-          0x2b7e44680d35a6676223538d54abcd7bc2c54281bf0f5277c81cf5b114d3a345
-        ],
-        [ 0x17e6d213292c2aa12ef3cc75aca8cb9cbd47d05086227db2dbd1262d3e89dbf0,
-          0x291a53fea204b470bb901fb184155facd6e3b44fad848d536386b73d6c31fd52
-        ]
-      ],
-      [ [ 0x2844ed362ecf2c491a471a18c2875fd727126a62c8151c356f81e02cff52f045,
-          0x2a8245d55a3b3f9deae9cca372912a31b88dc77cee06dfa10a717acbf758cbd5
-        ],
-        [ 0x222ff2e20c4578e886027953a035cbd8784a9764bbcd353051ba9f02c4dce8ad,
-          0x8532a0a75fb0acdf508c3bdd4c7700efb3a9ae403818daad5937d9ffffaca45
-        ],
-        [ 0x2e7e3a4aaef17a53de3c528319b426e35f53455107f49d7fe52de95849e7dcf6,
-          0x2ba2bc83434031012424aad830a35c459c40a0b7ce87735010db68c10b61ddcb
-        ]
-      ]
-    ]
 
 pt' :: Fq12
 pt' =
@@ -230,18 +180,6 @@ spec = do
   pairingGenTest
   pairingProofTest
   describe "pairing tests" $ do
-    it "pairing lib smoke test" $ do
-      let a :: Integer = 2
-      let b :: Integer = 3
-
-      let p :: Pairing.G1 BN254 = pairingP1
-      let q :: Pairing.G2 BN254 = pairingP2
-
-      Pairing.pairing p q `shouldBe` pairingGtPt
-
-      Pairing.pairing (C.mul' p a) (C.mul' q b)
-        `shouldBe` pow (Pairing.pairing p q) (a * b)
-
     it "pairing smoke test" $ do
       let a :: Integer = 2
       let b :: Integer = 3
@@ -276,25 +214,25 @@ data Proof
 --
 solVerifyingKey :: VerifyingKey
 solVerifyingKey =
-  VerifyingKey a1 b2 g2 d2 ic
+  VerifyingKey alfa1 beta2 gamma2 delta2 ic
   where
-  a1 = Point
+  alfa1 = Point
     20491192805390485299153009773594534940189261866228447918068658471970481763042
     9383485363053290200918347156157836566562967994039712273449902621266178545958
-  b2 = Point
+  beta2 = Point
     [ 6375614351688725206403948262868962793625744043794305715222011528459656738731
     , 4252822878758300859123897981450591353533073413197771768651442665752259397132]
     [ 10505242626370262277552901082094356697409835680220590971873171140371331206856
     , 21847035105528745403288232691147584728191162732299865338377159692350059136679
     ]
-  g2 = Point
+  gamma2 = Point
     [ 10857046999023057135944570762232829481370756359578518086990519993285655852781
     , 11559732032986387107991004021392285783925812861821192530917403151452391805634
     ]
     [ 8495653923123431417604973247489272438418190587263600148770280649306958101930
     , 4082367875863433681332203403145435568316851327593401208105741076214120093531
     ]
-  d2 = Point
+  delta2 = Point
     [ 16809031008450260338666218659281275370828342486329981864349494337906939571887
     , 14264224196899353800543367999525075765943744025449601386425105981609273614701]
     [ 11890256881228627469373664690032300678627026600164400771388911741873652827176
