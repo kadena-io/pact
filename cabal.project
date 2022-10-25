@@ -1,4 +1,4 @@
-packages: . 
+packages: .
 
 -- these upper bounds are required in order to not break payload validation in chainweb
 constraints: base16-bytestring <1
