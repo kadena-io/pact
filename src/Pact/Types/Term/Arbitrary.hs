@@ -108,6 +108,9 @@ instance (Arbitrary v) => Arbitrary (ObjectMap v) where
 instance Arbitrary Use where
   arbitrary = Use <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
+instance (Arbitrary a) => Arbitrary (CapabilityGuard a) where
+  arbitrary = CapabilityGuard <$> arbitrary <*> arbitrary <*> arbitrary
+
 instance (Arbitrary a) => Arbitrary (Guard a) where
   arbitrary = oneof
     [ GPact <$> arbitrary
@@ -115,6 +118,7 @@ instance (Arbitrary a) => Arbitrary (Guard a) where
     , GKeySetRef <$> arbitrary
     , GModule <$> arbitrary
     , GUser <$> arbitrary
+    , GCapability <$> arbitrary
     ]
 
 instance Arbitrary g => Arbitrary (Module g) where

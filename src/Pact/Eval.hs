@@ -150,10 +150,7 @@ enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of
   GKeySet k -> runSysOnly $ enforceKeySet (getInfo i) Nothing k
   GKeySetRef n -> enforceKeySetName (getInfo i) n
-  GPact PactGuard{..} -> do
-    pid <- getPactId i
-    unless (pid == _pgPactId) $
-      evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
+  GPact PactGuard{..} -> enforcePactId False _pgPactId
   GModule mg@ModuleGuard{..} -> do
     md <- _mdModule <$> getModule i _mgModuleName
     case md of
@@ -165,6 +162,17 @@ enforceGuard i g = case g of
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
+  GCapability CapabilityGuard{..} -> do
+    traverse_ (enforcePactId True) _cgPactId
+    args <- enforcePactValue' _cgArgs
+    acquired <- capabilityAcquired $ SigCapability _cgName args
+    unless acquired $ failTx' i "Capability not acquired"
+  where
+    enforcePactId doFail pid = do
+      currPid <- getPactId i
+      unless (currPid == pid) $
+        if doFail then failTx' i "Invalid Pact ID" else
+          evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
 
 

@@ -19,7 +19,10 @@
 --
 
 module Pact.Types.Runtime
- ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
+ ( evalError,evalError',
+   failTx,failTx',
+   argsError,argsError',
+   throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
@@ -444,6 +447,9 @@ evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
 failTx i = throwErr TxFailure i
+
+failTx' :: HasInfo i => i -> Doc -> Eval e a
+failTx' = failTx . getInfo
 
 throwDbError :: MonadThrow m => Doc -> m a
 throwDbError = throwM . PactError DbError def def

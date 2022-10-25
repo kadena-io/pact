@@ -46,6 +46,11 @@ flag with-integer-gmp
   description: Include integer-gmp package (removed after GHC 9)
   manual:      False
 
+flag tests-in-lib
+  description: Include test src and deps in lib
+  default:     False
+  manual:      True
+
 library
 
   -- common to all configurations:
@@ -310,6 +315,14 @@ library
       build-depends: unix
     if !flag(no-advice)
       cpp-options: -DADVICE
+    if flag(tests-in-lib)
+      hs-source-dirs: tests
+      build-depends:
+        , hedgehog >= 1.0.1 && < 1.2
+        , hspec
+        , hspec-golden >= 0.1.0.2
+        , hw-hspec-hedgehog == 0.1.*
+        , intervals
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)

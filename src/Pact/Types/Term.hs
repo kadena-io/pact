@@ -41,6 +41,7 @@ module Pact.Types.Term
    PactId(..),
    UserGuard(..),
    ModuleGuard(..),
+   CapabilityGuard(..),
    Guard(..),_GPact,_GKeySet,_GKeySetRef,_GModule,_GUser,
    DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
@@ -931,6 +932,7 @@ guardTypeOf g = case g of
   GPact {} -> GTyPact
   GUser {} -> GTyUser
   GModule {} -> GTyModule
+  GCapability {} -> GTyCapability
 
 -- | Return a Pact type, or a String description of non-value Terms.
 -- Does not handle partial schema types.

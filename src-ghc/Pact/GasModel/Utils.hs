@@ -62,7 +62,6 @@ import Bound (abstract, Scope)
 import Control.Exception (throwIO)
 import Data.Aeson (toJSON, ToJSON(..))
 import Data.Default (def)
-import Data.List.NonEmpty (NonEmpty(..))
 import NeatInterpolation (text)
 
 
@@ -72,7 +71,6 @@ import qualified Data.HashSet as HS
 import qualified Data.Set as S
 import qualified Data.Map as M
 import qualified Data.Text as T
-import qualified Data.List.NonEmpty as NEL
 
 
 import Pact.Compile (compileExps, mkTextInfo)
@@ -105,16 +103,16 @@ eitherDie annot
 
 
 -- | Pact literals of different sizes and textual description
-sizes :: NEL.NonEmpty (T.Text, Integer)
+sizes :: [(T.Text, Integer)]
 sizes =
-    ("long", 10000) :|
-  [ ("med", 100),
-    ("small", 10)
+  [ ("long", 10000)
+  , ("med", 100)
+  , ("small", 10)
   ]
 
 -- example: "100"
-sizesExpr :: NEL.NonEmpty PactExpression
-sizesExpr = NEL.map format sizes
+sizesExpr :: [PactExpression]
+sizesExpr = map format sizes
   where
     format (desc, i) = PactExpression
                        (toText (MockInt i))
@@ -122,66 +120,66 @@ sizesExpr = NEL.map format sizes
 
 
 -- List of integers of varying sizes
-intLists :: NEL.NonEmpty (T.Text, NEL.NonEmpty Integer)
-intLists = NEL.map format sizes
+intLists :: [(T.Text, [Integer])]
+intLists = map format sizes
   where
-    format (desc, i) = (desc, (1 :| [2..i]))
+    format (desc, i) = (desc, [1..i])
 
-duplicateListsExpr :: NEL.NonEmpty PactExpression
-duplicateListsExpr = NEL.map format intLists
+duplicateListsExpr :: [PactExpression]
+duplicateListsExpr = map format intLists
   where
-    duplicate = NEL.fromList . foldr (\a b -> a : a : b) []
+    duplicate = foldr (\a b -> a : a : b) []
 
     format (desc, duplicate -> li) = PactExpression
       (makeExpr li)
       (Just $ desc <> "DuplicateNumberList")
 
     makeExpr li =
-      toText $ MockList $ map MockInt (NEL.toList li)
+      toText $ MockList $ map MockInt li
 
 -- example: [ "[1 2 3 4]" ]
-intListsExpr :: NEL.NonEmpty PactExpression
-intListsExpr = NEL.map format intLists
+intListsExpr :: [PactExpression]
+intListsExpr = map format intLists
   where
     format (desc, li) = PactExpression
                         (makeExpr li)
                         (Just $ desc <> "NumberList")
     makeExpr li =
-      toText $ MockList $ map MockInt (NEL.toList li)
+      toText $ MockList $ map MockInt li
 
 
 -- List of strings of varying sizes
-strLists :: NEL.NonEmpty (T.Text, NEL.NonEmpty T.Text)
-strLists = NEL.map format intLists
+strLists :: [(T.Text, [T.Text])]
+strLists = map format intLists
   where
     format (desc, li) = (desc,
-                         NEL.map (("a" <>) . intToStr) li)
+                         map (("a" <>) . intToStr) li)
 
 
 -- example: [ "[ \"a1\" \"a2\" \"a3\" \"a4\" ]" ]
-escapedStrListsExpr :: NEL.NonEmpty PactExpression
-escapedStrListsExpr = NEL.map format strLists
+escapedStrListsExpr :: [PactExpression]
+escapedStrListsExpr = map format strLists
   where
     format (desc, li) = PactExpression
                         (makeExpr li)
                         (Just $ desc <> "EscapedStrList")
     makeExpr li =
-      toText $ MockList $ map MockString (NEL.toList li)
+      toText $ MockList $ map MockString li
 
 
 -- Maps of varying sizes.
-strKeyIntValMaps :: NEL.NonEmpty (T.Text, (HM.HashMap T.Text Integer))
-strKeyIntValMaps = NEL.map toMap allLists
-  where allLists = NEL.zip strLists intLists
+strKeyIntValMaps :: [(T.Text, (HM.HashMap T.Text Integer))]
+strKeyIntValMaps = map toMap allLists
+  where allLists = zip strLists intLists
         toMap ((kDesc, kList), (_, vList)) = (kDesc, m)
           where
             m = HM.fromList
-                $ zip (NEL.toList kList) (NEL.toList vList)
+                $ zip kList vList
 
 
 -- example: "{ \"a5\": 5, \"a3\": 3 }"
-strKeyIntValMapsExpr :: NEL.NonEmpty PactExpression
-strKeyIntValMapsExpr = NEL.map format strKeyIntValMaps
+strKeyIntValMapsExpr :: [PactExpression]
+strKeyIntValMapsExpr = map format strKeyIntValMaps
   where
     format (desc, m) = PactExpression
                        (toText (MockObject m))
@@ -189,8 +187,8 @@ strKeyIntValMapsExpr = NEL.map format strKeyIntValMaps
 
 
 -- example: "{ \"a5\" := a5, \"a3\" := a3 }"
-strKeyIntValBindingsExpr :: NEL.NonEmpty PactExpression
-strKeyIntValBindingsExpr = NEL.map format strKeyIntValMaps
+strKeyIntValBindingsExpr :: [PactExpression]
+strKeyIntValBindingsExpr = map format strKeyIntValMaps
   where
     format (desc, m) = PactExpression
                        (toText (MockBinding m))
@@ -198,16 +196,16 @@ strKeyIntValBindingsExpr = NEL.map format strKeyIntValMaps
 
 
 -- Strings of varying sizes
-strings :: NEL.NonEmpty (T.Text, T.Text)
-strings = NEL.map format sizes
+strings :: [(T.Text, T.Text)]
+strings = map format sizes
   where
     toString i = T.replicate (fromIntegral i) "a"
     format (desc, i) = (desc, toString i)
 
 
 -- example: "\"aaaaa\""
-escapedStringsExpr :: NEL.NonEmpty PactExpression
-escapedStringsExpr = NEL.map format strings
+escapedStringsExpr :: [PactExpression]
+escapedStringsExpr = map format strings
   where
     format (desc, s) = PactExpression
                        (toText (MockString s))

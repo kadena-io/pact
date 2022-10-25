@@ -168,6 +168,7 @@ data GuardType
   | GTyPact
   | GTyUser
   | GTyModule
+  | GTyCapability
   deriving (Eq,Ord,Generic,Show)
 
 instance ToJSON GuardType where
@@ -177,6 +178,7 @@ instance ToJSON GuardType where
     GTyPact -> "pact"
     GTyUser -> "user"
     GTyModule -> "module"
+    GTyCapability -> "capability"
 instance FromJSON GuardType where
   parseJSON = withText "GuardType" $ \t -> case t of
     "keyset" -> pure GTyKeySet
@@ -184,6 +186,7 @@ instance FromJSON GuardType where
     "pact" -> pure GTyPact
     "user" -> pure GTyUser
     "module" -> pure GTyModule
+    "capability" -> pure GTyCapability
     _ -> fail "Unrecognized guard type"
 
 instance NFData GuardType

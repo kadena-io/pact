@@ -379,14 +379,20 @@ toGuardPactValue g = case g of
   (GUser (UserGuard n ts)) -> do
     pvs <- map elideModRefInfo <$> traverse toPactValue ts
     return (GUser (UserGuard n pvs))
+  (GCapability (CapabilityGuard n ts pid)) -> do
+    pvs <- map elideModRefInfo <$> traverse toPactValue ts
+    return (GCapability (CapabilityGuard n pvs pid))
   (GKeySet k) -> Right (GKeySet k)
   (GKeySetRef k) -> Right (GKeySetRef k)
   (GModule m) -> Right (GModule m)
   (GPact p) -> Right (GPact p)
 
+
 fromGuardPactValue :: Guard PactValue -> Guard (Term Name)
 fromGuardPactValue g = case g of
   (GUser (UserGuard n ts)) -> GUser (UserGuard n (map fromPactValue ts))
+  (GCapability (CapabilityGuard n ts pid)) ->
+    GCapability (CapabilityGuard n (map fromPactValue ts) pid)
   (GKeySet k) -> GKeySet k
   (GKeySetRef k) -> GKeySetRef k
   (GModule m) -> GModule m
