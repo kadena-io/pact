@@ -184,7 +184,7 @@ library
     , lens-aeson >= 1.0.0.5 && < 1.3
     , megaparsec >= 9
     , mtl >= 2.2.1 && < 2.3
-    , pact-time >= 0.2
+    , pact-time >= 0.2.0.1
     , parsers >= 0.12.4 && < 0.13
     , prettyprinter >= 1.2 && < 1.6.1
     , prettyprinter-ansi-terminal >= 1.1 && < 1.2
