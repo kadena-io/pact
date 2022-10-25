@@ -214,12 +214,12 @@ instance Pretty Separator where
   pretty ColonEquals = ":="
   pretty Comma = ","
 instance ToJSON Separator where
-  toJSON Colon = enableToJSON "Pact.Types.Exp.Separator" $ ":"
-  toJSON ColonEquals = enableToJSON "Pact.Types.Exp.Separator" $ ":="
-  toJSON Comma = enableToJSON "Pact.Types.Exp.Separator" $ ","
-  toEncoding Colon = toEncoding @String":"
-  toEncoding ColonEquals = toEncoding @String":="
-  toEncoding Comma = toEncoding @String","
+  toJSON Colon = enableToJSON "Pact.Types.Exp.Separator" ":"
+  toJSON ColonEquals = enableToJSON "Pact.Types.Exp.Separator" ":="
+  toJSON Comma = enableToJSON "Pact.Types.Exp.Separator" ","
+  toEncoding Colon = toEncoding @String ":"
+  toEncoding ColonEquals = toEncoding @String ":="
+  toEncoding Comma = toEncoding @String ","
 instance FromJSON Separator where
   parseJSON = withText "Separator" $ \t -> case t of
     ":" -> pure Colon
