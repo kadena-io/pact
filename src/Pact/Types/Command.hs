@@ -49,6 +49,7 @@ module Pact.Types.Command
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
   , cmdToRequestKey
+  , requestKeyToB16Text
   ) where
 
 
@@ -457,6 +458,10 @@ data CommandExecInterface m a l = CommandExecInterface
   { _ceiApplyCmd :: ApplyCmd l
   , _ceiApplyPPCmd :: ApplyPPCmd m a l
   }
+
+
+requestKeyToB16Text :: RequestKey -> Text
+requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}

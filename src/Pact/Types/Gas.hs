@@ -68,7 +68,7 @@ instance FromJSON GasPrice where
   parseJSON = fmap GasPrice . parseGT0
 
 instance Arbitrary GasPrice where
-  arbitrary = GasPrice <$> arbitrary
+  arbitrary = GasPrice <$> (getPositive <$> arbitrary)
 
 instance Wrapped GasPrice
 
@@ -179,7 +179,7 @@ newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
 
 instance Arbitrary GasLimit where
-  arbitrary = GasLimit <$> arbitrary
+  arbitrary = GasLimit <$> (getPositive <$> arbitrary)
 
 instance Show GasLimit where
   show (GasLimit (ParsedInteger i)) = show i
