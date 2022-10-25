@@ -26,6 +26,11 @@ jobs:
           cabal: '3.8'
           cabalcache: 'true'
           flags: '+build-tool'
+        - os: 'ubuntu-22.04'
+          ghc: '9.2.4'
+          cabal: '3.8'
+          cabalcache: 'true'
+          flags: '+build-tool'
         # include:
         # - os: 'windows-latest'
         #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
@@ -103,6 +108,10 @@ jobs:
           documentation: False
           optimization: 1
           flags: ${{ matrix.flags }}
+        -- GHC 9.2:
+        allow-newer: *:base
+        allow-newer: *:bytestring
+        allow-newer: *:aeson
         EOF
     - name: Extend cabal.project.local for GHC-9.0.1
       if: "startsWith(matrix.ghc, '9')"

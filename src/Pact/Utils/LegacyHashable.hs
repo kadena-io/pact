@@ -110,8 +110,7 @@ defaultLegacyHashWithSalt salt = xor (salt * 16777619) . legacyHash
 newtype LegacyHashed a = LegacyHashed { _getLegacyHashed :: a }
   deriving newtype (Show, Eq, Ord, IsString, LegacyHashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
-
-instance (Eq a, LegacyHashable a) => Hashable (LegacyHashed a) where
+instance (LegacyHashable a) => Hashable (LegacyHashed a) where
   hash = legacyHash . _getLegacyHashed
   hashWithSalt s = legacyHashWithSalt s . _getLegacyHashed
   {-# INLINE hash #-}

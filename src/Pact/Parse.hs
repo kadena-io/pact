@@ -61,7 +61,7 @@ import Test.QuickCheck (Arbitrary, arbitrary)
 
 
 -- | Main parser for Pact expressions.
-expr :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
+expr :: DeltaParsing m => PactParser m (Exp Parsed)
 expr = do
   delt <- position
   let inf = do
@@ -85,7 +85,7 @@ expr = do
     ]
 {-# INLINE expr #-}
 
-number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
+number :: DeltaParsing m => PactParser m Literal
 number = do
   -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather
   -- than `symbolic :: TokenParsing m => Char -> m Char` here. We use the char
@@ -120,7 +120,7 @@ dynamicAtom = do
   var <- ident style
   return (var,[ref])
 
-bool :: (Monad m, DeltaParsing m) => PactParser m Literal
+bool :: DeltaParsing m => PactParser m Literal
 bool = msum
   [ LBool True  <$ symbol "true"
   , LBool False <$ symbol "false"
@@ -129,11 +129,11 @@ bool = msum
 
 
 -- | Parse one or more Pact expressions.
-exprs :: (TokenParsing m, DeltaParsing m) => PactParser m [Exp Parsed]
+exprs :: DeltaParsing m => PactParser m [Exp Parsed]
 exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
-exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
+exprsOnly :: DeltaParsing m => m [Exp Parsed]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
 -- | JSON serialization for 'readDecimal' and public meta info;

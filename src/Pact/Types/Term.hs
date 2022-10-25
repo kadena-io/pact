@@ -606,11 +606,11 @@ instance (SizeOf a) => SizeOf (Term a) where
   sizeOf t = sizeOf1 t
 
 instance Applicative Term where
-    pure = return
+    pure a = TVar a def
     (<*>) = ap
 
 instance Monad Term where
-    return a = TVar a def
+    return = pure
     TModule m b i >>= f = TModule (fmap (>>= f) m) (b >>>= f) i
     TList bs t i >>= f = TList (V.map (>>= f) bs) (fmap (>>= f) t) i
     TDef (Def n m dt ft b d dm i) i' >>= f =
