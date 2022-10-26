@@ -17,7 +17,6 @@ import Data.Decimal
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as M
 import Data.List
-import Data.Time
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -31,6 +30,8 @@ import Data.Text qualified as T
 import Pact.GasModel.GasModel hiding (bench, benchesOnce, main)
 import Pact.GasModel.Types
 import Pact.GasModel.Utils
+import Pact.Time
+import Pact.Types.Exp qualified as Pact
 import Pact.Types.Lang qualified as Pact
 import Pact.Types.Runtime (EvalEnv (_eeGas))
 import Pact.Types.Term (Gas)
@@ -251,7 +252,7 @@ toLisp = \case
   EDec d -> show d
   EBool True -> "true"
   EBool False -> "false"
-  ETime _ -> "!time!" -- jww (2022-09-26): TODO
+  ETime t -> concat ["(parse-time ", T.unpack (Pact.formatLTime t), ")"] -- jww (2022-09-26): TODO
   EKeyset -> "!keyset!" -- jww (2022-09-26): TODO
   EList xs -> "[" ++ intercalate ", " (map toLisp xs) ++ "]"
   EObject _ -> "!object!" -- jww (2022-09-26): TODO
@@ -293,11 +294,10 @@ genDec =
 genBool :: MonadGen m => m LispExpr
 genBool = EBool <$> Gen.bool
 
+-- | from Pact.Types.Exp
 genUTCTime :: MonadGen m => m UTCTime
-genUTCTime = do
-  day <- Gen.integral_ $ Range.linear 0 (10000 :: Integer)
-  sec <- Gen.integral_ $ Range.linear 0 (10_000_000 :: Integer)
-  pure $ UTCTime (ModifiedJulianDay day) (fromIntegral sec)
+genUTCTime = fromPosixTimestampMicros
+    <$> Gen.int64 (Range.constant (-30610224000000000) 4133894400000000)
 
 genTime :: MonadGen m => m LispExpr
 genTime = ETime <$> genUTCTime
@@ -306,7 +306,7 @@ genSchema :: MonadGen m => m Schema
 genSchema = pure []
 
 genLitType :: MonadGen m => m ExprType
-genLitType = Gen.element [TStr, TInt, TDec, TBool]
+genLitType = Gen.element [TStr, TInt, TDec, TBool, TTime]
 
 genType :: MonadGen m => m ExprType
 genType = go (2 :: Int)
