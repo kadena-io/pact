@@ -107,7 +107,7 @@ jobs:
           benchmarks: True
           documentation: False
           optimization: 1
-          flags: ${{ matrix.flags }}
+          flags: ${{ matrix.flags }} +cryptonite-ed25519
         EOF
     - name: Extend cabal.project.local for GHC-9.0.1
       if: "startsWith(matrix.ghc, '9')"
