@@ -306,7 +306,8 @@ genTime :: MonadGen m => m LispExpr
 genTime = ETime <$> genUTCTime
 
 genSchema :: MonadGen m => m Schema
-genSchema = pure []
+genSchema =
+  Gen.list (Range.exponential 0 4) ((,) <$> Gen.string (Range.linear 2 5) Gen.alpha <*> genType)
 
 genLitType :: MonadGen m => m ExprType
 genLitType = Gen.element [TStr, TInt, TDec, TBool]
@@ -439,8 +440,8 @@ builtins =
       ("|", gen_bitwise_or),
       ("~", gen_bitwise_complement)
       -- Time native functions
-      -- "add-time"    -> Just $ addTimeTests nativeName
-      -- "days"        -> Just $ daysTests nativeName
+      ("add-time", gen_add_time),
+      ("days", gen_days)
       -- "diff-time"   -> Just $ diffTimeTests nativeName
       -- "format-time" -> Just $ formatTimeTests nativeName
       -- "hours"       -> Just $ hoursTests nativeName
