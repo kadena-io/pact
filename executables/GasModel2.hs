@@ -686,7 +686,7 @@ gen_namespace t@TStr = do
 gen_namespace _ = mzero
 
 gen_pact_id :: PactGen
-gen_pact_id _ = mzero -- jww (2022-09-26): TODO
+gen_pact_id _ = pure $ EParens [ESym "pact-id"]
 
 gen_pact_version :: PactGen
 gen_pact_version _ = pure $ EParens [ESym "pact-version"]
@@ -704,7 +704,11 @@ gen_read_string :: PactGen
 gen_read_string _ = mzero -- jww (2022-09-26): TODO
 
 gen_remove :: PactGen
-gen_remove _ = mzero -- jww (2022-09-26): TODO
+gen_remove t@(TObj sch) = do
+  x <- genExpr t
+  (a, _) <- Gen.element sch
+  pure $ EParens [ESym "remove", EStr a, x]
+gen_remove _ = mzero
 
 gen_resume :: PactGen
 gen_resume _ = mzero -- jww (2022-09-26): TODO
@@ -748,7 +752,7 @@ gen_try t = do
   pure $ EParens [ESym "try", x, y]
 
 gen_tx_hash :: PactGen
-gen_tx_hash _ = mzero -- jww (2022-09-26): TODO
+gen_tx_hash _ = pure $ EParens [ESym "tx-hash"]
 
 gen_typeof :: PactGen
 gen_typeof t = do
