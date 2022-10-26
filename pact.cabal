@@ -369,6 +369,7 @@ executable gasmodel2
                      , time
                      , transformers
                      , unordered-containers
+                     , semirings
   hs-source-dirs:      executables
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -DGAS_MODEL
   ghc-prof-options:    -fprof-auto -fprof-auto-calls

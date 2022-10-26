@@ -17,6 +17,7 @@ import Data.Decimal
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as M
 import Data.List
+import GHC.Exts(IsList(..))
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -24,6 +25,7 @@ import Hedgehog.Range qualified as Range
 import Control.Exception (bracket)
 import Criterion qualified as C
 import Criterion.Types qualified as C
+import Data.Field(Field)
 import Data.IORef
 import Data.List.NonEmpty qualified as NE
 import Data.Text qualified as T
@@ -31,6 +33,7 @@ import Data.Text.IO qualified as T
 import Pact.GasModel.GasModel hiding (bench, benchesOnce, main)
 import Pact.GasModel.Types
 import Pact.GasModel.Utils
+import Pact.Native.Pairing
 import Pact.Time
 import Pact.Types.Exp qualified as Pact
 import Pact.Types.Lang qualified as Pact
@@ -86,12 +89,23 @@ main = do
         (Pact.NativeDefName (T.pack name),)
             <$> fmap (gasTest name)
                   (Gen.sample $
-                    replicateM 1 $
+                    replicateM 20 $
                       flip runReaderT defaultEnv $
                         genBuiltin name t)
 
   -- opt <- O.execParser options
-  tests <- mapM (uncurry genTest) [("+", TInt), ("-", TInt), ("add-time", TTime), ("days", TInt), ("days", TDec)]
+  tests <- mapM (uncurry genTest) 
+    -- [ ("+", TInt)
+    -- , ("-", TInt)
+    -- , ("add-time", TTime)
+    -- , ("days", TInt)
+    -- , ("days", TDec)
+    [ ("scalar-mult", g1Type)
+    , ("scalar-mult", g2Type)
+    , ("point-add", g1Type)
+    , ("point-add", g2Type)
+    , ("pairing-check", TBool)
+    ]
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
@@ -445,7 +459,7 @@ builtins =
       ("~", gen_bitwise_complement),
       -- Time native functions
       ("add-time", gen_add_time),
-      ("days", gen_days) 
+      ("days", gen_days),
       -- "diff-time"   -> Just $ diffTimeTests nativeName
       -- "format-time" -> Just $ formatTimeTests nativeName
       -- "hours"       -> Just $ hoursTests nativeName
@@ -506,7 +520,73 @@ builtins =
       -- "use"       -> Just $ useTests nativeName
       -- "module"    -> Just $ moduleTests nativeName
       -- "interface" -> Just $ interfaceTests nativeName
+
+      -- ZK primitives
+      ("pairing-check", gen_pairing_check),
+      ("scalar-mult", gen_scalar_mult),
+      ("point-add", gen_point_add)
     ]
+
+fieldModulus :: Integer
+fieldModulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
+
+curveOrder :: Integer
+curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
+genCurvePoint
+  :: (Field a, Eq a, Num a, MonadGen m)
+  => CurvePoint a -- Generator
+  -> m (CurvePoint a)
+genCurvePoint gen' = do
+  r <- Gen.integral $ Range.constant 0 (curveOrder - 1)
+  pure (multiply gen' r)
+
+genG1 :: MonadGen m => m G1
+genG1 = genCurvePoint g1
+
+genG2 :: MonadGen m => m G2
+genG2 = genCurvePoint g2
+
+g1ToLisp :: G1 -> LispExpr
+g1ToLisp CurveInf = EObject [("x", EInt 0), ("y", EInt 0)]
+g1ToLisp (Point x y) = EObject [("x", EInt $ fromIntegral x), ("y", EInt $ fromIntegral y)]
+
+g2ToLisp :: G2 -> LispExpr
+g2ToLisp CurveInf = EObject [("x", EList [EInt 0]), ("y", EList [EInt 0])]
+g2ToLisp (Point x y) = EObject [("x", EList $ EInt . fromIntegral <$> toList x), ("y", EList $ EInt . fromIntegral <$> toList y)]
+
+gen_pairing_check :: PactGen
+gen_pairing_check t@TBool = do
+  points <- Gen.list (Range.constant 5 5) ((,) <$> (g1ToLisp <$> genG1) <*> (g2ToLisp <$> genG2))
+  let (g1s, g2s) = unzip points
+  return $ EParens [ESym "pairing-check", EList g1s, EList g2s]
+gen_pairing_check _ = mzero
+-- gen_pairing_check t@TObj [("x", TInt), ("y", TInt)] = do
+
+g1Type = TObj [("x", TInt), ("y", TInt)]
+g2Type = TObj [("x", TList TInt), ("y", TList TInt)]
+
+gen_scalar_mult :: PactGen
+gen_scalar_mult t | t == g1Type = do
+  g1 <- g1ToLisp <$> genG1
+  scalar <- genInt
+  return $ EParens [ESym "scalar-mult", EStr "g1", g1, scalar]
+gen_scalar_mult t | t == g2Type = do
+  g2 <- g2ToLisp <$> genG2
+  scalar <- genInt
+  return $ EParens [ESym "scalar-mult", EStr "g2", g2, scalar]
+gen_scalar_mult _ = mzero
+
+gen_point_add :: PactGen
+gen_point_add t | t == g1Type = do
+  g1 <- g1ToLisp <$> genG1
+  g1' <- g1ToLisp <$> genG1
+  return $ EParens [ESym "point-add", EStr "g1", g1, g1']
+gen_point_add t | t == g2Type = do
+  g2 <- g2ToLisp <$> genG2
+  g2' <- g2ToLisp <$> genG2
+  return $ EParens [ESym "point-add", EStr "g2", g2, g2']
+gen_point_add t = mzero
 
 gen_at :: PactGen
 gen_at t = do

@@ -128,8 +128,8 @@ instance GaloisField Fq where
 
 -- | Frobenius endomorphism precomputation.
 frobenius' :: GaloisField k => Vector k -> Vector k -> Maybe (Vector k)
-frobenius' []  _ = Just []
-frobenius' [a] _ = Just [frobenius a]
+frobenius' []  !_ = Just []
+frobenius' [a] !_ = Just [frobenius a]
 frobenius' [a, b] [x, 0, 1]
   | degree x == 2  = Just [a, negate b]
   | characteristic x == 2 = Just [frobenius a - frobenius b * x]
@@ -329,7 +329,7 @@ instance ExtensionField p k => GaloisField (Extension p k) where
   degree _ = degree (undefined :: k) * deg'
     where
     deg' = fromIntegral (E.degree (fieldPoly :: VPoly k))
-  frobenius y@(Extension x) = case frobenius' (unPoly x) (unPoly (fieldPoly :: VPoly k)) of
+  frobenius y@(Extension !x) = case frobenius' (unPoly x) (unPoly (fieldPoly :: VPoly k)) of
     Just f -> Extension (toPoly f)
     Nothing -> pow y (characteristic y)
 

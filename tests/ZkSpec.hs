@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module ZkSpec (spec) where
+module ZkSpec (spec, genG1, genG2) where
 
 import Data.Group (pow)
 import Data.Field(Field)
