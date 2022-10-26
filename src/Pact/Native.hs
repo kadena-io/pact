@@ -144,7 +144,10 @@ enforceDef = defNative "enforce" enforce
   where
 
     enforce :: NativeFun e
-    enforce i as = runSysOnly $ gasUnreduced i as $ mapM reduce as >>= enforce' i
+    enforce i as = runSysOnly $ gasUnreduced i as $
+      ifExecutionFlagSet FlagDisablePact45
+      (mapM reduce as >>= enforce' i)
+      (enforceLazy i as)
 
     enforce' :: RNativeFun e
     enforce' i [TLiteral (LBool b') _,TLitString msg]
@@ -152,6 +155,19 @@ enforceDef = defNative "enforce" enforce
         | otherwise = failTx (_faInfo i) $ pretty msg
     enforce' i as = argsError i as
     {-# INLINE enforce' #-}
+
+    enforceLazy i [cond, msg] = do
+      cond' <- reduce cond
+      case cond' of
+        TLiteral (LBool b') _ ->
+          if b' then
+            return (TLiteral (LBool True) def)
+          else reduce msg >>= \case
+            TLitString msg' -> failTx (_faInfo i) $ pretty msg'
+            e -> evalError' i $ "Invalid message argument, expected string " <> pretty e
+        _ -> reduce msg >>= argsError i . reverse . (:[cond'])
+    enforceLazy i as = mapM reduce as >>= argsError i
+    {-# INLINE enforceLazy #-}
 
 enforceOneDef :: NativeDef
 enforceOneDef =

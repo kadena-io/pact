@@ -156,6 +156,8 @@ data ExecutionFlag
   | FlagDisablePact44
   -- | Disable new transcendental impls
   | FlagDisableNewTrans
+  -- | Disable Pact 4.5 Features
+  | FlagDisablePact45
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
