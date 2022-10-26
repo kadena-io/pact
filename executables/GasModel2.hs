@@ -27,6 +27,7 @@ import Criterion.Types qualified as C
 import Data.IORef
 import Data.List.NonEmpty qualified as NE
 import Data.Text qualified as T
+import Data.Text.IO qualified as T
 import Pact.GasModel.GasModel hiding (bench, benchesOnce, main)
 import Pact.GasModel.Types
 import Pact.GasModel.Utils
@@ -70,17 +71,27 @@ main = do
     -- print x3
     putStrLn $ toLisp x3
 
+  putStrLn "x4:"
+  xs4 <-
+    Gen.sample $
+      replicateM 10 $
+        flip runReaderT defaultEnv $
+          genBuiltin "add-time" TTime
+  forM_ xs4 $ \x4 -> do
+    -- print x3
+    putStrLn $ toLisp x4
+
 #if defined(GAS_MODEL)
-  let genTest name = do
+  let genTest name t = do
         (Pact.NativeDefName (T.pack name),)
             <$> fmap (gasTest name)
                   (Gen.sample $
                     replicateM 1 $
                       flip runReaderT defaultEnv $
-                        genBuiltin name TInt)
+                        genBuiltin name t)
 
   -- opt <- O.execParser options
-  tests <- mapM genTest ["+", "-"]
+  tests <- mapM (uncurry genTest) [("+", TInt), ("-", TInt), ("add-time", TTime), ("days", TInt), ("days", TDec)]
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
@@ -237,9 +248,7 @@ data LispExpr
   | ETime UTCTime
   | EKeyset
   | EList [LispExpr]
-  | EObject Schema -- jww (2022-09-26): should data corresponding to a scheme
-  | ETable Schema
-  | EModule
+  | EObject [(String, LispExpr)] -- jww (2022-09-26): should data corresponding to a scheme
   | ESym String
   | EParens [LispExpr]
   deriving (Eq, Show)
@@ -252,12 +261,10 @@ toLisp = \case
   EDec d -> show d
   EBool True -> "true"
   EBool False -> "false"
-  ETime t -> concat ["(parse-time ", T.unpack (Pact.formatLTime t), ")"] -- jww (2022-09-26): TODO
+  ETime t -> concat ["(time \"", T.unpack (Pact.formatLTime t), "\")"] -- jww (2022-09-26): TODO
   EKeyset -> "!keyset!" -- jww (2022-09-26): TODO
   EList xs -> "[" ++ intercalate ", " (map toLisp xs) ++ "]"
-  EObject _ -> "!object!" -- jww (2022-09-26): TODO
-  ETable _ -> "!table!" -- jww (2022-09-26): TODO
-  EModule -> "!module!" -- jww (2022-09-26): TODO
+  EObject m -> "{ " <> intercalate ", " ["\"" <> k <> "\": " <> toLisp e | (k, e) <- m] <> " }" -- jww (2022-09-26): TODO
   ESym s -> s
   EParens xs -> "(" ++ intercalate " " (map toLisp xs) ++ ")"
 
@@ -303,7 +310,8 @@ genTime :: MonadGen m => m LispExpr
 genTime = ETime <$> genUTCTime
 
 genSchema :: MonadGen m => m Schema
-genSchema = pure []
+genSchema = 
+  Gen.list (Range.exponential 0 4) ((,) <$> Gen.string (Range.linear 2 5) Gen.alpha <*> genType)
 
 genLitType :: MonadGen m => m ExprType
 genLitType = Gen.element [TStr, TInt, TDec, TBool, TTime]
@@ -315,10 +323,10 @@ genType = go (2 :: Int)
       Gen.frequency
         [ (1, genLitType),
           -- Do not generate lists of lists greater than depth 2
-          (if n > 0 then 1 else 0, TList <$> go (pred n))
+          (if n > 0 then 1 else 0, TList <$> go (pred n)),
           -- jww (2022-09-26): TODO
           -- (1, pure TKeyset),
-          -- (1, TObj <$> genSchema),
+          (1, TObj <$> genSchema)
           -- (1, TTable <$> genSchema)
         ]
 
@@ -331,8 +339,8 @@ genExpr = \case
   TTime -> genTime
   TKeyset -> pure EKeyset -- jww (2022-09-26): TODO
   TList t -> genList t
-  TObj sch -> pure $ EObject sch -- jww (2022-09-26): TODO
-  TTable sch -> pure $ ETable sch -- jww (2022-09-26): TODO
+  TObj sch -> EObject <$> sequenceA [ (k,) <$> genExpr t | (k, t) <- sch ] -- jww (2022-09-26): TODO
+  TTable _sch -> mzero -- pure $ ETable sch -- jww (2022-09-26): TODO
 
 listRange :: Range Int
 listRange = Range.constant 0 10
@@ -434,10 +442,10 @@ builtins =
       ("sqrt", gen_sqrt),
       ("xor", gen_xor),
       ("|", gen_bitwise_or),
-      ("~", gen_bitwise_complement)
+      ("~", gen_bitwise_complement),
       -- Time native functions
-      -- "add-time"    -> Just $ addTimeTests nativeName
-      -- "days"        -> Just $ daysTests nativeName
+      ("add-time", gen_add_time),
+      ("days", gen_days) 
       -- "diff-time"   -> Just $ diffTimeTests nativeName
       -- "format-time" -> Just $ formatTimeTests nativeName
       -- "hours"       -> Just $ hoursTests nativeName
@@ -848,3 +856,15 @@ gen_bitwise_or _ = mzero
 gen_bitwise_complement :: PactGen
 gen_bitwise_complement t@TInt = arity1 "~" t
 gen_bitwise_complement _ = mzero
+
+gen_add_time :: PactGen
+gen_add_time TTime = do
+  t <- genTime
+  s <- genInt
+  return $ EParens [ESym "add-time", t, s]
+gen_add_time _ = mzero
+
+gen_days :: PactGen
+gen_days t@TInt = arity1 "days" t
+gen_days t@TDec = arity1 "days" t
+gen_days _ = mzero

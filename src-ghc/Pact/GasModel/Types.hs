@@ -32,6 +32,7 @@ import Control.DeepSeq (NFData(..))
 import Control.Exception (onException)
 import Control.Lens hiding ((.=),DefName)
 import Data.Default (def)
+import Data.IORef
 import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import NeatInterpolation (text)
@@ -279,6 +280,7 @@ defSqliteBackend = do
         |]
   setupTerms <- compileCode setupExprs
   (res,_) <- runEval' state env $ mapM eval setupTerms
+  writeIORef (_eeGas env) 0
   _ <- onException (eitherDie "Sqlite setup expressions" res) (sqliteSetupCleanup (env,state))
   return env
 
