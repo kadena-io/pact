@@ -24,3 +24,10 @@ source-repository-package
   tag: f991ffb74a1a1ab86f14e751d7c4f4ba549785b3
   location: https://github.com/hackage-package-forks/trifecta
 
+-- Servant is notoriously forcing outdated upper bounds onto its users.
+-- It is usually safe to just ignore those.
+--
+allow-newer: servant-server:*
+allow-newer: servant-client-core:*
+allow-newer: servant-client:*
+allow-newer: servant:*
