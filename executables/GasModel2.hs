@@ -335,7 +335,8 @@ genExpr = \case
   TTime -> genTime
   TKeyset -> pure EKeyset -- jww (2022-09-26): TODO
   TList t -> genList t
-  TObj sch -> pure $ EObject sch -- jww (2022-09-26): TODO
+  TObj sch -> pure $ EObject sch
+  -- elp (2022-10-26): should this even exist?
   TTable sch -> pure $ ETable sch -- jww (2022-09-26): TODO
 
 listRange :: Range Int
@@ -539,10 +540,15 @@ gen_base64_encode t@TStr = do
 gen_base64_encode _ = mzero
 
 gen_bind :: PactGen
-gen_bind _ = undefined -- TODO
+gen_bind t@TObj{} = do
+  x <- genExpr t
+  y <- genExpr t
+  z <- genExpr =<< lift genType
+  pure $ EParens [ESym "bind", x, y, z]
+gen_bind _ = mzero
 
 gen_chain_data :: PactGen
-gen_chain_data _ = mzero -- jww (2022-09-26): TODO
+gen_chain_data _ = pure $ EParens [ESym "chain-data"]
 
 gen_compose :: PactGen
 gen_compose _ = mzero -- jww (2022-09-26): TODO
@@ -566,7 +572,10 @@ gen_contains t = do
   pure $ EParens [ESym "contains", a, x]
 
 gen_define_namespace :: PactGen
-gen_define_namespace _ = mzero -- jww (2022-09-26): TODO
+gen_define_namespace t@TStr = do
+  x <- genExpr t
+  pure $ EParens [ESym "define-namespace", x]
+gen_define_namespace _ = mzero
 
 gen_drop :: PactGen
 gen_drop t = do
@@ -605,7 +614,16 @@ gen_fold :: PactGen
 gen_fold _ = mzero -- jww (2022-09-26): TODO
 
 gen_format :: PactGen
-gen_format _ = mzero -- jww (2022-09-26): TODO
+gen_format t = do
+  x@(EList l) <- genList t
+
+  let i = length l
+      -- creates a string of the shape "{}-{}-{}-{}-{}-{}"
+      -- etc for the length of the list.
+      s = intercalate "-" $ replicate i "{}"
+
+  pure $ EParens [ESym "format", EStr s, x]
+
 
 gen_hash :: PactGen
 gen_hash t = do
@@ -633,7 +651,12 @@ gen_int_to_str t@TInt = do
   pure $ EParens [ESym "int-to-str", EInt 16, x]
 
 gen_is_charset :: PactGen
-gen_is_charset _ = mzero -- jww (2022-09-26): TODO
+gen_is_charset t@TStr = do
+  x <- genExpr t
+  -- latin1 is the upperbound in terms of complexity for
+  -- this native.
+  pure $ EParens [ESym "is-charset", EStr "CHARSET_LATIN1", x]
+gen_is_charset _ = mzero
 
 gen_length :: PactGen
 gen_length t@TList{} = do
