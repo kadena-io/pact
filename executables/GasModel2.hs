@@ -12,15 +12,19 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
 import Data.Decimal
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as M
 import Data.List
 import Data.Time
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
+import Pact.Types.Util
 #if defined(GAS_MODEL)
 import Control.Exception (bracket)
 import Criterion qualified as C
@@ -164,7 +168,6 @@ gasTest name exprs =
 #endif
 
 type PactGen = ExprType -> ReaderT Env Gen LispExpr
-
 type Scope = HashMap String LispExpr
 
 -- jww (2022-09-26): More things needed here
@@ -509,15 +512,33 @@ gen_at t = do
 
 gen_base64_decode :: PactGen
 gen_base64_decode t@TStr = do
-  x <- genExpr t
-  pure $ EParens [ESym "base64-decode", x]
+  -- elp (2022-10-24):
+  --
+  -- In order to properly stress this, we have to generate 2 strings:
+  -- one (the first part) encoded as valid base64, and then the second
+  -- being (potential) garbage so that we can stress the error path
+  -- more effectively.
+  --
+  EStr x <- genExpr t
+  EStr y <- genExpr t
+
+  let z = Text.unpack
+        . toB64UrlUnpaddedText
+        . Text.encodeUtf8
+        . Text.pack
+        $ x
+
+  pure $ EParens [ESym "base64-decode", EStr $ z ++ y]
 gen_base64_decode _ = mzero
 
 gen_base64_encode :: PactGen
-gen_base64_encode _ = mzero -- jww (2022-09-26): TODO
+gen_base64_encode t@TStr = do
+  x <- genExpr t
+  pure $ EParens [ESym "base64-encode", x]
+gen_base64_encode _ = mzero
 
 gen_bind :: PactGen
-gen_bind _ = mzero -- jww (2022-09-26): TODO
+gen_bind _ = undefined -- TODO
 
 gen_chain_data :: PactGen
 gen_chain_data _ = mzero -- jww (2022-09-26): TODO
@@ -526,31 +547,55 @@ gen_compose :: PactGen
 gen_compose _ = mzero -- jww (2022-09-26): TODO
 
 gen_concat :: PactGen
-gen_concat _ = mzero -- jww (2022-09-26): TODO
+gen_concat t = do
+  x <- genList t
+  y <- genList t
+  pure $ EParens [ESym "concat", x, y]
 
 gen_constantly :: PactGen
-gen_constantly _ = mzero -- jww (2022-09-26): TODO
+gen_constantly t = do
+  x <- genExpr t
+  y <- lift genType >>= genExpr
+  pure $ EParens [ESym "constantly", x, y]
 
 gen_contains :: PactGen
-gen_contains _ = mzero -- jww (2022-09-26): TODO
+gen_contains t = do
+  x <- genList t
+  a <- genExpr t
+  pure $ EParens [ESym "contains", a, x]
 
 gen_define_namespace :: PactGen
 gen_define_namespace _ = mzero -- jww (2022-09-26): TODO
 
 gen_drop :: PactGen
-gen_drop _ = mzero -- jww (2022-09-26): TODO
+gen_drop t = do
+  i <- lift genInt
+  x <- genExpr t
+  pure $ EParens [ESym "drop", i, x]
 
 gen_enforce :: PactGen
-gen_enforce _ = mzero -- jww (2022-09-26): TODO
+gen_enforce t@TBool = do
+  x <- genExpr t
+  msg <- lift genStr
+  pure $ EParens [ESym "enforce", x, msg]
+gen_enforce _ = mzero
 
 gen_enforce_one :: PactGen
-gen_enforce_one _ = mzero -- jww (2022-09-26): TODO
+gen_enforce_one t@TBool = do
+  x <- lift genStr
+  y <- genList t
+  pure $ EParens [ESym "enforce-one", x, y]
+gen_enforce_one _ = mzero
 
 gen_enforce_pact_version :: PactGen
 gen_enforce_pact_version _ = mzero -- jww (2022-09-26): TODO
 
 gen_enumerate :: PactGen
-gen_enumerate _ = mzero -- jww (2022-09-26): TODO
+gen_enumerate t@TInt = do
+  x <- genExpr t
+  y <- genExpr t
+  pure $ EParens [ESym "enumerate", x, y]
+gen_enumerate _ = mzero
 
 gen_filter :: PactGen
 gen_filter _ = mzero -- jww (2022-09-26): TODO
@@ -562,28 +607,47 @@ gen_format :: PactGen
 gen_format _ = mzero -- jww (2022-09-26): TODO
 
 gen_hash :: PactGen
-gen_hash _ = mzero -- jww (2022-09-26): TODO
+gen_hash t = do
+  x <- genExpr t
+  pure $ EParens [ESym "hash", x]
 
 gen_identity :: PactGen
-gen_identity _ = mzero -- jww (2022-09-26): TODO
+gen_identity t = do
+  x <- genExpr t
+  pure $ EParens [ESym "identity", x]  -- jww (2022-09-26): TODO
 
 gen_if :: PactGen
-gen_if _ = mzero -- jww (2022-09-26): TODO
+gen_if t@TBool = do
+  x <- genExpr t
+  y <- genExpr t
+  pure $ EParens [ESym "if", x, y]
+gen_if _ = mzero
 
 gen_int_to_str :: PactGen
-gen_int_to_str _ = mzero -- jww (2022-09-26): TODO
+gen_int_to_str t@TInt = do
+  x <- genExpr t
+  -- defaulting to 16 for the base conversion since
+  -- it should be the upper bound in terms of
+  -- computational cost
+  pure $ EParens [ESym "int-to-str", EInt 16, x]
 
 gen_is_charset :: PactGen
 gen_is_charset _ = mzero -- jww (2022-09-26): TODO
 
 gen_length :: PactGen
-gen_length _ = mzero -- jww (2022-09-26): TODO
+gen_length t@TList{} = do
+  x <- genExpr t
+  pure $ EParens [ESym "length", x]
+gen_length _ = mzero
 
 gen_list_modules :: PactGen
 gen_list_modules _ = mzero -- jww (2022-09-26): TODO
 
 gen_make_list :: PactGen
-gen_make_list _ = mzero -- jww (2022-09-26): TODO
+gen_make_list t = do
+  n <- lift genInt -- n <= 0 defaults to the empty list
+  x <- genList t
+  pure $ EParens [ESym "make-list", n, x]
 
 gen_map :: PactGen
 gen_map _ = mzero -- jww (2022-09-26): TODO
@@ -592,16 +656,19 @@ gen_zip :: PactGen
 gen_zip _ = mzero -- jww (2022-09-26): TODO
 
 gen_namespace :: PactGen
-gen_namespace _ = mzero -- jww (2022-09-26): TODO
+gen_namespace t@TStr = do
+  x <- genExpr t
+  pure $ EParens [ESym "namespace", x]
+gen_namespace _ = mzero
 
 gen_pact_id :: PactGen
 gen_pact_id _ = mzero -- jww (2022-09-26): TODO
 
 gen_pact_version :: PactGen
-gen_pact_version _ = mzero -- jww (2022-09-26): TODO
+gen_pact_version _ = pure $ EParens [ESym "pact-version"]
 
 gen_read_decimal :: PactGen
-gen_read_decimal _ = mzero -- jww (2022-09-26): TODO
+gen_read_decimal _ = mzero
 
 gen_read_integer :: PactGen
 gen_read_integer _ = mzero -- jww (2022-09-26): TODO
@@ -619,31 +686,55 @@ gen_resume :: PactGen
 gen_resume _ = mzero -- jww (2022-09-26): TODO
 
 gen_reverse :: PactGen
-gen_reverse _ = mzero -- jww (2022-09-26): TODO
+gen_reverse t@TList{} = do
+  x <- genExpr t
+  pure $ EParens [ESym "reverse", x]
+gen_reverse _ = mzero
 
 gen_sort :: PactGen
+gen_sort t@TList{} = do
+  x <- genExpr t
+  pure $ EParens [ESym "sort", x]
 gen_sort _ = mzero -- jww (2022-09-26): TODO
 
 gen_str_to_int :: PactGen
-gen_str_to_int _ = mzero -- jww (2022-09-26): TODO
+gen_str_to_int t@TStr = do
+  x <- genExpr t
+  -- same as base64 decode - this needs to be
+  -- 2 strings concatenated to stress error paths
+  pure $ EParens [ESym "str-to-int", x]
+gen_str_to_int _ = mzero
 
 gen_str_to_list :: PactGen
-gen_str_to_list _ = mzero -- jww (2022-09-26): TODO
+gen_str_to_list t@TStr = do
+  x <- genExpr t
+  pure $ EParens [ESym "str-to-list", x]
+gen_str_to_list _ = mzero
 
 gen_take :: PactGen
-gen_take _ = mzero -- jww (2022-09-26): TODO
+gen_take t = do
+  x <- genExpr t
+  i <- lift genInt
+  pure $ EParens [ESym "take", i, x]
 
 gen_try :: PactGen
-gen_try _ = mzero -- jww (2022-09-26): TODO
+gen_try t = do
+  x <- genExpr t
+  y <- genExpr t
+  pure $ EParens [ESym "try", x, y]
 
 gen_tx_hash :: PactGen
 gen_tx_hash _ = mzero -- jww (2022-09-26): TODO
 
 gen_typeof :: PactGen
-gen_typeof _ = mzero -- jww (2022-09-26): TODO
+gen_typeof t = do
+  x <- genExpr t
+  pure $ EParens [ESym "typeof", x]
 
 gen_distinct :: PactGen
-gen_distinct _ = mzero -- jww (2022-09-26): TODO
+gen_distinct t = do
+  x <- genList t
+  pure $ EParens [ESym "distinct", x]
 
 gen_where :: PactGen
 gen_where _ = mzero -- jww (2022-09-26): TODO
