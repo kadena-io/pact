@@ -703,7 +703,7 @@ scalarMultDef =
 
 pairingCheckDef :: NativeDef
 pairingCheckDef =
-  defRNative "pairing-check" pairingCheck' (funType tTyBool [("points-g1", a), ("points-g2", b)])
+  defRNative "pairing-check" pairingCheck' (funType tTyBool [("points-g1", TyList a), ("points-g2", TyList b)])
   []
   "Perform pairing and final exponentiation points in G1 and G2 in BN254, check if the result is 1"
   where
