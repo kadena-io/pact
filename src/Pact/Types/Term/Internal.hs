@@ -813,10 +813,22 @@ instance (SizeOf a) => SizeOf (CapabilityGuard a) where
   sizeOf CapabilityGuard{..} =
     (constructorCost 2) + (sizeOf _cgName) + (sizeOf _cgArgs) + (sizeOf _cgPactId)
 
+capabilityGuardProperties :: ToJSON n => JsonProperties (CapabilityGuard n)
+capabilityGuardProperties o =
+  [ "cgPactId" .= _cgPactId o
+  , "cgArgs" .= _cgArgs o
+  , "cgName" .= _cgName o
+  ]
+
 instance ToJSON a => ToJSON (CapabilityGuard a) where
-  toJSON = lensyToJSON 1
+  toJSON = enableToJSON "Pact.Types.Term.CapabilityGuard" . object . capabilityGuardProperties
+  toEncoding = A.pairs . mconcat . capabilityGuardProperties
+  {-# INLINEABLE toJSON #-}
+  {-# INLINEABLE toEncoding #-}
+
 instance FromJSON a => FromJSON (CapabilityGuard a) where
   parseJSON = lensyParseJSON 1
+  {-# INLINE parseJSON #-}
 
 -- -------------------------------------------------------------------------- --
 -- Guard

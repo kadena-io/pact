@@ -563,6 +563,11 @@ spec = describe "JSON encoding backward compatibility" $ do
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
+   spec_case @(CapabilityGuard ())
+      [ Case checkRoundtrip
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
    spec_case @(Guard ())
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
