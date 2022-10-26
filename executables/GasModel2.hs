@@ -665,7 +665,7 @@ gen_length t@TList{} = do
 gen_length _ = mzero
 
 gen_list_modules :: PactGen
-gen_list_modules _ = mzero -- jww (2022-09-26): TODO
+gen_list_modules _ = pure $ EParens [ESym "list-modules"]
 
 gen_make_list :: PactGen
 gen_make_list t = do
