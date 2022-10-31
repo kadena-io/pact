@@ -439,7 +439,7 @@ builtins =
       ("sqrt", gen_sqrt),
       ("xor", gen_xor),
       ("|", gen_bitwise_or),
-      ("~", gen_bitwise_complement)
+      ("~", gen_bitwise_complement),
       -- Time native functions
       ("add-time", gen_add_time),
       ("days", gen_days)
@@ -649,6 +649,7 @@ gen_int_to_str t@TInt = do
   -- it should be the upper bound in terms of
   -- computational cost
   pure $ EParens [ESym "int-to-str", EInt 16, x]
+gen_int_to_str _ = mzero
 
 gen_is_charset :: PactGen
 gen_is_charset t@TStr = do
@@ -967,3 +968,15 @@ gen_bitwise_or _ = mzero
 gen_bitwise_complement :: PactGen
 gen_bitwise_complement t@TInt = arity1 "~" t
 gen_bitwise_complement _ = mzero
+
+gen_add_time :: PactGen
+gen_add_time TTime = do
+  t <- genTime
+  s <- genInt
+  return $ EParens [ESym "add-time", t, s]
+gen_add_time _ = mzero
+
+gen_days :: PactGen
+gen_days t@TInt = arity1 "days" t
+gen_days t@TDec = arity1 "days" t
+gen_days _ = mzero
