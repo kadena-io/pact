@@ -23,18 +23,21 @@ module Pact.Types.Names
   , DefName(..)
   , TableName(..)
   , ModuleName(..), mnName, mnNamespace, parseModuleName
+  , moduleNameParser
+  , nameParser
   , Name(..), parseName
   , QualifiedName(..), parseQualifiedName
   , DynamicName(..)
   , dynInfo, dynInterfaces, dynMember, dynRefArg
   , BareName(..)
+  , FullyQualifiedName(..)
   ) where
 
 
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
-import Data.Aeson (ToJSON(..), FromJSON(..), withText)
+import Data.Aeson (ToJSON(..), FromJSON(..), withText, FromJSONKey(..), ToJSONKey(..))
 import qualified Data.Attoparsec.Text as AP
 import Data.Default
 import Data.Hashable
@@ -46,22 +49,22 @@ import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 import Test.QuickCheck
-import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof)
+import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof, alphaNum, between, char)
 
 
 import Pact.Types.Info
-import Pact.Types.Parser
+import Pact.Types.Parser ( style )
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util
+import Pact.Types.Hash
 
 
-newtype NamespaceName = NamespaceName Text
+newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf)
 
 instance Arbitrary NamespaceName where
   arbitrary = NamespaceName <$> genBareText
-
 
 data ModuleName = ModuleName
   { _mnName      :: Text
@@ -116,9 +119,11 @@ parseModuleName :: Text -> Either String ModuleName
 parseModuleName = AP.parseOnly (moduleNameParser <* eof)
 
 
-newtype DefName = DefName Text
+newtype DefName = DefName { _unDefName :: Text }
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
 
+instance SizeOf DefName where
+  sizeOf (DefName n) = sizeOf n
 
 data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
@@ -204,12 +209,47 @@ instance SizeOf DynamicName where
     sizeOf _dynMember + sizeOf _dynRefArg
     + sizeOf _dynInterfaces + sizeOf _dynInfo
 
+data FullyQualifiedName
+  = FullyQualifiedName
+  { _fqName :: !Text
+  , _fqModule :: ModuleName
+  , _fqModuleHash :: Hash
+  } deriving (Generic, Eq, Show)
+
+instance NFData FullyQualifiedName
+
+instance ToJSON FullyQualifiedName where
+  toJSON (FullyQualifiedName n (ModuleName m ns) hsh) =
+    toJSON $ maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
+
+instance FromJSON FullyQualifiedName where
+  parseJSON = withText "FullyQualifiedName" $ \f -> case AP.parseOnly (fullyQualNameParser <* eof) f of
+    Left s  -> fail s
+    Right n -> return n
+
+instance FromJSONKey FullyQualifiedName
+instance ToJSONKey FullyQualifiedName
+
+instance SizeOf FullyQualifiedName
+
+instance Pretty FullyQualifiedName where
+  pretty (FullyQualifiedName fqn fqm _) =
+    pretty fqm <> "." <> pretty fqn
+
+instance Hashable FullyQualifiedName where
+  hashWithSalt s FullyQualifiedName{..} =
+    s `hashWithSalt` _fqName `hashWithSalt` _fqModule `hashWithSalt` _fqModuleHash
+
+instance Ord FullyQualifiedName where
+  (FullyQualifiedName fq fm fh) `compare` (FullyQualifiedName fq' fm' fh') =
+    (fq, fm, fh) `compare` (fq', fm', fh')
 
 -- | A named reference from source.
 data Name
   = QName QualifiedName
   | Name BareName
   | DName DynamicName
+  | FQName FullyQualifiedName
   deriving (Generic, Show)
 
 instance Arbitrary Name where
@@ -222,17 +262,20 @@ instance HasInfo Name where
   getInfo (QName q) = getInfo q
   getInfo (Name n) = getInfo n
   getInfo (DName d) = getInfo d
+  getInfo _ = def
 
 instance Pretty Name where
   pretty = \case
     QName q -> pretty q
     Name n -> pretty n
     DName d -> pretty d
+    FQName n -> pretty n
 
 instance SizeOf Name where
-  sizeOf (QName qn) = (constructorCost 1) + sizeOf qn
-  sizeOf (Name bn) = (constructorCost 1) + sizeOf bn
-  sizeOf (DName dn) = (constructorCost 1) + sizeOf dn
+  sizeOf (QName qn) = constructorCost 1 + sizeOf qn
+  sizeOf (Name bn) = constructorCost 1 + sizeOf bn
+  sizeOf (DName dn) = constructorCost 1 + sizeOf dn
+  sizeOf (FQName fq) = constructorCost 1 + sizeOf fq
 
 instance AsString Name where asString = renderCompactText
 
@@ -249,13 +292,26 @@ instance NFData Name
 parseName :: Info -> Text -> Either String Name
 parseName i = AP.parseOnly (nameParser i <* eof)
 
+fullyQualNameParser :: AP.Parser FullyQualifiedName
+fullyQualNameParser = do
+  qualifier <- ident style
+  mname <- dot *> ident style
+  oname <- optional (dot *> ident style)
+  h <- dot *> (between (char '{') (char '}') $ some (alphaNum <|> char '-' <|> char '_'))
+  hash' <- case parseB64UrlUnpaddedText' (T.pack h) of
+    Right hash' -> pure hash'
+    Left _ -> fail "invalid hash encoding"
+  case oname of
+    Just nn ->
+      pure (FullyQualifiedName nn (ModuleName mname (Just $ NamespaceName qualifier)) (Hash hash'))
+    Nothing ->
+      pure (FullyQualifiedName mname (ModuleName qualifier Nothing) (Hash hash'))
 
 nameParser :: (TokenParsing m, Monad m) => Info -> m Name
 nameParser i = (QName <$> qualifiedNameParser i <?> "qualifiedName") <|>
                (Name <$> bareNameParser <?> "bareName")
   where
     bareNameParser = BareName <$> ident style <*> pure i
-
 
 instance Hashable Name where
   hashWithSalt s (Name (BareName t _)) =
@@ -265,6 +321,8 @@ instance Hashable Name where
   hashWithSalt s (DName DynamicName{..}) =
     s `hashWithSalt` (2::Int) `hashWithSalt` _dynMember
     `hashWithSalt` _dynRefArg `hashWithSalt` _dynInterfaces
+  hashWithSalt s (FQName fqn) =
+    s `hashWithSalt` (3 :: Int) `hashWithSalt` fqn
 instance Eq Name where
   (QName (QualifiedName a b _)) == (QName (QualifiedName c d _)) =
     (a,b) == (c,d)
@@ -280,12 +338,16 @@ instance Ord Name where
     a `compare` b
   (DName (DynamicName a b c _)) `compare` (DName (DynamicName d e f _)) =
     (a,b,c) `compare` (d,e,f)
-  Name {} `compare` QName {} = LT
-  Name {} `compare` DName {} = LT
+  (FQName f) `compare` (FQName f') =
+    f `compare` f'
+  Name {} `compare` _ = LT
   QName {} `compare` DName {} = LT
+  QName {} `compare` FQName {} = LT
   QName {} `compare` Name {} = GT
-  DName {} `compare` Name {} = GT
-  DName {} `compare` QName {} = GT
+  FQName {} `compare` Name {} = GT
+  FQName {} `compare` QName {} = GT
+  FQName {} `compare` DName {} = LT
+  DName {} `compare` _ = GT
 
 
 newtype NativeDefName = NativeDefName Text
@@ -294,11 +356,15 @@ newtype NativeDefName = NativeDefName Text
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name
 
-
+instance SizeOf NativeDefName where
+  sizeOf (NativeDefName n) = sizeOf n
 
 newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,AsString,Hashable,Show,NFData,ToJSON,FromJSON)
 instance Pretty TableName where pretty (TableName s) = pretty s
+
+instance SizeOf TableName where
+  sizeOf (TableName t) = sizeOf t
 
 makeLenses ''ModuleName
 makeLenses ''DynamicName

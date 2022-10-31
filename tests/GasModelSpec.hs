@@ -1,5 +1,8 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module GasModelSpec (spec) where
 
@@ -14,11 +17,13 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 import qualified Data.Yaml as Y
 
+import Control.Lens hiding ((.=))
 import Control.Exception (bracket, throwIO)
-import Control.Monad (when)
+import Control.Monad (when, forM_)
 import Data.Aeson
+import Data.IORef
 import Data.Int (Int64)
-import Data.List (foldl')
+import Data.List (foldl', sortOn)
 import Test.QuickCheck
 import Test.QuickCheck.Gen (Gen(..))
 import Test.QuickCheck.Random (mkQCGen)
@@ -37,6 +42,7 @@ import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
 
+import Test.Hspec.Core.Spec
 
 spec :: Spec
 spec = describe "gas model tests" $ do
@@ -56,23 +62,30 @@ untestedNativesCheck = do
      , "verify-spv"
      , "public-chain-data"
      , "list"
+     , "continue"
      ])
 
 allGasTestsAndGoldenShouldPass :: Spec
-allGasTestsAndGoldenShouldPass = after_ (cleanupActual "gas-model" []) $ allGasTestsAndGoldenShouldPass'
+allGasTestsAndGoldenShouldPass =
+  after_ (cleanupActual "gas-model" []) allGasTestsAndGoldenShouldPass'
 
 -- | Calling directly is useful as it doesn't clean up, so you can use the actual
 -- as a new golden on expected changes.
 allGasTestsAndGoldenShouldPass' :: Spec
-allGasTestsAndGoldenShouldPass' = do
-  res <- runIO gasTestResults
+allGasTestsAndGoldenShouldPass' = beforeAll (newIORef []) $ sequential $ do
+
   -- fails if one of the gas tests throws a pact error
+  parallel $ do
+    forM_ ([0::Int ..] `zip` HM.toList unitTests) $ \(i, (n, t)) -> do
+      it (show n) $ \ref -> do
+        !r <- runTest t
+        atomicModifyIORef' ref (\x -> ((i,r):x, ()))
 
-  let allActualOutputsGolden = map toGoldenOutput res
-
-
-  it "gas model tests should not return a PactError, but should pass golden" $ do
-    (golden "gas-model" allActualOutputsGolden)
+  beforeAllWith (fmap formatResults . readIORef) $
+    it "gas model tests should not return a PactError, but should pass golden" $
+      golden "gas-model"
+ where
+   formatResults = fmap toGoldenOutput . concatMap snd . sortOn fst
 
 golden :: (FromJSON a,ToJSON a) => String -> a -> Golden a
 golden name obj = Golden
@@ -103,25 +116,33 @@ allNativesInGasTable = do
     `shouldBe`
     (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
 
-gasTestResults :: IO [GasTestResult ([Term Name], EvalState)]
-gasTestResults = concat <$> mapM (runTest . snd) (HM.toList unitTests)
-
 -- | Use this to run a single named test.
 _runNative :: NativeDefName -> IO (Maybe [(T.Text,Gas)])
 _runNative = traverse (fmap (map toGoldenOutput) . runTest) . unitTestFromDef
 
-runTest :: GasUnitTests -> IO [GasTestResult ([Term Name], EvalState)]
-runTest t = mapOverGasUnitTests t run run
+runTest :: GasUnitTests -> IO [GasTestResult ([Term Name], EvalState, Gas)]
+runTest t = runGasUnitTests t run run
   where
     run expr dbSetup = do
-      (res, st) <- bracket (setupEnv dbSetup) (gasSetupCleanup dbSetup) (mockRun expr)
+      (res, (gas, st)) <- bracket (setupEnv' dbSetup) (gasSetupCleanup dbSetup) $ \(e,s) -> do
+        writeIORef (_eeGas e) 0
+        res <- mockRun expr (e,s)
+        gas <- readIORef (_eeGas e)
+        return ((gas,) <$> res)
       res' <- eitherDie (getDescription expr dbSetup) res
-      return (res', st)
+      return (res', st, gas)
+    setupEnv' dbs = do
+      (r, s) <- setupEnv dbs
+      let
+        flags = mkExecutionConfig
+               [ FlagDisableInlineMemCheck, FlagDisablePactEvents
+               , FlagDisablePact43, FlagDisablePact44]
+        r' = set eeExecutionConfig flags r
+      pure (r', s)
 
-toGoldenOutput :: GasTestResult ([Term Name], EvalState) -> (T.Text, Gas)
-toGoldenOutput r = (_gasTestResultDesciption r, gasCost r)
-    where
-      gasCost = _evalGas . snd . _gasTestResultSqliteDb
+toGoldenOutput :: GasTestResult ([Term Name], EvalState, Gas) -> (T.Text, Gas)
+toGoldenOutput r =
+  (_gasTestResultDesciption r, view _3 (_gasTestResultSqliteDb r))
 
 -- Utils
 --

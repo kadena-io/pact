@@ -1,8 +1,9 @@
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 
 module Pact.GasModel.Types
@@ -14,11 +15,15 @@ module Pact.GasModel.Types
 
   , GasUnitTests(..)
   , concatGasUnitTests
-  , mapOverGasUnitTests
+  , runGasUnitTests
 
   , NoopNFData(..)
 
+  , defGasUnitTest
   , defGasUnitTests
+  , defPactExpGasTest
+  , defPactExpGasTests
+
   , createGasUnitTests
 
   , setState
@@ -32,16 +37,17 @@ import Control.DeepSeq (NFData(..))
 import Control.Exception (onException)
 import Control.Lens hiding ((.=),DefName)
 import Data.Default (def)
-import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import NeatInterpolation (text)
 import System.Directory (removeFile)
 
 
+import qualified Data.ByteString.Char8 as B8
+import qualified Data.ByteString.Base16 as B16
 import qualified Data.HashMap.Strict as HM
-import qualified Data.List.NonEmpty  as NEL
 import qualified Pact.Persist.SQLite as PSL
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 
 import Pact.Eval (eval)
@@ -92,27 +98,20 @@ getDescription expr testSetup =
                    (_pactExpressionAbridged expr)
 
 
-newtype GasUnitTests = GasUnitTests (NEL.NonEmpty GasTest)
-instance Semigroup GasUnitTests where
-  (GasUnitTests g) <> (GasUnitTests g') =
-    GasUnitTests (g <> g')
+newtype GasUnitTests = GasUnitTests { gasUnitTests :: [GasTest] }
+    deriving Semigroup
 
-concatGasUnitTests :: NEL.NonEmpty GasUnitTests -> GasUnitTests
-concatGasUnitTests listOfTests =
-  foldl' (<>) baseCase rest
-  where
-    baseCase = NEL.head listOfTests
-    rest = NEL.tail listOfTests
+concatGasUnitTests :: [GasUnitTests] -> GasUnitTests
+concatGasUnitTests = GasUnitTests . concat . map gasUnitTests
 
 
-
-mapOverGasUnitTests
+runGasUnitTests
   :: GasUnitTests
-  -> (PactExpression -> GasSetup SQLiteDb -> IO f)
-  -> (PactExpression -> GasSetup () -> IO f)
-  -> IO [GasTestResult f]
-mapOverGasUnitTests (GasUnitTests tests) sqliteFun mockFun = do
-  mapM run (NEL.toList tests)
+  -> (PactExpression -> GasSetup SQLiteDb -> IO a)
+  -> (PactExpression -> GasSetup () -> IO a)
+  -> IO [GasTestResult a]
+runGasUnitTests (GasUnitTests tests) sqliteFun mockFun = do
+  mapM run tests
   where
     description (PactExpression full abrid) =
       fromMaybe full abrid
@@ -132,28 +131,37 @@ newtype NoopNFData a = NoopNFData a
 instance NFData (NoopNFData a) where
   rnf _ = ()
 
-
+defGasUnitTest
+  :: PactExpression
+  -> NativeDefName
+  -> GasUnitTests
+defGasUnitTest pe = defGasUnitTests [pe]
 
 defGasUnitTests
-  :: NEL.NonEmpty PactExpression
+  :: [PactExpression]
   -> NativeDefName
   -> GasUnitTests
 defGasUnitTests pactExprs funName =
-  GasUnitTests $ NEL.map (\e -> defGasTest e funName) pactExprs
+  GasUnitTests $ map (\e -> defGasTest e funName) pactExprs
 
+defPactExpGasTest :: T.Text -> NativeDefName -> GasUnitTests
+defPactExpGasTest code = defPactExpGasTests [code]
+
+defPactExpGasTests :: [T.Text] -> NativeDefName -> GasUnitTests
+defPactExpGasTests codes = defGasUnitTests (map defPactExpression codes)
 
 createGasUnitTests
   :: (GasSetup SQLiteDb -> GasSetup SQLiteDb)
   -> (GasSetup () -> GasSetup ())
-  -> NEL.NonEmpty PactExpression
+  -> [PactExpression]
   -> NativeDefName
   -> GasUnitTests
 createGasUnitTests sqliteUpdate mockUpdate pactExprs funName =
-  GasUnitTests $ NEL.map createTest pactExprs
+  GasUnitTests $ map createTest pactExprs
   where
     createTest expr =
       GasTest funName expr
-      (sqliteUpdate defSqliteGasSetup,
+      (sqliteUpdate (defSqliteGasSetup funName),
        mockUpdate defMockGasSetup)
 
 
@@ -163,15 +171,17 @@ defGasTest expr funName =
   GasTest
   funName
   expr
-  (defSqliteGasSetup, defMockGasSetup)
+  (defSqliteGasSetup funName, defMockGasSetup)
 
-defSqliteGasSetup :: GasSetup SQLiteDb
-defSqliteGasSetup =
+defSqliteGasSetup :: NativeDefName -> GasSetup SQLiteDb
+defSqliteGasSetup n =
   GasSetup
-  defSqliteBackend
+  (defSqliteBackend encName)
   defEvalState
   "SQLiteDb"
-  sqliteSetupCleanup
+  (sqliteSetupCleanup encName)
+ where
+  encName = B8.unpack $ B16.encode $ T.encodeUtf8 $ asString n
 
 defMockGasSetup :: GasSetup ()
 defMockGasSetup =
@@ -201,11 +211,10 @@ setEnv f setup = setEnv'
 defEvalState :: IO EvalState
 defEvalState = do
   stateWithModule <- getLoadedState (accountsModule acctModuleName)
-  let loaded = HM.singleton (Name $ BareName sampleLoadedKeysetName def)
-               (Direct $ TGuard (GKeySet sampleKeyset) def)
+  let loaded = HM.singleton sampleLoadedKeysetName
+               (Direct $ TGuard (GKeySet sampleKeyset) def, Nothing)
   return
-      $ set (evalRefs . rsLoaded) loaded
-      $ set evalGas 0 stateWithModule
+      $ set (evalRefs . rsLoaded) loaded stateWithModule
 
 getLoadedState
   :: T.Text
@@ -214,7 +223,7 @@ getLoadedState code = do
   terms <- compileCode code
   pureDb <- mkPureEnv neverLog
   initSchema pureDb
-  let env = defEvalEnv pureDb
+  env <- defEvalEnv pureDb
   (_, newState) <- runEval def env $ mapM eval terms
   return newState
 
@@ -226,19 +235,20 @@ getLoadedState code = do
 --   * An account "someId" with 0.0 as its balance
 --   * Sample keyset and namespace
 
-defEvalEnv :: PactDbEnv e -> EvalEnv e
-defEvalEnv db =
+defEvalEnv :: PactDbEnv e -> IO (EvalEnv e)
+defEvalEnv db = do
   setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-  initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def def
+    initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def noPact44EC
   where entity = Just $ EntityName "entity"
         prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
+        noPact44EC = mkExecutionConfig [FlagDisablePact44]
 
 -- MockDb
 --
 defMockBackend :: IO (EvalEnv ())
 defMockBackend = do
   db <- mkMockEnv defMockDb
-  return $ defEvalEnv db
+  defEvalEnv db
 
 defMockDb :: MockDb
 defMockDb = mockdb
@@ -247,7 +257,7 @@ defMockDb = mockdb
 
     rowRead :: Domain k v -> k -> Method () (Maybe v)
     rowRead UserTables {} _ = rc (Just acctRow)
-    rowRead KeySets (KeySetName ks)
+    rowRead KeySets (KeySetName ks _n)
       | ks == sampleLoadedKeysetName = rc (Just sampleKeyset)
       | otherwise = rc Nothing
     rowRead Namespaces (NamespaceName n)
@@ -257,37 +267,42 @@ defMockDb = mockdb
 
 -- SQLite Db
 --
-sqliteFile :: String
-sqliteFile = "gasmodel.sqlite"
+sqliteFile :: Maybe String -> String
+sqliteFile s = "gasmodel" <> maybe "" ('.':) s <> ".sqlite"
 
-defSqliteBackend :: IO (EvalEnv SQLiteDb)
-defSqliteBackend = do
+defSqliteBackend :: String -> IO (EvalEnv SQLiteDb)
+defSqliteBackend name = do
   sqliteDb <- mkSQLiteEnv (newLogger neverLog "")
-              True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
+              True (SQLiteConfig dbFileName fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   state <- defEvalState
-  let env = defEvalEnv sqliteDb
-      setupExprs =
+  env <- defEvalEnv sqliteDb
+  let setupExprs =
         (accountsModule acctModuleName) <>
         [text| (create-table $acctModuleNameText.accounts)
                (insert $acctModuleNameText.accounts
                   "someId"
                   { "balance": 0.0 })
+
                (define-keyset "$sampleLoadedKeysetName" $sampleLoadedKeysetName)
                (define-namespace "$sampleNamespaceName" $sampleLoadedKeysetName $sampleLoadedKeysetName)
         |]
   setupTerms <- compileCode setupExprs
   (res,_) <- runEval' state env $ mapM eval setupTerms
-  _ <- onException (eitherDie "Sqlite setup expressions" res) (sqliteSetupCleanup (env,state))
+  _ <- onException (eitherDie "Sqlite setup expressions" res) (sqliteSetupCleanup name (env,state))
   return env
+ where
+  dbFileName = sqliteFile $ Just name
 
 
 -- | Default GasSetup cleanup
 mockSetupCleanup :: (EvalEnv (), EvalState) -> IO ()
 mockSetupCleanup (_, _) = return ()
 
-sqliteSetupCleanup :: (EvalEnv SQLiteDb, EvalState) -> IO ()
-sqliteSetupCleanup (env, _) = do
+sqliteSetupCleanup :: String -> (EvalEnv SQLiteDb, EvalState) -> IO ()
+sqliteSetupCleanup name (env, _) = do
   c <- readMVar $ _eePactDbVar env
   _ <- PSL.closeSQLite $ _db c
-  removeFile sqliteFile
+  removeFile dbFileName
+ where
+  dbFileName = sqliteFile $ Just name

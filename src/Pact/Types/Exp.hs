@@ -285,6 +285,18 @@ instance FromJSON i => FromJSON (SeparatorExp i) where
 instance Pretty (SeparatorExp i) where
   pretty (SeparatorExp sep' _) = pretty sep'
 
+-- SizeOf instances
+instance SizeOf Separator where
+  sizeOf _ = 0
+
+instance SizeOf ListDelimiter where
+  sizeOf _ = 0
+
+instance (SizeOf i) => SizeOf (LiteralExp i)
+instance (SizeOf i) => SizeOf (AtomExp i)
+instance (SizeOf i) => SizeOf (ListExp i)
+instance (SizeOf i) => SizeOf (SeparatorExp i)
+
 -- | Pact syntax expressions
 data Exp i =
   ELiteral (LiteralExp i) |
@@ -307,6 +319,8 @@ instance HasInfo (Exp Info) where
     EAtom a -> getInfo a
     EList l -> getInfo l
     ESeparator s -> getInfo s
+
+instance (SizeOf i) => SizeOf (Exp i)
 
 instance ToJSON i => ToJSON (Exp i) where
   toJSON (ELiteral a) = toJSON a

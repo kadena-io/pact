@@ -158,6 +158,17 @@ Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry.
    pact> (contains "foo" "foobar")
    true
 
+continue
+~~~~~~~~
+
+*value* ``*`` *→* ``*``
+
+Continue a previously started nested defpact.
+
+.. code:: lisp
+
+   (continue (coin.transfer-crosschain "bob" "alice" 10.0))
+
 define-namespace
 ~~~~~~~~~~~~~~~~
 
@@ -172,6 +183,20 @@ will be rotated in its place.
 .. code:: lisp
 
    (define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))
+
+Top level only: this function will fail if used in module code.
+
+describe-namespace
+~~~~~~~~~~~~~~~~~~
+
+*ns* ``string`` *→* ``object:{described-namespace}``
+
+Describe the namespace NS, returning a row object containing the user
+and admin guards of the namespace, as well as its name.
+
+.. code:: lisp
+
+   (describe-namespace 'my-namespace)
 
 Top level only: this function will fail if used in module code.
 
@@ -492,7 +517,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "4.1"
+   "4.4"
 
 Top level only: this function will fail if used in module code.
 
@@ -734,6 +759,26 @@ chain using automated SPV endorsement-based dispatch.
    (yield { "amount": 100.0 })
    (yield { "amount": 100.0 } "some-chain-id")
 
+zip
+~~~
+
+*f* ``x:<a> y:<b> -> <c>`` *list1* ``[<a>]`` *list2* ``[<b>]``
+*→* ``[<c>]``
+
+Combine two lists with some function f, into a new list, the length of
+which is the length of the shortest list.
+
+.. code:: lisp
+
+   pact> (zip (+) [1 2 3 4] [4 5 6 7])
+   [5 7 9 11]
+   pact> (zip (-) [1 2 3 4] [4 5 6])
+   [-3 -3 -3]
+   pact> (zip (+) [1 2 3] [4 5 6 7])
+   [5 7 9]
+   pact> (zip (lambda (x y) { 'x: x, 'y: y }) [1 2 3 4] [4 5 6 7])
+   [{"x": 1,"y": 4} {"x": 2,"y": 5} {"x": 3,"y": 6} {"x": 4,"y": 7}]
+
 .. _Database:
 
 Database
@@ -788,6 +833,25 @@ Get metadata for TABLE. Returns an object with ‘name’, ‘hash’,
    (describe-table accounts)
 
 Top level only: this function will fail if used in module code.
+
+fold-db
+~~~~~~~
+
+*table* ``table:<{row}>`` *qry* ``a:string b:object:<{row}> -> bool``
+*consumer* ``a:string b:object:<{row}> -> <b>`` *→* ``[<b>]``
+
+Select rows from TABLE using QRY as a predicate with both key and value,
+and then accumulate results of the query in CONSUMER. Output is sorted
+by the ordering of keys.
+
+.. code:: lisp
+
+   (let*
+    ((qry (lambda (k obj) true)) ;; select all rows
+     (f (lambda (x) [(at 'firstName x), (at 'b x)]))
+    )
+    (fold-db people (qry) (f))
+   )
 
 insert
 ~~~~~~
@@ -1056,8 +1120,8 @@ Operators
 !=
 ~~
 
-*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
-*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>``
+*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>``
 *→* ``bool``
 
 True if X does not equal Y.
@@ -1216,8 +1280,8 @@ True if X <= Y.
 =
 ~
 
-*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
-*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>``
+*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,guard,module{}]>``
 *→* ``bool``
 
 Compare alike terms for equality, returning TRUE if X is equal to Y.
@@ -1869,6 +1933,61 @@ are base-16 strings of length 32.
 
    (validate-keypair pubkey privkey)
 
+.. _Guards:
+
+Guards
+------
+
+create-principal
+~~~~~~~~~~~~~~~~
+
+*guard* ``guard`` *→* ``string``
+
+Create a principal which unambiguously identifies GUARD.
+
+.. code:: lisp
+
+   (create-principal (read-keyset 'keyset))
+   (create-principal (keyset-ref-guard 'keyset))
+   (create-principal (create-module-guard 'module-guard))
+   (create-principal (create-user-guard 'user-guard))
+   (create-principal (create-pact-guard 'pact-guard))
+
+is-principal
+~~~~~~~~~~~~
+
+*principal* ``string`` *→* ``bool``
+
+Tell whether PRINCIPAL string conforms to the principal format without
+proving validity.
+
+.. code:: lisp
+
+   (enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+
+typeof-principal
+~~~~~~~~~~~~~~~~
+
+*principal* ``string`` *→* ``string``
+
+Return the protocol type of a given PRINCIPAL value. If input value is
+not a principal type, then the empty string is returned.
+
+.. code:: lisp
+
+   (typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
+
+validate-principal
+~~~~~~~~~~~~~~~~~~
+
+*guard* ``guard`` *principal* ``string`` *→* ``bool``
+
+Validate that PRINCIPAL unambiguously identifies GUARD.
+
+.. code:: lisp
+
+   (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
+
 .. _repl-lib:
 
 REPL-only functions
@@ -2030,7 +2149,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableModuleInstall”,“DisablePact40”,“DisablePactEvents”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
 
 .. code:: lisp
 

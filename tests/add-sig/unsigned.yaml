@@ -1,0 +1,6 @@
+hash: tTg1a9B8jWRM3KrAq2ITSZtL5yq1wQj30SpugHiLqiE
+sigs:
+  1ba4d22bdcf499a8e27667b56e45222260a93806066ca5f82e79ef2f38cf8c0b: null
+  87a4f2f179662829da6816b901ec1402b4baa30ce9d96048345aff9b346de6b7: null
+cmd: '{"networkId":"testnet04","payload":{"exec":{"data":null,"code":"(+ 1 1)"}},"signers":[{"pubKey":"87a4f2f179662829da6816b901ec1402b4baa30ce9d96048345aff9b346de6b7"},{"pubKey":"1ba4d22bdcf499a8e27667b56e45222260a93806066ca5f82e79ef2f38cf8c0b","clist":[{"args":[],"name":"coin.GAS"}]}],"meta":{"creationTime":1648585041,"ttl":28800,"gasLimit":5000,"chainId":"0","gasPrice":1.0e-8,"sender":"jose"},"nonce":"2022-03-29 20:17:21.296857 UTC"}'
+

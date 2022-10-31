@@ -19,12 +19,14 @@
 
 module Pact.Docgen where
 
-import           Control.Lens                 (ifor_)
+import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Catch
 import           Data.Foldable                (for_)
 import           Data.Function
 import           Data.List
+import           Data.Maybe                   (fromMaybe)
+import qualified Data.Map.Strict              as Map
 import           Data.Text                    (unpack, pack, replace)
 import qualified Data.Text                    as T
 import           System.IO
@@ -120,8 +122,9 @@ data ExampleType = Exec | ExecErr | Lit
 
 renderExamples :: Handle -> NativeDefName -> [Example] -> IO ()
 renderExamples h f es = do
+  let examples = fromMaybe es (Map.lookup f overrideExamples)
   hPutStrLn h "```lisp"
-  forM_ es $ \example -> do
+  forM_ examples $ \example -> do
     let (eTy, e) = case example of
           ExecErrExample str -> (ExecErr, unpack str)
           LitExample     str -> (Lit,     unpack str)
@@ -139,6 +142,34 @@ renderExamples h f es = do
               "Error rendering example for function " ++
               renderCompactString f ++ ": " ++ e ++ ": " ++ err
   hPutStrLn h "```"
+  where
+  foldDbOverride =
+    ("fold-db"
+    , [LitExample "(let* \n\
+                  \ ((qry (lambda (k obj) true)) ;; select all rows\n\
+                  \  (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))\n\
+                  \ )\n\
+                  \ (fold-db people (qry) (f))\n\
+                  \)"])
+  zipOverride =
+    ( "zip"
+    , [ "(zip (+) [1 2 3 4] [4 5 6 7])"
+      , "(zip (-) [1 2 3 4] [4 5 6])"
+      , "(zip (+) [1 2 3] [4 5 6 7])"
+      , "(zip (lambda (x y) { 'x: x, 'y: y }) [1 2 3 4] [4 5 6 7])"]
+    )
+  continueOverride =
+    ( "continue"
+    , [LitExample "(continue (coin.transfer-crosschain \"bob\" \"alice\" 10.0))"])
+  createPrincipalOveride =
+    ( "create-principal"
+    , [ LitExample "(create-principal (read-keyset 'keyset))"
+      , LitExample "(create-principal (keyset-ref-guard 'keyset))"
+      , LitExample "(create-principal (create-module-guard 'module-guard))"
+      , LitExample "(create-principal (create-user-guard 'user-guard))"
+      , LitExample "(create-principal (create-pact-guard 'pact-guard))"]
+    )
+  overrideExamples = Map.fromList (over (mapped._1) NativeDefName [continueOverride, createPrincipalOveride, zipOverride, foldDbOverride])
 
 renderProperties :: Handle -> IO ()
 renderProperties h = do

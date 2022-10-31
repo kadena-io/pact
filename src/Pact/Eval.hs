@@ -9,6 +9,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- Suppress unused constraint on enforce-keyset.
 -- TODO unused constraint is a dodgy warning, probably should not do it.
@@ -31,6 +35,7 @@ module Pact.Eval
     ,reduce,reduceBody
     ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
+    ,enforceGuard
     ,deref
     ,liftTerm,apply
     ,acquireModuleAdmin
@@ -41,13 +46,20 @@ module Pact.Eval
     ,toPersistDirect
     ,reduceDynamic
     ,instantiate'
+    ,resumeNestedPactExec
+    ,createNestedPactId
     ) where
 
 import Bound
 import Control.Lens hiding (DefName)
+import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.State.Strict
+import Data.Monoid (Sum(..))
 import Data.Aeson (Value)
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Aeson as A
 import Data.Default
 import Data.Foldable
 import Data.Functor.Classes
@@ -59,18 +71,25 @@ import Data.Maybe
 import qualified Data.Vector as V
 import Data.Text (Text, pack)
 import qualified Data.Text as T
-import Safe
+import qualified Data.Text.Encoding as T
+import qualified Data.Set as Set
 
 import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
-import Pact.Types.Advice
 import Pact.Types.Capability
 import Pact.Types.PactValue
+import Pact.Types.KeySet
 import Pact.Types.Pretty
 import Pact.Types.Purity
 import Pact.Types.Runtime
+import Pact.Types.SizeOf
+import Pact.Types.Namespace
+
+#ifdef ADVICE
+import Pact.Types.Advice
+#endif
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -88,20 +107,21 @@ evalCommitTx i = do
 {-# INLINE evalCommitTx #-}
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
-enforceKeySetName mi mksn = do
-  ks <- maybe (evalError mi $ "No such keyset: " <> pretty mksn) return =<< readRow mi KeySets mksn
-  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet mksn ks))
-  runSysOnly $ enforceKeySet mi (Just mksn) ks
+enforceKeySetName mi ksn = do
+  ks <- readRow mi KeySets ksn >>= \case
+      Nothing -> evalError mi $ "No such keyset: " <> pretty ksn
+      Just ks -> pure ks
+  _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet ksn ks))
+  runSysOnly $ enforceKeySet mi (Just ksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn KeySet{..} = go
+enforceKeySet i ksn KeySet{..} = do
+  sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
+  sigs' <- checkSigCaps sigs
+  runPred (M.size sigs')
   where
-    go = do
-      sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
-      sigs' <- checkSigCaps sigs
-      runPred (M.size sigs')
     matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
@@ -124,6 +144,35 @@ enforceKeySet i ksn KeySet{..} = go
         runBuiltIn p | p count matched = return ()
                      | otherwise = failed
 {-# INLINE enforceKeySet #-}
+
+enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
+enforceGuard i g = case g of
+  GKeySet k -> runSysOnly $ enforceKeySet (getInfo i) Nothing k
+  GKeySetRef n -> enforceKeySetName (getInfo i) n
+  GPact PactGuard{..} -> enforcePactId False _pgPactId
+  GModule mg@ModuleGuard{..} -> do
+    md <- _mdModule <$> getModule i _mgModuleName
+    case md of
+      MDModule m@Module{..} -> calledByModule m >>= \r ->
+        if r then
+          return ()
+        else
+          void $ acquireModuleAdmin (getInfo i) _mName _mGovernance
+      MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
+  GUser UserGuard{..} ->
+    void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
+  GCapability CapabilityGuard{..} -> do
+    traverse_ (enforcePactId True) _cgPactId
+    args <- enforcePactValue' _cgArgs
+    acquired <- capabilityAcquired $ SigCapability _cgName args
+    unless acquired $ failTx' i "Capability not acquired"
+  where
+    enforcePactId doFail pid = do
+      currPid <- getPactId i
+      unless (currPid == pid) $
+        if doFail then failTx' i "Invalid Pact ID" else
+          evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
+
 
 
 -- | Hoist Name back to ref
@@ -195,14 +244,16 @@ enforceModuleAdmin i modGov =
 -- 'namespace.modulename' is the name we will associate
 -- with a module unless the namespace policy is defined
 -- otherwise
-evalNamespace :: Info -> (Setter' s ModuleName) -> s -> Eval e s
-evalNamespace info setter m = do
-  mNs <- use $ evalRefs . rsNamespace
-  case mNs of
+evalNamespace
+    :: Info
+    -> (Setter' s ModuleName)
+    -> s
+    -> Maybe (Namespace (Term Name))
+    -> Eval e s
+evalNamespace info setter m = \case
     Nothing -> do
-      policy <- view eeNamespacePolicy
-      unless (allowRoot policy) $
-        evalError info "Definitions in default namespace are not authorized"
+      -- legacy: enforce root on install & upgrade
+      whenExecutionFlagSet FlagDisablePact44 $ enforceRootNamespacePolicy info
       return m
     Just (Namespace n _ _) -> return $ over setter (mangleModuleName n) m
   where
@@ -211,28 +262,49 @@ evalNamespace info setter m = do
       case ns of
         Nothing -> ModuleName nn (Just n)
         Just {} -> mn
-    allowRoot (SimpleNamespacePolicy f) = f Nothing
+
+-- | Check namespace policy to allow root install.
+enforceRootNamespacePolicy :: HasInfo i => i -> Eval e ()
+enforceRootNamespacePolicy i = do
+    policy <- view eeNamespacePolicy
+    unless (allowRoot policy) $
+        evalError' i "Definitions in default namespace are not authorized"
+  where
     allowRoot (SmartNamespacePolicy ar _) = ar
+    allowRoot (SimpleNamespacePolicy f) = f Nothing
 
-
-
+eval :: Term Name -> Eval e (Term Name)
+eval t =
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (strippedEval t)
+  where
+  strippedEval t' =
+    view eeInRepl >>= \case
+      True -> eval' $!! t'
+      False -> ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
+  stripOnlyModule t' = case t' of
+    TModule {} -> stripTermInfo t'
+    _ -> t'
 
 -- | Evaluate top-level term.
-eval ::  Term Name ->  Eval e (Term Name)
-eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
+eval' ::  Term Name ->  Eval e (Term Name)
+eval' (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
-eval (TModule tm@(MDModule m) bod i) =
-  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 ->
-  eAdvise i (AdviceModule tm) $ do
+eval' (TModule _tm@(MDModule m) bod i) =
+#ifdef ADVICE
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> eAdvise i (AdviceModule _tm) $ do
+#else
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
+#endif
     checkAllowModule i
+    mNs <- use $ evalRefs . rsNamespace
     -- prepend namespace def to module name
-    mangledM <- evalNamespace i mName m
+    mangledM <- evalNamespace i mName m mNs
     -- enforce old module governance
     preserveModuleNameBug <- isExecutionFlagSet FlagPreserveModuleNameBug
     oldM <- lookupModule i $ _mName $ if preserveModuleNameBug then m else mangledM
     case oldM of
-      Nothing -> return ()
-      Just (ModuleData omd _) ->
+      Nothing -> enforceNamespaceInstall i mNs
+      Just (ModuleData omd _ _) ->
         case omd of
           MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
           MDInterface Interface{..} -> evalError i $
@@ -254,25 +326,54 @@ eval (TModule tm@(MDModule m) bod i) =
     (g,govM) <- loadModule mangledM bod i g0
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
+#ifdef ADVICE
     return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
+#else
+    return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
+#endif
 
-eval (TModule tm@(MDInterface m) bod i) =
-  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas ->
-  eAdvise i (AdviceModule tm) $ do
+eval' (TModule _tm@(MDInterface m) bod i) =
+#ifdef ADVICE
+  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> eAdvise i (AdviceModule _tm) $ do
+#else
+  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
+#endif
     checkAllowModule i
+    mNs <- use $ evalRefs . rsNamespace
+    enforceNamespaceInstall i mNs
      -- prepend namespace def to module name
-    mangledI <- evalNamespace i interfaceName m
+    mangledI <- evalNamespace i interfaceName m mNs
     -- enforce no upgrades
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
     (g,govI) <- loadInterface mangledI bod i gas
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
+#ifdef ADVICE
     return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
-eval t = enscope t >>= reduce
+#else
+    return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
+#endif
+eval' t = enscope t >>= reduce
 
+-- | Enforce namespace/root access on install.
+enforceNamespaceInstall
+    :: HasInfo i
+    => i
+    -> Maybe (Namespace (Term Name))
+    -> Eval e ()
+enforceNamespaceInstall i Nothing =
+  unlessExecutionFlagSet FlagDisablePact44 $
+    enforceRootNamespacePolicy i
+enforceNamespaceInstall i (Just ns) =
+  unlessExecutionFlagSet FlagDisablePact44 $ do
+    enforceGuard i $ _nsUser ns
+
+
+#ifdef ADVICE
 dup :: Monad m => m a -> m (a,a)
 dup a = a >>= \r -> return (r,r)
+#endif
 
 checkAllowModule :: Info -> Eval e ()
 checkAllowModule i = do
@@ -290,7 +391,8 @@ evalUse :: Use -> Eval e ()
 evalUse (Use mn mh mis i) = do
   mm <- resolveModule i mn
   case mm of
-    Nothing -> evalError i $ "Module " <> pretty mn <> " not found"
+    Nothing ->
+      evalError i $ "Module " <> pretty mn <> " not found"
     Just md -> do
       case _mdModule md of
         MDModule Module{..} ->
@@ -361,11 +463,14 @@ loadModule m bod1 mi g0 = do
     tt@TTable{} -> return $ Just $ asString (_tTableName tt)
     TUse _ _ -> return Nothing
     _ -> evalError' t "Invalid module member"
-  evaluatedDefs <- evaluateDefs mi (MDModule m) $
-      mangleDefs (_mName m) <$> mdefs
+  let mangled = mangleDefs (_mName m) <$> mdefs
+  (evaluatedDefs, deps) <-
+    ifExecutionFlagSet FlagDisablePact43
+      ((,mempty) <$> evaluateDefs mi (MDModule m) mangled)
+      (fullyQualifyDefs mi m mangled)
   (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
   mGov <- resolveGovernance solvedDefs m'
-  let md = ModuleData mGov solvedDefs
+  let md = ModuleData mGov solvedDefs deps
   installModule True md Nothing
   return (g1,md)
 
@@ -385,7 +490,7 @@ loadInterface i body info gas0 = do
     _ -> evalError' t "Invalid interface member"
   evaluatedDefs <- evaluateDefs info (MDInterface i) $
       mangleDefs (_interfaceName i) <$> idefs
-  let md = ModuleData (MDInterface i) evaluatedDefs
+  let md = ModuleData (MDInterface i) evaluatedDefs mempty
   installModule True md Nothing
   return (gas1,md)
 
@@ -412,7 +517,7 @@ collectNames g0 args body k = case instantiate' body of
       Nothing -> return (g, ds)
       Just dn -> do
         -- disallow native overlap
-        when (isJust $ HM.lookup (Name (BareName dn def)) ns) $
+        when (isJust $ HM.lookup dn ns) $
           evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
         -- disallow conflicting members
         when (isJust $ HM.lookup dn ds) $
@@ -436,6 +541,74 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
       Nothing -> evalError (_tInfo g) "Unknown module governance reference"
     _ -> evalError (_tInfo g) "Invalid module governance, should be var"
 
+-- Auxiliary data types for strict fold on heap cost.
+data HeapMemState
+  = HeapMemState
+  { _hmMemoEnv :: !(M.Map Name Bytes)
+  , _hmTotalMem :: !Bytes
+  }
+
+data HeapFold
+  = HeapFold
+  { _hfAllDefs :: !(HM.HashMap Text Ref)
+  , _hfMemoEnv :: !(M.Map Name Bytes)
+  , _hfTotalMem :: !Bytes
+  }
+
+-- Inline the defuns according to the set heap limit for modules.
+-- We keep a memoized cost of each inlined `defun` so as to not calculate `sizeOf` more than once
+-- per inlined function.
+dresolveMem
+  :: Info
+  -> HeapFold
+  -> (Term (Either Text (Ref' (Term Name))), Text, c)
+  -> Eval e HeapFold
+dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
+  (!unified, (HeapMemState costMemoEnv' totalMem))
+      <- runStateT (traverse (replaceMemo allDefs) defTerm)
+                 (HeapMemState costMemoEnv (sizeOf defTerm + currMem))
+  unified' <- case unified of
+    t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
+    _ -> pure (Ref unified)
+  pure (HeapFold (HM.insert defName unified' allDefs) costMemoEnv' totalMem)
+  where
+  -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
+  -- We also calculate the cost per callsite, to fail faster.
+  replaceMemo _ (Right (Ref td@(TDef defn _))) = do
+    let (DefName defname) = _dDefName defn
+        name = QName (QualifiedName (_dModule defn) defname def)
+    memoEnv <- gets _hmMemoEnv
+    case M.lookup name memoEnv of
+      Just heapCost -> do
+        modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
+      Nothing -> do
+        let !heapCost = sizeOf td
+        modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total + heapCost))
+    !currMem' <- gets _hmTotalMem
+    _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
+    pure (Ref td)
+  -- Note: inlining only ever inlines tdefs and modrefs, it's fine to not charge
+  -- for the second case
+  replaceMemo _ (Right r) = pure r
+  -- Looking up a def, so:
+  --  - Check mem cost in the memoization env (if not there add it)
+  --  - Check for gas overflow post replacing `Left defn` by the full definition.
+  replaceMemo m (Left defn) = do
+    memoEnv <- gets _hmMemoEnv
+    let inlined = m HM.! defn
+    case M.lookup (Name (BareName defn def)) memoEnv of
+      Just heapCost -> do
+        modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
+      Nothing -> do
+        let !heapCost = sizeOf inlined
+        modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total + heapCost))
+    !currMem' <- gets _hmTotalMem
+    _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
+    pure inlined
+
+removeFromLoaded :: Set.Set Text -> Eval e ()
+removeFromLoaded toRemove =
+  evalRefs . rsLoaded %= HM.filterWithKey (\k _ -> Set.notMember k toRemove)
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
@@ -447,61 +620,145 @@ resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
 evaluateDefs :: Info -> ModuleDef (Term Name) -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
 evaluateDefs info mdef defs = do
   cs <- liftIO (newIORef Nothing) >>= traverseGraph defs
-  sortedDefs <- forM cs $ \c -> case c of
-    AcyclicSCC v -> return v
-    CyclicSCC vs -> do
-      let i = if null vs then info else _tInfo $ view _1 $ head vs
-          pl = over (traverse . _3) (SomeDoc . prettyList)
-            $ over (traverse . _1) (fmap mkSomeDoc)
-            $ vs
-
-      evalError i $ "Recursion detected: " <> prettyList pl
-
+  sortedDefs <- enforceAcyclic info cs
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
-  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
-      unifiedDefs = foldl' dresolve HM.empty sortedDefs
-
-  traverse (runSysOnly . evalConsts) unifiedDefs
+  isExecutionFlagSet FlagDisableInlineMemCheck >>= \case
+    True -> do
+      let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
+          unifiedDefs = (foldl' dresolve HM.empty sortedDefs)
+      traverse (runSysOnly . evalConsts) unifiedDefs
+    False -> do
+      hf <- foldlM (dresolveMem info) (HeapFold HM.empty M.empty 0) sortedDefs
+      -- Compute, commit and log the final gas after getting the final memory cost.
+      _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
+      pure (_hfAllDefs hf)
   where
-    mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
+  -- | traverse to find deps and form graph
+  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+    defTerm' <- forM defTerm $ \(f :: Name) -> do
+      dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
+      case (dm, f) of
+        (Just t, _) -> return (Right t) -- ref found
+        -- for barenames, check decls and finally modules
+        (Nothing, Name (BareName fn _)) ->
+          case HM.lookup fn allDefs of
+            Just _ -> return (Left fn) -- decl found
+            Nothing -> resolveBareModRef info f fn memo mdef >>= \r -> case r of
+              Just mr -> return (Right mr) -- mod ref found
+              Nothing ->
+                evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+        -- for qualified names, simply fail
+        (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
 
+    return (defTerm', defName, mapMaybe (either Just (const Nothing)) $ toList defTerm')
+
+enforceAcyclic
+  :: (Ord key, Pretty key, Pretty l, Pretty r)
+  => Info
+  -> [SCC (Term (Either l r), key, [key])]
+  -> Eval e [(Term (Either l r), key, [key])]
+enforceAcyclic info cs = forM cs $ \c -> case c of
+  AcyclicSCC v -> return v
+  CyclicSCC vs -> do
+    let i = if null vs then info else _tInfo $ view _1 $ head vs
+        pl = over (traverse . _3) (SomeDoc . prettyList)
+          $ over (traverse . _1) (fmap mkSomeDoc)
+          $ vs
+    evalError i $ "Recursion detected: " <> prettyList pl
+  where
+  mkSomeDoc = either (SomeDoc . pretty) (SomeDoc . pretty)
+
+-- Note: two info parameters kept to maintain
+-- backcompat to previous code.
+resolveBareModRef
+  :: HasInfo i
+  => Info
+  -> i
+  -> Text
+  -> IORef (Maybe Ref)
+  -> ModuleDef g
+  -> Eval e (Maybe Ref)
+resolveBareModRef info f fn memo mdef
+    | fn /= (moduleBareName mdef) = resolveModRef f (ModuleName fn Nothing)
+    | otherwise = liftIO (readIORef memo) >>= \case
+        Just cachedMR -> return $ Just cachedMR
+        Nothing -> do
+          mdef' <- (_MDModule . mInterfaces . traverse) (resolveIfs f) mdef
+          let mr = Just $ Ref $ mkModRef f mdef'
+          liftIO $ writeIORef memo mr
+          pure mr
+  where
+  moduleBareName (MDInterface i) = _mnName $ _interfaceName i
+  moduleBareName (MDModule m) = _mnName $ _mName m
+  resolveIfs i mn = do
+    resolveModule (getInfo i) mn >>= \case
+      Nothing -> evalError info $ "Modref Interface not defined: " <> pretty mn
+      Just (ModuleData (MDInterface Interface{..}) _irefs _) -> pure _interfaceName
+      Just _ -> evalError info "Unexpected: module found in interface position while resolving constraints"
+
+
+-- | Definitions are transformed such that all non fully qualified free variables are
+-- resolved to either an "inlineable unit" (A table, schema, or an evaluated const),
+-- or a fully qualified variable, either external (Right Ref) or internal (Left FullyQualifiedName).
+-- A graph is formed from all internal 'Left FullyQualifiedName' entries and enforced as acyclic,
+-- proving the definitions to be non-recursive.
+-- The graph is walked to unify the Either to
+-- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
+-- the table itself: the topological sort of the graph ensures the reference will be there.
+fullyQualifyDefs
+  :: Info
+  -> Module (Term Name)
+  -> HM.HashMap Text (Term Name)
+  -> Eval e (HM.HashMap Text Ref, HM.HashMap FullyQualifiedName Ref)
+fullyQualifyDefs info mdef defs = do
+  removeFromLoaded (Set.fromList (HM.keys defs))
+  (cs, depNames) <- flip runStateT Set.empty $ liftIO (newIORef Nothing) >>= traverseGraph defs
+  sortedDefs <- enforceAcyclic info cs
+  fDefs <- foldlM mkAndEvalConsts mempty sortedDefs
+  deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
+  let (Sum totalMemory) = foldMap (Sum . sizeOf) fDefs + foldMap (Sum . sizeOf) deps
+  _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
+  pure (fDefs, deps)
+  where
+    -- Inline all but TDefs.
+    replaceL m n = case HM.lookup (_fqName n) m of
+        Just p -> case p of
+          Ref TDef{} -> pure (Direct (TVar (FQName n) def))
+          Ref (TConst _ _ (CVEval _ v) _ _) -> pure (Ref v)
+          _ -> pure p
+        Nothing -> evalError' info $ "Unbound local free variable"
+    mkAndEvalConsts m (term', dn, _) = do
+      t <- Ref <$> (traverse (either (replaceL m) pure) term')
+      t' <- runSysOnly $ evalConstsNonRec t
+      evalRefs . rsQualifiedDeps %= HM.insert dn t'
+      pure $ HM.insert(_fqName dn) t' m
+
+    checkAddDep = \case
+      Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
+      _ -> pure ()
     -- | traverse to find deps and form graph
-    traverseGraph ds memo = fmap stronglyConnCompR $ forM (HM.toList ds) $ \(dn,d) -> do
-      d' <- forM d $ \(f :: Name) -> do
-        dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
+    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+      let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
+      defTerm' <- forM defTerm $ \(f :: Name) -> do
+        dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
         case (dm, f) of
-          (Just t, _) -> return (Right t) -- ref found
+          (Just t, _) -> checkAddDep t *> return (Right t) -- ref found
           -- for barenames, check decls and finally modules
           (Nothing, Name (BareName fn _)) ->
-            case HM.lookup fn ds of
-              Just _ -> return (Left fn) -- decl found
-              Nothing -> resolveBareModRef f fn memo >>= \r -> case r of
+            case HM.lookup fn allDefs of
+              Just _ -> do
+                let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
+                return (Left name') -- decl found
+              Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \r -> case r of
                 Just mr -> return (Right mr) -- mod ref found
                 Nothing ->
-                  evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+                  lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
           -- for qualified names, simply fail
-          (Nothing, _) -> evalError' f $ "Cannot resolve " <> dquotes (pretty f)
+          (Nothing, _) -> lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
 
-      return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
+      return (defTerm', defName', mapMaybe (either Just (const Nothing)) $ toList defTerm')
+    moduleHash = _mhHash . _mHash
 
-    resolveBareModRef f fn memo
-        | fn /= moduleBareName mdef = resolveModRef f (ModuleName fn Nothing)
-        | otherwise = liftIO (readIORef memo) >>= \case
-            Just cachedMR -> return $ Just cachedMR
-            Nothing -> do
-              mdef' <- (_MDModule . mInterfaces . traverse) (resolveIfs f) mdef
-              let mr = Just $ Ref $ mkModRef f mdef'
-              liftIO $ writeIORef memo mr
-              pure mr
-
-    resolveIfs i mn = do
-      resolveModule (getInfo i) mn >>= \case
-        Nothing -> evalError info $ "Modref Interface not defined: " <> pretty mn
-        Just (ModuleData (MDInterface Interface{..}) _irefs) -> pure _interfaceName
-        Just _ -> evalError info "Unexpected: module found in interface position while resolving constraints"
-
-    moduleBareName (MDInterface i) = _mnName $ _interfaceName i
-    moduleBareName (MDModule m) = _mnName $ _mName m
 
 -- | Evaluate interface constraints in module.
 evaluateConstraints
@@ -518,7 +775,7 @@ evaluateConstraints info m evalMap = do
       case refData of
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
-        Just (ModuleData (MDInterface Interface{..}) irefs) -> do
+        Just (ModuleData (MDInterface Interface{..}) irefs _) -> do
           em' <- HM.foldrWithKey (solveConstraint ifn info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
           newIf <- ifExecutionFlagSet' FlagPreserveModuleIfacesBug ifn _interfaceName
@@ -585,6 +842,7 @@ solveConstraint ifn info refName (Ref t) evalMap = do
       (Just _,Nothing) -> False
     defMetaEq a b = a == b
     getDefName (an,TVar (Ref (TDef Def {..} _)) _) = Just (_dDefName,an)
+    getDefName (an,TVar (Direct (TVar (FQName fq) _)) _) = Just (DefName (_fqName fq),an)
     getDefName _ = Nothing
 
 
@@ -628,14 +886,14 @@ resolveRef' _ i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
           -- it's fine since we're supplying an ns-qualified module name
           -- so it won't re-try like here.
           resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
-resolveRef' disableModRefs i nn@(Name (BareName bn _)) = do
-  nm <- preview $ eeRefStore . rsNatives . ix nn
+resolveRef' disableModRefs i (Name (BareName bn _)) = do
+  nm <- preview $ eeRefStore . rsNatives . ix bn
   case nm of
     d@Just {} -> return d
     Nothing -> do
-      n <- preuse $ evalRefs . rsLoaded . ix nn
+      n <- preuse $ evalRefs . rsLoaded . ix bn
       case n of
-        Just r -> return $ Just r
+        Just (r, _) -> pure (Just r)
         Nothing
             | disableModRefs -> return Nothing
             | otherwise -> resolveModRef i $ ModuleName bn Nothing
@@ -644,13 +902,61 @@ resolveRef' _ _i (DName d@(DynamicName mem _ sigs i)) = do
   case a of
     Nothing -> evalError' i $ "resolveRef: dynamic ref not found: " <> pretty d
     Just r -> return $ Just r
+resolveRef' _ i _ = evalError' i $ "resolveRef: do not resolve fully qual names eagerly"
+
+-- | Variation of 'resolveRef' that allows nerfing the module ref attempt on bare names.
+resolveRefFQN :: HasInfo i => i -> Name -> Eval e (Maybe Ref)
+resolveRefFQN i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleResolver lookupQn i q
+  where
+    getModuleHash = \case
+      MDModule m -> pure (_mhHash $ _mHash m)
+      _ -> evalError' i $ "Qualified name access does not point to a module function " <> pretty q <> " " <> pretty n
+    lookupQn i' q' = do
+      m <- lookupModule i' q'
+      case (m, ns) of
+        (Just m', _) ->
+          case HM.lookup n (_mdRefMap m') of
+            Just (Ref (TDef def' _) ) -> do
+              h <- getModuleHash (_mdModule m')
+              let name' = FQName (FullyQualifiedName n (_dModule def') h)
+              return $ Just (Direct (TVar name' def))
+            p -> pure p
+        (Nothing, Just{}) -> return Nothing
+        (Nothing, Nothing) ->
+          -- note that while 'resolveModRef' uses 'moduleResolver' again,
+          -- it's fine since we're supplying an ns-qualified module name
+          -- so it won't re-try like here.
+          resolveModRef i $ ModuleName n (Just $ NamespaceName refNs)
+-- Barename resolution is kept unchanged in terms of scoping.
+-- However, TDefs now point to Fully Qualified names
+resolveRefFQN i (Name (BareName bn _)) = do
+  nm <- preview $ eeRefStore . rsNatives . ix bn
+  case nm of
+    d@Just {} -> return d
+    Nothing -> do
+      n <- preuse $ evalRefs . rsLoaded . ix bn
+      case n of
+        Just (ref, mh) -> case ref of
+          Ref (TDef d _) -> do
+            fqn <- FullyQualifiedName (_unDefName (_dDefName d)) (_dModule d)
+              <$> maybe (evalError' i "TDef missing accompanying module hash") (pure . _mhHash) mh
+            pure $ Just (Direct (TVar (FQName fqn) def))
+          _ -> pure (Just ref)
+        Nothing -> return Nothing
+resolveRefFQN _i (DName d@(DynamicName mem _ sigs i)) = do
+  a <- foldM (resolveDynamic i mem) Nothing sigs
+  case a of
+    Nothing -> evalError' i $ "resolveRef: dynamic ref not found: " <> pretty d
+    Just r -> return $ Just r
+resolveRefFQN i _ = evalError' i $ "resolveRef: do not resolve fully qualfied names eagerly"
+
 
 resolveModRef :: HasInfo i => i -> ModuleName -> Eval e (Maybe Ref)
 resolveModRef i mn = moduleResolver lkp i mn
   where
     lkp _ m = lookupModule i m >>= \r -> return $ case r of
       Nothing -> Nothing
-      (Just (ModuleData md _)) -> return $ Ref $ mkModRef i md
+      (Just (ModuleData md _ _)) -> return $ Ref $ mkModRef i md
 
 mkModRef :: HasInfo i => i -> ModuleDef m -> Term n
 mkModRef i = \case
@@ -681,9 +987,9 @@ resolveDynamic i mem acc n = case acc of
     md <- resolveModule i n
     case md of
       Nothing -> return Nothing
-      Just (ModuleData MDModule{} _) ->
+      Just (ModuleData MDModule{} _ _) ->
         evalError' i $ "resolveDynamic: expected interface: " <> pretty n
-      Just (ModuleData _ members) -> return $ members ^? ix mem
+      Just (ModuleData _ members _) -> return $ members ^? ix mem
 
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug
@@ -691,6 +997,7 @@ unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right r) = r
 unify m (Left t) = m HM.! t
 
+-- | Evaluate consts in a module. Deprecated in favor of `evalConstsNonRec`
 evalConsts :: PureSysOnly e => Ref -> Eval e Ref
 evalConsts rr@(Ref r) = case r of
   TConst {..} -> case _tConstVal of
@@ -702,11 +1009,30 @@ evalConsts rr@(Ref r) = case r of
   _ -> Ref <$> traverse evalConsts r
 evalConsts r = return r
 
+-- | Evaluate consts in a module, relying on correct dependency order, which avoids recursive invocations.
+evalConstsNonRec :: PureSysOnly e => Ref -> Eval e Ref
+evalConstsNonRec rr@(Ref r) = case r of
+  TConst {..} -> case _tConstVal of
+    CVRaw raw -> do
+      v <- reduce raw
+      traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
+      return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
+    _ -> return rr
+  _ -> return rr
+evalConstsNonRec r = return r
+
 
 deref :: Ref -> Eval e (Term Name)
 deref (Direct t@TConst{}) = case _tConstVal t of
   CVEval _ v -> return v
   CVRaw _ -> evalError' t $ "internal error: deref: unevaluated const: " <> pretty t
+deref (Direct (TVar (FQName fq) i)) = do
+  use (evalRefs . rsQualifiedDeps . at fq) >>= \case
+    Just r -> case r of
+      Direct d -> pure d
+      Ref r' -> reduce r'
+    Nothing -> do
+      evalError i $ "unbound free var:" <> pretty fq
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 
@@ -748,9 +1074,13 @@ compatPretty t = ifExecutionFlagSet' FlagPreserveShowDefs
   (renderCompactText t)
 
 reduceBody :: Term Ref -> Eval e (Term Name)
-reduceBody (TList bs _ _) =
+reduceBody (TList bs _ i) =
   -- unsafe but only called in validated body contexts
-  V.last <$> V.mapM reduce bs
+  V.mapM reduce bs >>= \vec -> case vec V.!? (V.length vec - 1) of
+    Just v ->
+      pure v
+    Nothing ->
+      evalError i "Expected non-empty function body"
 reduceBody t = evalError (_tInfo t) "Expected body forms"
 
 reduceLet :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
@@ -771,7 +1101,7 @@ reduceLam = \case
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> Int -> Term n
-resolveArg ai as i = case atMay as i of
+resolveArg ai as i = case as ^? ix i of
   Nothing -> appError ai $ "Missing argument value at index " <> pretty i
   Just i' -> i'
 
@@ -853,7 +1183,7 @@ reduceDynamic tref tmem i = do
       let (DefName mem) = _dDefName d
       md <- resolveModule i ref
       case md of
-        Just (ModuleData _ refs) -> case HM.lookup mem refs of
+        Just (ModuleData _ refs _) -> case HM.lookup mem refs of
           Just (Ref (TDef mdef _)) -> return (Right mdef)
           _ -> evalError' i $ "reduceDynamic: unknown module ref: " <> pretty tref
         Nothing -> evalError' i
@@ -889,8 +1219,12 @@ guardRecursion fname m act  =
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
-evalUserAppBody d@Def{..} (as',ft') ai g run =
-  guardRecursion fname (Just _dModule) $ eAdvise ai (AdviceUser (d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+evalUserAppBody _d@Def{..} (as',ft') ai g run = guardRecursion fname (Just _dModule) $
+#ifdef ADVICE
+  eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+#else
+  appCall fa ai as' $ fmap (g,) $ run bod'
+#endif
   where
   fname = asString _dDefName
   bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
@@ -942,23 +1276,107 @@ reduceDirect TNative {..} as ai =
             ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
+#ifdef ADVICE
     eAdvise ai (AdviceNative _tNativeName) $ dup
         $ appCall fa ai as
         $ _nativeFun _tNativeFun fa as
+#else
+    appCall fa ai as $ _nativeFun _tNativeFun fa as
+#endif
+reduceDirect (TVar (FQName fq) _) args i = do
+  use (evalRefs . rsQualifiedDeps . at fq) >>= \case
+    Just r -> reduceApp (App (TVar r def) args i)
+    Nothing -> do
+      evalError i $ "unbound free variable: " <> pretty fq
 reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
 
-initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
-initPact i app bod = view eePactStep >>= \es -> case es of
-  Just v -> evalError i $ "initPact: internal error: step already in environment: " <> pretty v
-  Nothing -> view eeHash >>= \hsh ->
-    applyPact i app bod $ PactStep 0 False (toPactId hsh) Nothing
+createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
+createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
+  let pc = PactContinuation (QName qn{_qnInfo = def}) pvs
+  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
+createNestedPactId i n _ =
+  evalError' i $ "Error creating nested pact id, name is not qualified: " <> pretty n
 
+initPact :: Info -> PactContinuation -> Term Ref -> Eval e (Term Name)
+initPact i app bod = view eePactStep >>= \case
+  Just v@(PactStep step b parent _) -> do
+    whenExecutionFlagSet FlagDisablePact43 $
+      evalError i $ "initPact: internal error: step already in environment: " <> pretty v
+    newPactId <- createNestedPactId i app parent
+    applyNestedPact i app bod $ PactStep step b newPactId Nothing
+  Nothing -> view eeHash >>= \hsh -> do
+    let pStep = PactStep 0 False (toPactId hsh) Nothing
+    local (set eePactStep (Just pStep)) $ applyPact i app bod pStep mempty
+
+-- Nested defpact application, subject to a few conditions:
+-- - If parent step has rollback, this step _Also_ needs to have rollback.
+applyNestedPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
+applyNestedPact i app (TList steps _a _b) ps@PactStep {..} = do
+  -- only one pact state allowed in a transaction
+  parentExec <- use evalPactExec >>= \case
+    Nothing -> evalError i $ "Nested Pact attempted but no pactExec found for:" <> pretty (_pcDef app)
+    -- Nested pact execution
+    Just pe -> pure pe
+
+  -- retrieve indicated step from code
+  st <- maybe (evalError i $ "applyPact: step not found: " <> pretty _psStep) return $ steps V.!? _psStep
+  step <- case st of
+    TStep step _meta _i -> return step
+    t -> evalError (_tInfo t) "expected step"
+
+  when (isJust (_sEntity step)) $ evalError' step "applyNestedPact: nested defpacts do not allow private execution"
+
+  (rollback, stepCount) <- verifyParent parentExec step
+  exec <- case parentExec ^. peNested . at _psPactId of
+    -- If the step == 0, we expect this to be the case
+    Nothing ->
+      if _psStep == 0 then pure (PactExec stepCount Nothing Nothing _psStep _psPactId app rollback mempty)
+      else evalError' step $ "Nested pact executing same nested pact twice"
+    Just pe
+      | _psStep >= 0 && (rollback && _npeStep pe == _psStep) ->
+        pure $ fromNestedPactExec rollback $ pe
+      | _psStep > 0 && (_npeStep pe + 1 == _psStep) ->
+        pure $ fromNestedPactExec rollback $ over npeStep (+ 1) pe
+      | otherwise -> evalError' step $ "Nested pact never started at prior step"
+  -- set the pact state to the "local" nested exec to eval the result
+  evalPactExec .=
+      Just exec
+
+  -- evaluate
+  result <- local (set eePactStep (Just ps)) $ case (_psRollback,_sRollback step) of
+    (False,_) -> reduce $ _sExec step
+    (True,Just rexp) -> reduce rexp
+    (True,Nothing) -> evalError' step $ "Rollback requested but none in step"
+
+  resultState <- use evalPactExec >>= (`maybe` pure)
+    (evalError i "Internal error, pact exec state not found after execution")
+  when (nestedPactsNotAdvanced resultState ps) $
+    evalError' i $ "Nested defpacts were not all advanced in prior step for pact: " <> pretty _psPactId
+  -- Update the entry of the pactExec at the parent
+  let newParent = parentExec & peNested %~ M.insert _psPactId (toNestedPactExec resultState)
+  evalPactExec .= Just newParent
+
+  return result
+  where
+  verifyParent PactExec{..} step =  do
+    let stepCount = length steps
+        rollback = isJust $ _sRollback step
+    when (stepCount /= _peStepCount) $ evalError' step $ "applyNestedPact: invalid nested defpact length, must be equal to length of parent"
+    when (rollback /= _peStepHasRollback) $ evalError' step $ "applyNestedPact: invalid nested defpact step, must match parent rollback"
+    pure (rollback, stepCount)
+applyNestedPact _ _ t _ = evalError' t "applyNestedPact: invalid defpact body, expected list of steps"
+
+-- | Important check for nested pacts:
+--     - Nested step must be equal to the parent step after execution.
+nestedPactsNotAdvanced :: PactExec -> PactStep -> Bool
+nestedPactsNotAdvanced resultState ps =
+  any (\npe -> _npeStep npe /= _psStep ps) (_peNested resultState)
+{-# INLINE nestedPactsNotAdvanced #-}
 
 -- | Apply or resume a pactdef step.
-applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> Eval e (Term Name)
-applyPact i app (TList steps _ _) PactStep {..} = do
-
+applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> M.Map PactId NestedPactExec ->  Eval e (Term Name)
+applyPact i app (TList steps _a _b) ps@PactStep {..} nested = do
   -- only one pact state allowed in a transaction
   use evalPactExec >>= \bad -> unless (isNothing bad) $
     evalError i "Multiple or nested pact exec found"
@@ -981,7 +1399,7 @@ applyPact i app (TList steps _ _) PactStep {..} = do
 
   -- init pact state
   evalPactExec .=
-      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback)
+      Just (PactExec stepCount Nothing executePrivate _psStep _psPactId app rollback nested)
 
   -- evaluate
   result <- case executePrivate of
@@ -1002,13 +1420,15 @@ applyPact i app (TList steps _ _) PactStep {..} = do
         || (not private && _psRollback) -- done if public rollback
         || (private && _psRollback && _psStep == 0) -- done if private and rolled back to step 0
 
+  when (nestedPactsNotAdvanced resultState ps) $
+    evalError' i $ "Nested defpacts were not all advanced in prior step for pact: " <> pretty _psPactId
+
   writeRow i Write Pacts _psPactId $ if done then Nothing else Just resultState
 
   unlessExecutionFlagSet FlagDisablePact40 $ emitXChainEvents _psResume resultState
 
   return result
-
-applyPact _ _ t _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
+applyPact _ _ t _ _ = evalError' t "applyPact: invalid defpact body, expected list of steps"
 
 
 -- | Synthesize events for cross chain. Usually only submits yield OR resume,
@@ -1096,6 +1516,33 @@ resumePact i crossChainContinuation = do
 
       proceed ccExec
 
+-- | Resume a pact with supplied PactExec context.
+resumeNestedPactExec :: Info -> Def Ref -> PactStep -> NestedPactExec -> Eval e (Term Name)
+resumeNestedPactExec i def' req ctx = do
+  when (_dDefType def' /= Defpact) $ evalError' def' $ "resumeNestedPactExec: defpact required"
+
+  when (_psPactId req /= _npePactId ctx) $ evalError i $
+    "resumeNestedPactExec: request and context pact IDs do not match: " <>
+    pretty (_psPactId req,_npePactId ctx)
+
+  when (_psStep req < 0 || _psStep req >= _npeStepCount ctx) $ evalError i $
+    "resumeNestedPactExec: invalid step in request: " <> pretty (_psStep req)
+
+  let args = map (liftTerm . fromPactValue) (_pcArgs (_npeContinuation ctx))
+
+  g <- computeUserAppGas def' i
+  af <- prepareUserAppArgs def' args i
+
+  -- if resume is in step, use that, otherwise get from exec state
+  let resume = case _psResume req of
+        r@Just {} -> r
+        Nothing -> _npeYield ctx
+
+  -- run local environment with yield from pact exec
+  local (set eePactStep (Just $ set psResume resume req)) $
+    evalUserAppBody def' af i g $ \bod ->
+      applyNestedPact i (_npeContinuation ctx) bod req
+
 
 -- | Resume a pact with supplied PactExec context.
 resumePactExec :: Info -> PactStep -> PactExec -> Eval e (Term Name)
@@ -1138,7 +1585,7 @@ resumePactExec i req ctx = do
   -- run local environment with yield from pact exec
   local (set eePactStep (Just $ set psResume resume req)) $
     evalUserAppBody def' af i g $ \bod ->
-      applyPact i (_peContinuation ctx) bod req
+      applyPact i (_peContinuation ctx) bod req (_peNested ctx)
 
 
 -- | Create special error form handled in 'reduceApp'
@@ -1158,17 +1605,29 @@ resolveFreeVars i b = traverse r b where
 installModule :: Bool -> ModuleData Ref -> Maybe (V.Vector Text) -> Eval e ()
 installModule updated md = go . maybe allDefs filteredDefs
   where
+    updateInternal f = case _mdModule md of
+      MDModule m -> do
+        let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
+        let hm = HM.map (\v -> (v, Just (_mHash m))) (_mdRefMap md)
+        evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty hm)
+        evalRefs . rsQualifiedDeps %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
+      MDInterface _ -> do
+        let
+          f' m k v = case v of
+            Ref TDef{} -> m
+            _ -> f m k (v, Nothing)
+        evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f' mempty $ _mdRefMap md)
     go f = do
-      evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty $ _mdRefMap md)
+      updateInternal f
       when updated $
         evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
 
     filteredDefs is m k v =
       if V.elem k is
-      then HM.insert (Name $ BareName k def) v m
+      then HM.insert k v m
       else m
 
-    allDefs m k v = HM.insert (Name $ BareName k def) v m
+    allDefs m k v = HM.insert k v m
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'

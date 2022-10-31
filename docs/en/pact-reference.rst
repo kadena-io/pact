@@ -1,4 +1,4 @@
-|image1|
+.. image:: img/kadena-logo-210px.png
 
 Pact Smart Contract Language Reference
 ======================================
@@ -14,1123 +14,28 @@ Copyright (c) 2016 - 2018, Stuart Popejoy. All Rights Reserved.
 Rest API
 ========
 
-As of version 2.1.0 Pact ships with a built-in HTTP server and SQLite
-backend. This allows for prototyping blockchain applications with just
-the ``pact`` tool.
+See (https://api.chainweb.com/openapi/pact.html) for latest OpenAPI
+docs.
 
-To start up the server issue ``pact -s config.yaml``, with a suitable
-config. The ``pact-lang-api`` JS library is `available via
+Pact built-in server
+--------------------
+
+Pact ships with a built-in HTTP server and SQLite backend. To start up
+the server issue ``pact -s config.yaml``, with a suitable config.
+
+``pact-lang-api`` JS Library
+----------------------------
+
+The ``pact-lang-api`` JS library is `available via
 npm <https://www.npmjs.com/package/pact-lang-api>`__ for web
 development.
-
-Commands
---------
-
-The command object
-~~~~~~~~~~~~~~~~~~
-
-Pact represents blockchain transactions (or commands) as a JSON object
-with the following attributes:
-
-Attributes
-^^^^^^^^^^
-
-``"cmd"``
-'''''''''
-
-*type:* **string (encoded, escaped JSON)** ``required``
-
-The component of a transaction that is signed to ensure
-non-malleability. Initially, this component is a JSON object containing
-the transaction payload, signatories, and platform-specific metadata.
-When assembling the transaction, this JSON is “stringified” and provided
-to the ``cmd`` field. If you inspect the output of the `request
-formatter in the pact tool <#api-request-formatter>`__, you will see
-that the ``"cmd"`` field, along with any code supplied, are a String of
-encoded, escaped JSON. See `cmd field <#cmd-field>`__ for more
-information.
-
-``"hash"``
-''''''''''
-
-*type:* **string (base64url)** ``required``
-
-Blake2 hash of the ``cmd`` field “stringified” value. Serves as a
-command’s request key since each transaction must be unique.
-
-``"sigs"``
-''''''''''
-
-*type:* **[ object ]** ``required``
-
-List of JSON objects containing a cryptographic signature. This
-signature is generated using a cryptographic private key to authenticate
-the current transaction (i.e. the contents of the ``cmd`` field). The
-``ith`` signature must correspond to the ``ith`` signer in ``cmd``\ ’s
-list of `signers <#cmd-signers>`__.This signature object has the
-following attribute(s):
-
-.. code:: yaml
-
-   name: "sig"                     # Cryptographic signature of current
-   type: string (base16)           # transaction.
-   required: true
-
-Example command
-^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   // Command with exec payload and Chainweb metadata
-   {
-     "cmds":[{
-       "hash":"H6XjdPHzMai2HLa3_yVkXfkFYMgA0bGfsB0kOsHAMuI",
-       "sigs":[{
-         "sig":"8d452109cc0439234c093b5e204a7428bc0a54f22704402492e027aaa9375a34c910d8a468a12746d0d29e9353f4a3fbebe920d63bcc7963853995db015d060f"
-         }],
-       "cmd":"{
-         \"payload\":{\"exec\":{\"data\":null,\"code\":\"(+ 1 2)\"}},
-         \"signers\":[{
-           \"addr\":\"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca\",
-           \"scheme\":\"ED25519\",
-           \"pubKey\":\"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca\"
-           }],
-         \"meta\":{
-           \"gasLimit\":1000,
-           \"chainId\":\"0\",
-           \"gasPrice\":1.0e-2,
-           \"sender\":\"sender00\"
-           },
-         \"nonce\":\"\\\"2019-06-20 20:56:39.509435 UTC\\\"\"
-       }"
-     }]
-   }
-
-.. _cmd-field:
-
-The ``cmd`` field
-~~~~~~~~~~~~~~~~~
-
-Transactions sent into the blockchain must be hashed in order to ensure
-the received command is correct; this is also the value that is signed
-with the required private keys. To ensure the JSON for the transaction
-matches byte-for-byte with the value used to make the hash, the JSON
-must be *encoded* into the payload as a string (i.e.,
-`“stringified” <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify>`__).
-The ``cmd`` field holds transaction information as encoded strings. The
-format of the JSON to be encoded is as follows:
-
-.. _attributes-1:
-
-Attributes
-^^^^^^^^^^
-
-``"nonce"``
-'''''''''''
-
-*type:* **string** ``required``
-
-Transaction nonce values. Needs to be unique for every call.
-
-``"meta"``
-''''''''''
-
-*type:* **object** ``required``
-
-Platform-specific metadata. For chainweb platforms, see
-`public-meta <#public-meta-field>`__
-
-.. _cmd-signers:
-
-``"signers"``
-'''''''''''''
-
-*type:* **[ object ]** ``required``
-
-List of JSON object with information on the signers authenticating the
-current payload. This signer object has the following attributes:
-
-.. code:: yaml
-
-   name: "scheme"                # Signer's cryptographic signature scheme.
-   type: enum (string)           # "ED25519" or "ETH" (Ethereum's ECDSA scheme).
-   required: false               # Defaults to "ED25519".
-
-.. code:: yaml
-
-   name: "pubKey"                # Public key of signing keypair.
-   type: string (base16)         # Must be valid public key for specified `scheme`.
-   required: true
-
-.. code:: yaml
-
-   name: "addr"                  # Address derived from public key, if needed from scheme.
-                                 # Only ETH scheme requires an address currently.
-   type: string (base16)         # Must be valid address for specified `scheme`.
-   required: false               # Defaults to null.
-
-.. code:: yaml
-
-   name: "caps"                  # List of capabilities to scope this signature.
-   type: list[string]            # Example: ["(accounts.PAY "alice" "bob" 10.0)"]
-   required: false               # Defaults to empty list.
-
-``"payload"``
-'''''''''''''
-
-*type:* `exec <#exec-payload>`__ **or** `cont <#cont-payload>`__ payload
-``required``
-
-The ``cmd`` field supports two types of JSON payloads: the `exec
-payload <#exec-payload>`__ and the `cont payload <#cont-payload>`__.
-
-``"networkId"``
-'''''''''''''''
-
-*type:* **string** ``optional``
-
-Platform specific network ID, e.g. to distinguish between a testnet and
-production chain, or completely different chain (ie private chain ID, if
-supported). Platform may require this value.
-
-Example ``cmd`` field
-^^^^^^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "cmd":{
-         "payload":{
-           "exec":{
-             "data": null,
-             "code": "(+ 1 2)"
-           }
-         },
-         "signers":[{
-           "pubKey":"368820f80c324bbc7c2b0610688a7da43e39f91d118732671cd9c7500ff43cca",
-           "caps": ["(accounts.PAY \"alice\" \"bob\" 20.0)"]
-           }],
-         "meta":{
-           "gasLimit":1000,
-           "chainId":"0",
-           "gasPrice":1.0e-2,
-           "sender":"sender00"
-           },
-         "nonce":"\\\"2019-06-20 20:56:39.509435 UTC\\\"",
-         "networkId": "testnet00"
-       }
-   }
-
-.. _public-meta-field:
-
-Public meta
-~~~~~~~~~~~
-
-*type:* **object** Information for Chainweb platforms.
-
-.. code:: yaml
-
-   name: "chainId"       # Numeric chain ID as string. Ex: "0", "1"
-   type: string
-   required: true
-
-   name: "sender"        # Coin account name for gas payer.
-   type: string
-   required: true
-
-   name: "gasLimit"      # Maximum allowed gas for tx.
-   type: integer         # Sender account must have balance (gasLimit * gasPrice).
-   required: true
-
-   name: "gasPrice"      # Gas unit price to be charged.
-   type: decimal         # Sender account must have balance (gasLimit * gasPrice).
-   required: true        # Price can be used to get tx priority; miners may reject
-                         # prices that are too low.
-
-   name: "ttl"           # Time-to-live in seconds, to be validated against 'creationTime'.
-   type: decimal         # Expired commands will not be processed.
-   required: true
-
-   name: "creationTime"  # Tx creation time, POSIX seconds since epoch (Jan 1 1970 00:00:00 UTC).
-   type: integer         # Platform will validate time as within some range of network time.
-   required: true
-
-.. _exec-payload:
-
-The ``exec`` payload
-~~~~~~~~~~~~~~~~~~~~
-
-The ``exec`` payload holds executable code and data. The
-`send <#send>`__ and `local <#local>`__ endpoints support this payload
-type in the ``cmd`` field. The format of the JSON to be encoded is as
-follows:
-
-.. _attributes-2:
-
-Attributes
-^^^^^^^^^^
-
-``"exec"``
-''''''''''
-
-*type:* **object** ``required``
-
-JSON object representing the exec payload. It has the following child
-attributes:
-
-.. code:: yaml
-
-   name: "code"          # Pact code to be executed.
-   type: string
-   required: true
-
-.. code:: yaml
-
-   name: "data"          # Arbitrary user data to accompany code.
-   type: object          # Must be `null` or any valid JSON.
-   required: false       # This data will be injected into the scope of the
-                         # pact execution.
-
-Example ``exec`` payload
-^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "payload":{
-       "exec":{
-         "data":null,
-         "code":"(+ 1 2)"
-       }
-     }
-   }
-
-.. _cont-payload:
-
-The ``cont`` payload
-~~~~~~~~~~~~~~~~~~~~
-
-The ``cont`` payload allows for continuing or rolling back
-`pacts <#pacts>`__. The `send <#send>`__ and `local <#local>`__
-endpoints support this payload type in the ``cmd`` field. The format of
-the JSON to be encoded is as follows:
-
-.. _attributes-3:
-
-Attributes
-^^^^^^^^^^
-
-``"cont"``
-''''''''''
-
-*type:* **object** ``required``
-
-JSON object representing the continuation (cont) payload. It has the
-following child attributes:
-
-.. code:: yaml
-
-   name: "pactId"                # The id of the pact to be continued or
-   type: string (base64url)      # rolled back. This id is equivalent to the
-   required: true                # request key (payload hash) of the command
-                                 # that instantiated the pact since only one
-                                 # pact instantiation is allowed per transaction.
-
-.. code:: yaml
-
-   name: "rollback"              # 'true' to rollback a pact, `false` otherwise.
-   type: boolean, required
-   required: true
-
-.. code:: yaml
-
-   name: "step"                  # Step to be continued or rolled back.
-   type: integer                 # Must be integer between 0 and
-   required: true                # (total # of steps - 1).
-                                 # If rolling back, must be the step number of
-                                 # the step that just executed.
-                                 # Otherwise, must correspond to one more than
-                                 # the step that just executed.
-
-.. code:: yaml
-
-   name: "data"                  # Arbitrary user data to accompany code.
-   type: object                  # Must be `null` or any valid JSON.
-   required: false               # This data will be injected into the scope of
-                                 # the pact execution.
-
-.. code:: yaml
-
-   name: "proof"                 # Must be `null` or Bytestring.
-   type: string (base64url)      # Provide SPV proof that the previous step has been
-   required: false               # confirmed and recorded in the ledger.
-                                 # The blockchain automatically verifies this
-                                 # proof when it is supplied.
-                                 # If doing cross-chain continuations, then
-                                 # it MUST be present (not `null`) for each step
-                                 # in order to validate `yield/resume` data for
-                                 # each `yield/resume` pair.
-
-Example ``cont`` payload
-^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "payload":{
-       "cont":{
-         "proof":"[proof base64url value]",
-         "data":{
-           "final-price":12.0
-         },
-         "pactId":"bNWr_FjKZ2sxzo7NNLTtWA64oysWw6Xqe_PZ_qSeEU0",
-         "rollback":false,
-         "step":1
-       }
-     }
-   }
-
-Command Results
----------------
-
-The command result object
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The result of attempting to execute a Pact command is a JSON object.
-
-.. _attributes-4:
-
-Attributes
-^^^^^^^^^^
-
-``"reqKey"``
-''''''''''''
-
-*type:* **string (base64url)** ``required``
-
-Request key of the command.
-
-``"result"``
-''''''''''''
-
-*type:* `Pact Error <#pact-errors>`__ **or** `Pact
-Value <#pact-values>`__ ``required``
-
-The result of a pact execution. It will either be a `pact
-error <#pact-errors>`__ or the last `pact value <#pact-values>`__
-outputted by a successful execution.
-
-``"txId"``
-''''''''''
-
-*type:* **string (base64url)** ``optional``
-
-Transaction id of processed command. Used in querying history.
-
-``"gas"``
-'''''''''
-
-*type:* **integer (int64)** ``required``
-
-Gas consumed by the command.
-
-``"logs"``
-''''''''''
-
-*type:* **string (base64url)** ``optional``
-
-Hash of the command’s pact execution logs.
-
-``"metaData"``
-''''''''''''''
-
-*type:* **object** ``optional``
-
-JSON object representing platform-specific meta data.
-
-``"continuation"``
-''''''''''''''''''
-
-*type:* **object** ``optional``
-
-Output of a `continuation <#cont-payload>`__ (i.e. “pacts”) if one
-occurred in the command. This continuation object has the following
-child attributes:
-
-.. code:: yaml
-
-   name: "executed"            # Only required for private pacts to indicate
-   type: boolean               # if step was executed or skipped.
-   required: false
-
-.. code:: yaml
-
-   name: "pactId"              # The id of the pact to be continued or
-   type: string (base64url)    # rolled back. Equivalent to the
-   required: true              # request key (payload hash) of the command
-                               # that instantiated the pact.
-
-.. code:: yaml
-
-   name: "step"                # Step that was just executed or skipped.
-   type: integer
-   required: true
-
-.. code:: yaml
-
-   name: "stepCount"           # Total number of steps in the pact.
-   type: integer
-   required: true
-
-.. code:: yaml
-
-   name: "continuation"        # Strict (in arguments) application of the pact,
-   type: object                # for future invocation.
-   required: true
-   children:
-     name: "args"              # `args`: `defpact` arguments when it was
-       type: [PactValue]       #         first invoked.
-       required: true
-     name: "def"               # `def`: Name of continuation ("pact").
-       type: string
-       required: true
-
-.. code:: yaml
-
-   name: "yield"               # Yield value if it was invoked by the step that
-   type: object                # just executed.
-   required: false
-   children:
-     name: "data"                        # `data`: data yielded from one step to another
-       type: map (string->PactValue)     #         Can only be resumed (accessed) by
-       required: true                    #         the following step.
-     name: "provenance"                  # `provenance`: Contains necessary
-       type: object                      #               data to "endorse" a yield
-       required: false                   #               object.
-       children:
-         name: "targetChainId"           #  'targetChainId' for the endorsement
-           type: string
-           required: true
-         name: "moduleHash"              # 'moduleHash' hash of current containing module
-           type: string (base64url)
-           required: true
-
-``"events"``
-''''''''''''
-
-*type:* **array (**\ `Pact Event <#pact-event>`__ ``optional``
-
-Includes `events <#pact-event>`__ that were emitted during the course of
-the transaction. If events are empty they are not included in the JSON.
-
-Example command result
-^^^^^^^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   // successful command result
-   {
-     "gas":0,
-     "result":{
-       "status":"success",
-       "data":3
-     },
-     "reqKey":"cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI",
-     "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
-     "metaData":null,
-     "continuation":null,
-     "txId":null,
-     "events": [ {
-       "name": "TRANSFER",
-       "params": ["Alice", "Bob", 10.0],
-       "module": "coin",
-       "moduleHash": "ut_J_ZNkoyaPUEJhiwVeWnkSQn9JT9sQCWKdjjVVrWo"
-     } ]
-   }
-
-.. code:: json
-
-   // command result with pact error
-   {
-     "gas":0,
-     "result":{
-       "status":"failure",
-       "error":{
-         "callStack":["<interactive>:0:0: (+ 1 2 3)"],
-         "type":"ArgsError",
-         "message":"Invalid arguments, received [1 2 3] for [ x:<a[integer,decimal]> y:<a[integer\n,decimal]> -> <a[integer,decimal]>\n, x:<a[integer,decimal]> y:<b[integer,decimal]> -> decimal\n, x:<a[string,[<l>],object:<{o}>]> y:<a[string,[<l>],object:<{o}>]> -> <a[string\n,[<l>]\n,object:<{o}>]> ]",
-         "info":"<interactive>:0:0"
-       }
-     },
-     "reqKey":"h0D6-RsVVd7OHlEon2zH0RL_CKmR8D8Xdmo_YvURiJQ",
-     "logs":null,
-     "metaData":null,
-     "continuation":null,
-     "txId":null
-   }
-
-.. _pact-event:
-
-Pact events
-~~~~~~~~~~~
-
-Pact events represent named, provable events that transpired in a
-transaction, in the following format:
-
-``name``
-^^^^^^^^
-
-*type:* **string** ``required``
-
-Event name or “topic”
-
-``params``
-^^^^^^^^^^
-
-*type:* **[**\ `PactValue <#pact-values>`__\ **]** ``required``
-
-Values representing the parameterization of this event.
-
-``module``
-^^^^^^^^^^
-
-*type:* **string** ``required``
-
-Fully-qualified module name that sourced the event.
-
-``moduleHash``
-^^^^^^^^^^^^^^
-
-*type:* **string (base64url)** ``required``
-
-Hash of sourcing module.
-
-Pact Values
-~~~~~~~~~~~
-
-Pact values are those values representable in Pact with an equivalent
-JSON representation and as such can be used in input and output in the
-API. A pact value can be one of the following: a literal string,
-integer, decimal, boolean, or time; a list of other pact values; an
-object mapping textual keys to pact values; or
-`guards <#guard-types>`__, which can be pact (continuation) guards,
-module guards, user guards, keysets, or references to a keysets. Below
-is the JSON representation of these values:
-
-Types
-^^^^^
-
-``string``
-''''''''''
-
-*type:* **string**
-
-``integer``
-'''''''''''
-
-*type:* **object**
-
-.. code:: yaml
-
-   name: "int"
-   type: integer
-   required: true
-
-``decimal``
-'''''''''''
-
-*type:* **number**
-
-``boolean``
-'''''''''''
-
-*type:* **boolean**
-
-``time``
-''''''''
-
-*type:* **object**
-
-Literal time value using the UTC time format. The time pact object has
-the following attribute(s):
-
-.. code:: yaml
-
-   name: "time"        # UTC timestamp.
-   type: string        # Example: "1970-01-01T00:00:00Z"
-   required: true
-
-``list``
-''''''''
-
-*type:* **[**\ `PactValue <#pact-values>`__\ **]**
-
-``object map``
-''''''''''''''
-
-*type:* **map (string->**\ `PactValue <#pact-values>`__\ **)**
-
-JSON object mapping string keys to `pact values <#pact-values>`__.
-
-``pact guard``
-''''''''''''''
-
-*type:* **object**
-
-.. code:: yaml
-
-   name: "pactId"                # id of the specific `defpact` execution in
-   type: string (base64url)      # which the guard was created. Thus, the
-   required: true                # guard will only pass if being accessed by
-                                 # code in subsequent steps of that particular
-                                 # pact execution (i.e. having the same
-                                 # pact id).
-
-.. code:: yaml
-
-   name: "name"                  # Name of the guard
-   type: string
-   required: true
-
-``module guard``
-''''''''''''''''
-
-*type:* **object**
-
-.. code:: yaml
-
-   name: "moduleName"      # Name and namespace of module being guarded
-   type: object
-   required: true
-   children:
-     name: "name"
-       type: string
-       required: true
-     name: "namespace"
-       type: string
-       required: false
-
-.. code:: yaml
-
-   name: "name"            # Name of the guard
-   type: string
-   required: true
-
-``user guard``
-''''''''''''''
-
-*type:* **object**
-
-.. code:: yaml
-
-   name: "data"      # Internal pact representation of a the function
-   type: object      # governing the user guard.
-   required: true
-
-.. code:: yaml
-
-   name: "predFun"   # Name of function governing the user guard.
-   type: string
-   required: true
-
-``keysets``
-'''''''''''
-
-*type:* `KeySet <#keysets-and-authorization>`__
-
-``keyset references``
-'''''''''''''''''''''
-
-*type:* **object**
-
-.. code:: yaml
-
-   name: "keyNamef"    # Name of keyset being referenced.
-   type: string
-   required: true
-
-Pact errors
-~~~~~~~~~~~
-
-When an error occurs during a pact execution, the following JSON object
-is returned in Command Result’s ``result`` field:
-
-.. _attributes-5:
-
-Attributes
-^^^^^^^^^^
-
-``"callStack"``
-'''''''''''''''
-
-*type:* **array (string)** ``required``
-
-List of stack traces (i.e. active stack frames) during the pact
-execution error.
-
-``"info"``
-''''''''''
-
-*type:* **string** ``required``
-
-The parsed pact code that produced the error.
-
-``"message"``
-'''''''''''''
-
-*type:* **string** ``required``
-
-The error message that was produced.
-
-``"type"``
-''''''''''
-
-*type:* **enum (string)** ``required``
-
-The type of pact error that was produced. The error type must be one of
-the following:
-
--  “EvalError”
--  “ArgsError”
--  “DbError”
--  “TxFailure”
--  “SyntaxError”
--  “GasError”
-
-Example pact error
-^^^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "callStack":["<interactive>:0:0: (+ 1 2 3)"],
-     "type":"ArgsError",
-     "message":"Invalid arguments, received [1 2 3] for [ x:<a[integer,decimal]> y:<a[integer\n,decimal]> -> <a[integer,decimal]>\n, x:<a[integer,decimal]> y:<b[integer,decimal]> -> decimal\n, x:<a[string,[<l>],object:<{o}>]> y:<a[string,[<l>],object:<{o}>]> -> <a[string\n,[<l>]\n,object:<{o}>]> ]",
-     "info":"<interactive>:0:0"
-   }
-
-Endpoints
----------
-
-All endpoints are served from ``api/v1``. Thus a ``send`` call would be
-sent to http://localhost:8080/api/v1/send, if running on
-``localhost:8080``. Each endpoint section specifies the request body
-schema they expect and the schema of their response. If they receive an
-invalid request body, an HTTP ``400 Bad Request Error`` will be
-returned. All endpoints also consume and produce
-``application/json;charset=utf-8``.
-
-One way to interact with the endpoints is to use Pact’s `API Request
-formatter <#api-request-formatter>`__ and ``curl``.
-
-.. code:: shell
-
-   #!/bin/sh
-
-   set -e
-
-   JSON="Content-Type: application/json"
-
-   echo ""; echo "Step 1"; echo ""
-   pact -a examples/accounts/scripts/01-system.yaml | curl -H "$JSON" -d @- http://localhost:8080/api/v1/send
-   sleep 1; echo ""
-   curl -H "$JSON" -d '{"requestKeys":["zaqnRQ0RYzxTccjtYoBvQsDo5K9mxr4TEF-HIYTi5Jo"]}' -X POST http://localhost:8080/api/v1/poll
-
-/send
-~~~~~
-
-.. code:: shell
-
-   POST /api/v1/send
-
-Asynchronous submission of one or more public (unencrypted) commands to
-the blockchain. See `cmd field <#cmd-field>`__ format regarding the
-stringified JSON data.
-
-Request schema
-^^^^^^^^^^^^^^
-
-``"cmds"``
-''''''''''
-
-*type:* **[**\ `Command <#the-command-object>`__\ **]** ``required``
-
-List of `Command <#the-command-object>`__ objects to be submitted to the
-blockchain. Expects each command to have stringified JSON payload.
-
-Example request
-^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   { "cmds": [
-     {
-       "hash":"cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI",
-       "sigs":[
-         {
-           "sig":"8acb9293ac03774f29a9b6c216c2237bff90244b339cc17468388f5c9769ec8fb03fbbcd96cbeb69cd2d8792929a9b7c1b1028acf6c2583dfb086e1cafaf410b"
-         }],
-         "cmd":"{\"payload\":{\"exec\":{\"data\":null,\"code\":\"(+ 1 2)\"}},\"signers\":[{\"addr\":\"ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9\",\"scheme\":\"ED25519\",\"pubKey\":\"ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9\"}],\"meta\":{\"gasLimit\":0,\"chainId\":\"\",\"gasPrice\":0,\"sender\":\"\"},\"nonce\":\"\\\"step05\\\"\"}"
-     },
-     {
-       "hash":"zaqnRQ0RYzxTccjtYoBvQsDo5K9mxr4TEF-HIYTi5Jo",
-       "sigs":[
-         {
-           "sig":"6997a02e17ab6863bb9fe43200ae60c43fe4be278ff39e76887a33d7010ee2f15e6dfd4d0658c5e08ec3f397d1c1b37f15b01f613cedc49ce44e3714f789180a"
-         }],
-       "cmd":"{\"payload\":{\"exec\":{\"data\":{\"accounts-admin-keyset\":[\"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d\"]},\"code\":\"(define-keyset 'k (read-keyset \\\"accounts-admin-keyset\\\"))\\n(module system 'k\\n  (defun get-system-time ()\\n    (time \\\"2017-10-31T12:00:00Z\\\")))\\n(get-system-time)\"}},\"signers\":[{\"addr\":\"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d\",\"scheme\":\"ED25519\",\"pubKey\":\"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d\"}],\"meta\":{\"gasLimit\":0,\"chainId\":\"\",\"gasPrice\":0,\"sender\":\"\"},\"nonce\":\"\\\"step01\\\"\"}"
-     }]
-   }
-
-Response schema
-^^^^^^^^^^^^^^^
-
-``"requestKeys"``
-'''''''''''''''''
-
-*type:* **[ string (base64url) ]** ``required``
-
-Returns the list of the submitted command’s request keys. Use with
-``/poll`` or ``/listen`` to get the transaction results.
-
-Example response
-^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "requestKeys":["cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI",
-                    "zaqnRQ0RYzxTccjtYoBvQsDo5K9mxr4TEF-HIYTi5Jo"]
-   }
-
-/poll
-~~~~~
-
-.. code:: shell
-
-   POST /api/v1/poll
-
-Poll for multiple command results.
-
-.. _request-schema-1:
-
-Request schema
-^^^^^^^^^^^^^^
-
-.. _requestkeys-1:
-
-``"requestKeys"``
-'''''''''''''''''
-
-*type:* **[ string (base64url) ]** ``required``
-
-List of desired commands’ request key.
-
-.. _example-request-1:
-
-Example request
-^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "requestKeys":["r5L96DVwNKANAedHArQoJc9oxF3hf_EftopCsoaCuuY",
-                    "CgjWWeA3MBmf3GIyop2CPU7ndhPuxnXFtcGm7-STMUo"]
-   }
-
-.. _response-schema-1:
-
-Response schema
-^^^^^^^^^^^^^^^
-
-Returns a JSON object, whose keys are commands’ request key and values
-are their corresponding `Command Result <#the-command-result-object>`__
-objects. If one of the polled commands have not been processed yet, then
-it will be absent from the returned JSON object.
-
-.. _example-response-1:
-
-Example response
-^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI":{
-       "gas":0,
-       "result":{
-         "status":"success",
-         "data":3
-       },
-       "reqKey":"cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI",
-       "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
-       "metaData":null,
-       "continuation":null,
-       "txId":null
-     },
-     "h0D6-RsVVd7OHlEon2zH0RL_CKmR8D8Xdmo_YvURiJQ":{
-       "gas":0,
-       "result":{
-         "status":"failure",
-         "error":{
-           "callStack":["<interactive>:0:0: (+ 1 2 3)"],
-           "type":"ArgsError",
-           "message":"Invalid arguments, received [1 2 3] for [ x:<a[integer,decimal]> y:<a[integer\n,decimal]> -> <a[integer,decimal]>\n, x:<a[integer,decimal]> y:<b[integer,decimal]> -> decimal\n, x:<a[string,[<l>],object:<{o}>]> y:<a[string,[<l>],object:<{o}>]> -> <a[string\n,[<l>]\n,object:<{o}>]> ]",
-           "info":"<interactive>:0:0"
-         }
-       },
-       "reqKey":"h0D6-RsVVd7OHlEon2zH0RL_CKmR8D8Xdmo_YvURiJQ",
-       "logs":null,
-       "metaData":null,
-       "continuation":null,
-       "txId":null
-     }
-   }
-
-/listen
-~~~~~~~
-
-.. code:: shell
-
-   POST /api/v1/listen
-
-Blocking call to listen for a single command result, or retrieve an
-already-executed command.
-
-.. _request-schema-2:
-
-Request schema
-^^^^^^^^^^^^^^
-
-.. _listen-1:
-
-``"listen"``
-''''''''''''
-
-*type:* **string (base64url)** ``required``
-
-A command’s request key.
-
-.. _example-request-2:
-
-Example request
-^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "listen": "zaqnRQ0RYzxTccjtYoBvQsDo5K9mxr4TEF-HIYTi5Jo"
-   }
-
-.. _response-schema-2:
-
-Response schema
-^^^^^^^^^^^^^^^
-
-Returns a `Command Result <#the-command-result-object>`__ object if the
-listen was successful. Otherwise, a timeout response is returned with
-fields ``status`` (always the string “timeout”) and ``timeout-micros``.
-
-.. _example-response-2:
-
-Example response
-^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   // timeout response
-   {
-     "status": "timeout",
-     "timeout-micros": 0
-   }
-
-.. code:: json
-
-   // successful command result
-   {
-     "gas":0,
-     "result":{
-       "status":"success",
-       "data":3
-     },
-     "reqKey":"cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI",
-     "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
-     "metaData":null,
-     "continuation":null,
-     "txId":null
-   }
-
-/local
-~~~~~~
-
-.. code:: shell
-
-   POST /api/v1/local
-
-Blocking/sync call to send a command for non-transactional execution. In
-a blockchain environment this would be a node-local “dirty read”. Any
-database writes or changes to the environment are rolled back. See `cmd
-field <#cmd-field>`__ format regarding the stringified JSON data.
-
-.. _request-schema-3:
-
-Request schema
-^^^^^^^^^^^^^^
-
-Expects a `Command <#the-command-object>`__ object with stringified JSON
-payload.
-
-.. _example-request-3:
-
-Example request
-^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   {
-     "hash":"cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI",
-     "sigs":[
-       {
-         "sig":"8acb9293ac03774f29a9b6c216c2237bff90244b339cc17468388f5c9769ec8fb03fbbcd96cbeb69cd2d8792929a9b7c1b1028acf6c2583dfb086e1cafaf410b"
-       }],
-       "cmd":"{\"payload\":{\"exec\":{\"data\":null,\"code\":\"(+ 1 2)\"}},\"signers\":[{\"addr\":\"ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9\",\"scheme\":\"ED25519\",\"pubKey\":\"ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9\"}],\"meta\":{\"gasLimit\":0,\"chainId\":\"\",\"gasPrice\":0,\"sender\":\"\"},\"nonce\":\"\\\"step05\\\"\"}"
-   }
-
-.. _response-schema-3:
-
-Response schema
-^^^^^^^^^^^^^^^
-
-Returns a `Command Result <#the-command-result-object>`__ object.
-
-.. _example-response-3:
-
-Example response
-^^^^^^^^^^^^^^^^
-
-.. code:: json
-
-   // successful command result
-   {
-     "gas":0,
-     "result":{
-       "status":"success",
-       "data":3
-     },
-     "reqKey":"cQ-guhschk0wTvMBtrqc92M7iYm4S2MYhipQ2vNKxoI",
-     "logs":"wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8",
-     "metaData":null,
-     "continuation":null,
-     "txId":null
-   }
 
 API request formatter
 ---------------------
 
-As of Pact 2.2.3, the ``pact`` tool now accepts the ``-a`` option to
-format API request JSON, using a YAML file describing the request. The
-output can then be used with a POST tool like Postman or even piping
-into ``curl``.
+The ``pact`` tool accepts the ``-a`` option to format API request JSON,
+using a YAML file describing the request. The output can then be used
+with a POST tool like Postman or even piping into ``curl``.
 
 For instance, a yaml file called “apireq.yaml” with the following
 contents:
@@ -1163,67 +68,17 @@ port 8080:
 .. _request-yaml:
 
 Request YAML file format
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
 
 Request yaml files takes two forms. An *execution* Request yaml file
-describes the `exec <#exec-payload>`__ payload. Meanwhile, a
-*continuation* Request yaml file describes the `cont <#cont-payload>`__
-payload. Private and public blockchains require different metadata, so
-each payload format may have different fields depending on the context.
+describes the
+`exec <https://api.chainweb.com/openapi/pact.html#tag/model-payload>`__
+payload. Meanwhile, a *continuation* Request yaml file describes the
+`cont <https://api.chainweb.com/openapi/pact.html#tag/model-payload>`__
+payload.
 
-.. _request-yaml-private-chain:
-
-Private Blockchain YAML Format
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The execution request yaml for a private blockchain takes the following
-keys:
-
-.. code:: yaml
-
-     code: Transaction code
-     codeFile: Transaction code file
-     data: JSON transaction data
-     dataFile: JSON transaction data file
-     networkId: string identifier for a blockchain network
-     keyPairs: list of key pairs and capabilities for signing (use pact -g to generate): [
-       public: base 16 public key
-       secret: base 16 secret key
-       caps: [
-         optional managed capabilities
-         ]
-       ]
-     nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
-
-The continuation request yaml for a private blockchain takes the
-following keys:
-
-.. code:: yaml
-
-     type: "cont"
-     txId: Integer transaction id of pact
-     step: Integer next step of a pact
-     rollback: Boolean for rollingback a pact
-     data: JSON transaction data
-     dataFile: JSON transaction data file
-     networkId: string identifier for a blockchain network
-     keyPairs: list of key pairs for signing (use pact -g to generate): [
-       public: base 16 public key
-       secret: base 16 secret key
-       caps: [
-         optional managed capabilities
-         ]
-       ]
-     nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
-
-.. _request-yaml-public-chain:
-
-Public Blockchain YAML Format
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+YAML exec command request
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The execution request yaml for a public blockchain takes the following
 keys:
@@ -1251,6 +106,9 @@ keys:
        ttl: integer time-to-live value
        creationTime: optional integer tx execution time after offset
      type: exec
+
+YAML Continuation command request
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The continuation request yaml for a public blockchain takes the
 following keys:
@@ -2270,7 +1128,7 @@ that simply encloses ``debit`` and ``credit`` calls:
      (check-account-exists to))
 
    (defun transfer (from to amount)
-     (with-capability (TRANSFER to from amount)
+     (with-capability (TRANSFER from to amount)
        (debit from amount)
        (credit to amount)))
 
@@ -3418,6 +2276,25 @@ columns in a row, or values in an object.
      (with-read accounts id { "balance" := bal }
        (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 
+Lambdas
+~~~~~~~
+
+Lambdas, or “anonymous functions”, allow defining functions to be
+applied in local scope, as opposed to defining functions at top-level
+with ``defun.``
+
+Lambdas are supported in ``let``, ``let*``, and as inline arguments to
+built-in function applications.
+
+.. code:: lisp
+
+     ; identity function
+     (let ((f (lambda (x) x))) (f a))
+     ; native example
+     (let ((f (lambda (x) x))) (map (f) [1 2 3]))
+     ; Inline native example:
+     (map (lambda (x) x) [1 2 3])
+
 Type specifiers
 ---------------
 
@@ -3649,6 +2526,57 @@ result in a reverse-sequence “rollback cascade”.
      (step payee-entity
        (credit payee amount)))
 
+Public defpacts may be nested (though the recursion restrictions apply,
+so it must be a different defpact). They may be kicked off like a
+regular function call within a defpact, but are continued after the
+first step by calling ``continue`` with the same arguments.
+
+As such, they have the following restrictions: - The number of steps of
+the child must match the number of steps of the parent. - If a parent
+defpact step has the rollback field, so must the child. If parent steps
+roll back, so do child steps. - ``continue`` must be called with the
+same continuation arguments as the defpact originally dispatched, to
+support multiple nested defpacts of the same function but with different
+arguments.
+
+The following example shows well-formed defpacts with equal number of
+steps, nested rollbacks and continue:
+
+::
+
+   (defpact payment (payer payee amount)
+     (step-with-rollback
+       (debit payer amount)
+       (credit payer amount))
+     (step payee-entity
+       (credit payee amount)))
+
+   ...
+   (defpact split-payment (payer payee1 payee2 amount ratio)
+     (step-with-rollback
+       (let
+         ((payment1 (payment payer payee1 (* amount ratio)))
+         (payment2 (payment payer payee2 (* amount (- 1 ratio))))
+         )
+         "step 0 complete"
+       )
+       (let
+         ((payment1 (continue (payment payer payee1 (* amount ratio))))
+          (payment2 (continue (payment payer payee2 (* amount (- 1 ratio)))))
+         )
+         "step 0 rolled back"
+       )
+     )
+     (step
+       (let
+         ((payment1 (continue (payment payer payee1 (* amount ratio))))
+          (payment2 (continue (payment payer payee2 (* amount (- 1 ratio)))))
+         )
+         "step 1 complete"
+       )
+     )
+   )
+
 defschema
 ~~~~~~~~~
 
@@ -3717,6 +2645,34 @@ expanded at compile-time to nested ``let`` calls for each BINDPAIR; thus
           (y (* x 10)))
      (+ x y))
    > 22
+
+cond;
+~~~~~
+
+::
+
+   (cond (TEST BRANCH) [(TEST2 BRANCH2) [...]] ELSE-BRANCH)
+
+Special form/sugar to produce a series of “if-elseif-else” expressions,
+such that if TEST1 passes, BRANCH1 is evaluated, otherwise followed by
+evaluating TEST2 -> BRANCH2 etc. ELSE-BRANCH is evaluated if all tests
+fail.
+
+``cond`` is syntactically expanded such that
+
+.. code:: lisp
+
+   (cond
+      (a b)
+      (c d)
+      (e f)
+      g)
+
+is expanded to:
+
+.. code:: lisp
+
+   (if a b (if c d (if e f g)))
 
 step
 ~~~~
@@ -3927,7 +2883,8 @@ Atoms are non-reserved barewords starting with a letter or allowed
 symbol, and containing letters, digits and allowed symbols. Allowed
 symbols are ``%#+-_&$@<>=?*!|/``. Atoms must resolve to a variable bound
 by a `defun <#defun>`__, `defpact <#defpact>`__, `binding <#bindings>`__
-form, or to symbols imported into the namespace with `use <#use>`__.
+form, `lambda <#lambda>`__ form, or to symbols imported into the
+namespace with `use <#use>`__.
 
 .. _sexp:
 
@@ -3939,16 +2896,13 @@ determining if the expression is a `special form <#special-forms>`__ or
 a function application, in which case the first atom must refer to a
 definition.
 
-.. _partialapplication:
-
 Partial application
 ^^^^^^^^^^^^^^^^^^^
 
 An application with less than the required arguments is in some contexts
 a valid *partial application* of the function. However, this is only
-supported in Pact’s `functional-style
-functions <#functional-concepts>`__; anywhere else this will result in a
-runtime error.
+supported in Pact’s `functional-style functions <#fp>`__; anywhere else
+this will result in a runtime error.
 
 References
 ~~~~~~~~~~
@@ -3977,10 +2931,7 @@ for legibility.
 Time formats
 ============
 
-Pact leverages the Haskell `thyme
-library <http://hackage.haskell.org/package/thyme>`__ for fast
-computation of time values. The
-`parse-time <pact-functions.html#parse-time>`__ and
+The `parse-time <pact-functions.html#parse-time>`__ and
 `format-time <pact-functions.html#format-time>`__ functions accept
 format codes that derive from GNU ``strftime`` with some extensions, as
 follows:
@@ -4134,168 +3085,3 @@ YYYY-MM-DD hh:mm:ss.000000
 
    pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
    "2016-07-23 13:30:45.001002"
-
-Database Serialization Format
-=============================
-
-IMPORTANT EXPERIMENTAL/BETA WARNING
------------------------------------
-
-This section documents the database serialization format starting with
-Pact 2.4.\* versions. However, this format is still in BETA as we are
-only recently starting to work with concrete RDBMS back-ends and
-deployments that directly export this data.
-
-As a result we make NO COMMITMENT TO BACKWARD-COMPATIBILITY of these
-formats and reserve the right to move to improved formats in future
-versions. API stability in Pact prioritizes client-facing compatibility
-and performance first, with backend export still being an experimental
-feature.
-
-We do expect these formats to stabilize in the future at which time
-backward compatibility will be guaranteed.
-
-Key-Value Format with JSON values
----------------------------------
-
-Pact stores all values to the backing database in a two-column key-value
-structure with all values expressed as JSON. This approach is motivated
-by transparency and portability:
-
-*Transparency*: JSON is a human-readable format which allows visual
-verification of values.
-
-*Portability*: JSON enjoys strong support in nearly every database
-backend at time of writing (2018). The key-value structure allows using
-even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very
-straightforward, with simple primary key structure. Indexing is not
-supported nor required.
-
-.. _integer-1:
-
-Integer
-~~~~~~~
-
-Integers are encoded as an JSON object with a single field “int”
-referring to a Number value for non-large integers, or a string for
-large values.
-
-What is considered a “large integer” in JSON/Javascript is subject to
-debate; we use the range ``[-2^53 .. 2^53]`` as specified
-`here <http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html>`__.
-For large integers, we encode a JSON singleton object with the
-stringified integer value:
-
-.. code:: javascript
-
-   /* small integers are just a number */
-   { "int": 1 }
-   /* large integers are string */
-   { "int": "1231289371891238912983712983712098908937"
-   }
-
-.. _decimal-1:
-
-Decimal
-~~~~~~~
-
-Decimals are directly encoded to JSON scientific format, unless the
-mantissa is greater than a safe JS integer, in which case it is encoded
-as an JSON object with key “decimal” referring to the string
-representation.
-
-.. code:: javascript
-
-   /* decimal with safe mantissa */
-   10.234
-   /* decimal with unsafe mantissa */
-   { "decimal": "34985794739875934875348957394875349835.39587348953495875394534" }
-
-.. _boolean-1:
-
-Boolean
-~~~~~~~
-
-Booleans are stored as JSON booleans.
-
-.. _string-1:
-
-String
-~~~~~~
-
-Strings are stored as JSON strings.
-
-.. _time-1:
-
-Time
-~~~~
-
-Times are stored in a JSON object with key “time” for second-resolution
-values, or “timep” for microsecond-resolution values, as a ISO8601 UTC
-string (modified for high-resolution).
-
-.. code:: javascript
-
-   /* second-resolution time */
-   { "time": "2016-12-23T08:23:13Z"
-   /* microsecond-resolution time */
-   { "timep": "2016-12-23T08:23:13.006032Z" }
-
-Keyset
-~~~~~~
-
-Keysets use the built-in JSON representation.
-
-.. code:: javascript
-
-   { "keys": ["key1","key2"] /* public key string representations */
-   , "pred": "keys-all"      /* predicate function name */
-   }
-
-Module (User) Tables
---------------------
-
-NOTE/WARNING: This does not apply to Chainweb table backends, and may be
-discontinued.
-
-For each module table specified in Pact code, two backend tables are
-created: the “data table” and the “transaction table”.
-
-Column names
-~~~~~~~~~~~~
-
-Names for all key value tables are simply **t_key** and **t_value**.
-
-User Data table
-~~~~~~~~~~~~~~~
-
-The data table supports CRUD-style access to the current table state.
-
--  **Naming**: ``USER_[module]_[table]``.
--  **Key Format**: Keys are text/VARCHARs, and maximum length supported
-   is backend-dependent.
--  **Value format**: JSON object, with user-specified keys and
-   codec-transformed values.
-
-User Transaction Table
-~~~~~~~~~~~~~~~~~~~~~~
-
-The transaction table logs all updates to the table.
-
--  **Naming**: ``TX_[module]_[table]``
--  **Key Format**: Keys are integers, using backend-specific BIGINT
-   values, reflecting the transaction ID being recorded.
--  **Value format**: JSON array of updates in a particular transaction.
-
-The update format is a JSON object:
-
-.. code:: javascript
-
-   { "table": "name"  /* user-visible table name (not backend table name) */
-   , "key": "123"     /* update string key */
-   , "value": { ... } /* The new JSON row value. Entire row is captured. */
-
-Note that the JSON row value uses the same encoding as found in the user
-data table.
-
-.. |image1| image:: img/kadena-logo-210px.png

@@ -56,7 +56,7 @@ import Pact.Types.Util
 -- | Code location, length from parsing.
 data Parsed = Parsed {
   _pDelta :: Delta,
-  _pLength :: Int
+  _pLength :: !Int
   } deriving (Eq,Show,Ord,Generic)
 
 instance Arbitrary Parsed where

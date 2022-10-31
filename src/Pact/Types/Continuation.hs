@@ -22,15 +22,20 @@ module Pact.Types.Continuation
     PactStep(..)
   , PactContinuation(..)
   , PactExec(..)
+  , NestedPactExec(..)
   , Yield(..)
   , Provenance(..)
     -- * Optics
   , peStepCount, peYield, peExecuted, pePactId
   , peStep, peContinuation, peStepHasRollback
-  , psStep, psRollback, psPactId, psResume
+  , npeStepCount, npeYield, npeExecuted, npeStep
+  , npePactId, npeContinuation, npeNested
+  , psStep, psRollback, psPactId, psResume, peNested
   , pcDef, pcArgs
   , yData, yProvenance, ySourceChain
   , pTargetChainId, pModuleHash
+  , toNestedPactExec
+  , fromNestedPactExec
   ) where
 
 import GHC.Generics (Generic)
@@ -39,6 +44,9 @@ import Control.DeepSeq (NFData)
 import Control.Lens hiding ((.=))
 
 import Data.Aeson
+import Data.Map.Strict(Map)
+import Data.Maybe(fromMaybe)
+import qualified Data.Map.Strict as Map
 
 import Test.QuickCheck
 
@@ -151,15 +159,88 @@ data PactExec = PactExec
     -- ^ Strict (in arguments) application of pact, for future step invocations.
   , _peStepHasRollback :: !Bool
     -- ^ Track whether a current step has a rollback
+  , _peNested :: Map PactId NestedPactExec
+    -- ^ Track whether a current step has nested defpact evaluation results
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec
-instance ToJSON PactExec where toJSON = lensyToJSON 3
-instance FromJSON PactExec where parseJSON = lensyParseJSON 3
+instance ToJSON PactExec where
+  toJSON PactExec{..} = object $
+    [ "executed" .= _peExecuted
+    , "pactId" .= _pePactId
+    , "stepHasRollback" .= _peStepHasRollback
+    , "step" .= _peStep
+    , "yield" .= _peYield
+    , "continuation" .= _peContinuation
+    , "stepCount" .= _peStepCount
+    ] ++ [ "nested" .= _peNested | not (Map.null _peNested)]
+
+instance FromJSON PactExec where
+  parseJSON = withObject "PactExec" $ \o ->
+    PactExec
+      <$> o .: "stepCount"
+      <*> o .: "yield"
+      <*> o .: "executed"
+      <*> o .: "step"
+      <*> o .: "pactId"
+      <*> o .: "continuation"
+      <*> o .: "stepHasRollback"
+      <*> (fromMaybe mempty <$> o .:? "nested")
+
 instance Pretty PactExec where pretty = viaShow
+
+data NestedPactExec = NestedPactExec
+  { _npeStepCount :: Int
+    -- ^ Count of steps in pact (discovered when code is executed)
+  , _npeYield :: !(Maybe Yield)
+    -- ^ Yield value if invoked
+  , _npeExecuted :: Maybe Bool
+    -- ^ Only populated for private pacts, indicates if step was executed or skipped.
+  , _npeStep :: Int
+    -- ^ Step that was executed or skipped
+  , _npePactId :: PactId
+    -- ^ Pact id. On a new pact invocation, is copied from tx id.
+  , _npeContinuation :: PactContinuation
+    -- ^ Strict (in arguments) application of pact, for future step invocations.
+  , _npeNested :: Map PactId NestedPactExec
+    -- ^ Track whether a current step has nested defpact evaluation results
+  } deriving (Eq, Show, Generic)
+
+toNestedPactExec :: PactExec -> NestedPactExec
+toNestedPactExec (PactExec stepCount yield exec step pid cont _ nested) =
+  NestedPactExec stepCount yield exec step pid cont nested
+
+fromNestedPactExec :: Bool -> NestedPactExec -> PactExec
+fromNestedPactExec rollback (NestedPactExec stepCount yield exec step pid cont nested) =
+  PactExec stepCount yield exec step pid cont rollback nested
+
+
+instance ToJSON NestedPactExec where
+  toJSON NestedPactExec{..} = object $
+    [ "executed" .= _npeExecuted
+    , "pactId" .= _npePactId
+    , "yield" .= _npeYield
+    , "step" .= _npeStep
+    , "continuation" .= _npeContinuation
+    , "stepCount" .= _npeStepCount
+    , "nested" .= _npeNested
+    ]
+instance FromJSON NestedPactExec where
+  parseJSON = withObject "NestedPactExec" $ \o ->
+    NestedPactExec
+      <$> o .: "stepCount"
+      <*> o .: "yield"
+      <*> o .: "executed"
+      <*> o .: "step"
+      <*> o .: "pactId"
+      <*> o .: "continuation"
+      <*> o .: "nested"
+instance NFData NestedPactExec
+instance Pretty NestedPactExec where pretty = viaShow
 
 
 makeLenses ''PactExec
+makeLenses ''NestedPactExec
 makeLenses ''PactStep
 makeLenses ''PactContinuation
 makeLenses ''Yield

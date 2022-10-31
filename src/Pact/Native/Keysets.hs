@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-
 -- |
 -- Module      :  Pact.Native.Keysets
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -17,16 +16,15 @@ module Pact.Native.Keysets
 where
 
 import Control.Lens
-import Control.Monad
-import Data.Foldable
-import qualified Data.ByteString.Char8 as BS
-import Data.Char
+
 import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Types.KeySet
 import Pact.Types.Purity
 import Pact.Types.Runtime
+import Pact.Types.Namespace
 
 readKeysetDef :: NativeDef
 readKeysetDef =
@@ -70,30 +68,9 @@ keyDefs =
 readKeySet' :: FunApp -> Text -> Eval e KeySet
 readKeySet' i key = do
   ks <- parseMsgKey i "read-keyset" key
-  whenExecutionFlagSet FlagEnforceKeyFormats $ enforceKeyFormats i ks
-  return ks
-
--- | A predicate for public key format validation.
-type KeyFormat = PublicKey -> Bool
-
--- | Current "Kadena" ED-25519 key format: 64-length hex.
-ed25519Hex :: KeyFormat
-ed25519Hex (PublicKey k) = BS.length k == 64 && BS.all isHexDigitLower k
-
--- | Lower-case hex numbers.
-isHexDigitLower :: Char -> Bool
-isHexDigitLower c =
-  -- adapted from GHC.Unicode#isHexDigit
-  isDigit c || (fromIntegral (ord c - ord 'a')::Word) <= 5
-
--- | Supported key formats.
-keyFormats :: [KeyFormat]
-keyFormats = [ed25519Hex]
-
-enforceKeyFormats :: HasInfo i => i -> KeySet -> Eval e ()
-enforceKeyFormats i (KeySet ks _p) = traverse_ go ks
-  where
-    go k = unless (any ($ k) keyFormats) $ evalError' i "Invalid keyset"
+  whenExecutionFlagSet FlagEnforceKeyFormats $
+      enforceKeyFormats (const $ evalError' i "Invalid keyset") ks
+  pure ks
 
 defineKeyset :: GasRNativeFun e
 defineKeyset g0 fi as = case as of
@@ -102,13 +79,41 @@ defineKeyset g0 fi as = case as of
   _ -> argsError fi as
   where
     go name ks = do
-      let ksn = KeySetName name
-          i = _faInfo fi
+      let i = _faInfo fi
+
+      ksn <- ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName name Nothing)
+        (case parseAnyKeysetName name of
+           Left {} ->
+             evalError' fi "incorrect keyset name format"
+           Right ksn -> pure ksn)
+
+
+      mNs <- use $ evalRefs . rsNamespace
       old <- readRow i KeySets ksn
+
       case old of
-        Nothing -> do
-          computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
-            writeRow i Write KeySets ksn ks & success "Keyset defined"
+        Nothing -> case mNs of
+          Nothing -> do
+            unlessExecutionFlagSet FlagDisablePact44 $
+              evalError' fi "Cannot define a keyset outside of a namespace"
+
+            computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
+              writeRow i Write KeySets ksn ks & success "Keyset defined"
+          Just (Namespace nsn ug _ag) -> do
+            ksn' <- ifExecutionFlagSet FlagDisablePact44
+              (pure ksn)
+              (do
+                enforceGuard i ug
+                if Just nsn == _ksnNamespace ksn
+                  -- if namespaces match, leave the keyset name alone
+                  then pure ksn
+                  -- otherwise, assume mismatching keysets
+                  else evalError' fi "Mismatching keyset namespace")
+
+            computeGas' g0 fi (GPreWrite (WriteKeySet ksn' ks)) $
+              writeRow i Write KeySets ksn' ks & success "Keyset defined"
+
         Just oldKs -> do
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
           computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks)) $ do

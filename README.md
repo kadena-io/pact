@@ -9,7 +9,7 @@
 [![Build Status](https://travis-ci.org/kadena-io/pact.svg?branch=master)](https://travis-ci.org/kadena-io/pact)
 
 
-[Pact](http://kadena.io/pact) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
+[Pact](http://kadena.io/build) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
 
 Read the whitepaper:
 
@@ -33,6 +33,7 @@ For additional information, press, and development inquires, please refer to the
   - [Chainweaver](#chainweaver)
   - [In Browser](#in-browser)
   - [Atom](#atom)
+  - [VS Code](#vs-code)
   - [Emacs](#emacs)
   - [Vim](#vim)
 - [The Pact REST Api](#the-pact-rest-api)
@@ -43,18 +44,18 @@ For additional information, press, and development inquires, please refer to the
 
 ## Tutorials
 
-Extensive tutorials on every facet of the Pact language may be found [here](https://pactlang.org). Additionally, users may find example scripts in Kadena's [pact-examples](https://github.com/kadena-io/pact-examples) repository, in the [examples](https://github.com/kadena-io/pact/tree/master/examples) directory, and in production as part of the [Kadena Public Blockchain](https://github.com/kadena-io/chainweb-node/).
+Extensive tutorials on every facet of the Pact language may be found [on docs.kadena.io](https://docs.kadena.io/learn-pact/intro). Additionally, users may find example scripts in Kadena's [pact-examples](https://github.com/kadena-io/pact-examples) repository, in the [examples](https://github.com/kadena-io/pact/tree/master/examples) directory, and in production as part of the [Kadena Public Blockchain](https://github.com/kadena-io/chainweb-node/).
 
 ## Documentation
 
-The Pact language specification, API documentation, features, motivations, and in-depth tutorial content may be found [here](http://pact-language.readthedocs.io). 
+The Pact language specification, API documentation, features, motivations, and in-depth tutorial content may be found [here](http://pact-language.readthedocs.io).
 
 Documentation is always in flux, and corrections to out of date documentation are always appreciated. Feel free to do so if you find such an error by opening an [issue](https://github.com/kadena-io/pact/issues).
 
 
 ## Quickstart
 
-The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.io), or via the Chainweaver [wallet](https://github.com/kadena-io/chainweaver). Both environments support error and warning highlighting, as well as an in-app REPL environment for you to test out your code immediately. 
+The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.io), or via the Chainweaver [wallet](https://github.com/kadena-io/chainweaver). Both environments support error and warning highlighting, as well as an in-app REPL environment for you to test out your code immediately. The Kadena docs also include a [developer quickstart](https://docs.kadena.io/basics/quickstart). 
 
 ## Installing Pact
 
@@ -64,7 +65,7 @@ The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.
 Pact can be installed via binary distribution for Linux or Mac by following the instructions below:
 
 - Install [z3](https://github.com/Z3Prover/z3/wiki).
-- Download the [prebuilt binaries](https://github.com/kadena-io/pact/releases) for either Linux or Mac, depending on your OS. 
+- Download the [prebuilt binaries](https://github.com/kadena-io/pact/releases) for either Linux or Mac, depending on your OS.
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
 
@@ -119,6 +120,17 @@ cabal v2-update
 cabal v2-build
 ```
 
+On some systems the default build might fail with linker errors complaining about cryptonite and ed25519, try:
+
+```bash
+# configure cabal 
+cabal v2-configure -f cryptonite-ed25519
+
+# Build the project.
+cabal v2-build
+```
+
+
 This will install a runnable version of Pact, which you can run via:
 
 ```bash
@@ -129,6 +141,8 @@ Alternatively, `cabal v2-install` will install the binary to `~/.cabal/bin/`, wh
 you may need to add to your path. Then, you can call `pact` as-is.
 
 #### Building with Stack
+
+***(stack is no longer supported)***
 
 Stack is a Haskell build tool that manages compiler and dependency versions for
 you. It's easy to install and use.
@@ -184,23 +198,27 @@ pact> (+ "hello, " "world")
 
 ## Supported Editors
 
-Pact is supported by a variety of editors ranging from full-fledged IDE environments to syntax highlighting. 
+Pact is supported by a variety of editors ranging from full-fledged IDE environments to syntax highlighting.
 
 ### Chainweaver
 
-The Chainweaver [wallet](https://github.com/kadena-io/chainweaver) is the Kadena's wallet, offering a seamless IDE experience and wallet in one. It supports a full in-app REPL, code preview, error/warning highlighting, code deployment, key generation, and integration with existing Kadena blockchains. 
+The Chainweaver [wallet](https://github.com/kadena-io/chainweaver) is the Kadena's wallet, offering a seamless IDE experience and wallet in one. It supports a full in-app REPL, code preview, error/warning highlighting, code deployment, key generation, and integration with existing Kadena blockchains.
 
 ### In-Browser
 
-An implementation of Chainweaver exists [in the browser](http://pact.kadena.io), if you do not wish to download the wallet. 
+An implementation of Chainweaver exists [in the browser](http://pact.kadena.io), if you do not wish to download the wallet.
 
 ### Atom
 
 For a full-fledged IDE experience, install the [Atom](https://atom.io)  editor along with `language-pact` using the [atom package manager](http://flight-manual.atom.io/using-atom/sections/atom-packages/).
 
+### VS Code
+
+The Pact language has community support for VS Code via the [pact-vscode](https://github.com/kadena-community/pact-vscode) package. (https://github.com/kadena-community/pact-vscode)
+
 ### Emacs
 
-Emacs has [`pact-mode`](https://melpa.org/#/pact-mode) support via MELPA, along with [`flycheck-pact`](https://melpa.org/#/flycheck-pact) for on-the-fly error highlighting. Download `pact-mode` and (optionally) `flycheck-pact` by opening Emacs and issuing `M-x package-list-packages`, syncing MELPA, and installing by name. Then, in your `init.el` or `.emacs`, include 
+Emacs has [`pact-mode`](https://melpa.org/#/pact-mode) support via MELPA, along with [`flycheck-pact`](https://melpa.org/#/flycheck-pact) for on-the-fly error highlighting. Download `pact-mode` and (optionally) `flycheck-pact` by opening Emacs and issuing `M-x package-list-packages`, syncing MELPA, and installing by name. Then, in your `init.el` or `.emacs`, include
 
 ```elisp
 (use-package pact-mode
@@ -213,7 +231,7 @@ Emacs has [`pact-mode`](https://melpa.org/#/pact-mode) support via MELPA, along 
 If you've chosen to include `flycheck-pact`, you can start the interactive buffer and trace by calling `flycheck-pact-toggle-trace` and `flycheck-pact-interactive-buffer`.
 ### Vim
 
-If you are a [vim](https://vim.org) user, the [vim-pact](https://github.com/wsdjeg/vim-pact) plugin provides support for the pact syntax. 
+If you are a [vim](https://vim.org) user, the [vim-pact](https://github.com/wsdjeg/vim-pact) plugin provides support for the pact syntax.
 
 ## The Pact REST Api
 
@@ -226,13 +244,13 @@ The REST API is documented at [http://pact-language.readthedocs.io/en/latest/pac
 Pact features a full REST API HTTP server and SQLite database implementation, making
 blockchain application development painless and easy. The Pact server simulates a single-node blockchain environment, with the same API supported by the Kadena ScalableBFT blockchain.
 
-To start the server, issue 
+To start the server, issue
 
 ```bash
 pact --serve CONFIG
-``` 
+```
 
-or 
+or
 
 ```
 pact -s CONFIG

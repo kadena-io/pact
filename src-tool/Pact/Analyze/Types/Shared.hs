@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
@@ -215,7 +216,7 @@ instance IsString ColumnName where
 
 newtype CapName
   = CapName String
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Pretty)
 
 instance IsString CapName where
   fromString = CapName
@@ -429,10 +430,17 @@ instance SDivisible (S Integer) where
 type PredicateS = Symbolic (S Bool)
 
 instance MProvable IO PredicateS where
+#if MIN_VERSION_sbv(8,17,5)
+  universal_   = fmap _sSbv
+  universal _  = fmap _sSbv
+  existential_  = fmap _sSbv
+  existential _ = fmap _sSbv
+#else
   forAll_   = fmap _sSbv
   forAll _  = fmap _sSbv
   forSome_  = fmap _sSbv
   forSome _ = fmap _sSbv
+#endif
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S Str -> S Str -> S Str

@@ -994,6 +994,42 @@ String to integer conversion
 
 Supported in either invariants or properties.
 
+.. _FStringTake:
+
+take
+~~~~
+
+.. code:: lisp
+
+   (take n s)
+
+-  takes ``n``: ``integer``
+-  takes ``s``: ``string``
+-  produces ``string``
+
+take the first ``n`` values from ``xs`` (taken from the end if ``n`` is
+negative)
+
+Supported in either invariants or properties.
+
+.. _FStringDrop:
+
+drop
+~~~~
+
+.. code:: lisp
+
+   (drop n s)
+
+-  takes ``n``: ``integer``
+-  takes ``s``: ``string``
+-  produces ``string``
+
+drop the first ``n`` values from ``xs`` (dropped from the end if ``n``
+is negative)
+
+Supported in either invariants or properties.
+
 .. _Temporal:
 
 Temporal operators

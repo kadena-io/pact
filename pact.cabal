@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.2.0
+version:             4.4
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -17,13 +17,18 @@ copyright:           Copyright (C) 2016 Stuart Popejoy
 category:            Language
 build-type:          Simple
 
+extra-source-files:
+    README.md
+    CHANGELOG.md
+    cbits/musl/libm.h
+    cbits/musl/endian.h
+    cbits/musl/exp_data.h
+    cbits/musl/log_data.h
+    cbits/musl/pow_data.h
+    cbits/musl/sqrt_data.h
+
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
-  default:     False
-  manual:      True
-
-flag ghc-flags
-  description: Generate .ghc.flags files during compilation
   default:     False
   manual:      True
 
@@ -32,12 +37,43 @@ flag build-tool
   default:     True
   manual:      True
 
+flag no-advice
+  description: Disable advice in interpreter
+  default:     False
+  manual:      True
+
+flag with-integer-gmp
+  description: Include integer-gmp package (removed after GHC 9)
+  manual:      False
+
+flag tests-in-lib
+  description: Include test src and deps in lib
+  default:     False
+  manual:      True
+
 library
 
   -- common to all configurations:
   hs-source-dirs: src
   default-language: Haskell2010
   ghc-prof-options: -fprof-auto -fprof-auto-calls
+  if !impl(ghcjs)
+    c-sources:
+      cbits/musl/__math_invalid.c
+      cbits/musl/__math_divzero.c
+      cbits/musl/__math_oflow.c
+      cbits/musl/__math_uflow.c
+      cbits/musl/__math_xflow.c
+      cbits/musl/exp.c
+      cbits/musl/exp_data.c
+      cbits/musl/log.c
+      cbits/musl/log_data.c
+      cbits/musl/pow.c
+      cbits/musl/pow_data.c
+      cbits/musl/sqrt.c
+      cbits/musl/sqrt_data.c
+    exposed-modules:
+      Pact.Native.Trans.TOps
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -47,6 +83,7 @@ library
     Pact.Gas.Table
     Pact.Native
     Pact.Native.Capabilities
+    Pact.Native.Guards
     Pact.Native.Db
     Pact.Native.Internal
     Pact.Native.SPV
@@ -78,13 +115,16 @@ library
     Pact.Types.Gas
     Pact.Types.Hash
     Pact.Types.Info
+    Pact.Types.KeySet
     Pact.Types.Lang
     Pact.Types.Logger
     Pact.Types.Names
+    Pact.Types.Namespace
     Pact.Types.Native
     Pact.Types.PactError
     Pact.Types.PactValue
     Pact.Types.Parser
+    Pact.Types.Principal
     Pact.Types.Advice
     Pact.Types.Persistence
     Pact.Types.Pretty
@@ -102,12 +142,23 @@ library
     Pact.Types.Version
     Pact.Types.Typecheck
     Pact.Typechecker
+  if flag(with-integer-gmp)
+    build-depends:
+        , base >= 4.15.0.0
+  else
+    build-depends:
+      , base >=4.9.0.0 && < 4.15.0.0
+    if !impl(ghcjs)
+      build-depends:
+        , integer-gmp
   build-depends:
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1
     , aeson >= 0.11.3.0 && < 1.6
     , attoparsec >= 0.13.0.2 && < 0.15
-    , base >=4.9.0.0 && < 4.16
+    -- note: this is the real constraint, but due to base changes
+    -- we split for compat.
+    -- , base >=4.9.0.0 && < 4.17
     , base16-bytestring >=0.1.1.6 && < 0.2
     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
         -- base64-bytestring >= 1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
@@ -123,8 +174,8 @@ library
     , exceptions >= 0.8.3 && < 0.11
     , filepath >= 1.4.1.0 && < 1.5
     , hashable >= 1.2.4.0 && < 1.3.3.0
-    , lens >= 4.14 && < 5.1
-    , lens-aeson >= 1.0.0.5 && < 1.2
+    , lens >= 4.14 && < 5.2
+    , lens-aeson >= 1.0.0.5 && < 1.3
     , megaparsec >= 9
     , mtl >= 2.2.1 && < 2.3
     , pact-time >= 0.2
@@ -137,18 +188,14 @@ library
     , safe-exceptions 
     , semigroupoids >= 5.0
     , servant
-    , text >= 1.2.2.1 && < 1.3
-    , transformers >= 0.5.2.0 && < 0.6
+    , text >= 1.2.2.1 && < 2
+    , transformers >= 0.5.2.0 && < 0.7
     , trifecta >= 2.1
-    , unordered-containers >= 0.2.7.2 && <= 0.2.15.0
+    , unordered-containers >= 0.2.7.2 && <= 0.2.16
     , utf8-string >= 1.0.1.1 && < 1.1
     , vector >= 0.11.0.0 && < 0.13
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
-  if flag(ghc-flags)
-    build-tool-depends: hsinspect:hsinspect
-    ghc-options: -fplugin GhcFlags.Plugin
-    build-depends: ghcflags
 
   -- GHCJS
   if impl(ghcjs)
@@ -158,12 +205,13 @@ library
       , ghcjs-base
       , ghcjs-dom
       , ghcjs-prim
-      , optparse-applicative >= 0.12.1.0 && < 0.16
+      , optparse-applicative >= 0.12.1.0 && < 0.18
 
   -- Normal GHC
   else
     hs-source-dirs: src-ghc
     ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+    cc-options: -w
     exposed-modules:
       Pact.ApiReq
       Pact.Coverage
@@ -181,13 +229,12 @@ library
     build-depends:
       , criterion >= 1.1.4 && < 1.6
       , cryptonite
-      , direct-sqlite == 2.3.26
-      , http-client
+      , direct-sqlite == 2.3.27
       , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2
       , servant-client
       , servant-client-core
-      , statistics >= 0.13.3 && < 0.16
+      , statistics >= 0.13.3 && < 0.17
       , yaml
     if flag(build-tool)
       hs-source-dirs: src-tool
@@ -237,22 +284,21 @@ library
         Pact.Server.History.Service
         Pact.Server.History.Types
         Pact.Server.Server
-        Pact.Server.Test
         Pact.GasModel.GasModel
         Pact.GasModel.Types
         Pact.GasModel.Utils
         Pact.GasModel.GasTests
       build-depends:
-        , algebraic-graphs >= 0.2 && < 0.6
+        , algebraic-graphs >= 0.2 && < 0.7
         , async
         , cassava >= 0.5
         , constraints
         , fast-logger
         , haskeline >= 0.7.3 && < 0.9
-        , mmorph >= 1.1 && < 1.2
+        , mmorph >= 1.1 && < 1.3
         , neat-interpolation >= 0.4
-        , optparse-applicative >= 0.12.1.0 && < 0.16
-        , sbv >= 8.8
+        , optparse-applicative >= 0.12.1.0 && < 0.18
+        , sbv >= 9.0
         , servant-server
         , wai-cors
         , warp
@@ -264,6 +310,16 @@ library
         , ed25519-donna
     if !os(windows)
       build-depends: unix
+    if !flag(no-advice)
+      cpp-options: -DADVICE
+    if flag(tests-in-lib)
+      hs-source-dirs: tests
+      build-depends:
+        , hedgehog >= 1.0.1 && < 1.2
+        , hspec
+        , hspec-golden >= 0.1.0.2
+        , hw-hspec-hedgehog == 0.1.*
+        , intervals
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)
@@ -311,12 +367,14 @@ test-suite hspec
 
   build-depends:
     , aeson
+    , attoparsec
     , base
     , bound
     , bytestring
     , containers
     , data-default
     , hspec
+    , hspec-core
     , pact
     , unordered-containers
 
@@ -324,6 +382,7 @@ test-suite hspec
     Blake2Spec
     KeysetSpec
     RoundTripSpec
+    PrincipalSpec
 
   if !impl(ghcjs)
     other-modules:
@@ -361,20 +420,24 @@ test-suite hspec
         PersistSpec
         RemoteVerifySpec
         TypecheckSpec
+        SizeOfSpec
+        PactCLISpec
+        Utils
 
       build-depends:
         , Decimal
         , QuickCheck
         , deepseq
+        , directory
         , exceptions
-        , hedgehog >= 1.0.1 && < 1.1
+        , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2
         , http-client
         , hw-hspec-hedgehog == 0.1.*
         , intervals
         , mmorph
         , neat-interpolation
-        , prettyprinter
         , sbv
         , servant-client
+        , temporary >= 1.3
         , yaml

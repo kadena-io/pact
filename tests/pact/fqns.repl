@@ -1,0 +1,79 @@
+(env-data {"keyset": { "keys": ["bob"], "pred": "keys-any" }})
+(env-keys ["bob"])
+(begin-tx)
+(define-namespace 'free (read-keyset 'keyset) (read-keyset 'keyset))
+(commit-tx)
+(begin-tx)
+(env-exec-config ['DisablePact43])
+(namespace 'free)
+(module modA G
+  (defcap G () true)
+  (defun func (x) (+ 1 x))
+  (defconst test:string "hi")
+  )
+(module modB G
+  (defcap G () true)
+  (defun chain () (modA.func 10))
+  (defconst test:string "hello")
+  (defun get-test() test)
+  )
+
+(expect "ns-scoped module call works fully qualified" (free.modB.chain) 11)
+
+(namespace 'free)
+
+(expect "ns-scoped module call works within namespace scope" (modB.chain) 11)
+
+(expect "selects incorrect test" (modB.get-test) "hi")
+(commit-tx)
+
+(begin-tx)
+(env-exec-config [])
+(namespace 'free)
+(module modA G
+  (defcap G () true)
+  (defun func (x) (+ 1 x))
+  (defconst test:string "hi")
+  )
+(module modB G
+  (defcap G () true)
+  (defun chain () (modA.func 10))
+  (defconst test:string "hello")
+  (defun get-test() test)
+  )
+
+(expect "ns-scoped module call works fully qualified" (free.modB.chain) 11)
+
+(namespace 'free)
+
+(expect "ns-scoped module call works within namespace scope" (modB.chain) 11)
+
+(expect "selects correct test" (modB.get-test) "hello")
+(commit-tx)
+
+; works across different txs
+(begin-tx)
+(namespace 'free)
+(module modA G
+  (defcap G () true)
+  (defun func (x) (+ 1 x))
+  (defconst test:string "hi")
+  )
+(commit-tx)
+(begin-tx)
+(namespace 'free)
+(module modB G
+  (defcap G () true)
+  (defun chain () (modA.func 10))
+  (defconst test:string "hello")
+  (defun get-test() test)
+  )
+
+(expect "ns-scoped module call works fully qualified" (free.modB.chain) 11)
+
+(namespace 'free)
+
+(expect "ns-scoped module call works within namespace scope" (modB.chain) 11)
+
+(expect "selects correct test" (modB.get-test) "hello")
+(commit-tx)
