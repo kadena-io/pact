@@ -51,9 +51,9 @@ jobs:
     # Non Haskell dependencies
     - name: Install z3 (ubuntu-22.04)
       if: contains(matrix.os, 'ubuntu-22.04')
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y z3
+      uses: pavpanchekha/setup-z3@v0.3.0
+      with:
+        version: "4.11.2"
     - name: Install z3 (ubuntu-20.04)
       if: contains(matrix.os, 'ubuntu-20.04')
       run: |
@@ -61,7 +61,7 @@ jobs:
         sudo apt-get install -y z3
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
-      uses: pavpanchekha/setup-z3@0.2.0
+      uses: pavpanchekha/setup-z3@v0.3.0
       with:
         version: "4.8.10"
         architecture: "x64"
