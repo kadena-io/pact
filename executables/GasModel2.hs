@@ -580,7 +580,7 @@ gen_define_namespace _ = mzero
 gen_drop :: PactGen
 gen_drop t = do
   i <- lift genInt
-  x <- genExpr t
+  x <- genList t
   pure $ EParens [ESym "drop", i, x]
 
 gen_enforce :: PactGen
