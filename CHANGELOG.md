@@ -1,3 +1,25 @@
+4.4
+---
+* Document VSCode support - thanks JeremeyJS! (#965)
+* Documentation fixes - thanks JCM00N and Luzzotica! (#1003, #1021)
+* Gas-related bug fixes and adjustments to `format` and `try` (#1020, #1019)
+* Defined keysets are now required to be namespaced (#1011)
+* Consolidated Pact 4.4 execution config flag (removes need for `DisablePreserveNamespaceUpgrade` flag, #1026)
+
+4.3
+---
+* Interpreter improvements (#970)
+* New `create-principal` and `validate-principal` natives (#969)
+* Fixes to name resolution (#987)
+* New nested defpacts + `continue` native (#980)
+
+4.2.1
+---
+* Backport chainweb gasmodel (#978)
+* Memory improvements (#964)
+* Force eof in parseExprs (#963)
+* Fix `pact add-sig` (#981)
+
 4.2.0
 ---
 * Language features:

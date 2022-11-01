@@ -19,18 +19,21 @@
 --
 
 module Pact.Types.Runtime
- ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
+ ( evalError,evalError',
+   failTx,failTx',
+   argsError,argsError',
+   throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,
-   eePactDb,eePurity,eeHash,eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
+   eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice,
    toPactId,
    Purity(..),
-   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
-   evalGas,evalCapabilities,evalLogGas,evalEvents,
+   evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -62,6 +65,7 @@ import Control.Monad.State.Strict
 import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
+import Data.IORef(IORef)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -82,21 +86,8 @@ import Pact.Types.Persistence
 import Pact.Types.Pretty
 import Pact.Types.SPV
 import Pact.Types.Util
+import Pact.Types.Namespace
 
-
--- | Governance of namespace use. Policy dictates:
--- 1. Whether a namespace can be created.
--- 2. Whether the default namespace can be used.
-data NamespacePolicy =
-  SimpleNamespacePolicy (Maybe (Namespace (Term Name)) -> Bool)
-  -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
-  |
-  SmartNamespacePolicy Bool QualifiedName
-  -- ^ Bool governs root usage, Name governs ns creation.
-  -- Def is (defun xxx:bool (ns:string ns-admin:guard))
-
-permissiveNamespacePolicy :: NamespacePolicy
-permissiveNamespacePolicy = SimpleNamespacePolicy $ const True
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -109,7 +100,7 @@ keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [
 
 -- | Storage for natives.
 data RefStore = RefStore {
-      _rsNatives :: HM.HashMap Name Ref
+      _rsNatives :: HM.HashMap Text Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty
@@ -153,10 +144,18 @@ data ExecutionFlag
   | FlagDisablePact40
   -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
   | FlagEnforceKeyFormats
-  -- | Enable Pact 4.2.0 db sorted key guarantees, and row persistence
+  -- | Disable Pact 4.2.0 db sorted key guarantees, and row persistence
   | FlagDisablePact420
-  -- | Enable memory limit check
+  -- | Disable memory limit check
   | FlagDisableInlineMemCheck
+  -- | Disable new non-inlined modules
+  | FlagDisablePact43
+  -- | Disable pact 4.3 features
+  | FlagDisablePact431
+  -- | Disable Pact 4.4 features
+  | FlagDisablePact44
+  -- | Disable new transcendental impls
+  | FlagDisableNewTrans
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -212,6 +211,8 @@ data EvalEnv e = EvalEnv {
     , _eeHash :: Hash
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
+      -- | Tallied gas
+    , _eeGas :: IORef Gas
       -- | Namespace Policy
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
@@ -222,6 +223,8 @@ data EvalEnv e = EvalEnv {
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
+      -- | Are we in the repl? If so, ignore info
+    , _eeInRepl :: Bool
     }
 makeLenses ''EvalEnv
 
@@ -232,15 +235,18 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Name Ref
+      _rsLoaded :: HM.HashMap Text (Ref, Maybe (ModuleHash))
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
     , _rsNamespace :: Maybe (Namespace (Term Name))
+      -- | Map of all fully qualified names in scope, including transitive dependencies.
+    , _rsQualifiedDeps :: HM.HashMap FullyQualifiedName Ref
     } deriving (Eq,Show,Generic)
+
 makeLenses ''RefState
 instance NFData RefState
-instance Default RefState where def = RefState HM.empty HM.empty Nothing
+instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty
 
 data PactEvent = PactEvent
   { _eventName :: !Text
@@ -262,8 +268,6 @@ data EvalState = EvalState {
     , _evalCallStack :: ![StackFrame]
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
-      -- | Gas tally
-    , _evalGas :: Gas
       -- | Capability list
     , _evalCapabilities :: Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
@@ -273,7 +277,7 @@ data EvalState = EvalState {
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def 0 def def def
+instance Default EvalState where def = EvalState def def def def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
@@ -411,6 +415,9 @@ evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
 failTx i = throwErr TxFailure i
+
+failTx' :: HasInfo i => i -> Doc -> Eval e a
+failTx' = failTx . getInfo
 
 throwDbError :: MonadThrow m => Doc -> m a
 throwDbError = throwM . PactError DbError def def

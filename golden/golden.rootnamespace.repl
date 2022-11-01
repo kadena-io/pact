@@ -1,0 +1,20 @@
+(env-exec-config ['DisablePact44])
+(begin-tx)
+(module test-mgd-ns GOV
+  (defcap GOV () true)
+  (defun manage (ns guard) true))
+(module nsupgrade G
+    (defcap G () true)
+    (defun foo () 1))
+(commit-tx)
+
+(use test-mgd-ns)
+(env-namespace-policy false (manage))
+
+(begin-tx)
+; should upgrade post-fork
+(env-exec-config [])
+(module nsupgrade G
+  (defcap G () true)
+  (defun foo () 3))
+(commit-tx)

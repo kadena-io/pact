@@ -29,6 +29,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Runtime
+import Pact.Types.Namespace
 
 type Persist s a = s -> IO (s,a)
 

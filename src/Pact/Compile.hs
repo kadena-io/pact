@@ -150,11 +150,11 @@ reservedAtom = bareAtom >>= \AtomExp{..} -> case HM.lookup _atomAtom reserveds o
   Nothing -> expected "reserved word"
   Just r -> commit >> return r
 
-compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
-compile mi e = let ei = mi <$> e in runCompile topLevel (initParseState ei) ei
+compile :: ParseEnv -> MkInfo -> Exp Parsed -> Either PactError (Term Name)
+compile pe mi e = let ei = mi <$> e in runCompile pe topLevel (initParseState ei) ei
 
-compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
-compileExps mi exps = sequence $ compile mi <$> exps
+compileExps :: Traversable t => ParseEnv -> MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
+compileExps pe mi exps = sequence $ compile pe mi <$> exps
 
 moduleState :: Compile ModuleState
 moduleState = use (psUser . csModule) >>= \m -> case m of
@@ -264,8 +264,9 @@ literals :: Compile (Term Name)
 literals =
   literal
   <|> listLiteral
-  <|> objectLiteral
-
+  <|> tryMay objectLiteral
+  where
+    tryMay a = narrowTry a (try a)
 
 -- | Bare atoms (excluding reserved words).
 userAtom :: Compile (AtomExp Info)
@@ -476,8 +477,7 @@ defpact = do
 moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
-  gov <- Governance <$>
-    (((Left . KeySetName) <$> str) <|> (Right <$> userVar))
+  gov <- Governance <$> ((Left <$> keysetNameStr) <|> (Right <$> userVar))
   m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
@@ -728,7 +728,7 @@ _compileWith :: Compile a -> (ParseState CompileState -> ParseState CompileState
             TF.Result ([Exp Parsed],MkInfo) -> IO (Either PactError [a])
 _compileWith parser sfun r = handleParseError r >>= \(a,mk) -> return $ forM a $ \e ->
   let ei = mk <$> e
-  in runCompile parser (sfun (initParseState ei)) ei
+  in runCompile def parser (sfun (initParseState ei)) ei
 
 _compile :: (ParseState CompileState -> ParseState CompileState) ->
             TF.Result ([Exp Parsed],MkInfo) -> IO (Either PactError [Term Name])
@@ -766,7 +766,7 @@ _compileFile f = do
     p <- _parseF f
     rs <- case p of
             (TF.Failure e) -> putDoc (TF._errDoc e) >> error "Parse failed"
-            (TF.Success (es,s)) -> return $ map (compile s) es
+            (TF.Success (es,s)) -> return $ map (compile def s) es
     case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts
@@ -776,7 +776,7 @@ _atto fp = do
   f <- decodeUtf8 <$> BS.readFile fp
   rs <- case parseExprs f of
     Left s -> throwIO $ userError s
-    Right es -> return $ map (compile (mkStringInfo (unpack f))) es
+    Right es -> return $ map (compile def (mkStringInfo (unpack f))) es
   case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts

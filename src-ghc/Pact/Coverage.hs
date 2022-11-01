@@ -14,6 +14,7 @@
 module Pact.Coverage
   ( mkCoverageAdvice
   , writeCovReport
+  , writeCovReportInDir
   , writeCovReport'
   ) where
 
@@ -83,7 +84,7 @@ cover ref i ctx f = case _iInfo i of
         dn = renderCompactText $ derefDef fdef
 
     postModule :: MonadIO m => ModuleData Ref -> m ()
-    postModule (ModuleData (MDModule _m) modDefs) = do
+    postModule (ModuleData (MDModule _m) modDefs _) = do
       ((modFuns,modLines),_) <- liftIO $ runTC 0 False $
         foldM walkDefs (mempty,mempty) (HM.elems modDefs)
       let (fn,_l) = parseInf i
@@ -124,6 +125,9 @@ parseInf inf = case getInfo inf of
 
 writeCovReport :: IORef LcovReport -> IO ()
 writeCovReport = writeCovReport' True "coverage/lcov.info"
+
+writeCovReportInDir :: FilePath -> IORef LcovReport -> IO ()
+writeCovReportInDir dir = writeCovReport' True (dir </> "coverage/lcov.info")
 
 writeCovReport' :: Bool -> FilePath -> IORef LcovReport -> IO ()
 writeCovReport' mkParentDir reportFile ref = do

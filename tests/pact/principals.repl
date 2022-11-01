@@ -1,0 +1,597 @@
+(begin-tx)
+
+;; k: account validation
+
+(env-data
+  { 'ks1: ["584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"],
+    'ks2:
+      [ "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+      , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+      ]
+  , 'ks3: ["keys3"]
+  })
+
+(env-keys
+  [ "584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+  , "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+  , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+  , "keys3"
+  ])
+
+(expect
+ "creating principals using keysets creates k: accounts"
+ "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+ (create-principal (read-keyset 'ks1)))
+
+(expect
+ "validating principals using created principal keysets passes validation"
+ true
+ (validate-principal
+  (read-keyset 'ks1)
+  "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+  ))
+
+(expect
+ "validating principal keysets roundtrips for all created principals"
+ true
+ (validate-principal
+  (read-keyset 'ks1)
+  (create-principal (read-keyset 'ks1))
+  ))
+
+(expect
+  "is-principal returns true for k: accounts"
+  true
+  (is-principal (create-principal (read-keyset 'ks1))))
+
+(expect
+  "is-principal should be false for improper k: accounts"
+  false
+  (is-principal "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c687"))
+
+(expect
+  "typeof-principal should return k: for k accounts"
+  "k:"
+  (typeof-principal (create-principal (read-keyset 'ks1))))
+
+(expect
+  "typeof-principal should fail for k: accounts: improper keylength - too big"
+  ""
+  (typeof-principal "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c687"))
+
+(expect
+  "typeof-principal should fail for k: accounts: improper keylength - too small"
+  ""
+  (typeof-principal "k:584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c6"))
+
+;; w: account validation
+
+(expect
+ "creating principal keysets with more than 1 key creates w: accounts"
+ "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_ew:keys-all"
+ (create-principal (read-keyset 'ks2)))
+
+(expect
+ "validation for w: account creation validates passes"
+ true
+ (validate-principal
+   (read-keyset 'ks2)
+   "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_ew:keys-all"
+   ))
+
+(expect
+ "validation for w: account creation roundtrips with create-principal"
+ true
+ (validate-principal
+   (read-keyset 'ks2)
+   (create-principal (read-keyset 'ks2))
+   ))
+
+(expect
+  "is-principal returns true for w: accounts"
+  true
+  (is-principal (create-principal (read-keyset 'ks2))))
+
+(expect
+  "is-principal should be false for improper w: accounts"
+  false
+  (is-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_:keys-all"))
+
+(expect
+  "typeof-principal should return 'w:' for w: accounts"
+  "w:"
+  (typeof-principal (create-principal (read-keyset 'ks2))))
+
+(expect
+  "typeof-principal should fail for w accounts: improper hash length - too big"
+  ""
+  (typeof-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_ewe:keys-all"))
+
+(expect
+  "typeof-principal should fail for w accounts: improper hash length - too small"
+  ""
+  (typeof-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_:keys-all"))
+
+(expect
+  "typeof-principal should fail for w accounts: empty predicate"
+  ""
+  (typeof-principal "w:5PhRgNM3oePrkfAKhk9dYmjRqOhEEhbR2eyFz8HU_:"))
+
+
+;; r: reference validation
+
+(env-data
+  { "ks3" : ['k]
+  , "ns.ks3" : ['k]
+  })
+(env-keys ['k])
+
+(define-namespace 'ns (read-keyset 'ks3) (read-keyset 'ks3))
+(namespace 'ns)
+(define-keyset "ns.ks3")
+
+(expect
+ "creating principals using keyset references creates r: guards"
+ "r:ns.ks3"
+ (create-principal (keyset-ref-guard "ns.ks3")))
+
+(expect
+ "validating principals using created principal keyset refs passes"
+ true
+ (validate-principal
+  (keyset-ref-guard "ns.ks3")
+  "r:ns.ks3"
+  ))
+
+(expect
+ "validating principal keyset refs roundtrips for all created principals"
+ true
+ (validate-principal
+  (keyset-ref-guard "ns.ks3")
+  (create-principal (keyset-ref-guard "ns.ks3"))
+  ))
+
+(expect
+  "is-principal returns true for r: guards"
+  true
+  (is-principal (create-principal (keyset-ref-guard "ns.ks3")))
+  )
+
+(expect
+  "is-principal should be false for improper r: guards"
+  false
+  (is-principal "r:"))
+
+(expect
+  "typeof-principal should return r: for r guards"
+  "r:"
+  (typeof-principal (create-principal (keyset-ref-guard "ns.ks3"))))
+
+(expect
+  "typeof-principal should fail for r: guards: improper keylength - empty"
+  ""
+  (typeof-principal "r:"))
+
+(commit-tx)
+(begin-tx)
+
+(env-data
+  { 'ks1: ["584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"],
+    'ks2:
+      [ "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+      , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+      ]
+  , 'ks3: ["keys3"]
+  })
+
+(env-keys
+  [ "584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+  , "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+  , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+  , "keys3"
+  ])
+
+(define-namespace 'test-ns (read-keyset 'ks1) (read-keyset 'ks1))
+(namespace 'test-ns)
+
+(module tester G
+  (defcap G ()
+    true)
+
+  (defschema test-schema
+    "test schema"
+    guard:string)
+
+  (deftable test-table:{test-schema})
+
+  (defun f:string ()
+    (insert test-table "admin"
+      { "guard":
+          (create-principal (create-module-guard 'tester))
+      }))
+
+  (defun g ()
+    (at 'guard (read test-table "admin")))
+
+  (defun both-guard (ks1 ks2)
+    (enforce-keyset ks1)
+    (enforce-keyset ks2))
+
+  (defun h ()
+    (insert test-table "user"
+      { "guard":
+          (create-principal
+            (create-user-guard
+             (both-guard
+               (read-keyset 'ks1)
+               (read-keyset 'ks2)
+              )))
+      }))
+
+  (defun j ()
+    (at 'guard (read test-table "user")))
+
+  (defun k ()
+    (validate-principal
+     (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2)))
+     (create-principal
+      (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2))))
+     ))
+
+  (defpact pact-test ()
+    (step
+      (let*
+        ((guard
+           (create-principal
+           (create-pact-guard "pact-guard"))))
+
+        (update test-table "user"
+          { "guard": guard
+          })
+
+        guard
+        ))
+
+    (step
+       (validate-principal
+         (create-pact-guard "pact-guard")
+         (at 'guard (read test-table "user"))
+       )))
+)
+
+(module tester2 G
+  (defcap G ()
+    true)
+
+  (defun f:string ()
+    (create-principal (create-module-guard 'tester)))
+
+  (defun g:bool ()
+    (validate-principal
+     (create-module-guard 'tester)
+     (create-principal (create-module-guard 'tester))))
+)
+
+(create-table tester.test-table)
+(tester.f)
+(tester.h)
+
+(commit-tx)
+(begin-tx)
+
+;; m: guard validation
+
+(expect
+ "creating principals for autonomous module guards creates m: guards with same name"
+ "m:test-ns.tester:tester"
+ (test-ns.tester.g))
+
+(expect
+ "creating principal module guards for other modules creates m: guards that show provenance"
+ "m:test-ns.tester2:tester"
+ (test-ns.tester2.f))
+
+(expect
+ "validating principal module guards roundtrips with create-principal"
+ true
+ (test-ns.tester2.g))
+
+(expect
+  "is-principal returns true for m: guards"
+  true
+  (is-principal (test-ns.tester.g)))
+
+(expect
+  "is-principal should be false for improper m: guards - empty module name"
+  false
+  (is-principal "m::tester"))
+
+(expect
+  "is-principal should be false for improper m: guards - empty func name"
+  false
+  (is-principal "m:test-ns.tester:"))
+
+(expect
+  "typeof-principal should return m: for m guards"
+  "m:"
+  (typeof-principal (test-ns.tester.g)))
+
+(expect
+  "typeof-principal should fail for m: accounts: empty module name"
+  ""
+  (typeof-principal "m::tester"))
+
+(expect
+  "typeof-principal should fail for m: accounts: empty func name"
+  ""
+  (typeof-principal "m:test-ns.tester:"))
+
+
+;; u: guard validation
+
+(expect
+ "creating principal user guards creates u: guards with correct format"
+ "u:test-ns.tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDI"
+ (test-ns.tester.j))
+
+
+(expect
+ "validating principal user guards roundtrips with create-principal"
+ true
+ (test-ns.tester.k))
+
+(expect
+  "is-principal returns true for u: guards"
+  true
+  (is-principal (test-ns.tester.j)))
+
+(expect
+  "is-principal should be false for improper u: guards - empty fqn"
+  false
+  (is-principal "u::tester"))
+
+(expect
+  "is-principal should be false for improper u: guards - empty hash"
+  false
+  (is-principal "u:test-ns.tester.both-guard:"))
+
+(expect
+  "typeof-principal should return u: for u guards"
+  "u:"
+  (typeof-principal (test-ns.tester.j)))
+
+(expect
+  "typeof-principal should fail for u: accounts: empty fqn"
+  ""
+  (typeof-principal "u::aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDI"))
+
+(expect
+  "typeof-principal should fail for u: accounts: empty hash"
+  ""
+  (typeof-principal "u:test-ns.tester.both-guard:"))
+
+(expect
+  "typeof-principal should fail for u: accounts: hash too big"
+  ""
+  (typeof-principal "u:test-ns.tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDIs"))
+
+(expect
+  "typeof-principal should fail for u: accounts: hash too small"
+  ""
+  (typeof-principal "u:test-ns.tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQD"))
+
+;; p: guard validation
+
+(expect
+ "creating principal pact guards creates p: guards with correct format"
+ "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:pact-guard"
+ (test-ns.tester.pact-test))
+
+(expect
+ "validating principal pact guards roundtrips with create-principal"
+ true
+ (continue-pact 1))
+
+;; clear env
+(pact-state true)
+
+(expect
+  "is-principal returns true for p: guards"
+  true
+  (is-principal (test-ns.tester.pact-test)))
+
+(expect
+  "is-principal should be false for improper p: guards - empty hash"
+  false
+  (is-principal "p::pact-guard"))
+
+(expect
+  "is-principal should be false for improper p: guards - empty name"
+  false
+  (is-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:"))
+
+;; clear env
+(pact-state true)
+
+(expect
+  "typeof-principal should return p: for pact guards"
+  "p:"
+  (typeof-principal (test-ns.tester.pact-test)))
+
+(expect
+  "typeof-principal should fail for p: accounts: empty fqn"
+  ""
+  (typeof-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:"))
+
+(expect
+  "typeof-principal should fail for p: accounts: empty hash"
+  ""
+  (typeof-principal "p::pact-guard"))
+
+(expect
+  "typeof-principal should fail for p: accounts: hash too big"
+  ""
+  (typeof-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46gg:pact-guard"))
+
+(expect
+  "typeof-principal should fail for p: accounts: hash too small"
+  ""
+  (typeof-principal "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46:pact-guard"))
+
+(commit-tx)
+(begin-tx)
+
+(env-data
+  { 'ks1: ["584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"],
+    'ks2:
+      [ "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+      , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+      ]
+  , 'ks3: ["keys3"]
+  })
+
+(env-keys
+  [ "584deb6f81d8efe67767309d1732019cf6ad14f9f0007cff50c730ef62521c68"
+  , "4440249a122879f2060814e1c4348cdfe0cbf971017ab1f43a0eaf9799583271"
+  , "2f625f20a1a6fffb60455bf957779a82e3d811d350f2b9bc8d3d5549bfd4a953"
+  , "keys3"
+  ])
+
+(module tester G
+  (defcap G ()
+    true)
+
+  (defschema test-schema
+    "test schema"
+    guard:string)
+
+  (deftable test-table:{test-schema})
+
+  (defun f:string ()
+    (insert test-table "admin"
+      { "guard":
+          (create-principal (create-module-guard 'tester))
+      }))
+
+  (defun g ()
+    (at 'guard (read test-table "admin")))
+
+  (defun both-guard (ks1 ks2)
+    (enforce-keyset ks1)
+    (enforce-keyset ks2))
+
+  (defun h ()
+    (insert test-table "user"
+      { "guard":
+          (create-principal
+            (create-user-guard
+             (both-guard
+               (read-keyset 'ks1)
+               (read-keyset 'ks2)
+              )))
+      }))
+
+  (defun j ()
+    (at 'guard (read test-table "user")))
+
+  (defun k ()
+    (validate-principal
+     (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2)))
+     (create-principal
+      (create-user-guard
+      (both-guard
+        (read-keyset 'ks1)
+        (read-keyset 'ks2))))
+     ))
+
+  (defpact pact-test ()
+    (step
+      (let*
+        ((guard
+           (create-principal
+           (create-pact-guard "pact-guard"))))
+
+        (update test-table "user"
+          { "guard": guard
+          })
+
+        guard
+        ))
+
+    (step
+       (validate-principal
+         (create-pact-guard "pact-guard")
+         (at 'guard (read test-table "user"))
+       )))
+)
+
+(module tester2 G
+  (defcap G ()
+    true)
+
+  (defun f:string ()
+    (create-principal (create-module-guard 'tester)))
+
+  (defun g:bool ()
+    (validate-principal
+     (create-module-guard 'tester)
+     (create-principal (create-module-guard 'tester))))
+)
+
+(create-table tester.test-table)
+(tester.f)
+(tester.h)
+
+(commit-tx)
+(begin-tx)
+
+;; m: guard validation
+
+(expect
+ "creating principals for autonomous module guards creates m: guards with same name"
+ "m:tester:tester"
+ (tester.g))
+
+(expect
+ "creating principal module guards for other modules creates m: guards that show provenance"
+ "m:tester2:tester"
+ (tester2.f))
+
+(expect
+ "validating principal module guards roundtrips with create-principal"
+ true
+ (tester2.g))
+
+;; u: guard validation
+
+(expect
+ "creating principal user guards creates u: guards with correct format"
+ "u:tester.both-guard:aqukm-5Jj6ITLeQfhNYydmtDccinqdJylD9CMlLKQDI"
+ (tester.j))
+
+
+(expect
+ "validating principal user guards roundtrips with create-principal"
+ true
+ (tester.k))
+
+;; p: guard validation
+
+(expect
+ "creating principal pact guards creates p: guards with correct format"
+ "p:DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g:pact-guard"
+ (tester.pact-test))
+
+(expect
+ "validating principal pact guards roundtrips with create-principal"
+ true
+ (continue-pact 1))

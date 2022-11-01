@@ -49,7 +49,7 @@ testJSONColumns = do
   uguard = GUser $ UserGuard (Name (BareName "a" def)) [PLiteral (LInteger 123)]
   pguard = GPact $ PactGuard (PactId "123") "456"
   ksguard = GKeySet $ mkKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"
-  ksrguard = GKeySetRef $ KeySetName "beepboop"
+  ksrguard = GKeySetRef $ KeySetName "beepboop" Nothing
   mguard = GModule $ ModuleGuard (ModuleName "beep" Nothing) "boop"
   obj = ObjectMap $ fromList
     [("A", PLiteral (LInteger 123))

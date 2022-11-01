@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -18,6 +18,7 @@ module Pact.Native.Capabilities
   , evalCap
   ) where
 
+
 import Control.Lens
 import Control.Monad
 import Data.Default
@@ -27,12 +28,10 @@ import qualified Data.Set as S
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Runtime.Capabilities
-import Pact.Runtime.Utils
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-
 
 capDefs :: NativeModule
 capDefs =
@@ -43,10 +42,6 @@ capDefs =
    , requireCapability
    , composeCapability
    , emitEventDef
-   , createUserGuard
-   , createPactGuard
-   , createModuleGuard
-   , keysetRefGuard
    ])
 
 tvA :: Type n
@@ -188,7 +183,9 @@ requireCapability =
     requireCapability' i [TApp a@App{} _] = gasUnreduced i [] $ do
       (cap,_,_) <- appToCap a
       granted <- capabilityAcquired cap
-      unless granted $ evalError' i $ "require-capability: not granted: " <> pretty cap
+      unless granted $ ifExecutionFlagSet FlagDisablePact44
+        (evalError' i ("require-capability: not granted: " <> pretty cap))
+        (failTx (_faInfo i) ("require-capability: not granted: " <> pretty cap))
       return $ toTerm True
     requireCapability' i as = argsError' i as
 
@@ -232,76 +229,6 @@ defcapInStack limit = use evalCallStack >>= return . go limit
     funapps = traverse . sfApp . _Just . _1
 
 
-
-
-createPactGuard :: NativeDef
-createPactGuard =
-  defRNative "create-pact-guard" createPactGuard'
-  (funType (tTyGuard (Just GTyPact)) [("name",tTyString)])
-  []
-  "Defines a guard predicate by NAME that captures the results of 'pact-id'. \
-  \At enforcement time, the success condition is that at that time 'pact-id' must \
-  \return the same value. In effect this ensures that the guard will only succeed \
-  \within the multi-transaction identified by the pact id."
-  where
-    createPactGuard' :: RNativeFun e
-    createPactGuard' i [TLitString name] = do
-      pid <- getPactId i
-      return $ (`TGuard` (_faInfo i)) $ GPact $ PactGuard pid name
-    createPactGuard' i as = argsError i as
-
-
-createModuleGuard :: NativeDef
-createModuleGuard =
-  defRNative "create-module-guard" createModuleGuard'
-  (funType (tTyGuard (Just GTyModule)) [("name",tTyString)])
-  []
-  "Defines a guard by NAME that enforces the current module admin predicate."
-  where
-    createModuleGuard' :: RNativeFun e
-    createModuleGuard' i [TLitString name] = findCallingModule >>= \m -> case m of
-      Just mn ->
-        return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
-      Nothing -> evalError' i "create-module-guard: must call within module"
-    createModuleGuard' i as = argsError i as
-
-keysetRefGuard :: NativeDef
-keysetRefGuard =
-  defRNative "keyset-ref-guard" keysetRefGuard'
-  (funType (tTyGuard (Just GTyKeySetName)) [("keyset-ref",tTyString)])
-  []
-  "Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. \
-  \Concrete keysets are themselves guard types; this function is specifically to \
-  \store references alongside other guards in the database, etc."
-  where
-    keysetRefGuard' :: RNativeFun e
-    keysetRefGuard' fa [TLitString kref] = do
-      let n = KeySetName kref
-          i = _faInfo fa
-      readRow i KeySets n >>= \t -> case t of
-        Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
-        Just _ -> return $ (`TGuard` i) $ GKeySetRef n
-    keysetRefGuard' i as = argsError i as
-
-
-createUserGuard :: NativeDef
-createUserGuard =
-  defNative "create-user-guard" createUserGuard'
-  (funType (tTyGuard (Just GTyUser)) [("closure",TyFun $ funType' tTyBool [])])
-  []
-  "Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, \
-  \to be supplied to indicated function at enforcement time."
-  where
-    createUserGuard' :: NativeFun e
-    createUserGuard' i [TApp App {..} _] = gasUnreduced i [] $ do
-      args <- mapM reduce _appArgs
-      fun <- case _appFun of
-        (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
-          Defun -> return (QName $ QualifiedName _dModule (asString _dDefName) _dInfo)
-          _ -> evalError _appInfo $ "User guard closure must be defun, found: " <> pretty _dDefType
-        t -> evalError (_tInfo t) $ "User guard closure function must be def: " <> pretty _appFun
-      return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard fun args)
-    createUserGuard' i as = argsError' i as
 
 emitEventDef :: NativeDef
 emitEventDef =

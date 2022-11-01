@@ -4,6 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
+
 
 -- |
 -- Module      :  Pact.Types.PactValue
@@ -29,6 +31,7 @@ module Pact.Types.PactValue
   , _PGuard
   , _PObject
   , _PModRef
+  , stripPactValueInfo
   -- | Helper functions for generating arbitrary pact values
   , PactValueGeneratorSize(..)
   , decreaseGenSize
@@ -177,6 +180,15 @@ fromPactValue (PModRef r) = TModRef r def
 elideModRefInfo :: PactValue -> PactValue
 elideModRefInfo (PModRef m) = PModRef (set modRefInfo def m)
 elideModRefInfo p = p
+
+
+stripPactValueInfo :: PactValue -> PactValue
+stripPactValueInfo = \case
+  PLiteral lit -> PLiteral lit
+  PList vec -> PList (stripPactValueInfo <$> vec)
+  PObject om -> PObject (stripPactValueInfo <$> om)
+  PGuard gu -> PGuard gu
+  PModRef mr -> PModRef mr{_modRefInfo = def }
 
 -- | Lenient conversion, implying that conversion back won't necc. succeed.
 -- Integers are coerced to Decimal for simple representation.

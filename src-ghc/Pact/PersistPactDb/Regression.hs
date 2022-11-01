@@ -23,7 +23,6 @@ import Pact.Types.Runtime
 import Pact.Persist.Pure (initPureDb,persister,PureDb)
 import Data.Aeson
 import Pact.Types.Logger
-import Data.Default (def)
 import Pact.Types.PactValue
 import Pact.Repl
 import Pact.Repl.Types
@@ -46,7 +45,7 @@ loadModule = do
         show (view (rEvalState . evalRefs . rsLoadedModules) s)
 
 nativeLookup :: NativeDefName -> Maybe (Term Name)
-nativeLookup (NativeDefName n) = case HM.lookup (Name $ BareName n def) nativeDefs of
+nativeLookup (NativeDefName n) = case HM.lookup n nativeDefs of
   Just (Direct t) -> Just t
   _ -> Nothing
 

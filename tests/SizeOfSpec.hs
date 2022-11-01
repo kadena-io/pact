@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module SizeOfSpec(spec) where
 
 import Test.Hspec
@@ -15,6 +16,14 @@ instance SizeOf A
 instance SizeOf B
 instance SizeOf a => SizeOf (C a)
 
+newtype D = D Int
+  deriving (Eq, Show, Generic)
+
+instance SizeOf D
+
+newtype F = F Int
+  deriving (Eq, Show, SizeOf)
+
 spec :: Spec
 spec = do
   describe "SizeOf V0 generics conform to specification" $ do
@@ -28,3 +37,10 @@ spec = do
       sizeOf SizeOfV0 (B3 0 True A1) `shouldBe` b3Cost
     it "Works with parametrically defined instances" $ do
       sizeOf SizeOfV0 (C (B1 0)) `shouldBe` (sizeOf SizeOfV0 (B1 0) + constructorCost 1)
+        -- sizeOf (C (B1 0)) `shouldBe` (sizeOf (B1 0) + constructorCost 1)
+    it "Prices newtype instance with standalone deriving like constructor" $ do
+        let k = 1
+        sizeOf (D k) `shouldBe` (sizeOf k + constructorCost 1)
+    it "Prices newtype instance with GND like a newtype" $ do
+        let k = 1
+        sizeOf (F k) `shouldBe` 16
