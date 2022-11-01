@@ -716,7 +716,7 @@ fullyQualifyDefs info mdef defs = do
   sortedDefs <- enforceAcyclic info cs
   fDefs <- foldlM mkAndEvalConsts mempty sortedDefs
   deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
-  let (Sum totalMemory) = foldMap (Sum . sizeOf) fDefs + foldMap (Sum . sizeOf) deps
+  let (Sum totalMemory) = foldMap (Sum . sizeOf SizeOfV0) fDefs + foldMap (Sum . sizeOf SizeOfV0) deps
   _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
   pure (fDefs, deps)
   where

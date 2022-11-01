@@ -681,8 +681,8 @@ instance Pretty a => Pretty (CapabilityGuard a) where
     ]
 
 instance (SizeOf a) => SizeOf (CapabilityGuard a) where
-  sizeOf CapabilityGuard{..} =
-    (constructorCost 2) + (sizeOf _cgName) + (sizeOf _cgArgs) + (sizeOf _cgPactId)
+  sizeOf ver CapabilityGuard{..} =
+    (constructorCost 2) + (sizeOf ver _cgName) + (sizeOf ver _cgArgs) + (sizeOf ver _cgPactId)
 
 instance ToJSON a => ToJSON (CapabilityGuard a) where
   toJSON = lensyToJSON 1
@@ -723,12 +723,12 @@ instance Pretty a => Pretty (Guard a) where
   pretty (GCapability g) = pretty g
 
 instance (SizeOf p) => SizeOf (Guard p) where
-  sizeOf (GPact pg) = (constructorCost 1) + (sizeOf pg)
-  sizeOf (GKeySet ks) = (constructorCost 1) + (sizeOf ks)
-  sizeOf (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ksr)
-  sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
-  sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
-  sizeOf (GCapability g) = (constructorCost 1) + (sizeOf g)
+  sizeOf ver (GPact pg) = (constructorCost 1) + (sizeOf ver pg)
+  sizeOf ver (GKeySet ks) = (constructorCost 1) + (sizeOf ver ks)
+  sizeOf ver (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ver ksr)
+  sizeOf ver (GModule mg) = (constructorCost 1) + (sizeOf ver mg)
+  sizeOf ver (GUser ug) = (constructorCost 1) + (sizeOf ver ug)
+  sizeOf ver (GCapability g) = (constructorCost 1) + (sizeOf ver g)
 
 guardCodec :: (ToJSON a, FromJSON a) => Codec (Guard a)
 guardCodec = Codec enc dec

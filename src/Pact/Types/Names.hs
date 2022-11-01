@@ -272,10 +272,10 @@ instance Pretty Name where
     FQName n -> pretty n
 
 instance SizeOf Name where
-  sizeOf (QName qn) = constructorCost 1 + sizeOf qn
-  sizeOf (Name bn) = constructorCost 1 + sizeOf bn
-  sizeOf (DName dn) = constructorCost 1 + sizeOf dn
-  sizeOf (FQName fq) = constructorCost 1 + sizeOf fq
+  sizeOf ver (QName qn) = constructorCost 1 + sizeOf ver qn
+  sizeOf ver (Name bn) = constructorCost 1 + sizeOf ver bn
+  sizeOf ver (DName dn) = constructorCost 1 + sizeOf ver dn
+  sizeOf ver (FQName fq) = constructorCost 1 + sizeOf ver fq
 
 instance AsString Name where asString = renderCompactText
 
