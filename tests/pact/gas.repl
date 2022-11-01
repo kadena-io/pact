@@ -746,14 +746,14 @@ d.G3
 (begin-tx)
 (env-exec-config ["DisablePact45"])
 (env-gas 0)
-(enforce true (format "{} {} {} {}" [1, 2, 3, 4, 5]))
-(expect "gas of enforce pre-fork" 21 (env-gas))
+(enforce true (format "{} {} {} {} {}" [1, 2, 3, 4, 5]))
+(expect "gas of enforce pre-fork" 24 (env-gas))
 (commit-tx)
 
 (begin-tx)
 (env-exec-config [])
 (env-gas 0)
-(enforce true (format "{} {} {} {}" [1, 2, 3, 4, 5]))
+(enforce true (format "{} {} {} {} {}" [1, 2, 3, 4, 5]))
 (expect "gas of enforce post-fork does not evaluate string" 1 (env-gas))
 (commit-tx)
 
