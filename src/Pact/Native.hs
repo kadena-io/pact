@@ -166,19 +166,6 @@ enforceDef = defNative "enforce" enforce
         cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
     enforceLazy i as = mapM reduce as >>= argsError i
 
-    enforceLazy i [cond, msg] = do
-      cond' <- reduce cond
-      case cond' of
-        TLiteral (LBool b') _ ->
-          if b' then
-            return (TLiteral (LBool True) def)
-          else reduce msg >>= \case
-            TLitString msg' -> failTx (_faInfo i) $ pretty msg'
-            e -> evalError' i $ "Invalid message argument, expected string " <> pretty e
-        _ -> reduce msg >>= argsError i . reverse . (:[cond'])
-    enforceLazy i as = mapM reduce as >>= argsError i
-    {-# INLINE enforceLazy #-}
-
 enforceOneDef :: NativeDef
 enforceOneDef =
   defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
