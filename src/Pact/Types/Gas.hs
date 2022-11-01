@@ -148,6 +148,7 @@ data GasArgs
   -- ^ the cost of principal creation and validation
   | GIntegerOpCost !Integer Integer
   -- ^ Integer costs
+  | GMakeList2 !Integer !(Maybe Integer)
 
 instance Pretty GasArgs where
   pretty g = case g of
@@ -169,6 +170,7 @@ instance Pretty GasArgs where
     GModuleMemory i -> "GModuleMemory: " <> pretty i
     GPrincipal i -> "GPrincipal: " <> pretty i
     GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
+    GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
