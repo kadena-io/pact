@@ -154,7 +154,17 @@ enforceDef = defNative "enforce" enforce
         | b' = return $ TLiteral (LBool True) def
         | otherwise = failTx (_faInfo i) $ pretty msg
     enforce' i as = argsError i as
-    {-# INLINE enforce' #-}
+
+    enforceLazy i [cond, msg] =
+      reduce cond >>= \case
+        TLiteral (LBool b') _ ->
+          if b' then
+            return (TLiteral (LBool True) def)
+          else reduce msg >>= \case
+            TLitString msg' -> failTx (_faInfo i) $ pretty msg'
+            e -> evalError' i $ "Invalid message argument, expected string " <> pretty e
+        cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
+    enforceLazy i as = mapM reduce as >>= argsError i
 
     enforceLazy i [cond, msg] = do
       cond' <- reduce cond
