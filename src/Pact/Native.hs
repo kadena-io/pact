@@ -909,11 +909,10 @@ list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set 
 
 makeList :: GasRNativeFun e
 makeList g i [TLitInteger len,value] = case typeof value of
-  Right ty -> isExecutionFlagSet FlagDisablePact45 >>= \case
-    True ->
-      computeGas' g i (GMakeList len) $ return $ toTListV ty def $ V.replicate (fromIntegral len) value
-    False ->
-      computeGas' g i (GMakeList2 len Nothing) $ return $ toTList ty def $ replicate (fromIntegral len) value
+  Right ty -> do
+    ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
+    computeGas' g i ga $ return $
+      toTListV ty def $ V.replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
 
