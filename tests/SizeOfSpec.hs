@@ -40,7 +40,7 @@ spec = do
         -- sizeOf (C (B1 0)) `shouldBe` (sizeOf (B1 0) + constructorCost 1)
     it "Prices newtype instance with standalone deriving like constructor" $ do
         let k = 1
-        sizeOf (D k) `shouldBe` (sizeOf k + constructorCost 1)
+        sizeOf SizeOfV0 (D k) `shouldBe` (sizeOf SizeOfV0 k + constructorCost 1)
     it "Prices newtype instance with GND like a newtype" $ do
         let k = 1
-        sizeOf (F k) `shouldBe` 16
+        sizeOf SizeOfV0 (F k) `shouldBe` 16

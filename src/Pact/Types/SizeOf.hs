@@ -6,6 +6,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE CPP #-}
+
 
 
 -- |
@@ -43,6 +45,12 @@ import GHC.Generics
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Pact.Types.Orphans()
+
+#if !defined(ghcjs_HOST_OS)
+import qualified GHC.Integer.Logarithms as IntLog
+import GHC.Int(Int(..))
+#endif
+
 
 -- |  Estimate of number of bytes needed to represent data type
 --
@@ -135,8 +143,15 @@ instance SizeOf Text where
 
 instance SizeOf Integer where
   sizeOf ver i = case ver of
-    SizeOfV0 -> ceiling ((logBase 100000 (realToFrac i)) :: Double)
-    SizeOfV1 -> ceiling ((logBase 100000 (realToFrac (abs i))) :: Double)
+    SizeOfV0 ->
+      if i <= 0 then 0 else ceiling ((logBase 100000 (realToFrac i)) :: Double)
+    SizeOfV1 ->
+#if !defined(ghcjs_HOST_OS)
+      fromIntegral (max 64 (I# (IntLog.integerLog2# (abs i)) + 1))  `quot` 8
+#else
+      (max 64 (ceiling (logBase @Double 2 (fromIntegral (abs i))) + 1)) `quot` 8
+#endif
+
 
 instance SizeOf Int where
   sizeOf _ _ = 2 * wordSize

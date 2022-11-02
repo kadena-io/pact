@@ -324,7 +324,8 @@ eval' (TModule _tm@(MDModule m) bod i) =
         void $ acquireModuleAdminCapability capMName $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
-    _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)))
+    szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+    _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)) szVer)
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
 #ifdef ADVICE
     return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
@@ -347,7 +348,8 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
     (g,govI) <- loadInterface mangledI bod i gas
-    _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)))
+    szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+    _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)) szVer)
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
 #ifdef ADVICE
     return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
@@ -564,9 +566,10 @@ dresolveMem
   -> (Term (Either Text (Ref' (Term Name))), Text, c)
   -> Eval e HeapFold
 dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
+  szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
   (!unified, (HeapMemState costMemoEnv' totalMem))
-      <- runStateT (traverse (replaceMemo allDefs) defTerm)
-                 (HeapMemState costMemoEnv (sizeOf SizeOfV0 defTerm + currMem))
+      <- runStateT (traverse (replaceMemo szVer allDefs) defTerm)
+                 (HeapMemState costMemoEnv (sizeOf szVer defTerm + currMem))
   unified' <- case unified of
     t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
     _ -> pure (Ref unified)
@@ -574,7 +577,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
   where
   -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
   -- We also calculate the cost per callsite, to fail faster.
-  replaceMemo _ (Right (Ref td@(TDef defn _))) = do
+  replaceMemo szVer _ (Right (Ref td@(TDef defn _))) = do
     let (DefName defname) = _dDefName defn
         name = QName (QualifiedName (_dModule defn) defname def)
     memoEnv <- gets _hmMemoEnv
@@ -582,25 +585,25 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
       Just heapCost -> do
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
       Nothing -> do
-        let !heapCost = sizeOf SizeOfV0 td
+        let !heapCost = sizeOf szVer td
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert name heapCost env) (total + heapCost))
     !currMem' <- gets _hmTotalMem
     _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
     pure (Ref td)
   -- Note: inlining only ever inlines tdefs and modrefs, it's fine to not charge
   -- for the second case
-  replaceMemo _ (Right r) = pure r
+  replaceMemo _ _ (Right r) = pure r
   -- Looking up a def, so:
   --  - Check mem cost in the memoization env (if not there add it)
   --  - Check for gas overflow post replacing `Left defn` by the full definition.
-  replaceMemo m (Left defn) = do
+  replaceMemo szVer m (Left defn) = do
     memoEnv <- gets _hmMemoEnv
     let inlined = m HM.! defn
     case M.lookup (Name (BareName defn def)) memoEnv of
       Just heapCost -> do
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
       Nothing -> do
-        let !heapCost = sizeOf SizeOfV0 inlined
+        let !heapCost = sizeOf szVer inlined
         modify' (\(HeapMemState env total) -> HeapMemState (M.insert (Name (BareName defn def)) heapCost env) (total + heapCost))
     !currMem' <- gets _hmTotalMem
     _ <- lift $ computeGasNonCommit info "ModuleMemory" (GModuleMemory currMem')
@@ -716,7 +719,8 @@ fullyQualifyDefs info mdef defs = do
   sortedDefs <- enforceAcyclic info cs
   fDefs <- foldlM mkAndEvalConsts mempty sortedDefs
   deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
-  let (Sum totalMemory) = foldMap (Sum . sizeOf SizeOfV0) fDefs + foldMap (Sum . sizeOf SizeOfV0) deps
+  szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+  let (Sum totalMemory) = foldMap (Sum . sizeOf szVer) fDefs + foldMap (Sum . sizeOf szVer) deps
   _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
   pure (fDefs, deps)
   where
