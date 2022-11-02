@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Repl
@@ -68,6 +69,7 @@ import qualified Data.ByteString.UTF8 as BS
 import Data.Char
 import Data.Default
 import Data.List
+import Data.IORef
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Monoid (appEndo)
@@ -129,9 +131,27 @@ initPureEvalEnv verifyUri = do
 initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
-  return $ EvalEnv (RefStore nativeDefs) mempty Null Transactional
-    def def mv repldb def pactInitialHash freeGasEnv
-    permissiveNamespacePolicy (spvs mv) def def def
+  gasRef <- newIORef 0
+  return $ EvalEnv
+    { _eeRefStore = RefStore nativeDefs
+    , _eeMsgSigs = mempty
+    , _eeMsgBody = Null
+    , _eeMode = Transactional
+    , _eeEntity = Nothing
+    , _eePactStep = Nothing
+    , _eePactDbVar = mv
+    , _eePactDb = repldb
+    , _eePurity = PImpure
+    , _eeHash = pactInitialHash
+    , _eeGasEnv = freeGasEnv
+    , _eeGas = gasRef
+    , _eeNamespacePolicy = permissiveNamespacePolicy
+    , _eeSPVSupport = spvs mv
+    , _eePublicData = def
+    , _eeExecutionConfig = def
+    , _eeAdvice = def
+    , _eeInRepl = True
+    }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport
 
@@ -197,8 +217,13 @@ parsedCompileEval src r = do
 
 handleCompile :: String -> Exp Parsed -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
 handleCompile src exp a =
-    case compile (mkStringInfo src) exp of
+    case compile def (mkStringInfo src) exp of
       Right t -> a t
+      -- special case for `with-capability` bareword due to
+      -- `with-capability` being a reserved word that fails to
+      -- compile if issued in the repl for doc purposes
+      Left{} | "with-capability" == (exp ^. _EAtom . to _atomAtom) ->
+          a $ TVar (Name (BareName "with-capability" def)) def
       Left er -> do
           case _iInfo (peInfo er) of
             Just (_,d) -> do
@@ -410,11 +435,11 @@ useReplLib = id %= setReplLib
 
 -- | mutate repl state to install lib functions
 setReplLib :: ReplState -> ReplState
-setReplLib = over (rEvalState.evalRefs.rsLoaded) $ HM.union (moduleToMap replDefs)
+setReplLib = over (rEvalState.evalRefs.rsLoaded) $ HM.union replDefsMap
 
 -- | mutate repl state to remove lib functions
 unsetReplLib :: ReplState -> ReplState
-unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` (moduleToMap replDefs))
+unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` replDefsMap)
 
 -- | evaluate string in repl monad
 evalPact :: String -> Repl (Either String (Term Name))

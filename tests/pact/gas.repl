@@ -3,7 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
-(env-exec-config ["DisableInlineMemCheck"])
+(env-exec-config ["DisableInlineMemCheck", "DisablePact43", "DisablePact44"])
 (env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
@@ -543,9 +543,20 @@ d.G3
 
 (env-gas 0)
 (env-gaslog)
+(env-exec-config ['DisablePact44])
 (namespace "a")
 (env-gaslog)
 (expect "Cost: using namespace" 14 (env-gas))
+
+(rollback-tx)
+(begin-tx)
+(env-keys ["s"])
+(env-gas 0)
+(env-gaslog)
+(env-exec-config [])
+(namespace "a")
+(env-gaslog)
+(expect "Cost: using namespace w/o enforce" 13 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
@@ -610,7 +621,8 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
-(env-exec-config [])
+(env-exec-config ["DisablePact43"])
+(env-gasmodel "table")
 (module basic-module GOV
   (defcap GOV () true)
 
@@ -675,3 +687,73 @@ d.G3
 
 (expect "new module gas" 60841 (env-gas))
 (commit-tx)
+
+(begin-tx)
+(env-gas 0)
+(env-gaslimit 80000)
+(env-exec-config [])
+
+(load "../../golden/golden.fqns.repl")
+
+(expect "new module with FQVs gas" 60835 (env-gas))
+
+(commit-tx)
+(begin-tx)
+; setup module
+(module fdb G
+  (defcap G () true)
+  (defschema fdb-test a:integer b:integer)
+  (deftable fdb-tbl:{fdb-test})
+)
+(create-table fdb-tbl)
+(insert fdb-tbl 'b {'a:2, 'b:2})
+(insert fdb-tbl 'd {'a:4, 'b:4})
+(insert fdb-tbl 'c {'a:3, 'b:3})
+(insert fdb-tbl 'a {'a:1, 'b:1})
+
+; select cost
+(env-gas 0)
+(select fdb-tbl (where 'a (> 0)))
+(expect "new select gas" 40025 (env-gas))
+; fold-db cost
+(env-gas 0)
+(let*
+  ((qry (lambda (k o)  (< k "c")))
+   (consume (lambda (k o) [k (at 'a o)]))
+  )
+  (fold-db fdb-tbl (qry) (consume))
+  )
+
+(expect "new fold-db gas" 40027 (env-gas))
+
+(env-gas 0)
+(keys fdb-tbl)
+
+(expect "new keys" 40004 (env-gas))
+(commit-tx)
+
+; Test that gas is reset across begin/commit boundaries as
+; gas lives in evalEnv now
+(begin-tx)
+(+ 1 1)
+(commit-tx)
+
+(begin-tx)
+(expect "gas was reset" 0 (env-gas))
+(commit-tx)
+
+; Gas change to enforce
+(begin-tx)
+(env-exec-config ["DisablePact45"])
+(env-gas 0)
+(enforce true (format "{} {} {} {} {}" [1, 2, 3, 4, 5]))
+(expect "gas of enforce pre-fork" 24 (env-gas))
+(commit-tx)
+
+(begin-tx)
+(env-exec-config [])
+(env-gas 0)
+(enforce true (format "{} {} {} {} {}" [1, 2, 3, 4, 5]))
+(expect "gas of enforce post-fork does not evaluate string" 1 (env-gas))
+(commit-tx)
+

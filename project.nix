@@ -12,8 +12,8 @@ in {
       overrides = self: super: {
         direct-sqlite = dontCheck (self.callHackageDirect {
           pkg = "direct-sqlite";
-          ver = "2.3.26";
-          sha256 = "1kdkisj534nv5r0m3gmxy2iqgsn6y1dd881x77a87ynkx1glxfva";
+          ver = "2.3.27";
+          sha256 = "0w8wj3210h08qlws40qhidkscgsil3635zk83kdlj929rbd8khip";
         } {});
 
         # The z3 dependency needs to be conditional so pact can be a
@@ -28,6 +28,25 @@ in {
           sha256 = "1cfn74j6dr4279bil9k0n1wff074sdlz6g1haqyyy38wm5mdd7mr";
         } {});
 
+        # sbv requires this even though it is not used in the build (and the hash is invalid)
+        tasty-bench = dontCheck (self.callHackageDirect {
+          pkg = "tasty-bench";
+          ver = "0.3.1";
+          sha256 = "0000000000000000000000000000000000000000000000000000";
+        } {});
+
+        libBF = doJailbreak (dontCheck (self.callHackageDirect {
+          pkg = "libBF";
+          ver = "0.6.3";
+          sha256 = "0j0i39jb389rnrkkw2xqz10471afxys79nf31hhlqr4fk6ddhjf7";
+        } {}));
+
+        sbv = dontCheck (self.callHackageDirect {
+          pkg = "sbv";
+          ver = "9.0";
+          sha256 = "14g2qax1vc7q4g78fa562dviqvcd0l52kd5jmgv90g3g3ci15bnl";
+        } {});
+
         pact-do-benchmark = overrideCabal (doBenchmark (dontCheck super.pact)) (oldDrv: {
           benchmarkSystemDepends = [ pkgs.z3 ];
           postBuild = ''
@@ -35,7 +54,7 @@ in {
             ./Setup bench
           '';
           doHaddock = false;
-          doCheck = true;
+          doCheck = false;
         });
       };
       packages = {

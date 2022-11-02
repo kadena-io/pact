@@ -64,7 +64,7 @@ expr = do
   let inf = do
         end <- position
         let len = bytes end - bytes delt
-        return $ Parsed delt (fromIntegral len)
+        return $! Parsed delt (fromIntegral len)
       separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
   msum
     [ TF.try (ELiteral <$> (LiteralExp <$> token number <*> inf)) <?> "number"

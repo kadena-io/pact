@@ -1,5 +1,5 @@
 (begin-tx)
-
+(env-exec-config ["DisablePact44"])
 (define-keyset 'k (sig-keyset))
 
 (module leftpad 'k

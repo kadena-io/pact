@@ -48,8 +48,8 @@ import Data.Default
 import Data.Foldable
 import qualified Data.Vector as V
 import Data.Text (Text)
-
 import Unsafe.Coerce
+import Data.Functor (($>))
 
 import Pact.Eval
 import Pact.Gas
@@ -57,9 +57,9 @@ import Pact.Types.Capability
 import Pact.Types.Native
 import Pact.Types.PactValue
 import Pact.Types.Pretty
-import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Runtime.Utils
+import Pact.Types.KeySet (parseAnyKeysetName)
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -161,11 +161,6 @@ tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o def
 tTyObjectAny :: Type n; tTyObjectAny = tTyObject TyAny
 tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
 
-getPactId :: FunApp -> Eval e PactId
-getPactId i = use evalPactExec >>= \pe -> case pe of
-  Nothing -> evalError' i "pact-id: not in pact execution"
-  Just PactExec{..} -> return _pePactId
-
 enforceGuardDef :: NativeDefName -> NativeDef
 enforceGuardDef dn =
   defRNative dn enforceGuard'
@@ -179,28 +174,16 @@ enforceGuardDef dn =
     enforceGuard' :: RNativeFun e
     enforceGuard' i as = case as of
       [TGuard g _] -> enforceGuard i g >> return (toTerm True)
-      [TLitString k] -> enforceGuard i (GKeySetRef (KeySetName k)) >> return (toTerm True)
+      [TLitString k] -> do
+        let f ksn = enforceGuard i (GKeySetRef ksn) $> toTerm True
+
+        ifExecutionFlagSet FlagDisablePact44
+          (f $ KeySetName k Nothing)
+          (case parseAnyKeysetName k of
+             Left{} -> evalError' i "incorrect keyset name format"
+             Right ksn -> f ksn)
       _ -> argsError i as
 
-enforceGuard :: FunApp -> Guard (Term Name) -> Eval e ()
-enforceGuard i g = case g of
-  GKeySet k -> runSysOnly $ enforceKeySet (_faInfo i) Nothing k
-  GKeySetRef n -> enforceKeySetName (_faInfo i) n
-  GPact PactGuard{..} -> do
-    pid <- getPactId i
-    unless (pid == _pgPactId) $
-      evalError' i $ "Pact guard failed, intended: " <> pretty _pgPactId <> ", active: " <> pretty pid
-  GModule mg@ModuleGuard{..} -> do
-    md <- _mdModule <$> getModule (_faInfo i) _mgModuleName
-    case md of
-      MDModule m@Module{..} -> calledByModule m >>= \r ->
-        if r then
-          return ()
-        else
-          void $ acquireModuleAdmin (_faInfo i) _mName _mGovernance
-      MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
-  GUser UserGuard{..} ->
-    void $ runSysOnly $ evalByName _ugFun _ugArgs (_faInfo i)
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
@@ -254,7 +237,7 @@ enforceYield fa y = case _yProvenance y of
 
 -- | Validate App of indicated DefType and return Def
 requireDefApp :: DefType -> App (Term Ref) -> Eval e (Def Ref)
-requireDefApp dt App{..} = case _appFun of
+requireDefApp dt App{..} = lookupFullyQualifiedTerm _appInfo _appFun >>= \case
   (TVar (Ref (TDef d@Def{} _)) _) -> matchDefTy d
   TDynamic tref tmem ti -> reduceDynamic tref tmem ti >>= \case
     Left v -> evalError ti $ "requireDefApp: expected module member for dynamic: " <> pretty v

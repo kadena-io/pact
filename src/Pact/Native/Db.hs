@@ -20,7 +20,7 @@
 --
 
 module Pact.Native.Db
-    (dbDefs)
+    (dbDefs, checkNonLocalAllowed)
     where
 
 import Bound
@@ -43,7 +43,7 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.PactValue
-
+import Pact.Types.KeySet (parseAnyKeysetName)
 
 class Readable a where
   readable :: a -> ReadValue
@@ -179,15 +179,22 @@ descTable i as = argsError i as
 
 descKeySet :: GasRNativeFun e
 descKeySet g i [TLitString t] = do
-  r <- readRow (_faInfo i) KeySets (KeySetName t)
+  k <- ifExecutionFlagSet FlagDisablePact44
+    (pure $ KeySetName t Nothing)
+    (case parseAnyKeysetName t of
+       Left {} -> evalError' i "incorrect keyset name format"
+       Right k -> pure k)
+
+  r <- readRow (_faInfo i) KeySets k
   case r of
-    Just v -> computeGas' g i (GPostRead (ReadKeySet (KeySetName t) v)) $
+    Just v -> computeGas' g i (GPostRead (ReadKeySet k v)) $
               return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
 descKeySet _ i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
+  unlessExecutionFlagSet FlagDisablePact431 $ checkNonLocalAllowed i
   mods <- lookupModule i (ModuleName t Nothing)
   case _mdModule <$> mods of
     Just m ->

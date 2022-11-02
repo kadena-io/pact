@@ -2,6 +2,8 @@
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE ViewPatterns      #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 
 -- | Pattern synonym definitions for translation from typechecked 'AST' to
 -- 'Term'.
@@ -41,9 +43,9 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
-pattern AST_InlinedApp :: Lang.ModuleName -> Text -> [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_InlinedApp modName funName bindings body <-
-  App _ (FDefun _ modName funName _ _ _ [Binding _ bindings body AstBindInlinedCallArgs] _) _args
+pattern AST_InlinedApp :: Lang.ModuleName -> Text -> Lang.DefType -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_InlinedApp modName funName deftype bindings body <-
+  App _ (FDefun _ modName funName deftype _ _ [Binding _ bindings body AstBindInlinedCallArgs] _) _args
 
 pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
@@ -91,6 +93,14 @@ pattern AST_CreateUserGuard app <-
 pattern AST_CreateModuleGuard :: AST Node -> AST Node
 pattern AST_CreateModuleGuard name <-
   App _node (NativeFunc "create-module-guard") [name]
+
+pattern AST_CreateCapabilityGuard :: AST Node -> AST Node
+pattern AST_CreateCapabilityGuard app <-
+  App _node (NativeFunc "create-capability-guard") [app]
+
+pattern AST_CreateCapabilityPactGuard :: AST Node -> AST Node
+pattern AST_CreateCapabilityPactGuard app <-
+  App _node (NativeFunc "create-capability-pact-guard") [app]
 
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
@@ -243,6 +253,9 @@ pattern AST_RequireCapability node app <-
 pattern AST_ComposeCapability :: AST Node -> AST Node
 pattern AST_ComposeCapability app <-
   App _node (NativeFunc "compose-capability") [app]
+
+pattern AST_Continue :: Node -> AST Node -> AST Node
+pattern AST_Continue node body <- App node (NativeFunc "continue") [body]
 
 -- pattern RawTableName :: Text -> AST Node
 -- pattern RawTableName t <- Table (Node (TcId _ t _) _) _

@@ -1,0 +1,16 @@
+code: |-
+  (+ 1 1)
+publicMeta:
+  chainId: "0"
+  sender: jose
+  gasLimit: 5000
+  gasPrice: 0.00000001
+  ttl: 28800
+networkId: "testnet04"
+signers:
+  - public: 87a4f2f179662829da6816b901ec1402b4baa30ce9d96048345aff9b346de6b7
+  - public: 1ba4d22bdcf499a8e27667b56e45222260a93806066ca5f82e79ef2f38cf8c0b
+    caps:
+      - name: coin.GAS
+        args: []
+type: exec

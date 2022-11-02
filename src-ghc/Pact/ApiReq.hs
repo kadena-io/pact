@@ -14,6 +14,8 @@
 module Pact.ApiReq
     (
      ApiKeyPair(..)
+    ,ApiSigner(..)
+    ,ApiPublicMeta(..)
     ,ApiReq(..)
     ,apiReq
     ,uapiReq
@@ -23,12 +25,14 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
-    ,AddSigsReq(..),addSigsReq
+    ,AddSigsReq(..)
+    ,addSigsReq
     ,combineSigs
     ,combineSigDatas
     ,signCmd
     ,decodeYaml
     ,returnCommandIfDone
+    ,loadSigData
     ) where
 
 import Control.Applicative
@@ -45,17 +49,19 @@ import Data.Default (def)
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Set as S
+import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 import Data.Text.Encoding
+import Data.Foldable(foldrM)
 import Pact.Time
 import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude
-import System.Directory
 import System.Exit hiding (die)
 import System.FilePath
 import System.IO
 
+import Pact.Parse
 import Pact.Types.API
 import Pact.Types.Capability
 import Pact.Types.Command
@@ -140,14 +146,6 @@ instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 
-data SignReq = SignReq
-  { _srHash :: Hash
-  , _srKeyPairs :: [ApiKeyPair]
-  } deriving (Eq,Show,Generic)
-instance ToJSON SignReq where toJSON = lensyToJSON 3
-instance FromJSON SignReq where parseJSON = lensyParseJSON 3
-
-
 data AddSigsReq = AddSigsReq
   { _asrUnsigned :: Command Text
   , _asrSigs :: [UserSig]
@@ -212,7 +210,55 @@ addSigToList k s ((pk,pus):ps) =
 addSigsReq :: [FilePath] -> Bool -> ByteString -> IO ByteString
 addSigsReq keyFiles outputLocal bs = do
   sd <- either (error . show) return $ Y.decodeEither' bs
-  returnCommandIfDone outputLocal =<< foldM addSigReq sd keyFiles
+  returnSigDataOrCommand outputLocal =<< foldM addSigReq sd keyFiles
+
+-- | `returnSigDataOrCommand` will either:
+--   - validate partial sig(s) added for a particular SigData, then re-serialize as SigData
+--   - validate all signatures if all signatures are provided, and output the resulting `Command`
+--   TODO: `IO ByteString` is fairly opaque, low hanging fruit to provide (Either Command SigData)
+--   and serialize upstream most likely, but is not of much concern atm.
+returnSigDataOrCommand :: Bool -> SigData Text -> IO ByteString
+returnSigDataOrCommand  outputLocal sd
+  | isPartialSigData = do
+    case verifyPartialSigData sd of
+      Right _ ->
+        pure $ Y.encodeWith yamlOptions sd
+      Left e -> do
+        let msg = unlines ["Command verification failed!", e]
+        hPutStrLn stderr msg >> hFlush stderr >> exitFailure
+  | otherwise = returnCommandIfDone outputLocal sd
+  where
+  isPartialSigData = any (isn't _Just . snd) (_sigDataSigs sd)
+  verifyPartialSigData (SigData h sigs (Just cmd)) = do
+    payload :: Payload Value ParsedCode <- traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 cmd)
+    let sigMap = Map.fromList sigs
+    when (length (_pSigners payload) /= length sigs) $
+      Left "Number of signers in the payload does not match number of signers in the sigData"
+    usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
+    let failedSigs = filter (not . verifySig h) usrSigs
+    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
+    _ <- verifyHash h (encodeUtf8 cmd)
+    pure ()
+    where
+    verifySig hsh (signer, usrSig) = case usrSig of
+      Nothing -> True
+      Just sig -> verifyUserSig hsh sig signer
+    toSignerPair sigMap signer =
+      case Map.lookup (PublicKeyHex $ _siPubKey signer) sigMap of
+        Nothing -> Left $ "Signer in payload does not show up in signatures" <> show (_siPubKey signer)
+        Just v -> pure (signer, v)
+  verifyPartialSigData (SigData h sigs Nothing) = do
+    sigs' <- foldrM toVerifPair [] sigs
+    let scheme = toScheme ED25519
+        failedSigs = filter (\(pk, sig) -> not $ verify scheme (toUntypedHash h) pk sig) sigs'
+    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
+    pure ()
+    where
+    toVerifPair (PublicKeyHex pktext, Just UserSig{..}) m = do
+      pk <- PubBS <$> parseB16TextOnly pktext
+      sig <- SigBS <$> parseB16TextOnly _usSig
+      pure $ (pk, sig):m
+    toVerifPair (_, Nothing) m = pure m
 
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
 returnCommandIfDone outputLocal sd =
@@ -337,14 +383,15 @@ withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
 
 mkApiReqExec :: Bool -> ApiReq -> FilePath -> IO (ApiReqParts,Command Text)
 mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
-  (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
+  (code,cdata) <- do
+    let dir = takeDirectory fp
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
-      (Just f,Nothing) -> liftIO (decodeUtf8 <$> BS.readFile f)
+      (Just f,Nothing) -> liftIO (decodeUtf8 <$> BS.readFile (dir </> f))
       _ -> dieAR "Expected either a 'code' or 'codeFile' entry"
     cdata <- case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
-      (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
+      (Just f,Nothing) -> liftIO (BSL.readFile (dir </> f)) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
       (Nothing,Nothing) -> return Null
@@ -445,10 +492,11 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
     Just r -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
 
-  cdata <- withCurrentDirectory (takeDirectory fp) $ do
+  cdata <- do
+    let dir = takeDirectory fp
     case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
-      (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
+      (Just f,Nothing) -> liftIO (BSL.readFile (dir </> f)) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
       (Nothing,Nothing) -> return Null

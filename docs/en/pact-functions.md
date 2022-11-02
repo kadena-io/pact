@@ -141,6 +141,17 @@ true
 ```
 
 
+### continue {#continue}
+
+*value*&nbsp;`*` *&rarr;*&nbsp;`*`
+
+
+Continue a previously started nested defpact.
+```lisp
+(continue (coin.transfer-crosschain "bob" "alice" 10.0))
+```
+
+
 ### define-namespace {#define-namespace}
 
 *namespace*&nbsp;`string` *user-guard*&nbsp;`guard` *admin-guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
@@ -149,6 +160,19 @@ true
 Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, and GUARD will be rotated in its place.
 ```lisp
 (define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))
+```
+
+Top level only: this function will fail if used in module code.
+
+
+### describe-namespace {#describe-namespace}
+
+*ns*&nbsp;`string` *&rarr;*&nbsp;`object:{described-namespace}`
+
+
+Describe the namespace NS, returning a row object containing the user and admin guards of the namespace, as well as its name.
+```lisp
+(describe-namespace 'my-namespace)
 ```
 
 Top level only: this function will fail if used in module code.
@@ -437,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.2.0.1"
+"4.4"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -679,6 +703,8 @@ pact> (zip (-) [1 2 3 4] [4 5 6])
 [-3 -3 -3]
 pact> (zip (+) [1 2 3] [4 5 6 7])
 [5 7 9]
+pact> (zip (lambda (x y) { 'x: x, 'y: y }) [1 2 3 4] [4 5 6 7])
+[{"x": 1,"y": 4} {"x": 2,"y": 5} {"x": 3,"y": 6} {"x": 4,"y": 7}]
 ```
 
 ## Database {#Database}
@@ -741,7 +767,7 @@ Select rows from TABLE using QRY as a predicate with both key and value, and the
 ```lisp
 (let* 
  ((qry (lambda (k obj) true)) ;; select all rows
-  (f (lambda (x) [(at 'firstName x), (at 'b x)]))
+  (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
  )
  (fold-db people (qry) (f))
 )
@@ -1519,30 +1545,6 @@ Specifies and requests grant of CAPABILITY which is an application of a 'defcap'
 ```
 
 
-### create-module-guard {#create-module-guard}
-
-*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
-
-
-Defines a guard by NAME that enforces the current module admin predicate.
-
-
-### create-pact-guard {#create-pact-guard}
-
-*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
-
-
-Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
-
-
-### create-user-guard {#create-user-guard}
-
-*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
-
-
-Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
-
-
 ### emit-event {#emit-event}
 
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
@@ -1577,14 +1579,6 @@ Specifies, and provisions install of, a _managed_ CAPABILITY, defined in a 'defc
 ```lisp
 (install-capability (PAY "alice" "bob" 10.0))
 ```
-
-
-### keyset-ref-guard {#keyset-ref-guard}
-
-*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
-
-
-Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
 
 
 ### require-capability {#require-capability}
@@ -1641,6 +1635,109 @@ Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encry
 Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are base-16 strings of length 32.
 ```lisp
 (validate-keypair pubkey privkey)
+```
+
+## Guards {#Guards}
+
+### create-capability-guard {#create-capability-guard}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard that will enforce that CAPABILITY is acquired.
+```lisp
+(create-capability-guard (BANK_DEBIT 10.0))
+```
+
+
+### create-capability-pact-guard {#create-capability-pact-guard}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard that will enforce that CAPABILITY is acquired and that the currently-executing defpact is operational.
+```lisp
+(create-capability-pact-guard (ESCROW owner))
+```
+
+
+### create-module-guard {#create-module-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard by NAME that enforces the current module admin predicate.
+
+
+### create-pact-guard {#create-pact-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
+
+
+### create-principal {#create-principal}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
+
+
+Create a principal which unambiguously identifies GUARD.
+```lisp
+(create-principal (read-keyset 'keyset))
+(create-principal (keyset-ref-guard 'keyset))
+(create-principal (create-module-guard 'module-guard))
+(create-principal (create-user-guard 'user-guard))
+(create-principal (create-pact-guard 'pact-guard))
+```
+
+
+### create-user-guard {#create-user-guard}
+
+*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
+
+
+### is-principal {#is-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Tell whether PRINCIPAL string conforms to the principal format without proving validity.
+```lisp
+(enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+```
+
+
+### keyset-ref-guard {#keyset-ref-guard}
+
+*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
+
+
+### typeof-principal {#typeof-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Return the protocol type of a given PRINCIPAL value. If input value is not a principal type, then the empty string is returned.
+```lisp
+(typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
+```
+
+
+### validate-principal {#validate-principal}
+
+*guard*&nbsp;`guard` *principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Validate that PRINCIPAL unambiguously identifies GUARD.
+```lisp
+(enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 ```
 
 ## REPL-only functions {#repl-lib}
@@ -1786,7 +1883,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
