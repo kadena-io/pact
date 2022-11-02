@@ -301,10 +301,17 @@ eval' (TModule _tm@(MDModule m) bod i) =
     mangledM <- evalNamespace i mName m mNs
     -- enforce old module governance
     preserveModuleNameBug <- isExecutionFlagSet FlagPreserveModuleNameBug
+    -- test for new vs upgrade
     oldM <- lookupModule i $ _mName $ if preserveModuleNameBug then m else mangledM
     case oldM of
-      Nothing -> enforceNamespaceInstall i mNs
+
+      Nothing -> do
+        -- new install
+        enforceNameRestriction i $ _mnName $ _mName m
+        enforceNamespaceInstall i mNs
+
       Just (ModuleData omd _ _) ->
+        -- upgrade existing
         case omd of
           MDModule om -> void $ acquireModuleAdmin i (_mName om) (_mGovernance om)
           MDInterface Interface{..} -> evalError i $
@@ -340,7 +347,10 @@ eval' (TModule _tm@(MDInterface m) bod i) =
 #endif
     checkAllowModule i
     mNs <- use $ evalRefs . rsNamespace
+
+    enforceNameRestriction i $ _mnName $ _interfaceName m
     enforceNamespaceInstall i mNs
+
      -- prepend namespace def to module name
     mangledI <- evalNamespace i interfaceName m mNs
     -- enforce no upgrades

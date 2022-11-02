@@ -281,6 +281,8 @@ in the runtime environment and stores their definition in the global keyset data
 
 Namespaces are defined using [define-namespace](#define-namespace). Namespaces are "entered" by issuing the [namespace](#namespace) command.
 
+See [Name restrictions](#namerestrictions) for restrictions on namespace names added in Pact 4.5.
+
 #### Module declaration {#moduledeclaration}
 
 [Modules](#module) contain the API and data definitions for smart contracts. They are comprised of:
@@ -303,6 +305,8 @@ As of Pact 2.2, `use` statements can be issued within a module declaration. This
 
 Module names must be unique within a namespace.
 
+See [Name restrictions](#namerestrictions) for restrictions on module names added in Pact 4.5.
+
 #### Interface Declaration {#interfacedeclaration}
 
 [Interfaces](#interfaces) contain an API specification and data definitions for smart contracts.
@@ -319,6 +323,14 @@ They are comprised of:
 Interfaces represent an abstract api that a [module](#module) may implement by issuing an `implements` statement within the module declaration. Interfaces may import definitions from other modules by issuing a [use](#use) declaration, which may be used to construct new constant definitions, or make use of types defined in the imported module. Unlike Modules, Interface versioning is not supported. However, modules may implement multiple interfaces.
 
 Interface names must be unique within a namespace.
+
+See [Name restrictions](#namerestrictions) for restrictions on interface names added in Pact 4.5.
+
+#### Name restrictions on modules, interfaces and namespaces {#namerestrictions}
+In Pact 4.5, modules, interfaces and namespaces are restricted to 48 characters in length
+and only permitting lowercase ASCII letters, digits, dash (`-`) and underscore (`_`) characters.
+
+To bypass this restriction, use `(env-exec-config ['UnrestrictedNames])`.
 
 #### Table Creation {#tablecreation}
 

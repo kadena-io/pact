@@ -26,14 +26,17 @@ module Pact.Runtime.Utils
   , lookupFullyQualifiedTerm
   , inlineModuleData
   , getPactId
+  , enforceNameRestriction
   ) where
 
 import Bound
 import Control.Lens
 import Control.Monad
+import Data.Char (isAsciiLower,isDigit)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Pact.Gas
 import Pact.Types.Runtime
@@ -301,3 +304,25 @@ inlineModuleData md@(ModuleData m export deps) = case m of
     Ref t -> Ref (resolve m' <$> t)
     Direct (TVar (FQName fq) _) -> resolve m' (m' HM.! fq)
     e -> e
+
+-- | If restriction in force, limit module, interface and namespace names
+-- to ASCII lowercase, dash and underscore, and length to 48 characters.
+-- This is in addition to whatever restrictions are already in force
+-- (valid identifier, etc).
+enforceNameRestriction
+    :: HasInfo i
+    => i
+    -> Text
+    -> Eval e ()
+enforceNameRestriction i n =
+  unlessExecutionFlagSet FlagUnrestrictedNames $
+    if T.length n > 48 then evalError' i "Illegal name: must be 48 characters or less"
+    else case T.find restricted n of
+      Just {} -> evalError' i "Illegal name: invalid characters"
+      Nothing -> pure ()
+  where
+    restricted c = not
+        $ isAsciiLower c
+        || isDigit c
+        || c == '-'
+        || c == '_'

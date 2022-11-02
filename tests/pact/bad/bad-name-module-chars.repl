@@ -1,0 +1,2 @@
+(module char# G
+  (defcap G () true))

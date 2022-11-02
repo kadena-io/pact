@@ -156,6 +156,8 @@ data ExecutionFlag
   | FlagDisablePact44
   -- | Disable new transcendental impls
   | FlagDisableNewTrans
+  -- | Allow for unrestricted module, interface and namespace names
+  | FlagUnrestrictedNames
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

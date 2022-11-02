@@ -1,0 +1,110 @@
+
+;; ========== test unrestricted names ============
+(env-exec-config ['UnrestrictedNames])
+
+;; unrestricted new module
+(module unrestrictedModuleNameWithWeirdChars#$%AndLongerThan48Chars G
+  (defcap G () true))
+
+;; unrestricted interface
+(interface unrestrictedInterfaceNameWithWeirdChars#$%AndLongerThan48Chars
+  (defun f ()))
+
+(expect-that
+ "define unrestricted namespace ok"
+ (constantly true)
+ (define-namespace
+   "unrestrictedNamespaceNameWithWeirdChars#$%AndLongerThan48Chars"
+   (sig-keyset)
+   (sig-keyset)))
+
+
+;; ============ test restricted names =============
+(env-exec-config [])
+
+;; test that upgrades work on old names
+
+;; unrestricted module upgrade
+(module unrestrictedModuleNameWithWeirdChars#$%AndLongerThan48Chars F
+  (defcap F () true))
+
+
+(expect-that
+ "redefine unrestricted namespace ok"
+ (constantly true)
+ (define-namespace
+   "unrestrictedNamespaceNameWithWeirdChars#$%AndLongerThan48Chars"
+   (sig-keyset)
+   (sig-keyset)))
+
+;; test valid names
+
+;; restricted module new
+(module restricted-module-names-48-chars_dash_underscore G
+  (defcap G () true))
+
+;; restricted module upgrade
+(module restricted-module-names-48-chars_dash_underscore F
+  (defcap F () true))
+
+;; restricted interface
+(interface restricted-interface-name-48-char_dash_underscor
+  (defun f ()))
+
+(expect-that
+ "define restricted namespace ok"
+ (constantly true)
+ (define-namespace
+   "restricted-namespace-name-48-char_dash_underscor"
+   (sig-keyset)
+   (sig-keyset)))
+
+(expect-that
+ "redefine restricted namespace ok"
+ (constantly true)
+ (define-namespace
+   "restricted-namespace-name-48-char_dash_underscor"
+   (sig-keyset)
+   (sig-keyset)))
+
+(expect-failure
+ "invalid restricted namespace name: caps"
+ "Illegal name: invalid characters"
+ (define-namespace
+  "CAPS"
+  (sig-keyset)
+  (sig-keyset)))
+
+
+(expect-failure
+ "invalid restricted namespace name: symbols"
+ "Illegal name: invalid characters"
+ (define-namespace
+  "CAPS"
+  (sig-keyset)
+  (sig-keyset)))
+
+(expect-failure
+ "invalid restricted namespace name: length 49"
+ "Illegal name: must be 48 characters or less"
+ (define-namespace
+  "tooooooooooooooo-looooooooooooooooooooooooooooong"
+  (sig-keyset)
+  (sig-keyset)))
+
+;; check all identifiers that are illegal (see Pact.Types.Parser.style)
+
+(map
+ (lambda (c)
+  (expect-failure
+   "invalid restricted namespace name: idents"
+   "Illegal name: invalid characters"
+   (define-namespace (+ "ident" c) (sig-keyset) (sig-keyset))))
+ (str-to-list "%#+&$@<>=^?*!|/~"))
+
+(expect-failure
+ "invalid restricted namespace name: latin-1"
+ (define-namespace
+  "latin1Ö"
+  (sig-keyset)
+  (sig-keyset)))

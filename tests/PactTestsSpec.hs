@@ -122,7 +122,7 @@ badErrors = M.fromList
   ,(pfx "bad-ns-def.repl"
    ,"invalid namespace name format")
   ,(pfx "bad-defcap-explicit-mgr-auto-impl.repl"
-   ,"Defmeta mismatch with I: found @managed, expected @managed b")
+   ,"Defmeta mismatch with i: found @managed, expected @managed b")
   ,(pfx "bad-namespace-upgrade.repl"
    ,"autonomous")
   ,(pfx "bad-modrefs.repl"
@@ -139,8 +139,14 @@ badErrors = M.fromList
    ,"Keyset failure")
   ,(pfx "bad-term-in-list.repl"
    ,"Expected: value level form")
-
-  ]
+  ,(pfx "bad-name-module-length.repl"
+   ,"Illegal name: must be 48 characters or less")
+  ,(pfx "bad-name-interface-length.repl"
+   ,"Illegal name: must be 48 characters or less")
+  ,(pfx "bad-name-module-chars.repl"
+   ,"Illegal name: invalid characters")
+  ,(pfx "bad-name-interface-chars.repl"
+   ,"Illegal name: invalid characters")  ]
   where
     pfx = ("tests/pact/bad/" ++)
 

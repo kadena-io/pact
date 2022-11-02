@@ -4,7 +4,7 @@
 (define-namespace 'free (read-keyset 'keyset) (read-keyset 'keyset))
 (commit-tx)
 (begin-tx)
-(env-exec-config ['DisablePact43])
+(env-exec-config ['DisablePact43,'UnrestrictedNames])
 (namespace 'free)
 (module modA G
   (defcap G () true)

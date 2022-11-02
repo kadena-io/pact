@@ -1,5 +1,8 @@
 (begin-tx)
 
+;; allow legacy module names
+(env-exec-config ['UnrestrictedNames])
+
 ;; root namespace iface
 
 (interface ifaceA

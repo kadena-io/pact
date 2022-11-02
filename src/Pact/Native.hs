@@ -95,7 +95,7 @@ import Pact.Native.Ops
 import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Parse
-import Pact.Runtime.Utils(lookupFreeVar)
+import Pact.Runtime.Utils(lookupFreeVar,enforceNameRestriction)
 import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
@@ -485,6 +485,8 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
           computeGas' g1 fi (GPreWrite (WriteNamespace newNsPactValue)) $
             writeNamespace info name newNsPactValue
         Nothing -> do
+          -- new namespace
+          enforceNameRestriction fi nsn
           enforcePolicy info name newNs
           computeGas' g0 fi (GPreWrite (WriteNamespace newNsPactValue)) $
             writeNamespace info name newNsPactValue
