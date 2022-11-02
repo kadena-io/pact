@@ -3,7 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
-(env-exec-config ["DisableInlineMemCheck", "DisablePact43", "DisablePact44"])
+(env-exec-config ["DisableInlineMemCheck", "DisablePact43", "DisablePact44", "DisablePact45"])
 (env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
@@ -543,7 +543,7 @@ d.G3
 
 (env-gas 0)
 (env-gaslog)
-(env-exec-config ['DisablePact44])
+(env-exec-config ['DisablePact44, 'DisablePact45])
 (namespace "a")
 (env-gaslog)
 (expect "Cost: using namespace" 14 (env-gas))
@@ -553,7 +553,7 @@ d.G3
 (env-keys ["s"])
 (env-gas 0)
 (env-gaslog)
-(env-exec-config [])
+(env-exec-config ['DisablePact45])
 (namespace "a")
 (env-gaslog)
 (expect "Cost: using namespace w/o enforce" 13 (env-gas))
@@ -621,7 +621,7 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
-(env-exec-config ["DisablePact43"])
+(env-exec-config ["DisablePact43",'DisablePact45])
 (env-gasmodel "table")
 (module basic-module GOV
   (defcap GOV () true)
@@ -691,7 +691,7 @@ d.G3
 (begin-tx)
 (env-gas 0)
 (env-gaslimit 80000)
-(env-exec-config [])
+(env-exec-config ['DisablePact45])
 
 (load "../../golden/golden.fqns.repl")
 
