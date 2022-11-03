@@ -58,9 +58,9 @@ module Pact.Native
     ) where
 
 import Control.Arrow hiding (app)
+import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
-import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
