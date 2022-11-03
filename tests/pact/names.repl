@@ -75,15 +75,6 @@
   (sig-keyset)
   (sig-keyset)))
 
-
-(expect-failure
- "invalid restricted namespace name: symbols"
- "Illegal name: invalid characters"
- (define-namespace
-  "CAPS"
-  (sig-keyset)
-  (sig-keyset)))
-
 (expect-failure
  "invalid restricted namespace name: length 49"
  "Illegal name: must be 48 characters or less"
