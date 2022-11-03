@@ -1248,7 +1248,7 @@ stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
 
 strToList :: GasRNativeFun e
 strToList g i [TLitString s] = do
-  let !len = fromIntegral $ T.length s
+  let len = fromIntegral $ T.length s
   ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
   computeGas' g i ga $ return $ toTListV tTyString def $ stringToCharList s
 strToList _ i as = argsError i as

@@ -275,8 +275,8 @@ tableGasModel gasConfig =
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
         GModuleMemory i -> moduleMemoryCost i
         GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
-        GMakeList2 len msz -> let
-          !glen = fromIntegral len
+        GMakeList2 len msz ->
+          let glen = fromIntegral len
           in glen + maybe 0 ((* glen) . intCost) msz
   in GasModel
       { gasModelName = "table"
