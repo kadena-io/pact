@@ -4,9 +4,6 @@ module Utils
 ( testMgr
 , withTestPactServer
 , withTestPactServerWithSpv
-, testFlags
-, backCompatFlags
-, nestedDefPactFlags
 , genKeys
 , testDir
 ) where
@@ -48,15 +45,6 @@ genKeys = genKeyPair defaultScheme
 
 testDir :: FilePath
 testDir = "tests/"
-
-testFlags :: [ExecutionFlag]
-testFlags = [ FlagDisablePact43, FlagDisablePact44 ]
-
-backCompatFlags :: [ExecutionFlag]
-backCompatFlags = [ FlagDisablePact40, FlagDisablePact43, FlagDisablePact44 ]
-
-nestedDefPactFlags :: [ExecutionFlag]
-nestedDefPactFlags = [ FlagDisablePact44 ]
 
 serverRoot :: Port -> String
 serverRoot port = "http://localhost:" ++ show port ++ "/"
@@ -100,8 +88,8 @@ withTestConfig label flags inner =
 -- -------------------------------------------------------------------------- --
 -- Test Pact Server
 
-withTestPactServer :: String -> (ClientEnv -> IO a) -> IO a
-withTestPactServer label = withTestPactServerWithSpv label testFlags noSPVSupport
+withTestPactServer :: String -> [ExecutionFlag] -> (ClientEnv -> IO a) -> IO a
+withTestPactServer label flags = withTestPactServerWithSpv label flags noSPVSupport
 
 withTestPactServerWithSpv
   :: String
@@ -114,4 +102,3 @@ withTestPactServerWithSpv label flags spv action =
     withTestPactServerWithSpv_ spv fp $ \port -> do
       clientEnv <- mkClientEnv testMgr <$> parseBaseUrl (serverRoot port)
       action clientEnv
-

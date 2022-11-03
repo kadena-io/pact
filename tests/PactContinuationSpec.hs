@@ -47,7 +47,7 @@ type ClientError = ServantError
 ---- TESTS -----
 
 spec :: Spec
-spec = describe "pacts in dev server" $ do
+spec = describe "PactContinuationSpec" $ do
   describe "testPactContinuation" testPactContinuation
   describe "testPactRollback" testPactRollback
   describe "testPactYield" testPactYield
@@ -99,6 +99,15 @@ testElideModRefEvents = do
            (evmodule.emit evmodule)
            |]
 
+-- TODO modernize tests to not need flags except for explicit backcompat
+testFlags :: [ExecutionFlag]
+testFlags = [ FlagDisablePact43, FlagDisablePact44, FlagUnrestrictedNames ]
+
+backCompatFlags :: [ExecutionFlag]
+backCompatFlags = [ FlagDisablePact40, FlagDisablePact43, FlagDisablePact44, FlagUnrestrictedNames ]
+
+nestedDefPactFlags :: [ExecutionFlag]
+nestedDefPactFlags = [ FlagDisablePact44, FlagUnrestrictedNames ]
 
 mkModuleHash :: Text -> IO ModuleHash
 mkModuleHash =

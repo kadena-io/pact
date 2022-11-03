@@ -45,21 +45,21 @@ spec = describe "Servant API client tests" $ do
 
     it "correctly runs a simple command locally" $ do
       cmd <- simpleServerCmd
-      res <- withTestPactServer "clientspec" $ \clientEnv -> do
+      res <- withTestPactServer "clientspec" [] $ \clientEnv -> do
         runClientM (localClient cmd) clientEnv
       let cmdPactResult = (PactResult . Right . PLiteral . LDecimal) 3
       (_crResult <$> res) `shouldBe` Right cmdPactResult
 
     it "correctly runs a simple command with pact error locally" $ do
       cmd <- simpleServerCmdWithPactErr
-      res <- withTestPactServer "clientspec" $ \clientEnv -> do
+      res <- withTestPactServer "clientspec" [] $ \clientEnv -> do
         runClientM (localClient cmd) clientEnv
       (_crResult <$> res) `shouldSatisfy` failWith ArgsError
 
     it "correctly runs a simple command publicly and listens to the result" $ do
       cmd <- simpleServerCmd
       let rk = cmdToRequestKey cmd
-      (res,res') <- withTestPactServer "clientspec" $ \clientEnv -> do
+      (res,res') <- withTestPactServer "clientspec" [] $ \clientEnv -> do
         !res <- runClientM (sendClient (SubmitBatch [cmd])) clientEnv
         !res' <- runClientM (listenClient (ListenerRequest rk)) clientEnv
         return (res,res')
@@ -74,7 +74,7 @@ spec = describe "Servant API client tests" $ do
     it "correctly runs a simple command with pact error publicly and listens to the result" $ do
       cmd <- simpleServerCmdWithPactErr
       let rk = cmdToRequestKey cmd
-      (res,res') <- withTestPactServer "clientspec" $ \clientEnv -> do
+      (res,res') <- withTestPactServer "clientspec" [] $ \clientEnv -> do
         !res <- runClientM (sendClient (SubmitBatch [cmd])) clientEnv
         !res' <- runClientM (listenClient (ListenerRequest rk)) clientEnv
         return (res,res')
