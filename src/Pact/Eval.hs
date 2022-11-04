@@ -48,6 +48,7 @@ module Pact.Eval
     ,instantiate'
     ,resumeNestedPactExec
     ,createNestedPactId
+    ,getSizeOfVersion
     ) where
 
 import Bound
@@ -173,7 +174,9 @@ enforceGuard i g = case g of
         if doFail then failTx' i "Invalid Pact ID" else
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
-
+getSizeOfVersion :: Eval e SizeOfVersion
+getSizeOfVersion = ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+{-# INLINABLE getSizeOfVersion #-}
 
 -- | Hoist Name back to ref
 liftTerm :: Term Name -> Term Ref
@@ -324,7 +327,7 @@ eval' (TModule _tm@(MDModule m) bod i) =
         void $ acquireModuleAdminCapability capMName $ return ()
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
-    szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+    szVer <- getSizeOfVersion
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)) szVer)
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
 #ifdef ADVICE
@@ -348,7 +351,7 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     void $ lookupModule i (_interfaceName mangledI) >>= traverse
       (const $ evalError i $ "Existing interface found (interfaces cannot be upgraded)")
     (g,govI) <- loadInterface mangledI bod i gas
-    szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+    szVer <- getSizeOfVersion
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)) szVer)
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
 #ifdef ADVICE
@@ -566,7 +569,7 @@ dresolveMem
   -> (Term (Either Text (Ref' (Term Name))), Text, c)
   -> Eval e HeapFold
 dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = do
-  szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+  szVer <- getSizeOfVersion
   (!unified, (HeapMemState costMemoEnv' totalMem))
       <- runStateT (traverse (replaceMemo szVer allDefs) defTerm)
                  (HeapMemState costMemoEnv (sizeOf szVer defTerm + currMem))
@@ -719,7 +722,7 @@ fullyQualifyDefs info mdef defs = do
   sortedDefs <- enforceAcyclic info cs
   fDefs <- foldlM mkAndEvalConsts mempty sortedDefs
   deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
-  szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+  szVer <- getSizeOfVersion
   let (Sum totalMemory) = foldMap (Sum . sizeOf szVer) fDefs + foldMap (Sum . sizeOf szVer) deps
   _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
   pure (fDefs, deps)

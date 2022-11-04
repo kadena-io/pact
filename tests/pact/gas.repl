@@ -750,6 +750,18 @@ d.G3
 (expect "gas of enforce pre-fork" 24 (env-gas))
 (commit-tx)
 
+; Gas change to sizeOf
+(begin-tx)
+(env-gas 0)
+(module m G
+  (defcap G () true)
+  (defconst c1:integer 01823012838012380128301203812038132812381238128312831823812381238912312312312312)
+  (defconst c2:integer (- 01230128380123801230891245710857102597102587105287102581725081725102587102857))
+  )
+(expect "New post-fork memory gas" 60094 (env-gas))
+(commit-tx)
+
+
 (begin-tx)
 (env-exec-config [])
 (env-gas 0)
@@ -757,3 +769,13 @@ d.G3
 (expect "gas of enforce post-fork does not evaluate string" 1 (env-gas))
 (commit-tx)
 
+
+(begin-tx)
+(env-gas 0)
+(module m G
+  (defcap G () true)
+  (defconst c1:integer 01823012838012380128301203812038132812381238128312831823812381238912312312312312)
+  (defconst c2:integer (- 01230128380123801230891245710857102597102587105287102581725081725102587102857))
+  )
+(expect "New post-fork memory gas" 60096 (env-gas))
+(commit-tx)

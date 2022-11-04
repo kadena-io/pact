@@ -25,7 +25,6 @@ import Pact.Types.KeySet
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Namespace
-import Pact.Types.SizeOf(SizeOfVersion(..))
 
 readKeysetDef :: NativeDef
 readKeysetDef =
@@ -92,7 +91,7 @@ defineKeyset g0 fi as = case as of
 
       mNs <- use $ evalRefs . rsNamespace
       old <- readRow i KeySets ksn
-      szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+      szVer <- getSizeOfVersion
 
       case old of
         Nothing -> case mNs of

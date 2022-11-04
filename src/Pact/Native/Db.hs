@@ -44,7 +44,6 @@ import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 import Pact.Types.KeySet (parseAnyKeysetName)
-import Pact.Types.SizeOf(SizeOfVersion(..))
 
 class Readable a where
   readable :: a -> ReadValue
@@ -437,7 +436,7 @@ write wt partial i as = do
     [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
       ps' <- enforcePactValue' ps
       cost0 <- computeGas (Right i) (GUnreduced [])
-      szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+      szVer <- getSizeOfVersion
       cost1 <- computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps') szVer)
       guardTable i table GtWrite
       case _tTableType of
@@ -455,7 +454,7 @@ createTable' :: GasRNativeFun e
 createTable' g i [t@TTable {..}] = do
   guardTable i t GtCreateTable
   let (UserTables tn) = userTable t
-  szVer <- ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+  szVer <- getSizeOfVersion
   computeGas' g i (GPreWrite (WriteTable (asString tn)) szVer) $
     success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' _ i as = argsError i as

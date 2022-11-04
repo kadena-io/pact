@@ -46,6 +46,7 @@ import GHC.Generics
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Pact.Types.Orphans()
+import Pact.Types.Pretty
 
 #if !defined(ghcjs_HOST_OS)
 import qualified GHC.Integer.Logarithms as IntLog
@@ -68,6 +69,9 @@ data SizeOfVersion
   = SizeOfV0
   | SizeOfV1
   deriving Show
+
+instance Pretty SizeOfVersion where
+  pretty = viaShow
 
 class SizeOf t where
   sizeOf :: SizeOfVersion -> t -> Bytes
