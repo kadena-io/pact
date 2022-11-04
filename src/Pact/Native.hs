@@ -58,9 +58,9 @@ module Pact.Native
     ) where
 
 import Control.Arrow hiding (app)
+import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
-import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
@@ -910,7 +910,10 @@ list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set 
 
 makeList :: GasRNativeFun e
 makeList g i [TLitInteger len,value] = case typeof value of
-  Right ty -> computeGas' g i (GMakeList len) $ return $ toTList ty def $ replicate (fromIntegral len) value
+  Right ty -> do
+    ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
+    computeGas' g i ga $ return $
+      toTListV ty def $ V.replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
 
@@ -923,11 +926,17 @@ enumerate g i = \case
     as -> argsError i as
   where
 
-    computeList :: Integer -> V.Vector Integer -> Eval e (Gas, Term Name)
-    computeList gas = computeGas' g i (GMakeList gas)
-      . pure
-      . toTListV tTyInteger def
-      . fmap toTerm
+    computeList
+      :: Integer
+      -- ^ the length of the list
+      -> Integer
+      -- ^ size of the largest element.
+      -> V.Vector Integer
+      -- ^ The generated vector
+      -> Eval e (Gas, Term Name)
+    computeList len sz v = do
+      ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len (Just sz))
+      computeGas' g i ga $ pure $ toTListV tTyInteger def $ fmap toTerm v
 
     step to' inc acc
       | acc > to', inc > 0 = Nothing
@@ -935,15 +944,15 @@ enumerate g i = \case
       | otherwise = Just (acc, acc + inc)
 
     createEnumerateList from' to' inc
-      | from' == to' = computeList 1 (V.singleton from')
-      | inc == 0 = computeList 1 mempty
+      | from' == to' = computeList 1 from' (V.singleton from')
+      | inc == 0 = computeList 1 0 mempty
       | from' < to', from' + inc < from' =
         evalError' i "enumerate: increment diverges below from interval bounds."
       | from' > to', from' + inc > from' =
         evalError' i "enumerate: increment diverges above from interval bounds."
       | otherwise = do
         let g' = succ $ (abs (from' - to')) `div` (abs inc)
-        computeList g' $ V.unfoldr (step to' inc) from'
+        computeList g' (max (abs from') (abs to')) $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
@@ -1240,8 +1249,10 @@ stringToCharList :: Text -> V.Vector (Term a)
 stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
 
 strToList :: GasRNativeFun e
-strToList g i [TLitString s] = computeGas' g i (GMakeList $ fromIntegral $ T.length s) $
-  return $ toTListV tTyString def $ stringToCharList s
+strToList g i [TLitString s] = do
+  let len = fromIntegral $ T.length s
+  ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
+  computeGas' g i ga $ return $ toTListV tTyString def $ stringToCharList s
 strToList _ i as = argsError i as
 
 strToInt :: RNativeFun e

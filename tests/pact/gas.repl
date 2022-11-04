@@ -779,3 +779,22 @@ d.G3
   )
 (expect "New post-fork memory gas" 60096 (env-gas))
 (commit-tx)
+
+(begin-tx)
+(env-gas 0)
+(enumerate 0 9)
+(expect "gas of enumerate post-fork" 11 (env-gas))
+(commit-tx)
+
+(begin-tx)
+(env-gas 0)
+(make-list 10 1)
+(expect "gas of make-list post-fork" 11 (env-gas))
+(commit-tx)
+
+
+(begin-tx)
+(env-gas 0)
+(str-to-list "0123456789")
+(expect "gas of str-to-list post-fork" 11 (env-gas))
+(commit-tx)

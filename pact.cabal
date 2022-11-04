@@ -184,6 +184,8 @@ library
     , prettyprinter-ansi-terminal >= 1.1 && < 1.2
     , quickcheck-instances >= 0.3
     , reflection
+    , safe >= 0.3.11 && < 0.4
+    , safe-exceptions 
     , semigroupoids >= 5.0
     , servant
     , text >= 1.2.2.1 && < 2
