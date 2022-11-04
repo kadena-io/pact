@@ -158,7 +158,7 @@ instance Pretty GasArgs where
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
     GUnreduced {} -> "GUnreduced"
     GPostRead rv -> "GPostRead:" <> pretty rv
-    GPreWrite wv _ -> "GWrite:" <> pretty wv
+    GPreWrite wv szVer -> "GWrite:" <> pretty wv <> colon <> pretty szVer
     GModuleMember {} -> "GModuleMember"
     GModuleDecl {} -> "GModuleDecl"
     GUse {} -> "GUse"
