@@ -3,7 +3,7 @@
 ; ============================================================ ;
 ;; TEST: Out of gas error
 ;;
-(env-exec-config ["DisableInlineMemCheck", "DisablePact43", "DisablePact44"])
+(env-exec-config ["DisableInlineMemCheck", "DisablePact43", "DisablePact44", "DisablePact45"])
 (env-gaslimit 11)
 (env-gasrate 1)
 (map (+ 1) (make-list 8 8))
@@ -757,3 +757,21 @@ d.G3
 (expect "gas of enforce post-fork does not evaluate string" 1 (env-gas))
 (commit-tx)
 
+(begin-tx)
+(env-gas 0)
+(enumerate 0 9)
+(expect "gas of enumerate post-fork" 11 (env-gas))
+(commit-tx)
+
+(begin-tx)
+(env-gas 0)
+(make-list 10 1)
+(expect "gas of make-list post-fork" 11 (env-gas))
+(commit-tx)
+
+
+(begin-tx)
+(env-gas 0)
+(str-to-list "0123456789")
+(expect "gas of str-to-list post-fork" 11 (env-gas))
+(commit-tx)
