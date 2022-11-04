@@ -58,9 +58,9 @@ module Pact.Native
     ) where
 
 import Control.Arrow hiding (app)
+import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
-import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
@@ -144,14 +144,27 @@ enforceDef = defNative "enforce" enforce
   where
 
     enforce :: NativeFun e
-    enforce i as = runSysOnly $ gasUnreduced i as $ mapM reduce as >>= enforce' i
+    enforce i as = runSysOnly $ gasUnreduced i as $
+      ifExecutionFlagSet FlagDisablePact45
+      (mapM reduce as >>= enforce' i)
+      (enforceLazy i as)
 
     enforce' :: RNativeFun e
     enforce' i [TLiteral (LBool b') _,TLitString msg]
         | b' = return $ TLiteral (LBool True) def
         | otherwise = failTx (_faInfo i) $ pretty msg
     enforce' i as = argsError i as
-    {-# INLINE enforce' #-}
+
+    enforceLazy i [cond, msg] =
+      reduce cond >>= \case
+        TLiteral (LBool b') _ ->
+          if b' then
+            return (TLiteral (LBool True) def)
+          else reduce msg >>= \case
+            TLitString msg' -> failTx (_faInfo i) $ pretty msg'
+            e -> evalError' i $ "Invalid message argument, expected string " <> pretty e
+        cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
+    enforceLazy i as = mapM reduce as >>= argsError i
 
 enforceOneDef :: NativeDef
 enforceOneDef =

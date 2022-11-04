@@ -33,11 +33,10 @@ import Prelude hiding (log)
 
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
+import Control.Exception.Safe
 import Control.Lens
 import Control.Monad
-import Control.Monad.Catch
 import Control.Monad.State.Strict
-import Data.Typeable
 import Data.String
 
 import Data.Aeson hiding ((.=))

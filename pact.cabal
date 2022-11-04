@@ -191,6 +191,8 @@ library
     , quickcheck-instances >= 0.3
     , reflection
     , scientific >= 0.3
+    , safe-exceptions
+    , semigroupoids >= 5.0
     , servant
     , text >= 1.2.2.1 && < 2.1
     , trifecta >=2.1.1.1
