@@ -185,7 +185,7 @@ library
     , quickcheck-instances >= 0.3
     , reflection
     , safe >= 0.3.11 && < 0.4
-    , safe-exceptions 
+    , safe-exceptions
     , semigroupoids >= 5.0
     , servant
     , text >= 1.2.2.1 && < 2
@@ -383,6 +383,7 @@ test-suite hspec
     KeysetSpec
     RoundTripSpec
     PrincipalSpec
+    SizeOfSpec
 
   if !impl(ghcjs)
     other-modules:
@@ -420,7 +421,6 @@ test-suite hspec
         PersistSpec
         RemoteVerifySpec
         TypecheckSpec
-        SizeOfSpec
         PactCLISpec
         Utils
 
