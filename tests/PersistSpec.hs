@@ -3,8 +3,8 @@
 module PersistSpec (spec) where
 
 import Control.Concurrent
+import Control.Lens
 import Control.Monad
-import Data.Default
 import Data.Either
 import qualified Data.Map.Strict as M
 import Database.SQLite3.Direct
@@ -16,7 +16,6 @@ import qualified Pact.Persist.SQLite as SQLite
 import qualified Pact.PersistPactDb as Pdb
 import Pact.PersistPactDb.Regression
 import Pact.Repl
-import Pact.Repl.Lib
 import Pact.Repl.Types
 import Pact.Types.Logger
 import Pact.Types.Runtime
@@ -72,11 +71,10 @@ ucaseMungerTest = do
 runDbRepl :: TableMunger -> IO (SpecWith (),[Utf8])
 runDbRepl munger = do
   (PactDbEnv _ pdb) <- mkInMemSQLiteEnv neverLog
-  ls <- initLibState' (LibDb pdb) Nothing
-  ee <- initEvalEnv ls
-  let rs = ReplState (ee { _eeTableMunger = munger }) def Quiet def def def
+  rs <- set (rEnv . eeTableMunger) munger <$> initReplStateDb pdb Quiet Nothing
   (r,_) <- execScriptState' dbScript rs id
   -- statements are indexed by table name so grab them to test
   -- easier than running `.tables` on the connection directly
   ks <- M.keys . SQLite.tableStmts . Pdb._db <$> readMVar pdb
+  -- return assertion as 'Spec' is hard to factor
   return (it "db repl succeeds" $ r `shouldSatisfy` isRight, ks)
