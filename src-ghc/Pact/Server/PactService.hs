@@ -152,6 +152,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
         (MsgData edata Nothing (toUntypedHash hsh) signers)
         initRefStore _ceGasEnv permissiveNamespacePolicy
         _ceSPVSupport _cePublicData _ceExecutionConfig
+        ucaseEncodeTableMunger
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
@@ -164,5 +165,6 @@ applyContinuation rk hsh signers cm = do
   evalEnv <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) initRefStore
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
+                ucaseEncodeTableMunger
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

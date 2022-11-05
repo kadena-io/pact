@@ -28,7 +28,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eeAdvice,
+   eeAdvice,eeTableMunger,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
@@ -226,6 +226,8 @@ data EvalEnv e = EvalEnv {
     , _eeAdvice :: !Advice
       -- | Are we in the repl? If so, ignore info
     , _eeInRepl :: Bool
+      -- | Table name munging strategy
+    , _eeTableMunger :: TableMunger
     }
 makeLenses ''EvalEnv
 

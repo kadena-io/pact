@@ -33,6 +33,7 @@ module Pact.Repl
   , evalString
   , handleCompile
   , handleParse
+  , initEvalEnv
   , initPureEvalEnv
   , initReplState
   , initReplState'
@@ -151,6 +152,7 @@ initEvalEnv ls = do
     , _eeExecutionConfig = def
     , _eeAdvice = def
     , _eeInRepl = True
+    , _eeTableMunger = simpleTableMunger
     }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport

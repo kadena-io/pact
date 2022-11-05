@@ -269,3 +269,26 @@
   [["a" 1] ["b" 2]]
   (fold-db fdb-tbl (lambda (k o)  (< k "c")) (lambda (k o) [k (at 'a o)]))
   )
+
+
+;; tables specifically for testing munging, see PersistSpec
+(begin-tx)
+
+;; root version
+(module mungeModule G
+  (defcap G () (enforce false "non-upgradeable"))
+  (defschema s i:integer)
+  (deftable mungeTable:{s}))
+(create-table mungeTable)
+
+;; namespace version
+(define-namespace "mungeNamespace" (sig-keyset) (sig-keyset))
+(namespace 'mungeNamespace)
+
+(module mungeModule G
+  (defcap G () 1)
+  (defschema s i:integer)
+  (deftable mungeTable:{s}))
+(create-table mungeTable)
+
+(commit-tx)

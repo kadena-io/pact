@@ -167,8 +167,9 @@ setupEvalEnv
   -> SPVSupport
   -> PublicData
   -> ExecutionConfig
+  -> TableMunger
   -> IO (EvalEnv e)
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec tm = do
   gasRef <- newIORef 0
   pure EvalEnv {
     _eeRefStore = refStore
@@ -189,6 +190,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   , _eeExecutionConfig = ec
   , _eeAdvice = def
   , _eeInRepl = False
+  , _eeTableMunger = tm
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss
@@ -240,7 +242,7 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
 
   where
 
-    withRollback act = 
+    withRollback act =
       act `onException` safeRollback
 
     safeRollback =
