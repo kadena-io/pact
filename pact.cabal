@@ -431,6 +431,7 @@ test-suite hspec
         , QuickCheck
         , deepseq
         , directory
+        , direct-sqlite
         , exceptions
         , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2
