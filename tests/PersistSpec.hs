@@ -45,36 +45,30 @@ dbScript :: FilePath
 dbScript = "tests/pact/db.repl"
 
 simpleTableMungerTest :: Spec
-simpleTableMungerTest = do
-  (test,tblNames) <- runIO $ runDbRepl simpleTableMunger
-  test
-  forM_
-    [ "[USER_mungeModule_mungeTable_DATA]",
-      "[USER_mungeNamespace.mungeModule_mungeTable_DATA]"
-    ] $ \t ->
-      it ("found table " ++ show t) $ tblNames `shouldSatisfy` (t `elem`)
+simpleTableMungerTest = runMungerTest simpleTableMunger
+      [ "[USER_mungeModule_mungeTable_DATA]"
+      , "[USER_mungeNamespace.mungeModule_mungeTable_DATA]"
+      ]
+
 
 ucaseMungerTest :: Spec
-ucaseMungerTest = do
-  (test,tblNames) <- runIO $ runDbRepl ucaseEncodeTableMunger
-  test
-  forM_
-    [ "[USER_mungem:odule.munget:able_DATA]",
-      "[USER_mungen:amespace.mungem:odule.munget:able_DATA]"
-    ] $ \t ->
-      it ("found table " ++ show t) $ tblNames `shouldSatisfy` (t `elem`)
+ucaseMungerTest = runMungerTest ucaseEncodeTableMunger
+      [ "[USER_mungem:odule.munget:able_DATA]"
+      , "[USER_mungen:amespace.mungem:odule.munget:able_DATA]"
+      ]
 
 -- | Munger test fixture.
 -- munged names are further modified by backend, we're really
 -- just ensuring that db functions work on sqlite with all
 -- munge types, and verifying the mungers run.
-runDbRepl :: TableMunger -> IO (SpecWith (),[Utf8])
-runDbRepl munger = do
-  (PactDbEnv _ pdb) <- mkInMemSQLiteEnv neverLog
-  rs <- set (rEnv . eeTableMunger) munger <$> initReplStateDb pdb Quiet Nothing
-  (r,_) <- execScriptState' dbScript rs id
+runMungerTest :: TableMunger -> [Utf8] -> Spec
+runMungerTest munger names = do
+  (PactDbEnv _ pdb) <- runIO $ mkInMemSQLiteEnv neverLog
+  rs <- set (rEnv . eeTableMunger) munger <$> runIO (initReplStateDb pdb Quiet Nothing)
+  (r,_) <- runIO $ execScriptState' dbScript rs id
   -- statements are indexed by table name so grab them to test
   -- easier than running `.tables` on the connection directly
-  ks <- M.keys . SQLite.tableStmts . Pdb._db <$> readMVar pdb
-  -- return assertion as 'Spec' is hard to factor
-  return (it "db repl succeeds" $ r `shouldSatisfy` isRight, ks)
+  ks <- M.keys . SQLite.tableStmts . Pdb._db <$> runIO (readMVar pdb)
+  it "db repl succeeds" $ r `shouldSatisfy` isRight
+  forM_ names $ \t ->
+    it ("found table " ++ show t) $ ks `shouldSatisfy` (t `elem`)
