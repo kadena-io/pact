@@ -9,10 +9,12 @@ module Utils
 , nestedDefPactFlags
 , genKeys
 , testDir
+, mkInMemSQLiteEnv
 ) where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception
+import Control.Monad.IO.Class
 
 import Data.Aeson
 
@@ -23,11 +25,16 @@ import Servant.Client
 import System.IO.Temp
 import System.IO.Unsafe
 
+
 -- internal modules
 
+import Pact.Interpreter
+import qualified Pact.Persist.SQLite as PSL
+import Pact.PersistPactDb
 import Pact.Server.API
 import Pact.Server.Server
 import Pact.Types.Crypto as Crypto
+import Pact.Types.Logger
 import Pact.Types.Runtime
 import Pact.Types.SPV
 
@@ -115,3 +122,7 @@ withTestPactServerWithSpv label flags spv action =
       clientEnv <- mkClientEnv testMgr <$> parseBaseUrl (serverRoot port)
       action clientEnv
 
+
+mkInMemSQLiteEnv :: MonadIO m => Loggers -> m (PactDbEnv (DbEnv PSL.SQLite))
+mkInMemSQLiteEnv loggers =
+  liftIO $ mkSQLiteEnv (newLogger loggers "InitLog") False (PSL.SQLiteConfig "" []) loggers

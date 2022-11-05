@@ -5,14 +5,14 @@ module PersistSpec (spec) where
 import Control.Concurrent
 import Control.Monad
 import Data.Default
+import Data.Either
 import qualified Data.Map.Strict as M
+import Database.SQLite3.Direct
 import System.Directory
 import Test.Hspec
 
 import Pact.Interpreter
-import Pact.Persist
 import qualified Pact.Persist.SQLite as SQLite
-import qualified Pact.Persist.Pure as Pure
 import qualified Pact.PersistPactDb as Pdb
 import Pact.PersistPactDb.Regression
 import Pact.Repl
@@ -20,6 +20,8 @@ import Pact.Repl.Lib
 import Pact.Repl.Types
 import Pact.Types.Logger
 import Pact.Types.Runtime
+
+import Utils
 
 spec :: Spec
 spec = do
@@ -45,27 +47,36 @@ dbScript = "tests/pact/db.repl"
 
 simpleTableMungerTest :: Spec
 simpleTableMungerTest = do
-  tblNames <- runIO $ runDbRepl simpleTableMunger
+  (test,tblNames) <- runIO $ runDbRepl simpleTableMunger
+  test
   forM_
-    [ "USER_mungeModule_mungeTable",
-      "USER_mungeNamespace.mungeModule_mungeTable"
+    [ "[USER_mungeModule_mungeTable_DATA]",
+      "[USER_mungeNamespace.mungeModule_mungeTable_DATA]"
     ] $ \t ->
-      it ("found table " ++ show t) $ tblNames `shouldSatisfy` (DataTable t `elem`)
+      it ("found table " ++ show t) $ tblNames `shouldSatisfy` (t `elem`)
 
 ucaseMungerTest :: Spec
 ucaseMungerTest = do
-  tblNames <- runIO $ runDbRepl ucaseEncodeTableMunger
+  (test,tblNames) <- runIO $ runDbRepl ucaseEncodeTableMunger
+  test
   forM_
-    [ "USER_mungem:odule.munget:able",
-      "USER_mungen:amespace.mungem:odule.munget:able"
+    [ "[USER_mungem:odule.munget:able_DATA]",
+      "[USER_mungen:amespace.mungem:odule.munget:able_DATA]"
     ] $ \t ->
-      it ("found table " ++ show t) $ tblNames `shouldSatisfy` (DataTable t `elem`)
+      it ("found table " ++ show t) $ tblNames `shouldSatisfy` (t `elem`)
 
-runDbRepl :: TableMunger -> IO [Table DataKey]
+-- | Munger test fixture.
+-- munged names are further modified by backend, we're really
+-- just ensuring that db functions work on sqlite with all
+-- munge types, and verifying the mungers run.
+runDbRepl :: TableMunger -> IO (SpecWith (),[Utf8])
 runDbRepl munger = do
-  (PactDbEnv _ pdb) <- mkPureEnv neverLog
+  (PactDbEnv _ pdb) <- mkInMemSQLiteEnv neverLog
   ls <- initLibState' (LibDb pdb) Nothing
   ee <- initEvalEnv ls
   let rs = ReplState (ee { _eeTableMunger = munger }) def Quiet def def def
-  void $ execScriptState' dbScript rs id
-  M.keys . Pure._tbls . Pure._dataTables . Pure._committed . Pdb._db <$> readMVar pdb
+  (r,_) <- execScriptState' dbScript rs id
+  -- statements are indexed by table name so grab them to test
+  -- easier than running `.tables` on the connection directly
+  ks <- M.keys . SQLite.tableStmts . Pdb._db <$> readMVar pdb
+  return (it "db repl succeeds" $ r `shouldSatisfy` isRight, ks)
