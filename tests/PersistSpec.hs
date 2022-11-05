@@ -20,8 +20,6 @@ import Pact.Repl.Types
 import Pact.Types.Logger
 import Pact.Types.Runtime
 
-import Utils
-
 spec :: Spec
 spec = do
   it "regress Pure" (void $ regressPure neverLog)

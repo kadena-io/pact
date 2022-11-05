@@ -27,6 +27,7 @@ module Pact.Interpreter
   , setupEvalEnv
   , initRefStore
   , mkSQLiteEnv
+  , mkInMemSQLiteEnv
   , mkPureEnv
   , mkPactDbEnv
   , initSchema
@@ -212,6 +213,12 @@ mkSQLiteEnv initLog deleteOldFile c loggers = do
       removeFile (PSL._dbFile c)
   dbe <- initDbEnv loggers PSL.persister <$> PSL.initSQLite c loggers
   mkPactDbEnv pactdb dbe
+
+
+mkInMemSQLiteEnv :: Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
+mkInMemSQLiteEnv loggers =
+  mkSQLiteEnv (newLogger loggers "InitLog") False (PSL.SQLiteConfig "" []) loggers
+
 
 mkPureEnv :: Loggers -> IO (PactDbEnv (DbEnv Pure.PureDb))
 mkPureEnv loggers = mkPactDbEnv pactdb $ initDbEnv loggers Pure.persister Pure.initPureDb

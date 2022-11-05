@@ -25,8 +25,6 @@ import Pact.Parse (parsePact, legacyParsePact)
 import System.Directory
 import System.FilePath
 
-import Utils
-
 spec :: Spec
 spec = do
   tests <- runIO findTests
