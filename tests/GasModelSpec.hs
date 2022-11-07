@@ -154,7 +154,7 @@ someGoldenSizeOfPactValue :: String -> Spec
 someGoldenSizeOfPactValue desc = do
   it ("passes sizeOf golden test with pseudo-random " <> desc <> " pact value") $ do
     (goldenSize, goldenPactValue) <- jsonDecode (goldenPactValueFilePath desc)
-    let actualSize = sizeOf goldenPactValue
+    let actualSize = sizeOf SizeOfV0 goldenPactValue
     actualSize `shouldBe` goldenSize
 
   where jsonDecode :: FilePath -> IO (Int64, PactValue)
@@ -182,7 +182,7 @@ _generateGoldenPactValues = mapM_ f pactValuesDescAndGen
       -- TODO add quickcheck propeties for json roundtrips
       pv <- generate $
             suchThat genPv satisfiesRoundtripJSON
-      jsonEncode fp (sizeOf pv, pv)
+      jsonEncode fp (sizeOf SizeOfV0 pv, pv)
 
     jsonEncode :: FilePath -> (Int64, PactValue) -> IO ()
     jsonEncode fp = BL.writeFile fp . encode
