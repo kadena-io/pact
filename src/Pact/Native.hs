@@ -489,17 +489,18 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
           newNs = Namespace name ug ag
       newNsPactValue <- toNamespacePactValue info newNs
       mOldNs <- readRow info Namespaces name
+      szVer <- getSizeOfVersion
       case (fromNamespacePactValue <$> mOldNs) of
         Just ns@(Namespace _ _ oldg) -> do
           -- if namespace is defined, enforce old guard
           nsPactValue <- toNamespacePactValue info ns
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadNamespace nsPactValue)) $ return ()
           enforceGuard fi oldg
-          computeGas' g1 fi (GPreWrite (WriteNamespace newNsPactValue)) $
+          computeGas' g1 fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
         Nothing -> do
           enforcePolicy info name newNs
-          computeGas' g0 fi (GPreWrite (WriteNamespace newNsPactValue)) $
+          computeGas' g0 fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
 
     enforcePolicy info nn ns = do
@@ -1113,7 +1114,8 @@ yield g i as = case as of
               if _peStepHasRollback pe
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
                 else fmap (\p -> Yield o' p sourceChain) $ provenanceOf i t
-          computeGas' g i (GPreWrite (WriteYield y)) $ do
+          szVer <- getSizeOfVersion
+          computeGas' g i (GPreWrite (WriteYield y) szVer) $ do
             evalPactExec . _Just . peYield .= Just y
             return u
 

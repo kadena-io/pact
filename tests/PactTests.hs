@@ -6,6 +6,7 @@ import qualified Blake2Spec
 import qualified KeysetSpec
 import qualified RoundTripSpec
 import qualified PrincipalSpec
+import qualified SizeOfSpec
 
 #ifndef ghcjs_HOST_OS
 import qualified PactTestsSpec
@@ -25,7 +26,6 @@ import qualified PactContinuationSpec
 import qualified PersistSpec
 import qualified RemoteVerifySpec
 import qualified TypecheckSpec
-import qualified SizeOfSpec
 import qualified PactCLISpec
 # endif
 #endif
@@ -37,6 +37,7 @@ main = hspec $ parallel $ do
   describe "KeysetSpec" KeysetSpec.spec
   describe "RoundTripSpec" RoundTripSpec.spec
   describe "PrincipalSpec" PrincipalSpec.spec
+  describe "SizeOfSpec" SizeOfSpec.spec
 
 #ifndef ghcjs_HOST_OS
 
@@ -58,8 +59,8 @@ main = hspec $ parallel $ do
   describe "PersistSpec" PersistSpec.spec
   describe "RemoteVerifySpec" RemoteVerifySpec.spec
   describe "TypecheckSpec" TypecheckSpec.spec
-  describe "SizeOfSpec" SizeOfSpec.spec
   describe "PactCLISpec" PactCLISpec.spec
+
 
 # endif
 #endif

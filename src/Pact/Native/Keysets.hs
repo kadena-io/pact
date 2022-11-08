@@ -91,6 +91,7 @@ defineKeyset g0 fi as = case as of
 
       mNs <- use $ evalRefs . rsNamespace
       old <- readRow i KeySets ksn
+      szVer <- getSizeOfVersion
 
       case old of
         Nothing -> case mNs of
@@ -98,7 +99,7 @@ defineKeyset g0 fi as = case as of
             unlessExecutionFlagSet FlagDisablePact44 $
               evalError' fi "Cannot define a keyset outside of a namespace"
 
-            computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks)) $
+            computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks) szVer) $
               writeRow i Write KeySets ksn ks & success "Keyset defined"
           Just (Namespace nsn ug _ag) -> do
             ksn' <- ifExecutionFlagSet FlagDisablePact44
@@ -111,12 +112,12 @@ defineKeyset g0 fi as = case as of
                   -- otherwise, assume mismatching keysets
                   else evalError' fi "Mismatching keyset namespace")
 
-            computeGas' g0 fi (GPreWrite (WriteKeySet ksn' ks)) $
+            computeGas' g0 fi (GPreWrite (WriteKeySet ksn' ks) szVer) $
               writeRow i Write KeySets ksn' ks & success "Keyset defined"
 
         Just oldKs -> do
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
-          computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks)) $ do
+          computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks) szVer) $ do
             runSysOnly $ enforceKeySet i (Just ksn) oldKs
             writeRow i Write KeySets ksn ks & success "Keyset defined"
 

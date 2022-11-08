@@ -385,6 +385,7 @@ test-suite hspec
     KeysetSpec
     RoundTripSpec
     PrincipalSpec
+    SizeOfSpec
 
   if !impl(ghcjs)
     other-modules:
@@ -422,7 +423,6 @@ test-suite hspec
         PersistSpec
         RemoteVerifySpec
         TypecheckSpec
-        SizeOfSpec
         PactCLISpec
         Utils
 
