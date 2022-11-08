@@ -51,8 +51,8 @@ simpleTableMungerTest = runMungerTest simpleTableMunger
 
 ucaseMungerTest :: Spec
 ucaseMungerTest = runMungerTest ucaseEncodeTableMunger
-      [ "[USER_mungem:odule.munget:able_DATA]"
-      , "[USER_mungen:amespace.mungem:odule.munget:able_DATA]"
+      [ "[USER_munge:module.munge:table_DATA]"
+      , "[USER_munge:namespace.munge:module.munge:table_DATA]"
       ]
 
 -- | Munger test fixture.

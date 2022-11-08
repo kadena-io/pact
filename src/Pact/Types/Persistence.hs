@@ -294,4 +294,4 @@ ucaseEncodeTableMunger (ModuleName mn ns) (TableName tn) = TableName $
     (maybe "" ((<> ".") . munge . asString) ns) <> munge (asString mn) <> "." <> munge (asString tn)
   where
     munge = T.concatMap $ \c ->
-      if isAsciiUpper c then pack [toLower c,':'] else T.singleton c
+      if isAsciiUpper c then pack [':',toLower c] else T.singleton c
