@@ -317,8 +317,11 @@ library
         , hedgehog >= 1.0.1 && < 1.2
         , hspec
         , hspec-golden >= 0.1.0.2
+        , http-client
         , hw-hspec-hedgehog == 0.1.*
         , intervals
+        , temporary >= 1.3
+
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)
@@ -428,6 +431,7 @@ test-suite hspec
         , QuickCheck
         , deepseq
         , directory
+        , direct-sqlite
         , exceptions
         , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2

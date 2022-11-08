@@ -33,9 +33,11 @@ module Pact.Repl
   , evalString
   , handleCompile
   , handleParse
+  , initEvalEnv
   , initPureEvalEnv
   , initReplState
   , initReplState'
+  , initReplStateDb
   , isPactFile
   , loadFile
   , parsedCompileEval
@@ -85,6 +87,7 @@ import Pact.Eval
 import Pact.Types.Pretty hiding (line)
 import Pact.Types.Runtime
 import Pact.Native
+import Pact.PersistPactDb (DbEnv(..))
 import Pact.Repl.Lib
 import Pact.Types.Logger
 import Pact.Types.SPV
@@ -124,6 +127,11 @@ initReplState' :: MonadIO m => LibState -> ReplMode -> m ReplState
 initReplState' ls m =
   liftIO (initEvalEnv ls) >>= \e -> return (ReplState e def m def def def)
 
+initReplStateDb :: MonadIO m => MVar (DbEnv e) -> ReplMode -> Maybe String -> m ReplState
+initReplStateDb pdb m verifyUri = do
+  ls <- liftIO $ initLibState' (LibDb pdb) verifyUri
+  initReplState' ls m
+
 initPureEvalEnv :: Maybe String -> IO (EvalEnv LibState)
 initPureEvalEnv verifyUri = do
   initLibState neverLog verifyUri >>= initEvalEnv
@@ -151,6 +159,7 @@ initEvalEnv ls = do
     , _eeExecutionConfig = def
     , _eeAdvice = def
     , _eeInRepl = True
+    , _eeTableMunger = simpleTableMunger
     }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport

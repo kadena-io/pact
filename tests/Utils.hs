@@ -114,4 +114,3 @@ withTestPactServerWithSpv label flags spv action =
     withTestPactServerWithSpv_ spv fp $ \port -> do
       clientEnv <- mkClientEnv testMgr <$> parseBaseUrl (serverRoot port)
       action clientEnv
-

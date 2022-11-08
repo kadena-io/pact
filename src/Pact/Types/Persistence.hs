@@ -33,7 +33,10 @@ module Pact.Types.Persistence
    ModuleData(..),mdModule,mdRefMap, mdDependencies,
    PersistModuleData,
    ExecutionMode(..),
-   allModuleExports
+   allModuleExports,
+   TableMunger,
+   simpleTableMunger,
+   ucaseEncodeTableMunger
    ) where
 
 import Control.Applicative ((<|>))
@@ -41,12 +44,14 @@ import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
+import Data.Char (isAsciiUpper,toLower)
 import Data.Default
 import Data.Hashable (Hashable)
 import Data.Maybe(fromMaybe)
 import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
+import qualified Data.Text as T
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
@@ -233,8 +238,6 @@ data ExecutionMode =
     Local
     deriving (Eq,Show)
 
-
-
 -- | Shape of back-end methods: use MVar for state, run in IO.
 type Method e a = MVar e -> IO a
 
@@ -271,3 +274,24 @@ data PactDb e = PactDb {
   , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
                  Domain k v -> TxId -> Method e [TxLog v]
 }
+
+
+-- | Control how user table names are represented in database.
+-- One-way function, so it is not required to avoid unreserved characters, etc.
+type TableMunger = ModuleName -> TableName -> TableName
+
+-- | "Simple" munger encodes with underscore. Thus, the table @my-table@
+-- in module @free.foo@ becomes @free.foo_my-table@.
+simpleTableMunger :: TableMunger
+simpleTableMunger mn tn = TableName $ asString mn <> "_" <> asString tn
+
+-- | Delimits using period for namespace.module.table, and
+-- encodes uppercase ASCII chars using lowercase and colon.
+-- Table @MyTable@ in @free.fooModule@ becomes
+-- @free.foom:odule.m:yt:able@.
+ucaseEncodeTableMunger :: TableMunger
+ucaseEncodeTableMunger (ModuleName mn ns) (TableName tn) = TableName $
+    (maybe "" ((<> ".") . munge . asString) ns) <> munge (asString mn) <> "." <> munge (asString tn)
+  where
+    munge = T.concatMap $ \c ->
+      if isAsciiUpper c then pack [':',toLower c] else T.singleton c

@@ -216,15 +216,22 @@ descModule i [TLitString t] = do
     Nothing -> evalError' i $ "Module not found: " <> pretty t
 descModule i as = argsError i as
 
--- | unsafe function to create domain from TTable.
-userTable :: Show n => Term n -> Domain RowKey RowData
-userTable = UserTables . userTable'
+-- | Create domain from table
+userTable :: Term n -> Eval e (Domain RowKey RowData)
+userTable t = UserTables <$> userTable' t
 
--- | unsafe function to create TableName from TTable.
-userTable' :: Show n => Term n -> TableName
-userTable' TTable {..} = TableName $ asString _tModuleName <> "_" <> asString _tTableName
-userTable' t = error $ "creating user table from non-TTable: " ++ show t
+-- | Munge table name per environment.
+userTable' :: Term n -> Eval e TableName
+userTable' TTable {..} = view eeTableMunger >>= \f -> pure $ f _tModuleName _tTableName
+userTable' t = evalError' t "userTable invariant error"
 
+-- | 'readRow' from TTable term
+readRow_ :: Info -> Term n -> RowKey -> Eval e (Maybe RowData)
+readRow_ i t k = userTable t >>= \t' -> readRow i t' k
+
+-- | 'keys' from TTable term
+keys_ :: Info -> Term n -> Eval e [RowKey]
+keys_ i t = userTable t >>= keys i
 
 read' :: GasRNativeFun e
 read' g0 i as@(table@TTable {}:TLitString key:rest) = do
@@ -233,7 +240,7 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
     [l] -> colsToList (argsError i as) l
     _ -> argsError i as
   guardTable i table GtRead
-  mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
+  mrow <- readRow_ (_faInfo i) table (RowKey key)
   case mrow of
     Nothing -> failTx (_faInfo i) $ "read: row not found: " <> pretty key
     Just cs -> do
@@ -260,9 +267,9 @@ foldDB' i [tbl, tLamToApp -> TApp qry _, tLamToApp -> TApp consumer _] = do
   asBool t = evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
   getKeys table = do
     guardTable i table GtKeys
-    keys (_faInfo i) (userTable table)
+    keys_ (_faInfo i) table
   fdb table (!g0, acc) key = do
-    mrow <- readRow (_faInfo i) (userTable table) key
+    mrow <- readRow_ (_faInfo i) table key
     case mrow of
       Just row -> do
         g1 <- gasPostRead i g0 row
@@ -318,11 +325,11 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
     guardTable i tbl GtSelect
     let fi = _faInfo i
         tblTy = _tTableType tbl
-    ks <- keys fi (userTable tbl)
+    ks <- keys_ fi tbl
     fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
       (\f -> foldM f (g0 + g1, []) ks) $ \(gPrev,rs) k -> do
 
-      mrow <- readRow fi (userTable tbl) k
+      mrow <- readRow_ fi tbl k
       case mrow of
         Nothing -> evalError fi $ "select: unexpected error, key not found in select: "
                    <> pretty k <> ", table: " <> pretty tbl
@@ -348,7 +355,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
   case tkd of
     [table@TTable {}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
       guardTable fi table GtWithDefaultRead
-      mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
+      mrow <- readRow_ (_faInfo fi) table (RowKey key)
       case mrow of
         Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue' defaultRow)
         (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
@@ -362,7 +369,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   case tk of
     [table@TTable {},TLitString key] -> do
       guardTable fi table GtWithRead
-      mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
+      mrow <- readRow_ (_faInfo fi) table (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
         (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
@@ -379,7 +386,7 @@ keys' g i [table@TTable {}] = do
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table GtKeys
-      keys (_faInfo i) (userTable table)
+      keys_ (_faInfo i) table
 keys' _ i as = argsError i as
 
 
@@ -389,7 +396,7 @@ txids' g i [table@TTable {},TLitInteger key] = do
   gasPostReads i g
     ((\b -> TList (V.fromList b) tTyInteger def) . map toTerm) $ do
       guardTable i table GtTxIds
-      txids (_faInfo i) (userTable' table) (fromIntegral key)
+      userTable' table >>= \t -> txids (_faInfo i) t (fromIntegral key)
 txids' _ i as = argsError i as
 
 txlog :: GasRNativeFun e
@@ -397,7 +404,7 @@ txlog g i [table@TTable {},TLitInteger tid] = do
   checkNonLocalAllowed i
   gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
       guardTable i table GtTxLog
-      getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
+      userTable table >>= \t -> getTxLog (_faInfo i) t (fromIntegral tid)
 txlog _ i as = argsError i as
 
 txlogToObj :: TxLog RowData -> Term Name
@@ -423,8 +430,9 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
                 toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]
   gasPostReads i g postProc $ do
     guardTable i table GtKeyLog
-    tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
-    logs <- fmap concat $ forM tids $ \tid -> map (tid,) <$> getTxLog (_faInfo i) (userTable table) tid
+    table' <- userTable' table
+    tids <- txids (_faInfo i) table' (fromIntegral utid)
+    logs <- fmap concat $ forM tids $ \tid -> map (tid,) <$> getTxLog (_faInfo i) (UserTables table') tid
     return $ filter (\(_,TxLog {..}) -> _txKey == key) logs
 
 keylog _ i as = argsError i as
@@ -444,7 +452,8 @@ write wt partial i as = do
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
       rdv <- ifExecutionFlagSet' FlagDisablePact420 RDV0 RDV1
-      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) $
+      t <- userTable table
+      r <- success "Write succeeded" $ writeRow (_faInfo i) wt t (RowKey key) $
           RowData rdv (pactValueToRowData <$> ps')
       return (cost0 + cost1, r)
     _ -> argsError i ts
@@ -453,7 +462,7 @@ write wt partial i as = do
 createTable' :: GasRNativeFun e
 createTable' g i [t@TTable {..}] = do
   guardTable i t GtCreateTable
-  let (UserTables tn) = userTable t
+  tn <- userTable' t
   szVer <- getSizeOfVersion
   computeGas' g i (GPreWrite (WriteTable (asString tn)) szVer) $
     success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
