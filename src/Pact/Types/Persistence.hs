@@ -291,7 +291,7 @@ simpleTableMunger mn tn = TableName $ asString mn <> "_" <> asString tn
 -- @free.foom:odule.m:yt:able@.
 ucaseEncodeTableMunger :: TableMunger
 ucaseEncodeTableMunger (ModuleName mn ns) (TableName tn) = TableName $
-    (maybe "" ((<> ".") . munge . asString) ns) <> munge (asString mn) <> "." <> munge (asString tn)
+    (maybe "" ((<> ".") . munge . asString) ns) <> munge (asString mn) <> "_" <> munge (asString tn)
   where
     munge = T.concatMap $ \c ->
       if isAsciiUpper c then pack [':',toLower c] else T.singleton c
