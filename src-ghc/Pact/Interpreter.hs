@@ -27,7 +27,6 @@ module Pact.Interpreter
   , setupEvalEnv
   , initRefStore
   , mkSQLiteEnv
-  , mkInMemSQLiteEnv
   , mkPureEnv
   , mkPactDbEnv
   , initSchema
@@ -168,9 +167,8 @@ setupEvalEnv
   -> SPVSupport
   -> PublicData
   -> ExecutionConfig
-  -> TableMunger
   -> IO (EvalEnv e)
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec tm = do
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   gasRef <- newIORef 0
   pure EvalEnv {
     _eeRefStore = refStore
@@ -191,7 +189,6 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec tm = do
   , _eeExecutionConfig = ec
   , _eeAdvice = def
   , _eeInRepl = False
-  , _eeTableMunger = tm
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss
@@ -213,12 +210,6 @@ mkSQLiteEnv initLog deleteOldFile c loggers = do
       removeFile (PSL._dbFile c)
   dbe <- initDbEnv loggers PSL.persister <$> PSL.initSQLite c loggers
   mkPactDbEnv pactdb dbe
-
-
-mkInMemSQLiteEnv :: Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
-mkInMemSQLiteEnv loggers =
-  mkSQLiteEnv (newLogger loggers "InitLog") False (PSL.SQLiteConfig "" []) loggers
-
 
 mkPureEnv :: Loggers -> IO (PactDbEnv (DbEnv Pure.PureDb))
 mkPureEnv loggers = mkPactDbEnv pactdb $ initDbEnv loggers Pure.persister Pure.initPureDb
@@ -249,7 +240,7 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
 
   where
 
-    withRollback act =
+    withRollback act = 
       act `onException` safeRollback
 
     safeRollback =
