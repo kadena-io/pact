@@ -43,4 +43,3 @@
       packages.default = flake.packages."pact:exe:pact";
     });
 }
-
