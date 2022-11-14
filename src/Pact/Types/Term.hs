@@ -560,50 +560,50 @@ prettyTypeTerm TSchema{..} = SPSpecial ("{" <> asString _tSchemaName <> "}")
 prettyTypeTerm t = SPNormal t
 
 instance SizeOf1 Term where
-  sizeOf1 = \case
+  sizeOf1 ver = \case
     TModule defn body info ->
-      constructorCost 3 + sizeOf defn + sizeOf body + sizeOf info
+      constructorCost 3 + sizeOf ver defn + sizeOf ver body + sizeOf ver info
     TList li typ info ->
-       constructorCost 3 + sizeOf li + sizeOf typ + sizeOf info
+       constructorCost 3 + sizeOf ver li + sizeOf ver typ + sizeOf ver info
     TDef defn info ->
-      constructorCost 2 + sizeOf defn + sizeOf info
+      constructorCost 2 + sizeOf ver defn + sizeOf ver info
     -- note: we actually strip docs and examples
     -- post fork
     TNative name _defun ftyps examples docs tlo info ->
-      constructorCost 7 + sizeOf name + sizeOf ftyps + sizeOf examples +
-        sizeOf docs + sizeOf tlo + sizeOf info
+      constructorCost 7 + sizeOf ver name + sizeOf ver ftyps + sizeOf ver examples +
+        sizeOf ver docs + sizeOf ver tlo + sizeOf ver info
     TConst arg mname cval meta info  ->
-      constructorCost 5 + sizeOf arg + sizeOf mname + sizeOf cval + sizeOf meta + sizeOf info
+      constructorCost 5 + sizeOf ver arg + sizeOf ver mname + sizeOf ver cval + sizeOf ver meta + sizeOf ver info
     TApp app info ->
-      constructorCost 2 + sizeOf app + sizeOf info
+      constructorCost 2 + sizeOf ver app + sizeOf ver info
     TVar v info ->
-      constructorCost 2 + sizeOf v + sizeOf info
+      constructorCost 2 + sizeOf ver v + sizeOf ver info
     TBinding bps body btyp info ->
-      constructorCost 4 + sizeOf bps + sizeOf body + sizeOf btyp + sizeOf info
+      constructorCost 4 + sizeOf ver bps + sizeOf ver body + sizeOf ver btyp + sizeOf ver info
     TLam lam info ->
-      constructorCost 2 + sizeOf lam + sizeOf info
+      constructorCost 2 + sizeOf ver lam + sizeOf ver info
     TObject obj info ->
-      constructorCost 2 + sizeOf obj + sizeOf info
+      constructorCost 2 + sizeOf ver obj + sizeOf ver info
     TSchema tn mn meta args info ->
-      constructorCost 5 + sizeOf tn + sizeOf mn + sizeOf meta + sizeOf args + sizeOf info
+      constructorCost 5 + sizeOf ver tn + sizeOf ver mn + sizeOf ver meta + sizeOf ver args + sizeOf ver info
     TLiteral lit info ->
-      constructorCost 2 + sizeOf lit + sizeOf info
+      constructorCost 2 + sizeOf ver lit + sizeOf ver info
     TGuard g info ->
-      constructorCost 2 + sizeOf g + sizeOf info
+      constructorCost 2 + sizeOf ver g + sizeOf ver info
     TUse u info->
-      constructorCost 2 + sizeOf u + sizeOf info
+      constructorCost 2 + sizeOf ver u + sizeOf ver info
     TStep step meta info ->
-      constructorCost 3 + sizeOf step + sizeOf meta + sizeOf info
+      constructorCost 3 + sizeOf ver step + sizeOf ver meta + sizeOf ver info
     TModRef mr info ->
-      constructorCost 2 + sizeOf mr + sizeOf info
+      constructorCost 2 + sizeOf ver mr + sizeOf ver info
     TTable tn mn hs typ meta info ->
-      constructorCost 6 + sizeOf tn + sizeOf mn + sizeOf hs + sizeOf typ
-        + sizeOf meta + sizeOf info
+      constructorCost 6 + sizeOf ver tn + sizeOf ver mn + sizeOf ver hs + sizeOf ver typ
+        + sizeOf ver meta + sizeOf ver info
     TDynamic e1 e2 info ->
-      constructorCost 3 + sizeOf e1 + sizeOf e2 + sizeOf info
+      constructorCost 3 + sizeOf ver e1 + sizeOf ver e2 + sizeOf ver info
 
 instance (SizeOf a) => SizeOf (Term a) where
-  sizeOf t = sizeOf1 t
+  sizeOf ver t = sizeOf1 ver t
 
 instance Applicative Term where
     pure a = TVar a def

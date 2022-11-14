@@ -9,6 +9,7 @@ import qualified PrincipalSpec
 import qualified Test.Pact.Utils.LegacyHashable
 import qualified Test.Pact.Utils.LegacyHashMap
 import qualified Test.Pact.Utils.LegacyValue
+import qualified SizeOfSpec
 
 #ifndef ghcjs_HOST_OS
 import qualified PactTestsSpec
@@ -28,7 +29,6 @@ import qualified PactContinuationSpec
 import qualified PersistSpec
 import qualified RemoteVerifySpec
 import qualified TypecheckSpec
-import qualified SizeOfSpec
 import qualified PactCLISpec
 # endif
 #endif
@@ -43,6 +43,7 @@ main = hspec $ parallel $ do
   describe "Test.Pact.Utils.LegacyHashable" Test.Pact.Utils.LegacyHashable.spec
   describe "Test.Pact.Utils.LegacyHashMap" Test.Pact.Utils.LegacyHashMap.spec
   describe "Test.Pact.Utils.LegacyValue" Test.Pact.Utils.LegacyValue.spec
+  describe "SizeOfSpec" SizeOfSpec.spec
 
 #ifndef ghcjs_HOST_OS
 
@@ -64,8 +65,8 @@ main = hspec $ parallel $ do
   describe "PersistSpec" PersistSpec.spec
   describe "RemoteVerifySpec" RemoteVerifySpec.spec
   describe "TypecheckSpec" TypecheckSpec.spec
-  describe "SizeOfSpec" SizeOfSpec.spec
   describe "PactCLISpec" PactCLISpec.spec
+
 
 # endif
 #endif

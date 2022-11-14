@@ -107,7 +107,7 @@ newtype TypeName = TypeName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show)
 
 instance SizeOf TypeName where
-  sizeOf (TypeName n) = sizeOf n
+  sizeOf ver (TypeName n) = sizeOf ver n
 
 instance Arbitrary TypeName where
   arbitrary = TypeName <$> arbitrary
@@ -284,7 +284,7 @@ instance FromJSON PrimType where
   {-# INLINE parseJSON #-}
 
 instance SizeOf PrimType where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 instance Arbitrary PrimType where
   arbitrary = oneof
@@ -354,7 +354,7 @@ instance Pretty SchemaType where
   pretty TyBinding = "binding"
 
 instance SizeOf SchemaType where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 instance Arbitrary SchemaType where
   arbitrary = elements [TyTable, TyObject, TyBinding]
@@ -368,7 +368,7 @@ instance Arbitrary TypeVarName where
 instance Show TypeVarName where show (TypeVarName t) = show t
 
 instance SizeOf TypeVarName where
-  sizeOf = sizeOf . _typeVarName
+  sizeOf ver = sizeOf ver . _typeVarName
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =

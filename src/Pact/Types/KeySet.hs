@@ -113,8 +113,8 @@ instance Pretty KeySet where
     ]
 
 instance SizeOf KeySet where
-  sizeOf (KeySet pkArr ksPred) =
-    (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
+  sizeOf ver (KeySet pkArr ksPred) =
+    (constructorCost 2) + (sizeOf ver pkArr) + (sizeOf ver ksPred)
 
 instance Arbitrary KeySet where
   arbitrary = do
@@ -171,7 +171,7 @@ instance IsString KeySetName where
 instance NFData KeySetName
 
 instance SizeOf KeySetName where
-  sizeOf = sizeOf . asString
+  sizeOf ver = sizeOf ver . asString
 
 instance FromJSON KeySetName where
   parseJSON v =

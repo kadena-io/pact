@@ -114,11 +114,11 @@ instance Serialize Literal
 instance NFData Literal
 
 instance SizeOf Literal where
-  sizeOf (LString t) = (constructorCost 1) + (sizeOf t)
-  sizeOf (LInteger i) = (constructorCost 1) + (sizeOf i)
-  sizeOf (LDecimal d) = (constructorCost 1) + (sizeOf d)
-  sizeOf (LBool _) = (constructorCost 1) + 0
-  sizeOf (LTime ti) = (constructorCost 1) + (sizeOf ti)
+  sizeOf ver (LString t) = (constructorCost 1) + (sizeOf ver t)
+  sizeOf ver (LInteger i) = (constructorCost 1) + (sizeOf ver i)
+  sizeOf ver (LDecimal d) = (constructorCost 1) + (sizeOf ver d)
+  sizeOf _ (LBool _) = (constructorCost 1) + 0
+  sizeOf ver (LTime ti) = (constructorCost 1) + (sizeOf ver ti)
 
 makePrisms ''Literal
 
@@ -370,10 +370,10 @@ instance Pretty (SeparatorExp i) where
 
 -- SizeOf instances
 instance SizeOf Separator where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 instance SizeOf ListDelimiter where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 instance (SizeOf i) => SizeOf (LiteralExp i)
 instance (SizeOf i) => SizeOf (AtomExp i)

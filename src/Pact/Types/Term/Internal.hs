@@ -194,8 +194,8 @@ instance Pretty a => Pretty (UserGuard a) where
     ]
 
 instance (SizeOf p) => SizeOf (UserGuard p) where
-  sizeOf (UserGuard n arr) =
-    (constructorCost 2) + (sizeOf n) + (sizeOf arr)
+  sizeOf ver (UserGuard n arr) =
+    (constructorCost 2) + (sizeOf ver n) + (sizeOf ver arr)
 
 userGuardProperties :: ToJSON a => JsonProperties (UserGuard a)
 userGuardProperties o =
@@ -226,7 +226,7 @@ instance ToJSON DefType
 instance NFData DefType
 
 instance SizeOf DefType where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
@@ -622,7 +622,7 @@ instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
   (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
 instance SizeOf ModRef where
-  sizeOf (ModRef n s _) = constructorCost 1 + sizeOf n + sizeOf s
+  sizeOf ver (ModRef n s _) = constructorCost 1 + sizeOf ver n + sizeOf ver s
 
 -- | This JSON encoding omits the @refInfo@ property when it is the default Value.
 --
@@ -660,8 +660,8 @@ instance Pretty ModuleGuard where
     ]
 
 instance SizeOf ModuleGuard where
-  sizeOf (ModuleGuard md n) =
-    (constructorCost 2) + (sizeOf md) + (sizeOf n)
+  sizeOf ver (ModuleGuard md n) =
+    (constructorCost 2) + (sizeOf ver md) + (sizeOf ver n)
 
 moduleGuardProperties :: JsonProperties ModuleGuard
 moduleGuardProperties o =
@@ -695,8 +695,8 @@ instance Pretty PactGuard where
     ]
 
 instance SizeOf PactGuard where
-  sizeOf (PactGuard pid pn) =
-    (constructorCost 2) + (sizeOf pid) + (sizeOf pn)
+  sizeOf ver (PactGuard pid pn) =
+    (constructorCost 2) + (sizeOf ver pid) + (sizeOf ver pn)
 
 pactGuardProperties :: JsonProperties PactGuard
 pactGuardProperties o =
@@ -810,8 +810,8 @@ instance Pretty a => Pretty (CapabilityGuard a) where
     ]
 
 instance (SizeOf a) => SizeOf (CapabilityGuard a) where
-  sizeOf CapabilityGuard{..} =
-    (constructorCost 2) + (sizeOf _cgName) + (sizeOf _cgArgs) + (sizeOf _cgPactId)
+  sizeOf ver CapabilityGuard{..} =
+    (constructorCost 2) + (sizeOf ver _cgName) + (sizeOf ver _cgArgs) + (sizeOf ver _cgPactId)
 
 capabilityGuardProperties :: ToJSON n => JsonProperties (CapabilityGuard n)
 capabilityGuardProperties o =
@@ -853,12 +853,12 @@ instance Pretty a => Pretty (Guard a) where
   pretty (GCapability g) = pretty g
 
 instance (SizeOf p) => SizeOf (Guard p) where
-  sizeOf (GPact pg) = (constructorCost 1) + (sizeOf pg)
-  sizeOf (GKeySet ks) = (constructorCost 1) + (sizeOf ks)
-  sizeOf (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ksr)
-  sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
-  sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
-  sizeOf (GCapability g) = (constructorCost 1) + (sizeOf g)
+  sizeOf ver (GPact pg) = (constructorCost 1) + (sizeOf ver pg)
+  sizeOf ver (GKeySet ks) = (constructorCost 1) + (sizeOf ver ks)
+  sizeOf ver (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ver ksr)
+  sizeOf ver (GModule mg) = (constructorCost 1) + (sizeOf ver mg)
+  sizeOf ver (GUser ug) = (constructorCost 1) + (sizeOf ver ug)
+  sizeOf ver (GCapability g) = (constructorCost 1) + (sizeOf ver g)
 
 keyNamef :: Key
 keyNamef = "keysetref"
