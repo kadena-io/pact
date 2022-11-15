@@ -57,8 +57,6 @@ import qualified Data.Text.Encoding as T
 import Data.Aeson                        as A
 import Data.Aeson.Types                  as A
 import Data.Hashable
-import Data.Serialize                    as SZ
-import qualified Data.Serialize          as S
 
 import Pact.Types.Util
 import Pact.Types.Hash
@@ -413,27 +411,14 @@ ed25519GetPublicKey = Ed25519.toPublic
 
 instance Ord Ed25519.PublicKey where
   b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
-instance Serialize Ed25519.PublicKey where
-  put s = S.putByteString (B.convert s :: ByteString)
-  get = maybe (fail "Invalid ED25519 Public Key") return =<<
-        (E.maybeCryptoError . Ed25519.publicKey <$> S.getByteString 32)
-
 
 instance Ord Ed25519.SecretKey where
   b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
-instance Serialize Ed25519.SecretKey where
-  put s = S.putByteString (B.convert s :: ByteString)
-  get = maybe (fail "Invalid ED25519 Private Key") return =<<
-        (E.maybeCryptoError . Ed25519.secretKey <$> S.getByteString 32)
-
 
 
 instance Ord Ed25519.Signature where
   b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
-instance Serialize Ed25519.Signature where
-  put s = S.put (B.convert s :: ByteString)
-  get = maybe (fail "Invalide ED25519 Signature") return =<<
-        (E.maybeCryptoError . Ed25519.signature <$> (S.get >>= S.getByteString))
+
 #else
 ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.PrivateKey)
 ed25519GenKeyPair = do
@@ -453,27 +438,15 @@ instance Eq Ed25519.PublicKey where
   b == b' = (Ed25519.exportPublic b) == (Ed25519.exportPublic b')
 instance Ord Ed25519.PublicKey where
   b <= b' = (Ed25519.exportPublic b) <= (Ed25519.exportPublic b')
-instance Serialize Ed25519.PublicKey where
-  put s = S.putByteString (Ed25519.exportPublic s)
-  get = maybe (fail "Invalid ED25519 Public Key") return =<<
-        (Ed25519.importPublic <$> S.getByteString 32)
-
 
 
 instance Eq Ed25519.PrivateKey where
   b == b' = (Ed25519.exportPrivate b) == (Ed25519.exportPrivate b')
 instance Ord Ed25519.PrivateKey where
   b <= b' = (Ed25519.exportPrivate b) <= (Ed25519.exportPrivate b')
-instance Serialize Ed25519.PrivateKey where
-  put s = S.putByteString (Ed25519.exportPrivate s)
-  get = maybe (fail "Invalid ED25519 Private Key") return =<<
-        (Ed25519.importPrivate <$> S.getByteString 32)
-
 
 
 deriving instance Eq Ed25519.Signature
 deriving instance Ord Ed25519.Signature
-instance Serialize Ed25519.Signature where
-  put (Ed25519.Sig s) = S.put s
-  get = Ed25519.Sig <$> (S.get >>= S.getByteString)
 #endif
+

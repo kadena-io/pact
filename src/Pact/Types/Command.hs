@@ -58,7 +58,6 @@ import Control.Lens hiding ((.=))
 import Control.DeepSeq
 
 import Data.ByteString (ByteString)
-import Data.Serialize as SZ
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
@@ -95,7 +94,6 @@ data Command a = Command
   , _cmdSigs :: ![UserSig]
   , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
-instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
     toJSON (Command payload uSigs hsh) =
         object [ "cmd" .= payload
@@ -287,7 +285,6 @@ newtype UserSig = UserSig { _usSig :: Text }
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData UserSig
-instance Serialize UserSig
 instance ToJSON UserSig where
   toJSON UserSig {..} = object [ "sig" .= _usSig ]
 instance FromJSON UserSig where
@@ -377,7 +374,7 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, NFData)
+  deriving (Eq, Ord, Generic, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, NFData)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

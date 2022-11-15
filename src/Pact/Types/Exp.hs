@@ -55,7 +55,6 @@ import Data.Maybe (fromMaybe)
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
-import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Test.QuickCheck
 
@@ -111,7 +110,6 @@ instance Arbitrary Literal where
     , genLiteralTime
     ]
 
-instance Serialize Literal
 instance NFData Literal
 
 instance SizeOf Literal where

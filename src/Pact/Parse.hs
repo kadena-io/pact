@@ -40,7 +40,6 @@ import qualified Data.ByteString as BS
 import Data.Char (digitToInt)
 import Data.Decimal
 import Data.List
-import Data.Serialize (Serialize)
 import Data.Text (Text, unpack)
 import Data.Text.Encoding
 import GHC.Generics (Generic)
@@ -137,7 +136,7 @@ exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 -- accepts both a String version (parsed as a Pact decimal) or
 -- a Number.
 newtype ParsedDecimal = ParsedDecimal Decimal
-  deriving (Eq,Ord,Num,Real,RealFrac,Fractional,Generic,NFData,Serialize,ToTerm)
+  deriving (Eq,Ord,Num,Real,RealFrac,Fractional,Generic,NFData,ToTerm)
 
 instance A.FromJSON ParsedDecimal where
   parseJSON (A.String s) =
@@ -163,7 +162,7 @@ instance Wrapped ParsedDecimal
 -- accepts both a String version (parsed as a Pact integer),
 -- a Number, or a PactValue { "int": ... } integer
 newtype ParsedInteger = ParsedInteger Integer
-  deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,Serialize,ToTerm,Pretty)
+  deriving (Eq,Show,Ord,Num,Real,Enum,Integral,Generic,NFData,ToTerm,Pretty)
 
 instance A.FromJSON ParsedInteger where
   parseJSON (A.String s) =

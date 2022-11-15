@@ -28,7 +28,6 @@ module Pact.Types.Hash
 import Control.DeepSeq
 import Data.ByteString (ByteString)
 import Data.Hashable (Hashable(hashWithSalt))
-import Data.Serialize (Serialize(..))
 import Pact.Types.Pretty
 import Pact.Types.Util
 import Data.Aeson
@@ -58,7 +57,7 @@ import Crypto.Hash.Blake2Native
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ByteString }
-  deriving (Eq, Ord, Generic, Hashable, Serialize,SizeOf)
+  deriving (Eq, Ord, Generic, Hashable, SizeOf)
 
 instance Arbitrary Hash where
   -- TODO: add generators for other hash types
@@ -115,10 +114,6 @@ data TypedHash (h :: HashAlgo) where
 
 instance Hashable (TypedHash h) where
   hashWithSalt a h = hashWithSalt a (toUntypedHash h)
-
-instance Serialize (TypedHash h) where
-  put = put . toUntypedHash
-  get = fromUntypedHash <$> get
 
 instance Show (TypedHash h) where
   show (TypedHash h) = show $ encodeBase64UrlUnpadded h

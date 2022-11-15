@@ -27,7 +27,6 @@ import Control.DeepSeq
 import Control.Lens
 
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Data.Text
 import Test.QuickCheck (Arbitrary(..))
@@ -46,7 +45,7 @@ newtype ChainId = ChainId { _chainId :: Text }
   deriving newtype
     ( Show, Pretty, IsString
     , ToJSON, FromJSON
-    , Serialize, ToTerm, NFData
+    , ToTerm, NFData
     , SizeOf, AsString
     )
 
@@ -70,7 +69,7 @@ newtype NetworkId = NetworkId { _networkId :: Text }
   deriving newtype
     ( Show, Pretty, IsString
     , ToJSON, FromJSON
-    , Serialize, ToTerm, NFData
+    , ToTerm, NFData
     )
 
 instance Wrapped NetworkId

@@ -34,7 +34,6 @@ import Control.Lens (makeLenses,Wrapped)
 import Data.Aeson
 import Data.Text (Text, unpack)
 import Data.Aeson.Types (Parser)
-import Data.Serialize
 
 import GHC.Generics
 
@@ -58,7 +57,7 @@ parseGT0 v = parseJSON v >>= \a ->
 
 -- | API Price value, basically a newtype over `Decimal`
 newtype GasPrice = GasPrice ParsedDecimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON,Pretty)
+  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Generic,ToTerm,ToJSON,Pretty)
 instance Show GasPrice where
   show (GasPrice (ParsedDecimal d)) = show d
 
@@ -174,7 +173,7 @@ instance Pretty GasArgs where
     GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
 
 newtype GasLimit = GasLimit ParsedInteger
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,NFData,Generic,ToTerm,ToJSON,Pretty)
 
 instance Show GasLimit where
   show (GasLimit (ParsedInteger i)) = show i
