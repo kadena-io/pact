@@ -65,6 +65,7 @@ import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow, JsonProperties, enableToJSON, (.?=))
 import Pact.Types.Namespace
 import Pact.Utils.LegacyValue
+import qualified Pact.Utils.LegacyHashMap as LHM
 
 data PersistDirect =
     PDValue PactValue
@@ -135,31 +136,35 @@ makeLenses ''ModuleData
 
 instance NFData r => NFData (ModuleData r)
 
+-- On chain this encoded as follows:
+-- * refMap: object
+-- * dependencies: Array
+
 instance ToJSON r => ToJSON (ModuleData r) where
   toJSON o = enableToJSON "Pact.Types.Persistence.ModuleData r" $ A.Object $ mconcat
     [ "dependencies" .?= if HM.null (_mdDependencies o)
       then Nothing
-      else Just (_mdDependencies o)
+      else Just (LHM.toList $ legacyHashMap $ _mdDependencies o)
     , "module" .= _mdModule o
     , "refMap" .= _mdRefMap o
     ]
   toEncoding o = pairs $ mconcat
     [ "dependencies" .?= if HM.null (_mdDependencies o)
       then Nothing
-      else Just (legacyHashMap $ _mdDependencies o)
+      else Just (LHM.toList $ legacyHashMap $ _mdDependencies o)
     , "module" .= _mdModule o
     , "refMap" .= legacyHashMap (_mdRefMap o)
     ]
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
-instance (ToJSON r, FromJSON r) => FromJSON (ModuleData r) where
+instance (FromJSON r) => FromJSON (ModuleData r) where
   parseJSON =
     withObject "ModuleData" $ \o ->
       ModuleData
       <$> o .: "module"
       <*> o .: "refMap"
-      <*> (fromMaybe HM.empty <$> o .:? "dependencies")
+      <*> (HM.fromList <$> (fromMaybe mempty <$> o .:? "dependencies"))
 
 instance Arbitrary r => Arbitrary (ModuleData r) where
   arbitrary = ModuleData
