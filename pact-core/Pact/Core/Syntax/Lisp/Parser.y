@@ -177,7 +177,7 @@ Type :: { Type }
 
 Type1 :: { Type }
   : TYLIST Type { TyList $2 }
-  | '{' RowType '}' { TyObject (Map.fromList $2) }
+  -- | '{' RowType '}' { TyObject (Map.fromList $2) }
   | AtomicType { $1 }
 
 -- TyArrows :: { [Type] }

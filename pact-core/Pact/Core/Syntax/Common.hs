@@ -6,9 +6,9 @@
 module Pact.Core.Syntax.Common where
 
 import Data.Text(Text)
-import Data.Map.Strict(Map)
-import Data.List(intersperse)
-import Data.Foldable(fold)
+-- import Data.Map.Strict(Map)
+-- import Data.List(intersperse)
+-- import Data.Foldable(fold)
 import Data.List.NonEmpty(NonEmpty(..))
 
 import Pact.Core.Names
@@ -17,7 +17,7 @@ import Pact.Core.Type(PrimType(..))
 import Pact.Core.Imports
 import Pact.Core.Guards
 
-import qualified Data.Map.Strict as Map
+-- import qualified Data.Map.Strict as Map
 
 
 data UnaryOp
@@ -70,8 +70,8 @@ data Type
   = TyPrim PrimType
   | TyFun Type Type
   | TyList Type
-  | TyObject (Map Field Type)
-  | TyCap
+  -- | TyObject (Map Field Type)
+  -- | TyCap
   deriving Show
 
 pattern TyInt :: Type
@@ -101,11 +101,11 @@ instance Pretty Type where
         parens (pretty l) <+> "->" <+> pretty r
       _ -> pretty l <+> "->" <+> pretty r
     TyList t -> "List" <+> renderListParens t (pretty t)
-    TyObject fields ->
-      "{" <> fold (intersperse ", " $ renderMapObjs <$> Map.toList fields) <> "}"
-    TyCap -> "Capability"
+    -- TyObject fields ->
+    --   "{" <> fold (intersperse ", " $ renderMapObjs <$> Map.toList fields) <> "}"
+    -- TyCap -> "Capability"
     where
-    renderMapObjs (Field f, t) = pretty f <+> ":" <+> pretty t
+    -- renderMapObjs (Field f, t) = pretty f <+> ":" <+> pretty t
     renderListParens = \case
       TyList _ -> parens
       TyFun _ _ -> parens
@@ -144,19 +144,19 @@ data Managed
   | Managed Text ParsedName
   deriving (Show)
 
-data DefCap e i
-  = DefCap
-  { _dcapName :: Text
-  , _dcapArgs :: ![Arg]
-  , _dcapManaged :: Maybe Managed
-  , _dcapTerm :: e
-  , _dcapInfo :: i
-  } deriving Show
+-- data DefCap e i
+--   = DefCap
+--   { _dcapName :: Text
+--   , _dcapArgs :: ![Arg]
+--   , _dcapManaged :: Maybe Managed
+--   , _dcapTerm :: e
+--   , _dcapInfo :: i
+--   } deriving Show
 
 data Def e i
   = Dfun (Defun e i)
   | DConst (DefConst e i)
-  | DCap (DefCap e i)
+  -- | DCap (DefCap e i)
   deriving Show
 
 data ExtDecl

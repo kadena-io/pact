@@ -8,10 +8,10 @@
 
 module Pact.Core.Untyped.Utils where
 
+import Data.Foldable(foldl')
+
 import Pact.Core.Names
-
 import Pact.Core.Untyped.Term
-
 import qualified Pact.Core.Typed.Term as Typed
 
 fromTypedTerm :: Typed.Term name tyname b i -> Term name b i
@@ -27,7 +27,7 @@ fromTypedTerm = \case
     Builtin b i
   Typed.Constant lit i -> Constant lit i
   Typed.TyApp te _ _ -> fromTypedTerm te
-  Typed.TyAbs _ te _ -> fromTypedTerm te
+  -- Typed.TyAbs _ te _ -> fromTypedTerm te
   Typed.Block nel i ->
     Block (fromTypedTerm <$> nel) i
   Typed.ObjectLit m i ->

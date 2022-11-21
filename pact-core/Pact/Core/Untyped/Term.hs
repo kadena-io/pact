@@ -10,6 +10,7 @@ module Pact.Core.Untyped.Term
  ( Defun(..)
  , DefConst(..)
  , Def(..)
+ , DefCap(..)
  , defType
  , defName
  , defTerm
@@ -281,9 +282,6 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
         Pretty.parens $ Pretty.hsep ["#" <> pretty fi, pretty te]
       ObjectExtend fi v o ->
         Pretty.braces $ Pretty.hsep [pretty fi <> ":" <> pretty v, "|", pretty o]
-      ReadEnvObject ty o ->
-        "read-object" <+> "@{" <> pretty ty <> "}" <> pretty o
-
 
 termInfo :: Lens' (Term name builtin info) info
 termInfo f = \case

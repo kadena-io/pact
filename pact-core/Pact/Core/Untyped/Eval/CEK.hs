@@ -34,18 +34,14 @@ module Pact.Core.Untyped.Eval.CEK
  ) where
 
 import Control.Lens hiding (op)
-import Control.Monad(guard)
 import Control.Monad.Catch
 import Control.Exception(throw)
 import Control.Monad.IO.Class(liftIO)
 import Data.Bits
-import Data.Char(isHexDigit)
 import Data.Decimal(roundTo', Decimal)
 import Data.Text(Text)
--- import Data.Vector(Vector)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Primitive(Array, indexArray)
-import Data.Void
 import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Vector as V
@@ -60,7 +56,6 @@ import Pact.Core.Literal
 import Pact.Core.Errors
 import Pact.Core.PactValue
 import Pact.Core.Guards
-import Pact.Core.Type
 import Pact.Core.Persistence
 import Pact.Core.Hash
 
@@ -100,32 +95,13 @@ eval = evalCEK Mt
     returnCEK cont (VClosure body env)
   evalCEK cont _env (Builtin b _) =
     returnCEK cont (VNative (indexArray ?cekBuiltins (fromEnum b)))
-  evalCEK cont env (ObjectLit obj _) = do
-    vs <- traverse (evalCEK Mt env) obj
-    returnCEK cont (VObject vs)
+  evalCEK _cont _env (ObjectLit _obj _) = undefined
   evalCEK cont env (Block (t :| ts) _) =
     evalCEK (BlockC env ts cont) env t
   evalCEK cont env (ListLit ts _) = do
     ts' <- traverse (evalCEK Mt env) ts
     returnCEK cont (VList ts')
-  evalCEK cont env (ObjectOp op _) = case op of
-    ObjectAccess f o -> do
-      o' <- evalCEK Mt env o
-      v' <- objAccess f o'
-      returnCEK cont v'
-    ObjectRemove f o -> do
-      o' <- evalCEK Mt env o
-      v' <- objRemove f o'
-      returnCEK cont v'
-    ObjectExtend f v o -> do
-      o' <- evalCEK Mt env o
-      v' <- evalCEK Mt env v
-      out <- objUpdate f o' v'
-      returnCEK cont out
-    ReadEnvObject ty o -> do
-      o' <- evalCEK Mt env o
-      v' <- coreReadObject ty o'
-      returnCEK cont v'
+  evalCEK _cont _env (ObjectOp _op _) = undefined
   returnCEK
     :: CEKRuntime b i
     => Cont b i
@@ -146,14 +122,6 @@ eval = evalCEK Mt
     | arity - 1 == 0 = fn (reverse (arg:args)) >>= returnCEK cont
     | otherwise = returnCEK cont (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
   applyLam _ _ _ = failInvariant "Applying value to non-function"
-  objAccess f (VObject o) = case Map.lookup f o of
-    Just v -> pure v
-    Nothing -> failInvariant "object access"
-  objAccess _ _ = failInvariant "object access"
-  objRemove f (VObject o) = pure (VObject (Map.delete f o))
-  objRemove _ _ = failInvariant "object remove"
-  objUpdate f v (VObject o) = pure (VObject (Map.insert f v o))
-  objUpdate _ _ _ = failInvariant "object update"
 
 runCEK
   :: Enum b
@@ -664,7 +632,6 @@ unsafeEqLiteral _ _ =
 
 unsafeEqCEKValue :: CEKValue b i -> CEKValue b i -> Bool
 unsafeEqCEKValue (VLiteral l) (VLiteral l') = unsafeEqLiteral l l'
-unsafeEqCEKValue (VObject o) (VObject o') = and (Map.intersectionWith unsafeEqCEKValue o o')
 unsafeEqCEKValue (VList l) (VList l') =  V.length l == V.length l' &&  and (V.zipWith unsafeEqCEKValue l l')
 unsafeEqCEKValue _ _ = throw (FatalExecutionError "invariant failed in value Eq")
 
@@ -740,7 +707,6 @@ coreLength = mkBuiltinFn \case
   [VLiteral (LString t)] -> do
     pure (VLiteral (LInteger (fromIntegral (T.length t))))
   [VList li] -> pure (VLiteral (LInteger (fromIntegral (V.length li))))
-  [VObject o] -> pure (VLiteral (LInteger (fromIntegral (Map.size o))))
   _ -> failInvariant "length"
 
 
@@ -877,44 +843,6 @@ coreReadDecimal = mkBuiltinFn \case
         _ -> throwM (ReadException (readError s "decimal"))
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-decimal"
-
-coreReadObject :: CEKRuntime b i => Row Void -> CEKValue b i  -> EvalT b (CEKValue b i)
-coreReadObject ty = \case
-  VLiteral (LString s) ->
-    case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
-      Just pv -> case pv of
-        t@PObject{} | checkPactValueType (TyRow ty) t -> pure (fromPactValue t)
-        _ -> throwM (ReadException (readError s "object"))
-      _ -> throwM (ReadException ("no field at key " <> s))
-  _ -> failInvariant "readObject"
-
-coreReadKeyset :: BuiltinArity b => b -> BuiltinFn b i
-coreReadKeyset = mkBuiltinFn \case
-  [VLiteral (LString s)] ->
-    case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
-      Just pv -> case pv of
-        PObject m -> case lookupKs m of
-          Just ks -> pure (VGuard (GKeyset ks))
-          _ -> throwM (ReadException "Invalid keyset format")
-        _ -> throwM (ReadException (readError s "decimal"))
-      _ -> throwM (ReadException ("no field at key " <> s))
-  _ -> failInvariant "read-keyset"
-  where
-  -- Todo: public key parsing.
-  -- This is most certainly wrong, it needs more checks.
-  lookupKs m = do
-    ks <- Map.lookup (Field "keys") m >>= \case
-      PList v -> do
-        o <- traverse (preview (_PLiteral . _LString)) v
-        guard (all (T.all isHexDigit) o)
-        pure $ Set.fromList $ V.toList (PublicKey . T.encodeUtf8 <$> o)
-      _ -> Nothing
-    kspred <- case Map.lookup (Field "pred") m of
-      (Just (PLiteral LString{})) -> pure KeysAll
-      Just _ -> Nothing
-      Nothing -> pure KeysAll
-    pure (KeySet ks kspred)
-
 
 coreKeysetRefGuard :: BuiltinArity b => b -> BuiltinFn b i
 coreKeysetRefGuard = mkBuiltinFn \case
@@ -1064,7 +992,7 @@ rawBuiltinFn = \case
   RawReadInteger -> coreReadInteger RawReadInteger
   RawReadDecimal -> coreReadDecimal RawReadDecimal
   RawReadString -> coreReadString RawReadString
-  RawReadKeyset -> coreReadKeyset RawReadKeyset
+  RawReadKeyset -> undefined
   RawEnforceGuard -> coreEnforceGuard RawEnforceGuard
   RawKeysetRefGuard -> coreKeysetRefGuard RawKeysetRefGuard
   RawCreateUserGuard -> createUserGuard RawCreateUserGuard

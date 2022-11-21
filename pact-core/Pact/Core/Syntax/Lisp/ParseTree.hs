@@ -88,8 +88,6 @@ instance Pretty (Expr i) where
         pretty o <> "#" <> pretty f
       ObjectExtend f u o ->
         pretty o <> braces (pretty f <> ":=" <> pretty u)
-      ReadEnvObject ty o ->
-        "read-object" <+> "@{" <> pretty ty <> "}" <+> pretty o
     -- Todo: fix errors
     where
     prettyObj m =

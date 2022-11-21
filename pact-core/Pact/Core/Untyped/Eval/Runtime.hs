@@ -44,10 +44,8 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Set(Set)
 import Data.Vector(Vector)
--- import Data.List.NonEmpty(NonEmpty(..))
 import Data.RAList(RAList)
 import Data.Primitive(Array)
-import qualified Data.Map.Strict as Map
 import qualified Data.Vector as V
 
 import Pact.Core.Names
@@ -84,7 +82,6 @@ data Closure b i
 -- | The type of our semantic runtime values
 data CEKValue b i
   = VLiteral !Literal
-  | VObject !(Map Field (CEKValue b i))
   | VList !(Vector (CEKValue b i))
   | VClosure !(EvalTerm b i) !(CEKEnv b i)
   | VNative !(BuiltinFn b i)
@@ -155,9 +152,6 @@ instance (Pretty b) => Pretty (BuiltinFn b i) where
 instance Pretty b => Pretty (CEKValue b i) where
   pretty = \case
     VLiteral i -> pretty i
-    VObject o ->
-      let toBind (k, e) = pretty k <> ":" <> pretty e
-      in P.braces $ P.hsep (P.punctuate P.comma (toBind <$> Map.toList o))
     VList v ->
       P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
     VClosure{} ->
@@ -173,8 +167,6 @@ fromPactValue :: PactValue -> CEKValue b i
 fromPactValue = \case
   PLiteral lit -> VLiteral lit
   PList vec -> VList (fromPactValue <$> vec)
-  PObject o ->
-    VObject (fromPactValue <$> o)
   PGuard gu ->
     VGuard (fromPactValue <$> gu)
 
@@ -183,14 +175,5 @@ checkPactValueType ty = \case
   PLiteral lit -> typeOfLit lit == ty
   PList vec -> case ty of
     TyList t -> V.null vec || all (checkPactValueType t) vec
-    _ -> False
-  PObject m -> case ty of
-    TyRow r -> case r of
-      EmptyRow -> Map.null m
-      RowTy rm rv ->
-        maybe True absurd rv
-        && Map.keys rm == Map.keys m
-        && and (Map.intersectionWith checkPactValueType rm m)
-      RowVar v -> absurd v
     _ -> False
   PGuard _ -> ty == TyGuard

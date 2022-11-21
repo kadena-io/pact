@@ -187,8 +187,6 @@ data Term name tyname builtin info
   -- ^ Constant/Literal values
   | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname)) info
   -- ^ (e_1 @t)
-  | TyAbs (NonEmpty tyname) (Term name tyname builtin info) info
-  -- ^ ΛX.e
   | Block (NonEmpty (Term name tyname builtin info)) info
   -- ^ ΛX.e
   | ObjectLit (Map Field (Term name tyname builtin info)) info
@@ -244,8 +242,6 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       prettyFollowing e = Pretty.hardline <> "in" <+> pretty e
     TyApp t (NE.toList -> apps) _ ->
       pretty t <+> Pretty.hsep (fmap (prettyTyApp) apps)
-    TyAbs (NE.toList -> tyabs) t _ ->
-      "Λ" <> Pretty.hsep (pretty <$> tyabs) <+> "->" <+> pretty t
     Block nel _ -> Pretty.nest 2 $
       "{" <> Pretty.hardline <> prettyBlock nel <> "}"
     ObjectLit (Map.toList -> obj) _ ->
@@ -257,8 +253,6 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
         "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
       ObjectExtend f v o ->
         "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
-      ReadEnvObject ty o ->
-        "read-object" <+> "@{" <> pretty ty <> "}" <> pretty o
     ListLit ty (V.toList -> li) _ ->
       (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Builtin b _ -> pretty b
@@ -276,7 +270,6 @@ termInfo f = \case
   Let n e1 e2 i ->
     Let n e1 e2 <$> f i
   TyApp term ty i -> TyApp term ty <$> f i
-  TyAbs ty term i -> TyAbs ty term <$> f i
   Block terms i -> Block terms <$> f i
   ObjectLit obj i -> ObjectLit obj <$> f i
   ObjectOp o i -> ObjectOp o <$> f i
@@ -295,8 +288,6 @@ traverseTermType f = \case
     Let n <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
   TyApp l tyapps i ->
     TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
-  TyAbs tyabs body i ->
-    TyAbs tyabs <$> traverseTermType f body <*> pure i
   Block nel i ->
     Block <$> traverse (traverseTermType f) nel <*> pure i
   ObjectLit obj i ->
@@ -316,7 +307,6 @@ instance Plated (Term name tyname builtin info) where
     Let n e1 e2 i ->
       Let n <$> f e1 <*> f e2 <*> pure i
     TyApp term ty i -> TyApp <$> f term <*> pure ty <*> pure i
-    TyAbs ty term i -> TyAbs ty <$> f term <*> pure i
     ObjectLit tm i ->
       ObjectLit <$> traverse f tm <*> pure i
     ListLit ty ts i ->

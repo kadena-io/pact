@@ -374,18 +374,19 @@ library pact-core
     -- Pact.Core.Repl
     -- Core IR modules
     Pact.Core.IR.Term
-    -- Pact.Core.IR.Typecheck
+    Pact.Core.IR.Typecheck
     Pact.Core.IR.Desugar
 
     -- Typed core modules
-    -- Pact.Core.Typed.Typecheck
-    -- Pact.Core.Typed.Term
-    -- Pact.Core.Typed.Overload
+    Pact.Core.Typed.Typecheck
+    Pact.Core.Typed.Term
+    Pact.Core.Typed.Overload
 
     -- Untyped core
     Pact.Core.Untyped.Term
     Pact.Core.Untyped.Eval.Runtime
     Pact.Core.Untyped.Eval.CEK
+    Pact.Core.Untyped.Utils
     -- Pact.Core.Untyped.Eval.Builtin
 
     -- Repl

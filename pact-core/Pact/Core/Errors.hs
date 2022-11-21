@@ -57,7 +57,6 @@ renderDesugarError render = \case
 
 data TypecheckError info
   = UnificationError (Type Text) (Type Text) info
-  | RowKindUnificationError (Row Text) (Type Text) info
   deriving Show
 
 instance (Show info, Typeable info) => Exception (TypecheckError info)

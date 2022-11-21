@@ -143,8 +143,6 @@ data CoreBuiltin
 instance Pretty CoreBuiltin where
   pretty = pretty . coreBuiltinToText
 
-
-
 instance BuiltinArity CoreBuiltin where
   builtinArity = \case
     AddInt -> 2

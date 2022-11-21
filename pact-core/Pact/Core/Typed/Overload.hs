@@ -96,8 +96,6 @@ resolveTerm = \case
     App <$> resolveTerm f <*> traverse resolveTerm args <*> pure i
   TyApp l rs i ->
     TyApp <$> resolveTerm l <*> pure rs <*> pure i
-  TyAbs nel t i ->
-    TyAbs nel <$> resolveTerm t <*> pure i
   Block nel i ->
     Block <$> traverse resolveTerm nel <*> pure i
   ObjectLit ms i ->
@@ -239,13 +237,9 @@ resolveTerm = \case
       pure (Builtin NotBool i)
     -- (==) instance + dyn access
     -- TODO: TIME
-    (RawEq, [TyRow _], _) ->
-      pure (Builtin EqObj i)
     (RawEq, [_], [p]) ->
       specializeEq i RawEq eqResolve p
     -- (/=) instance + dyn access
-    (RawNeq, [TyRow _], _) ->
-      pure (Builtin NeqObj i)
     (RawNeq, [_], [p]) ->
       specializeEq i RawNeq neqResolve p
     -- Ord : GT (>) instances
@@ -666,7 +660,6 @@ lengthResolve =
 
 varOverloaded :: i -> Pred NamedDeBruijn -> OverloadT (CoreEvalTerm i)
 varOverloaded i (Pred tc ty) = case tc of
-  WithoutField _ -> fail "invariant failure"
   Add -> addOverloaded i ty
   Eq -> eqOverloaded i ty
   Num -> numOverloaded i ty
@@ -711,7 +704,6 @@ eqOverloaded i = \case
     PrimUnit -> pure (eqUnit i)
     _ -> fail "invariant failure: no instance for eq"
   t@TyVar{} -> bindDictVar i Eq t
-  TyRow _ -> pure (eqObj i)
   _ -> fail "invariant failure: no instance for eq"
 
 ordOverloaded
@@ -755,7 +747,6 @@ showOverloaded i = \case
     PrimUnit -> pure (showUnit i)
     _ -> fail "invariant failure: no instance for show"
   t@TyVar{} -> bindDictVar i Show t
-  TyRow _ -> pure (eqObj i)
   _ -> fail "invariant failure: no instance for show"
 
 numOverloaded
@@ -881,9 +872,6 @@ eqUnit = eqDict EqUnit NeqUnit
 
 eqBool :: info -> CoreEvalTerm info
 eqBool = eqDict EqBool NeqBool
-
-eqObj :: info -> CoreEvalTerm info
-eqObj = eqDict EqObj NeqObj
 
 numInt, numDec :: info -> CoreEvalTerm info
 numInt = numDict SubInt MulInt DivInt NegateInt AbsInt

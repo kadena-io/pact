@@ -31,16 +31,6 @@ typeUnifies (TyVar n) (TyVar n') = n == n'
 typeUnifies (TyPrim l) (TyPrim r) = l == r
 typeUnifies (TyFun l r) (TyFun l' r') =
   typeUnifies l l' && typeUnifies r r'
-typeUnifies (TyRow r) (TyRow r') = rowUnifies r r'
-  where
-  rowUnifies EmptyRow EmptyRow = True
-  rowUnifies (RowVar n) (RowVar n') = n == n'
-  rowUnifies (RowTy obj rv) (RowTy obj' rv') =
-    rv == rv'
-      && Map.size obj == Map.size obj'
-      && Map.isSubmapOfBy typeUnifies obj obj'
-  rowUnifies _ _ = False
-typeUnifies TyCap TyCap = True
 typeUnifies (TyForall as ty) (TyForall as' ty') =
   let tys = NE.zip as (TyVar <$>  as')
       env = Map.fromList (NE.toList tys)
@@ -68,22 +58,6 @@ substInTy s (TyVar n) =
     Nothing -> TyVar n
 substInTy s (TyFun l r) =
   TyFun (substInTy s l) (substInTy s r)
-substInTy s (TyRow row) = TyRow (substInRow row)
-  where
-    substInRow (RowVar rv) =
-      case Map.lookup rv s of
-        Just (TyRow r) -> r
-        Just (TyVar tv) -> RowVar tv
-        _ -> row
-    substInRow (RowTy obj (Just rv)) =
-      case Map.lookup rv s of
-        Just (TyRow r) -> case r of
-          RowVar rv' -> RowTy obj (Just rv')
-          RowTy obj' mrv ->
-            RowTy (Map.union obj obj') mrv
-          EmptyRow -> RowTy obj Nothing
-        _ -> row
-    substInRow _ = row
 substInTy _ t = t
 
 typecheck'
@@ -126,14 +100,6 @@ typecheck' = \case
   TyApp term tyApps _ -> do
     ty <- typecheck' term
     foldlM applyType ty tyApps
-  -- Γ,X_1,..,X_n ⊢ e:t1
-  -- ------------------------ (T-TAbs)
-  -- Γ ⊢ ΛX_1,..,X_n.e : ∀X.t1
-  -- BIG TODO: ROW APPS
-  TyAbs tn term _ -> do
-    typ <- typecheck' term
-    pure (TyForall tn typ)
-
   -- b : t ∈ B                (where B = { b : t | for b in Builtins, t in T})
   -- ------------------------ (T-Builtin)
   -- Γ ⊢ b : t
@@ -150,9 +116,7 @@ typecheck' = \case
   -- a_1, ..., a_n : t
   -- ------------------------ (T-Builtin)
   -- Γ ⊢ [a_1, ..., a_n] : List t
-  ObjectLit fields _ -> do
-    fields' <- traverse typecheck' fields
-    pure $ TyRow (RowTy fields' Nothing)
+  ObjectLit _fields _ -> error "unimplemented"
   ObjectOp _ _ -> error "unimplemented"
 
   -- e_1:t_1, ... , e_n : t_n
