@@ -142,7 +142,7 @@ instance FromJSON o => FromJSON (Arg o) where
   parseJSON = withObject "Arg" $ \o -> Arg
     <$> o .: "name"
     <*> o .: "type"
-    <*> o .: "info"
+    <*> o .:? "info" .!= Info Nothing
   {-# INLINE parseJSON #-}
 
 instance (SizeOf o) => SizeOf (Arg o)

@@ -101,6 +101,7 @@ import Control.Monad
 import Data.Aeson hiding (pairs,Object, (<?>))
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Key as A
+import qualified Data.Aeson.KeyMap as A
 import qualified Data.Aeson.Types as A
 import Data.Decimal
 import Data.Default
@@ -301,7 +302,7 @@ instance HasInfo (Lam n) where getInfo = _lamInfo
 
 instance Pretty n => Pretty (Lam n) where
   pretty (Lam arg ty _ _) =
-    pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> (parensSep $ pretty <$> _ftArgs ty) <+> "..."
+    pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> parensSep (pretty <$> _ftArgs ty) <+> "..."
 
 instance NFData n => NFData (Lam n)
 
@@ -603,7 +604,7 @@ instance SizeOf1 Term where
       constructorCost 3 + sizeOf ver e1 + sizeOf ver e2 + sizeOf ver info
 
 instance (SizeOf a) => SizeOf (Term a) where
-  sizeOf ver t = sizeOf1 ver t
+  sizeOf = sizeOf1
 
 instance Applicative Term where
     pure a = TVar a def
@@ -640,57 +641,137 @@ instance Monad Term where
 -- | JSON Properties Vocabulary for Term
 --
 data TermProperties
-  = TermModuleDef
+  = TermArgs
   | TermBody
-  | TermMeta
-  | TermList
-  | TermType
-  | TermNatName
-  | TermNatFun
-  | TermNatFunTypes
-  | TermNatExamples
-  | TermNatDocs
-  | TermNatTopLevel
   | TermConstArg
-  | TermModName
   | TermConstVal
-  | TermVar
-  | TermPairs
-  | TermLiteral
-  | TermGuard
-  | TermSchemaName
-  | TermFields
-  | TermTblName
-  | TermHash
-  | TermDynRef
+  | TermDefBody
+  | TermDefMeta
+  | TermDefName
+  | TermDefType
   | TermDynMem
-  deriving (Show, Enum)
+  | TermDynRef
+  | TermFields
+  | TermFun
+  | TermFunType
+  | TermGuard
+  | TermHash
+  | TermI
+  | TermInfo
+  | TermLamArg
+  | TermLamBindBody
+  | TermLamInfo
+  | TermLamTy
+  | TermList
+  | TermLiteral
+  | TermMeta
+  | TermModName
+  | TermModRefInfo
+  | TermModRefName
+  | TermModRefSpec
+  | TermModule
+  | TermName
+  | TermNatDocs
+  | TermNatExamples
+  | TermNatFunTypes
+  | TermNatTopLevel
+  | TermObjectKeyorder
+  | TermObjectObj
+  | TermPairs
+  | TermType
+  | TermUnknown String
+  | TermUseImports
+  | TermVar
 
-prop :: IsString a => TermProperties -> a
-prop TermModuleDef = "module"
+  deriving (Show, Eq, Ord)
+
+prop :: IsString a => Semigroup a => TermProperties -> a
+prop TermArgs = "args"
 prop TermBody = "body"
-prop TermMeta = "meta"
-prop TermList = "list"
-prop TermType = "type"
-prop TermNatName = "name"
-prop TermNatFun = "fun"
-prop TermNatFunTypes = "types"
-prop TermNatExamples = "examples"
-prop TermNatDocs = "docs"
-prop TermNatTopLevel = "tl"
 prop TermConstArg = "arg"
-prop TermModName = "modname"
 prop TermConstVal = "val"
-prop TermVar = "var"
-prop TermPairs = "pairs"
-prop TermLiteral = "lit"
-prop TermGuard = "guard"
-prop TermSchemaName = "name"
-prop TermFields = "fields"
-prop TermTblName = "name"
-prop TermHash = "hash"
-prop TermDynRef = "dref"
+prop TermDefBody = "defBody"
+prop TermDefMeta = "defMeta"
+prop TermDefName = "defName"
+prop TermDefType = "defType"
 prop TermDynMem = "dmem"
+prop TermDynRef = "dref"
+prop TermFields = "fields"
+prop TermFun = "fun"
+prop TermFunType = "funType"
+prop TermGuard = "guard"
+prop TermHash = "hash"
+prop TermI = "i"
+prop TermInfo = "info"
+prop TermLamArg = "amArg"
+prop TermLamBindBody = "amBindBody"
+prop TermLamInfo = "amInfo"
+prop TermLamTy = "amTy"
+prop TermList = "list"
+prop TermLiteral = "lit"
+prop TermMeta = "meta"
+prop TermModName = "modname"
+prop TermModRefInfo = "refInfo"
+prop TermModRefName = "refName"
+prop TermModRefSpec = "refSpec"
+prop TermModule = "module"
+prop TermName = "name"
+prop TermNatDocs = "docs"
+prop TermNatExamples = "examples"
+prop TermNatFunTypes = "types"
+prop TermNatTopLevel = "tl"
+prop TermObjectKeyorder = "keyorder"
+prop TermObjectObj = "obj"
+prop TermPairs = "pairs"
+prop TermType = "type"
+prop (TermUnknown t) = "UNKNOWN_TERM[" <> fromString t <> "]"
+prop TermUseImports = "imports"
+prop TermVar = "var"
+{-# INLINE prop #-}
+
+unprop :: IsString a => Eq a => Show a => a -> TermProperties
+unprop "args" = TermArgs
+unprop "body" = TermBody
+unprop "arg" = TermConstArg
+unprop "val" = TermConstVal
+unprop "defBody" = TermDefBody
+unprop "defMeta" = TermDefMeta
+unprop "defName" = TermDefName
+unprop "defType" = TermDefType
+unprop "dmem" = TermDynMem
+unprop "dref" = TermDynRef
+unprop "fields" = TermFields
+unprop "fun" = TermFun
+unprop "funType" = TermFunType
+unprop "guard" = TermGuard
+unprop "hash" = TermHash
+unprop "i" = TermI
+unprop "info" = TermInfo
+unprop "amArg" = TermLamArg
+unprop "amBindBody" = TermLamBindBody
+unprop "amInfo" = TermLamInfo
+unprop "amTy" = TermLamTy
+unprop "list" = TermList
+unprop "lit" = TermLiteral
+unprop "meta" = TermMeta
+unprop "modname" = TermModName
+unprop "refInfo" = TermModRefInfo
+unprop "refName" = TermModRefName
+unprop "refSpec" = TermModRefSpec
+unprop "module" = TermModule
+unprop "name" = TermName
+unprop "docs" = TermNatDocs
+unprop "examples" = TermNatExamples
+unprop "types" = TermNatFunTypes
+unprop "tl" = TermNatTopLevel
+unprop "keyorder" = TermObjectKeyorder
+unprop "obj" = TermObjectObj
+unprop "pairs" = TermPairs
+unprop "type" = TermType
+unprop "imports" = TermUseImports
+unprop "var" = TermVar
+unprop t = TermUnknown (show t)
+{-# INLINE unprop #-}
 
 instance ToJSON n => ToJSON (Term n) where
   toJSON = termEnc object toJSON
@@ -706,7 +787,7 @@ termEnc
 termEnc kv val = \case
   (TModule d b i) -> kv
     [ p TermBody .= b
-    , p TermModuleDef .= d
+    , p TermModule .= d
     , inf i
     ]
   (TList ts ty i) -> kv
@@ -718,8 +799,8 @@ termEnc kv val = \case
   -- TNative intentionally not marshallable
   (TNative n _fn tys _exs d tl i) -> kv
     [ p TermNatFunTypes .= tys
-    , p TermNatName .= n
-    , p TermNatFun .= Null {- TODO fn -}
+    , p TermName .= n
+    , p TermFun .= Null {- TODO fn -}
     , p TermNatTopLevel .= tl
     , p TermNatExamples .= Null {- TODO exs -}
     , p TermNatDocs .= d
@@ -761,7 +842,7 @@ termEnc kv val = \case
     ]
   (TSchema sn smod smeta sfs i) -> kv
     [ p TermModName .= smod
-    , p TermSchemaName .= sn
+    , p TermName .= sn
     , p TermMeta .= smeta
     , inf i
     , p TermFields .= sfs
@@ -769,7 +850,7 @@ termEnc kv val = \case
   (TTable tn tmod th tty tmeta i) -> kv
     [ p TermHash .= th
     , p TermModName .= tmod
-    , p TermTblName .= tn
+    , p TermName .= tn
     , p TermMeta .= tmeta
     , p TermType .= tty
     , inf i
@@ -781,96 +862,96 @@ termEnc kv val = \case
    ]
   (TModRef mr _i) -> val mr
  where
-  -- p = prop @T.Text
   p = prop @Key
   inf i = ("i" :: Key) .= i
 
 instance FromJSON n => FromJSON (Term n) where
-  parseJSON v =
-    ( wo "Module"
-      (\o -> TModule
-        <$> o .: p TermModuleDef
-        <*> o .: p TermBody
-        <*> inf o
-      )
-    <|> wo "List"
-      (\o -> TList
-        <$> o .: p TermList
-        <*> o .: p TermType
-        <*> inf o
-      )
-    <|> parseWithInfo TDef
+
+  -- "info" and "i" may be optional, so we don't consider those for matching
+  --
+  parseJSON v = flip (A.<?>) (A.Key "Term") $ case propsWithoutOptionals of
+    [TermBody, TermModule] ->  wo "Module" $ \o -> TModule
+      <$> o .: p TermModule
+      <*> o .: p TermBody
+      <*> inf o
+    [TermList, TermType] -> wo "List" $ \o -> TList
+      <$> o .: p TermList
+      <*> o .: p TermType
+      <*> inf o
+    [TermDefBody, TermDefMeta, TermDefName, TermDefType, TermFunType, TermMeta, TermModule] -> parseWithInfo TDef
+
     -- TNative intentionally not marshallable
-    <|> wo "Const"
-      (\o -> TConst
-        <$> o .: p TermConstArg
-        <*> o .: p TermModName
-        <*> o .: p TermConstVal
-        <*> o .: p TermMeta
-        <*> inf o
-      )
-    <|> parseWithInfo TApp
-    <|> wo "Var"
-      (\o -> TVar
+    -- [TermFun, TermName, TermNatDocs, TermNatExamples, TermNatFunTypes, TermNatTopLevel] ->
+    --   wo "Native" $ \o -> TNative
+    --     <$> o .: p TermName
+    --     <*> error "not supported" -- TermFun serialized as Null
+    --     <*> o .: p TermFunType
+    --     <*> return [] -- TermNatExamples serialized as Null
+    --     <*> o .: p TermNatDocs
+    --     <*> o .: p TermNatTopLevel
+    --     <*> inf o
+
+    [TermConstArg, TermConstVal, TermMeta, TermModName] -> wo "Const" $ \o -> TConst
+      <$> o .: p TermConstArg
+      <*> o .: p TermModName
+      <*> o .: p TermConstVal
+      <*> o .: p TermMeta
+      <*> inf o
+    [TermArgs, TermFun] -> parseWithInfo TApp
+    [TermVar] -> wo "Var" $ \o -> TVar
         <$>  o .: p TermVar
         <*> inf o
-      )
-    <|> wo "Binding"
-        (\o -> TBinding
-          <$> o .: p TermPairs
-          <*> o .: p TermBody
-          <*> o .: p TermType
-          <*> inf o
-        )
-    <|> parseWithInfo TObject
-    <|> wo "Literal"
-      (\o -> TLiteral
-        <$> o .: p TermLiteral
-        <*> inf o
-      )
-    <|> wo "Guard"
-      (\o -> TGuard
-        <$> o .: p TermGuard
-        <*> inf o
-      )
-    <|> parseWithInfo TUse
-    <|> parseWithInfo TLam
-    <|> wo "Step"
-        (\o -> TStep
-          <$> o .: p TermBody
-          <*> o .: p TermMeta
-          <*> inf o
-        )
-   --  parseWithInfo TStep
-    <|> wo "Schema"
-        (\o -> TSchema
-          <$>  o .: p TermSchemaName
-          <*> o .: p TermModName
-          <*> o .: p TermMeta
-          <*> o .: p TermFields
-          <*> inf o
-        )
-    <|> wo "Table"
-        (\o -> TTable
-          <$>  o .: p TermTblName
-          <*> o .: p TermModName
-          <*> o .: p TermHash
-          <*> o .: p TermType
-          <*> o .: p TermMeta
-          <*> inf o
-        )
-    <|> wo "Dynamic"
-        (\o -> TDynamic
-          <$> o .: p TermDynRef
-          <*> o .: p TermDynMem
-          <*> inf o
-        )
-    <|> parseWithInfo TModRef
-    ) A.<?> A.Key (A.fromText "Term")
+    [TermBody, TermPairs, TermType] -> wo "Binding" $ \o -> TBinding
+      <$> o .: p TermPairs
+      <*> o .: p TermBody
+      <*> o .: p TermType
+      <*> inf o
+    [TermObjectObj, TermType] -> parseWithInfo TObject -- FIXME keyorder is optional
+    [TermLiteral] -> wo "Literal" $ \o -> TLiteral
+      <$> o .: p TermLiteral
+      <*> inf o
+    [TermGuard] -> wo "Guard" $ \o -> TGuard
+      <$> o .: p TermGuard
+      <*> inf o
+    [TermHash, TermModule, TermUseImports] -> parseWithInfo TUse
+    [TermLamArg, TermLamBindBody, TermLamInfo, TermLamTy] -> parseWithInfo TLam
+    [TermBody, TermMeta] -> wo "Step" $ \o -> TStep
+      <$> o .: p TermBody
+      <*> o .: p TermMeta
+      <*> inf o
+     --  parseWithInfo TStep
+    [TermFields, TermMeta, TermModName, TermName] -> wo "Schema" $ \o -> TSchema
+      <$>  o .: p TermName
+      <*> o .: p TermModName
+      <*> o .: p TermMeta
+      <*> o .: p TermFields
+      <*> inf o
+    [TermHash, TermMeta, TermModName, TermName, TermType] -> wo "Table" $ \o -> TTable
+      <$>  o .: p TermName
+      <*> o .: p TermModName
+      <*> o .: p TermHash
+      <*> o .: p TermType
+      <*> o .: p TermMeta
+      <*> inf o
+    [TermDynMem, TermDynRef] -> wo "Dynamic" $ \o -> TDynamic
+      <$> o .: p TermDynRef
+      <*> o .: p TermDynMem
+      <*> inf o
+    [TermModRefInfo, TermModRefName, TermModRefSpec] -> parseWithInfo TModRef
+    _ -> fail $ "unexpected properties for Term: "
+      <> "[" <> T.unpack (T.intercalate "," (props v)) <> "]"
+      <> ", " <> show propsWithoutOptionals
+      <> ", " <> show (encode v)
+    -- A.<?> A.Key (A.fromText $ "Term[" <> T.intercalate "," (props v) <> "]")
    where
     p = prop
-    inf o = o .: "i"
+    inf o = o .:? "i" .!= Info Nothing
     wo n f = withObject n f v
+    props (A.Object m) = A.toText <$> A.keys m
+    props _ = []
+
+    propsWithoutOptionals = sort $ unprop
+        <$> filter (\x -> x `notElem` ["i", "info", "keyorder"]) (props v)
 
     parseWithInfo :: HasInfo a => FromJSON a => (a -> Info -> Term n) -> A.Parser (Term n)
     parseWithInfo f = (\a -> f a $ getInfo a) <$> parseJSON v
@@ -994,7 +1075,7 @@ canEq _ _ = False
 -- | Support pact `=` for value-level terms
 -- and TVar for types.
 termEq :: Eq1 Guard => Eq n => Term n -> Term n -> Bool
-termEq a b = termEq1 (==) a b
+termEq = termEq1 (==)
 
 -- | Support 'termEq' for 'Term Ref'
 termRefEq :: Eq1 Guard => Term Ref -> Term Ref -> Bool
@@ -1008,7 +1089,7 @@ termEq1 eq (TObject (Object (ObjectMap a) _ _ _) _) (TObject (Object (ObjectMap 
   -- O(3n), 2x M.toList + short circuiting walk
   M.size a == M.size b && go (M.toList a) (M.toList b) True
     where go _ _ False = False
-          go ((k1,v1):r1) ((k2,v2):r2) _ = go r1 r2 $ k1 == k2 && (termEq1 eq v1 v2)
+          go ((k1,v1):r1) ((k2,v2):r2) _ = go r1 r2 $ k1 == k2 && termEq1 eq v1 v2
           go [] [] _ = True
           go _ _ _ = False
 termEq1 _ (TLiteral a _) (TLiteral b _) = a == b

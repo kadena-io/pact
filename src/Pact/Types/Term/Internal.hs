@@ -92,6 +92,7 @@ import Control.Lens hiding ((.=), DefName(..), elements)
 import Control.Monad
 import Data.Aeson hiding (pairs,Object, (<?>))
 import qualified Data.Aeson as A
+import qualified Data.Aeson.KeyMap as A
 import Data.Default
 import Data.Eq.Deriving
 import Data.Foldable
@@ -346,7 +347,12 @@ instance ToJSON t => ToJSON (App t) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
-instance FromJSON t => FromJSON (App t) where parseJSON = lensyParseJSON 4
+instance FromJSON t => FromJSON (App t) where
+  parseJSON = withObject "App" $ \o -> App
+    <$> o .: "fun"
+    <*> o .: "args"
+    <*> o .:? "info" .!= Info Nothing
+  {-# INLINE parseJSON #-}
 
 instance Pretty n => Pretty (App n) where
   pretty App{..} = parensSep $ pretty _appFun : map pretty _appArgs
@@ -567,7 +573,14 @@ instance ToJSON n => ToJSON (Step n) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
-instance FromJSON n => FromJSON (Step n) where parseJSON = lensyParseJSON 2
+instance FromJSON n => FromJSON (Step n) where
+  parseJSON = withObject "Step" $ \o -> Step
+    <$> o .: "entity"
+    <*> o .: "exec"
+    <*> o .: "rollback"
+    <*> o .:? "info" .!= Info Nothing
+  {-# INLINE parseJSON #-}
+
 instance HasInfo (Step n) where getInfo = _sInfo
 instance Pretty n => Pretty (Step n) where
   pretty = \case
@@ -783,7 +796,7 @@ instance FromJSON Use where
     Use <$> o .: "module"
         <*> o .:? "hash"
         <*> o .:? "imports"
-        <*> o .: "i"
+        <*> o .:? "i" .!= Info Nothing
 
 instance NFData Use
 instance SizeOf Use
@@ -863,6 +876,56 @@ instance (SizeOf p) => SizeOf (Guard p) where
 keyNamef :: Key
 keyNamef = "keysetref"
 
+data GuardProperty
+  = GuardArgs
+  | GuardCgArgs
+  | GuardCgName
+  | GuardCgPactId
+  | GuardFun
+  | GuardKeys
+  | GuardKeysetref
+  | GuardKsn
+  | GuardModuleName
+  | GuardName
+  | GuardNs
+  | GuardPactId
+  | GuardPred
+  | GuardUnknown String
+  deriving (Show, Eq, Ord)
+
+_gprop :: IsString a => Semigroup a => GuardProperty -> a
+_gprop GuardArgs = "args"
+_gprop GuardCgArgs = "cgArgs"
+_gprop GuardCgName = "cgName"
+_gprop GuardCgPactId = "cgPactId"
+_gprop GuardFun = "fun"
+_gprop GuardKeys = "keys"
+_gprop GuardKeysetref = "keysetref"
+_gprop GuardKsn = "ksn"
+_gprop GuardModuleName = "moduleName"
+_gprop GuardName = "name"
+_gprop GuardNs = "ns"
+_gprop GuardPactId = "pactId"
+_gprop GuardPred = "pred"
+_gprop (GuardUnknown t) = "UNKNOWN_GUARD[" <> fromString t <> "]"
+
+ungprop :: IsString a => Eq a => Show a => a -> GuardProperty
+ungprop "args" = GuardArgs
+ungprop "cgArgs" = GuardCgArgs
+ungprop "cgName" = GuardCgName
+ungprop "cgPactId" = GuardCgPactId
+ungprop "fun" = GuardFun
+ungprop "keys" = GuardKeys
+ungprop "keysetref" = GuardKeysetref
+ungprop "ksn" = GuardKsn
+ungprop "moduleName" = GuardModuleName
+ungprop "name" = GuardName
+ungprop "ns" = GuardNs
+ungprop "pactId" = GuardPactId
+ungprop "pred" = GuardPred
+ungprop t = GuardUnknown (show t)
+
+
 instance ToJSON a => ToJSON (Guard a) where
   toJSON (GKeySet k) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON k
   toJSON (GKeySetRef n) = enableToJSON "Pact.Types.Term.Guard a" $ object [ keyNamef .= n ]
@@ -882,13 +945,20 @@ instance ToJSON a => ToJSON (Guard a) where
   {-# INLINEABLE toEncoding #-}
 
 instance FromJSON a => FromJSON (Guard a) where
-  parseJSON v =
-      (GKeySet <$> parseJSON v) <|>
-      (withObject "KeySetRef" $ \o -> GKeySetRef <$> o .: keyNamef) v <|>
-      (GPact <$> parseJSON v) <|>
-      (GModule <$> parseJSON v) <|>
-      (GUser <$> parseJSON v) <|>
-      (GCapability <$> parseJSON v)
+  parseJSON v = case props v of
+    [GuardKeys, GuardPred] -> GKeySet <$> parseJSON v
+    [GuardKeysetref] -> flip (withObject "KeySetRef") v $ \o ->
+        GKeySetRef <$> o .: keyNamef
+    [GuardName, GuardPactId] -> GPact <$> parseJSON v
+    [GuardModuleName, GuardName] -> GModule <$> parseJSON v
+    [GuardArgs, GuardFun] -> GUser <$> parseJSON v
+    [GuardCgArgs, GuardCgName, GuardCgPactId] -> GCapability <$> parseJSON v
+    _ -> fail $ "unexpected properties for Guard: "
+      <> show (props v)
+      <> ", " <> show (encode v)
+   where
+    props (A.Object o) = sort $ ungprop <$> A.keys o
+    props _ = []
   {-# INLINEABLE parseJSON #-}
 
 -- -------------------------------------------------------------------------- --
