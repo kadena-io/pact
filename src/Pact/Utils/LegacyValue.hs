@@ -1,7 +1,9 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Pact.Utils.LegacyValue
 ( -- LegacyValue
@@ -32,6 +34,7 @@ import qualified Data.Aeson.KeyMap as AKM
 import Data.Bifunctor
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Reflection
 import qualified Data.Text as T
 import Data.Typeable
 
@@ -86,9 +89,44 @@ import qualified Pact.Utils.LegacyHashMap as LHM
 newtype LegacyValue = LegacyValue { _getLegacyValue :: Value }
   deriving (Show, Eq, NFData)
 
-instance ToJSON LegacyValue where
+-- | This datatype is used to signal if it is safe to call 'toJSON' on a
+-- 'LegacyValue'. 'toJSON' must not be called as a submethod of 'encode' to
+-- serialize a 'Value', because that code path does not preserve the the legacy
+-- ordering of JSON properties. For that reason the a type class instance for
+-- 'Given' is used to inject default value of 'LegacyValueForbidden' into calls
+-- of 'toJSON' in the 'ToJSON' instance of 'LegacyValue'. This behavior can be
+-- "overridden" by use of 'given' in contexts where calling 'toJSON' is safe.
+--
+data LegacyValuePolicy = LegacyValueForbidden | LegacyValueAllowed
+  deriving (Show, Eq)
+
+-- | Define "default" behavior of 'toJSON' for 'LegacyValue'. This behavior can
+-- be overwritten by using 'give' to provide a local instance. Current versions
+-- of GHC give precedence to the local instance.
+--
+-- @
+-- λ> (given @LegacyValueWitness, give LegacyValueAllowed $ given @LegacyValueWitness )
+-- (LegacyValueForbidden,LegacyValueAllowed)
+-- @
+--
+-- Since the exact behavior of given is implementation dependent when there is
+-- more than one instance in scope, there must be test case that validates the
+-- behavior for the respective GHC instance in use.
+--
+instance Given LegacyValuePolicy where
+    given = LegacyValueForbidden
+    {-# NOINLINE given #-}
+    -- The NOINLINE pragma forces GHC to give precedence to locally defined
+    -- instances that are passed as implicit arguments.
+
+instance Given LegacyValuePolicy => ToJSON LegacyValue where
   toJSON :: HasCallStack => LegacyValue -> Value
-  toJSON v = error $ "Pact.Utils.Json.LegacyValue: attempt to call toJSON on " <> show v
+  toJSON v = case given of
+    LegacyValueForbidden -> error $ "Pact.Utils.Json.LegacyValue: attempt to call toJSON on " <> show v
+    LegacyValueAllowed -> toJSON (_getLegacyValue v)
+        -- this case is only safe when 'LegacyValues' are created. It allows to
+        -- nest 'LegacyValue' values in inner datastructers into a new top-level
+        -- 'LegacyValue'.
 
   toEncoding (LegacyValue (Object o)) = toEncoding $ LegacyValue <$> legacyKeyMap o
   toEncoding (LegacyValue (Array a)) = toEncoding $ LegacyValue <$> a
@@ -101,8 +139,21 @@ instance FromJSON LegacyValue where
   parseJSON = fmap LegacyValue . parseJSON
   {-# INLINE parseJSON #-}
 
+-- | Convert a value with 'ToJSON' instance into 'LegacyValue'. The resulting
+-- value must not be encoded with 'toJSON'. Instead the 'toEncoding' code path
+-- must be used, which guarantees correct legacy ordering of properties.
+--
+-- In the context of toLegacyJson, we allow the use of toJSON on LegacyValue.
+-- This allows to create aeson 'Value' values from types that have nested
+-- 'LegacyValue' values. (This happens for instance in chainweb in pact service
+-- when TxLog values are embedded in pact error messages.) It is safe to do so,
+-- becaues by wrapping the overall result in 'LegacyValue' it is guaranteed that
+-- the correct legacy serialization is preserved for all nested values. It is
+-- also guaranteed that 'toJSON' can not be called in on the result to encode
+-- the value to JSON.
+--
 toLegacyJson :: ToJSON a => a -> LegacyValue
-toLegacyJson = LegacyValue . toJSON
+toLegacyJson a = LegacyValue (give LegacyValueAllowed $ toJSON a)
 {-# INLINE toLegacyJson #-}
 
 -- -------------------------------------------------------------------------- --
