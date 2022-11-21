@@ -22,6 +22,17 @@ import Pact.Types.Term
 import Pact.Types.Util
 
 -- -------------------------------------------------------------------------- --
+-- Utils
+
+arbitraryName :: (Int, Int, Int, Int) -> Gen Name
+arbitraryName (f,q,n,d) = frequency
+  [ (f, FQName <$> arbitrary)
+  , (q, QName <$> arbitrary)
+  , (n, Name <$> arbitrary)
+  , (d, DName <$> arbitrary)
+  ]
+
+-- -------------------------------------------------------------------------- --
 -- Arbitrary Orphans for Scope
 
 instance Arbitrary (f (Var b (f a))) => Arbitrary (Scope b f a) where
@@ -37,10 +48,10 @@ instance Arbitrary Meta where
     arbitrary = Meta <$> arbitrary <*> arbitrary
 
 instance Arbitrary PactId where
-  arbitrary = PactId <$> hashToText <$> arbitrary
+  arbitrary = PactId . hashToText <$> arbitrary
 
 instance (Arbitrary a) => Arbitrary (UserGuard a) where
-  arbitrary = UserGuard <$> arbitrary <*> arbitrary
+  arbitrary = UserGuard <$> arbitraryName (0,1,1,0) <*> arbitrary
 
 instance Arbitrary DefType where
   arbitrary = elements [Defun, Defpact, Defcap]
@@ -190,29 +201,31 @@ instance Arbitrary n => Arbitrary (Term n) where
     0 -> oneof
       [ TLiteral <$> arbitrary <*> arbitrary
       , TVar <$> arbitrary <*> arbitrary
-      , TUse <$> arbitrary <*> arbitrary
+      , (\o -> TUse o (_uInfo o)) <$> arbitrary
       ]
     s -> do
       Positive k <- arbitrary
       resize (s `div` (k + 1)) $ oneof
         [ TModule <$> arbitrary <*> arbitrary <*> arbitrary
         , TList <$> arbitrary <*> arbitrary <*> arbitrary
-        , TDef <$> arbitrary <*> arbitrary
+        , (\o -> TDef o (_dInfo o)) <$> arbitrary
+
         -- TNative intentionally not marshallable
-        , TNative <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+        -- , TNative <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
         , TConst <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-        , TApp <$> arbitrary <*> arbitrary
+        , (\o -> TApp o (_appInfo o)) <$> arbitrary
         , TVar <$> arbitrary <*> arbitrary
         , TBinding <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-        , TObject <$> arbitrary <*> arbitrary
+        , (\o -> TObject o (_oInfo o)) <$> arbitrary
         , TLiteral <$> arbitrary <*> arbitrary
-        , TLam <$> arbitrary <*> arbitrary
+        , (\o -> TLam o (_lamInfo o)) <$> arbitrary
         , TGuard <$> arbitrary <*> arbitrary
-        , TUse <$> arbitrary <*> arbitrary
+        , (\o -> TUse o (_uInfo o)) <$> arbitrary
         , TStep <$> arbitrary <*> arbitrary <*> arbitrary
         , TSchema <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
         , TTable <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
         , TDynamic <$> arbitrary <*> arbitrary <*> arbitrary
-        , TModRef <$> arbitrary <*> arbitrary
+        , (\o -> TModRef o (_modRefInfo o)) <$> arbitrary
         ]
 

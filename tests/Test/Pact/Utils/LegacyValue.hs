@@ -463,7 +463,7 @@ spec = describe "JSON encoding backward compatibility" $ do
   -- ---------------------------------------------- --
   describe "Pact.Types.Term" $ do
    spec_case @Meta
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
@@ -473,7 +473,7 @@ spec = describe "JSON encoding backward compatibility" $ do
       , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(UserGuard ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
@@ -569,12 +569,12 @@ spec = describe "JSON encoding backward compatibility" $ do
       , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Guard ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Module ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
@@ -584,7 +584,7 @@ spec = describe "JSON encoding backward compatibility" $ do
       , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(ModuleDef ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
@@ -596,22 +596,22 @@ spec = describe "JSON encoding backward compatibility" $ do
    -- spec_case @Ref [ ]
    -- spec_case @NativeDFun [ ]
    spec_case @(Def ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Lam ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Object ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Term ())
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
