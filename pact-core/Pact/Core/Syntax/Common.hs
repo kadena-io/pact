@@ -6,18 +6,12 @@
 module Pact.Core.Syntax.Common where
 
 import Data.Text(Text)
--- import Data.Map.Strict(Map)
--- import Data.List(intersperse)
--- import Data.Foldable(fold)
 import Data.List.NonEmpty(NonEmpty(..))
 
 import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Imports
-import Pact.Core.Guards
-
--- import qualified Data.Map.Strict as Map
 
 
 data UnaryOp
@@ -168,7 +162,7 @@ data ExtDecl
 data Module e i
   = Module
   { _mName :: ModuleName
-  , _mGovernance :: Governance Text
+  -- , _mGovernance :: Governance Text
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def e i)
   } deriving Show

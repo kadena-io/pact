@@ -6,8 +6,7 @@
 {-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Builtin
- ( ObjectOp(..)
- , RawBuiltin(..)
+ ( RawBuiltin(..)
  , rawBuiltinToText
  , rawBuiltinMap
  , rawBuiltinNames
@@ -27,21 +26,21 @@ import Data.Map.Strict(Map)
 
 import qualified Data.Map.Strict as Map
 
-import Pact.Core.Names
 import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Type
 
-data ObjectOp o
-  = ObjectAccess Field o
-  -- access[f](o)
-  -- For some {f:a|r}, access f
-  | ObjectRemove Field o
-  -- remove[f](o)
-  -- For some {f:a|r}, remove f
-  | ObjectExtend Field o o
-  -- extend[k:=v](o)
-  -- For some {r}, extend with
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+-- Todo: Objects to be added later @ a later milestone
+-- data ObjectOp o
+--   = ObjectAccess Field o
+--   -- access[f](o)
+--   -- For some {f:a|r}, access f
+--   | ObjectRemove Field o
+--   -- remove[f](o)
+--   -- For some {f:a|r}, remove f
+--   | ObjectExtend Field o o
+--   -- extend[k:=v](o)
+--   -- For some {r}, extend with
+--   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 data DefType
   = DTDefun

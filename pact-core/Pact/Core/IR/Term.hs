@@ -14,7 +14,6 @@ module Pact.Core.IR.Term where
 
 import Control.Lens
 import Data.Void(Void)
-import Data.Map(Map)
 import Data.Text(Text)
 import Data.Vector (Vector)
 import Data.List.NonEmpty (NonEmpty)
@@ -24,9 +23,7 @@ import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Names
-import Pact.Core.Builtin
 import Pact.Core.Imports
-import Pact.Core.Guards
 
 data Defun name builtin info
   = Defun
@@ -44,33 +41,34 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
-data DefCap name builtin info
-  = DefCap
-  { _dcapName :: Text
-  , _dcapArgs :: [Text]
-  , _dcapTerm :: Term name builtin info
-  , _dcapCapType :: CapType name
-  , _dcapType :: Type Void
-  , _dcapInfo :: info
-  } deriving Show
+-- data DefCap name builtin info
+--   = DefCap
+--   { _dcapName :: Text
+--   , _dcapArgs :: [Text]
+--   , _dcapTerm :: Term name builtin info
+--   , _dcapCapType :: CapType name
+--   , _dcapType :: Type Void
+--   , _dcapInfo :: info
+--   } deriving Show
 
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
-  | DCap (DefCap name builtin info)
+  -- | DCap (DefCap name builtin info)
   deriving Show
 
 defName :: Def name b i -> Text
 defName (Dfun d) = _dfunName d
 defName (DConst d) = _dcName d
-defName (DCap d) = _dcapName d
+-- defName (DCap d) = _dcapName d
 
--- Todo:
--- Support module guard
+-- TODO:
+-- Support module guards
+-- Support governance
 data Module name builtin info
   = Module
   { _mName :: ModuleName
-  , _mGovernance :: Governance name
+  -- , _mGovernance :: Governance name
   , _mDefs :: [Def name builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
@@ -129,11 +127,12 @@ data Term name builtin info
   -- ^ Built-in ops, e.g (+)
   | Constant Literal info
   -- ^ Literals
-  | ObjectLit (Map Field (Term name builtin info)) info
-  -- ^ Object literals
   | ListLit (Vector (Term name builtin info)) info
-  -- List Literals ^
-  | ObjectOp (ObjectOp (Term name builtin info)) info
+  -- ^ List Literals
+  -- | ObjectOp (ObjectOp (Term name builtin info)) info
+  -- ^ Object literals
+  -- | ObjectLit (Map Field (Term name builtin info)) info
+  -- ^ Primitive object operations
   deriving (Show, Functor)
 
 
@@ -150,8 +149,8 @@ termInfo f = \case
   App t1 t2 i -> App t1 t2 <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
-  ObjectLit m i -> ObjectLit m <$> f i
-  ObjectOp o i -> ObjectOp o <$> f i
+  -- ObjectLit m i -> ObjectLit m <$> f i
+  -- ObjectOp o i -> ObjectOp o <$> f i
   Block terms i -> Block terms <$> f i
   ListLit l i  -> ListLit l <$> f i
 
@@ -163,8 +162,8 @@ instance Plated (Term name builtin info) where
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
-    ObjectLit m i -> ObjectLit <$> traverse f m <*> pure i
-    ObjectOp o i -> ObjectOp <$> traverse f o <*> pure i
+    -- ObjectLit m i -> ObjectLit <$> traverse f m <*> pure i
+    -- ObjectOp o i -> ObjectOp <$> traverse f o <*> pure i
     Block terms i -> Block <$> traverse f terms <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
 

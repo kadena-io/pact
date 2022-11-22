@@ -95,13 +95,13 @@ eval = evalCEK Mt
     returnCEK cont (VClosure body env)
   evalCEK cont _env (Builtin b _) =
     returnCEK cont (VNative (indexArray ?cekBuiltins (fromEnum b)))
-  evalCEK _cont _env (ObjectLit _obj _) = undefined
   evalCEK cont env (Block (t :| ts) _) =
     evalCEK (BlockC env ts cont) env t
   evalCEK cont env (ListLit ts _) = do
     ts' <- traverse (evalCEK Mt env) ts
     returnCEK cont (VList ts')
-  evalCEK _cont _env (ObjectOp _op _) = undefined
+  -- evalCEK _cont _env (ObjectLit _obj _) = undefined
+  -- evalCEK _cont _env (ObjectOp _op _) = undefined
   returnCEK
     :: CEKRuntime b i
     => Cont b i

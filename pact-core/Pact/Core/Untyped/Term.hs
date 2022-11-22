@@ -10,7 +10,6 @@ module Pact.Core.Untyped.Term
  ( Defun(..)
  , DefConst(..)
  , Def(..)
- , DefCap(..)
  , defType
  , defName
  , defTerm
@@ -33,7 +32,6 @@ module Pact.Core.Untyped.Term
 
 import Control.Lens
 import Data.Text(Text)
-import Data.Map.Strict(Map)
 import Data.List.NonEmpty(NonEmpty)
 import Data.Vector (Vector)
 import Data.Void
@@ -41,16 +39,13 @@ import Data.Foldable(foldl')
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as V
-import qualified Data.Map.Strict as Map
 
-import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
-import Pact.Core.Guards
-import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
+import Pact.Core.Pretty(Pretty(..), pretty)
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.IR.Term as IR
@@ -58,7 +53,7 @@ import qualified Pact.Core.IR.Term as IR
 data Defun name builtin info
   = Defun
   { _dfunName :: Text
-  , _dfunType :: Type NamedDeBruijn
+  , _dfunType :: Type Void
   , _dfunTerm :: Term name builtin info
   , _dfunInfo :: info
   } deriving Show
@@ -66,53 +61,53 @@ data Defun name builtin info
 data DefConst name builtin info
   = DefConst
   { _dcName :: Text
-  , _dcType :: Type NamedDeBruijn
+  , _dcType :: Type Void
   , _dcTerm :: Term name builtin info
   , _dcInfo :: info
   } deriving Show
 
-data DefCap name builtin info
-  = DefCap
-  { _dcapName :: Text
-  , _dcapArgs :: [Text]
-  , _dcapTerm :: Term name builtin info
-  , _dcapCapType :: CapType name
-  , _dcapType :: Type NamedDeBruijn
-  , _dcapInfo :: info
-  } deriving Show
+-- data DefCap name builtin info
+--   = DefCap
+--   { _dcapName :: Text
+--   , _dcapArgs :: [Text]
+--   , _dcapTerm :: Term name builtin info
+--   , _dcapCapType :: CapType name
+--   , _dcapType :: Type NamedDeBruijn
+--   , _dcapInfo :: info
+--   } deriving Show
 
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
-  | DCap (DefCap name builtin info)
+  -- | DCap (DefCap name builtin info)
    deriving Show
 
 -- DCap (DefCap name builtin info)
 -- DPact (DefPact name builtin info)
 -- DSchema (DefSchema name info)
 -- DTable (DefTable name info)
-defType :: Def name builtin info -> Type NamedDeBruijn
+defType :: Def name builtin info -> Type Void
 defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
-  DCap d -> _dcapType d
+  -- DCap d -> _dcapType d
 
 defName :: Def name builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
-  DCap d -> _dcapName d
+  -- DCap d -> _dcapName d
 
 defTerm :: Def name builtin info -> Term name builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
-  DCap d -> _dcapTerm d
+  -- DCap d -> _dcapTerm d
 
 data Module name builtin info
   = Module
   { _mName :: ModuleName
-  , _mGovernance :: Governance name
+  -- , _mGovernance :: Governance name
   , _mDefs :: [Def name builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
@@ -179,11 +174,11 @@ data Term name builtin info
   -- ^ Built-in functions (or natives)
   | Constant Literal info
   -- ^ ΛX.e
-  | ObjectLit (Map Field (Term name builtin info)) info
-  -- ^ {f_1:e_1, .., f_n:e_n}
   | ListLit (Vector (Term name builtin info)) info
   -- ^ [e_1, e_2, .., e_n]
-  | ObjectOp (ObjectOp (Term name builtin info)) info
+  -- | ObjectLit (Map Field (Term name builtin info)) info
+  -- ^ {f_1:e_1, .., f_n:e_n}
+  -- | ObjectOp (ObjectOp (Term name builtin info)) info
   -- Object access, update and remove
   deriving (Show, Functor)
 
@@ -209,10 +204,10 @@ fromIRTerm = \case
     Block (fromIRTerm <$> nel) i
   IR.ListLit v i ->
     ListLit (fromIRTerm <$> v) i
-  IR.ObjectLit m i ->
-    ObjectLit (fromIRTerm <$> m) i
-  IR.ObjectOp oo i ->
-    ObjectOp (fromIRTerm <$> oo) i
+  -- IR.ObjectLit m i ->
+  --   ObjectLit (fromIRTerm <$> m) i
+  -- IR.ObjectOp oo i ->
+  --   ObjectOp (fromIRTerm <$> oo) i
 
 ---------
 
@@ -228,11 +223,11 @@ fromIRDConst
 fromIRDConst (IR.DefConst n ty term i) =
   DefConst n (maybe TyUnit (fmap absurd) ty) (fromIRTerm term) i
 
-fromIRDCap
-  :: IR.DefCap name builtin info
-  -> DefCap name builtin info
-fromIRDCap (IR.DefCap name args term captype ty info) =
-  DefCap name args (fromIRTerm term) captype (absurd <$> ty) info
+-- fromIRDCap
+--   :: IR.DefCap name builtin info
+--   -> DefCap name builtin info
+-- fromIRDCap (IR.DefCap name args term captype ty info) =
+--   DefCap name args (fromIRTerm term) captype (absurd <$> ty) info
 
 fromIRDef
   :: IR.Def name builtin info
@@ -240,13 +235,13 @@ fromIRDef
 fromIRDef = \case
   IR.Dfun d -> Dfun (fromIRDefun d)
   IR.DConst d -> DConst (fromIRDConst d)
-  IR.DCap d -> DCap (fromIRDCap d)
+  -- IR.DCap d -> DCap (fromIRDCap d)
 
 fromIRModule
   :: IR.Module name builtin info
   -> Module name builtin info
-fromIRModule (IR.Module mn mgov defs blessed imports implements hs) =
-  Module mn mgov (fromIRDef <$> defs) blessed imports implements hs
+fromIRModule (IR.Module mn defs blessed imports implements hs) =
+  Module mn (fromIRDef <$> defs) blessed imports implements hs
 
 fromIRTopLevel
   :: IR.TopLevel name builtin info
@@ -266,22 +261,22 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
     Builtin b _ -> pretty b
     Constant l _ -> pretty l
     Block nel _ -> Pretty.parens ("progn" <> Pretty.hsep (pretty <$> NE.toList nel))
-    ObjectLit (Map.toList -> obj) _ ->
-      Pretty.braces $
-      Pretty.hsep $
-      Pretty.punctuate Pretty.comma $
-      fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
     ListLit (V.toList -> li) _ ->
       Pretty.brackets $
       Pretty.hsep $
       Pretty.punctuate Pretty.comma (pretty <$> li)
-    ObjectOp oop _ -> case oop of
-      ObjectAccess fi te ->
-        Pretty.parens $ Pretty.hsep ["@" <> pretty fi, pretty te]
-      ObjectRemove fi te ->
-        Pretty.parens $ Pretty.hsep ["#" <> pretty fi, pretty te]
-      ObjectExtend fi v o ->
-        Pretty.braces $ Pretty.hsep [pretty fi <> ":" <> pretty v, "|", pretty o]
+    -- ObjectLit (Map.toList -> obj) _ ->
+    --   Pretty.braces $
+    --   Pretty.hsep $
+    --   Pretty.punctuate Pretty.comma $
+    --   fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
+    -- ObjectOp oop _ -> case oop of
+    --   ObjectAccess fi te ->
+    --     Pretty.parens $ Pretty.hsep ["@" <> pretty fi, pretty te]
+    --   ObjectRemove fi te ->
+    --     Pretty.parens $ Pretty.hsep ["#" <> pretty fi, pretty te]
+    --   ObjectExtend fi v o ->
+    --     Pretty.braces $ Pretty.hsep [pretty fi <> ":" <> pretty v, "|", pretty o]
 
 termInfo :: Lens' (Term name builtin info) info
 termInfo f = \case
@@ -289,8 +284,8 @@ termInfo f = \case
   Lam term i -> Lam term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Block terms i -> Block terms <$> f i
-  ObjectLit obj i -> ObjectLit obj <$> f i
-  ObjectOp o i -> ObjectOp o <$> f i
+  -- ObjectLit obj i -> ObjectLit obj <$> f i
+  -- ObjectOp o i -> ObjectOp o <$> f i
   ListLit v i -> ListLit v <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i

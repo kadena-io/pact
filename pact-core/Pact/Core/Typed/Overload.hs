@@ -23,8 +23,8 @@ import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.IntMap.Strict(IntMap)
 import Data.Foldable(foldl')
+import Data.Void
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as Map
 import qualified Data.IntMap.Strict as IntMap
 
 import Pact.Core.Type
@@ -36,7 +36,7 @@ data ROState
   = ROState
   { _roBoundVars :: IntMap DeBruijn
   , _roVarDepth :: DeBruijn
-  , _roOverloads :: [(Pred NamedDeBruijn, DeBruijn)]
+  -- , _roOverloads :: [(Pred Void, DeBruijn)]
   }
 makeLenses ''ROState
 
@@ -46,19 +46,17 @@ resolveTerm
   :: OverloadedTerm RawBuiltin info
   -> OverloadT (CoreEvalTerm info)
 resolveTerm = \case
-  Var (OverloadedName n nk) i -> case nk of
-    OBound u -> do
+  Var (IRName n nk u) i -> case nk of
+    IRBound -> do
       depth <- view roVarDepth
       views roBoundVars (IntMap.lookup u) >>= \case
         Just d -> do
           let n' = Name n (NBound (depth - d - 1))
           pure (Var n' i)
         Nothing -> fail "invariant failure: unbound name"
-    OTopLevel m h -> do
+    IRTopLevel m h -> do
       let n' = Name n (NTopLevel m h)
       pure (Var n' i)
-    OBuiltinDict p ->
-      varOverloaded i p
   Lam nts e info -> do
     depth <- view roVarDepth
     let (ns, ts) = NE.unzip nts
@@ -66,26 +64,26 @@ resolveTerm = \case
         newDepth = depth + len
         ixs = NE.fromList [depth..newDepth-1]
         nsix = NE.zip ns ixs
-        (m, de) = foldl' mkEnv (mempty, []) nsix
+        m = foldl' mkEnv mempty nsix
         ns' = toON <$> nsix
-    e' <- local (inEnv m de newDepth) (resolveTerm e)
+    e' <- local (inEnv m newDepth) (resolveTerm e)
     pure (Lam (NE.zip ns' ts) e' info)
     where
-    inEnv m de depth =
+    inEnv m depth =
       over roBoundVars (IntMap.union m)
       . set roVarDepth depth
-      . over roOverloads (de ++)
-    toON (n, ix) = Name (_olName n) (NBound ix)
-    mkEnv (m, de) (OverloadedName _ nk, ix)  = case nk of
-      OBound u -> (IntMap.insert u ix m, de)
-      OBuiltinDict p -> (m, (p, ix):de)
-      _ -> (m, de)
+      -- . over roOverloads (de ++)
+    toON (n, ix) = Name (_irName n) (NBound ix)
+    mkEnv m (IRName _ nk u, ix)  = case nk of
+      IRBound -> IntMap.insert u ix m
+      -- IRBuiltinDict p -> (m, (p, ix):de)
+      _ -> m
   Let n e1 e2 i -> do
-    u <- case _olNameKind n of
-      OBound u -> pure u
+    u <- case _irNameKind n of
+      IRBound -> pure (_irUnique n)
       _ -> fail "invariant error: let bound as incorrect variable"
     depth <- view roVarDepth
-    let n' = Name (_olName n) (NBound depth)
+    let n' = Name (_irName n) (NBound depth)
     e1' <- resolveTerm e1
     e2' <- local (inEnv u depth) $ resolveTerm e2
     pure (Let n' e1' e2' i)
@@ -98,15 +96,15 @@ resolveTerm = \case
     TyApp <$> resolveTerm l <*> pure rs <*> pure i
   Block nel i ->
     Block <$> traverse resolveTerm nel <*> pure i
-  ObjectLit ms i ->
-    ObjectLit <$> traverse resolveTerm ms <*> pure i
   ListLit tn ts i ->
     ListLit tn <$> traverse resolveTerm ts <*> pure i
   Constant lit i ->
     pure (Constant lit i)
   Builtin b i -> solveOverload i b
-  ObjectOp o i ->
-    ObjectOp <$> traverse resolveTerm o <*> pure i
+  -- ObjectLit ms i ->
+  --   ObjectLit <$> traverse resolveTerm ms <*> pure i
+  -- ObjectOp o i ->
+  --   ObjectOp <$> traverse resolveTerm o <*> pure i
   where
   listEqualityInstance i raw inst (Pred tc t) = do
     b <- solveOverload i (raw, [t], [Pred tc t])
@@ -119,32 +117,33 @@ resolveTerm = \case
 
   specializeAdd
     :: info
-    -> Pred NamedDeBruijn
+    -> Pred Void
     -> OverloadT (CoreEvalTerm info)
-  specializeAdd i p@(Pred _ t) = case t of
+  specializeAdd i (Pred _ t) = case t of
     TyInt -> pure (Builtin AddInt i)
     TyDecimal -> pure (Builtin AddDec i)
     TyString -> pure (Builtin AddStr i)
     TyList _ -> pure (Builtin AddList i)
-    _ -> accessDict i "+" <$> lookupDictVar i p
+    _ -> fail "unable to resolve overload for Add Operation"
+      -- accessDict i "+" <$> lookupDictVar i p
 
   specializeNumOp
     :: info
     -> NumResolution
-    -> Pred NamedDeBruijn
+    -> Pred Void
     -> OverloadT (CoreEvalTerm info)
-  specializeNumOp i reso p@(Pred _ t) = case t of
+  specializeNumOp i reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_nrIntInstance reso) i)
     TyDecimal -> pure (Builtin (_nrDecInstance reso) i)
-    _ -> accessDict i (_nrRawName reso) <$> lookupDictVar i p
+    _ -> fail "unable to resolve overload for Num Operation"
 
   specializeEq
     :: info
     -> RawBuiltin
     -> EqResolution
-    -> Pred NamedDeBruijn
+    -> Pred Void
     -> OverloadT (CoreEvalTerm info)
-  specializeEq i raw reso p@(Pred _ t) = case t of
+  specializeEq i raw reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_erIntInstance reso) i)
     TyDecimal -> pure (Builtin (_erDecInstance reso) i)
     TyString -> pure (Builtin (_erStrInstance reso) i)
@@ -152,45 +151,46 @@ resolveTerm = \case
     TyBool -> pure (Builtin (_erBoolInstance reso) i)
     TyList t' ->
       listEqualityInstance i raw (_erListInstance reso) (Pred Eq t')
-    _ -> accessDict i (_erRawName reso) <$> lookupDictVar i p
+    _ -> fail "unable to resolve overload for Eq Operation"
 
   specializeOrd
     :: info
     -> RawBuiltin
     -> OrdResolution
-    -> Pred NamedDeBruijn
+    -> Pred Void
     -> OverloadT (CoreEvalTerm info)
-  specializeOrd i raw reso p@(Pred _ t) = case t of
+  specializeOrd i raw reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_orIntInstance reso) i)
     TyDecimal -> pure (Builtin (_orDecInstance reso) i)
     TyString -> pure (Builtin (_orStrInstance reso) i)
     TyUnit -> pure (Builtin (_orUnitInstance reso) i)
     TyList t' ->
       listEqualityInstance i raw (_orListInstance reso) (Pred Ord t')
-    _ -> accessDict i (_orRawName reso) <$> lookupDictVar i p
+    _ -> fail "unable to resolve overload for Ord Operation"
 
   specializeFracOp
     :: info
     -> FracResolution
-    -> Pred NamedDeBruijn
+    -> Pred Void
     -> OverloadT (CoreEvalTerm info)
-  specializeFracOp i reso p@(Pred _ t) = case t of
+  specializeFracOp i reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_frIntInstance reso) i)
     TyDecimal -> pure (Builtin (_frDecInstance reso) i)
-    _ -> accessDict i (_frRawName reso) <$> lookupDictVar i p
+    _ -> fail "unable to resolve overload for Fractional Operation"
 
   specializeListLikeOp
     :: info
     -> ListLikeResolution
-    -> Pred NamedDeBruijn
+    -> Pred Void
     -> OverloadT (CoreEvalTerm info)
-  specializeListLikeOp i reso p@(Pred _ t) = case t of
+  specializeListLikeOp i reso (Pred _ t) = case t of
     TyString -> pure (Builtin (_llrStrInstance reso) i)
     TyList _ -> pure (Builtin (_llrListInstance reso) i)
-    _ -> accessDict i (_llrRawName reso) <$> lookupDictVar i p
-  accessDict i f v =
-    let op = ObjectAccess (Field f) v
-    in ObjectOp op i
+    _ -> fail "unable to resolve overload for ListLike Operation"
+      -- accessDict i (_llrRawName reso) <$> lookupDictVar i p
+  -- accessDict i f v =
+  --   let op = ObjectAccess (Field f) v
+  --   in ObjectOp op i
   -- We specialize here on the common case
   -- and solve overloaded variables.
   -- see: [Typeclasses and Instances] in
@@ -202,7 +202,7 @@ resolveTerm = \case
   -- on the raw builtins
   solveOverload
     :: info
-    -> (RawBuiltin, [Type NamedDeBruijn], [Pred NamedDeBruijn])
+    -> (RawBuiltin, [Type Void], [Pred Void])
     -> OverloadT (CoreEvalTerm info)
   solveOverload i = \case
     -- Addition
@@ -328,8 +328,8 @@ resolveTerm = \case
           a1 = (a1Var, t)
           app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
       pure (Lam (a1 :| []) app i)
-    (RawShow, [_], [p]) ->
-      accessDict i "show" <$> lookupDictVar i p
+    -- (RawShow, [_], [p]) ->
+      -- accessDict i "show" <$> lookupDictVar i p
     (RawEnumerate, [], []) ->
       pure (Builtin Enumerate i)
     (RawEnumerateStepN, [], []) ->
@@ -359,11 +359,6 @@ resolveTerm = \case
       pure (Builtin B64Decode i)
     _ -> error "could not resolve overload"
 
-unsafeToTLName :: OverloadedName o -> Name
-unsafeToTLName (OverloadedName n nk) = case nk of
-  OTopLevel m mh -> Name n (NTopLevel m mh)
-  _ -> error "invalid"
-
 resolveDefun
   :: OverloadedDefun RawBuiltin info
   -> OverloadT (CoreEvalDefun info)
@@ -378,13 +373,13 @@ resolveDefConst (DefConst dname ty term info) = do
   term' <- resolveTerm term
   pure (DefConst dname ty term' info)
 
-resolveDefCap
-  :: OverloadedDefCap RawBuiltin info
-  -> OverloadT (DefCap Name NamedDeBruijn CoreBuiltin info)
-resolveDefCap (DefCap dname dargs term captype termtype info) = do
-  term' <- resolveTerm term
-  let captype' = unsafeToTLName <$> captype
-  pure (DefCap dname dargs term' captype' termtype info)
+-- resolveDefCap
+--   :: OverloadedDefCap RawBuiltin info
+--   -> OverloadT (DefCap Name Void CoreBuiltin info)
+-- resolveDefCap (DefCap dname dargs term captype termtype info) = do
+--   term' <- resolveTerm term
+--   let captype' = unsafeToTLName <$> captype
+--   pure (DefCap dname dargs term' captype' termtype info)
 
 resolveDef
   :: OverloadedDef RawBuiltin info
@@ -392,15 +387,15 @@ resolveDef
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
-  DCap d -> DCap <$> resolveDefCap d
+  -- DCap d -> DCap <$> resolveDefCap d
 
 resolveModule
   :: OverloadedModule RawBuiltin info
   -> OverloadT (CoreEvalModule info)
 resolveModule m = do
   defs' <- traverse resolveDef (_mDefs m)
-  let gov' = unsafeToTLName <$> _mGovernance m
-  pure m{_mDefs=defs', _mGovernance=gov'}
+  -- let gov' = unsafeToTLName <$> _mGovernance m
+  pure m{_mDefs=defs'}
 
 resolveTopLevel
   :: OverloadedTopLevel RawBuiltin info
@@ -658,255 +653,255 @@ lengthResolve =
   , _llrListInstance = LengthList
   }
 
-varOverloaded :: i -> Pred NamedDeBruijn -> OverloadT (CoreEvalTerm i)
-varOverloaded i (Pred tc ty) = case tc of
-  Add -> addOverloaded i ty
-  Eq -> eqOverloaded i ty
-  Num -> numOverloaded i ty
-  Ord -> ordOverloaded i ty
-  Show -> showOverloaded i ty
-  Fractional -> fractionalOverloaded i ty
-  ListLike -> listLikeOverloaded i ty
+-- varOverloaded :: i -> Pred Void -> OverloadT (CoreEvalTerm i)
+-- varOverloaded i (Pred tc ty) = case tc of
+--   Add -> addOverloaded i ty
+--   Eq -> eqOverloaded i ty
+--   Num -> numOverloaded i ty
+--   Ord -> ordOverloaded i ty
+--   Show -> showOverloaded i ty
+--   Fractional -> fractionalOverloaded i ty
+--   ListLike -> listLikeOverloaded i ty
 
-lookupDictVar :: i -> Pred NamedDeBruijn -> OverloadT (CoreEvalTerm i)
-lookupDictVar i p = do
-  depth <- view roVarDepth
-  ols <- view roOverloads
-  case lookup p ols of
-    Just d -> do
-      let n = Name "#dictInst" $ NBound (depth - d - 1)
-      pure (Var n i)
-    Nothing -> fail "invariant failure: unbound dictionary variable"
+-- lookupDictVar :: i -> Pred Void -> OverloadT (CoreEvalTerm i)
+-- lookupDictVar i p = do
+--   depth <- view roVarDepth
+--   ols <- view roOverloads
+--   case lookup p ols of
+--     Just d -> do
+--       let n = Name "#dictInst" $ NBound (depth - d - 1)
+--       pure (Var n i)
+--     Nothing -> fail "invariant failure: unbound dictionary variable"
 
-addOverloaded
-  :: info
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm info)
-addOverloaded i = \case
-  TyInt -> pure (addInt i)
-  TyDecimal -> pure (addDec i)
-  TyString -> pure (addStr i)
-  TyList _ -> pure (addList i)
-  t@TyVar{} -> bindDictVar i Add t
-  _ -> fail "invariant failure: no instance for add"
+-- addOverloaded
+--   :: info
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm info)
+-- addOverloaded i = \case
+--   TyInt -> pure (addInt i)
+--   TyDecimal -> pure (addDec i)
+--   TyString -> pure (addStr i)
+--   TyList _ -> pure (addList i)
+--   t@TyVar{} -> bindDictVar i Add t
+--   _ -> fail "invariant failure: no instance for add"
 
 
-eqOverloaded
-  :: i
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm i)
-eqOverloaded i = \case
-  TyPrim p -> case p of
-    PrimInt -> pure (eqInt i)
-    PrimDecimal -> pure (eqDecimal i)
-    PrimString -> pure (eqString i)
-    PrimBool -> pure (eqBool i)
-    PrimUnit -> pure (eqUnit i)
-    _ -> fail "invariant failure: no instance for eq"
-  t@TyVar{} -> bindDictVar i Eq t
-  _ -> fail "invariant failure: no instance for eq"
+-- eqOverloaded
+--   :: i
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm i)
+-- eqOverloaded i = \case
+--   TyPrim p -> case p of
+--     PrimInt -> pure (eqInt i)
+--     PrimDecimal -> pure (eqDecimal i)
+--     PrimString -> pure (eqString i)
+--     PrimBool -> pure (eqBool i)
+--     PrimUnit -> pure (eqUnit i)
+--     _ -> fail "invariant failure: no instance for eq"
+--   t@TyVar{} -> bindDictVar i Eq t
+--   _ -> fail "invariant failure: no instance for eq"
 
-ordOverloaded
-  :: info
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm info)
-ordOverloaded i = \case
-  TyPrim p -> case p of
-    PrimInt -> pure (ordInt i)
-    PrimDecimal -> pure (ordDec i)
-    PrimString -> pure (ordStr i)
-    PrimUnit -> pure (ordUnit i)
-    _ -> fail "invariant failure, no such ord instance"
-  t@TyVar{} -> bindDictVar i Ord t
-  _ -> fail "invariant failure, no such ord instance"
+-- ordOverloaded
+--   :: info
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm info)
+-- ordOverloaded i = \case
+--   TyPrim p -> case p of
+--     PrimInt -> pure (ordInt i)
+--     PrimDecimal -> pure (ordDec i)
+--     PrimString -> pure (ordStr i)
+--     PrimUnit -> pure (ordUnit i)
+--     _ -> fail "invariant failure, no such ord instance"
+--   t@TyVar{} -> bindDictVar i Ord t
+--   _ -> fail "invariant failure, no such ord instance"
 
-bindDictVar
-  :: info
-  -> BuiltinTC
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm info)
-bindDictVar i tc t = do
-  depth <- view roVarDepth
-  ols <- view roOverloads
-  case lookup (Pred tc t) ols of
-    Just d -> do
-      let n = Name "#dictInst" $ NBound (depth - d - 1)
-      pure (Var n i)
-    Nothing -> fail "invariant failure: unbound dictionary variable"
+-- bindDictVar
+--   :: info
+--   -> BuiltinTC
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm info)
+-- bindDictVar i tc t = do
+--   depth <- view roVarDepth
+--   ols <- view roOverloads
+--   case lookup (Pred tc t) ols of
+--     Just d -> do
+--       let n = Name "#dictInst" $ NBound (depth - d - 1)
+--       pure (Var n i)
+--     Nothing -> fail "invariant failure: unbound dictionary variable"
 
-showOverloaded
-  :: info
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm info)
-showOverloaded i = \case
-  TyPrim p -> case p of
-    PrimInt -> pure (showInt i)
-    PrimDecimal -> pure (showDec i)
-    PrimString -> pure (showStr i)
-    PrimBool -> pure (showBool i)
-    PrimUnit -> pure (showUnit i)
-    _ -> fail "invariant failure: no instance for show"
-  t@TyVar{} -> bindDictVar i Show t
-  _ -> fail "invariant failure: no instance for show"
+-- showOverloaded
+--   :: info
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm info)
+-- showOverloaded i = \case
+--   TyPrim p -> case p of
+--     PrimInt -> pure (showInt i)
+--     PrimDecimal -> pure (showDec i)
+--     PrimString -> pure (showStr i)
+--     PrimBool -> pure (showBool i)
+--     PrimUnit -> pure (showUnit i)
+--     _ -> fail "invariant failure: no instance for show"
+--   t@TyVar{} -> bindDictVar i Show t
+--   _ -> fail "invariant failure: no instance for show"
 
-numOverloaded
-  :: info
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm info)
-numOverloaded i = \case
-  TyInt -> pure (numInt i)
-  TyDecimal -> pure (numDec i)
-  t@TyVar{} -> bindDictVar i Num t
-  _ -> fail "invariant failure: no instance for num"
+-- numOverloaded
+--   :: info
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm info)
+-- numOverloaded i = \case
+--   TyInt -> pure (numInt i)
+--   TyDecimal -> pure (numDec i)
+--   t@TyVar{} -> bindDictVar i Num t
+--   _ -> fail "invariant failure: no instance for num"
 
-fractionalOverloaded
-  :: info
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm info)
-fractionalOverloaded i = \case
-  TyInt -> pure (fracInt i)
-  TyDecimal -> pure (fracDec i)
-  t@TyVar{} -> bindDictVar i Fractional t
-  _ -> fail "invariant failure: no instance for frac"
+-- fractionalOverloaded
+--   :: info
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm info)
+-- fractionalOverloaded i = \case
+--   TyInt -> pure (fracInt i)
+--   TyDecimal -> pure (fracDec i)
+--   t@TyVar{} -> bindDictVar i Fractional t
+--   _ -> fail "invariant failure: no instance for frac"
 
-listLikeOverloaded
-  :: info
-  -> Type NamedDeBruijn
-  -> OverloadT (CoreEvalTerm info)
-listLikeOverloaded i = \case
-  TyString -> pure (listLikeStr i)
-  TyList _ -> pure (listLikeList i)
-  t@TyVar{} -> bindDictVar i ListLike t
-  _ -> fail "invariant failure: no instance for listLike"
+-- listLikeOverloaded
+--   :: info
+--   -> Type Void
+--   -> OverloadT (CoreEvalTerm info)
+-- listLikeOverloaded i = \case
+--   TyString -> pure (listLikeStr i)
+--   TyList _ -> pure (listLikeList i)
+--   t@TyVar{} -> bindDictVar i ListLike t
+--   _ -> fail "invariant failure: no instance for listLike"
 
-eqDict :: b -> b -> i -> Term n tn b i
-eqDict eq neq i =
-  ObjectLit o i
-  where
-  o = Map.fromList
-    [(Field "==", Builtin eq i)
-    ,(Field "/=", Builtin neq i)]
+-- eqDict :: b -> b -> i -> Term n tn b i
+-- eqDict eq neq i =
+--   ObjectLit o i
+--   where
+--   o = Map.fromList
+--     [(Field "==", Builtin eq i)
+--     ,(Field "/=", Builtin neq i)]
 
-showDict :: b -> i -> Term n tn b i
-showDict s i =
-  ObjectLit o i
-  where
-  o = Map.singleton (Field "show") (Builtin s i)
+-- showDict :: b -> i -> Term n tn b i
+-- showDict s i =
+--   ObjectLit o i
+--   where
+--   o = Map.singleton (Field "show") (Builtin s i)
 
-ordDict :: b -> b -> b -> b -> i -> Term n tn b i
-ordDict gt geq lt leq i =
-  ObjectLit o i
-  where
-  o = Map.fromList
-    [ (Field ">", Builtin gt i)
-    , (Field ">=", Builtin geq i)
-    , (Field "<", Builtin lt i)
-    , (Field "<=", Builtin leq i)]
+-- ordDict :: b -> b -> b -> b -> i -> Term n tn b i
+-- ordDict gt geq lt leq i =
+--   ObjectLit o i
+--   where
+--   o = Map.fromList
+--     [ (Field ">", Builtin gt i)
+--     , (Field ">=", Builtin geq i)
+--     , (Field "<", Builtin lt i)
+--     , (Field "<=", Builtin leq i)]
 
-addDict :: builtin -> info -> Term name tyname builtin info
-addDict add i =
-  ObjectLit o i
-  where
-  o = Map.singleton (Field "+") (Builtin add i)
+-- addDict :: builtin -> info -> Term name tyname builtin info
+-- addDict add i =
+--   ObjectLit o i
+--   where
+--   o = Map.singleton (Field "+") (Builtin add i)
 
-numDict :: builtin
-  -> builtin
-  -> builtin
-  -> builtin
-  -> builtin
-  -> info
-  -> Term name tyname builtin info
-numDict sub mul divv neg abs' i =
-  ObjectLit o i
-  where
-  o = Map.fromList
-    [ (Field "-", Builtin sub i)
-    , (Field "*", Builtin mul i)
-    , (Field "/", Builtin divv i)
-    , (Field "negate", Builtin neg i)
-    , (Field "abs", Builtin abs' i)]
+-- numDict :: builtin
+--   -> builtin
+--   -> builtin
+--   -> builtin
+--   -> builtin
+--   -> info
+--   -> Term name tyname builtin info
+-- numDict sub mul divv neg abs' i =
+--   ObjectLit o i
+--   where
+--   o = Map.fromList
+--     [ (Field "-", Builtin sub i)
+--     , (Field "*", Builtin mul i)
+--     , (Field "/", Builtin divv i)
+--     , (Field "negate", Builtin neg i)
+--     , (Field "abs", Builtin abs' i)]
 
-fracDict :: builtin
-  -> builtin
-  -> builtin
-  -> builtin
-  -> info
-  -> Term name tyname builtin info
-fracDict ln_ exp_ sqrt_ logBase_ i =
-  ObjectLit o i
-  where
-  o = Map.fromList
-    [ (Field "ln", Builtin ln_ i)
-    , (Field "exp", Builtin exp_ i)
-    , (Field "sqrt", Builtin sqrt_ i)
-    , (Field "log-base", Builtin logBase_ i)]
+-- fracDict :: builtin
+--   -> builtin
+--   -> builtin
+--   -> builtin
+--   -> info
+--   -> Term name tyname builtin info
+-- fracDict ln_ exp_ sqrt_ logBase_ i =
+--   ObjectLit o i
+--   where
+--   o = Map.fromList
+--     [ (Field "ln", Builtin ln_ i)
+--     , (Field "exp", Builtin exp_ i)
+--     , (Field "sqrt", Builtin sqrt_ i)
+--     , (Field "log-base", Builtin logBase_ i)]
 
-listLikeDict :: builtin
-  -> builtin
-  -> builtin
-  -> builtin
-  -> builtin
-  -> info
-  -> Term name tyname builtin info
-listLikeDict take_ drop_ concat_ rev len i =
-  ObjectLit o i
-  where
-  o = Map.fromList
-    [ (Field "take", Builtin take_ i)
-    , (Field "drop", Builtin drop_ i)
-    , (Field "concat", Builtin concat_ i)
-    , (Field "reverse", Builtin rev i)
-    , (Field "length", Builtin len i)]
+-- listLikeDict :: builtin
+--   -> builtin
+--   -> builtin
+--   -> builtin
+--   -> builtin
+--   -> info
+--   -> Term name tyname builtin info
+-- listLikeDict take_ drop_ concat_ rev len i =
+--   ObjectLit o i
+--   where
+--   o = Map.fromList
+--     [ (Field "take", Builtin take_ i)
+--     , (Field "drop", Builtin drop_ i)
+--     , (Field "concat", Builtin concat_ i)
+--     , (Field "reverse", Builtin rev i)
+-- --     , (Field "length", Builtin len i)]
 
-eqInt :: info -> CoreEvalTerm info
-eqInt = eqDict EqInt NeqInt
+-- eqInt :: info -> CoreEvalTerm info
+-- eqInt = eqDict EqInt NeqInt
 
-eqDecimal :: info -> CoreEvalTerm info
-eqDecimal = eqDict EqDec NeqDec
+-- eqDecimal :: info -> CoreEvalTerm info
+-- eqDecimal = eqDict EqDec NeqDec
 
-eqString :: info -> CoreEvalTerm info
-eqString = eqDict EqStr NeqStr
+-- eqString :: info -> CoreEvalTerm info
+-- eqString = eqDict EqStr NeqStr
 
-eqUnit :: info -> CoreEvalTerm info
-eqUnit = eqDict EqUnit NeqUnit
+-- eqUnit :: info -> CoreEvalTerm info
+-- eqUnit = eqDict EqUnit NeqUnit
 
-eqBool :: info -> CoreEvalTerm info
-eqBool = eqDict EqBool NeqBool
+-- eqBool :: info -> CoreEvalTerm info
+-- eqBool = eqDict EqBool NeqBool
 
-numInt, numDec :: info -> CoreEvalTerm info
-numInt = numDict SubInt MulInt DivInt NegateInt AbsInt
-numDec = numDict AddDec MulDec DivDec NegateDec AbsDec
+-- numInt, numDec :: info -> CoreEvalTerm info
+-- numInt = numDict SubInt MulInt DivInt NegateInt AbsInt
+-- numDec = numDict AddDec MulDec DivDec NegateDec AbsDec
 
-addInt, addDec, addStr, addList :: info -> CoreEvalTerm info
-addInt = addDict AddInt
-addDec = addDict AddDec
-addStr = addDict AddStr
-addList = addDict AddList
+-- addInt, addDec, addStr, addList :: info -> CoreEvalTerm info
+-- addInt = addDict AddInt
+-- addDec = addDict AddDec
+-- addStr = addDict AddStr
+-- addList = addDict AddList
 
-ordInt, ordDec, ordStr, ordUnit :: info -> CoreEvalTerm info
-ordInt = ordDict GTInt GEQInt LTInt LEQInt
-ordDec = ordDict GTDec GEQDec LTDec LEQDec
-ordStr = ordDict GTStr GEQStr LTStr LEQStr
-ordUnit = ordDict NeqUnit EqUnit NeqUnit EqUnit
+-- ordInt, ordDec, ordStr, ordUnit :: info -> CoreEvalTerm info
+-- ordInt = ordDict GTInt GEQInt LTInt LEQInt
+-- ordDec = ordDict GTDec GEQDec LTDec LEQDec
+-- ordStr = ordDict GTStr GEQStr LTStr LEQStr
+-- ordUnit = ordDict NeqUnit EqUnit NeqUnit EqUnit
 
-showInt, showDec, showStr, showUnit, showBool :: info -> CoreEvalTerm info
-showInt = showDict ShowInt
-showDec = showDict ShowDec
-showStr = showDict ShowStr
-showUnit = showDict ShowUnit
-showBool = showDict ShowBool
+-- showInt, showDec, showStr, showUnit, showBool :: info -> CoreEvalTerm info
+-- showInt = showDict ShowInt
+-- showDec = showDict ShowDec
+-- showStr = showDict ShowStr
+-- showUnit = showDict ShowUnit
+-- showBool = showDict ShowBool
 
-fracInt, fracDec :: info -> CoreEvalTerm info
-fracInt = fracDict LnInt ExpInt SqrtInt LogBaseInt
-fracDec = fracDict LnDec ExpDec SqrtDec LogBaseDec
+-- fracInt, fracDec :: info -> CoreEvalTerm info
+-- fracInt = fracDict LnInt ExpInt SqrtInt LogBaseInt
+-- fracDec = fracDict LnDec ExpDec SqrtDec LogBaseDec
 
-listLikeStr, listLikeList :: info -> CoreEvalTerm info
-listLikeStr = listLikeDict TakeStr DropStr ConcatStr ReverseStr LengthStr
-listLikeList = listLikeDict TakeList DropList ConcatList ReverseList LengthList
+-- listLikeStr, listLikeList :: info -> CoreEvalTerm info
+-- listLikeStr = listLikeDict TakeStr DropStr ConcatStr ReverseStr LengthStr
+-- listLikeList = listLikeDict TakeList DropList ConcatList ReverseList LengthList
 
 runOverload :: OverloadT a -> IO a
 runOverload act = do
-  let st = ROState mempty 0 []
+  let st = ROState mempty 0
   runReaderT act st
 
 runOverloadTerm :: OverloadedTerm RawBuiltin i -> IO (CoreEvalTerm i)

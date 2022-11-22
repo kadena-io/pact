@@ -9,7 +9,6 @@
 module Pact.Core.Typed.Term
  ( Defun(..)
  , DefConst(..)
- , DefCap(..)
  , Def(..)
  , Term(..)
  , Module(..)
@@ -27,7 +26,6 @@ module Pact.Core.Typed.Term
  , OverloadedTerm
  , OverloadedDefun
  , OverloadedDefConst
- , OverloadedDefCap
  , OverloadedDef
  , OverloadedModule
  , OverloadedTopLevel
@@ -47,13 +45,12 @@ module Pact.Core.Typed.Term
 
 import Control.Lens
 import Data.Text(Text)
-import Data.Map.Strict(Map)
 import Data.List.NonEmpty(NonEmpty)
 import Data.Vector (Vector)
+import Data.Void
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as V
-import qualified Data.Map.Strict as Map
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -61,7 +58,6 @@ import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
-import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
@@ -69,7 +65,7 @@ import qualified Pact.Core.Pretty as Pretty
 data Defun name tyname builtin info
   = Defun
   { _dfunName :: Text
-  , _dfunType :: Type tyname
+  , _dfunType :: Type Void
   , _dfunTerm :: Term name tyname builtin info
   , _dfunInfo :: info
   } deriving Show
@@ -77,54 +73,54 @@ data Defun name tyname builtin info
 data DefConst name tyname builtin info
   = DefConst
   { _dcName :: Text
-  , _dcType :: Type tyname
+  , _dcType :: Type Void
   , _dcTerm :: Term name tyname builtin info
   , _dcInfo :: info
   } deriving Show
 
-data DefCap name tyname builtin info
-  = DefCap
-  { _dcapName :: Text
-  , _dcapArgs :: [Text]
-  , _dcapTerm :: Term name tyname builtin info
-  , _dcapCapType :: CapType name
-  , _dcapType :: Type tyname
-  , _dcapInfo :: info
-  } deriving Show
+-- data DefCap name tyname builtin info
+--   = DefCap
+--   { _dcapName :: Text
+--   , _dcapArgs :: [Text]
+--   , _dcapTerm :: Term name tyname builtin info
+--   , _dcapCapType :: CapType name
+--   , _dcapType :: Type tyname
+--   , _dcapInfo :: info
+--   } deriving Show
 
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
-  | DCap (DefCap name tyname builtin info)
+  -- | DCap (DefCap name builtin info)
    deriving Show
 
--- DCap (DefCap name tyname builtin info)
--- DPact (DefPact name tyname builtin info)
--- DSchema (DefSchema name tyname info)
--- DTable (DefTable name tyname info)
-defType :: Def name tyname builtin info -> Type tyname
+-- Todo: deftypes to support
+-- DCap (DefCap name builtin info)
+-- DPact (DefPact name builtin info)
+-- DSchema (DefSchema name info)
+-- DTable (DefTable name info)
+defType :: Def name tyname builtin info -> Type Void
 defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
-  DCap d -> _dcapType d
-
+  -- DCap d -> _dcapType d
 
 defName :: Def name tyname builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
-  DCap d -> _dcapName d
+  -- DCap d -> _dcapName d
 
 defTerm :: Def name tyname builtin info -> Term name tyname builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
-  DCap d -> _dcapTerm d
+  -- DCap d -> _dcapTerm d
 
 data Module name tyname builtin info
   = Module
   { _mName :: ModuleName
-  , _mGovernance :: Governance name
+  -- , _mGovernance :: Governance name
   , _mDefs :: [Def name tyname builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
@@ -139,15 +135,15 @@ data Interface name tyname builtin info
   , _ifHash :: Hash
   } deriving Show
 
-data IfDefun name tyname info
+data IfDefun name info
   = IfDefun
   { _ifdName :: Text
-  , _ifdType :: Type tyname
+  , _ifdType :: Type Void
   , _ifdInfo :: info
   } deriving Show
 
 data IfDef name tyname builtin info
-  = IfDfun (IfDefun name tyname info)
+  = IfDfun (IfDefun name info)
   | IFDConst (DefConst name tyname builtin info)
   deriving Show
 
@@ -159,7 +155,7 @@ data TopLevel name tyname builtin info
 
 data ReplTopLevel name tyname builtin info
   = RTLModule (Module name tyname builtin info)
-  -- | RTLInterface (Interface name tyname builtin info)
+  -- | RTLInterface (Interface name builtin info)
   | RTLDefun (Defun name tyname builtin info)
   | RTLDefConst (DefConst name tyname builtin info)
   | RTLTerm (Term name tyname builtin info)
@@ -188,42 +184,42 @@ data Term name tyname builtin info
   | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname)) info
   -- ^ (e_1 @t)
   | Block (NonEmpty (Term name tyname builtin info)) info
-  -- ^ ΛX.e
-  | ObjectLit (Map Field (Term name tyname builtin info)) info
+  -- ^ Blocks (to be replaced by Seq)
+  -- | ObjectLit (Map Field (Term name builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
   | ListLit (Type tyname) (Vector (Term name tyname builtin info)) info
   -- ^ [e_1, e_2, .., e_n]
-  | ObjectOp (ObjectOp (Term name tyname builtin info)) info
-  -- ^ error terms + their inferred type
+  -- | ObjectOp (ObjectOp (Term name builtin info)) info
+  -- ^ Object primitives
   deriving (Show, Functor)
 
 -- Post Typecheck terms + modules
 type OverloadedTerm b i =
-  Term (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+  Term IRName Void (b, [Type Void], [Pred Void]) i
 type OverloadedDefun b i =
-  Defun (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+  Defun IRName Void (b, [Type Void], [Pred Void]) i
 type OverloadedDefConst b i =
-  DefConst (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
-type OverloadedDefCap b i =
-  DefCap (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+  DefConst IRName Void (b, [Type Void], [Pred Void]) i
+-- type OverloadedDefCap b i =
+--   DefCap IRName (b, [Type Void], [Pred Void]) i
 type OverloadedDef b i =
-  Def (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+  Def IRName Void (b, [Type Void], [Pred Void]) i
 type OverloadedModule b i =
-  Module (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+  Module IRName Void (b, [Type Void], [Pred Void]) i
 type OverloadedTopLevel b i =
-  TopLevel (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+  TopLevel IRName Void (b, [Type Void], [Pred Void]) i
 type OverloadedReplTopLevel b i =
-  ReplTopLevel (OverloadedName (Pred NamedDeBruijn)) NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i
+  ReplTopLevel IRName Void (b, [Type Void], [Pred Void]) i
 
 -- On-chain, core builtin-types
-type CoreEvalTerm i = Term Name NamedDeBruijn CoreBuiltin i
-type CoreEvalDefun i = Defun Name NamedDeBruijn CoreBuiltin i
-type CoreEvalDefConst i = DefConst Name NamedDeBruijn CoreBuiltin i
-type CoreEvalDef i = Def Name NamedDeBruijn CoreBuiltin i
-type CoreEvalModule i = Module Name NamedDeBruijn CoreBuiltin i
-type CoreEvalTopLevel i = TopLevel Name NamedDeBruijn CoreBuiltin i
-type CoreEvalReplTopLevel i = ReplTopLevel Name NamedDeBruijn CoreBuiltin i
-type ETerm b = Term Name NamedDeBruijn b ()
+type CoreEvalTerm i = Term Name Void CoreBuiltin i
+type CoreEvalDefun i = Defun Name Void CoreBuiltin i
+type CoreEvalDefConst i = DefConst Name Void CoreBuiltin i
+type CoreEvalDef i = Def Name Void CoreBuiltin i
+type CoreEvalModule i = Module Name Void CoreBuiltin i
+type CoreEvalTopLevel i = TopLevel Name Void CoreBuiltin i
+type CoreEvalReplTopLevel i = ReplTopLevel Name Void CoreBuiltin i
+type ETerm b = Term Name b ()
 
 
 instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
@@ -244,15 +240,15 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       pretty t <+> Pretty.hsep (fmap (prettyTyApp) apps)
     Block nel _ -> Pretty.nest 2 $
       "{" <> Pretty.hardline <> prettyBlock nel <> "}"
-    ObjectLit (Map.toList -> obj) _ ->
-      Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
-    ObjectOp oop _ -> case oop of
-      ObjectAccess f o ->
-        "accessObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
-      ObjectRemove f o ->
-        "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
-      ObjectExtend f v o ->
-        "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
+    -- ObjectLit (Map.toList -> obj) _ ->
+    --   Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
+    -- ObjectOp oop _ -> case oop of
+    --   ObjectAccess f o ->
+    --     "accessObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
+    --   ObjectRemove f o ->
+    --     "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
+    --   ObjectExtend f v o ->
+    --     "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
     ListLit ty (V.toList -> li) _ ->
       (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Builtin b _ -> pretty b
@@ -271,13 +267,18 @@ termInfo f = \case
     Let n e1 e2 <$> f i
   TyApp term ty i -> TyApp term ty <$> f i
   Block terms i -> Block terms <$> f i
-  ObjectLit obj i -> ObjectLit obj <$> f i
-  ObjectOp o i -> ObjectOp o <$> f i
+  -- ObjectLit obj i -> ObjectLit obj <$> f i
+  -- ObjectOp o i -> ObjectOp o <$> f i
   ListLit ty v i -> ListLit ty v <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
 
-traverseTermType :: Traversal' (Term name tyname builtin info) (Type tyname)
+traverseTermType
+  :: Traversal
+    (Term name tyname builtin info)
+    (Term name tyname' builtin info)
+    (Type tyname)
+    (Type tyname')
 traverseTermType f = \case
   Var n i -> pure (Var n i)
   Lam ns body i ->
@@ -290,10 +291,10 @@ traverseTermType f = \case
     TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
   Block nel i ->
     Block <$> traverse (traverseTermType f) nel <*> pure i
-  ObjectLit obj i ->
-    ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
-  ObjectOp oop i ->
-    ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
+  -- ObjectLit obj i ->
+  --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
+  -- ObjectOp oop i ->
+  --   ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
   ListLit ty v i ->
     ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
   Constant l i -> pure (Constant l i)
@@ -307,12 +308,12 @@ instance Plated (Term name tyname builtin info) where
     Let n e1 e2 i ->
       Let n <$> f e1 <*> f e2 <*> pure i
     TyApp term ty i -> TyApp <$> f term <*> pure ty <*> pure i
-    ObjectLit tm i ->
-      ObjectLit <$> traverse f tm <*> pure i
     ListLit ty ts i ->
       ListLit ty <$> traverse f ts <*> pure i
-    ObjectOp oop i ->
-      ObjectOp <$> traverse f oop <*> pure i
+    -- ObjectLit tm i ->
+    --   ObjectLit <$> traverse f tm <*> pure i
+    -- ObjectOp oop i ->
+    --   ObjectOp <$> traverse f oop <*> pure i
     Block terms i -> Block <$> traverse f terms <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)

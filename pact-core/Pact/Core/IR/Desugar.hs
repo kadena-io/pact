@@ -34,7 +34,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as V
 import qualified Data.Set as Set
-import qualified Data.Text as T
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -183,10 +182,10 @@ desugarLispTerm = \case
     ListLit (V.fromList (desugarLispTerm <$> e1)) i
   Lisp.Constant l i ->
     Constant l i
-  Lisp.Object objs i ->
-    ObjectLit (desugarLispTerm <$> objs) i
-  Lisp.ObjectOp o i ->
-    ObjectOp (desugarLispTerm <$> o) i
+  -- Lisp.Object objs i ->
+  --   ObjectLit (desugarLispTerm <$> objs) i
+  -- Lisp.ObjectOp o i ->
+  --   ObjectOp (desugarLispTerm <$> o) i
   where
   binderToLet i (Lisp.Binder n mty expr) term =
     Let (BN (BareName n)) (desugarType <$> mty) (desugarLispTerm expr) term i
@@ -242,12 +241,12 @@ desugarDef = \case
   -- Common.DCap d -> DCap (desugarDefCap d)
 
 desugarModule :: (DesugarTerm term b i) => Common.Module term i -> Module ParsedName b i
-desugarModule (Common.Module mname gov extdecls defs) = let
+desugarModule (Common.Module mname extdecls defs) = let
   (imports, blessed, implemented) = splitExts extdecls
   defs' = desugarDef <$> NE.toList defs
   mhash = ModuleHash (Hash "placeholder")
-  gov' = BN . BareName <$> gov
-  in Module mname gov' defs' blessed imports implemented mhash
+  -- gov' = BN . BareName <$> gov
+  in Module mname defs' blessed imports implemented mhash
   where
   splitExts = split ([], Set.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
@@ -314,9 +313,9 @@ termSCC currM = conn
     Block nel _ -> foldMap conn nel
     Builtin{} -> Set.empty
     Constant{} -> Set.empty
-    ObjectLit o _ -> foldMap conn o
     ListLit v _ -> foldMap conn v
-    ObjectOp o _ -> foldMap conn o
+    -- ObjectLit o _ -> foldMap conn o
+    -- ObjectOp o _ -> foldMap conn o
 
 
 defunSCC :: ModuleName -> Defun Name b i -> Set Text
@@ -325,14 +324,14 @@ defunSCC mn = termSCC mn . _dfunTerm
 defConstSCC :: ModuleName -> DefConst Name b i -> Set Text
 defConstSCC mn = termSCC mn . _dcTerm
 
-defCapSCC :: ModuleName -> DefCap Name b i -> Set Text
-defCapSCC mn = termSCC mn . _dcapTerm
+-- defCapSCC :: ModuleName -> DefCap Name b i -> Set Text
+-- defCapSCC mn = termSCC mn . _dcapTerm
 
 defSCC :: ModuleName -> Def Name b i1 -> Set Text
 defSCC mn = \case
   Dfun d -> defunSCC mn d
   DConst d -> defConstSCC mn d
-  DCap d -> defCapSCC mn d
+  -- DCap d -> defCapSCC mn d
 
 -- | Look up a qualified name in the pact db
 -- if it's there, great! We will load the module into the scope of
@@ -413,12 +412,12 @@ renameTerm (Block exprs i) = do
 renameTerm (Builtin b i) = pure (Builtin b i)
 renameTerm (Constant l i) =
   pure (Constant l i)
-renameTerm (ObjectLit o i) =
-  ObjectLit <$> traverse renameTerm o <*> pure i
 renameTerm (ListLit v i) = do
   ListLit <$> traverse renameTerm v <*> pure i
-renameTerm (ObjectOp o i) = do
-  ObjectOp <$> traverse renameTerm o <*> pure i
+-- renameTerm (ObjectLit o i) =
+--   ObjectLit <$> traverse renameTerm o <*> pure i
+-- renameTerm (ObjectOp o i) =
+--   ObjectOp <$> traverse renameTerm o <*> pure i
 
 renameDefun
   :: Defun ParsedName b i
@@ -436,13 +435,13 @@ renameDefConst (DefConst n mty term i) = do
   term' <- renameTerm term
   pure (DefConst n mty term' i)
 
-renameDefCap
-  :: DefCap ParsedName builtin info
-  -> RenamerM cb ci (DefCap Name builtin info)
-renameDefCap (DefCap name args term capType ty i) = do
-  term' <- renameTerm term
-  capType' <- traverse resolveName capType
-  pure (DefCap name args term' capType' ty i)
+-- renameDefCap
+--   :: DefCap ParsedName builtin info
+--   -> RenamerM cb ci (DefCap Name builtin info)
+-- renameDefCap (DefCap name args term capType ty i) = do
+--   term' <- renameTerm term
+--   capType' <- traverse resolveName capType
+--   pure (DefCap name args term' capType' ty i)
 
 renameDef
   :: Def ParsedName b i
@@ -450,7 +449,7 @@ renameDef
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
-  DCap d -> DCap <$> renameDefCap d
+  -- DCap d -> DCap <$> renameDefCap d
 
 resolveName :: ParsedName -> RenamerM b i Name
 resolveName = \case
@@ -471,10 +470,10 @@ resolveBare (BareName bn) = views reBinds (Map.lookup bn) >>= \case
     Just fqn -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)))
     Nothing -> fail $ "unbound free variable " <> show bn
 
-resolveBareName' :: Text -> RenamerM b i Name
-resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
-  Just irnk -> pure (Name bn irnk)
-  Nothing -> fail $ "Expected identifier " <> T.unpack bn <> " in scope"
+-- resolveBareName' :: Text -> RenamerM b i Name
+-- resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
+--   Just irnk -> pure (Name bn irnk)
+--   Nothing -> fail $ "Expected identifier " <> T.unpack bn <> " in scope"
 
 resolveQualified :: QualifiedName -> RenamerM b i Name
 resolveQualified (QualifiedName qn qmn) = do
@@ -488,7 +487,7 @@ resolveQualified (QualifiedName qn qmn) = do
 renameModule
   :: Module ParsedName b i
   -> RenamerM cb ci (Module Name b i)
-renameModule (Module mname mgov defs blessed imp implements mhash) = do
+renameModule (Module mname defs blessed imp implements mhash) = do
   let rawDefNames = defName <$> defs
       defMap = Map.fromList $ (, NTopLevel mname mhash) <$> rawDefNames
       fqns = Map.fromList $ (\n -> (n, FullyQualifiedName mname n mhash)) <$> rawDefNames
@@ -501,8 +500,8 @@ renameModule (Module mname mgov defs blessed imp implements mhash) = do
   defs'' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
     CyclicSCC d -> fail $ "Functions: " <> show (defName  <$> d) <> " form a cycle"
-  mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
-  pure (Module mname mgov' defs'' blessed imp implements mhash)
+  -- mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
+  pure (Module mname defs'' blessed imp implements mhash)
   where
   mkScc def = (def, defName def, Set.toList (defSCC mname def))
 

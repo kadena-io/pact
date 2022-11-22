@@ -20,8 +20,7 @@ import Pact.Core.Type
 
 
 data TCEnv name tyname builtin = TCEnv
-  { _tcTypeEnv :: Map.Map tyname (Type tyname)
-  , _tcVarEnv :: Map.Map name (Type tyname)
+  { _tcVarEnv :: Map.Map name (Type tyname)
   , _tcBuiltin :: builtin -> Type tyname }
 
 makeLenses ''TCEnv
@@ -116,8 +115,8 @@ typecheck' = \case
   -- a_1, ..., a_n : t
   -- ------------------------ (T-Builtin)
   -- Γ ⊢ [a_1, ..., a_n] : List t
-  ObjectLit _fields _ -> error "unimplemented"
-  ObjectOp _ _ -> error "unimplemented"
+  -- ObjectLit _fields _ -> error "unimplemented"
+  -- ObjectOp _ _ -> error "unimplemented"
 
   -- e_1:t_1, ... , e_n : t_n
   -- ------------------------ (T-Builtin)

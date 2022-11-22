@@ -129,8 +129,12 @@ ReplTopLevel :: { ParsedReplTopLevel }
   | Expr { RTLTerm $1 }
 
 Module :: { ParsedModule }
-  : '(' module IDENT '(' Gov ')' Exts Defs ')'
-    { Module (ModuleName (getIdent $3) Nothing) $5 (reverse $7) (NE.fromList (reverse $8)) }
+  : '(' module IDENT Exts Defs ')'
+    { Module (ModuleName (getIdent $3) Nothing) (reverse $4) (NE.fromList (reverse $5)) }
+
+-- Module :: { ParsedModule }
+--   : '(' module IDENT '(' Gov ')' Exts Defs ')'
+--     { Module (ModuleName (getIdent $3) Nothing) $5 (reverse $7) (NE.fromList (reverse $8)) }
 
 Gov :: { Governance Text }
   : keygov STR { Governance (Left (KeySetName (getStr $2))) }
@@ -256,8 +260,6 @@ OperatorExpr :: { LineInfo -> ParsedExpr }
   | OrdOp Expr Expr { BinaryOp $1 $2 $3  }
   | EqOp Expr Expr { BinaryOp $1 $2 $3 }
   | BoolOp Expr Expr { BinaryOp $1 $2 $3  }
-  | '@' IDENT Expr { ObjectOp (ObjectAccess (getIdentField $2) $3) }
-  | '#' IDENT Expr { ObjectOp (ObjectRemove (getIdentField $2) $3) }
 
 ExprCommaSep :: { [ParsedExpr] }
   : ExprCommaSep ',' Expr { $3:$1 }
@@ -297,7 +299,6 @@ Atom :: { ParsedExpr }
   : Name { $1 }
   | Number { $1 }
   | String { $1 }
-  | Object { $1 }
   | List { $1 }
   | Bool { $1 }
   | '(' ')' { Constant LUnit (_ptInfo $1) }
@@ -321,11 +322,11 @@ Number :: { ParsedExpr }
 String :: { ParsedExpr }
  : STR  { Constant (LString (getStr $1)) (_ptInfo $1) }
 
-Object :: { ParsedExpr }
-  : '{' ObjectBody '}' { Object $2 (_ptInfo $1) }
+-- Object :: { ParsedExpr }
+--   : '{' ObjectBody '}' { Object $2 (_ptInfo $1) }
 
-ObjectBody
-  : FieldPairs { Map.fromList $1 }
+-- ObjectBody
+--   : FieldPairs { Map.fromList $1 }
 
 FieldPair :: { (Field, ParsedExpr) }
   : IDENT ':' Expr { (Field (getIdent $1), $3) }
