@@ -14,20 +14,18 @@ module Pact.Core.Builtin
  , replRawBuiltinNames
  , replRawBuiltinMap
  , BuiltinArity(..)
- , CapabilityOp(..)
- , CapType(..)
- , DefType(..)
+--  , CapabilityOp(..)
+--  , CapType(..)
+--  , DefType(..)
  , CoreBuiltin(..)
  )where
 
-import Data.Void(Void)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 
 import qualified Data.Map.Strict as Map
 
 import Pact.Core.Pretty(Pretty(..))
-import Pact.Core.Type
 
 -- Todo: Objects to be added later @ a later milestone
 -- data ObjectOp o
@@ -48,18 +46,18 @@ data DefType
   | DTDefConst
   deriving Show
 
-data CapabilityOp name o
-  = WithCapability name [o] o
-  | RequireCapability name [o]
-  | InstallCapability name [o]
-  | ComposeCapability name [o]
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+-- data CapabilityOp name o
+--   = WithCapability name [o] o
+--   | RequireCapability name [o]
+--   | InstallCapability name [o]
+--   | ComposeCapability name [o]
+--   deriving (Show, Eq, Functor, Foldable, Traversable)
 
-data CapType name
-  = ManagedCap Int (Type Void) name
-  | AutomanagedCap
-  | Unmanaged
-  deriving  (Show, Eq, Functor, Foldable, Traversable)
+-- data CapType name
+--   = ManagedCap Int (Type Void) name
+--   | AutomanagedCap
+--   | Unmanaged
+--   deriving  (Show, Eq, Functor, Foldable, Traversable)
 
 {-
   [Typeclasses and Instances]
@@ -201,10 +199,10 @@ data RawBuiltin
   | RawReadInteger
   | RawReadDecimal
   | RawReadString
-  | RawReadKeyset
-  | RawEnforceGuard
-  | RawKeysetRefGuard
-  | RawCreateUserGuard
+  -- | RawReadKeyset
+  -- | RawEnforceGuard
+  -- | RawKeysetRefGuard
+  -- | RawCreateUserGuard
   | RawListAccess
   | RawB64Encode
   | RawB64Decode
@@ -271,10 +269,10 @@ rawBuiltinToText = \case
   RawReadInteger -> "read-integer"
   RawReadDecimal -> "read-decimal"
   RawReadString -> "read-string"
-  RawReadKeyset -> "read-keyset"
-  RawEnforceGuard -> "enforce-guard"
-  RawKeysetRefGuard -> "keyset-ref-guard"
-  RawCreateUserGuard -> "create-user-guard"
+  -- RawReadKeyset -> "read-keyset"
+  -- RawEnforceGuard -> "enforce-guard"
+  -- RawKeysetRefGuard -> "keyset-ref-guard"
+  -- RawCreateUserGuard -> "create-user-guard"
   RawListAccess -> "at"
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
@@ -340,10 +338,10 @@ instance BuiltinArity RawBuiltin where
     RawReadInteger -> 1
     RawReadDecimal -> 1
     RawReadString -> 1
-    RawReadKeyset -> 1
-    RawEnforceGuard -> 1
-    RawKeysetRefGuard -> 1
-    RawCreateUserGuard -> 1
+    -- RawReadKeyset -> 1
+    -- RawEnforceGuard -> 1
+    -- RawKeysetRefGuard -> 1
+    -- RawCreateUserGuard -> 1
     RawListAccess -> 2
     RawB64Encode -> 1
     RawB64Decode -> 1
@@ -550,8 +548,8 @@ data CoreBuiltin
   -- String Show
   | ShowStr
   -- Object equality
-  | EqObj
-  | NeqObj
+  -- | EqObj
+  -- | NeqObj
   -- List Equality
   | EqList
   | NeqList
@@ -588,10 +586,10 @@ data CoreBuiltin
   | ReadInteger
   | ReadDecimal
   | ReadString
-  | ReadKeyset
-  | EnforceGuard
-  | KeysetRefGuard
-  | CreateUserGuard
+  -- | ReadKeyset
+  -- | EnforceGuard
+  -- | KeysetRefGuard
+  -- | CreateUserGuard
   | ListAccess
   | B64Encode
   | B64Decode
@@ -666,8 +664,8 @@ instance BuiltinArity CoreBuiltin where
     LengthStr -> 1
     ReverseStr -> 1
     ShowStr -> 1
-    EqObj -> 2
-    NeqObj -> 2
+    -- EqObj -> 2
+    -- NeqObj -> 2
     EqList -> 2
     NeqList -> 2
     GTList -> 2
@@ -696,10 +694,10 @@ instance BuiltinArity CoreBuiltin where
     ReadInteger -> 1
     ReadDecimal -> 1
     ReadString -> 1
-    ReadKeyset -> 1
-    EnforceGuard -> 1
-    KeysetRefGuard -> 1
-    CreateUserGuard -> 1
+    -- ReadKeyset -> 1
+    -- EnforceGuard -> 1
+    -- KeysetRefGuard -> 1
+    -- CreateUserGuard -> 1
     ListAccess -> 2
     B64Encode -> 1
     B64Decode -> 1
@@ -792,8 +790,8 @@ coreBuiltinToText = \case
   -- String Show
   ShowStr -> "showStr"
   -- Object equality
-  EqObj -> "eqObj"
-  NeqObj -> "neqObj"
+  -- EqObj -> "eqObj"
+  -- NeqObj -> "neqObj"
   -- List Equality
   EqList -> "eqList"
   NeqList -> "neqList"
@@ -830,10 +828,10 @@ coreBuiltinToText = \case
   ReadInteger -> "read-integer"
   ReadDecimal -> "read-decimal"
   ReadString -> "read-string"
-  ReadKeyset -> "read-keyset"
-  EnforceGuard -> "enforce-guard"
-  KeysetRefGuard -> "keyset-ref-guard"
-  CreateUserGuard -> "create-user-guard"
+  -- ReadKeyset -> "read-keyset"
+  -- EnforceGuard -> "enforce-guard"
+  -- KeysetRefGuard -> "keyset-ref-guard"
+  -- CreateUserGuard -> "create-user-guard"
   ListAccess -> "at"
   B64Encode -> "base64-encode"
   B64Decode -> "base64-decode"

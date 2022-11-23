@@ -29,14 +29,13 @@ module Pact.Core.Untyped.Eval.CEK
  , CEKRuntime
  , runCEK
  , runRawCEK
+ , eval
  , Cont(..)
- , rawBuiltinRuntime
  ) where
 
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Exception(throw)
-import Control.Monad.IO.Class(liftIO)
 import Data.Bits
 import Data.Decimal(roundTo', Decimal)
 import Data.Text(Text)
@@ -48,15 +47,12 @@ import qualified Data.Vector as V
 import qualified Data.Primitive.Array as Array
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.Set as Set
 
 import Pact.Core.Names
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Errors
 import Pact.Core.PactValue
-import Pact.Core.Guards
-import Pact.Core.Persistence
 import Pact.Core.Hash
 
 import Pact.Core.Untyped.Term
@@ -144,20 +140,6 @@ runCEK env builtins renv term = let
 
 -- | Run our CEK interpreter
 --   for only our core builtins
--- runCoreCEK
---   :: CEKTLEnv CoreBuiltin i
---   -- ^ Top levels
---   -> RuntimeEnv CoreBuiltin i
---   -- ^ Runtime environment
---   -> EvalTerm CoreBuiltin i
---   -- ^ Term to evaluate
---   -> IO (CEKValue CoreBuiltin i, CEKState CoreBuiltin)
--- runCoreCEK env =
---   runCEK env coreBuiltinRuntime
-
-
--- | Run our CEK interpreter
---   for only our core builtins
 runRawCEK
   :: CEKTLEnv RawBuiltin i
   -- ^ Top levels
@@ -197,14 +179,14 @@ mkBuiltinFn
   -> BuiltinFn b i
 mkBuiltinFn fn b =
   BuiltinFn b fn (builtinArity b) []
-{-# INLINE mkBuiltinFn #-}
+{-# INLINABLE mkBuiltinFn #-}
 
 -- -- Todo: runtime error
 unaryIntFn :: BuiltinArity b => (Integer -> Integer) -> b -> BuiltinFn b i
 unaryIntFn op = mkBuiltinFn \case
   [VLiteral (LInteger i)] -> pure (VLiteral (LInteger (op i)))
   _ -> failInvariant "unary int function"
-{-# INLINE unaryIntFn #-}
+{-# INLINABLE unaryIntFn #-}
 
 -- unaryDecFn :: BuiltinArity b => (Decimal -> Decimal) -> b -> BuiltinFn b i
 -- unaryDecFn op = mkBuiltinFn \case
@@ -844,48 +826,48 @@ coreReadDecimal = mkBuiltinFn \case
       _ -> throwM (ReadException ("no field at key " <> s))
   _ -> failInvariant "read-decimal"
 
-coreKeysetRefGuard :: BuiltinArity b => b -> BuiltinFn b i
-coreKeysetRefGuard = mkBuiltinFn \case
-  [VLiteral (LString s)] -> pure (VGuard (GKeySetRef (KeySetName s)))
-  _ -> failInvariant "keyset-ref-guard"
+-- coreKeysetRefGuard :: BuiltinArity b => b -> BuiltinFn b i
+-- coreKeysetRefGuard = mkBuiltinFn \case
+--   [VLiteral (LString s)] -> pure (VGuard (GKeySetRef (KeySetName s)))
+--   _ -> failInvariant "keyset-ref-guard"
 
-coreEnforceGuard :: BuiltinArity b => b -> BuiltinFn b i
-coreEnforceGuard = mkBuiltinFn \case
-  [VGuard v] -> case v of
-    GKeyset ks -> enforceKeySet ks
-    GKeySetRef ksr -> enforceKeySetRef ksr
-    GUserGuard ug -> enforceUserGuard ug
-  _ -> failInvariant "enforceGuard"
+-- coreEnforceGuard :: BuiltinArity b => b -> BuiltinFn b i
+-- coreEnforceGuard = mkBuiltinFn \case
+--   [VGuard v] -> case v of
+--     GKeyset ks -> enforceKeySet ks
+--     GKeySetRef ksr -> enforceKeySetRef ksr
+--     GUserGuard ug -> enforceUserGuard ug
+--   _ -> failInvariant "enforceGuard"
 
-enforceKeySet :: CEKRuntime b i => KeySet name -> EvalT b (CEKValue b i)
-enforceKeySet (KeySet keys p) = do
-  let sigs = _ckeSigs ?cekRuntimeEnv
-      matched = Set.size $ Set.filter (`Set.member` keys) sigs
-      count = Set.size keys
-  case p of
-    KeysAll | matched == count -> pure (VLiteral LUnit)
-    Keys2 | matched >= 2 -> pure (VLiteral LUnit)
-    KeysAny | matched > 0 -> pure (VLiteral LUnit)
-    _ -> throwM (EnforceException "cannot match keyset predicate")
+-- enforceKeySet :: CEKRuntime b i => KeySet name -> EvalT b (CEKValue b i)
+-- enforceKeySet (KeySet keys p) = do
+--   let sigs = _ckeSigs ?cekRuntimeEnv
+--       matched = Set.size $ Set.filter (`Set.member` keys) sigs
+--       count = Set.size keys
+--   case p of
+--     KeysAll | matched == count -> pure (VLiteral LUnit)
+--     Keys2 | matched >= 2 -> pure (VLiteral LUnit)
+--     KeysAny | matched > 0 -> pure (VLiteral LUnit)
+--     _ -> throwM (EnforceException "cannot match keyset predicate")
 
-enforceKeySetRef :: CEKRuntime b i => KeySetName -> EvalT b (CEKValue b i)
-enforceKeySetRef ksr = do
-  let pactDb = _ckePactDb ?cekRuntimeEnv
-  liftIO (_readKeyset pactDb ksr) >>= \case
-    Just ks -> enforceKeySet ks
-    Nothing -> throwM (EnforceException "no such keyset")
+-- enforceKeySetRef :: CEKRuntime b i => KeySetName -> EvalT b (CEKValue b i)
+-- enforceKeySetRef ksr = do
+--   let pactDb = _ckePactDb ?cekRuntimeEnv
+--   liftIO (_readKeyset pactDb ksr) >>= \case
+--     Just ks -> enforceKeySet ks
+--     Nothing -> throwM (EnforceException "no such keyset")
 
-enforceUserGuard :: CEKRuntime b i => CEKValue b i -> EvalT b (CEKValue b i)
-enforceUserGuard = \case
-  v@VClosure{} -> unsafeApplyOne v (VLiteral LUnit) >>= \case
-    VLiteral LUnit -> pure (VLiteral LUnit)
-    _ -> failInvariant "expected a function returning unit"
-  _ -> failInvariant "invalid type for user closure"
+-- enforceUserGuard :: CEKRuntime b i => CEKValue b i -> EvalT b (CEKValue b i)
+-- enforceUserGuard = \case
+--   v@VClosure{} -> unsafeApplyOne v (VLiteral LUnit) >>= \case
+--     VLiteral LUnit -> pure (VLiteral LUnit)
+--     _ -> failInvariant "expected a function returning unit"
+--   _ -> failInvariant "invalid type for user closure"
 
-createUserGuard :: BuiltinArity b => b -> BuiltinFn b i
-createUserGuard = mkBuiltinFn \case
-  [v@VClosure{}] -> pure (VGuard (GUserGuard v))
-  _ -> failInvariant "create-user-guard"
+-- createUserGuard :: BuiltinArity b => b -> BuiltinFn b i
+-- createUserGuard = mkBuiltinFn \case
+--   [v@VClosure{}] -> pure (VGuard (GUserGuard v))
+--   _ -> failInvariant "create-user-guard"
 
 listAccess :: BuiltinArity b => b -> BuiltinFn b i
 listAccess = mkBuiltinFn \case
@@ -992,10 +974,10 @@ rawBuiltinFn = \case
   RawReadInteger -> coreReadInteger RawReadInteger
   RawReadDecimal -> coreReadDecimal RawReadDecimal
   RawReadString -> coreReadString RawReadString
-  RawReadKeyset -> undefined
-  RawEnforceGuard -> coreEnforceGuard RawEnforceGuard
-  RawKeysetRefGuard -> coreKeysetRefGuard RawKeysetRefGuard
-  RawCreateUserGuard -> createUserGuard RawCreateUserGuard
+  -- RawReadKeyset -> undefined
+  -- RawEnforceGuard -> coreEnforceGuard RawEnforceGuard
+  -- RawKeysetRefGuard -> coreKeysetRefGuard RawKeysetRefGuard
+  -- RawCreateUserGuard -> createUserGuard RawCreateUserGuard
   RawListAccess -> listAccess RawListAccess
   RawB64Encode -> coreB64Encode RawB64Encode
   RawB64Decode -> coreB64Decode RawB64Decode

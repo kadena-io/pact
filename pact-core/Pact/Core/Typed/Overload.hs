@@ -343,14 +343,14 @@ resolveTerm = \case
       pure (Builtin ReadDecimal i)
     (RawReadString, _, _) ->
       pure (Builtin ReadString i)
-    (RawReadKeyset, _, _) ->
-      pure (Builtin ReadKeyset i)
-    (RawEnforceGuard, _, _) ->
-      pure (Builtin EnforceGuard  i)
-    (RawKeysetRefGuard, _, _) ->
-      pure (Builtin KeysetRefGuard i)
-    (RawCreateUserGuard, _, _) ->
-      pure (Builtin CreateUserGuard i)
+    -- (RawReadKeyset, _, _) ->
+    --   pure (Builtin ReadKeyset i)
+    -- (RawEnforceGuard, _, _) ->
+    --   pure (Builtin EnforceGuard  i)
+    -- (RawKeysetRefGuard, _, _) ->
+    --   pure (Builtin KeysetRefGuard i)
+    -- (RawCreateUserGuard, _, _) ->
+    --   pure (Builtin CreateUserGuard i)
     (RawListAccess, _, _) ->
       pure (Builtin ListAccess i)
     (RawB64Encode, _, _) ->

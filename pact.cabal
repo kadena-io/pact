@@ -386,6 +386,8 @@ library pact-core
     Pact.Core.Untyped.Term
     Pact.Core.Untyped.Eval.Runtime
     Pact.Core.Untyped.Eval.CEK
+    Pact.Core.Untyped.Eval.Runtime.CoreBuiltin
+    Pact.Core.Untyped.Eval.Runtime.RawBuiltin
     Pact.Core.Untyped.Utils
     -- Pact.Core.Untyped.Eval.Builtin
 

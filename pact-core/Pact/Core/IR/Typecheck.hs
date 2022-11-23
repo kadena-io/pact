@@ -1145,15 +1145,15 @@ rawBuiltinType = \case
     TypeScheme [] [] (TyString :~> TyDecimal)
   RawReadString ->
     TypeScheme [] [] (TyString :~> TyString)
-  RawReadKeyset ->
-    TypeScheme [] [] (TyString :~> TyGuard)
-  RawEnforceGuard ->
-    TypeScheme [] [] (TyGuard :~> TyUnit)
-  RawKeysetRefGuard ->
-    TypeScheme [] [] (TyString :~> TyGuard)
-  RawCreateUserGuard -> let
-    a = nd "a" 0
-    in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
+  -- RawReadKeyset ->
+  --   TypeScheme [] [] (TyString :~> TyGuard)
+  -- RawEnforceGuard ->
+  --   TypeScheme [] [] (TyGuard :~> TyUnit)
+  -- RawKeysetRefGuard ->
+  --   TypeScheme [] [] (TyString :~> TyGuard)
+  -- RawCreateUserGuard -> let
+  --   a = nd "a" 0
+  --   in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
   RawListAccess -> let
     a = nd "a" 0
     in TypeScheme [a] [] (TyInt :~> TyList (TyVar a) :~> TyVar a)
@@ -1235,10 +1235,6 @@ runInferTerm u loaded bfn term0 = stToIO $
     ty' <- noTypeVariables ty
     tt <- noTyVarsinTerm term1
     pure (TypeScheme [] [] ty', tt)
-    -- (tys, term2, _deferred) <- generalizeWithTerm ty preds term1
-    -- ts <- debruijnizeTypeScheme tys
-    -- term3 <- debruijnizeTermTypes term2
-    -- pure (ts, term3)
 
 runInferModule
   :: Supply
