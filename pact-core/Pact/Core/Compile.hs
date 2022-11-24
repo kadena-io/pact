@@ -48,7 +48,6 @@ import Pact.Core.Typed.Overload
 import Pact.Core.Untyped.Eval.CEK
 
 import qualified Pact.Core.IR.Term as IR
--- import qualified Pact.Core.Untyped.Eval.CEK as Runtime
 import qualified Pact.Core.Untyped.Eval.Runtime.CoreBuiltin as Runtime
 
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
@@ -64,7 +63,7 @@ data InterpretOutput b i
 data InterpretBundle
   = InterpretBundle
   { expr :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
-  -- , exprType :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
+  , exprType :: ByteString -> ReplT CoreBuiltin (Type Void)
   , program :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
   }
 
@@ -79,7 +78,7 @@ lispInterpretBundle :: InterpretBundle
 lispInterpretBundle =
     InterpretBundle
   { expr = interpretExprLisp
-  -- , exprType = interpretExprTypeLisp
+  , exprType = interpretExprTypeLisp
   , program = interpretProgramLisp }
 
 -- interpretExprNew :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
