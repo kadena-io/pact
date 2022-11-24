@@ -55,9 +55,9 @@ data ReplDebugFlag
   = DebugLexer
   | DebugParser
   | DebugDesugar
-  -- | DebugTypechecker
-  -- | DebugTypecheckerType
-  -- | DebugSpecializer
+  | DebugTypechecker
+  | DebugTypecheckerType
+  | DebugSpecializer
   | DebugUntyped
   deriving (Show, Eq, Ord, Enum, Bounded)
 
@@ -66,9 +66,9 @@ prettyReplFlag = \case
   DebugLexer -> "lexer"
   DebugParser -> "parser"
   DebugDesugar -> "desugar"
-  -- DebugTypechecker -> "tc-term"
-  -- DebugTypecheckerType -> "tc-type"
-  -- DebugSpecializer -> "specializer"
+  DebugTypechecker -> "tc-term"
+  DebugTypecheckerType -> "tc-type"
+  DebugSpecializer -> "specializer"
   DebugUntyped -> "untyped-core"
 
 -- | Passed in repl environment
@@ -100,9 +100,9 @@ replFlag =
   (DebugLexer <$ MP.chunk "lexer") <|>
   (DebugParser <$ MP.chunk "parser") <|>
   (DebugDesugar <$ MP.chunk "desugar") <|>
-  -- (DebugTypechecker <$ MP.chunk "tc-term") <|>
-  -- (DebugTypecheckerType <$ MP.chunk "tc-type") <|>
-  -- (DebugSpecializer <$ MP.chunk "specializer") <|>
+  (DebugTypechecker <$ MP.chunk "tc-term") <|>
+  (DebugTypecheckerType <$ MP.chunk "tc-type") <|>
+  (DebugSpecializer <$ MP.chunk "specializer") <|>
   (DebugUntyped <$ MP.chunk "untyped-core")
 
 replAction :: ReplParser ReplAction
@@ -142,15 +142,15 @@ printDebug a = \case
   DebugDesugar -> do
     putStrLn "----------- Desugar output ------------"
     print (pretty a)
-  -- DebugTypechecker -> do
-  --   putStrLn "----------- Typechecker output --------"
-  --   print (pretty a)
-  -- DebugTypecheckerType -> do
-  --   putStrLn "----------- Inferred type output -------"
-  --   print (pretty a)
-  -- DebugSpecializer -> do
-  --   putStrLn "----------- Specializer output --------"
-  --   print (pretty a)
+  DebugTypechecker -> do
+    putStrLn "----------- Typechecker output --------"
+    print (pretty a)
+  DebugTypecheckerType -> do
+    putStrLn "----------- Inferred type output -------"
+    print (pretty a)
+  DebugSpecializer -> do
+    putStrLn "----------- Specializer output --------"
+    print (pretty a)
   DebugUntyped -> do
     putStrLn "----------- Untyped core output -------"
     print (pretty a)

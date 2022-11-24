@@ -38,9 +38,8 @@ import Control.Monad.Except
 import Control.Exception(throwIO, catch)
 import Data.Void
 import Data.Dynamic (Typeable)
-import Data.IntMap.Strict(IntMap)
+import Data.RAList(RAList)
 import Data.Foldable(traverse_, foldlM)
--- import Data.List.NonEmpty(NonEmpty(..))
 import Data.STRef
 import Data.Map(Map)
 import Data.Text(Text)
@@ -48,7 +47,6 @@ import Data.Text(Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
-import qualified Data.IntMap.Strict as IntMap
 import qualified Data.RAList as RAList
 
 import Pact.Core.Builtin
@@ -59,8 +57,6 @@ import Pact.Core.Persistence
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
 import qualified Pact.Core.Untyped.Term as Untyped
-
-
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -88,7 +84,7 @@ data TCState s b
   = TCState
   { _tcSupply :: UniqueSupply s
   -- ^ Supply for fresh variables.
-  , _tcVarEnv :: IntMap (Type (TvRef s))
+  , _tcVarEnv :: RAList (Type (TvRef s))
   -- Variable environment for locally bound and top level names
   , _tcBuiltins :: b -> TypeScheme NamedDeBruijn
   -- ^ Builtins map, that uses the enum instance
@@ -104,11 +100,11 @@ type TCType s = Type (TvRef s)
 type TCPred s = Pred (TvRef s)
 
 -- | Term emitted by desugar
-type IRTerm b i = IR.Term IRName b i
-type IRModule b i = IR.Module IRName b i
+type IRTerm b i = IR.Term Name b i
+type IRModule b i = IR.Module Name b i
 
 -- | Term emitted by the typechecker prior to final generalization/unification.
-type TCTerm s b i = Typed.Term IRName (TvRef s) (b, [TCType s], [TCPred s]) i
+type TCTerm s b i = Typed.Term Name (TvRef s) (b, [TCType s], [TCPred s]) i
 
 -- Term/defun outputs post typechecking
 -- with ST monad existential removed
@@ -153,15 +149,15 @@ _dbgTypedTerm
   :: TCTerm s b i
   -> InferM s b i (Typed.Term Text String (b, [Type String], [Pred String]) i)
 _dbgTypedTerm = \case
-  Typed.Var n i -> pure (Typed.Var (_irName n) i)
+  Typed.Var n i -> pure (Typed.Var (_nName n) i)
   Typed.Lam nel body i -> do
     nel' <- (traversed._2) _dbgType nel
     body' <- _dbgTypedTerm body
-    pure (Typed.Lam (over (mapped._1) _irName nel') body' i)
+    pure (Typed.Lam (over (mapped._1) _nName nel') body' i)
   Typed.App fn body i ->
     Typed.App <$> _dbgTypedTerm fn <*> traverse _dbgTypedTerm body <*> pure i
   Typed.Let n e1 e2 i ->
-    Typed.Let (_irName n) <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
+    Typed.Let (_nName n) <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
   Typed.Builtin (b, tys, preds) i -> do
     tys' <- traverse _dbgType tys
     preds' <- traverse _dbgPred preds
@@ -468,9 +464,9 @@ split ps = do
       if l' then pure l' else (hasUnbound r)
     _ -> pure False
 
----------------------------------------------------------------
--- -- Instantiations
--- ---------------------------------------------------------------
+----------------------------------------------------------------------
+---- Instantiations
+---------------------------------------------------------------------
 
 -- | Instantiate a typescheme with bound variables with fresh bound variables
 -- Corresponds to the following inference rule
@@ -651,8 +647,8 @@ unify _ _ = fail "types do not unify"
 liftType :: Type Void -> Type a
 liftType = fmap absurd
 
--- toOName :: IRName -> OverloadedName b
--- toOName (IRName n nk u) =
+-- toOName :: Name -> OverloadedName b
+-- toOName (Name n nk u) =
 --   OverloadedName n $ case nk of
 --     IRBound -> OBound u
 --     IRTopLevel m mh -> OTopLevel m mh
@@ -660,14 +656,14 @@ liftType = fmap absurd
 -- Todo: bidirectionality
 inferTerm :: IRTerm b i -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
 inferTerm = \case
-  IR.Var irn@(IRName n nk u) i -> case nk of
-    IRBound -> do
-      views tcVarEnv (IntMap.lookup u) >>= \case
+  IR.Var irn@(Name n nk) i -> case nk of
+    NBound u -> do
+      views tcVarEnv (`RAList.lookup` u) >>= \case
         Just ty -> do
           let v' = Typed.Var irn i
           pure (ty, v', [])
         Nothing -> fail ("unbound variable in term infer" <> show n)
-    IRTopLevel mn _mh ->
+    NTopLevel mn _mh ->
       views tcFree (preview (ix mn . ix n)) >>= \case
         Just ty -> do
           let newVar = Typed.Var irn i
@@ -686,13 +682,14 @@ inferTerm = \case
           --   [] -> do
           --     when (preds /= []) $ fail "invariant failure: propagating non parameterized dicts"
           --     pure (ty, newVar, [])
-        Nothing -> fail ("unbound free variable in term infer " <> show (IRName n nk u))
+        Nothing -> fail ("unbound free variable in term infer " <> show irn)
   IR.Lam nts e i -> do
     let names = fst <$> nts
     ntys <- traverse withTypeInfo nts
     -- Todo: bidirectionality
-    let m = IntMap.fromList $ NE.toList $ NE.zipWith (\n t ->  (_irUnique n, t)) names ntys
-    (ty, e', preds) <- locally tcVarEnv (IntMap.union m) $ inferTerm e
+    -- let m = IntMap.fromList $ NE.toList $ NE.zipWith (\n t ->  (_irUnique n, t)) names ntys
+    let m = RAList.fromList (reverse (NE.toList ntys))
+    (ty, e', preds) <- locally tcVarEnv (m RAList.++) $ inferTerm e
     let nts' = NE.zip names ntys
         rty = foldr TyFun ty ntys
     pure (rty, Typed.Lam nts' e' i, preds)
@@ -715,8 +712,7 @@ inferTerm = \case
     leaveLevel
     _ <- _Just (unify te1 . liftType) mty
     -- (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1Unqual
-    let u = _irUnique n
-    (te2, e2', pe2) <- locally tcVarEnv (IntMap.insert u te1) $ inferTerm e2
+    (te2, e2', pe2) <- locally tcVarEnv (RAList.cons te1) $ inferTerm e2
     pure (te2, Typed.Let n e1' e2' i, pe1 ++ pe2)
   IR.Block nel i -> do
     nelTup <- traverse inferTerm nel
@@ -750,7 +746,7 @@ inferTerm = \case
 -- We can't generalize yet since
 -- we're not allowing type schemes just yet.
 inferDefun
-  :: IR.Defun IRName b i
+  :: IR.Defun Name b i
   -> InferM s b i (TypedDefun b i)
 inferDefun (IR.Defun name dfTy term info) = do
   enterLevel
@@ -763,7 +759,7 @@ inferDefun (IR.Defun name dfTy term info) = do
   pure (Typed.Defun name (liftType dfTy) fterm info)
 
 inferDefConst
-  :: IR.DefConst IRName b i
+  :: IR.DefConst Name b i
   -> InferM s b i (TypedDefConst b i)
 inferDefConst (IR.DefConst name dcTy term info) = do
   enterLevel
@@ -777,7 +773,7 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   pure (Typed.DefConst name rty' fterm info)
 
 inferDef
-  :: IR.Def IRName b i
+  :: IR.Def Name b i
   -> InferM s b i (TypedDef b i)
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
@@ -785,7 +781,7 @@ inferDef = \case
   -- IR.DCap d -> Typed.DCap <$> inferDefCap d
 
 inferModule
-  :: IR.Module IRName b i
+  :: IR.Module Name b i
   -> InferM s b i (TypedModule b i)
 inferModule (IR.Module mname defs blessed imports impl mh) = do
   -- gov' <- traverse (dbjName [] 0 . toOName ) gov
@@ -811,7 +807,7 @@ inferTermNonGen t = do
   noTyVarsinTerm t'
 
 inferTopLevel
-  :: IR.TopLevel IRName b i
+  :: IR.TopLevel Name b i
   -> InferM s b i (TypedTopLevel b i)
 inferTopLevel = \case
   IR.TLModule m -> Typed.TLModule <$> inferModule m
@@ -819,7 +815,7 @@ inferTopLevel = \case
   IR.TLInterface _ -> error "todo: implement interface inference"
 
 inferReplTopLevel
-  :: IR.ReplTopLevel IRName b i
+  :: IR.ReplTopLevel Name b i
   -> InferM s b i (TypedReplTopLevel b i)
 inferReplTopLevel = \case
   IR.RTLModule m -> Typed.RTLModule <$> inferModule m
@@ -829,12 +825,12 @@ inferReplTopLevel = \case
   IR.RTLInterface _ -> error "todo: implement interface inference"
 
 inferProgram
-  :: [IR.TopLevel IRName b i]
+  :: [IR.TopLevel Name b i]
   -> InferM s b i [TypedTopLevel b i]
 inferProgram = traverse inferTopLevel
 
 inferReplProgram
-  :: [IR.ReplTopLevel IRName b i]
+  :: [IR.ReplTopLevel Name b i]
   -> InferM s b i [TypedReplTopLevel b i]
 inferReplProgram = traverse inferReplTopLevel
 
@@ -1208,25 +1204,23 @@ mkFree loaded = let
   in Map.fromList . fmap toTy <$> mdefs
 
 runInfer
-  :: Supply
-  -> Loaded b' i'
+  :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> InferM s b i a
   -> ST s a
-runInfer u loaded bfn (InferT act) = do
-  uref <- newSTRef u
+runInfer loaded bfn (InferT act) = do
+  uref <- newSTRef 0
   lref <- newSTRef 1
   let tcs = TCState uref mempty bfn (mkFree loaded) lref
   runReaderT act tcs
 
 runInferTerm
-  :: Supply
-  -> Loaded b' i'
+  :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IRTerm b i
-  -> IO (TypeScheme Void, TypedTerm b i)
-runInferTerm u loaded bfn term0 = stToIO $
-  runInfer u loaded bfn $ do
+  -> IO (Type Void, TypedTerm b i)
+runInferTerm loaded bfn term0 = stToIO $
+  runInfer loaded bfn $ do
     enterLevel
     (ty, term1, preds) <- inferTerm term0
     leaveLevel
@@ -1234,40 +1228,36 @@ runInferTerm u loaded bfn term0 = stToIO $
     unless (null deferred && null retained) $ fail "term inferred with generic signature"
     ty' <- noTypeVariables ty
     tt <- noTyVarsinTerm term1
-    pure (TypeScheme [] [] ty', tt)
+    pure (ty', tt)
 
 runInferModule
-  :: Supply
-  -> Loaded b' i'
+  :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IRModule b i
   -> IO (TypedModule b i)
-runInferModule u loaded bfn term0 =
-  stToIO $ runInfer u loaded bfn (inferModule term0)
+runInferModule loaded bfn term0 =
+  stToIO $ runInfer loaded bfn (inferModule term0)
 
 runInferTopLevel
-  :: Supply
-  -> Loaded b' i'
+  :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
-  -> IR.TopLevel IRName b i
+  -> IR.TopLevel Name b i
   -> IO (TypedTopLevel b i)
-runInferTopLevel u l bfn tl =
-  stToIO $ runInfer u l bfn (inferTopLevel tl)
+runInferTopLevel l bfn tl =
+  stToIO $ runInfer l bfn (inferTopLevel tl)
 
 runInferProgram
-  :: Supply
-  -> Loaded b' i'
+  :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
-  -> [IR.TopLevel IRName b info]
+  -> [IR.TopLevel Name b info]
   -> IO [TypedTopLevel b info]
-runInferProgram u l bfn prog =
-  stToIO $ runInfer u l bfn $ inferProgram prog
+runInferProgram l bfn prog =
+  stToIO $ runInfer l bfn $ inferProgram prog
 
 runInferReplProgram
-  :: Supply
-  -> Loaded b' i'
+  :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
-  -> [IR.ReplTopLevel IRName b info]
+  -> [IR.ReplTopLevel Name b info]
   -> IO [TypedReplTopLevel b info]
-runInferReplProgram u l bfn prog =
-  stToIO $ runInfer u l bfn $ inferReplProgram prog
+runInferReplProgram l bfn prog =
+  stToIO $ runInfer l bfn $ inferReplProgram prog

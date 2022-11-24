@@ -10,7 +10,6 @@ module Pact.Core.Untyped.Utils where
 
 import Data.Foldable(foldl')
 
-import Pact.Core.Names
 import Pact.Core.Untyped.Term
 import qualified Pact.Core.Typed.Term as Typed
 
@@ -39,13 +38,13 @@ fromTypedTerm = \case
 
 
 fromTypedDefun
-  :: Typed.Defun name NamedDeBruijn builtin info
+  :: Typed.Defun name tyname builtin info
   -> Defun name builtin info
 fromTypedDefun (Typed.Defun n ty term i) =
   Defun n ty (fromTypedTerm term) i
 
 fromTypedDConst
-  :: Typed.DefConst name NamedDeBruijn builtin info
+  :: Typed.DefConst name tyname builtin info
   -> DefConst name builtin info
 fromTypedDConst (Typed.DefConst n ty term i) =
   DefConst n ty (fromTypedTerm term) i
@@ -57,7 +56,7 @@ fromTypedDConst (Typed.DefConst n ty term i) =
 --   DefCap name args (fromTypedTerm term) captype ty info
 
 fromTypedDef
-  :: Typed.Def name NamedDeBruijn builtin info
+  :: Typed.Def name tyname builtin info
   -> Def name builtin info
 fromTypedDef = \case
   Typed.Dfun d -> Dfun (fromTypedDefun d)
@@ -65,13 +64,13 @@ fromTypedDef = \case
   -- Typed.DCap d -> DCap (fromTypedDCap d)
 
 fromTypedModule
-  :: Typed.Module name NamedDeBruijn builtin info
+  :: Typed.Module name tyname builtin info
   -> Module name builtin info
 fromTypedModule (Typed.Module mn defs blessed imports implements hs) =
   Module mn (fromTypedDef <$> defs) blessed imports implements hs
 
 fromTypedTopLevel
-  :: Typed.TopLevel name NamedDeBruijn builtin info
+  :: Typed.TopLevel name tyname builtin info
   -> TopLevel name builtin info
 fromTypedTopLevel = \case
   Typed.TLModule m -> TLModule (fromTypedModule m)

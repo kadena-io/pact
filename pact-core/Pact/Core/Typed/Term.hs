@@ -195,21 +195,21 @@ data Term name tyname builtin info
 
 -- Post Typecheck terms + modules
 type OverloadedTerm b i =
-  Term IRName Void (b, [Type Void], [Pred Void]) i
+  Term Name Void (b, [Type Void], [Pred Void]) i
 type OverloadedDefun b i =
-  Defun IRName Void (b, [Type Void], [Pred Void]) i
+  Defun Name Void (b, [Type Void], [Pred Void]) i
 type OverloadedDefConst b i =
-  DefConst IRName Void (b, [Type Void], [Pred Void]) i
+  DefConst Name Void (b, [Type Void], [Pred Void]) i
 -- type OverloadedDefCap b i =
---   DefCap IRName (b, [Type Void], [Pred Void]) i
+--   DefCap Name (b, [Type Void], [Pred Void]) i
 type OverloadedDef b i =
-  Def IRName Void (b, [Type Void], [Pred Void]) i
+  Def Name Void (b, [Type Void], [Pred Void]) i
 type OverloadedModule b i =
-  Module IRName Void (b, [Type Void], [Pred Void]) i
+  Module Name Void (b, [Type Void], [Pred Void]) i
 type OverloadedTopLevel b i =
-  TopLevel IRName Void (b, [Type Void], [Pred Void]) i
+  TopLevel Name Void (b, [Type Void], [Pred Void]) i
 type OverloadedReplTopLevel b i =
-  ReplTopLevel IRName Void (b, [Type Void], [Pred Void]) i
+  ReplTopLevel Name Void (b, [Type Void], [Pred Void]) i
 
 -- On-chain, core builtin-types
 type CoreEvalTerm i = Term Name Void CoreBuiltin i
