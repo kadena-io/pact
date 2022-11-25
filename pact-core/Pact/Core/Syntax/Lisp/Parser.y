@@ -210,29 +210,6 @@ MTypeAnn :: { Maybe Type }
   : ':' Type { Just $2 }
   | {- empty -} { Nothing }
 
-BoolOp :: { BinaryOp }
-  : '&&' { AndOp }
-  | '||' { OrOp }
-
-EqOp :: { BinaryOp }
-  : '==' { EQOp }
-  | '!=' { NEQOp }
-
-OrdOp :: { BinaryOp }
-  : '>' { GTOp }
-  | '>=' { GEQOp }
-  | '<'  { LTOp }
-  | '<=' { LEQOp }
-
-AdditionOp :: { BinaryOp }
-  : '+' { AddOp }
-
-MultOp :: { BinaryOp }
-  : '*' { MultOp }
-  | '/' { DivOp }
-  | '&' { BitAndOp }
-  | '|' { BitOrOp }
-
 Block :: { ParsedExpr }
   : BlockBody { mkBlock (reverse $1)  }
 
@@ -246,20 +223,10 @@ Expr :: { ParsedExpr }
 
 SExpr :: { LineInfo -> ParsedExpr }
   : LamExpr { $1 }
-  | OperatorExpr { $1 }
   | LetExpr { $1 }
   | IfExpr { $1 }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
-
-OperatorExpr :: { LineInfo -> ParsedExpr }
-  : AdditionOp Expr Expr { BinaryOp $1 $2 $3 }
-  | '-' Expr Expr { BinaryOp SubOp $2 $3 }
-  | '-' Expr { UnaryOp NegateOp $2 }
-  | MultOp Expr Expr { BinaryOp $1 $2 $3  }
-  | OrdOp Expr Expr { BinaryOp $1 $2 $3  }
-  | EqOp Expr Expr { BinaryOp $1 $2 $3 }
-  | BoolOp Expr Expr { BinaryOp $1 $2 $3  }
 
 ExprCommaSep :: { [ParsedExpr] }
   : ExprCommaSep ',' Expr { $3:$1 }
@@ -301,7 +268,24 @@ Atom :: { ParsedExpr }
   | String { $1 }
   | List { $1 }
   | Bool { $1 }
+  | Operator { $1 }
   | '(' ')' { Constant LUnit (_ptInfo $1) }
+
+Operator :: { ParsedExpr }
+  : '&&' { Operator AndOp (_ptInfo $1) }
+  | '||' { Operator OrOp (_ptInfo $1) }
+  | '==' { Operator EQOp (_ptInfo $1) }
+  | '!=' { Operator NEQOp (_ptInfo $1) }
+  | '>'  { Operator GTOp (_ptInfo $1) }
+  | '>=' { Operator GEQOp (_ptInfo $1) }
+  | '<'  { Operator LTOp (_ptInfo $1) }
+  | '<=' { Operator LEQOp (_ptInfo $1) }
+  | '+'  { Operator AddOp (_ptInfo $1) }
+  | '-'  { Operator SubOp (_ptInfo $1) }
+  | '*'  { Operator MultOp (_ptInfo $1) }
+  | '/'  { Operator DivOp (_ptInfo $1) }
+  | '&'  { Operator BitAndOp (_ptInfo $1) }
+  | '|'  { Operator BitOrOp (_ptInfo $1) }
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }

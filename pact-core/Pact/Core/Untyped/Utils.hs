@@ -21,7 +21,8 @@ fromTypedTerm = \case
   Typed.App fn apps i ->
     foldl' (\f arg -> App f (fromTypedTerm arg) i) (fromTypedTerm fn) apps
   Typed.Let _ e1 e2 i ->
-    App (Lam (fromTypedTerm e1) i) (fromTypedTerm e2) i
+    App (Lam (fromTypedTerm e2) i) (fromTypedTerm e1) i
+    -- App (Lam (fromTypedTerm e1) i) (fromTypedTerm e2) i
   Typed.Builtin b i ->
     Builtin b i
   Typed.Constant lit i -> Constant lit i

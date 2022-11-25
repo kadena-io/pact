@@ -210,7 +210,7 @@ instance Pretty IRName where
 
 instance Pretty Name where
   pretty (Name n nk) = case nk of
-    NBound _ -> pretty n
+    NBound dix -> pretty n <> "<" <> pretty dix <> ">"
     NTopLevel mn _mh -> pretty mn <> "." <> pretty n
 
 instance Pretty NamedDeBruijn where

@@ -19,6 +19,7 @@ module Pact.Core.IR.Desugar
  ( runDesugarTermLisp
  , runDesugarTopLevelLisp
  , DesugarOutput(..)
+ , DesugarBuiltin(..)
  ) where
 
 import Control.Monad.Reader
@@ -139,8 +140,6 @@ class DesugarTerm term b i where
 instance DesugarBuiltin b => DesugarTerm (Lisp.Expr i) b i where
   desugarTerm = desugarLispTerm
 
-
-
 desugarLispTerm :: forall b i. DesugarBuiltin b => Lisp.Expr i -> Term ParsedName b i
 desugarLispTerm = \case
   Lisp.Var (BN n) i | isReservedNative (_bnName n) ->
@@ -171,13 +170,15 @@ desugarLispTerm = \case
     h' = desugarLispTerm h
     hs' = fmap desugarLispTerm hs
     in App e' (h' :| hs') i
-  Lisp.BinaryOp bop e1 e2 i -> let
-    e1' = desugarLispTerm e1
-    e2' = desugarLispTerm e2
-    in App (Builtin (desugarBinary bop) i) (e1' :| [e2']) i
-  Lisp.UnaryOp uop e1 i -> let
-    e1' = desugarLispTerm e1
-    in App (Builtin (desugarUnary uop) i) (e1' :| []) i
+  Lisp.Operator bop i ->
+    Builtin (desugarBinary bop) i
+  -- Lisp.BinaryOp bop e1 e2 i -> let
+  --   e1' = desugarLispTerm e1
+  --   e2' = desugarLispTerm e2
+  --   in App (Builtin (desugarBinary bop) i) (e1' :| [e2']) i
+  -- Lisp.UnaryOp uop e1 i -> let
+  --   e1' = desugarLispTerm e1
+  --   in App (Builtin (desugarUnary uop) i) (e1' :| []) i
   Lisp.List e1 i ->
     ListLit (V.fromList (desugarLispTerm <$> e1)) i
   Lisp.Constant l i ->

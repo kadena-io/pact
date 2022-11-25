@@ -87,9 +87,10 @@ data ReplAction
   = RALoad Text
   | RASetLispSyntax
   | RASetNewSyntax
-  -- | RATypecheck Text
+  | RATypecheck Text
   | RASetFlag ReplDebugFlag
   | RADebugAll
+  | RADebugNone
   | RAExecuteExpr Text
   deriving Show
 
@@ -114,15 +115,15 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    load <|> setLang <|> setFlag
+    load <|> setLang <|> setFlag <|> tc
   setFlag =
-    cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all"))
+    cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
   setLang = do
     cmdKw "syntax"
     (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
-  -- tc = do
-  --   cmdKw "type"
-  --   RATypecheck <$> MP.takeRest
+  tc = do
+    cmdKw "type"
+    RATypecheck <$> MP.takeRest
   load = do
     cmdKw "load"
     let c = MP.char '\"'

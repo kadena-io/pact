@@ -65,6 +65,11 @@ main = do
               loop bundle ref
           RASetLispSyntax -> loop lispInterpretBundle ref
           RASetNewSyntax -> loop lispInterpretBundle ref
+          RATypecheck inp -> catch' bundle ref $ do
+            let inp' = T.strip inp
+            out <- lift (exprType bundle (T.encodeUtf8 inp'))
+            outputStrLn (show (pretty out))
+            loop bundle ref
           RASetFlag flag -> do
             liftIO (modifyIORef' ref (over replFlags (Set.insert flag)))
             outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]
@@ -72,6 +77,10 @@ main = do
           RADebugAll -> do
             liftIO (modifyIORef' ref (set replFlags (Set.fromList [minBound .. maxBound])))
             outputStrLn $ unwords ["set all debug flags"]
+            loop bundle ref
+          RADebugNone -> do
+            liftIO (modifyIORef' ref (set replFlags mempty))
+            outputStrLn $ unwords ["Remove all debug flags"]
             loop bundle ref
           RAExecuteExpr src -> catch' bundle ref $ do
             out <- lift (expr bundle (T.encodeUtf8 src))

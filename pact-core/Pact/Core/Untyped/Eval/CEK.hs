@@ -76,7 +76,10 @@ eval = evalCEK Mt
     -> EvalT b (CEKValue b i)
   evalCEK cont env (Var n _)  =
     case _nKind n of
-      NBound i -> returnCEK cont (env RAList.!! i)
+      NBound i -> case RAList.lookup env i of
+        Just v -> returnCEK cont v
+        Nothing -> failInvariant $ "unbound identifier" <> T.pack (show n)
+        -- returnCEK cont (env RAList.!! i)
       -- Top level names are not closures, so we wipe the env
       NTopLevel mname mh -> let
         !fqn = FullyQualifiedName mname (_nName n) mh
