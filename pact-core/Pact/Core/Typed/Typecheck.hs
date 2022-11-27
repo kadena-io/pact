@@ -121,8 +121,8 @@ typecheck' = \case
   -- e_1:t_1, ... , e_n : t_n
   -- ------------------------ (T-Builtin)
   -- Γ ⊢  {e_1:t_1,...,e_n:t_n} : t_n
-  Block terms _ ->
-    NE.last <$> traverse typecheck' terms
+  Sequence e1 e2 _ ->
+    typecheck' e1 *> typecheck' e2
   -- k : p ∈ K                (where K = builtin types, constants)
   -- ------------------------ (T-Const)
   -- Γ ⊢ k : Prim p

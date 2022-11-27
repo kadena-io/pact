@@ -22,16 +22,15 @@ fromTypedTerm = \case
     foldl' (\f arg -> App f (fromTypedTerm arg) i) (fromTypedTerm fn) apps
   Typed.Let _ e1 e2 i ->
     App (Lam (fromTypedTerm e2) i) (fromTypedTerm e1) i
-    -- App (Lam (fromTypedTerm e1) i) (fromTypedTerm e2) i
   Typed.Builtin b i ->
     Builtin b i
   Typed.Constant lit i -> Constant lit i
   Typed.TyApp te _ _ -> fromTypedTerm te
-  -- Typed.TyAbs _ te _ -> fromTypedTerm te
-  Typed.Block nel i ->
-    Block (fromTypedTerm <$> nel) i
+  Typed.Sequence e1 e2 i ->
+    Sequence (fromTypedTerm e1) (fromTypedTerm e2) i
   Typed.ListLit _ vec i ->
     ListLit (fromTypedTerm <$> vec) i
+  -- Typed.TyAbs _ te _ -> fromTypedTerm te
   -- Typed.ObjectLit m i ->
   --   ObjectLit (fromTypedTerm <$> m) i
   -- Typed.ObjectOp oo i ->

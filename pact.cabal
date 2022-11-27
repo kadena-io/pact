@@ -385,7 +385,6 @@ library pact-core
 
     -- Untyped core
     Pact.Core.Untyped.Term
-    Pact.Core.Untyped.Gas
     Pact.Core.Untyped.Eval.Runtime
     Pact.Core.Untyped.Eval.CEK
     Pact.Core.Untyped.Eval.Runtime.CoreBuiltin

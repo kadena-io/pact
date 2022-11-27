@@ -125,11 +125,10 @@ data ExecutionMode
 data Cont b i
   = Fn (CEKValue b i) (Cont b i)
   | Arg (CEKEnv b i) (EvalTerm b i) (Cont b i)
-  | BlockC (CEKEnv b i) [EvalTerm b i] (Cont b i)
+  | SeqC (CEKEnv b i) (EvalTerm b i) (Cont b i)
   | ListC (CEKEnv b i) [EvalTerm b i] [CEKValue b i] (Cont b i)
   | Mt
   deriving Show
-
 
 data RuntimeEnv b i
   = RuntimeEnv

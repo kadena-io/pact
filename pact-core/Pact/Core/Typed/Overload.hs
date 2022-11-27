@@ -91,8 +91,8 @@ resolveTerm = \case
     App <$> resolveTerm f <*> traverse resolveTerm args <*> pure i
   TyApp l rs i ->
     TyApp <$> resolveTerm l <*> pure rs <*> pure i
-  Block nel i ->
-    Block <$> traverse resolveTerm nel <*> pure i
+  Sequence e1 e2 i ->
+    Sequence <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
   ListLit tn ts i ->
     ListLit tn <$> traverse resolveTerm ts <*> pure i
   Constant lit i ->

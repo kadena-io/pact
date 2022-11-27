@@ -34,8 +34,9 @@ module Pact.Core.Untyped.Eval.CEK
 
 import Control.Monad.Catch
 import Data.Text(Text)
-import Data.List.NonEmpty(NonEmpty(..))
+-- import Data.List.NonEmpty(NonEmpty(..))
 import Data.Primitive(Array, indexArray)
+-- import Data.Semiring(one)
 import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
@@ -43,9 +44,30 @@ import qualified Data.Vector as V
 
 import Pact.Core.Names
 import Pact.Core.Errors
+-- import Pact.Core.Gas
 
 import Pact.Core.Untyped.Term
 import Pact.Core.Untyped.Eval.Runtime
+
+-- data NodeType
+--   = VarNode
+--   | LamNode
+--   | AppNode
+--   | BlockNode
+--   | BuiltinNode
+--   | ConstantNode
+--   | ListNode
+--   deriving (Eq, Show)
+
+-- chargeNode :: NodeType -> Gas
+-- chargeNode = \case
+--   VarNode -> one
+--   LamNode -> one
+--   AppNode -> one
+--   BlockNode -> one
+--   BuiltinNode -> one
+--   ConstantNode -> one
+--   ListNode -> one
 
 -- Todo: exception handling? do we want labels
 -- Todo: `traverse` usage should be perf tested.
@@ -63,7 +85,7 @@ eval = evalCEK Mt
     -> CEKEnv b i
     -> EvalTerm b i
     -> EvalT b (CEKValue b i)
-  evalCEK cont env (Var n _)  =
+  evalCEK cont env (Var n _)  = do
     case _nKind n of
       NBound i -> case RAList.lookup env i of
         Just v -> returnCEK cont v
@@ -83,13 +105,11 @@ eval = evalCEK Mt
     returnCEK cont (VClosure body env)
   evalCEK cont _env (Builtin b _) =
     returnCEK cont (VNative (indexArray ?cekBuiltins (fromEnum b)))
-  evalCEK cont env (Block (t :| ts) _) =
-    evalCEK (BlockC env ts cont) env t
+  evalCEK cont env (Sequence e1 e2 _) =
+    evalCEK (SeqC env e2 cont) env e1
   evalCEK cont env (ListLit ts _) = case ts of
     [] -> returnCEK cont (VList mempty)
     x:xs -> evalCEK (ListC env xs [] cont) env x
-  -- evalCEK _cont _env (ObjectLit _obj _) = undefined
-  -- evalCEK _cont _env (ObjectOp _op _) = undefined
   returnCEK
     :: CEKRuntime b i
     => Cont b i
@@ -99,10 +119,8 @@ eval = evalCEK Mt
     evalCEK (Fn fn cont) env arg
   returnCEK (Fn fn ctx) arg =
     applyLam fn arg ctx
-  returnCEK (BlockC env (t:ts) cont) _discarded =
-    evalCEK (BlockC env ts cont) env t
-  returnCEK (BlockC _ [] cont) v =
-    returnCEK cont v
+  returnCEK (SeqC env e cont) _ =
+    evalCEK cont env e
   returnCEK (ListC env args vals cont) v = do
     case args of
       [] -> returnCEK cont (VList (V.fromList (reverse (v:vals))))

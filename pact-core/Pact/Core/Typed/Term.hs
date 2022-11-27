@@ -181,7 +181,7 @@ data Term name tyname builtin info
   -- ^ Constant/Literal values
   | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname)) info
   -- ^ (e_1 @t)
-  | Block (NonEmpty (Term name tyname builtin info)) info
+  | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Blocks (to be replaced by Seq)
   -- | ObjectLit (Map Field (Term name builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
@@ -231,13 +231,12 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       "let" <+> pretty n <+> "=" <+> pretty e1 <+> prettyFollowing e2
       where
       prettyFollowing e@Let{} = Pretty.hardline <> pretty e
-      prettyFollowing (Block nel _) = Pretty.nest 2 $
-        "in {" <> Pretty.hardline <> prettyBlock nel <> "}"
       prettyFollowing e = Pretty.hardline <> "in" <+> pretty e
     TyApp t (NE.toList -> apps) _ ->
       pretty t <+> Pretty.hsep (fmap (prettyTyApp) apps)
-    Block nel _ -> Pretty.nest 2 $
-      "{" <> Pretty.hardline <> prettyBlock nel <> "}"
+    Sequence e1 e2 _ ->
+      Pretty.parens ("seq" <+> pretty e1 <+> pretty e2)
+      -- "{" <> Pretty.hardline <> prettyBlock nel <> "}"
     -- ObjectLit (Map.toList -> obj) _ ->
     --   Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
     -- ObjectOp oop _ -> case oop of
@@ -253,8 +252,8 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     Constant l _ -> pretty l
     where
     prettyTyApp ty = "@(" <> pretty ty <> ")"
-    prettyBlock (NE.toList -> nel) =
-      Pretty.vsep (pretty <$> nel)
+    -- prettyBlock (NE.toList -> nel) =
+    --   Pretty.vsep (pretty <$> nel)
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
@@ -264,7 +263,7 @@ termInfo f = \case
   Let n e1 e2 i ->
     Let n e1 e2 <$> f i
   TyApp term ty i -> TyApp term ty <$> f i
-  Block terms i -> Block terms <$> f i
+  Sequence e1 e2 i -> Sequence e1 e2 <$> f i
   -- ObjectLit obj i -> ObjectLit obj <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
   ListLit ty v i -> ListLit ty v <$> f i
@@ -287,16 +286,18 @@ traverseTermType f = \case
     Let n <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
   TyApp l tyapps i ->
     TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
-  Block nel i ->
-    Block <$> traverse (traverseTermType f) nel <*> pure i
+  Sequence e1 e2 i ->
+    Sequence <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
   -- ObjectLit obj i ->
   --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
   -- ObjectOp oop i ->
   --   ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
   ListLit ty v i ->
     ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
-  Constant l i -> pure (Constant l i)
-  Builtin b i -> pure (Builtin b i)
+  Constant l i ->
+    pure (Constant l i)
+  Builtin b i ->
+    pure (Builtin b i)
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case
@@ -312,7 +313,8 @@ instance Plated (Term name tyname builtin info) where
     --   ObjectLit <$> traverse f tm <*> pure i
     -- ObjectOp oop i ->
     --   ObjectOp <$> traverse f oop <*> pure i
-    Block terms i -> Block <$> traverse f terms <*> pure i
+    Sequence e1 e2 i ->
+      Sequence <$> f e1 <*> f e2 <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
 

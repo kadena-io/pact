@@ -145,7 +145,9 @@ desugarLispTerm = \case
     Builtin (reservedNatives Map.! _bnName n) i
   Lisp.Var n i -> Var n i
   Lisp.Block nel i ->
-    Block (desugarLispTerm <$> nel) i
+    let nel' = desugarLispTerm <$> nel
+    in foldr (\a b -> Sequence a b i) (NE.last nel') (NE.init nel')
+    -- Block (desugarLispTerm <$> nel) i
   Lisp.LetIn binders expr i -> let
     expr' = desugarLispTerm expr
     in foldr (binderToLet i) expr' binders
@@ -310,7 +312,7 @@ termSCC currM = conn
     Let _ _ e1 e2 _ -> Set.union (conn e1) (conn e2)
     App fn apps _ ->
       Set.union (conn fn) (foldMap conn apps)
-    Block nel _ -> foldMap conn nel
+    Sequence e1 e2 _ -> Set.union (conn e1) (conn e2)
     Builtin{} -> Set.empty
     Constant{} -> Set.empty
     ListLit v _ -> foldMap conn v
@@ -406,9 +408,8 @@ renameTerm (App fn apps i) = do
   fn' <- renameTerm fn
   apps' <- traverse renameTerm apps
   pure (App fn' apps' i)
-renameTerm (Block exprs i) = do
-  exprs' <- traverse renameTerm exprs
-  pure (Block exprs' i)
+renameTerm (Sequence e1 e2 i) = do
+  Sequence <$> renameTerm e1 <*> renameTerm e2 <*> pure i
 renameTerm (Builtin b i) = pure (Builtin b i)
 renameTerm (Constant l i) =
   pure (Constant l i)

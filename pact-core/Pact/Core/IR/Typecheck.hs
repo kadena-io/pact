@@ -165,8 +165,8 @@ _dbgTypedTerm = \case
   Typed.Constant l i -> pure (Typed.Constant l i)
   Typed.TyApp t nelty i ->
     Typed.TyApp <$> _dbgTypedTerm t <*> traverse _dbgType nelty <*> pure i
-  Typed.Block nel i ->
-    Typed.Block <$> traverse _dbgTypedTerm nel <*> pure i
+  Typed.Sequence e1 e2 i ->
+    Typed.Sequence <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> _dbgType ty <*> traverse _dbgTypedTerm li <*> pure i
   -- Typed.ObjectLit obj i ->
@@ -714,12 +714,10 @@ inferTerm = \case
     -- (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1Unqual
     (te2, e2', pe2) <- locally tcVarEnv (RAList.cons te1) $ inferTerm e2
     pure (te2, Typed.Let n e1' e2' i, pe1 ++ pe2)
-  IR.Block nel i -> do
-    nelTup <- traverse inferTerm nel
-    let nel' = view _2 <$> nelTup
-        outTy = view _1 (NE.last nelTup)
-        preds' = concat (view _3 <$> nelTup)
-    pure (outTy, Typed.Block nel' i, preds')
+  IR.Sequence e1 e2 i -> do
+    (_, e1', pe1) <- inferTerm e1
+    (te2, e2', pe2) <- inferTerm e2
+    pure (te2, Typed.Sequence e1' e2' i, pe1 ++ pe2)
   -- Todo: Here, convert to dictionary
   IR.Builtin b i -> do
     tyImported <- views tcBuiltins ($ b)
@@ -944,8 +942,8 @@ noTyVarsinTerm = \case
   Typed.Constant l i -> pure (Typed.Constant l i)
   Typed.TyApp l tys i ->
     Typed.TyApp <$> noTyVarsinTerm l <*> traverse noTypeVariables tys <*> pure i
-  Typed.Block b i ->
-    Typed.Block <$> traverse noTyVarsinTerm b <*> pure i
+  Typed.Sequence e1 e2 i ->
+    Typed.Sequence <$> noTyVarsinTerm e1 <*> noTyVarsinTerm e2 <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> noTypeVariables ty <*> traverse noTyVarsinTerm li <*> pure i
 

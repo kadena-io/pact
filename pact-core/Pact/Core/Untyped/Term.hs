@@ -32,18 +32,16 @@ module Pact.Core.Untyped.Term
 
 import Control.Lens
 import Data.Text(Text)
-import Data.List.NonEmpty(NonEmpty)
 import Data.Void
 import Data.Foldable(foldl')
 import qualified Data.Set as Set
-import qualified Data.List.NonEmpty as NE
 
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
-import Pact.Core.Pretty(Pretty(..), pretty)
+import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.IR.Term as IR
@@ -166,7 +164,7 @@ data Term name builtin info
   -- All lambdas, even anonymous ones, are named, for the sake of them adding a stack frame
   | App (Term name builtin info) (Term name builtin info) info
   -- ^ Constant/Literal values
-  | Block (NonEmpty (Term name builtin info)) info
+  | Sequence (Term name builtin info) (Term name builtin info) info
   -- ^ (e_1 e_2 .. e_n)
   | Builtin builtin info
   -- ^ Built-in functions (or natives)
@@ -198,8 +196,8 @@ fromIRTerm = \case
     Builtin b i
   IR.Constant lit i ->
     Constant lit i
-  IR.Block nel i ->
-    Block (fromIRTerm <$> nel) i
+  IR.Sequence e1 e2 i ->
+    Sequence (fromIRTerm e1) (fromIRTerm e2) i
   IR.ListLit v i ->
     ListLit (fromIRTerm <$> v) i
   -- IR.ObjectLit m i ->
@@ -251,14 +249,15 @@ fromIRTopLevel = \case
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case
-    Var n _ -> pretty n
+    Var n _ ->
+      pretty n
     Lam term _ ->
       Pretty.parens ("λ." <> pretty term)
     App t1 t2 _ ->
       Pretty.parens (Pretty.hsep [pretty t1, pretty t2])
     Builtin b _ -> pretty b
     Constant l _ -> pretty l
-    Block nel _ -> Pretty.parens ("progn" <> Pretty.hsep (pretty <$> NE.toList nel))
+    Sequence e1 e2 _ -> Pretty.parens ("seq" <+> pretty e1 <+> pretty e2)
     ListLit li _ ->
       Pretty.brackets $
       Pretty.hsep $
@@ -281,7 +280,7 @@ termInfo f = \case
   Var n i -> Var n <$> f i
   Lam term i -> Lam term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
-  Block terms i -> Block terms <$> f i
+  Sequence e1 e2 i -> Sequence e1 e2 <$> f i
   -- ObjectLit obj i -> ObjectLit obj <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
   ListLit v i -> ListLit v <$> f i

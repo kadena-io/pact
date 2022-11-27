@@ -120,7 +120,7 @@ data Term name builtin info
   -- ^ let x = e1 in e2
   | App (Term name builtin info) (NonEmpty (Term name builtin info)) info
   -- ^ (e1 e2)
-  | Block (NonEmpty (Term name builtin info)) info
+  | Sequence (Term name builtin info)  (Term name builtin info) info
   -- ^ error term , error "blah"
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
@@ -150,7 +150,7 @@ termInfo f = \case
   Constant l i -> Constant l <$> f i
   -- ObjectLit m i -> ObjectLit m <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
-  Block terms i -> Block terms <$> f i
+  Sequence e1 e2 i -> Sequence e1 e2 <$> f i
   ListLit l i  -> ListLit l <$> f i
 
 instance Plated (Term name builtin info) where
@@ -163,6 +163,6 @@ instance Plated (Term name builtin info) where
     Constant l i -> pure (Constant l i)
     -- ObjectLit m i -> ObjectLit <$> traverse f m <*> pure i
     -- ObjectOp o i -> ObjectOp <$> traverse f o <*> pure i
-    Block terms i -> Block <$> traverse f terms <*> pure i
+    Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
 
