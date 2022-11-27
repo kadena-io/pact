@@ -666,7 +666,7 @@ instance BuiltinArity CoreBuiltin where
     ShowStr -> 1
     -- EqObj -> 2
     -- NeqObj -> 2
-    EqList -> 2
+    EqList -> 3
     NeqList -> 2
     GTList -> 2
     GEQList -> 2

@@ -17,6 +17,8 @@ module Pact.Core.Repl.Utils
  , replFlags
  , replLoaded
  , replPactDb
+ , replGas
+ , replEvalLog
  , whenReplFlagSet
  , unlessReplFlagSet
  , debugIfFlagSet
@@ -47,6 +49,7 @@ import Pact.Core.Info
 import Pact.Core.Names
 import Pact.Core.Persistence
 import Pact.Core.Pretty
+import Pact.Core.Gas
 import qualified Pact.Core.Untyped.Term as Term
 
 import System.Console.Haskeline.Completion
@@ -79,6 +82,8 @@ data ReplState b
   { _replFlags :: Set ReplDebugFlag
   , _replLoaded :: Loaded b LineInfo
   , _replPactDb :: PactDb b LineInfo
+  , _replGas :: IORef Gas
+  , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   }
 
 makeLenses ''ReplState

@@ -15,7 +15,6 @@ module Pact.Core.IR.Term where
 import Control.Lens
 import Data.Void(Void)
 import Data.Text(Text)
-import Data.Vector (Vector)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Set as Set
 
@@ -127,7 +126,7 @@ data Term name builtin info
   -- ^ Built-in ops, e.g (+)
   | Constant Literal info
   -- ^ Literals
-  | ListLit (Vector (Term name builtin info)) info
+  | ListLit [Term name builtin info] info
   -- ^ List Literals
   -- | ObjectOp (ObjectOp (Term name builtin info)) info
   -- ^ Object literals

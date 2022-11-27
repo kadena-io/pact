@@ -39,7 +39,9 @@ import Pact.Core.Builtin
 main :: IO ()
 main = do
   pactDb <- mockPactDb
-  ref <- newIORef (ReplState mempty emptyLoaded pactDb)
+  g <- newIORef mempty
+  evalLog <- newIORef Nothing
+  ref <- newIORef (ReplState mempty emptyLoaded pactDb g evalLog)
   runReplT ref (runInputT replSettings (loop lispInterpretBundle ref))
   where
   replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True

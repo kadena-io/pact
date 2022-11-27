@@ -24,11 +24,13 @@ module Pact.Core.Untyped.Eval.Runtime
  , CEKValue(..)
  , Cont(..)
  , RuntimeEnv(..)
- , ckeData
- , ckeTxHash
+--  , ckeData
+--  , ckeTxHash
 --  , ckeResolveName
- , ckePactDb
- , ckeSigs
+--  , ckePactDb
+--  , ckeSigs
+ , ckeGas
+ , ckeEvalLog
  , fromPactValue
  , checkPactValueType
  , Closure(..)
@@ -38,14 +40,14 @@ module Pact.Core.Untyped.Eval.Runtime
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
-import Control.Monad.State.Strict
 import Data.Void
 import Data.Text(Text)
 import Data.Map.Strict(Map)
-import Data.Set(Set)
+-- import Data.Set(Set)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
 import Data.Primitive(Array)
+import Data.IORef(IORef)
 import qualified Data.Vector as V
 
 import Pact.Core.Names
@@ -53,10 +55,10 @@ import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..), (<+>))
 import Pact.Core.Gas
 import Pact.Core.PactValue
-import Pact.Core.Hash
+-- import Pact.Core.Hash
 import Pact.Core.Untyped.Term
 import Pact.Core.Literal
-import Pact.Core.Persistence
+-- import Pact.Core.Persistence
 import Pact.Core.Type
 import qualified Pact.Core.Pretty as P
 
@@ -89,23 +91,23 @@ data CEKValue b i
   deriving (Show)
 
 data CEKState b
-  = CEKState
-  { _cekGas :: Gas
-  , _cekEvalLog :: Maybe [Text]
-  } deriving Show
+  = CEKState deriving Show
+  -- { _cekGas :: IORef Gas
+  -- , _cekEvalLog :: IORef (Maybe [Text])
+  -- } deriving Show
 
 newtype EvalT b a =
-  EvalT (StateT (CEKState b) IO a)
+  EvalT (ReaderT (CEKState b) IO a)
   deriving
     ( Functor, Applicative, Monad
-    , MonadState (CEKState b)
+    , MonadReader (CEKState b)
     , MonadIO
     , MonadThrow
     , MonadCatch)
-  via (StateT (CEKState b) IO)
+  via (ReaderT (CEKState b) IO)
 
-runEvalT :: CEKState b -> EvalT b a -> IO (a, CEKState b)
-runEvalT s (EvalT action) = runStateT action s
+runEvalT :: CEKState b -> EvalT b a -> IO a
+runEvalT s (EvalT action) = runReaderT action s
 
 data BuiltinFn b i
   = BuiltinFn
@@ -124,16 +126,20 @@ data Cont b i
   = Fn (CEKValue b i) (Cont b i)
   | Arg (CEKEnv b i) (EvalTerm b i) (Cont b i)
   | BlockC (CEKEnv b i) [EvalTerm b i] (Cont b i)
+  | ListC (CEKEnv b i) [EvalTerm b i] [CEKValue b i] (Cont b i)
   | Mt
   deriving Show
 
+
 data RuntimeEnv b i
   = RuntimeEnv
-  { _ckeData :: EnvData PactValue
-  , _ckeTxHash :: Hash
+  { _ckeGas :: IORef Gas
+  , _ckeEvalLog :: IORef (Maybe [(Text, Gas)])
+  -- , _ckeData :: EnvData PactValue
+  -- , _ckeTxHash :: Hash
   -- , _ckeResolveName :: QualifiedName -> Maybe FullyQualifiedName
-  , _ckeSigs :: Set PublicKey
-  , _ckePactDb :: PactDb b i
+  -- , _ckeSigs :: Set PublicKey
+  -- , _ckePactDb :: PactDb b i
   }
 
 instance (Pretty b) => Show (BuiltinFn b i) where

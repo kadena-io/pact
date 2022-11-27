@@ -33,7 +33,6 @@ import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Vector as V
 import qualified Data.Set as Set
 
 import Pact.Core.Builtin
@@ -180,7 +179,7 @@ desugarLispTerm = \case
   --   e1' = desugarLispTerm e1
   --   in App (Builtin (desugarUnary uop) i) (e1' :| []) i
   Lisp.List e1 i ->
-    ListLit (V.fromList (desugarLispTerm <$> e1)) i
+    ListLit (desugarLispTerm <$> e1) i
   Lisp.Constant l i ->
     Constant l i
   -- Lisp.Object objs i ->

@@ -45,7 +45,7 @@ import Pact.Core.IR.Typecheck
 import Pact.Core.Type
 import Pact.Core.Typed.Overload
 
-import Pact.Core.Untyped.Eval.CEK
+import Pact.Core.Untyped.Eval.Runtime
 
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Untyped.Eval.Runtime.CoreBuiltin as Runtime
@@ -114,7 +114,10 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet DebugSpecializer resolved
   let untyped = fromTypedTerm resolved
   debugIfFlagSet DebugUntyped untyped
-  (value, _) <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded') undefined untyped)
+  evalGas <- use replGas
+  evalLog <- use replEvalLog
+  let renv = RuntimeEnv evalGas evalLog
+  value <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded') renv untyped)
   replLoaded .= loaded'
   pure value
 
@@ -242,7 +245,10 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
         in (fqn, def)
 
     TLTerm resolved -> do
-      (value, _) <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded) undefined resolved)
+      evalGas <- use replGas
+      evalLog <- use replEvalLog
+      let renv = RuntimeEnv evalGas evalLog
+      value <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded) renv resolved)
       replLoaded .= loaded
       pure (InterpretValue value)
     TLInterface _ -> error "interfaces not yet supported"

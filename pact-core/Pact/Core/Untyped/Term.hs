@@ -33,12 +33,10 @@ module Pact.Core.Untyped.Term
 import Control.Lens
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty)
-import Data.Vector (Vector)
 import Data.Void
 import Data.Foldable(foldl')
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Vector as V
 
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -174,7 +172,7 @@ data Term name builtin info
   -- ^ Built-in functions (or natives)
   | Constant Literal info
   -- ^ ΛX.e
-  | ListLit (Vector (Term name builtin info)) info
+  | ListLit [Term name builtin info] info
   -- ^ [e_1, e_2, .., e_n]
   -- | ObjectLit (Map Field (Term name builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
@@ -255,13 +253,13 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case
     Var n _ -> pretty n
     Lam term _ ->
-      "λ." <> pretty term
+      Pretty.parens ("λ." <> pretty term)
     App t1 t2 _ ->
       Pretty.parens (Pretty.hsep [pretty t1, pretty t2])
     Builtin b _ -> pretty b
     Constant l _ -> pretty l
     Block nel _ -> Pretty.parens ("progn" <> Pretty.hsep (pretty <$> NE.toList nel))
-    ListLit (V.toList -> li) _ ->
+    ListLit li _ ->
       Pretty.brackets $
       Pretty.hsep $
       Pretty.punctuate Pretty.comma (pretty <$> li)

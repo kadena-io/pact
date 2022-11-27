@@ -46,11 +46,9 @@ module Pact.Core.Typed.Term
 import Control.Lens
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty)
-import Data.Vector (Vector)
 import Data.Void
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Vector as V
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -187,7 +185,7 @@ data Term name tyname builtin info
   -- ^ Blocks (to be replaced by Seq)
   -- | ObjectLit (Map Field (Term name builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
-  | ListLit (Type tyname) (Vector (Term name tyname builtin info)) info
+  | ListLit (Type tyname) [Term name tyname builtin info] info
   -- ^ [e_1, e_2, .., e_n]
   -- | ObjectOp (ObjectOp (Term name builtin info)) info
   -- ^ Object primitives
@@ -249,7 +247,7 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     --     "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
     --   ObjectExtend f v o ->
     --     "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
-    ListLit ty (V.toList -> li) _ ->
+    ListLit ty li _ ->
       (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Builtin b _ -> pretty b
     Constant l _ -> pretty l
