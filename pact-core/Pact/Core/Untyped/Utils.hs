@@ -24,8 +24,10 @@ fromTypedTerm = \case
     App (Lam (fromTypedTerm e2) i) (fromTypedTerm e1) i
   Typed.Builtin b i ->
     Builtin b i
-  Typed.Constant lit i -> Constant lit i
-  Typed.TyApp te _ _ -> fromTypedTerm te
+  Typed.Constant lit i ->
+    Constant lit i
+  Typed.TyApp te _ _ ->
+    fromTypedTerm te
   Typed.Sequence e1 e2 i ->
     Sequence (fromTypedTerm e1) (fromTypedTerm e2) i
   Typed.ListLit _ vec i ->

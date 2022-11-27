@@ -92,8 +92,8 @@ eval = evalCEK Mt
         Nothing -> failInvariant $ "unbound identifier" <> T.pack (show n)
         -- returnCEK cont (env RAList.!! i)
       -- Top level names are not closures, so we wipe the env
-      NTopLevel mname mh -> let
-        !fqn = FullyQualifiedName mname (_nName n) mh
+      NTopLevel mname mh ->
+        let !fqn = FullyQualifiedName mname (_nName n) mh
         in case Map.lookup fqn ?cekLoaded of
           Just d -> evalCEK cont RAList.Nil (defTerm d)
           Nothing -> failInvariant "top level name not in scope"
@@ -123,7 +123,8 @@ eval = evalCEK Mt
     evalCEK cont env e
   returnCEK (ListC env args vals cont) v = do
     case args of
-      [] -> returnCEK cont (VList (V.fromList (reverse (v:vals))))
+      [] ->
+        returnCEK cont (VList (V.fromList (reverse (v:vals))))
       e:es ->
         evalCEK (ListC env es (v:vals) cont) env e
   returnCEK Mt v = return v

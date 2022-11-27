@@ -147,7 +147,6 @@ desugarLispTerm = \case
   Lisp.Block nel i ->
     let nel' = desugarLispTerm <$> nel
     in foldr (\a b -> Sequence a b i) (NE.last nel') (NE.init nel')
-    -- Block (desugarLispTerm <$> nel) i
   Lisp.LetIn binders expr i -> let
     expr' = desugarLispTerm expr
     in foldr (binderToLet i) expr' binders
