@@ -58,8 +58,8 @@ import System.IO
 import System.FilePath
 
 import Control.Concurrent
+import Control.Exception.Safe
 import Control.Lens hiding (op)
-import Control.Monad.Catch
 import Control.Monad.State.Strict
 
 import Data.Aeson hiding ((.=),Object)

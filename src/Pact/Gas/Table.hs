@@ -101,6 +101,8 @@ defaultGasTable =
   ,("create-pact-guard", 1)
   ,("create-principal", 1)
   ,("create-user-guard", 1)
+  ,("create-capability-guard", 1)
+  ,("create-capability-pact-guard", 1)
   ,("days", 4)
   ,("decrypt-cc20p1305", 33)
   ,("diff-time", 8)
@@ -251,22 +253,25 @@ tableGasModel gasConfig =
           ReadNamespace _ns ->  _gasCostConfig_readColumnCost gasConfig
           ReadKeySet _ksName _ks ->  _gasCostConfig_readColumnCost gasConfig
           ReadYield (Yield _obj _ _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
-        GPreWrite w -> case w of
+        GPreWrite w szVer -> case w of
           WriteData _type key obj ->
-            (memoryCost key (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost obj (_gasCostConfig_writeBytesCost gasConfig))
-          WriteTable tableName -> (memoryCost tableName (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer obj (_gasCostConfig_writeBytesCost gasConfig))
+          WriteTable tableName ->
+            (memoryCost szVer tableName (_gasCostConfig_writeBytesCost gasConfig))
           WriteModule _modName _mCode ->
-            (memoryCost _modName (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost _mCode (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
           WriteInterface _modName _mCode ->
-            (memoryCost _modName (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost _mCode (_gasCostConfig_writeBytesCost gasConfig))
-          WriteNamespace ns -> (memoryCost ns (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
+          WriteNamespace ns ->
+            (memoryCost szVer ns (_gasCostConfig_writeBytesCost gasConfig))
           WriteKeySet ksName ks ->
-            (memoryCost ksName (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost ks (_gasCostConfig_writeBytesCost gasConfig))
-          WriteYield obj -> (memoryCost (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer ksName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer ks (_gasCostConfig_writeBytesCost gasConfig))
+          WriteYield obj ->
+            (memoryCost szVer (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
         GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
         GModuleDecl _moduleName _mCode -> (_gasCostConfig_moduleCost gasConfig)
         GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
@@ -274,6 +279,9 @@ tableGasModel gasConfig =
         GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
         GModuleMemory i -> moduleMemoryCost i
         GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
+        GMakeList2 len msz ->
+          let glen = fromIntegral len
+          in glen + maybe 0 ((* glen) . intCost) msz
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
@@ -286,10 +294,10 @@ perByteFactor :: Rational
 perByteFactor = 1%10
 {-# NOINLINE perByteFactor #-}
 
-memoryCost :: (SizeOf a) => a -> Gas -> Gas
-memoryCost val (Gas cost) = Gas totalCost
+memoryCost :: (SizeOf a) => SizeOfVersion -> a -> Gas -> Gas
+memoryCost szVer val (Gas cost) = Gas totalCost
   where costFrac = realToFrac cost
-        sizeFrac = realToFrac (sizeOf val)
+        sizeFrac = realToFrac (sizeOf szVer val)
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
 {-# INLINE memoryCost #-}
 

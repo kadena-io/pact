@@ -1128,7 +1128,7 @@ that simply encloses ``debit`` and ``credit`` calls:
      (check-account-exists to))
 
    (defun transfer (from to amount)
-     (with-capability (TRANSFER to from amount)
+     (with-capability (TRANSFER from to amount)
        (debit from amount)
        (credit to amount)))
 

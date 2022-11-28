@@ -461,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.3.1"
+"4.4"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1545,30 +1545,6 @@ Specifies and requests grant of CAPABILITY which is an application of a 'defcap'
 ```
 
 
-### create-module-guard {#create-module-guard}
-
-*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
-
-
-Defines a guard by NAME that enforces the current module admin predicate.
-
-
-### create-pact-guard {#create-pact-guard}
-
-*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
-
-
-Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
-
-
-### create-user-guard {#create-user-guard}
-
-*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
-
-
-Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
-
-
 ### emit-event {#emit-event}
 
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
@@ -1603,14 +1579,6 @@ Specifies, and provisions install of, a _managed_ CAPABILITY, defined in a 'defc
 ```lisp
 (install-capability (PAY "alice" "bob" 10.0))
 ```
-
-
-### keyset-ref-guard {#keyset-ref-guard}
-
-*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
-
-
-Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
 
 
 ### require-capability {#require-capability}
@@ -1671,6 +1639,44 @@ Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are bas
 
 ## Guards {#Guards}
 
+### create-capability-guard {#create-capability-guard}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard that will enforce that CAPABILITY is acquired.
+```lisp
+(create-capability-guard (BANK_DEBIT 10.0))
+```
+
+
+### create-capability-pact-guard {#create-capability-pact-guard}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard that will enforce that CAPABILITY is acquired and that the currently-executing defpact is operational.
+```lisp
+(create-capability-pact-guard (ESCROW owner))
+```
+
+
+### create-module-guard {#create-module-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard by NAME that enforces the current module admin predicate.
+
+
+### create-pact-guard {#create-pact-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
+
+
 ### create-principal {#create-principal}
 
 *guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
@@ -1686,6 +1692,14 @@ Create a principal which unambiguously identifies GUARD.
 ```
 
 
+### create-user-guard {#create-user-guard}
+
+*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
+
+
 ### is-principal {#is-principal}
 
 *principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
@@ -1695,6 +1709,14 @@ Tell whether PRINCIPAL string conforms to the principal format without proving v
 ```lisp
 (enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
 ```
+
+
+### keyset-ref-guard {#keyset-ref-guard}
+
+*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
 
 
 ### typeof-principal {#typeof-principal}
@@ -1861,7 +1883,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

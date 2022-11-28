@@ -42,6 +42,7 @@ module Pact.Types.Term
    PactId(..),
    UserGuard(..),
    ModuleGuard(..),
+   CapabilityGuard(..),
    Guard(..),_GPact,_GKeySet,_GKeySetRef,_GModule,_GUser,
    DefType(..),_Defun,_Defpact,_Defcap,
    defTypeRep,
@@ -204,8 +205,8 @@ instance Pretty a => Pretty (UserGuard a) where
     ]
 
 instance (SizeOf p) => SizeOf (UserGuard p) where
-  sizeOf (UserGuard n arr) =
-    (constructorCost 2) + (sizeOf n) + (sizeOf arr)
+  sizeOf ver (UserGuard n arr) =
+    (constructorCost 2) + (sizeOf ver n) + (sizeOf ver arr)
 
 instance ToJSON a => ToJSON (UserGuard a) where toJSON = lensyToJSON 3
 instance FromJSON a => FromJSON (UserGuard a) where parseJSON = lensyParseJSON 3
@@ -224,7 +225,7 @@ instance ToJSON DefType
 instance NFData DefType
 
 instance SizeOf DefType where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
@@ -533,7 +534,7 @@ instance Ord ModRef where
 instance Arbitrary ModRef where
   arbitrary = ModRef <$> arbitrary <*> arbitrary <*> pure def
 instance SizeOf ModRef where
-  sizeOf (ModRef n s _) = constructorCost 1 + sizeOf n + sizeOf s
+  sizeOf ver (ModRef n s _) = constructorCost 1 + sizeOf ver n + sizeOf ver s
 
 -- -------------------------------------------------------------------------- --
 -- ModuleGuard
@@ -555,8 +556,8 @@ instance Pretty ModuleGuard where
     ]
 
 instance SizeOf ModuleGuard where
-  sizeOf (ModuleGuard md n) =
-    (constructorCost 2) + (sizeOf md) + (sizeOf n)
+  sizeOf ver (ModuleGuard md n) =
+    (constructorCost 2) + (sizeOf ver md) + (sizeOf ver n)
 
 instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
@@ -581,8 +582,8 @@ instance Pretty PactGuard where
     ]
 
 instance SizeOf PactGuard where
-  sizeOf (PactGuard pid pn) =
-    (constructorCost 2) + (sizeOf pid) + (sizeOf pn)
+  sizeOf ver (PactGuard pid pn) =
+    (constructorCost 2) + (sizeOf ver pid) + (sizeOf ver pn)
 
 instance ToJSON PactGuard where toJSON = lensyToJSON 3
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
@@ -656,6 +657,39 @@ instance NFData Use
 instance SizeOf Use
 
 -- -------------------------------------------------------------------------- --
+-- CapabilityGuard
+
+-- | Capture a capability to be required as a guard,
+-- with option to be further constrained to a defpact execution context.
+data CapabilityGuard n = CapabilityGuard
+    { _cgName :: !QualifiedName
+    , _cgArgs :: ![n]
+    , _cgPactId :: !(Maybe PactId)
+    }
+  deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
+
+instance NFData a => NFData (CapabilityGuard a)
+
+instance (Arbitrary a) => Arbitrary (CapabilityGuard a) where
+  arbitrary = CapabilityGuard <$> arbitrary <*> arbitrary <*> arbitrary
+
+instance Pretty a => Pretty (CapabilityGuard a) where
+  pretty CapabilityGuard{..} = "CapabilityGuard" <+> commaBraces
+    [ "name: " <> pretty _cgName
+    , "args: " <> pretty _cgArgs
+    , "pactId: " <> pretty _cgPactId
+    ]
+
+instance (SizeOf a) => SizeOf (CapabilityGuard a) where
+  sizeOf ver CapabilityGuard{..} =
+    (constructorCost 2) + (sizeOf ver _cgName) + (sizeOf ver _cgArgs) + (sizeOf ver _cgPactId)
+
+instance ToJSON a => ToJSON (CapabilityGuard a) where
+  toJSON = lensyToJSON 1
+instance FromJSON a => FromJSON (CapabilityGuard a) where
+  parseJSON = lensyParseJSON 1
+
+-- -------------------------------------------------------------------------- --
 -- Guard
 
 data Guard a
@@ -664,6 +698,7 @@ data Guard a
   | GKeySetRef !KeySetName
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
+  | GCapability !(CapabilityGuard a)
   deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 -- potentially long output due to constrained recursion of PactValue
@@ -673,23 +708,27 @@ instance (Arbitrary a) => Arbitrary (Guard a) where
     , GKeySet <$> arbitrary
     , GKeySetRef <$> arbitrary
     , GModule <$> arbitrary
-    , GUser <$> arbitrary ]
+    , GUser <$> arbitrary
+    , GCapability <$> arbitrary
+    ]
 
 instance NFData a => NFData (Guard a)
 
 instance Pretty a => Pretty (Guard a) where
-  pretty (GPact g)      = pretty g
-  pretty (GKeySet g)    = pretty g
+  pretty (GPact g) = pretty g
+  pretty (GKeySet g) = pretty g
   pretty (GKeySetRef g) = pretty g
-  pretty (GUser g)      = pretty g
-  pretty (GModule g)    = pretty g
+  pretty (GUser g) = pretty g
+  pretty (GModule g) = pretty g
+  pretty (GCapability g) = pretty g
 
 instance (SizeOf p) => SizeOf (Guard p) where
-  sizeOf (GPact pg) = (constructorCost 1) + (sizeOf pg)
-  sizeOf (GKeySet ks) = (constructorCost 1) + (sizeOf ks)
-  sizeOf (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ksr)
-  sizeOf (GModule mg) = (constructorCost 1) + (sizeOf mg)
-  sizeOf (GUser ug) = (constructorCost 1) + (sizeOf ug)
+  sizeOf ver (GPact pg) = (constructorCost 1) + (sizeOf ver pg)
+  sizeOf ver (GKeySet ks) = (constructorCost 1) + (sizeOf ver ks)
+  sizeOf ver (GKeySetRef ksr) = (constructorCost 1) + (sizeOf ver ksr)
+  sizeOf ver (GModule mg) = (constructorCost 1) + (sizeOf ver mg)
+  sizeOf ver (GUser ug) = (constructorCost 1) + (sizeOf ver ug)
+  sizeOf ver (GCapability g) = (constructorCost 1) + (sizeOf ver g)
 
 guardCodec :: (ToJSON a, FromJSON a) => Codec (Guard a)
 guardCodec = Codec enc dec
@@ -699,13 +738,15 @@ guardCodec = Codec enc dec
     enc (GPact g) = toJSON g
     enc (GModule g) = toJSON g
     enc (GUser g) = toJSON g
+    enc (GCapability g) = toJSON g
     {-# INLINE enc #-}
     dec v =
       (GKeySet <$> parseJSON v) <|>
       (withObject "KeySetRef" $ \o -> GKeySetRef <$> o .: keyNamef) v <|>
       (GPact <$> parseJSON v) <|>
       (GModule <$> parseJSON v) <|>
-      (GUser <$> parseJSON v)
+      (GUser <$> parseJSON v) <|>
+      (GCapability <$> parseJSON v)
     {-# INLINE dec #-}
     keyNamef = "keysetref"
 
@@ -1160,50 +1201,50 @@ prettyTypeTerm TSchema{..} = SPSpecial ("{" <> asString _tSchemaName <> "}")
 prettyTypeTerm t = SPNormal t
 
 instance SizeOf1 Term where
-  sizeOf1 = \case
+  sizeOf1 ver = \case
     TModule defn body info ->
-      constructorCost 3 + sizeOf defn + sizeOf body + sizeOf info
+      constructorCost 3 + sizeOf ver defn + sizeOf ver body + sizeOf ver info
     TList li typ info ->
-       constructorCost 3 + sizeOf li + sizeOf typ + sizeOf info
+       constructorCost 3 + sizeOf ver li + sizeOf ver typ + sizeOf ver info
     TDef defn info ->
-      constructorCost 2 + sizeOf defn + sizeOf info
+      constructorCost 2 + sizeOf ver defn + sizeOf ver info
     -- note: we actually strip docs and examples
     -- post fork
     TNative name _defun ftyps examples docs tlo info ->
-      constructorCost 7 + sizeOf name + sizeOf ftyps + sizeOf examples +
-        sizeOf docs + sizeOf tlo + sizeOf info
+      constructorCost 7 + sizeOf ver name + sizeOf ver ftyps + sizeOf ver examples +
+        sizeOf ver docs + sizeOf ver tlo + sizeOf ver info
     TConst arg mname cval meta info  ->
-      constructorCost 5 + sizeOf arg + sizeOf mname + sizeOf cval + sizeOf meta + sizeOf info
+      constructorCost 5 + sizeOf ver arg + sizeOf ver mname + sizeOf ver cval + sizeOf ver meta + sizeOf ver info
     TApp app info ->
-      constructorCost 2 + sizeOf app + sizeOf info
+      constructorCost 2 + sizeOf ver app + sizeOf ver info
     TVar v info ->
-      constructorCost 2 + sizeOf v + sizeOf info
+      constructorCost 2 + sizeOf ver v + sizeOf ver info
     TBinding bps body btyp info ->
-      constructorCost 4 + sizeOf bps + sizeOf body + sizeOf btyp + sizeOf info
+      constructorCost 4 + sizeOf ver bps + sizeOf ver body + sizeOf ver btyp + sizeOf ver info
     TLam lam info ->
-      constructorCost 2 + sizeOf lam + sizeOf info
+      constructorCost 2 + sizeOf ver lam + sizeOf ver info
     TObject obj info ->
-      constructorCost 2 + sizeOf obj + sizeOf info
+      constructorCost 2 + sizeOf ver obj + sizeOf ver info
     TSchema tn mn meta args info ->
-      constructorCost 5 + sizeOf tn + sizeOf mn + sizeOf meta + sizeOf args + sizeOf info
+      constructorCost 5 + sizeOf ver tn + sizeOf ver mn + sizeOf ver meta + sizeOf ver args + sizeOf ver info
     TLiteral lit info ->
-      constructorCost 2 + sizeOf lit + sizeOf info
+      constructorCost 2 + sizeOf ver lit + sizeOf ver info
     TGuard g info ->
-      constructorCost 2 + sizeOf g + sizeOf info
+      constructorCost 2 + sizeOf ver g + sizeOf ver info
     TUse u info->
-      constructorCost 2 + sizeOf u + sizeOf info
+      constructorCost 2 + sizeOf ver u + sizeOf ver info
     TStep step meta info ->
-      constructorCost 3 + sizeOf step + sizeOf meta + sizeOf info
+      constructorCost 3 + sizeOf ver step + sizeOf ver meta + sizeOf ver info
     TModRef mr info ->
-      constructorCost 2 + sizeOf mr + sizeOf info
+      constructorCost 2 + sizeOf ver mr + sizeOf ver info
     TTable tn mn hs typ meta info ->
-      constructorCost 6 + sizeOf tn + sizeOf mn + sizeOf hs + sizeOf typ
-        + sizeOf meta + sizeOf info
+      constructorCost 6 + sizeOf ver tn + sizeOf ver mn + sizeOf ver hs + sizeOf ver typ
+        + sizeOf ver meta + sizeOf ver info
     TDynamic e1 e2 info ->
-      constructorCost 3 + sizeOf e1 + sizeOf e2 + sizeOf info
+      constructorCost 3 + sizeOf ver e1 + sizeOf ver e2 + sizeOf ver info
 
 instance (SizeOf a) => SizeOf (Term a) where
-  sizeOf t = sizeOf1 t
+  sizeOf ver t = sizeOf1 ver t
 
 instance Applicative Term where
     pure = return
@@ -1401,6 +1442,7 @@ guardTypeOf g = case g of
   GPact {} -> GTyPact
   GUser {} -> GTyUser
   GModule {} -> GTyModule
+  GCapability {} -> GTyCapability
 
 -- | Return a Pact type, or a String description of non-value Terms.
 -- Does not handle partial schema types.
@@ -1527,6 +1569,8 @@ instance Eq1 Guard where
   liftEq = $(makeLiftEq ''Guard)
 instance Eq1 UserGuard where
   liftEq = $(makeLiftEq ''UserGuard)
+instance Eq1 CapabilityGuard where
+  liftEq = $(makeLiftEq ''CapabilityGuard)
 instance Eq1 BindPair where
   liftEq = $(makeLiftEq ''BindPair)
 instance Eq1 App where
@@ -1564,6 +1608,8 @@ instance Eq1 Term where
 
 instance Show1 Guard where
   liftShowsPrec = $(makeLiftShowsPrec ''Guard)
+instance Show1 CapabilityGuard where
+  liftShowsPrec = $(makeLiftShowsPrec ''CapabilityGuard)
 instance Show1 UserGuard where
   liftShowsPrec = $(makeLiftShowsPrec ''UserGuard)
 instance Show1 BindPair where

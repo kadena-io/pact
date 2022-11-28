@@ -14,6 +14,8 @@
 module Pact.ApiReq
     (
      ApiKeyPair(..)
+    ,ApiSigner(..)
+    ,ApiPublicMeta(..)
     ,ApiReq(..)
     ,apiReq
     ,uapiReq
@@ -23,7 +25,8 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
-    ,AddSigsReq(..),addSigsReq
+    ,AddSigsReq(..)
+    ,addSigsReq
     ,combineSigs
     ,combineSigDatas
     ,signCmd
@@ -54,7 +57,6 @@ import Pact.Time
 import qualified Data.Yaml as Y
 import GHC.Generics
 import Prelude
-import System.Directory
 import System.Exit hiding (die)
 import System.FilePath
 import System.IO
@@ -142,14 +144,6 @@ data ApiReq = ApiReq {
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
-
-
-data SignReq = SignReq
-  { _srHash :: Hash
-  , _srKeyPairs :: [ApiKeyPair]
-  } deriving (Eq,Show,Generic)
-instance ToJSON SignReq where toJSON = lensyToJSON 3
-instance FromJSON SignReq where parseJSON = lensyParseJSON 3
 
 
 data AddSigsReq = AddSigsReq
@@ -389,14 +383,15 @@ withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
 
 mkApiReqExec :: Bool -> ApiReq -> FilePath -> IO (ApiReqParts,Command Text)
 mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
-  (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
+  (code,cdata) <- do
+    let dir = takeDirectory fp
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
-      (Just f,Nothing) -> liftIO (decodeUtf8 <$> BS.readFile f)
+      (Just f,Nothing) -> liftIO (decodeUtf8 <$> BS.readFile (dir </> f))
       _ -> dieAR "Expected either a 'code' or 'codeFile' entry"
     cdata <- case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
-      (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
+      (Just f,Nothing) -> liftIO (BSL.readFile (dir </> f)) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
       (Nothing,Nothing) -> return Null
@@ -497,10 +492,11 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
     Just r -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
 
-  cdata <- withCurrentDirectory (takeDirectory fp) $ do
+  cdata <- do
+    let dir = takeDirectory fp
     case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
-      (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
+      (Just f,Nothing) -> liftIO (BSL.readFile (dir </> f)) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
       (Nothing,Nothing) -> return Null

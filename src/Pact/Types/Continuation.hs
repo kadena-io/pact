@@ -75,8 +75,8 @@ instance Pretty Provenance where
   pretty (Provenance c h) = "(chain = \"" <> pretty c <> "\" hash=\"" <> pretty h <> "\")"
 
 instance SizeOf Provenance where
-  sizeOf (Provenance chainId modHash) =
-    (constructorCost 2) + (sizeOf chainId) + (sizeOf modHash)
+  sizeOf ver (Provenance chainId modHash) =
+    (constructorCost 2) + (sizeOf ver chainId) + (sizeOf ver modHash)
 
 instance NFData Provenance
 instance ToJSON Provenance where toJSON = lensyToJSON 2
@@ -108,8 +108,8 @@ instance FromJSON Yield where
     Yield <$> o .: "data" <*> o .: "provenance" <*> o .:? "source"
 
 instance SizeOf Yield where
-  sizeOf (Yield dataYield prov _) =
-    (constructorCost 2) + (sizeOf dataYield) + (sizeOf prov)
+  sizeOf ver (Yield dataYield prov _) =
+    (constructorCost 2) + (sizeOf ver dataYield) + (sizeOf ver prov)
 
 -- | Environment setup for pact execution, from ContMsg request.
 --
