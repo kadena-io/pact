@@ -183,12 +183,11 @@ data Term name tyname builtin info
   -- ^ (e_1 @t)
   | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Blocks (to be replaced by Seq)
-  -- | ObjectLit (Map Field (Term name builtin info)) info
-  -- ^ {f_1:e_1, .., f_n:e_n}
   | ListLit (Type tyname) [Term name tyname builtin info] info
   -- ^ [e_1, e_2, .., e_n]
   -- | ObjectOp (ObjectOp (Term name builtin info)) info
-  -- ^ Object primitives
+  -- | ObjectLit (Map Field (Term name builtin info)) info
+  -- ^ {f_1:e_1, .., f_n:e_n}
   deriving (Show, Functor)
 
 -- Post Typecheck terms + modules
@@ -288,16 +287,16 @@ traverseTermType f = \case
     TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
   Sequence e1 e2 i ->
     Sequence <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
-  -- ObjectLit obj i ->
-  --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
-  -- ObjectOp oop i ->
-  --   ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
   ListLit ty v i ->
     ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
   Constant l i ->
     pure (Constant l i)
   Builtin b i ->
     pure (Builtin b i)
+  -- ObjectLit obj i ->
+  --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
+  -- ObjectOp oop i ->
+  --   ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case

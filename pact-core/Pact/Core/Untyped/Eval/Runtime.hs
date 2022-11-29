@@ -13,24 +13,21 @@
 module Pact.Core.Untyped.Eval.Runtime
  ( CEKTLEnv
  , CEKEnv
- , HasTLEnv
- , HasBuiltinEnv
- , HasRuntimeEnv
- , CEKRuntime
+--  , HasTLEnv
+--  , HasBuiltinEnv
+--  , HasRuntimeEnv
+ , CEKRuntimeEnv(..)
  , BuiltinFn(..)
  , CEKState(..)
  , EvalT(..)
  , runEvalT
  , CEKValue(..)
  , Cont(..)
- , RuntimeEnv(..)
---  , ckeData
---  , ckeTxHash
---  , ckeResolveName
---  , ckePactDb
---  , ckeSigs
- , ckeGas
- , ckeEvalLog
+ , cekGas
+ , cekEvalLog
+ , cekBuiltins
+ , cekLoaded
+ , cekGasModel
  , fromPactValue
  , checkPactValueType
  , Closure(..)
@@ -46,7 +43,6 @@ import Data.Map.Strict(Map)
 -- import Data.Set(Set)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
-import Data.Primitive(Array)
 import Data.IORef(IORef)
 import qualified Data.Vector as V
 
@@ -68,14 +64,13 @@ type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 type CEKEnv b i = RAList (CEKValue b i)
 
 -- | Top level constraint
-type HasTLEnv b i = (?cekLoaded :: CEKTLEnv b i)
+-- type HasTLEnv b i = (?cekLoaded :: CEKTLEnv b i)
 -- | List of builtins
-type HasBuiltinEnv b i = (?cekBuiltins :: Array (BuiltinFn b i))
+type BuiltinEnv b i = b -> BuiltinFn b i
 -- | runtime env
-type HasRuntimeEnv b i = (?cekRuntimeEnv :: RuntimeEnv b i)
+-- type HasRuntimeEnv b i = (?cekRuntimeEnv :: RuntimeEnv b i)
 
-type CEKRuntime b i = (HasTLEnv b i, HasBuiltinEnv b i, HasRuntimeEnv b i, Enum b)
-
+-- type CEKRuntime b i = (HasTLEnv b i, HasBuiltinEnv b i, HasRuntimeEnv b i, Enum b)
 
 data Closure b i
   = Closure !(EvalTerm b i) !(CEKEnv b i)
@@ -96,23 +91,24 @@ data CEKState b
   -- , _cekEvalLog :: IORef (Maybe [Text])
   -- } deriving Show
 
-newtype EvalT b a =
-  EvalT (ReaderT (CEKState b) IO a)
+-- Todo: are we going to inject state as the reader monad here?
+newtype EvalT b i a =
+  EvalT (ReaderT (CEKRuntimeEnv b i) IO a)
   deriving
     ( Functor, Applicative, Monad
-    , MonadReader (CEKState b)
+    , MonadReader (CEKRuntimeEnv b i)
     , MonadIO
     , MonadThrow
     , MonadCatch)
-  via (ReaderT (CEKState b) IO)
+  via (ReaderT (CEKRuntimeEnv b i) IO)
 
-runEvalT :: CEKState b -> EvalT b a -> IO a
+runEvalT :: CEKRuntimeEnv b i -> EvalT b i a -> IO a
 runEvalT s (EvalT action) = runReaderT action s
 
 data BuiltinFn b i
   = BuiltinFn
   { _native :: b
-  , _nativeFn :: CEKRuntime b i => [CEKValue b i] -> EvalT b (CEKValue b i)
+  , _nativeFn :: [CEKValue b i] -> EvalT b i (CEKValue b i)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeAppliedArgs :: [CEKValue b i]
   }
@@ -130,10 +126,13 @@ data Cont b i
   | Mt
   deriving Show
 
-data RuntimeEnv b i
-  = RuntimeEnv
-  { _ckeGas :: IORef Gas
-  , _ckeEvalLog :: IORef (Maybe [(Text, Gas)])
+data CEKRuntimeEnv b i
+  = CEKRuntimeEnv
+  { _cekGas :: IORef Gas
+  , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
+  , _cekBuiltins :: BuiltinEnv b i
+  , _cekLoaded :: CEKTLEnv b i
+  , _cekGasModel :: GasEnv b
   -- , _ckeData :: EnvData PactValue
   -- , _ckeTxHash :: Hash
   -- , _ckeResolveName :: QualifiedName -> Maybe FullyQualifiedName
@@ -156,7 +155,8 @@ instance (Pretty b) => Pretty (BuiltinFn b i) where
 
 instance Pretty b => Pretty (CEKValue b i) where
   pretty = \case
-    VLiteral i -> pretty i
+    VLiteral i ->
+      pretty i
     VList v ->
       P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
     VClosure{} ->
@@ -165,7 +165,7 @@ instance Pretty b => Pretty (CEKValue b i) where
       P.angles $ "native" <+> pretty b
     VGuard _ -> P.angles "guard#"
 
-makeLenses ''RuntimeEnv
+makeLenses ''CEKRuntimeEnv
 
 
 fromPactValue :: PactValue -> CEKValue b i

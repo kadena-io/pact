@@ -36,6 +36,7 @@ import qualified Data.ByteString as B
 import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Builtin
+import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.Untyped.Term
@@ -116,8 +117,14 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet DebugUntyped untyped
   evalGas <- use replGas
   evalLog <- use replEvalLog
-  let renv = RuntimeEnv evalGas evalLog
-  value <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded') renv untyped)
+  let renv = CEKRuntimeEnv
+             { _cekGas = evalGas
+             , _cekEvalLog = evalLog
+             , _cekBuiltins = Runtime.coreBuiltinRuntime
+             , _cekLoaded = _loAllLoaded loaded'
+             , _cekGasModel = freeGasEnv 100000000 100000 }
+            --  evalGas evalLog Runtime.coreBuiltinEnv (_loAllLoaded loaded')
+  value <- liftIO (Runtime.runCoreCEK  renv untyped)
   replLoaded .= loaded'
   pure value
 
@@ -247,8 +254,13 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
     TLTerm resolved -> do
       evalGas <- use replGas
       evalLog <- use replEvalLog
-      let renv = RuntimeEnv evalGas evalLog
-      value <- liftIO (Runtime.runCoreCEK (_loAllLoaded loaded) renv resolved)
+      let renv = CEKRuntimeEnv
+                 { _cekGas = evalGas
+                 , _cekEvalLog = evalLog
+                 , _cekBuiltins = Runtime.coreBuiltinRuntime
+                 , _cekLoaded = _loAllLoaded loaded
+                 , _cekGasModel = freeGasEnv 100000000 100000 }
+      value <- liftIO (Runtime.runCoreCEK renv resolved)
       replLoaded .= loaded
       pure (InterpretValue value)
     TLInterface _ -> error "interfaces not yet supported"

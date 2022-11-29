@@ -75,6 +75,9 @@ fromTypedTopLevel
   :: Typed.TopLevel name tyname builtin info
   -> TopLevel name builtin info
 fromTypedTopLevel = \case
-  Typed.TLModule m -> TLModule (fromTypedModule m)
-  Typed.TLInterface _ -> error "todo: implement interfaces"
-  Typed.TLTerm e -> TLTerm (fromTypedTerm e)
+  Typed.TLModule m ->
+    TLModule (fromTypedModule m)
+  Typed.TLInterface _ ->
+    error "todo: implement interfaces"
+  Typed.TLTerm e ->
+    TLTerm (fromTypedTerm e)
