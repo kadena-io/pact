@@ -68,6 +68,7 @@ data ExecutionError
   | ArithmeticException
   | EnumeratationError Text
   | DecodeError Text
+  | GasExceeded Text
   deriving Show
 
 instance Exception ExecutionError

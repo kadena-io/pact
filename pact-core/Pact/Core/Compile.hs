@@ -122,7 +122,7 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
              , _cekEvalLog = evalLog
              , _cekBuiltins = Runtime.coreBuiltinRuntime
              , _cekLoaded = _loAllLoaded loaded'
-             , _cekGasModel = freeGasEnv 100000000 100000 }
+             , _cekGasModel = freeGasEnv }
             --  evalGas evalLog Runtime.coreBuiltinEnv (_loAllLoaded loaded')
   value <- liftIO (Runtime.runCoreCEK  renv untyped)
   replLoaded .= loaded'
@@ -259,7 +259,7 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
                  , _cekEvalLog = evalLog
                  , _cekBuiltins = Runtime.coreBuiltinRuntime
                  , _cekLoaded = _loAllLoaded loaded
-                 , _cekGasModel = freeGasEnv 100000000 100000 }
+                 , _cekGasModel = freeGasEnv }
       value <- liftIO (Runtime.runCoreCEK renv resolved)
       replLoaded .= loaded
       pure (InterpretValue value)

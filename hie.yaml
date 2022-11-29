@@ -9,6 +9,12 @@ cradle:
     - path: "./src-tool"
       component: "lib:pact"
 
+    - path: "./pact-core"
+      component: "lib:pact-core"
+
+    - path: "./pact-core/Pact/Core/Repl.hs"
+      component: "pact:exe:pact-core-repl"
+
     - path: "./executables/Repl.hs"
       component: "pact:exe:pact"
 
