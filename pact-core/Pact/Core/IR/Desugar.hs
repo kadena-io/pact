@@ -62,8 +62,13 @@ import qualified Pact.Core.Untyped.Term as Term
     let x2 = e2 in
     let f = fn (a, b) => e3 in
     {f1(f(x1, x2)), f2()}
+
   Moreover, `if a then b else c` gets desugared into
   `if a then () => b else () => c`
+
+  A special note: The "empty application" is currently being desugared into unit application for
+  all but builtins. That is:
+  (f) is desugared as `(f ())` and
 
   [Renaming]
   In core, we use a locally nameless representation, and prior to the final pass,
@@ -147,46 +152,46 @@ desugarLispTerm = \case
   Lisp.Block nel i ->
     let nel' = desugarLispTerm <$> nel
     in foldr (\a b -> Sequence a b i) (NE.last nel') (NE.init nel')
-  Lisp.LetIn binders expr i -> let
-    expr' = desugarLispTerm expr
+  Lisp.LetIn binders expr i ->
+    let
+      expr' = desugarLispTerm expr
     in foldr (binderToLet i) expr' binders
-  Lisp.Lam _name nsts body i -> let
-    (ns, ts) = NE.unzip nsts
-    ns' = BN . BareName <$> ns
-    ts' = fmap desugarType <$> ts
-    body' = desugarLispTerm body
+  Lisp.Lam _name nsts body i ->
+    let
+      (ns, ts) = NE.unzip nsts
+      ns' = BN . BareName <$> ns
+      ts' = fmap desugarType <$> ts
+      body' = desugarLispTerm body
     in Lam (NE.zip ns' ts') body' i
-  Lisp.If cond e1 e2 i -> let
-    cond' = desugarLispTerm cond
-    e1' = suspend i e1
-    e2' = suspend i e2
+  Lisp.If cond e1 e2 i ->
+    let
+      cond' = desugarLispTerm cond
+      e1' = suspend i e1
+      e2' = suspend i e2
     in App (Builtin builtinIf i) (cond' :| [e1', e2']) i
-  Lisp.App e [] i -> let
-    e' = desugarLispTerm e
-    body = Constant LUnit i :| []
-    in App e' body i
-  Lisp.App e (h:hs) i -> let
-    e' = desugarLispTerm e
-    h' = desugarLispTerm h
-    hs' = fmap desugarLispTerm hs
+  -- Todo: this is a syntactic hack, at the moment, for `(+) to mean `+` but
+  -- `(f)` to mean `(f ())`. Whether this stays or not is tentative.
+  Lisp.App e [] i -> case desugarLispTerm e of
+    v@Var{} ->
+      let arg = Constant LUnit i :| []
+      in App v arg i
+    e' -> e'
+  Lisp.App e (h:hs) i ->
+    let
+      e' = desugarLispTerm e
+      h' = desugarLispTerm h
+      hs' = fmap desugarLispTerm hs
     in App e' (h' :| hs') i
   Lisp.Operator bop i ->
     Builtin (desugarBinary bop) i
-  -- Lisp.BinaryOp bop e1 e2 i -> let
-  --   e1' = desugarLispTerm e1
-  --   e2' = desugarLispTerm e2
-  --   in App (Builtin (desugarBinary bop) i) (e1' :| [e2']) i
-  -- Lisp.UnaryOp uop e1 i -> let
-  --   e1' = desugarLispTerm e1
-  --   in App (Builtin (desugarUnary uop) i) (e1' :| []) i
   Lisp.List e1 i ->
     ListLit (desugarLispTerm <$> e1) i
   Lisp.Constant l i ->
     Constant l i
-  -- Lisp.Object objs i ->
-  --   ObjectLit (desugarLispTerm <$> objs) i
-  -- Lisp.ObjectOp o i ->
-  --   ObjectOp (desugarLispTerm <$> o) i
+  Lisp.Try e1 e2 i ->
+    Try (desugarLispTerm e1) (desugarLispTerm e2) i
+  Lisp.Error e i ->
+    Error e i
   where
   binderToLet i (Lisp.Binder n mty expr) term =
     Let (BN (BareName n)) (desugarType <$> mty) (desugarLispTerm expr) term i
@@ -315,6 +320,8 @@ termSCC currM = conn
     Builtin{} -> Set.empty
     Constant{} -> Set.empty
     ListLit v _ -> foldMap conn v
+    Try e1 e2 _ -> Set.union (conn e1) (conn e2)
+    Error {} -> Set.empty
     -- ObjectLit o _ -> foldMap conn o
     -- ObjectOp o _ -> foldMap conn o
 
@@ -414,6 +421,9 @@ renameTerm (Constant l i) =
   pure (Constant l i)
 renameTerm (ListLit v i) = do
   ListLit <$> traverse renameTerm v <*> pure i
+renameTerm (Try e1 e2 i) = do
+  Try <$> renameTerm e1 <*> renameTerm e2 <*> pure i
+renameTerm (Error e i) = pure (Error e i)
 -- renameTerm (ObjectLit o i) =
 --   ObjectLit <$> traverse renameTerm o <*> pure i
 -- renameTerm (ObjectOp o i) =

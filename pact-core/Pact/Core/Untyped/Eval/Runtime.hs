@@ -30,7 +30,9 @@ module Pact.Core.Untyped.Eval.Runtime
  , cekGasModel
  , fromPactValue
  , checkPactValueType
+--  , contHandler
  , Closure(..)
+ , CEKErrorHandler(..)
  ) where
 
 
@@ -83,7 +85,10 @@ data CEKValue b i
   | VClosure !(EvalTerm b i) !(CEKEnv b i)
   | VNative !(BuiltinFn b i)
   | VGuard !(Guard FullyQualifiedName (CEKValue b i))
+  | VError !Text
   deriving (Show)
+
+
 
 data CEKState b
   = CEKState deriving Show
@@ -126,6 +131,21 @@ data Cont b i
   | Mt
   deriving Show
 
+-- contHandler :: Lens' (Cont b i) (CEKErrorHandler b i)
+-- contHandler f = \case
+--  Fn v c h -> Fn v c <$> f h
+--  Arg env e c h -> Arg env e c <$> f h
+--  SeqC env e1 c h -> SeqC env e1 c <$> f h
+--  ListC env terms vs c h ->
+--   ListC env terms vs c <$> f h
+--  Mt h -> Mt <$> f h
+
+
+data CEKErrorHandler b i
+  = CEKNoHandler
+  | CEKHandler (CEKEnv b i) (EvalTerm b i) (Cont b i) (CEKErrorHandler b i)
+  deriving Show
+
 data CEKRuntimeEnv b i
   = CEKRuntimeEnv
   { _cekGas :: IORef Gas
@@ -164,6 +184,8 @@ instance Pretty b => Pretty (CEKValue b i) where
     VNative b ->
       P.angles $ "native" <+> pretty b
     VGuard _ -> P.angles "guard#"
+    VError e ->
+      ("error " <> pretty e)
 
 makeLenses ''CEKRuntimeEnv
 

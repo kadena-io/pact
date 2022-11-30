@@ -36,6 +36,8 @@ data Expr i
   | Operator BinaryOp i
   | List [Expr i] i
   | Constant Literal i
+  | Try (Expr i) (Expr i) i
+  | Error Text i
   deriving Show
 
 termInfo :: Lens' (Expr i) i
@@ -60,6 +62,10 @@ termInfo f = \case
   -- ObjectOp o i -> ObjectOp o <$> f i
   Constant l i ->
     Constant l <$> f i
+  Try e1 e2 i ->
+    Try e1 e2 <$> f i
+  Error t i ->
+    Error t <$> f i
 
 instance Pretty (Expr i) where
   pretty = \case
@@ -79,6 +85,10 @@ instance Pretty (Expr i) where
       pretty l
     List nel _ ->
       "[" <> prettyCommaSep nel <> "]"
+    Try e1 e2 _ ->
+      parens ("try" <+> pretty e1 <+> pretty e2)
+    Error e _ ->
+      parens ("error \"" <> pretty e <> "\"")
     -- UnaryOp uop e1 _ ->
     --   pretty uop <> pretty e1
     -- Object m _ ->

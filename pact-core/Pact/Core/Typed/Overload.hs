@@ -42,51 +42,10 @@ resolveTerm
   -> OverloadM (CoreEvalTerm info)
 resolveTerm = \case
   Var n i -> pure (Var n i)
-    -- IRBound -> do
-    --   depth <- view roVarDepth
-    --   views roBoundVars (IntMap.lookup u) >>= \case
-    --     Just d -> do
-    --       let n' = Name n (NBound (depth - d - 1))
-    --       pure (Var n' i)
-    --     Nothing -> fail "invariant failure: unbound name"
-    -- IRTopLevel m h -> do
-    --   let n' = Name n (NTopLevel m h)
-    --   pure (Var n' i)
   Lam nts e i ->
     Lam nts <$> resolveTerm e <*> pure i
-    -- depth <- view roVarDepth
-    -- let (ns, ts) = NE.unzip nts
-    --     len = fromIntegral (NE.length nts)
-    --     newDepth = depth + len
-    --     ixs = NE.fromList [depth..newDepth-1]
-    --     nsix = NE.zip ns ixs
-    --     m = foldl' mkEnv mempty nsix
-    --     ns' = toON <$> nsix
-    -- e' <- local (inEnv m newDepth) (resolveTerm e)
-    -- pure (Lam (NE.zip ns' ts) e' info)
-    -- where
-    -- inEnv m depth =
-    --   over roBoundVars (IntMap.union m)
-    --   . set roVarDepth depth
-      -- . over roOverloads (de ++)
-    -- toON (n, ix) = Name (_irName n) (NBound ix)
-    -- mkEnv m (IRName _ nk u, ix)  = case nk of
-    --   IRBound -> IntMap.insert u ix m
-      -- IRBuiltinDict p -> (m, (p, ix):de)
-      -- _ -> m
   Let n e1 e2 i ->
     Let n <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
-    -- u <- case _irNameKind n of
-    --   IRBound -> pure (_irUnique n)
-    --   _ -> fail "invariant error: let bound as incorrect variable"
-    -- depth <- view roVarDepth
-    -- let n' = Name (_irName n) (NBound depth)
-    -- e1' <- resolveTerm e1
-    -- e2' <- local (inEnv u depth) $ resolveTerm e2
-    -- pure (Let n' e1' e2' i)
-    -- where
-    -- inEnv u depth =
-    --   over roVarDepth (+ 1) . over roBoundVars (IntMap.insert u depth)
   App f args i ->
     App <$> resolveTerm f <*> traverse resolveTerm args <*> pure i
   TyApp l rs i ->
@@ -97,7 +56,12 @@ resolveTerm = \case
     ListLit tn <$> traverse resolveTerm ts <*> pure i
   Constant lit i ->
     pure (Constant lit i)
-  Builtin b i -> solveOverload i b
+  Builtin b i ->
+    solveOverload i b
+  Try e1 e2 i ->
+    Try <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
+  Error t e i ->
+    pure (Error t e i)
   -- ObjectLit ms i ->
   --   ObjectLit <$> traverse resolveTerm ms <*> pure i
   -- ObjectOp o i ->

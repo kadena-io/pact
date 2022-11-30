@@ -167,6 +167,10 @@ _dbgTypedTerm = \case
     Typed.TyApp <$> _dbgTypedTerm t <*> traverse _dbgType nelty <*> pure i
   Typed.Sequence e1 e2 i ->
     Typed.Sequence <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
+  Typed.Try e1 e2 i ->
+    Typed.Try <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
+  Typed.Error t e i ->
+    Typed.Error <$> _dbgType t <*> pure e <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> _dbgType ty <*> traverse _dbgTypedTerm li <*> pure i
   -- Typed.ObjectLit obj i ->
@@ -461,7 +465,7 @@ split ps = do
     TyList t -> hasUnbound t
     TyFun l r -> do
       l' <- hasUnbound l
-      if l' then pure l' else (hasUnbound r)
+      if l' then pure l' else hasUnbound r
     _ -> pure False
 
 ----------------------------------------------------------------------
@@ -739,6 +743,14 @@ inferTerm = \case
     let preds = concat (view _3 <$> liTup)
     traverse_ (unify tv . view _1) liTup
     pure (TyList tv, Typed.ListLit tv (view _2 <$> liTup) i, preds)
+  IR.Try e1 e2 i -> do
+    (te1, e1', p1) <- inferTerm e1
+    (te2, e2', p2)<- inferTerm e2
+    unify te1 te2
+    pure (te1, Typed.Try e1' e2' i, p1 ++ p2)
+  IR.Error e i -> do
+    ty <- TyVar <$> newTvRef
+    pure (ty, Typed.Error ty e i, [])
 
 -- Todo: generic types?
 -- We can't generalize yet since
@@ -946,6 +958,10 @@ noTyVarsinTerm = \case
     Typed.Sequence <$> noTyVarsinTerm e1 <*> noTyVarsinTerm e2 <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> noTypeVariables ty <*> traverse noTyVarsinTerm li <*> pure i
+  Typed.Try e1 e2 i ->
+    Typed.Try <$> noTyVarsinTerm e1 <*> noTyVarsinTerm e2 <*> pure i
+  Typed.Error t e i ->
+    Typed.Error <$> noTypeVariables t <*> pure e <*> pure i
 
 -- dbjName
 --   :: [(TvRef s, NamedDeBruijn)]

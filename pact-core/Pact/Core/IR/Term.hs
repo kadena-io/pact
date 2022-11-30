@@ -128,6 +128,10 @@ data Term name builtin info
   -- ^ Literals
   | ListLit [Term name builtin info] info
   -- ^ List Literals
+  | Try (Term name builtin info) (Term name builtin info) info
+  -- ^ try (catch expr) (try-expr)
+  | Error Text info
+  -- ^ Error term
   -- | ObjectOp (ObjectOp (Term name builtin info)) info
   -- ^ Object literals
   -- | ObjectLit (Map Field (Term name builtin info)) info
@@ -148,10 +152,12 @@ termInfo f = \case
   App t1 t2 i -> App t1 t2 <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
-  -- ObjectLit m i -> ObjectLit m <$> f i
-  -- ObjectOp o i -> ObjectOp o <$> f i
   Sequence e1 e2 i -> Sequence e1 e2 <$> f i
   ListLit l i  -> ListLit l <$> f i
+  Try e1 e2 i -> Try e1 e2 <$> f i
+  Error t i -> Error t <$> f i
+  -- ObjectLit m i -> ObjectLit m <$> f i
+  -- ObjectOp o i -> ObjectOp o <$> f i
 
 instance Plated (Term name builtin info) where
   plate f = \case
@@ -161,8 +167,8 @@ instance Plated (Term name builtin info) where
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
-    -- ObjectLit m i -> ObjectLit <$> traverse f m <*> pure i
-    -- ObjectOp o i -> ObjectOp <$> traverse f o <*> pure i
     Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
-
+    Try e1 e2 i ->
+      Try <$> f e1 <*> f e2 <*> pure i
+    Error e i -> pure (Error e i)

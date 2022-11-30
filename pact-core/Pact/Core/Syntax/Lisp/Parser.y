@@ -62,6 +62,8 @@ import Pact.Core.Syntax.Lisp.LexUtils
   true       { PosToken TokenTrue _ }
   false      { PosToken TokenFalse _ }
   progn      { PosToken TokenBlockIntro _ }
+  err        { PosToken TokenError _ }
+  try        { PosToken TokenTry _ }
   '{'        { PosToken TokenOpenBrace _ }
   '}'        { PosToken TokenCloseBrace _ }
   '('        { PosToken TokenOpenParens _ }
@@ -225,6 +227,8 @@ SExpr :: { LineInfo -> ParsedExpr }
   : LamExpr { $1 }
   | LetExpr { $1 }
   | IfExpr { $1 }
+  | TryExpr { $1 }
+  | ErrExpr { $1 }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
 
@@ -238,6 +242,12 @@ LamExpr :: { LineInfo -> ParsedExpr }
 
 IfExpr :: { LineInfo -> ParsedExpr }
   : if Expr Expr Expr { If $2 $3 $4 }
+
+TryExpr :: { LineInfo -> ParsedExpr }
+  : try Expr Expr { Try $2 $3 }
+
+ErrExpr :: { LineInfo -> ParsedExpr }
+  : err STR { Error (getStr $2) }
 
 LamArgs :: { [(Text, Maybe Type)] }
   : LamArgs IDENT ':' Type { (getIdent $2, Just $4):$1 }

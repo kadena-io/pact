@@ -75,8 +75,8 @@ data DefConst name builtin info
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
+  deriving Show
   -- | DCap (DefCap name builtin info)
-   deriving Show
 
 -- DCap (DefCap name builtin info)
 -- DPact (DefPact name builtin info)
@@ -172,6 +172,9 @@ data Term name builtin info
   -- ^ ΛX.e
   | ListLit [Term name builtin info] info
   -- ^ [e_1, e_2, .., e_n]
+  | Try (Term name builtin info) (Term name builtin info) info
+  -- ^ Error catching
+  | Error Text info
   -- | ObjectLit (Map Field (Term name builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
   -- | ObjectOp (ObjectOp (Term name builtin info)) info
@@ -200,13 +203,16 @@ fromIRTerm = \case
     Sequence (fromIRTerm e1) (fromIRTerm e2) i
   IR.ListLit v i ->
     ListLit (fromIRTerm <$> v) i
+  IR.Try e1 e2 i ->
+    Try (fromIRTerm e1) (fromIRTerm e2) i
+  IR.Error e i ->
+    Error e i
   -- IR.ObjectLit m i ->
   --   ObjectLit (fromIRTerm <$> m) i
   -- IR.ObjectOp oo i ->
   --   ObjectOp (fromIRTerm <$> oo) i
 
 ---------
-
 fromIRDefun
   :: IR.Defun name builtin info
   -> Defun name builtin info
@@ -262,6 +268,10 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       Pretty.brackets $
       Pretty.hsep $
       Pretty.punctuate Pretty.comma (pretty <$> li)
+    Try e1 e2 _ ->
+      Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
+    Error e _ ->
+      Pretty.parens ("error \"" <> pretty e <> "\"")
     -- ObjectLit (Map.toList -> obj) _ ->
     --   Pretty.braces $
     --   Pretty.hsep $
@@ -286,3 +296,7 @@ termInfo f = \case
   ListLit v i -> ListLit v <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
+  Try e1 e2 i ->
+    Try e1 e2 <$> f i
+  Error e i ->
+    Error e <$> f i

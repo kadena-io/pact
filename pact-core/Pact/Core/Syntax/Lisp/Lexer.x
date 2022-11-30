@@ -69,6 +69,8 @@ tokens :-
     or           { token TokenOr }
     at           { token TokenObjAccess }
     remove       { token TokenObjRemove }
+    try          { token TokenTry }
+    error        { token TokenError }
     progn        { token TokenBlockIntro }
 
     \(           { token TokenOpenParens }

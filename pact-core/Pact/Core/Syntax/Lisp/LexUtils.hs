@@ -47,6 +47,8 @@ data Token
   | TokenThen
   | TokenElse
   | TokenLambda
+  | TokenTry
+  | TokenError
   | TokenLambdaArrow
   | TokenModule
   | TokenKeyGov
@@ -198,6 +200,8 @@ renderTokenText = \case
   TokenThen -> "then"
   TokenElse -> "else"
   TokenLambda -> "lambda"
+  TokenTry -> "try"
+  TokenError -> "error"
   TokenLambdaArrow -> "=>"
   TokenModule -> "module"
   TokenKeyGov -> "keyGov"

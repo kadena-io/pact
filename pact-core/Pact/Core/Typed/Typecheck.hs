@@ -128,3 +128,12 @@ typecheck' = \case
   -- Γ ⊢ k : Prim p
   Constant l _ ->
     pure (typeOfLit l)
+    
+  Try e1 e2 _ -> do
+    te1 <- typecheck' e1
+    te2 <- typecheck' e2
+    when (te1 /= te2) $ throwError "Type mismatch in try"
+    pure te1
+
+  Error t _ _ ->
+    pure t

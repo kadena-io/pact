@@ -123,7 +123,6 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
              , _cekBuiltins = Runtime.coreBuiltinRuntime
              , _cekLoaded = _loAllLoaded loaded'
              , _cekGasModel = freeGasEnv }
-            --  evalGas evalLog Runtime.coreBuiltinEnv (_loAllLoaded loaded')
   value <- liftIO (Runtime.runCoreCEK  renv untyped)
   replLoaded .= loaded'
   pure value

@@ -89,8 +89,8 @@ data DefConst name tyname builtin info
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
+  deriving Show
   -- | DCap (DefCap name builtin info)
-   deriving Show
 
 -- Todo: deftypes to support
 -- DCap (DefCap name builtin info)
@@ -184,29 +184,43 @@ data Term name tyname builtin info
   | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Blocks (to be replaced by Seq)
   | ListLit (Type tyname) [Term name tyname builtin info] info
+  -- ^ List literals
+  | Try (Term name tyname builtin info) (Term name tyname builtin info) info
+  -- ^ Error handling
+  | Error (Type tyname) Text info
+  -- ^ Error term
+  deriving (Show, Functor)
+
   -- ^ [e_1, e_2, .., e_n]
   -- | ObjectOp (ObjectOp (Term name builtin info)) info
+  -- ^ access, removal
   -- | ObjectLit (Map Field (Term name builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
-  deriving (Show, Functor)
 
 -- Post Typecheck terms + modules
 type OverloadedTerm b i =
   Term Name Void (b, [Type Void], [Pred Void]) i
+
 type OverloadedDefun b i =
   Defun Name Void (b, [Type Void], [Pred Void]) i
+
 type OverloadedDefConst b i =
   DefConst Name Void (b, [Type Void], [Pred Void]) i
--- type OverloadedDefCap b i =
---   DefCap Name (b, [Type Void], [Pred Void]) i
+
 type OverloadedDef b i =
   Def Name Void (b, [Type Void], [Pred Void]) i
+
 type OverloadedModule b i =
   Module Name Void (b, [Type Void], [Pred Void]) i
+
 type OverloadedTopLevel b i =
   TopLevel Name Void (b, [Type Void], [Pred Void]) i
+
 type OverloadedReplTopLevel b i =
   ReplTopLevel Name Void (b, [Type Void], [Pred Void]) i
+
+-- type OverloadedDefCap b i =
+--   DefCap Name (b, [Type Void], [Pred Void]) i
 
 -- On-chain, core builtin-types
 type CoreEvalTerm i = Term Name Void CoreBuiltin i
@@ -232,10 +246,18 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       prettyFollowing e@Let{} = Pretty.hardline <> pretty e
       prettyFollowing e = Pretty.hardline <> "in" <+> pretty e
     TyApp t (NE.toList -> apps) _ ->
-      pretty t <+> Pretty.hsep (fmap (prettyTyApp) apps)
+      pretty t <+> Pretty.hsep (fmap prettyTyApp apps)
     Sequence e1 e2 _ ->
       Pretty.parens ("seq" <+> pretty e1 <+> pretty e2)
-      -- "{" <> Pretty.hardline <> prettyBlock nel <> "}"
+    ListLit ty li _ ->
+      Pretty.brackets (Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
+    Builtin b _ -> pretty b
+    Constant l _ -> pretty l
+    Try e1 e2 _ ->
+      Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
+    Error _ e _ ->
+      Pretty.parens ("error \"" <> pretty e <> "\"")
+    -- "{" <> Pretty.hardline <> prettyBlock nel <> "}"
     -- ObjectLit (Map.toList -> obj) _ ->
     --   Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
     -- ObjectOp oop _ -> case oop of
@@ -245,10 +267,6 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     --     "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
     --   ObjectExtend f v o ->
     --     "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
-    ListLit ty li _ ->
-      (Pretty.brackets $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
-    Builtin b _ -> pretty b
-    Constant l _ -> pretty l
     where
     prettyTyApp ty = "@(" <> pretty ty <> ")"
     -- prettyBlock (NE.toList -> nel) =
@@ -256,18 +274,30 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
-  Var n i -> Var n <$> f i
-  Lam ns term i -> Lam ns term <$> f i
-  App t1 t2 i -> App t1 t2 <$> f i
+  Var n i ->
+    Var n <$> f i
+  Lam ns term i ->
+    Lam ns term <$> f i
+  App t1 t2 i ->
+    App t1 t2 <$> f i
   Let n e1 e2 i ->
     Let n e1 e2 <$> f i
-  TyApp term ty i -> TyApp term ty <$> f i
-  Sequence e1 e2 i -> Sequence e1 e2 <$> f i
+  TyApp term ty i ->
+    TyApp term ty <$> f i
+  Sequence e1 e2 i ->
+    Sequence e1 e2 <$> f i
+  ListLit ty v i ->
+    ListLit ty v <$> f i
+  Builtin b i ->
+    Builtin b <$> f i
+  Constant l i ->
+    Constant l <$> f i
+  Try e1 e2 i ->
+    Try e1 e2 <$> f i
+  Error t e i ->
+    Error t e <$> f i
   -- ObjectLit obj i -> ObjectLit obj <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
-  ListLit ty v i -> ListLit ty v <$> f i
-  Builtin b i -> Builtin b <$> f i
-  Constant l i -> Constant l <$> f i
 
 traverseTermType
   :: Traversal
@@ -293,6 +323,10 @@ traverseTermType f = \case
     pure (Constant l i)
   Builtin b i ->
     pure (Builtin b i)
+  Try e1 e2 i ->
+    Try <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
+  Error t e i ->
+    Error <$> f t <*> pure e <*> pure i
   -- ObjectLit obj i ->
   --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
   -- ObjectOp oop i ->
@@ -308,12 +342,15 @@ instance Plated (Term name tyname builtin info) where
     TyApp term ty i -> TyApp <$> f term <*> pure ty <*> pure i
     ListLit ty ts i ->
       ListLit ty <$> traverse f ts <*> pure i
-    -- ObjectLit tm i ->
-    --   ObjectLit <$> traverse f tm <*> pure i
-    -- ObjectOp oop i ->
-    --   ObjectOp <$> traverse f oop <*> pure i
     Sequence e1 e2 i ->
       Sequence <$> f e1 <*> f e2 <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
+    Try e1 e2 i ->
+      Try <$> f e1 <*> f e2 <*> pure i
+    Error t e i -> pure (Error t e i)
+    -- ObjectLit tm i ->
+    --   ObjectLit <$> traverse f tm <*> pure i
+    -- ObjectOp oop i ->
+    --   ObjectOp <$> traverse f oop <*> pure i
 

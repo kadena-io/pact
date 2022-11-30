@@ -31,6 +31,7 @@ module Pact.Core.Untyped.Eval.CEK
  ) where
 
 import Control.Lens
+import Control.Monad(when)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.IORef
@@ -50,7 +51,11 @@ import Pact.Core.Untyped.Eval.Runtime
 chargeGas :: Gas -> EvalT b i ()
 chargeGas g = do
   ref <- view cekGas
-  liftIO $ modifyIORef' ref (<> g)
+  gCurr <- liftIO (readIORef ref)
+  gLimit <- view (cekGasModel . geGasLimit)
+  let gUsed = g + gCurr
+      msg = "Gas Limit (" <> T.pack (show gLimit) <> ") exceeeded: " <> T.pack (show gUsed)
+  when (gUsed > gLimit) $ throwM (GasExceeded msg)
 
 chargeNodeGas :: NodeType -> EvalT b i ()
 chargeNodeGas nt = do
@@ -69,72 +74,87 @@ eval
   :: CEKEnv b i
   -> EvalTerm b i
   -> EvalT b i (CEKValue b i)
-eval = evalCEK Mt
+eval = evalCEK Mt CEKNoHandler
   where
   evalCEK
     :: Cont b i
+    -> CEKErrorHandler b i
     -> CEKEnv b i
     -> EvalTerm b i
     -> EvalT b i (CEKValue b i)
-  evalCEK cont env (Var n _)  = do
+  evalCEK cont handler env (Var n _)  = do
     chargeNodeGas VarNode
     case _nKind n of
       NBound i -> case RAList.lookup env i of
-        Just v -> returnCEK cont v
+        Just v -> returnCEK cont handler v
         Nothing -> failInvariant $ "unbound identifier" <> T.pack (show n)
         -- returnCEK cont (env RAList.!! i)
       -- Top level names are not closures, so we wipe the env
       NTopLevel mname mh -> do
         let fqn = FullyQualifiedName mname (_nName n) mh
         views cekLoaded (Map.lookup fqn) >>= \case
-          Just d -> evalCEK cont RAList.Nil (defTerm d)
+          Just d -> evalCEK cont handler RAList.Nil (defTerm d)
           Nothing -> failInvariant "top level name not in scope"
-  evalCEK cont _env (Constant l _) = do
+  evalCEK cont handler _env (Constant l _) = do
     chargeNodeGas ConstantNode
-    returnCEK cont (VLiteral l)
-  evalCEK cont env (App fn arg _) = do
+    returnCEK cont handler (VLiteral l)
+  evalCEK cont handler env (App fn arg _) = do
     chargeNodeGas AppNode
-    evalCEK (Arg env arg cont) env fn
-  evalCEK cont env (Lam body _) = do
+    evalCEK (Arg env arg cont) handler env fn
+  evalCEK cont handler env (Lam body _) = do
     chargeNodeGas LamNode
-    returnCEK cont (VClosure body env)
-  evalCEK cont _env (Builtin b _) = do
+    returnCEK cont handler (VClosure body env)
+  evalCEK cont handler _env (Builtin b _) = do
     chargeNodeGas BuiltinNode
     builtins <- view cekBuiltins
-    returnCEK cont (VNative (builtins b))
-  evalCEK cont env (Sequence e1 e2 _) = do
+    returnCEK cont handler (VNative (builtins b))
+  evalCEK cont handler env (Sequence e1 e2 _) = do
     chargeNodeGas SeqNode
-    evalCEK (SeqC env e2 cont) env e1
-  evalCEK cont env (ListLit ts _) = do
+    evalCEK (SeqC env e2 cont) handler env e1
+  evalCEK cont handler env (ListLit ts _) = do
     chargeNodeGas ListNode
     case ts of
-      [] -> returnCEK cont (VList mempty)
-      x:xs -> evalCEK (ListC env xs [] cont) env x
+      [] -> returnCEK cont handler (VList mempty)
+      x:xs -> evalCEK (ListC env xs [] cont) handler env x
+  evalCEK cont handler env (Try e1 rest _) = do
+    let handler' = CEKHandler env e1 cont handler
+    evalCEK Mt handler' env rest
+  -- Error terms ignore the current cont
+  evalCEK _ handler _ (Error e _) =
+    case handler of
+      CEKNoHandler -> return (VError e)
+      CEKHandler env term cont' handler' ->
+        evalCEK cont' handler' env term
+    -- handleCEKError cont (VError e)
   returnCEK
     :: Cont b i
+    -> CEKErrorHandler b i
     -> CEKValue b i
     -> EvalT b i (CEKValue b i)
-  returnCEK (Arg env arg cont) fn =
-    evalCEK (Fn fn cont) env arg
-  returnCEK (Fn fn ctx) arg =
-    applyLam fn arg ctx
-  returnCEK (SeqC env e cont) _ =
-    evalCEK cont env e
-  returnCEK (ListC env args vals cont) v = do
+  returnCEK (Arg env arg cont) handler fn =
+    evalCEK (Fn fn cont) handler env arg
+  returnCEK (Fn fn cont) handler arg =
+    applyLam fn arg cont handler
+  returnCEK (SeqC env e cont) handler _ =
+    evalCEK cont handler env e
+  returnCEK (ListC env args vals cont) handler v = do
     case args of
       [] ->
-        returnCEK cont (VList (V.fromList (reverse (v:vals))))
+        returnCEK cont handler (VList (V.fromList (reverse (v:vals))))
       e:es ->
-        evalCEK (ListC env es (v:vals) cont) env e
-  returnCEK Mt v = return v
-  applyLam (VClosure body env) arg cont =
-    evalCEK cont (RAList.cons arg env) body
-  applyLam (VNative (BuiltinFn b fn arity args)) arg cont
+        evalCEK (ListC env es (v:vals) cont) handler env e
+  returnCEK Mt handler v = case handler of
+    CEKNoHandler -> return v
+    CEKHandler _env _term cont handler' ->
+      returnCEK cont handler' v
+  applyLam (VClosure body env) arg cont handler =
+    evalCEK cont handler (RAList.cons arg env) body
+  applyLam (VNative (BuiltinFn b fn arity args)) arg cont handler
     | arity - 1 == 0 = do
       chargeNative b
-      fn (reverse (arg:args)) >>= returnCEK cont
-    | otherwise = returnCEK cont (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
-  applyLam _ _ _ = failInvariant "Applying value to non-function"
+      fn (reverse (arg:args)) >>= returnCEK cont handler
+    | otherwise = returnCEK cont handler (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
+  applyLam _ _ _ _ = failInvariant "Applying value to non-function"
 
 runCEK
   :: CEKRuntimeEnv b i
