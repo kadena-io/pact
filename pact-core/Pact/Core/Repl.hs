@@ -50,10 +50,11 @@ main = do
     InterpretLog t -> outputStrLn (T.unpack t)
   catch' bundle ref ma = catchAll ma (\e -> outputStrLn (show e) *> loop bundle ref)
   loop bundle ref = do
-    minput <- getInputLine "pact>"
+    minput <- fmap (T.strip . T.pack) <$> getInputLine "pact>"
     case minput of
       Nothing -> outputStrLn "goodbye"
-      Just input -> case parseReplAction (T.strip (T.pack input)) of
+      Just input | T.null input -> loop bundle ref
+      Just input -> case parseReplAction input of
         Nothing -> do
           outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
           loop bundle ref

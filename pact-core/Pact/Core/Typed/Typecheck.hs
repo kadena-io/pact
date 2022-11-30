@@ -99,6 +99,12 @@ typecheck' = \case
   TyApp term tyApps _ -> do
     ty <- typecheck' term
     foldlM applyType ty tyApps
+
+  -- Todo: All type checks should ensure that types emitted (including type variables)
+  -- are checked to not be unbound.
+  TyAbs tys term _ -> do
+    termty <- typecheck' term
+    pure (TyForall tys termty)
   -- b : t ∈ B                (where B = { b : t | for b in Builtins, t in T})
   -- ------------------------ (T-Builtin)
   -- Γ ⊢ b : t
@@ -128,7 +134,7 @@ typecheck' = \case
   -- Γ ⊢ k : Prim p
   Constant l _ ->
     pure (typeOfLit l)
-    
+
   Try e1 e2 _ -> do
     te1 <- typecheck' e1
     te2 <- typecheck' e2

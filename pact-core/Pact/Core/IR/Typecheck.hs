@@ -34,20 +34,24 @@ import Control.Lens hiding (Level)
 import Control.Monad.Reader
 import Control.Monad.ST
 import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
+import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Exception(throwIO, catch)
 import Data.Void
 import Data.Dynamic (Typeable)
 import Data.RAList(RAList)
 import Data.Foldable(traverse_, foldlM)
+import Data.Functor(($>))
 import Data.STRef
 import Data.Map(Map)
 import Data.Text(Text)
+import Data.List.NonEmpty(NonEmpty(..))
 
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.RAList as RAList
+import qualified Data.Set as Set
 
 import Pact.Core.Builtin
 import Pact.Core.Type
@@ -108,19 +112,21 @@ type TCTerm s b i = Typed.Term Name (TvRef s) (b, [TCType s], [TCPred s]) i
 
 -- Term/defun outputs post typechecking
 -- with ST monad existential removed
-type TypedTerm b i = Typed.OverloadedTerm b i
+type TypedTerm b i = Typed.OverloadedTerm NamedDeBruijn b i
 
-type TypedDefun b i = Typed.OverloadedDefun b i
+type TypedGenTerm b i = Typed.OverloadedTerm NamedDeBruijn b i
 
-type TypedDefConst b i = Typed.OverloadedDefConst b i
+type TypedDefun b i = Typed.OverloadedDefun NamedDeBruijn b i
 
-type TypedDef b i = Typed.OverloadedDef b i
+type TypedDefConst b i = Typed.OverloadedDefConst NamedDeBruijn b i
 
-type TypedTopLevel b i = Typed.OverloadedTopLevel b i
+type TypedDef b i = Typed.OverloadedDef NamedDeBruijn b i
 
-type TypedReplTopLevel b i = Typed.OverloadedReplTopLevel b i
+type TypedTopLevel b i = Typed.OverloadedTopLevel NamedDeBruijn b i
 
-type TypedModule b i = Typed.OverloadedModule b i
+type TypedReplTopLevel b i = Typed.OverloadedReplTopLevel NamedDeBruijn b i
+
+type TypedModule b i = Typed.OverloadedModule NamedDeBruijn b i
 
 newtype InferM s b i a =
   InferT (ReaderT (TCState s b) (ST s) a)
@@ -165,6 +171,10 @@ _dbgTypedTerm = \case
   Typed.Constant l i -> pure (Typed.Constant l i)
   Typed.TyApp t nelty i ->
     Typed.TyApp <$> _dbgTypedTerm t <*> traverse _dbgType nelty <*> pure i
+  Typed.TyAbs tys term i -> do
+    tys' <- traverse _dbgTvRef tys
+    term' <- _dbgTypedTerm term
+    pure (Typed.TyAbs tys' term' i)
   Typed.Sequence e1 e2 i ->
     Typed.Sequence <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
   Typed.Try e1 e2 i ->
@@ -577,76 +587,79 @@ unify _ _ = fail "types do not unify"
 
 -- | We essentially only
 -- generalize on lambdas atm.
--- generalizeWithTerm
---   :: TCType s
---   -> [TCPred s]
---   -> TCTerm s b i
---   -> InferM s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
--- generalizeWithTerm ty pp term = case term of
---   Typed.Lam{} -> generalizeWithTerm' ty pp term
---   _ -> pure (TypeScheme [] [] ty, term, pp)
+generalizeWithTerm
+  :: TCType s
+  -> [TCPred s]
+  -> TCTerm s b i
+  -> InferM s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
+generalizeWithTerm ty pp term
+  | isValue term = generalizeWithTerm' ty pp term
+  | otherwise = pure (TypeScheme [] [] ty, term, pp)
+  where
+  isValue = \case
+    Typed.Var{} -> True
+    Typed.Constant{} -> True
+    Typed.Lam{} -> True
+    Typed.Error{} -> True
+    _ -> False
 
--- Generalization in general
--- generalizeWithTerm'
---   :: TCType s
---   -> [TCPred s]
---   -> TCTerm s b i
---   -> InferM s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
--- generalizeWithTerm' ty pp term = do
---   preds <- nubPreds pp
---   sts <- liftST (newSTRef Set.empty)
---   (ftvs, ty') <- gen' sts ty
---   (deferred, retained) <- split preds
---   retained' <- traverse (genPred sts) retained
---   when (retained /= []) $ fail ""
---   case ftvs of
---     [] -> do
---       when (retained /= []) $ fail "Retained predicates despite no quantified variables"
---       pure (TypeScheme [] [] ty' , term, deferred)
---     (x:xs) -> do
---       when (retained /= []) $ fail "Dictionary variables not currently supported"
---       pure (TypeScheme ftvs retained ty', Typed.TyAbs (x:|xs) term info, deferred)
---   where
---   nubPreds li = nubPreds' li []
---   -- we expect
---   nubPreds' (p@(Pred tc x) : xs) elems = case x of
---     TyVar rv -> readTvRef rv >>= \case
---       Link tl -> nubPreds' (Pred tc tl :xs) elems
---       _ ->
---         if elem p elems
---         then nubPreds' xs elems
---         else nubPreds' xs (Pred tc x:elems)
---     _ -> nubPreds' xs elems
---   nubPreds' [] elems = pure (reverse elems)
-
---   info = term ^. Typed.termInfo
---   toTyArg p@(Pred t tytv) =
---     let n  = OverloadedName "#dictVar" (OBuiltinDict p)
---         nty = tcToRowType t tytv
---     in (n, nty)
---   genPred sts (Pred t pty) = do
---     (o, pty')  <- gen' sts pty
---     when (o /= []) $ fail "BOOM1"
---     pure (Pred t pty')
---   gen' sts (TyVar tv) = readTvRef tv >>= \case
---     Unbound n u l -> do
---       cl <- currentLevel
---       if l > cl then do
---         s <- liftST (readSTRef sts)
---         writeTvRef tv (Bound n u)
---         if Set.member u s then pure ([], TyVar tv)
---         else liftST (writeSTRef sts (Set.insert u s)) $> ([tv], TyVar tv)
---       else pure ([], TyVar tv)
---     Link t' -> gen' sts t'
---     Bound _ _ -> pure ([], TyVar tv)
---   gen' sts (TyFun l r) = do
---     (ftvl, l') <- gen' sts l
---     (ftvr, r') <- gen' sts r
---     pure (ftvl ++ ftvr,TyFun l' r')
---   gen' _ t@TyPrim{} = pure ([], t)
---   gen' sts (TyList t) = over _2 TyList <$> gen' sts t
---   gen' _sts TyGuard = pure ([], TyGuard)
---   gen' _sts t@TyForall{} = pure ([], t)
+-- Generalization that emits a typed term
+-- Note: Deferred predicates are purely for the sake of
+-- callsite dictionary overloaded variables.
+-- These are currently disabled.
+generalizeWithTerm'
+  :: TCType s
+  -> [TCPred s]
+  -> TCTerm s b i
+  -> InferM s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
+generalizeWithTerm' ty pp term = do
+  preds <- nubPreds pp
+  -- sts <- liftST (newSTRef Set.empty)
+  ((ftvs, ty'), s) <- runStateT (gen' ty) Set.empty
+  (deferred, retained) <- split preds
+  retained' <- evalStateT (traverse genPred retained) s
+  when (retained' /= []) $ fail "Dictionary overloading currently not enabled"
+  case ftvs of
+    [] -> do
+      pure (TypeScheme [] [] ty' , term, deferred)
+    (x:xs) -> do
+      pure (TypeScheme ftvs [] ty', Typed.TyAbs (x:|xs) term info, deferred)
+  where
+  nubPreds li = nubPreds' li []
+  -- we expect
+  nubPreds' (p@(Pred tc x) : xs) elems = case x of
+    TyVar rv -> readTvRef rv >>= \case
+      Link tl -> nubPreds' (Pred tc tl :xs) elems
+      _ ->
+        if elem p elems
+        then nubPreds' xs elems
+        else nubPreds' xs (Pred tc x:elems)
+    _ -> nubPreds' xs elems
+  nubPreds' [] elems = pure (reverse elems)
+  info = term ^. Typed.termInfo
+  genPred (Pred t pty) = do
+    (o, pty')  <- gen' pty
+    when (o /= []) $ fail "Invariant failure"
+    pure (Pred t pty')
+  gen' (TyVar tv) = lift (readTvRef tv) >>= \case
+    Unbound n u l -> do
+      cl <- lift currentLevel
+      if l > cl then do
+        lift (writeTvRef tv (Bound n u))
+        gets (Set.member u) >>= \case
+          True -> pure ([], TyVar tv)
+          False -> modify' (Set.insert u) $> ([tv], TyVar tv)
+      else pure ([], TyVar tv)
+    Link t' -> gen' t'
+    Bound _ _ -> pure ([], TyVar tv)
+  gen' (TyFun l r) = do
+    (ftvl, l') <- gen' l
+    (ftvr, r') <- gen' r
+    pure (ftvl ++ ftvr,TyFun l' r')
+  gen' t@TyPrim{} = pure ([], t)
+  gen' (TyList t) = over _2 TyList <$> gen' t
+  gen' TyGuard = pure ([], TyGuard)
+  gen' t@TyForall{} = pure ([], t)
 
 liftType :: Type Void -> Type a
 liftType = fmap absurd
@@ -845,77 +858,72 @@ inferReplProgram
 inferReplProgram = traverse inferReplTopLevel
 
 
--- Todo: check interfaces
--- inferModule (IR.Module mname gov defs )
-
--- -- | Transform types into their debruijn-indexed version
--- -- Essentially: Start at depth 0:
--- --  rename : (Term, Γ, Int) -> IxTerm
--- --  rename (ΛX.e, tyEnv, DEPTH) = Λ. (rename (e, tyEnv[depth/X], DEPTH+1))
--- --  .. other cases are simply renaming recursively and calling `renameType`
--- --  on occurences of Type
--- --
--- --  NOTE: the passed in DEPTH is 1 higher than the highest binder.
--- --
--- --  renameType : (Type, Γ, Int) -> IxType
--- --  renameType (a, env, DEPTH) = DEPTH - env(a) - 1
--- --  .. other recursive cases are straightforward
--- --
--- --  Quip: when we debruijnize types, we expect no impredicative polymorphism atm,
--- --  thus we will fail on universially quantified types found in application and
--- --  var binding sites.
--- --  The typechecker does not spit out impredicative polymorphism, but while
--- --  it would be trivial to support their renaming here, I'd rather fail
--- --  for now as the typechecker does not support it and it functions as a sanity check
--- debruijnizeTermTypes :: TCTerm s b i -> InferM s b i (TypedTerm b i)
--- debruijnizeTermTypes = dbj [] 0
-  -- where
-  -- dbj :: [(TvRef s, NamedDeBruijn)] -> DeBruijn -> TCTerm s b i -> InferM s b i (TypedTerm b i)
-  -- dbj env depth = \case
-  --   Typed.Var n i ->
-  --     pure (Typed.Var n i)
-  --   Typed.Lam nts e i -> do
-  --     nts' <- _2 (dbjTyp env depth) nts
-  --     e' <- dbj env depth e
-  --     pure (Typed.Lam nts' e' i)
-      -- where
-      -- dbjBoth (nn, tty) = do
-      --   nn' <- dbjName env depth nn
-      --   tty' <- dbjTyp env depth tty
-      --   pure (nn', tty')
-    -- Typed.App l r i ->
-    --   Typed.App <$> dbj env depth l <*> traverse (dbj env depth) r <*> pure i
-    -- Typed.Let n e1 e2 i -> do
-    --   e1' <- dbj env depth e1
-    --   e2' <- dbj env depth e2
-    --   pure (Typed.Let n e1' e2' i)
-    -- Typed.TyApp e args i -> do
-    --   e' <- dbj env depth e
-    --   args' <- traverse (dbjTyp env depth) args
-    --   pure (Typed.TyApp e' args' i)
-    -- Typed.Block nel i ->
-    --   Typed.Block <$> traverse (dbj env depth) nel <*> pure i
-    -- Typed.ObjectLit obj i ->
-    --   Typed.ObjectLit <$> traverse (dbj env depth) obj <*> pure i
-    -- Typed.ObjectOp oop i -> fmap (`Typed.ObjectOp` i) $ case oop of
-    --   ObjectAccess f o -> do
-    --     o' <- dbj env depth o
-    --     pure (ObjectAccess f o')
-    --   ObjectRemove f o -> do
-    --     o' <- dbj env depth o
-    --     pure (ObjectRemove f o')
-    --   ObjectExtend f v o -> do
-    --     v' <- dbj env depth v
-    --     o' <- dbj env depth o
-    --     pure (ObjectExtend f v' o')
-    -- Typed.ListLit ty v i ->
-    --   Typed.ListLit <$> dbjTyp env depth ty <*> traverse (dbj env depth) v <*> pure i
-    -- Typed.Builtin (b, tys, preds) i -> do
-    --   tys' <- traverse (dbjTyp env depth) tys
-    --   preds' <- traverse (dbjPred env depth) preds
-    --   pure (Typed.Builtin (b, tys', preds') i)
-    -- Typed.Constant l i -> pure (Typed.Constant l i)
-
+-- | Transform types into their debruijn-indexed version
+-- Essentially: Start at depth 0:
+--  rename : (Term, Γ, Int) -> IxTerm
+--  rename (ΛX.e, tyEnv, DEPTH) = Λ. (rename (e, tyEnv[depth/X], DEPTH+1))
+--  .. other cases are simply renaming recursively and calling `renameType`
+--  on occurences of Type
+--
+--  NOTE: the passed in DEPTH is 1 higher than the highest binder.
+--
+--  renameType : (Type, Γ, Int) -> IxType
+--  renameType (a, env, DEPTH) = DEPTH - env(a) - 1
+--  .. other recursive cases are straightforward
+--
+--  Quip: when we debruijnize types, we expect no impredicative polymorphism atm,
+--  thus we will fail on universially quantified types found in application and
+--  var binding sites.
+--  The typechecker does not spit out impredicative polymorphism, but while
+--  it would be trivial to support their renaming here, I'd rather fail
+--  for now as the typechecker does not support it and it functions as a sanity check
+debruijnizeTermTypes
+  :: TCTerm s b i ->
+    InferM s b i (Typed.Term Name NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i)
+debruijnizeTermTypes = dbj [] 0
+  where
+  dbj
+    :: [(TvRef s, NamedDeBruijn)]
+    -> DeBruijn
+    -> TCTerm s b i
+    -> InferM s b i (Typed.Term Name NamedDeBruijn (b, [Type NamedDeBruijn], [Pred NamedDeBruijn]) i)
+  dbj env depth = \case
+    Typed.Var n i ->
+      pure (Typed.Var n i)
+    Typed.Lam nts e i -> do
+      nts' <- (traversed._2) (dbjTyp env depth) nts
+      e' <- dbj env depth e
+      pure (Typed.Lam nts' e' i)
+    Typed.App l r i ->
+      Typed.App <$> dbj env depth l <*> traverse (dbj env depth) r <*> pure i
+    Typed.Let n e1 e2 i -> do
+      e1' <- dbj env depth e1
+      e2' <- dbj env depth e2
+      pure (Typed.Let n e1' e2' i)
+    Typed.TyAbs ntys e i -> do
+      let len = fromIntegral (NE.length ntys)
+          ixs = NE.fromList [depth .. depth + len - 1]
+      names <- traverse (nameTvs (depth + len)) (NE.zip ntys ixs)
+      let env' = NE.toList $ NE.zip ntys names
+      Typed.TyAbs names <$> dbj (env' ++ env) (depth + len) e <*> pure i
+    Typed.TyApp e args i -> do
+      e' <- dbj env depth e
+      args' <- traverse (dbjTyp env depth) args
+      pure (Typed.TyApp e' args' i)
+    Typed.Sequence e1 e2 i ->
+      Typed.Sequence <$> dbj env depth e1 <*> dbj env depth e2 <*> pure i
+    Typed.Try e1 e2 i ->
+      Typed.Try <$> dbj env depth e1 <*> dbj env depth e2 <*> pure i
+    Typed.Error t e i -> do
+      ty <- dbjTyp env depth t
+      pure (Typed.Error ty e i)
+    Typed.ListLit ty v i ->
+      Typed.ListLit <$> dbjTyp env depth ty <*> traverse (dbj env depth) v <*> pure i
+    Typed.Builtin (b, tys, preds) i -> do
+      tys' <- traverse (dbjTyp env depth) tys
+      preds' <- traverse (dbjPred env depth) preds
+      pure (Typed.Builtin (b, tys', preds') i)
+    Typed.Constant l i -> pure (Typed.Constant l i)
 
 
 nameTvs :: DeBruijn -> (TvRef s, DeBruijn) -> InferM s b i NamedDeBruijn
@@ -923,7 +931,7 @@ nameTvs depth (nt, i) = readTvRef nt >>= \case
   Bound n _ -> pure (NamedDeBruijn (depth - i - 1) n)
   _ -> fail "found unbound variable"
 
-noTypeVariables :: TCType s -> InferM s b i (Type Void)
+noTypeVariables :: TCType s -> InferM s b i (Type a)
 noTypeVariables = \case
   TyVar n -> readTvRef n >>= \case
     Link ty -> noTypeVariables ty
@@ -934,7 +942,7 @@ noTypeVariables = \case
   TyGuard -> pure TyGuard
   TyForall _ _ -> fail "Encountered universal quantification emitted by the typechecker. Impossible"
 
-noTyVarsinPred :: TCPred s -> InferM s b i (Pred Void)
+noTyVarsinPred :: TCPred s -> InferM s b i (Pred NamedDeBruijn)
 noTyVarsinPred (Pred tc ty) = Pred tc <$> noTypeVariables ty
 
 noTyVarsinTerm :: TCTerm s b i -> InferM s b i (TypedTerm b i)
@@ -951,9 +959,13 @@ noTyVarsinTerm = \case
     ty' <- traverse noTypeVariables ty
     p' <- traverse noTyVarsinPred p
     pure $ Typed.Builtin (b, ty', p') i
+  Typed.TyAbs _ns _e _i -> fail "Encountered type variable in term"
   Typed.Constant l i -> pure (Typed.Constant l i)
   Typed.TyApp l tys i ->
-    Typed.TyApp <$> noTyVarsinTerm l <*> traverse noTypeVariables tys <*> pure i
+    Typed.TyApp
+      <$> noTyVarsinTerm l
+      <*> traverse noTypeVariables tys
+      <*> pure i
   Typed.Sequence e1 e2 i ->
     Typed.Sequence <$> noTyVarsinTerm e1 <*> noTyVarsinTerm e2 <*> pure i
   Typed.ListLit ty li i ->
@@ -973,43 +985,43 @@ noTyVarsinTerm = \case
 --   OTopLevel m h -> pure (OTopLevel m h)
 --   OBuiltinDict b -> OBuiltinDict <$> dbjPred env depth b
 
--- debruijnizeTypeScheme :: TypeScheme (TvRef s) -> InferM s b i (TypeScheme NamedDeBruijn)
--- debruijnizeTypeScheme (TypeScheme tvs preds t) = do
---     let len = fromIntegral (length tvs)
---     let ixs = [0.. len - 1]
---     names <- traverse (nameTvs len) (zip tvs ixs)
---     let env = zip tvs names
---     t' <- dbjTyp env len t
---     preds' <- traverse (dbjPred env len) preds
---     pure (TypeScheme names preds' t')
+debruijnizeTypeScheme :: TypeScheme (TvRef s) -> InferM s b i (TypeScheme NamedDeBruijn)
+debruijnizeTypeScheme (TypeScheme tvs preds t) = do
+    let len = fromIntegral (length tvs)
+    let ixs = [0.. len - 1]
+    names <- traverse (nameTvs len) (zip tvs ixs)
+    let env = zip tvs names
+    t' <- dbjTyp env len t
+    preds' <- traverse (dbjPred env len) preds
+    pure (TypeScheme names preds' t')
 
--- debruijnizeType :: TCType s -> InferM s b i (Type NamedDeBruijn)
--- debruijnizeType = dbjTyp [] 0
+debruijnizeType :: TCType s -> InferM s b i (Type NamedDeBruijn)
+debruijnizeType = dbjTyp [] 0
 
--- dbjPred
---   :: [(TvRef s, NamedDeBruijn)]
---   -> DeBruijn
---   -> TCPred s
---   -> InferM s b i (Pred NamedDeBruijn)
--- dbjPred env depth (Pred tc ty) =
---   Pred tc <$> dbjTyp env depth ty
+dbjPred
+  :: [(TvRef s, NamedDeBruijn)]
+  -> DeBruijn
+  -> TCPred s
+  -> InferM s b i (Pred NamedDeBruijn)
+dbjPred env depth (Pred tc ty) =
+  Pred tc <$> dbjTyp env depth ty
 
--- dbjTyp
---   :: [(TvRef s, NamedDeBruijn)]
---   -> DeBruijn
---   -> TCType s
---   -> InferM s b i (Type NamedDeBruijn)
--- dbjTyp env depth = \case
---   TyVar n -> case lookup n env of
---     Just v -> pure (TyVar v)
---     Nothing -> readTvRef n >>= \case
---       Unbound {} -> fail "unbound type"
---       Bound{} -> fail "invariant failure: bound variable otuside "
---       Link ty -> dbjTyp env depth ty
---   TyPrim p -> pure (TyPrim p)
---   TyFun l r -> TyFun <$> dbjTyp env depth l <*> dbjTyp env depth r
---   TyList l -> TyList <$> dbjTyp env depth l
---   _ -> fail "impredicative"
+dbjTyp
+  :: [(TvRef s, NamedDeBruijn)]
+  -> DeBruijn
+  -> TCType s
+  -> InferM s b i (Type NamedDeBruijn)
+dbjTyp env depth = \case
+  TyVar n -> case lookup n env of
+    Just v -> pure (TyVar v)
+    Nothing -> readTvRef n >>= \case
+      Unbound {} -> fail "unbound type"
+      Bound{} -> fail "invariant failure: bound variable otuside "
+      Link ty -> dbjTyp env depth ty
+  TyPrim p -> pure (TyPrim p)
+  TyFun l r -> TyFun <$> dbjTyp env depth l <*> dbjTyp env depth r
+  TyList l -> TyList <$> dbjTyp env depth l
+  _ -> fail "impredicative"
 
 -- -----------------------------------------
 -- --- Built-in type wiring
@@ -1232,17 +1244,21 @@ runInferTerm
   :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IRTerm b i
-  -> IO (Type Void, TypedTerm b i)
+  -> IO (TypeScheme NamedDeBruijn, TypedGenTerm b i)
 runInferTerm loaded bfn term0 = stToIO $
   runInfer loaded bfn $ do
     enterLevel
     (ty, term1, preds) <- inferTerm term0
     leaveLevel
-    (deferred, retained) <- split preds
-    unless (null deferred && null retained) $ fail "term inferred with generic signature"
-    ty' <- noTypeVariables ty
-    tt <- noTyVarsinTerm term1
-    pure (ty', tt)
+    (tys', term', deferred) <- generalizeWithTerm' ty preds term1
+    unless (null deferred) $ fail "Term inferred with dictionary overloading"
+    dbjTyScheme <- debruijnizeTypeScheme tys'
+    dbjTerm <- debruijnizeTermTypes term'
+    -- (deferred, retained) <- split preds
+    -- unless (null deferred && null retained) $ fail "term inferred with generic signature"
+    -- ty' <- noTypeVariables ty
+    -- tt <- noTyVarsinTerm term1
+    pure (dbjTyScheme, dbjTerm)
 
 runInferModule
   :: Loaded b' i'

@@ -28,7 +28,7 @@ import Control.Monad.IO.Class(liftIO)
 import Control.Monad.Catch
 import Data.Text as Text
 import Data.ByteString(ByteString)
-import Data.Void
+-- import Data.Void
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString as B
@@ -64,7 +64,7 @@ data InterpretOutput b i
 data InterpretBundle
   = InterpretBundle
   { expr :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
-  , exprType :: ByteString -> ReplT CoreBuiltin (Type Void)
+  , exprType :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
   , program :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
   }
 
@@ -138,7 +138,7 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
 --   replLoaded .= loaded'
 --   pure value
 
-interpretExprTypeLisp :: ByteString -> ReplT CoreBuiltin (Type Void)
+interpretExprTypeLisp :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprTypeLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
@@ -162,7 +162,7 @@ interpretExprTypeLisp source = do
 
 interpretExprType
   :: DesugarOutput CoreBuiltin LineInfo (IR.Term Name RawBuiltin LineInfo)
-  -> ReplT CoreBuiltin (Type Void)
+  -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
   (ty, typed) <- liftIO (runInferTerm loaded' rawBuiltinType desugared)
   debugIfFlagSet DebugTypecheckerType ty

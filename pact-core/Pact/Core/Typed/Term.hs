@@ -20,8 +20,6 @@ module Pact.Core.Typed.Term
  , Literal(..)
  , TyVarType(..)
  , termInfo
- , traverseTermType
- , ETerm
  -- Post-overload
  , OverloadedTerm
  , OverloadedDefun
@@ -181,6 +179,8 @@ data Term name tyname builtin info
   -- ^ Constant/Literal values
   | TyApp (Term name tyname builtin info) (NonEmpty (Type tyname)) info
   -- ^ (e_1 @t)
+  | TyAbs (NonEmpty tyname) (Term name tyname builtin info) info
+  -- /\a. e where a is a type variable
   | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Blocks (to be replaced by Seq)
   | ListLit (Type tyname) [Term name tyname builtin info] info
@@ -198,39 +198,38 @@ data Term name tyname builtin info
   -- ^ {f_1:e_1, .., f_n:e_n}
 
 -- Post Typecheck terms + modules
-type OverloadedTerm b i =
-  Term Name Void (b, [Type Void], [Pred Void]) i
+type OverloadedTerm tyname b i =
+  Term Name tyname (b, [Type tyname], [Pred tyname]) i
 
-type OverloadedDefun b i =
-  Defun Name Void (b, [Type Void], [Pred Void]) i
+type OverloadedDefun tyname b i =
+  Defun Name tyname (b, [Type tyname], [Pred tyname]) i
 
-type OverloadedDefConst b i =
-  DefConst Name Void (b, [Type Void], [Pred Void]) i
+type OverloadedDefConst tyname b i =
+  DefConst Name tyname (b, [Type tyname], [Pred tyname]) i
 
-type OverloadedDef b i =
-  Def Name Void (b, [Type Void], [Pred Void]) i
+type OverloadedDef tyname b i =
+  Def Name tyname (b, [Type tyname], [Pred tyname]) i
 
-type OverloadedModule b i =
-  Module Name Void (b, [Type Void], [Pred Void]) i
+type OverloadedModule tyname b i =
+  Module Name tyname (b, [Type tyname], [Pred tyname]) i
 
-type OverloadedTopLevel b i =
-  TopLevel Name Void (b, [Type Void], [Pred Void]) i
+type OverloadedTopLevel tyname b i =
+  TopLevel Name tyname (b, [Type tyname], [Pred tyname]) i
 
-type OverloadedReplTopLevel b i =
-  ReplTopLevel Name Void (b, [Type Void], [Pred Void]) i
+type OverloadedReplTopLevel tyname b i =
+  ReplTopLevel Name tyname (b, [Type tyname], [Pred tyname]) i
 
 -- type OverloadedDefCap b i =
 --   DefCap Name (b, [Type Void], [Pred Void]) i
 
 -- On-chain, core builtin-types
-type CoreEvalTerm i = Term Name Void CoreBuiltin i
-type CoreEvalDefun i = Defun Name Void CoreBuiltin i
-type CoreEvalDefConst i = DefConst Name Void CoreBuiltin i
-type CoreEvalDef i = Def Name Void CoreBuiltin i
-type CoreEvalModule i = Module Name Void CoreBuiltin i
-type CoreEvalTopLevel i = TopLevel Name Void CoreBuiltin i
-type CoreEvalReplTopLevel i = ReplTopLevel Name Void CoreBuiltin i
-type ETerm b = Term Name b ()
+type CoreEvalTerm tyname  i = Term Name tyname CoreBuiltin i
+type CoreEvalDefun tyname i = Defun Name tyname CoreBuiltin i
+type CoreEvalDefConst tyname i = DefConst Name tyname CoreBuiltin i
+type CoreEvalDef tyname i = Def Name tyname CoreBuiltin i
+type CoreEvalModule tyname i = Module Name tyname CoreBuiltin i
+type CoreEvalTopLevel tyname i = TopLevel Name tyname CoreBuiltin i
+type CoreEvalReplTopLevel tyname i = ReplTopLevel Name tyname CoreBuiltin i
 
 
 instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
@@ -247,6 +246,8 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       prettyFollowing e = Pretty.hardline <> "in" <+> pretty e
     TyApp t (NE.toList -> apps) _ ->
       pretty t <+> Pretty.hsep (fmap prettyTyApp apps)
+    TyAbs (NE.toList -> ns) term _ ->
+      "/\\" <> Pretty.hsep (pretty <$> ns) <> "." <+> pretty term
     Sequence e1 e2 _ ->
       Pretty.parens ("seq" <+> pretty e1 <+> pretty e2)
     ListLit ty li _ ->
@@ -284,6 +285,8 @@ termInfo f = \case
     Let n e1 e2 <$> f i
   TyApp term ty i ->
     TyApp term ty <$> f i
+  TyAbs ns e i ->
+    TyAbs ns e <$> f i
   Sequence e1 e2 i ->
     Sequence e1 e2 <$> f i
   ListLit ty v i ->
@@ -299,38 +302,40 @@ termInfo f = \case
   -- ObjectLit obj i -> ObjectLit obj <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
 
-traverseTermType
-  :: Traversal
-    (Term name tyname builtin info)
-    (Term name tyname' builtin info)
-    (Type tyname)
-    (Type tyname')
-traverseTermType f = \case
-  Var n i -> pure (Var n i)
-  Lam ns body i ->
-    Lam <$> (traversed._2) f ns <*> traverseTermType f body <*> pure i
-  App l r i ->
-    App <$> traverseTermType f l <*> traverse (traverseTermType f) r <*> pure i
-  Let n e1 e2 i ->
-    Let n <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
-  TyApp l tyapps i ->
-    TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
-  Sequence e1 e2 i ->
-    Sequence <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
-  ListLit ty v i ->
-    ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
-  Constant l i ->
-    pure (Constant l i)
-  Builtin b i ->
-    pure (Builtin b i)
-  Try e1 e2 i ->
-    Try <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
-  Error t e i ->
-    Error <$> f t <*> pure e <*> pure i
-  -- ObjectLit obj i ->
-  --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
-  -- ObjectOp oop i ->
-  --   ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
+-- traverseTermType
+--   :: Traversal
+--     (Term name tyname builtin info)
+--     (Term name tyname' builtin info)
+--     (Type tyname)
+--     (Type tyname')
+-- traverseTermType f = \case
+--   Var n i -> pure (Var n i)
+--   Lam ns body i ->
+--     Lam <$> (traversed._2) f ns <*> traverseTermType f body <*> pure i
+--   App l r i ->
+--     App <$> traverseTermType f l <*> traverse (traverseTermType f) r <*> pure i
+--   Let n e1 e2 i ->
+--     Let n <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
+--   TyAbs ns e i ->
+--     TyAbs
+--   TyApp l tyapps i ->
+--     TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
+--   Sequence e1 e2 i ->
+--     Sequence <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
+--   ListLit ty v i ->
+--     ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
+--   Constant l i ->
+--     pure (Constant l i)
+--   Builtin b i ->
+--     pure (Builtin b i)
+--   Try e1 e2 i ->
+--     Try <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
+--   Error t e i ->
+--     Error <$> f t <*> pure e <*> pure i
+--   -- ObjectLit obj i ->
+--   --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
+--   -- ObjectOp oop i ->
+--   --   ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case
@@ -340,6 +345,8 @@ instance Plated (Term name tyname builtin info) where
     Let n e1 e2 i ->
       Let n <$> f e1 <*> f e2 <*> pure i
     TyApp term ty i -> TyApp <$> f term <*> pure ty <*> pure i
+    TyAbs ns term i ->
+      TyAbs ns <$> f term <*> pure i
     ListLit ty ts i ->
       ListLit ty <$> traverse f ts <*> pure i
     Sequence e1 e2 i ->

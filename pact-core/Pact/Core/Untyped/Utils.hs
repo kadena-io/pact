@@ -28,6 +28,8 @@ fromTypedTerm = \case
     Constant lit i
   Typed.TyApp te _ _ ->
     fromTypedTerm te
+  Typed.TyAbs _ term _ ->
+    fromTypedTerm term
   Typed.Sequence e1 e2 i ->
     Sequence (fromTypedTerm e1) (fromTypedTerm e2) i
   Typed.ListLit _ vec i ->

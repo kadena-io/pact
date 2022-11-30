@@ -5,7 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-
+{-# LANGUAGE ScopedTypeVariables #-}
 
 
 module Pact.Core.Typed.Overload
@@ -20,7 +20,6 @@ module Pact.Core.Typed.Overload
 import Control.Monad.Except
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
-import Data.Void
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -38,8 +37,9 @@ import Pact.Core.Typed.Term
 type OverloadM = Either String
 
 resolveTerm
-  :: OverloadedTerm RawBuiltin info
-  -> OverloadM (CoreEvalTerm info)
+  :: forall info tyname.
+     OverloadedTerm tyname RawBuiltin info
+  -> OverloadM (CoreEvalTerm tyname info)
 resolveTerm = \case
   Var n i -> pure (Var n i)
   Lam nts e i ->
@@ -60,6 +60,8 @@ resolveTerm = \case
     solveOverload i b
   Try e1 e2 i ->
     Try <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
+  TyAbs ns term i ->
+    TyAbs ns <$> resolveTerm term <*> pure i
   Error t e i ->
     pure (Error t e i)
   -- ObjectLit ms i ->
@@ -78,8 +80,8 @@ resolveTerm = \case
 
   specializeAdd
     :: info
-    -> Pred Void
-    -> OverloadM (CoreEvalTerm info)
+    -> Pred tyname
+    -> OverloadM (CoreEvalTerm tyname info)
   specializeAdd i (Pred _ t) = case t of
     TyInt -> pure (Builtin AddInt i)
     TyDecimal -> pure (Builtin AddDec i)
@@ -91,8 +93,8 @@ resolveTerm = \case
   specializeNumOp
     :: info
     -> NumResolution
-    -> Pred Void
-    -> OverloadM (CoreEvalTerm info)
+    -> Pred tyname
+    -> OverloadM (CoreEvalTerm tyname info)
   specializeNumOp i reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_nrIntInstance reso) i)
     TyDecimal -> pure (Builtin (_nrDecInstance reso) i)
@@ -102,8 +104,8 @@ resolveTerm = \case
     :: info
     -> RawBuiltin
     -> EqResolution
-    -> Pred Void
-    -> OverloadM (CoreEvalTerm info)
+    -> Pred tyname
+    -> OverloadM (CoreEvalTerm tyname info)
   specializeEq i raw reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_erIntInstance reso) i)
     TyDecimal -> pure (Builtin (_erDecInstance reso) i)
@@ -118,8 +120,8 @@ resolveTerm = \case
     :: info
     -> RawBuiltin
     -> OrdResolution
-    -> Pred Void
-    -> OverloadM (CoreEvalTerm info)
+    -> Pred tyname
+    -> OverloadM (CoreEvalTerm tyname info)
   specializeOrd i raw reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_orIntInstance reso) i)
     TyDecimal -> pure (Builtin (_orDecInstance reso) i)
@@ -132,8 +134,8 @@ resolveTerm = \case
   specializeFracOp
     :: info
     -> FracResolution
-    -> Pred Void
-    -> OverloadM (CoreEvalTerm info)
+    -> Pred tyname
+    -> OverloadM (CoreEvalTerm tyname info)
   specializeFracOp i reso (Pred _ t) = case t of
     TyInt -> pure (Builtin (_frIntInstance reso) i)
     TyDecimal -> pure (Builtin (_frDecInstance reso) i)
@@ -142,8 +144,8 @@ resolveTerm = \case
   specializeListLikeOp
     :: info
     -> ListLikeResolution
-    -> Pred Void
-    -> OverloadM (CoreEvalTerm info)
+    -> Pred tyname
+    -> OverloadM (CoreEvalTerm tyname info)
   specializeListLikeOp i reso (Pred _ t) = case t of
     TyString -> pure (Builtin (_llrStrInstance reso) i)
     TyList _ -> pure (Builtin (_llrListInstance reso) i)
@@ -163,8 +165,8 @@ resolveTerm = \case
   -- on the raw builtins
   solveOverload
     :: info
-    -> (RawBuiltin, [Type Void], [Pred Void])
-    -> OverloadM (CoreEvalTerm info)
+    -> (RawBuiltin, [Type tyname], [Pred tyname])
+    -> OverloadM (CoreEvalTerm tyname info)
   solveOverload i = \case
     -- Addition
     -- Note, we can also sanity check this here.
@@ -289,8 +291,6 @@ resolveTerm = \case
           a1 = (a1Var, t)
           app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
       pure (Lam (a1 :| []) app i)
-    -- (RawShow, [_], [p]) ->
-      -- accessDict i "show" <$> lookupDictVar i p
     (RawEnumerate, [], []) ->
       pure (Builtin Enumerate i)
     (RawEnumerateStepN, [], []) ->
@@ -321,15 +321,15 @@ resolveTerm = \case
     _ -> error "could not resolve overload"
 
 resolveDefun
-  :: OverloadedDefun RawBuiltin info
-  -> OverloadM (CoreEvalDefun info)
+  :: OverloadedDefun tyname RawBuiltin info
+  -> OverloadM (CoreEvalDefun tyname info)
 resolveDefun (Defun dname ty term info) = do
   term' <- resolveTerm term
   pure (Defun dname ty term' info)
 
 resolveDefConst
-  :: OverloadedDefConst RawBuiltin info
-  -> OverloadM (CoreEvalDefConst info)
+  :: OverloadedDefConst tyname RawBuiltin info
+  -> OverloadM (CoreEvalDefConst tyname info)
 resolveDefConst (DefConst dname ty term info) = do
   term' <- resolveTerm term
   pure (DefConst dname ty term' info)
@@ -343,37 +343,37 @@ resolveDefConst (DefConst dname ty term info) = do
 --   pure (DefCap dname dargs term' captype' termtype info)
 
 resolveDef
-  :: OverloadedDef RawBuiltin info
-  -> OverloadM (CoreEvalDef info)
+  :: OverloadedDef tyname RawBuiltin info
+  -> OverloadM (CoreEvalDef tyname info)
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
   -- DCap d -> DCap <$> resolveDefCap d
 
 resolveModule
-  :: OverloadedModule RawBuiltin info
-  -> OverloadM (CoreEvalModule info)
+  :: OverloadedModule tyname RawBuiltin info
+  -> OverloadM (CoreEvalModule tyname info)
 resolveModule m = do
   defs' <- traverse resolveDef (_mDefs m)
   -- let gov' = unsafeToTLName <$> _mGovernance m
   pure m{_mDefs=defs'}
 
 resolveTopLevel
-  :: OverloadedTopLevel RawBuiltin info
-  -> OverloadM (CoreEvalTopLevel info)
+  :: OverloadedTopLevel tyname RawBuiltin info
+  -> OverloadM (CoreEvalTopLevel tyname info)
 resolveTopLevel = \case
   TLModule m -> TLModule <$> resolveModule m
   TLTerm t -> TLTerm <$> resolveTerm t
   _ -> error "unimplemented"
 
 resolveProgram
-  :: [OverloadedTopLevel RawBuiltin info]
-  -> OverloadM [CoreEvalTopLevel info]
+  :: [OverloadedTopLevel tyname RawBuiltin info]
+  -> OverloadM [CoreEvalTopLevel tyname info]
 resolveProgram  = traverse resolveTopLevel
 
 resolveReplTopLevel
-  :: OverloadedReplTopLevel RawBuiltin info
-  -> OverloadM (CoreEvalReplTopLevel info)
+  :: OverloadedReplTopLevel tyname RawBuiltin info
+  -> OverloadM (CoreEvalReplTopLevel tyname info)
 resolveReplTopLevel = \case
   RTLModule m -> RTLModule <$> resolveModule m
   RTLTerm t -> RTLTerm <$> resolveTerm t
@@ -381,8 +381,8 @@ resolveReplTopLevel = \case
   RTLDefConst d -> RTLDefConst <$> resolveDefConst d
 
 resolveReplProgram
-  :: [OverloadedReplTopLevel RawBuiltin info]
-  -> OverloadM [CoreEvalReplTopLevel info]
+  :: [OverloadedReplTopLevel tyname RawBuiltin info]
+  -> OverloadM [CoreEvalReplTopLevel tyname info]
 resolveReplProgram = traverse resolveReplTopLevel
 
 -------------------------------------------------
@@ -866,26 +866,26 @@ runOverload = either fail pure
   -- let st = ROState mempty 0
   -- runReaderT act st
 
-runOverloadTerm :: OverloadedTerm RawBuiltin i -> IO (CoreEvalTerm i)
+runOverloadTerm :: OverloadedTerm tyname RawBuiltin i -> IO (CoreEvalTerm tyname i)
 runOverloadTerm t = runOverload (resolveTerm t)
 
-runOverloadModule :: OverloadedModule RawBuiltin i -> IO (CoreEvalModule i)
+runOverloadModule :: OverloadedModule tyname RawBuiltin i -> IO (CoreEvalModule tyname i)
 runOverloadModule m = runOverload (resolveModule m)
 
-runOverloadTopLevel :: OverloadedTopLevel RawBuiltin info -> IO (CoreEvalTopLevel info)
+runOverloadTopLevel :: OverloadedTopLevel tyname RawBuiltin info -> IO (CoreEvalTopLevel tyname info)
 runOverloadTopLevel tl = runOverload (resolveTopLevel tl)
 
 runOverloadReplTopLevel
-  :: OverloadedReplTopLevel RawBuiltin info
-  -> IO (CoreEvalReplTopLevel info)
+  :: OverloadedReplTopLevel tyname RawBuiltin info
+  -> IO (CoreEvalReplTopLevel tyname info)
 runOverloadReplTopLevel tl = runOverload (resolveReplTopLevel tl)
 
 runOverloadProgram
-  :: [OverloadedTopLevel RawBuiltin info]
-  -> IO [CoreEvalTopLevel info]
+  :: [OverloadedTopLevel tyname RawBuiltin info]
+  -> IO [CoreEvalTopLevel tyname info]
 runOverloadProgram prog = runOverload (resolveProgram prog)
 
 runOverloadReplProgram
-  :: [OverloadedReplTopLevel RawBuiltin info]
-  -> IO [CoreEvalReplTopLevel info]
+  :: [OverloadedReplTopLevel tyname RawBuiltin info]
+  -> IO [CoreEvalReplTopLevel tyname info]
 runOverloadReplProgram prog = runOverload (resolveReplProgram prog)
