@@ -350,7 +350,7 @@ parseError (remaining, exp) =
   let rendered = renderTokenText . _ptToken <$> remaining
       expected = T.pack <$> exp
       li = maybe (LineInfo 0 0 1) _ptInfo (preview _head remaining)
-  in throwError $ PEParseError $ (ParsingError rendered expected li)
+  in throwParseError (ParsingError rendered expected) li
 
 mkIntegerConstant n i =
   let strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
@@ -359,7 +359,7 @@ mkIntegerConstant n i =
 mkDecimal num dec i = do
   let strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
       prec = T.length dec
-  when (prec > 255) $ throwError $ PEParseError $ PrecisionOverflowError prec i
+  when (prec > 255) $ throwParseError (PrecisionOverflowError prec) i
   let out = Decimal (fromIntegral prec) (strToNum (strToNum 0 num) dec)
   pure $ Constant (LDecimal out) i
 

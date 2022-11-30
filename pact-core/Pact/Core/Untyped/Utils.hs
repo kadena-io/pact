@@ -37,7 +37,6 @@ fromTypedTerm = \case
   Typed.Try e1 e2 i ->
     Try (fromTypedTerm e1) (fromTypedTerm e2) i
   Typed.Error _ e i -> Error e i
-  -- Typed.TyAbs _ te _ -> fromTypedTerm te
   -- Typed.ObjectLit m i ->
   --   ObjectLit (fromTypedTerm <$> m) i
   -- Typed.ObjectOp oo i ->

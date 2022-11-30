@@ -153,8 +153,8 @@ newtype Layout
   = Layout Int
   deriving (Eq, Show)
 
-newtype LexerT a =
-  LexerT (StateT AlexInput (Either PactErrorI) a)
+newtype LexerM a =
+  LexerM (StateT AlexInput (Either PactErrorI) a)
   deriving
     ( Functor, Applicative
     , Monad
@@ -163,34 +163,37 @@ newtype LexerT a =
   via (StateT AlexInput (Either PactErrorI))
 
 
-column :: LexerT Int
+column :: LexerM Int
 column = gets _inpColumn
 
 initState :: ByteString -> AlexInput
 initState s = AlexInput 0 1 '\n' s
 
-getLineInfo :: LexerT LineInfo
+getLineInfo :: LexerM LineInfo
 getLineInfo = do
   input <- get
   pure (LineInfo (_inpLine input) (_inpColumn input) 1)
 
-withLineInfo :: Token -> LexerT PosToken
+withLineInfo :: Token -> LexerM PosToken
 withLineInfo tok = PosToken tok <$> getLineInfo
 
-emit :: (Text -> Token) -> Text -> LexerT PosToken
+emit :: (Text -> Token) -> Text -> LexerM PosToken
 emit f e = withLineInfo (f e)
 
-token :: Token -> Text -> LexerT PosToken
+token :: Token -> Text -> LexerM PosToken
 token tok = const (withLineInfo tok)
 
-throwLexerError :: LexerError LineInfo -> LexerT a
-throwLexerError = throwError . PELexerError
+throwLexerError :: LexerError -> LineInfo -> LexerM a
+throwLexerError le = throwError . PELexerError le
 
-throwLexerError' :: (LineInfo -> LexerError LineInfo) -> LexerT a
-throwLexerError' f = getLineInfo >>= throwLexerError . f
+throwLexerError' :: LexerError -> LexerM a
+throwLexerError' le = getLineInfo >>= throwLexerError le
 
-runLexerT :: LexerT a -> ByteString -> Either PactErrorI a
-runLexerT (LexerT act) s = evalStateT act (initState s)
+throwParseError :: ParseError -> LineInfo -> ParserT a
+throwParseError pe = throwError . PEParseError pe
+
+runLexerT :: LexerM a -> ByteString -> Either PactErrorI a
+runLexerT (LexerM act) s = evalStateT act (initState s)
 
 renderTokenText :: Token -> Text
 renderTokenText = \case

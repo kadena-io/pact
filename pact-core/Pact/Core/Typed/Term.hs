@@ -88,7 +88,6 @@ data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
   deriving Show
-  -- | DCap (DefCap name builtin info)
 
 -- Todo: deftypes to support
 -- DCap (DefCap name builtin info)
@@ -191,12 +190,6 @@ data Term name tyname builtin info
   -- ^ Error term
   deriving (Show, Functor)
 
-  -- ^ [e_1, e_2, .., e_n]
-  -- | ObjectOp (ObjectOp (Term name builtin info)) info
-  -- ^ access, removal
-  -- | ObjectLit (Map Field (Term name builtin info)) info
-  -- ^ {f_1:e_1, .., f_n:e_n}
-
 -- Post Typecheck terms + modules
 type OverloadedTerm tyname b i =
   Term Name tyname (b, [Type tyname], [Pred tyname]) i
@@ -258,20 +251,8 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
     Error _ e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
-    -- "{" <> Pretty.hardline <> prettyBlock nel <> "}"
-    -- ObjectLit (Map.toList -> obj) _ ->
-    --   Pretty.braces $ Pretty.hsep $ Pretty.punctuate Pretty.comma $ fmap (\(f, o) -> pretty f <> ":" <+> pretty o) obj
-    -- ObjectOp oop _ -> case oop of
-    --   ObjectAccess f o ->
-    --     "accessObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
-    --   ObjectRemove f o ->
-    --     "removeObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o)
-    --   ObjectExtend f v o ->
-    --     "updateObj" <> Pretty.brackets ("'" <> pretty f) <> Pretty.parens (pretty o <> "," <+> pretty v)
     where
     prettyTyApp ty = "@(" <> pretty ty <> ")"
-    -- prettyBlock (NE.toList -> nel) =
-    --   Pretty.vsep (pretty <$> nel)
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
@@ -301,41 +282,6 @@ termInfo f = \case
     Error t e <$> f i
   -- ObjectLit obj i -> ObjectLit obj <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
-
--- traverseTermType
---   :: Traversal
---     (Term name tyname builtin info)
---     (Term name tyname' builtin info)
---     (Type tyname)
---     (Type tyname')
--- traverseTermType f = \case
---   Var n i -> pure (Var n i)
---   Lam ns body i ->
---     Lam <$> (traversed._2) f ns <*> traverseTermType f body <*> pure i
---   App l r i ->
---     App <$> traverseTermType f l <*> traverse (traverseTermType f) r <*> pure i
---   Let n e1 e2 i ->
---     Let n <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
---   TyAbs ns e i ->
---     TyAbs
---   TyApp l tyapps i ->
---     TyApp <$> traverseTermType f l <*> traverse f tyapps <*> pure i
---   Sequence e1 e2 i ->
---     Sequence <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
---   ListLit ty v i ->
---     ListLit <$> f ty <*> traverse (traverseTermType f) v <*> pure i
---   Constant l i ->
---     pure (Constant l i)
---   Builtin b i ->
---     pure (Builtin b i)
---   Try e1 e2 i ->
---     Try <$> traverseTermType f e1 <*> traverseTermType f e2 <*> pure i
---   Error t e i ->
---     Error <$> f t <*> pure e <*> pure i
---   -- ObjectLit obj i ->
---   --   ObjectLit <$> traverse (traverseTermType f) obj <*> pure i
---   -- ObjectOp oop i ->
---   --   ObjectOp <$> traverse (traverseTermType f) oop <*> pure i
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case

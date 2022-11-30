@@ -33,12 +33,12 @@ module Pact.Core.IR.Typecheck
 import Control.Lens hiding (Level)
 import Control.Monad.Reader
 import Control.Monad.ST
-import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
+-- import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
 import Control.Monad.State.Strict
 import Control.Monad.Except
-import Control.Exception(throwIO, catch)
+-- import Control.Exception(throwIO, catch)
 import Data.Void
-import Data.Dynamic (Typeable)
+-- import Data.Dynamic (Typeable)
 import Data.RAList(RAList)
 import Data.Foldable(traverse_, foldlM)
 import Data.Functor(($>))
@@ -95,7 +95,7 @@ data TCState s b
   , _tcFree :: Map ModuleName (Map Text (Type Void))
   -- ^ Free variables
   , _tcLevel :: STRef s Level
-  -- Type Variable "Region"
+  -- ^ Type Variable "Region"
   }
 
 makeLenses ''TCState
@@ -129,27 +129,28 @@ type TypedReplTopLevel b i = Typed.OverloadedReplTopLevel NamedDeBruijn b i
 type TypedModule b i = Typed.OverloadedModule NamedDeBruijn b i
 
 newtype InferM s b i a =
-  InferT (ReaderT (TCState s b) (ST s) a)
+  InferT (ExceptT (PactError i) (ReaderT (TCState s b) (ST s)) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadReader (TCState s b)
-    , MonadFail)
-  via (ReaderT (TCState s b) (ST s))
+    , MonadFail
+    , MonadError (PactError i))
+  via (ExceptT (PactError i) (ReaderT (TCState s b) (ST s)))
 
 -- ABSOLUTELY UNHOLY USE OF ST
-instance (Show i, Typeable i) => MonadError (PactError i) (InferM s b i) where
-  throwError e =
-    InferT (ReaderT (const (unsafeIOToST (throwIO e))))
-  catchError act handler =
-    InferT (ReaderT (\s -> unsafeIOToST $ catch (unsafeMkIO s act) (handle' s)))
-    where
-    unsafeMkIO :: TCState s b -> InferM s b i a -> IO a
-    unsafeMkIO s (InferT act') = unsafeSTToIO (runReaderT act' s)
-    handle' s e = unsafeMkIO s (handler e)
+-- instance (Show i, Typeable i) => MonadError (PactError i) (InferM s b i) where
+--   throwError e =
+--     InferT (ReaderT (const (unsafeIOToST (throwIO e))))
+--   catchError act handler =
+--     InferT (ReaderT (\s -> unsafeIOToST $ catch (unsafeMkIO s act) (handle' s)))
+--     where
+--     unsafeMkIO :: TCState s b -> InferM s b i a -> IO a
+--     unsafeMkIO s (InferT act') = unsafeSTToIO (runReaderT act' s)
+--     handle' s e = unsafeMkIO s (handler e)
 
 
 liftST :: ST s a -> InferM s b i a
-liftST action = InferT (ReaderT (const action))
+liftST action = InferT (ExceptT (Right <$> ReaderT (const action)))
 
 _dbgTypedTerm
   :: TCTerm s b i
@@ -221,7 +222,7 @@ _dbgType = \case
   TyList t -> TyList <$> _dbgType t
   TyPrim p -> pure (TyPrim p)
   TyGuard -> pure TyGuard
-  TyForall {} -> fail "impredicative"
+  TyForall {} -> error "impredicative"
 
 
 enterLevel :: InferM s b i ()
@@ -614,7 +615,6 @@ generalizeWithTerm'
   -> InferM s b i (TypeScheme (TvRef s), TCTerm s b i, [TCPred s])
 generalizeWithTerm' ty pp term = do
   preds <- nubPreds pp
-  -- sts <- liftST (newSTRef Set.empty)
   ((ftvs, ty'), s) <- runStateT (gen' ty) Set.empty
   (deferred, retained) <- split preds
   retained' <- evalStateT (traverse genPred retained) s
@@ -1233,19 +1233,19 @@ runInfer
   :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> InferM s b i a
-  -> ST s a
+  -> ST s (Either (PactError i) a)
 runInfer loaded bfn (InferT act) = do
   uref <- newSTRef 0
   lref <- newSTRef 1
   let tcs = TCState uref mempty bfn (mkFree loaded) lref
-  runReaderT act tcs
+  runReaderT (runExceptT act) tcs
 
 runInferTerm
   :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IRTerm b i
-  -> IO (TypeScheme NamedDeBruijn, TypedGenTerm b i)
-runInferTerm loaded bfn term0 = stToIO $
+  -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedGenTerm b i)
+runInferTerm loaded bfn term0 = runST $
   runInfer loaded bfn $ do
     enterLevel
     (ty, term1, preds) <- inferTerm term0
@@ -1264,30 +1264,30 @@ runInferModule
   :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IRModule b i
-  -> IO (TypedModule b i)
+  -> Either (PactError i) (TypedModule b i)
 runInferModule loaded bfn term0 =
-  stToIO $ runInfer loaded bfn (inferModule term0)
+  runST $ runInfer loaded bfn (inferModule term0)
 
 runInferTopLevel
   :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> IR.TopLevel Name b i
-  -> IO (TypedTopLevel b i)
+  -> Either (PactError i) (TypedTopLevel b i)
 runInferTopLevel l bfn tl =
-  stToIO $ runInfer l bfn (inferTopLevel tl)
+  runST $ runInfer l bfn (inferTopLevel tl)
 
 runInferProgram
   :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> [IR.TopLevel Name b info]
-  -> IO [TypedTopLevel b info]
+  -> Either (PactError info) [TypedTopLevel b info]
 runInferProgram l bfn prog =
-  stToIO $ runInfer l bfn $ inferProgram prog
+  runST $ runInfer l bfn $ inferProgram prog
 
 runInferReplProgram
   :: Loaded b' i'
   -> (b -> TypeScheme NamedDeBruijn)
   -> [IR.ReplTopLevel Name b info]
-  -> IO [TypedReplTopLevel b info]
+  -> Either (PactError info) [TypedReplTopLevel b info]
 runInferReplProgram l bfn prog =
-  stToIO $ runInfer l bfn $ inferReplProgram prog
+  runST $ runInfer l bfn $ inferReplProgram prog

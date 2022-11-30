@@ -108,7 +108,7 @@ interpretExpr
   :: DesugarOutput CoreBuiltin LineInfo (IR.Term Name RawBuiltin LineInfo)
   -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
-  (ty, typed) <- liftIO (runInferTerm loaded' rawBuiltinType desugared)
+  (ty, typed) <- either (error . show) pure (runInferTerm loaded' rawBuiltinType desugared)
   debugIfFlagSet DebugTypecheckerType ty
   debugIfFlagSet DebugTypechecker typed
   resolved <- liftIO (runOverloadTerm typed)
@@ -164,7 +164,7 @@ interpretExprType
   :: DesugarOutput CoreBuiltin LineInfo (IR.Term Name RawBuiltin LineInfo)
   -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
-  (ty, typed) <- liftIO (runInferTerm loaded' rawBuiltinType desugared)
+  (ty, typed) <- either (error . show) pure (runInferTerm loaded' rawBuiltinType desugared)
   debugIfFlagSet DebugTypecheckerType ty
   debugIfFlagSet DebugTypechecker typed
   pure ty
@@ -229,7 +229,7 @@ interpretTopLevel
   -> ReplT CoreBuiltin (InterpretOutput CoreBuiltin LineInfo)
 interpretTopLevel (DesugarOutput desugared loaded deps) = do
   p <- use replPactDb
-  typechecked <- liftIO (runInferTopLevel loaded rawBuiltinType desugared)
+  typechecked <- either (error . show) pure (runInferTopLevel loaded rawBuiltinType desugared)
   overloaded <- liftIO (runOverloadTopLevel typechecked)
   case fromTypedTopLevel overloaded of
     TLModule m -> do

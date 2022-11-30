@@ -103,7 +103,7 @@ tokens :-
 
 {
 -- TODO: non-horrible errors
-scan :: LexerT PosToken
+scan :: LexerM PosToken
 scan = do
   input@(AlexInput _ _ _ bs) <- get
   case alexScan input 0 of
@@ -111,8 +111,9 @@ scan = do
     AlexError (AlexInput line col _last inp) ->
       let li = LineInfo line col 1
       in case B.uncons inp of
-        Just (h, _) -> throwLexerError (LexicalError (w2c h) _last li)
-        Nothing -> throwLexerError (OutOfInputError li)
+        Just (h, _) ->
+          throwLexerError (LexicalError (w2c h) _last) li
+        Nothing -> throwLexerError OutOfInputError li
     AlexSkip input' _ -> do
       put input'
       scan
@@ -121,7 +122,7 @@ scan = do
       let t = T.decodeLatin1 (B.take (fromIntegral tokl) bs)
       action t
 
-stringLiteral :: Text -> LexerT PosToken
+stringLiteral :: Text -> LexerM PosToken
 stringLiteral _ = do
   inp <- get
   info <- getLineInfo
@@ -152,7 +153,7 @@ stringLiteral _ = do
 
 -- A colon _may_ indicate the start of a block,
 -- so we emit the token and push the start code.
-scanTokens :: LexerT [PosToken]
+scanTokens :: LexerM [PosToken]
 scanTokens = scan' []
   where
   scan' acc =

@@ -94,7 +94,7 @@ eval = evalCEK Mt CEKNoHandler
         let fqn = FullyQualifiedName mname (_nName n) mh
         views cekLoaded (Map.lookup fqn) >>= \case
           Just d -> evalCEK cont handler RAList.Nil (defTerm d)
-          Nothing -> failInvariant "top level name not in scope"
+          Nothing -> failInvariant ("top level name " <> T.pack (show fqn) <> " not in scope")
   evalCEK cont handler _env (Constant l _) = do
     chargeNodeGas ConstantNode
     returnCEK cont handler (VLiteral l)
@@ -121,16 +121,27 @@ eval = evalCEK Mt CEKNoHandler
     evalCEK Mt handler' env rest
   -- Error terms ignore the current cont
   evalCEK _ handler _ (Error e _) =
-    case handler of
-      CEKNoHandler -> return (VError e)
-      CEKHandler env term cont' handler' ->
-        evalCEK cont' handler' env term
+    returnCEK Mt handler (VError e)
+    -- case handler of
+    --   CEKNoHandler -> return (VError e)
+    --   CEKHandler env term cont' handler' ->
+    --     evalCEK cont' handler' env term
     -- handleCEKError cont (VError e)
   returnCEK
     :: Cont b i
     -> CEKErrorHandler b i
     -> CEKValue b i
     -> EvalT b i (CEKValue b i)
+  returnCEK Mt handler v =
+    case handler of
+      CEKNoHandler -> return v
+      CEKHandler env term cont' handler' -> case v of
+        VError{} -> evalCEK cont' handler' env term
+        _ -> returnCEK cont' handler' v
+  -- Error terms that don't simply returnt the empty continuation
+  -- "Zero out" the continuation up to the latest handler
+  returnCEK _cont handler v@VError{} =
+    returnCEK Mt handler v
   returnCEK (Arg env arg cont) handler fn =
     evalCEK (Fn fn cont) handler env arg
   returnCEK (Fn fn cont) handler arg =
@@ -143,10 +154,6 @@ eval = evalCEK Mt CEKNoHandler
         returnCEK cont handler (VList (V.fromList (reverse (v:vals))))
       e:es ->
         evalCEK (ListC env es (v:vals) cont) handler env e
-  returnCEK Mt handler v = case handler of
-    CEKNoHandler -> return v
-    CEKHandler _env _term cont handler' ->
-      returnCEK cont handler' v
   applyLam (VClosure body env) arg cont handler =
     evalCEK cont handler (RAList.cons arg env) body
   applyLam (VNative (BuiltinFn b fn arity args)) arg cont handler
