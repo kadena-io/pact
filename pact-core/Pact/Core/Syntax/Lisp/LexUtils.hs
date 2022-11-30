@@ -167,7 +167,7 @@ column :: LexerM Int
 column = gets _inpColumn
 
 initState :: ByteString -> AlexInput
-initState s = AlexInput 0 1 '\n' s
+initState = AlexInput 0 1 '\n'
 
 getLineInfo :: LexerM LineInfo
 getLineInfo = do

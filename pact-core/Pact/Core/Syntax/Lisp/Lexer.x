@@ -33,8 +33,7 @@ $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 
 
 tokens :-
-    $white ;
-    [\;].*;
+    $white+;
     -- Keywords
     let          { token TokenLet }
     in           { token TokenIn }
