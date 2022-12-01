@@ -2942,6 +2942,23 @@ spec = describe "analyze" $ do
         `shouldBe`
         Left "in (+ 0 1), unexpected argument types for (+): integer and integer"
 
+    it "checks abs" $ do
+      textToProp SInteger "(abs 10)"
+        `shouldBe`
+        Right (Inj (IntUnaryArithOp Abs 10 :: Numerical Prop 'TyInteger))
+
+      textToProp SDecimal "(abs 10.0)"
+        `shouldBe`
+        Right (Inj (DecUnaryArithOp Abs 10 :: Numerical Prop 'TyDecimal))
+
+      inferProp'' "(abs 10)"
+        `shouldBe`
+        Right (Some SInteger (Inj (IntUnaryArithOp Abs 10 :: Numerical Prop 'TyInteger)))
+
+      inferProp'' "(abs 10.0)"
+        `shouldBe`
+        Right (Some SDecimal (Inj (DecUnaryArithOp Abs 10 :: Numerical Prop 'TyDecimal)))
+
     it "check take/drop" $ do
       textToProp SStr "(take 2 \"asdf\")"
         `shouldBe`
