@@ -122,11 +122,6 @@ eval = evalCEK Mt CEKNoHandler
   -- Error terms ignore the current cont
   evalCEK _ handler _ (Error e _) =
     returnCEK Mt handler (VError e)
-    -- case handler of
-    --   CEKNoHandler -> return (VError e)
-    --   CEKHandler env term cont' handler' ->
-    --     evalCEK cont' handler' env term
-    -- handleCEKError cont (VError e)
   returnCEK
     :: Cont b i
     -> CEKErrorHandler b i

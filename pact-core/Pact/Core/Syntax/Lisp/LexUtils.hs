@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -13,10 +14,13 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Word (Word8)
 import Data.Text(Text)
+import Data.List(intersperse)
 import Data.ByteString.Internal(w2c)
 import Data.ByteString(ByteString)
+import Data.Default
 
 import qualified Data.ByteString as B
+import qualified Data.Text as T
 
 import Pact.Core.Info
 import Pact.Core.Errors
@@ -134,13 +138,6 @@ alexGetByte (AlexInput line col _ stream) =
     , _inpColumn = 0
     , _inpLast = '\n'
     , _inpStream = rest})
-  advance (c, rest) | w2c c  == '\n' =
-    (c
-    , AlexInput
-    { _inpLine  = line + 1
-    , _inpColumn = 0
-    , _inpLast = '\n'
-    , _inpStream = rest})
   advance (c, rest) =
     (c
     , AlexInput
@@ -167,7 +164,7 @@ column :: LexerM Int
 column = gets _inpColumn
 
 initState :: ByteString -> AlexInput
-initState = AlexInput 0 1 '\n'
+initState = AlexInput 0 0 '\n'
 
 getLineInfo :: LexerM LineInfo
 getLineInfo = do
@@ -191,6 +188,30 @@ throwLexerError' le = getLineInfo >>= throwLexerError le
 
 throwParseError :: ParseError -> LineInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
+
+parseError :: ([PosToken], [String]) -> ParserT a
+parseError (remaining, exps) =
+  case (remaining, exps) of
+    (_, []) -> handleTooMuchInput remaining
+    (x:_, _) -> handleWithLastToken (_ptInfo x)
+    (_, _) -> handleWithLastToken def
+  where
+  renderList e =
+    "[" <> T.concat (intersperse ", " e) <> "]"
+  renderRemaining r
+    | length r <= 10 = renderList r
+    | otherwise = renderList $ (<> ["..."]) $ take 10 r
+  handleWithLastToken i =
+    throwParseError (ParsingError (renderRemaining (T.pack <$> exps))) i
+  handleTooMuchInput = \case
+    (PosToken TokenCloseParens i):rest ->
+      let rem' = renderRemaining (renderTokenText . _ptToken <$> rest)
+      in throwParseError (TooManyCloseParens rem') i
+    xs ->
+      let rem' = renderRemaining (renderTokenText . _ptToken <$> xs)
+      in throwParseError (UnexpectedInput rem') $ case xs of
+        [] -> def
+        x:_ -> _ptInfo x
 
 runLexerT :: LexerM a -> ByteString -> Either PactErrorI a
 runLexerT (LexerM act) s = evalStateT act (initState s)

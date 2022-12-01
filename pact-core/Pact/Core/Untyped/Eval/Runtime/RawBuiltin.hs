@@ -777,7 +777,8 @@ listAccess = mkBuiltinFn \case
   [VLiteral (LInteger i), VList vec] ->
     case vec V.!? fromIntegral i of
       Just v -> pure v
-      _ -> throwM ArrayOutOfBoundsException
+      Nothing ->
+        throwM (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
   _ -> failInvariant "list-access"
 
 -----------------------------------

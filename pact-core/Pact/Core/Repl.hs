@@ -20,9 +20,11 @@ module Main where
 import Control.Lens
 import Control.Monad.IO.Class(liftIO)
 import Control.Monad.Catch
+import Control.Monad.Except
 import System.Console.Haskeline
 import Data.IORef
 import Data.Foldable(traverse_)
+import Data.Text(Text)
 import Control.Monad.Trans(lift)
 
 import qualified Data.ByteString as B
@@ -35,6 +37,8 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Builtin
+import Pact.Core.Errors
+import Pact.Core.Info
 
 main :: IO ()
 main = do
@@ -42,7 +46,11 @@ main = do
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   ref <- newIORef (ReplState mempty emptyLoaded pactDb g evalLog)
-  runReplT ref (runInputT replSettings (loop lispInterpretBundle ref))
+  runReplT ref (runInputT replSettings (loop lispInterpretBundle ref)) >>= \case
+    Left err -> do
+      putStrLn "Exited repl session with error:"
+      putStrLn $ T.unpack $ replError (ReplSource "(interactive)" "") err
+    _ -> pure ()
   where
   replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
@@ -50,11 +58,11 @@ main = do
     InterpretLog t -> outputStrLn (T.unpack t)
   catch' bundle ref ma = catchAll ma (\e -> outputStrLn (show e) *> loop bundle ref)
   loop bundle ref = do
-    minput <- fmap (T.strip . T.pack) <$> getInputLine "pact>"
+    minput <- fmap T.pack <$> getInputLine "pact>"
     case minput of
       Nothing -> outputStrLn "goodbye"
       Just input | T.null input -> loop bundle ref
-      Just input -> case parseReplAction input of
+      Just input -> case parseReplAction (T.strip input) of
         Nothing -> do
           outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
           loop bundle ref
@@ -86,6 +94,29 @@ main = do
             outputStrLn $ unwords ["Remove all debug flags"]
             loop bundle ref
           RAExecuteExpr src -> catch' bundle ref $ do
-            out <- lift (expr bundle (T.encodeUtf8 src))
-            displayOutput (InterpretValue out)
+            eout <- lift (tryError (expr bundle (T.encodeUtf8 src)))
+            case eout of
+              Right out -> displayOutput (InterpretValue out)
+              Left err -> let
+                rs = ReplSource "(interactive)" input
+                in outputStrLn (T.unpack (replError rs err))
             loop bundle ref
+
+tryError :: MonadError a m => m b -> m (Either a b)
+tryError ma =
+  catchError (Right <$> ma) (pure . Left)
+
+replError
+  :: ReplSource
+  -> PactErrorI
+  -> Text
+replError (ReplSource file src) pe =
+  let srcLines = T.lines src
+      pei = view peInfo pe
+      slice = withLine $ take (max 1 (_liSpan pei)) $ drop (_liLine pei) srcLines
+      colMarker = "  | " <> T.replicate (_liColumn pei - 1) " " <> "^"
+      errRender = renderPactError pe
+      fileErr = file <> ":" <> T.pack (show (_liLine pei)) <> ":" <> T.pack (show (_liColumn pei)) <> ": "
+  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
+  where
+  withLine lns = zipWith (\i e -> T.pack (show i) <> " | " <> e) [0..] lns

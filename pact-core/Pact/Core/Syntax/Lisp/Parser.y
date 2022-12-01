@@ -345,13 +345,6 @@ getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
 getIdentField = Field . getIdent
 
-
-parseError (remaining, exp) =
-  let rendered = renderTokenText . _ptToken <$> remaining
-      expected = T.pack <$> exp
-      li = maybe (LineInfo 0 0 1) _ptInfo (preview _head remaining)
-  in throwParseError (ParsingError rendered expected) li
-
 mkIntegerConstant n i =
   let strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
   in Constant (LInteger (strToNum 0 n)) i

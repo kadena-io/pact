@@ -10,7 +10,7 @@
 module Pact.Core.Repl.Utils
  ( ReplDebugFlag(..)
  , printDebug
- , ReplT(..)
+ , ReplM(..)
  , replFlagSet
  , runReplT
  , ReplState(..)
@@ -26,12 +26,14 @@ module Pact.Core.Repl.Utils
  , ReplAction(..)
  , parseReplAction
  , prettyReplFlag
+ , ReplSource(..)
  ) where
 
 import Control.Lens
 import Control.Monad.Reader
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Control.Monad.Catch
+import Control.Monad.Except
 
 import Data.Void
 import Data.IORef
@@ -50,6 +52,7 @@ import Pact.Core.Names
 import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Gas
+import Pact.Core.Errors
 import qualified Pact.Core.Untyped.Term as Term
 
 import System.Console.Haskeline.Completion
@@ -140,63 +143,72 @@ parseReplAction = MP.parseMaybe replAction
 printDebug :: Pretty a => a -> ReplDebugFlag -> IO ()
 printDebug a = \case
   DebugLexer -> do
-    putStrLn "----------- Lexer output --------------"
+    putStrLn "----------- Lexer output -----------------"
     print (pretty a)
   DebugParser -> do
-    putStrLn "----------- Parser output -------------"
+    putStrLn "----------- Parser output ----------------"
     print (pretty a)
   DebugDesugar -> do
-    putStrLn "----------- Desugar output ------------"
+    putStrLn "----------- Desugar output ---------------"
     print (pretty a)
   DebugTypechecker -> do
-    putStrLn "----------- Typechecker output --------"
+    putStrLn "----------- Typechecker output -----------"
     print (pretty a)
   DebugTypecheckerType -> do
-    putStrLn "----------- Inferred type output -------"
+    putStrLn "----------- Inferred type output ---------"
     print (pretty a)
   DebugSpecializer -> do
-    putStrLn "----------- Specializer output --------"
+    putStrLn "----------- Specializer output -----------"
     print (pretty a)
   DebugUntyped -> do
-    putStrLn "----------- Untyped core output -------"
+    putStrLn "----------- Untyped core output ----------"
     print (pretty a)
 
 replFlagSet
   :: ReplDebugFlag
-  -> ReplT b Bool
+  -> ReplM b Bool
 replFlagSet flag =
   uses replFlags (Set.member flag)
 
-debugIfFlagSet :: Pretty a => ReplDebugFlag -> a -> ReplT b ()
+debugIfFlagSet :: Pretty a => ReplDebugFlag -> a -> ReplM b ()
 debugIfFlagSet flag a =
   whenReplFlagSet flag $ liftIO (printDebug a flag)
 
-whenReplFlagSet :: ReplDebugFlag -> ReplT b () -> ReplT b ()
+whenReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
 whenReplFlagSet flag ma =
   replFlagSet flag >>= \b -> when b ma
 
-unlessReplFlagSet :: ReplDebugFlag -> ReplT b () -> ReplT b ()
+unlessReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
 unlessReplFlagSet flag ma =
   replFlagSet flag >>= \b -> unless b ma
 
-newtype ReplT b a
-  = ReplT { unReplT :: ReaderT (IORef (ReplState b)) IO a }
+newtype ReplM b a
+  = ReplT { unReplT :: ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO) a }
   deriving
-    ( Functor, Applicative, Monad
+    ( Functor
+    , Applicative
+    , Monad
     , MonadIO
     , MonadThrow
+    , MonadError (PactError LineInfo)
     , MonadCatch
     , MonadMask)
-  via (ReaderT (IORef (ReplState b)) IO)
+  via (ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO))
 
-instance MonadState (ReplState b) (ReplT b)  where
-  get = ReplT (ReaderT readIORef)
-  put rs = ReplT (ReaderT (`writeIORef` rs))
+instance MonadState (ReplState b) (ReplM b)  where
+  get = ReplT (ExceptT (Right <$> ReaderT readIORef))
+  put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
+
+data ReplSource
+  = ReplSource
+  { _rsFile :: Text
+  , _rsSource :: Text
+  } deriving Show
 
 replCompletion
   :: [Text]
   -- ^ natives
-  -> CompletionFunc (ReplT b)
+  -> CompletionFunc (ReplM b)
 replCompletion natives =
   completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') filenameWordBreakChars $ \str -> do
@@ -216,5 +228,5 @@ replCompletion natives =
     dns = defNames ems
     in fmap ((renderModuleName mn <> ".") <>) dns
 
-runReplT :: IORef (ReplState b) ->  ReplT b a -> IO a
-runReplT env (ReplT act) = runReaderT act env
+runReplT :: IORef (ReplState b) ->  ReplM b a -> IO (Either (PactError LineInfo) a)
+runReplT env (ReplT act) = runReaderT (runExceptT act) env

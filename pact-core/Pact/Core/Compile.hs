@@ -23,12 +23,10 @@ module Pact.Core.Compile
  ) where
 
 import Control.Lens
-import Control.Monad((>=>))
-import Control.Monad.IO.Class(liftIO)
-import Control.Monad.Catch
+-- import Control.Monad.Catch
+import Control.Monad.Except
 import Data.Text as Text
 import Data.ByteString(ByteString)
--- import Data.Void
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString as B
@@ -63,9 +61,9 @@ data InterpretOutput b i
 -- to assist in swapping from the lisp frontend
 data InterpretBundle
   = InterpretBundle
-  { expr :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
-  , exprType :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
-  , program :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
+  { expr :: ByteString -> ReplM CoreBuiltin (CEKValue CoreBuiltin LineInfo)
+  , exprType :: ByteString -> ReplM CoreBuiltin (TypeScheme NamedDeBruijn)
+  , program :: ByteString -> ReplM CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
   }
 
 -- newInterpretBundle :: InterpretBundle
@@ -93,25 +91,25 @@ lispInterpretBundle =
 --   desugared <- liftIO (runDesugarTermNew pactdb loaded parsed)
 --   interpretExpr desugared
 
-interpretExprLisp :: ByteString -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
+interpretExprLisp :: ByteString -> ReplM CoreBuiltin (CEKValue CoreBuiltin LineInfo)
 interpretExprLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
-  lexx <- liftIO (Lisp.runLexerIO source)
+  lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet DebugLexer lexx
-  parsed <- either throwM pure $ Lisp.parseExpr lexx
+  parsed <- liftEither $ Lisp.parseExpr lexx
   debugIfFlagSet DebugParser parsed
   desugared <- liftIO (runDesugarTermLisp pactdb loaded parsed)
   interpretExpr desugared
 
 interpretExpr
   :: DesugarOutput CoreBuiltin LineInfo (IR.Term Name RawBuiltin LineInfo)
-  -> ReplT CoreBuiltin (CEKValue CoreBuiltin LineInfo)
+  -> ReplM CoreBuiltin (CEKValue CoreBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
-  (ty, typed) <- either (error . show) pure (runInferTerm loaded' rawBuiltinType desugared)
+  (ty, typed) <- liftEither (runInferTerm loaded' rawBuiltinType desugared)
   debugIfFlagSet DebugTypecheckerType ty
   debugIfFlagSet DebugTypechecker typed
-  resolved <- liftIO (runOverloadTerm typed)
+  resolved <- liftEither (runOverloadTerm typed)
   debugIfFlagSet DebugSpecializer resolved
   let untyped = fromTypedTerm resolved
   debugIfFlagSet DebugUntyped untyped
@@ -138,13 +136,13 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
 --   replLoaded .= loaded'
 --   pure value
 
-interpretExprTypeLisp :: ByteString -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
+interpretExprTypeLisp :: ByteString -> ReplM CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprTypeLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
-  lexx <- liftIO (Lisp.runLexerIO source)
+  lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet DebugLexer lexx
-  parsed <- either throwM pure $ Lisp.parseExpr lexx
+  parsed <- liftEither $ Lisp.parseExpr lexx
   debugIfFlagSet DebugParser parsed
   desugared <- liftIO (runDesugarTermLisp pactdb loaded parsed)
   interpretExprType desugared
@@ -162,7 +160,7 @@ interpretExprTypeLisp source = do
 
 interpretExprType
   :: DesugarOutput CoreBuiltin LineInfo (IR.Term Name RawBuiltin LineInfo)
-  -> ReplT CoreBuiltin (TypeScheme NamedDeBruijn)
+  -> ReplM CoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
   (ty, typed) <- either (error . show) pure (runInferTerm loaded' rawBuiltinType desugared)
   debugIfFlagSet DebugTypecheckerType ty
@@ -181,16 +179,16 @@ interpretExprType (DesugarOutput desugared loaded' _) = do
 --   parsed <- either throwM pure $ New.parseProgram lexx
 --   traverse (liftIO . runDesugarTopLevelNew pactdb loaded >=> interpretTopLevel) parsed
 
-interpretProgramFileLisp :: FilePath -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
+interpretProgramFileLisp :: FilePath -> ReplM CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
 interpretProgramFileLisp source = liftIO (B.readFile source) >>= interpretProgramLisp
 
-interpretProgramLisp :: ByteString -> ReplT CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
+interpretProgramLisp :: ByteString -> ReplM CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
 interpretProgramLisp source = do
   loaded <- use replLoaded
   pactdb <- use replPactDb
-  lexx <- liftIO (Lisp.runLexerIO source)
+  lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet DebugLexer lexx
-  parsed <- either throwM pure $ Lisp.parseProgram lexx
+  parsed <- liftEither $ Lisp.parseProgram lexx
   traverse (liftIO . runDesugarTopLevelLisp pactdb loaded >=> interpretTopLevel) parsed
 
 -- todo: Clean up function
@@ -226,11 +224,11 @@ interpretProgramLisp source = do
 
 interpretTopLevel
   :: DesugarOutput CoreBuiltin LineInfo (IR.TopLevel Name RawBuiltin LineInfo)
-  -> ReplT CoreBuiltin (InterpretOutput CoreBuiltin LineInfo)
+  -> ReplM CoreBuiltin (InterpretOutput CoreBuiltin LineInfo)
 interpretTopLevel (DesugarOutput desugared loaded deps) = do
   p <- use replPactDb
-  typechecked <- either (error . show) pure (runInferTopLevel loaded rawBuiltinType desugared)
-  overloaded <- liftIO (runOverloadTopLevel typechecked)
+  typechecked <- liftEither (runInferTopLevel loaded rawBuiltinType desugared)
+  overloaded <- liftEither (runOverloadTopLevel typechecked)
   case fromTypedTopLevel overloaded of
     TLModule m -> do
       let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)

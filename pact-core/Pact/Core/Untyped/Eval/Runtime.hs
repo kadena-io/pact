@@ -18,7 +18,6 @@ module Pact.Core.Untyped.Eval.Runtime
 --  , HasRuntimeEnv
  , CEKRuntimeEnv(..)
  , BuiltinFn(..)
- , CEKState(..)
  , EvalT(..)
  , runEvalT
  , CEKValue(..)
@@ -88,14 +87,6 @@ data CEKValue b i
   | VError !Text
   deriving (Show)
 
-
-
-data CEKState b
-  = CEKState deriving Show
-  -- { _cekGas :: IORef Gas
-  -- , _cekEvalLog :: IORef (Maybe [Text])
-  -- } deriving Show
-
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalT b i a =
   EvalT (ReaderT (CEKRuntimeEnv b i) IO a)
@@ -130,15 +121,6 @@ data Cont b i
   | ListC (CEKEnv b i) [EvalTerm b i] [CEKValue b i] (Cont b i)
   | Mt
   deriving Show
-
--- contHandler :: Lens' (Cont b i) (CEKErrorHandler b i)
--- contHandler f = \case
---  Fn v c h -> Fn v c <$> f h
---  Arg env e c h -> Arg env e c <$> f h
---  SeqC env e1 c h -> SeqC env e1 c <$> f h
---  ListC env terms vs c h ->
---   ListC env terms vs c <$> f h
---  Mt h -> Mt <$> f h
 
 
 data CEKErrorHandler b i
@@ -188,7 +170,6 @@ instance Pretty b => Pretty (CEKValue b i) where
       ("error " <> pretty e)
 
 makeLenses ''CEKRuntimeEnv
-
 
 fromPactValue :: PactValue -> CEKValue b i
 fromPactValue = \case

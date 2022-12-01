@@ -202,7 +202,7 @@ popLayout = modify' \case
 
 initState :: ByteString -> LexState
 initState s =
-  LexState (AlexInput 0 1 '\n' s) (0 :| []) [] (-1)
+  LexState (AlexInput 0 0 '\n' s) (0 :| []) [] (-1)
 
 getLineInfo :: LexerT LineInfo
 getLineInfo = do

@@ -112,7 +112,7 @@ scan = do
       in case B.uncons inp of
         Just (h, _) ->
           throwLexerError (LexicalError (w2c h) _last) li
-        Nothing -> throwLexerError OutOfInputError li
+        Nothing -> throwLexerError (OutOfInputError _last) li
     AlexSkip input' _ -> do
       put input'
       scan
@@ -132,7 +132,7 @@ stringLiteral _ = do
     case alexGetByte inp of
       Just (c, rest) ->
         handleChar acc (w2c c) rest
-      Nothing -> throwLexerError' $ StringLiteralError "Did not close string literal"
+      Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
   handleChar acc c rest
     | c == '\\' = escape acc rest
     | c == '\n' = throwLexerError' $ StringLiteralError "newline in string literal"
@@ -147,8 +147,8 @@ stringLiteral _ = do
         | c == '\\' -> loop ('\\':acc) rest
         | c == '\"' -> loop ('\"':acc) rest
         | c == 'r' -> throwLexerError' $ StringLiteralError "carriage return is not supported in strings literals"
-        | otherwise -> throwLexerError' $ StringLiteralError "Lexical error: Invalid escape sequence"
-      Nothing -> throwLexerError' $ StringLiteralError "Did not close string literal"
+        | otherwise -> throwLexerError' $ StringLiteralError "Invalid escape sequence"
+      Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
 
 -- A colon _may_ indicate the start of a block,
 -- so we emit the token and push the start code.

@@ -137,18 +137,6 @@ newtype InferM s b i a =
     , MonadError (PactError i))
   via (ExceptT (PactError i) (ReaderT (TCState s b) (ST s)))
 
--- ABSOLUTELY UNHOLY USE OF ST
--- instance (Show i, Typeable i) => MonadError (PactError i) (InferM s b i) where
---   throwError e =
---     InferT (ReaderT (const (unsafeIOToST (throwIO e))))
---   catchError act handler =
---     InferT (ReaderT (\s -> unsafeIOToST $ catch (unsafeMkIO s act) (handle' s)))
---     where
---     unsafeMkIO :: TCState s b -> InferM s b i a -> IO a
---     unsafeMkIO s (InferT act') = unsafeSTToIO (runReaderT act' s)
---     handle' s e = unsafeMkIO s (handler e)
-
-
 liftST :: ST s a -> InferM s b i a
 liftST action = InferT (ExceptT (Right <$> ReaderT (const action)))
 
