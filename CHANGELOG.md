@@ -7,6 +7,7 @@
 * Lazily evaluate `enforce` to reduce gas usage on evaluation (#1069)
 * Gas adjustment for various natives (#1071)
 * Fix FV regression that disallowed the verification of unary operators like `abs` (#1079)
+* Documentation link fixes (thanks @przemeklach! #1075)
 
 4.4
 ---
