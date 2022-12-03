@@ -297,6 +297,7 @@ strToIntDef = defRNative "str-to-int" strToInt
   ["(str-to-int 16 \"abcdef123456\")"
   ,"(str-to-int \"123456\")"
   ,"(str-to-int 64 \"q80\")"
+  ,"(str-to-int 10 \"-1234\")"
   ]
   "Compute the integer value of STR-VAL in base 10, or in BASE if specified. \
   \STR-VAL can be up to 512 chars in length. \
@@ -1305,8 +1306,11 @@ baseStrToInt base t =
   else
     if T.null t
     then Left $ "empty text: " `T.append` asString t
-    else foldM go 0 $ T.unpack t
+    else fmap (sign *) $ foldM go 0 $ T.unpack absPart
   where
+    (sign, absPart) = case T.stripPrefix "-" t of
+      Nothing -> (1, t)
+      Just suffix -> (-1, suffix)
     go :: Integer -> Char -> Either Text Integer
     go acc c' =
       let val = fromIntegral . Char.digitToInt $ c'
