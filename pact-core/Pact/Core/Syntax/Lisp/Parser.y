@@ -169,9 +169,10 @@ ImportNames :: { [Text] }
 DefConst :: { LineInfo -> ParsedDefConst }
   : defconst IDENT MTypeAnn Expr { DefConst (getIdent $2) $3 $4 }
 
+-- ident = $2,
 Defun :: { LineInfo -> ParsedDefun }
-  : defun IDENT '(' ArgList ')' ':' Type Block
-    { Defun (getIdent $2) (reverse $4) $7 $8 }
+  : defun IDENT ':' Type '(' ArgList ')'  Block
+    { Defun (getIdent $2) (reverse $6) $4 $8 }
 
 ArgList :: { [Arg] }
   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }

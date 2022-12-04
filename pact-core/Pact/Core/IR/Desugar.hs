@@ -24,6 +24,7 @@ module Pact.Core.IR.Desugar
 
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Control.Monad.Except
 import Control.Lens hiding (List,ix)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
@@ -41,6 +42,7 @@ import Pact.Core.Type
 import Pact.Core.Literal
 import Pact.Core.Hash
 import Pact.Core.Persistence
+import Pact.Core.Errors
 import Pact.Core.IR.Term
 
 import qualified Pact.Core.Syntax.Common as Common
@@ -81,12 +83,11 @@ import qualified Pact.Core.Untyped.Term as Term
     worth writing our own.
 -}
 
-
-data RenamerEnv b i
+data RenamerEnv m b i
   = RenamerEnv
   { _reBinds :: Map Text NameKind
   , _reVarDepth :: DeBruijn
-  , _rePactDb :: PactDb b i
+  , _rePactDb :: PactDb m b i
   }
 makeLenses ''RenamerEnv
 
@@ -98,15 +99,15 @@ data RenamerState b i
 
 makeLenses ''RenamerState
 
-newtype RenamerM cb ci a =
-  RenamerT (StateT (RenamerState cb ci) (ReaderT (RenamerEnv cb ci) IO) a)
+newtype RenamerT m b i a =
+  RenamerT (StateT (RenamerState b i) (ReaderT (RenamerEnv m b i) m) a)
   deriving
-    (Functor, Applicative, Monad
-    , MonadReader (RenamerEnv cb ci)
-    , MonadState (RenamerState cb ci)
-    , MonadFail
-    , MonadIO)
-  via (StateT (RenamerState cb ci) (ReaderT (RenamerEnv cb ci) IO))
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadReader (RenamerEnv m b i)
+    , MonadState (RenamerState b i))
+  via (StateT (RenamerState b i) (ReaderT (RenamerEnv m b i) m))
 
 data DesugarOutput b i a
   = DesugarOutput
@@ -136,6 +137,9 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
   builtinIf = RBuiltinWrap RawIf
   desugarBinary = RBuiltinWrap . desugarBinary'
   desugarUnary = RBuiltinWrap . desugarUnary'
+
+throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> RenamerT m b i a
+throwDesugarError de = liftRenamerT . throwError . PEDesugarError de
 
 -- type DesugarTerm term b i = (?desugarTerm :: term -> Term ParsedName Text b i)
 class DesugarTerm term b i where
@@ -341,6 +345,9 @@ defSCC mn = \case
   DConst d -> defConstSCC mn d
   -- DCap d -> defCapSCC mn d
 
+liftRenamerT :: Monad m => m a -> RenamerT m cb ci a
+liftRenamerT ma = RenamerT (lift (lift ma))
+
 -- | Look up a qualified name in the pact db
 -- if it's there, great! We will load the module into the scope of
 -- `Loaded`, as well as include it in the renamer map
@@ -348,11 +355,13 @@ defSCC mn = \case
 -- current namespace.
 -- Namespace definitions are yet to be supported in core
 lookupModuleMember
-  :: ModuleName
+  :: (MonadError (PactError i) m)
+  => ModuleName
   -> Text
-  -> RenamerM cb ci Name
-lookupModuleMember modName name = do
-  view rePactDb >>= liftIO . (`_readModule` modName) >>= \case
+  -> i
+  -> RenamerT m b i Name
+lookupModuleMember modName name i = do
+  view rePactDb >>= liftRenamerT . (`_readModule` modName) >>= \case
     Just md -> let
       module_ = _mdModule md
       mhash = Term._mHash module_
@@ -371,8 +380,9 @@ lookupModuleMember modName name = do
         -- Module exists, but it has no such member
         -- Todo: check whether the module name includes a namespace
         -- if it does not, we retry the lookup under the current namespace
-        Nothing -> fail "boom: module does not have member"
-    Nothing -> fail "no such module"
+        Nothing ->
+          throwDesugarError (NoSuchModuleMember modName name) i
+    Nothing -> throwDesugarError (NoSuchModule modName) i
   where
   rawDefName def = Term.defName def
   toDepMap mhash def = (rawDefName def, NTopLevel modName mhash)
@@ -383,9 +393,10 @@ lookupModuleMember modName name = do
 -- Rename a term (that is part of a module)
 -- emitting the list of dependent calls
 renameTerm
-  :: Term ParsedName b i
-  -> RenamerM cb ci (Term Name b i)
-renameTerm (Var n i) = (`Var` i) <$> resolveName n
+  :: (MonadError (PactError i) m)
+  => Term ParsedName b' i
+  -> RenamerT m b i (Term Name b' i)
+renameTerm (Var n i) = (`Var` i) <$> resolveName n i
 renameTerm (Lam nsts body i) = do
   depth <- view reVarDepth
   let (pns, ts) = NE.unzip nsts
@@ -430,16 +441,18 @@ renameTerm (Error e i) = pure (Error e i)
 --   ObjectOp <$> traverse renameTerm o <*> pure i
 
 renameDefun
-  :: Defun ParsedName b i
-  -> RenamerM cb ci (Defun Name b i)
+  :: (MonadError (PactError i) m)
+  => Defun ParsedName b' i
+  -> RenamerT m b i (Defun Name b' i)
 renameDefun (Defun n dty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   term' <- renameTerm term
   pure (Defun n dty term' i)
 
 renameDefConst
-  :: DefConst ParsedName b i
-  -> RenamerM cb ci (DefConst Name b i)
+  :: (MonadError (PactError i) m)
+  => DefConst ParsedName b' i
+  -> RenamerT m b i (DefConst Name b' i)
 renameDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   term' <- renameTerm term
@@ -454,14 +467,19 @@ renameDefConst (DefConst n mty term i) = do
 --   pure (DefCap name args term' capType' ty i)
 
 renameDef
-  :: Def ParsedName b i
-  -> RenamerM cb ci (Def Name b i)
+  :: (MonadError (PactError i) m)
+  => Def ParsedName b' i
+  -> RenamerT m b i (Def Name b' i)
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
   -- DCap d -> DCap <$> renameDefCap d
 
-resolveName :: ParsedName -> RenamerM b i Name
+resolveName
+  :: (MonadError (PactError i) m)
+  => ParsedName
+  -> i
+  -> RenamerT m b i Name
 resolveName = \case
   BN b -> resolveBare b
   QN q -> resolveQualified q
@@ -469,8 +487,12 @@ resolveName = \case
 -- not in immediate binds, so it must be in the module
 -- Todo: resolve module ref within this model
 -- Todo: hierarchical namespace search
-resolveBare :: BareName -> RenamerM cb ci Name
-resolveBare (BareName bn) = views reBinds (Map.lookup bn) >>= \case
+resolveBare
+  :: (MonadError (PactError i) m)
+  => BareName
+  -> i
+  -> RenamerT m b i Name
+resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
   Just nk -> case nk of
     NBound d -> do
       depth <- view reVarDepth
@@ -478,25 +500,32 @@ resolveBare (BareName bn) = views reBinds (Map.lookup bn) >>= \case
     _ -> pure (Name bn nk)
   Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
     Just fqn -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)))
-    Nothing -> fail $ "unbound free variable " <> show bn
+    Nothing -> throwDesugarError (UnboundTermVariable bn) i
 
 -- resolveBareName' :: Text -> RenamerM b i Name
 -- resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
 --   Just irnk -> pure (Name bn irnk)
 --   Nothing -> fail $ "Expected identifier " <> T.unpack bn <> " in scope"
 
-resolveQualified :: QualifiedName -> RenamerM b i Name
-resolveQualified (QualifiedName qn qmn) = do
+resolveQualified
+  :: (MonadError (PactError i) m)
+  => QualifiedName
+  -> i
+  -> RenamerT m b i Name
+resolveQualified (QualifiedName qn qmn) i = do
   uses rsModuleBinds (Map.lookup qmn) >>= \case
     Just binds -> case Map.lookup qn binds of
       Just irnk -> pure (Name qn irnk)
-      Nothing -> fail "bound module has no such member"
-    Nothing -> lookupModuleMember qmn qn
+      Nothing ->
+        throwDesugarError (NoSuchModuleMember qmn qn) i
+    Nothing -> lookupModuleMember qmn qn i
 
 -- | Todo: support imports
+-- Todo:
 renameModule
-  :: Module ParsedName b i
-  -> RenamerM cb ci (Module Name b i)
+  :: (MonadError (PactError i) m)
+  => Module ParsedName b' i
+  -> RenamerT m b i (Module Name b' i)
 renameModule (Module mname defs blessed imp implements mhash) = do
   let rawDefNames = defName <$> defs
       defMap = Map.fromList $ (, NTopLevel mname mhash) <$> rawDefNames
@@ -509,18 +538,21 @@ renameModule (Module mname defs blessed imp implements mhash) = do
   let scc = mkScc <$> defs'
   defs'' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
-    CyclicSCC d -> fail $ "Functions: " <> show (defName  <$> d) <> " form a cycle"
+    CyclicSCC d ->
+      -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
+      -- but all uses of `head` are still scary
+      throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   -- mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
   pure (Module mname defs'' blessed imp implements mhash)
   where
   mkScc def = (def, defName def, Set.toList (defSCC mname def))
 
-runRenamerT
+runRenamerM
   :: RenamerState b i
-  -> RenamerEnv b i
-  -> RenamerM b i a
-  -> IO (a, RenamerState b i)
-runRenamerT st env (RenamerT act) = runReaderT (runStateT act st) env
+  -> RenamerEnv m b i
+  -> RenamerT m b i a
+  -> m (a, RenamerState b i)
+runRenamerM st env (RenamerT act) = runReaderT (runStateT act st) env
 
 reStateFromLoaded :: Loaded b i -> RenamerState b i
 reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
@@ -537,33 +569,34 @@ loadedBinds loaded =
   in f <$> _loToplevel loaded
 
 runDesugar'
-  :: PactDb b i
+  :: MonadError (PactError i) m
+  => PactDb m b i
   -> Loaded b i
-  -> RenamerM b i a
-  -> IO (DesugarOutput b i a)
+  -> RenamerT m b i a
+  -> m (DesugarOutput b i a)
 runDesugar' pdb loaded act = do
   let reState = reStateFromLoaded loaded
       rTLBinds = loadedBinds loaded
       rEnv = RenamerEnv rTLBinds 0 pdb
-  (renamed, RenamerState _ loaded' deps) <- runRenamerT reState rEnv act
+  (renamed, RenamerState _ loaded' deps) <- runRenamerM reState rEnv act
   pure (DesugarOutput renamed loaded' deps)
 
 runDesugarTerm
-  :: (DesugarTerm term b' i)
-  => PactDb b i
+  :: (DesugarTerm term b' i, MonadError (PactError i) m)
+  => PactDb m b i
   -> Loaded b i
   -> term
-  -> IO (DesugarOutput b i (Term Name b' i))
+  -> m (DesugarOutput b i (Term Name b' i))
 runDesugarTerm pdb loaded e = let
   desugared = desugarTerm e
   in runDesugar' pdb loaded (renameTerm desugared)
 
 runDesugarModule'
-  :: (DesugarTerm term b' i)
-  => PactDb b i
+  :: (DesugarTerm term b' i, MonadError (PactError i) m)
+  => PactDb m b i
   -> Loaded b i
   -> Common.Module term i
-  -> IO (DesugarOutput b i (Module Name b' i))
+  -> m (DesugarOutput b i (Module Name b' i))
 runDesugarModule' pdb loaded m  = let
   desugared = desugarModule m
   in runDesugar' pdb loaded (renameModule desugared)
@@ -576,11 +609,11 @@ runDesugarModule' pdb loaded m  = let
 -- runDesugarModule loaded = runDesugarModule' loaded 0
 
 runDesugarTopLevel
-  :: (DesugarTerm term b' i)
-  => PactDb b i
+  :: (DesugarTerm term b' i, MonadError (PactError i) m)
+  => PactDb m b i
   -> Loaded b i
   -> Common.TopLevel term i
-  -> IO (DesugarOutput b i (TopLevel Name b' i))
+  -> m (DesugarOutput b i (TopLevel Name b' i))
 runDesugarTopLevel pdb loaded = \case
   Common.TLModule m -> over dsOut TLModule <$> runDesugarModule' pdb loaded m
   Common.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm pdb loaded e
@@ -595,17 +628,17 @@ runDesugarTopLevel pdb loaded = \case
 
 
 runDesugarTermLisp
-  :: (DesugarBuiltin b')
-  => PactDb b i
+  :: (DesugarBuiltin b', MonadError (PactError i) m)
+  => PactDb m b i
   -> Loaded b i
   -> Lisp.Expr i
-  -> IO (DesugarOutput b i (Term Name b' i))
+  -> m (DesugarOutput b i (Term Name b' i))
 runDesugarTermLisp = runDesugarTerm
 
 runDesugarTopLevelLisp
-  :: (DesugarBuiltin b')
-  => PactDb b i
+  :: (DesugarBuiltin b', MonadError (PactError i) m)
+  => PactDb m b i
   -> Loaded b i
   -> Common.TopLevel (Lisp.Expr i) i
-  -> IO (DesugarOutput b i (TopLevel Name b' i))
+  -> m (DesugarOutput b i (TopLevel Name b' i))
 runDesugarTopLevelLisp = runDesugarTopLevel

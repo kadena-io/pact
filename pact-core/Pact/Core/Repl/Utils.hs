@@ -77,6 +77,24 @@ prettyReplFlag = \case
   DebugSpecializer -> "specializer"
   DebugUntyped -> "untyped-core"
 
+newtype ReplM b a
+  = ReplT { unReplT :: ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO) a }
+  deriving
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadIO
+    , MonadThrow
+    , MonadError (PactError LineInfo)
+    , MonadCatch
+    , MonadMask)
+  via (ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO))
+
+
+instance MonadState (ReplState b) (ReplM b)  where
+  get = ReplT (ExceptT (Right <$> ReaderT readIORef))
+  put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
+
 -- | Passed in repl environment
 -- Todo: not a `newtype` since there's
 -- more fields we can set.
@@ -84,10 +102,11 @@ data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
   , _replLoaded :: Loaded b LineInfo
-  , _replPactDb :: PactDb b LineInfo
+  , _replPactDb :: PactDb (ReplM b) b LineInfo
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   }
+
 
 makeLenses ''ReplState
 
@@ -182,23 +201,6 @@ unlessReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
 unlessReplFlagSet flag ma =
   replFlagSet flag >>= \b -> unless b ma
 
-newtype ReplM b a
-  = ReplT { unReplT :: ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO) a }
-  deriving
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadIO
-    , MonadThrow
-    , MonadError (PactError LineInfo)
-    , MonadCatch
-    , MonadMask)
-  via (ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO))
-
-instance MonadState (ReplState b) (ReplM b)  where
-  get = ReplT (ExceptT (Right <$> ReaderT readIORef))
-  put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
-
 data ReplSource
   = ReplSource
   { _rsFile :: Text
@@ -230,3 +232,4 @@ replCompletion natives =
 
 runReplT :: IORef (ReplState b) ->  ReplM b a -> IO (Either (PactError LineInfo) a)
 runReplT env (ReplT act) = runReaderT (runExceptT act) env
+

@@ -19,10 +19,14 @@ module Pact.Core.Type
  , typeOfLit
  , BuiltinTC(..)
  , Pred(..)
+ , renderType
+ , renderPred
  ) where
 
+import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty)
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Text as T
 
 import Pact.Core.Literal
 import Pact.Core.Pretty(Pretty(..), (<+>))
@@ -121,7 +125,7 @@ instance Pretty BuiltinTC where
 -- Note, no superclasses, for now
 data Pred tv
   = Pred BuiltinTC (Type tv)
-  deriving (Show, Eq)
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 data TypeScheme tv =
   TypeScheme [tv] [Pred tv]  (Type tv)
@@ -143,6 +147,12 @@ typeOfLit = TyPrim . \case
   LBool{} -> PrimBool
   LTime{} -> PrimTime
   LUnit -> PrimUnit
+
+renderType :: (Pretty n) => Type n -> Text
+renderType = T.pack . show . pretty
+
+renderPred :: (Pretty n) => Pred n -> Text
+renderPred = T.pack . show . pretty
 
 instance Pretty n => Pretty (Pred n) where
   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)

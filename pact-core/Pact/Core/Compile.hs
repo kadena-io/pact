@@ -99,7 +99,7 @@ interpretExprLisp source = do
   debugIfFlagSet DebugLexer lexx
   parsed <- liftEither $ Lisp.parseExpr lexx
   debugIfFlagSet DebugParser parsed
-  desugared <- liftIO (runDesugarTermLisp pactdb loaded parsed)
+  desugared <- runDesugarTermLisp pactdb loaded parsed
   interpretExpr desugared
 
 interpretExpr
@@ -144,7 +144,7 @@ interpretExprTypeLisp source = do
   debugIfFlagSet DebugLexer lexx
   parsed <- liftEither $ Lisp.parseExpr lexx
   debugIfFlagSet DebugParser parsed
-  desugared <- liftIO (runDesugarTermLisp pactdb loaded parsed)
+  desugared <- runDesugarTermLisp pactdb loaded parsed
   interpretExprType desugared
 
 -- interpretExprTypeNew :: ByteString -> ReplT RawBuiltin (TypeScheme NamedDeBruijn)
@@ -189,7 +189,8 @@ interpretProgramLisp source = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet DebugLexer lexx
   parsed <- liftEither $ Lisp.parseProgram lexx
-  traverse (liftIO . runDesugarTopLevelLisp pactdb loaded >=> interpretTopLevel) parsed
+  let f a = runDesugarTopLevelLisp pactdb loaded a
+  traverse (f >=> interpretTopLevel) parsed
 
 -- todo: Clean up function
 -- interpretTopLevel
@@ -233,7 +234,7 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
     TLModule m -> do
       let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
           mdata = ModuleData m deps'
-      liftIO (_writeModule p mdata)
+      _writeModule p mdata
       let out = "Loaded module " <> renderModuleName (_mName m)
           newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
           loaded' =

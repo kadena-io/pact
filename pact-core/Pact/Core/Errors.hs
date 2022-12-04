@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Errors
  ( PactErrorI
@@ -96,6 +97,9 @@ instance RenderError ParseError where
 data DesugarError
   = UnboundTermVariable Text
   | UnboundTypeVariable Text
+  | NoSuchModuleMember ModuleName Text
+  | NoSuchModule ModuleName
+  | RecursionDetected ModuleName [Text]
   | UnresolvedQualName QualifiedName
   deriving Show
 
@@ -107,13 +111,53 @@ instance RenderError DesugarError where
       tConcatSpace ["Unbound variable", t]
     UnboundTypeVariable t ->
       tConcatSpace ["Unbound type variable", t]
+    NoSuchModuleMember mn txt ->
+      tConcatSpace ["Module", renderModuleName mn, "has no such member:", txt]
+    NoSuchModule mn ->
+      tConcatSpace ["Cannot find module: ", renderModuleName mn]
+    RecursionDetected mn txts ->
+      tConcatSpace
+      ["Recursive cycle detected in Module"
+      , renderModuleName mn
+      , "in the following functions:"
+      , T.pack (show txts)]
     UnresolvedQualName qual ->
       tConcatSpace ["No such name", renderQualName qual]
 
 data TypecheckError
   = UnificationError (Type Text) (Type Text)
   | ContextReductionError (Pred Text)
+  | UnsupportedTypeclassGeneralization [Pred Text]
+  | UnsupportedImpredicativity
+  | OccursCheckFailure (Type Text)
+  | TCInvariantFailure Text
+  | TCUnboundTermVariable Text
+  | TCUnboundFreeVariable ModuleName Text
+  | DisabledGeneralization Text
   deriving Show
+
+instance RenderError TypecheckError where
+  renderError = \case
+    UnificationError ty ty' ->
+      tConcatSpace ["Type mismatch, expected:", renderType ty, "got:", renderType ty']
+    ContextReductionError pr ->
+      tConcatSpace ["Context reduction failure, no such instance:", renderPred pr]
+    UnsupportedTypeclassGeneralization prs ->
+      tConcatSpace ["Encountered term with generic signature, attempted to generalize on:", T.pack (show (renderPred <$> prs))]
+    UnsupportedImpredicativity ->
+      tConcatSpace ["Invariant failure: Inferred term with impredicative polymorphism"]
+    OccursCheckFailure ty ->
+      tConcatSpace
+      [ "Cannot construct the infinite type:"
+      , "Var(" <> renderType ty <> ") ~ " <> renderType ty]
+    TCInvariantFailure txt ->
+      tConcatSpace ["Typechecker invariant failure violated:", txt]
+    TCUnboundTermVariable txt ->
+      tConcatSpace ["Found unbound term variable:", txt]
+    TCUnboundFreeVariable mn txt ->
+      tConcatSpace ["Found unbound free variable:", renderModuleName mn <> "." <> txt]
+    DisabledGeneralization txt ->
+      tConcatSpace ["Generic types have been disabled:", txt]
 
 instance Exception TypecheckError
 
@@ -183,7 +227,7 @@ data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
   | PEDesugarError DesugarError info
-  -- | PETypecheckError TypecheckError info
+  | PETypecheckError TypecheckError info
   | PEOverloadError OverloadError info
   | PEExecutionError ExecutionError info
   | PEFatalError FatalPactError info
@@ -194,6 +238,7 @@ renderPactError = \case
   PELexerError le _ -> renderError le
   PEParseError pe _ -> renderError pe
   PEDesugarError de _ -> renderError de
+  PETypecheckError te _ -> renderError te
   PEOverloadError oe _ -> renderError oe
   PEExecutionError ee _ -> renderError ee
   PEFatalError fpe _ -> renderError fpe
@@ -206,6 +251,8 @@ peInfo f = \case
     PEParseError pe <$> f info
   PEDesugarError de info ->
     PEDesugarError de <$> f info
+  PETypecheckError pe info ->
+    PETypecheckError pe <$> f info
   PEOverloadError oe info ->
     PEOverloadError oe <$> f info
   PEExecutionError ee info ->

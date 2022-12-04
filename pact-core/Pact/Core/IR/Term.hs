@@ -53,13 +53,16 @@ data DefConst name builtin info
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
-  -- | DCap (DefCap name builtin info)
   deriving Show
 
 defName :: Def name b i -> Text
 defName (Dfun d) = _dfunName d
 defName (DConst d) = _dcName d
--- defName (DCap d) = _dcapName d
+
+defInfo :: Def name b i -> i
+defInfo = \case
+  Dfun de -> _dfunInfo de
+  DConst dc -> _dcInfo dc
 
 -- TODO:
 -- Support module guards

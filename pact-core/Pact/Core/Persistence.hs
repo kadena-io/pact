@@ -12,7 +12,6 @@ module Pact.Core.Persistence
  , mdModule
  , mdDependencies
  , PactDb(..)
- , HasPactDb
  , Loaded(..)
  , loModules
  , loToplevel
@@ -25,6 +24,7 @@ import Control.Lens
 import Data.Text(Text)
 import Data.IORef
 import Data.Map.Strict(Map)
+import Control.Monad.IO.Class
 
 import Pact.Core.Names
 import Pact.Core.Untyped.Term
@@ -53,20 +53,18 @@ data Purity
   deriving (Eq,Show,Ord,Bounded,Enum)
 
 -- | Fun-record type for Pact back-ends.
-data PactDb b i
+data PactDb m b i
   = PactDb
   { _purity :: !Purity
-  , _readModule :: ModuleName -> IO (Maybe (ModuleData b i))
+  , _readModule :: ModuleName -> m (Maybe (ModuleData b i))
   -- ^ Look up module by module name
-  , _writeModule :: ModuleData b i -> IO ()
+  , _writeModule :: ModuleData b i -> m ()
   -- ^ Save a module
-  , _readKeyset :: KeySetName -> IO (Maybe FQKS)
+  , _readKeyset :: KeySetName -> m (Maybe FQKS)
   -- ^ Read in a fully resolve keyset
-  , _writeKeyset :: KeySetName -> FQKS -> IO ()
+  , _writeKeyset :: KeySetName -> FQKS -> m ()
   -- ^ write in a keyset
   }
-
-type HasPactDb b i = (?pactDb :: PactDb b i)
 
 data Loaded b i
   = Loaded
@@ -81,16 +79,16 @@ makeLenses ''Loaded
 emptyLoaded :: Loaded b i
 emptyLoaded = Loaded mempty mempty mempty
 
-mockPactDb :: IO (PactDb b i)
+mockPactDb :: (MonadIO m1, MonadIO m2) => m1 (PactDb m2 b i)
 mockPactDb = do
-  refMod <- newIORef Map.empty
-  refKs <- newIORef Map.empty
+  refMod <- liftIO $ newIORef Map.empty
+  refKs <- liftIO $ newIORef Map.empty
   pure $ PactDb
     { _purity = PImpure
-    , _readModule = readMod refMod
-    , _writeModule = writeMod refMod
-    , _readKeyset = readKS refKs
-    , _writeKeyset = writeKS refKs
+    , _readModule = liftIO . readMod refMod
+    , _writeModule = liftIO . writeMod refMod
+    , _readKeyset = liftIO . readKS refKs
+    , _writeKeyset = \ksn  -> liftIO . writeKS refKs ksn
     }
   where
   readKS ref ksn = do
