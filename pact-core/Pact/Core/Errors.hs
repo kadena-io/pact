@@ -13,7 +13,6 @@ module Pact.Core.Errors
  , TypecheckError(..)
  , OverloadError(..)
  , ExecutionError(..)
- , FatalPactError(..)
  , PactError(..)
  , peInfo
  , renderPactError
@@ -185,6 +184,7 @@ data ExecutionError
   -- ^ Some form of decoding error
   | GasExceeded Text
   -- ^ Gas went past the gas limit
+  | FatalExecutionError Text
   deriving Show
 
 instance RenderError ExecutionError where
@@ -203,25 +203,27 @@ instance RenderError ExecutionError where
       tConcatSpace ["Decoding error:", txt]
     -- Todo: probably enhance this data type
     GasExceeded txt -> txt
+    FatalExecutionError txt ->
+      tConcatSpace ["Fatal execution error:", txt]
 
 instance Exception ExecutionError
 
-data FatalPactError
-  = FatalExecutionError Text
-  | FatalOverloadError Text
-  | FatalParserError Text
-  deriving Show
+-- data FatalPactError
+--   = FatalExecutionError Text
+--   | FatalOverloadError Text
+--   | FatalParserError Text
+--   deriving Show
 
-instance Exception FatalPactError
+-- instance Exception FatalPactError
 
-instance RenderError FatalPactError where
-  renderError = \case
-    FatalExecutionError txt ->
-      tConcatSpace ["Fatal Execution Error", txt]
-    FatalOverloadError txt ->
-      tConcatSpace ["Fatal Overload Error", txt]
-    FatalParserError txt ->
-      tConcatSpace ["Fatal Parser Error", txt]
+-- instance RenderError FatalPactError where
+--   renderError = \case
+--     FatalExecutionError txt ->
+--       tConcatSpace ["Fatal Execution Error", txt]
+--     FatalOverloadError txt ->
+--       tConcatSpace ["Fatal Overload Error", txt]
+--     FatalParserError txt ->
+--       tConcatSpace ["Fatal Parser Error", txt]
 
 data PactError info
   = PELexerError LexerError info
@@ -230,7 +232,6 @@ data PactError info
   | PETypecheckError TypecheckError info
   | PEOverloadError OverloadError info
   | PEExecutionError ExecutionError info
-  | PEFatalError FatalPactError info
   deriving Show
 
 renderPactError :: PactError i -> Text
@@ -241,7 +242,7 @@ renderPactError = \case
   PETypecheckError te _ -> renderError te
   PEOverloadError oe _ -> renderError oe
   PEExecutionError ee _ -> renderError ee
-  PEFatalError fpe _ -> renderError fpe
+  -- PEFatalError fpe _ -> renderError fpe
 
 peInfo :: Lens (PactError info) (PactError info') info info'
 peInfo f = \case
@@ -257,7 +258,7 @@ peInfo f = \case
     PEOverloadError oe <$> f info
   PEExecutionError ee info ->
     PEExecutionError ee <$> f info
-  PEFatalError fpe info ->
-    PEFatalError fpe <$> f info
+  -- PEFatalError fpe info ->
+  --   PEFatalError fpe <$> f info
 
 instance (Show info, Typeable info) => Exception (PactError info)

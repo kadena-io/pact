@@ -392,6 +392,15 @@ data ReplBuiltin b
   | RLoad
   deriving (Eq, Show)
 
+instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
+  builtinArity = \case
+    RBuiltinWrap b -> builtinArity b
+    RExpect -> 3
+    RExpectFailure -> 3
+    RExpectThat -> 3
+    RPrint -> 1
+    RLoad -> 1
+
 instance Bounded b => Bounded (ReplBuiltin b) where
   minBound = RBuiltinWrap minBound
   maxBound = RLoad
