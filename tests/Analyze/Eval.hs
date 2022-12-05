@@ -42,6 +42,7 @@ import           Pact.Types.Runtime       (EvalEnv, PactError (..),
                                            PactErrorType (EvalError), eeMsgBody,
                                            runEval)
 import qualified Pact.Types.Term          as Pact
+import           Pact.Utils.LegacyValue
 
 import           Analyze.Gen
 import           Analyze.Translate
@@ -193,5 +194,5 @@ mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts txStrs) = do
       txStrs' = HM.fromList
         $ fmap (\(k, Str v) -> (T.pack k, toJSON v))
         $ Map.toList txStrs
-      body = toJSON $ HM.unions [registryKSs', txKSs', txDecs', txInts', txStrs']
+      body = toLegacyJson $ HM.unions [registryKSs', txKSs', txDecs', txInts', txStrs']
   pure $ evalEnv & eeMsgBody .~ body

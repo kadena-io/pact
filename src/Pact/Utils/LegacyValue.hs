@@ -152,7 +152,7 @@ instance FromJSON LegacyValue where
 -- also guaranteed that 'toJSON' can not be called in on the result to encode
 -- the value to JSON.
 --
-toLegacyJson :: ToJSON a => a -> LegacyValue
+toLegacyJson :: HasCallStack => ToJSON a => a -> LegacyValue
 toLegacyJson a = LegacyValue (give LegacyValueAllowed $ toJSON a)
 {-# INLINE toLegacyJson #-}
 

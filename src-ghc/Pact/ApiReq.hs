@@ -71,6 +71,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.SigData
 import Pact.Types.SPV
+import Pact.Utils.LegacyValue
 
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {
@@ -525,7 +526,7 @@ mkExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         (Exec (ExecMsg code mdata))
+         (Exec (ExecMsg code (toLegacyJson mdata)))
   return $ decodeUtf8 <$> cmd
 
 -- | Construct an Exec request message
@@ -551,7 +552,7 @@ mkUnsignedExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         (Exec (ExecMsg code mdata))
+         (Exec (ExecMsg code (toLegacyJson mdata)))
   return $ decodeUtf8 <$> cmd
 
 
@@ -614,7 +615,7 @@ mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
          pubMeta
          rid
          nid
-         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
 
@@ -647,7 +648,7 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          pubMeta
          (pack $ show rid)
          nid
-         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
 mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPairCaps]

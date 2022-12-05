@@ -78,7 +78,7 @@ data PactDbEnv e = PactDbEnv {
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData {
-  mdData :: !Value,
+  mdData :: !LegacyValue,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
   mdSigners :: [Signer]
@@ -86,7 +86,7 @@ data MsgData = MsgData {
 
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData Null def h def
+initMsgData h = MsgData (toLegacyJson Null) def h def
 
 -- | Describes either a ContMsg or ExecMsg.
 -- ContMsg is represented as a 'Maybe PactExec'
@@ -242,7 +242,7 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
 
   where
 
-    withRollback act = 
+    withRollback act =
       act `onException` safeRollback
 
     safeRollback =

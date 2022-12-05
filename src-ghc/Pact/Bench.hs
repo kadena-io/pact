@@ -58,6 +58,7 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Capability
 import Pact.Runtime.Utils
+import Pact.Utils.LegacyValue
 
 -- | Flags for enabling file-based perf bracketing,
 -- see 'mkFilePerf' below.
@@ -147,7 +148,7 @@ loadBenchModule db = do
   m <- decodeUtf8 <$> BS.readFile "tests/bench/bench.pact"
   pc <- parseCode m
   let md = MsgData
-           (object
+           (toLegacyJson $ object
             [ "keyset" .= object
               [ "keys" .= ["benchadmin"::Text]
               , "pred" .= (">"::Text)]
@@ -183,7 +184,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData cdata Nothing pactInitialHash ss
+  let md = MsgData (toLegacyJson cdata) Nothing pactInitialHash ss
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Transactional md
           initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -195,7 +196,7 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
-  let md = MsgData Null Nothing pactInitialHash []
+  let md = MsgData (toLegacyJson Null) Nothing pactInitialHash []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   env <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Local md
             initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -239,7 +240,7 @@ mkBenchCmd kps (str, t) = do
     $ Payload payload "nonce" () ss Nothing
   return (str, cmd)
   where
-    payload = Exec $ ExecMsg t Null
+    payload = Exec $ ExecMsg t (toLegacyJson Null)
     ss = keyPairsToSigners kps
 
 pk :: Text

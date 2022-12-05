@@ -82,6 +82,7 @@ import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.Namespace
 import Pact.Parse
+import Pact.Utils.LegacyValue
 
 
 -- | General helper functions
@@ -277,9 +278,9 @@ toPactBinding  m = "{ " <> allKeys <> " }"
 
 -- Only use in testing: Pact.GasModel.GasTests
 --
-toPactKeyset :: T.Text -> T.Text -> Maybe T.Text -> A.Value
+toPactKeyset :: T.Text -> T.Text -> Maybe T.Text -> LegacyValue
 toPactKeyset ksName ksValue predicate =
-  toJSON $ HM.fromList [(ksName, A.object ["keys" A..= [ksValue], "pred" A..= pred'])]
+  toLegacyJson $ HM.fromList [(ksName, A.object ["keys" A..= [ksValue], "pred" A..= pred'])]
   where pred' = maybe ">" id predicate
 
 

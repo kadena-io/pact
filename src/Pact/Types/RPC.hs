@@ -35,6 +35,7 @@ import Test.QuickCheck
 import Pact.Types.Orphans ()
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Utils.LegacyValue
 
 
 data PactRPC c =
@@ -64,7 +65,7 @@ instance Arbitrary c => Arbitrary (PactRPC c) where
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
-  , _pmData :: Value
+  , _pmData :: LegacyValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
@@ -88,13 +89,13 @@ instance ToJSON c => ToJSON (ExecMsg c) where
     {-# INLINE toEncoding #-}
 
 instance Arbitrary c => Arbitrary (ExecMsg c) where
-  arbitrary = ExecMsg <$> arbitrary <*> pure (String "JSON VALUE")
+  arbitrary = ExecMsg <$> arbitrary <*> pure (toLegacyJson $ String "JSON VALUE")
 
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !Value
+  , _cmData :: !LegacyValue
   , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show,Generic)
 
@@ -127,7 +128,7 @@ instance Arbitrary ContMsg where
     <$> arbitrary
     <*> arbitrary
     <*> arbitrary
-    <*> pure (String "JSON VALUE")
+    <*> pure (toLegacyJson $ String "JSON VALUE")
     <*> arbitrary
 
 contMsgJsonPairs :: (Monoid a, KeyValue a) => ContMsg -> a

@@ -61,6 +61,7 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Runtime.Utils
 import Pact.Types.KeySet (parseAnyKeysetName)
+import Pact.Utils.LegacyValue
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -78,7 +79,7 @@ parseMsgKey f s t = parseMsgKey' f s (Just t)
 
 parseMsgKey' :: (FromJSON t) => FunApp -> String -> (Maybe Text) -> Eval e t
 parseMsgKey' i msg key = do
-  b <- view eeMsgBody
+  b <- view (eeMsgBody . to _getLegacyValue)
   let go v = case fromJSON v of
         Success t -> return t
         Error e -> evalError' i $ prettyString msg <> ": parse failed: "

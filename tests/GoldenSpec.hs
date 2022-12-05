@@ -38,6 +38,7 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Utils.LegacyValue
 
 spec :: Spec
 spec = do
@@ -156,7 +157,7 @@ doCRTest' ec tn code = beforeAllWith initRes $
         payload = Payload exec "" pubMeta [] Nothing
         pubMeta = def
         parsedCode = either error id $ parsePact code
-        exec = Exec $ ExecMsg parsedCode Null
+        exec = Exec $ ExecMsg parsedCode (toLegacyJson Null)
     applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 "" noSPVSupport ec Local cmd (ProcSucc cmd)
 
   -- hacks 'readFromFile' to run the golden value through the roundtrip.

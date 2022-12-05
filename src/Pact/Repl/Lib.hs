@@ -78,6 +78,7 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
+import Pact.Utils.LegacyValue
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -398,10 +399,10 @@ setmsg i as = case as of
     case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
       Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
       Right v -> go v
-  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
-  [a] -> go (toJSON a)
+  [TObject (Object om _ _ _) _] -> go (toLegacyJson (fmap toPactValueLenient om))
+  [a] -> go (toLegacyJson a)
   _ -> argsError i as
-  where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
+  where go (v :: LegacyValue) = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of

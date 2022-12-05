@@ -21,6 +21,7 @@ import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromJSON')
 import Pact.Types.RPC
 import Pact.Types.Hash
+import Pact.Utils.LegacyValue
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
@@ -82,7 +83,7 @@ toSigners kps = return $ map makeSigner kps
 toExecPayload :: [Signer] -> Text -> ByteString
 toExecPayload signers t = BSL.toStrict $ A.encode payload
   where
-    payload = Payload (Exec (ExecMsg t Null)) "nonce" () signers Nothing
+    payload = Payload (Exec (ExecMsg t $ toLegacyJson Null)) "nonce" () signers Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Expectation

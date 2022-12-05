@@ -206,7 +206,7 @@ data EvalEnv e = EvalEnv {
       -- | Verified keys from message.
     , _eeMsgSigs :: !(M.Map PublicKey (S.Set UserCapability))
       -- | JSON body accompanying message.
-    , _eeMsgBody :: !Value
+    , _eeMsgBody :: !LegacyValue
       -- | Execution mode
     , _eeMode :: ExecutionMode
       -- | Entity governing private/encrypted 'pact' executions.

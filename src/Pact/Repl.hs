@@ -90,6 +90,7 @@ import Pact.Types.Logger
 import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
+import Pact.Utils.LegacyValue
 
 -- | for use in GHCI
 repl :: IO (Either () (Term Name))
@@ -135,7 +136,7 @@ initEvalEnv ls = do
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
-    , _eeMsgBody = Null
+    , _eeMsgBody = toLegacyJson Null
     , _eeMode = Transactional
     , _eeEntity = Nothing
     , _eePactStep = Nothing

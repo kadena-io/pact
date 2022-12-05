@@ -83,7 +83,7 @@ checkRoundtrip = ("roundtrip", prop_checkRoundtrip)
 -- 'toEncoding' is compatible with the indirect encoding via 'toJSON' and
 -- 'LegacyValue'.
 --
--- 'encode' internally calls 'toEncoding' which is supposed to be compabile with
+-- 'encode' internally calls 'toEncoding' which is supposed to be compatible with
 -- the encoding of 'toLegacyJson'.
 --
 -- 'toLegacyJson' does not call 'toEncoding'. Instead it first creates a 'Value'
