@@ -12,6 +12,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+
+-- megaparsec <9.3 backard compatiblity
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+
 -- |
 -- Module      :  Pact.Types.ExpParser
 -- Copyright   :  (C) 2018 Stuart Popejoy
