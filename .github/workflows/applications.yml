@@ -49,8 +49,8 @@ jobs:
       uses: actions/checkout@v3
 
     # Non Haskell dependencies
-    - name: Install z3 (ubuntu-20.04)
-      if: contains(matrix.os, 'ubuntu-20.04')
+    - name: Install z3 (ubuntu-20.04, ubuntu-22.04)
+      if: contains(matrix.os, 'ubuntu-20.04') || contains(matrix.os, 'ubuntu-22.04')
       run: |
         sudo apt-get update
         sudo apt-get install -y z3
