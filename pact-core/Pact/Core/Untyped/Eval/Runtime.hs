@@ -110,7 +110,7 @@ data EvalMEnv b i
 
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalM b i a =
-  EvalT (ExceptT (PactError i) (ReaderT (EvalMEnv b i) IO) a)
+  EvalM (ExceptT (PactError i) (ReaderT (EvalMEnv b i) IO) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadReader (EvalMEnv b i)
@@ -119,8 +119,8 @@ newtype EvalM b i a =
     , MonadCatch)
   via (ExceptT (PactError i) (ReaderT (EvalMEnv b i) IO))
 
-runEvalT :: EvalMEnv b i -> EvalM b i a -> IO a
-runEvalT s (EvalT action) = runReaderT action s
+runEvalT :: EvalMEnv b i -> EvalM b i a -> IO (Either (PactError i) a)
+runEvalT s (EvalM action) = runReaderT (runExceptT action) s
 
 data BuiltinFn b i m
   = BuiltinFn
