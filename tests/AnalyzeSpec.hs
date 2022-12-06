@@ -3991,14 +3991,12 @@ spec = describe "analyze" $ do
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
 
-#if !darwin_HOST_OS
     describe "associativity of list concatenation" $ do
       expectVerified [text|
         (defun test:bool (a:[integer] b:[integer] c:[integer])
           @model [ (property result) ]
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
-#endif
 
     describe "testing monotonicity of a function" $ do
       expectVerified [text|
