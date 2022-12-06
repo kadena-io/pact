@@ -56,20 +56,20 @@ jobs:
         sudo apt-get install -y z3
     - name: Install z3 (ubuntu-22.04)
       if: contains(matrix.os, 'ubuntu-22.04')
-      uses: pavpanchekha/setup-z3@0.3.0
+      uses: pavpanchekha/setup-z3@v0.3.0
       with:
         version: "4.11.2"
         architecture: "x64"
     - name: Install z3 (ubuntu-18.04)
       if: contains(matrix.os, 'ubuntu-18.04')
-      uses: pavpanchekha/setup-z3@0.3.0
+      uses: pavpanchekha/setup-z3@v0.3.0
       with:
         version: "4.8.10"
         architecture: "x64"
         distribution: "ubuntu-18.04"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
-      uses: pavpanchekha/setup-z3@0.3.0
+      uses: pavpanchekha/setup-z3@v0.3.0
       with:
         version: "4.8.10"
         architecture: "x64"
