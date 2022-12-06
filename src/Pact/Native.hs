@@ -1297,7 +1297,7 @@ txHash i as = argsError i as
 --
 -- e.g.
 --   -- hexadecimal to decimal
---   baseStrToInt 10 "abcdef123456" = 188900967593046
+--   baseStrToInt 16 "abcdef123456" = 188900967593046
 --
 baseStrToInt :: Integer -> Text -> Either Text Integer
 baseStrToInt base t =
@@ -1306,7 +1306,11 @@ baseStrToInt base t =
   else
     if T.null t
     then Left $ "empty text: " `T.append` asString t
-    else fmap (sign *) $ foldM go 0 $ T.unpack absPart
+    else
+      let invalidChars = filter (not. Char.isHexDigit) (T.unpack absPart) in
+      if null invalidChars
+      then fmap (sign *) $ foldM go 0 $ T.unpack absPart
+      else Left $ "text contains invalid characters: " <> T.pack invalidChars
   where
     (sign, absPart) = case T.stripPrefix "-" t of
       Nothing -> (1, t)
