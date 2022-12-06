@@ -106,7 +106,13 @@ smtConfig :: SBV.SMTConfig
 smtConfig = SBV.z3
   { SBVI.allowQuantifiedQueries = True
   , SBVI.verbose = False -- set to True for debugging SMT formulas
+  , SBVI.transcript = Nothing -- Just "smt.transcript"
   }
+
+-- | Solver timeout in millis. Usually timeout is a bad sign
+-- but can always try larger values here.
+timeout :: Integer
+timeout = 10000
 
 newtype VerificationWarnings = VerificationWarnings [Text]
   deriving (Eq, Show)
@@ -373,11 +379,6 @@ inNewAssertionStack act = do
 -- Produces args for analysis from model args
 analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
-
--- | Solver timeout in millis. Usually timeout is a bad sign
--- but can always try larger values here.
-timeout :: Integer
-timeout = 1000 -- one second
 
 -- | Check that all invariants hold for a function (this is actually used for
 -- defun, defpact, and step)
