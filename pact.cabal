@@ -356,7 +356,6 @@ library pact-core
     Pact.Core.Hash
     Pact.Core.Type
     Pact.Core.Pretty
-    Pact.Core.Runtime
     Pact.Core.Gas
     Pact.Core.Info
     Pact.Core.Errors
