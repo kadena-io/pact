@@ -12,15 +12,14 @@
 module Main where
 
 import Control.Monad
-import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
 import Data.Decimal
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as M
 import Data.List
+import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
 import Data.Time
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -58,7 +57,7 @@ main = do
     Gen.sample $
       replicateM 10 $
         flip runReaderT defaultEnv $
-          genBuiltin "at" TInt
+          genBuiltinByName "at" TInt
   forM_ xs2 $ \x2 -> do
     -- print x2
     putStrLn $ toLisp x2
@@ -68,7 +67,7 @@ main = do
     Gen.sample $
       replicateM 10 $
         flip runReaderT defaultEnv $
-          genBuiltin "+" TInt
+          genBuiltinByName "+" TInt
   forM_ xs3 $ \x3 -> do
     -- print x3
     putStrLn $ toLisp x3
@@ -80,7 +79,7 @@ main = do
                   (Gen.sample $
                     replicateM 1 $
                       flip runReaderT defaultEnv $
-                        genBuiltin name TInt)
+                        genBuiltinByName name TInt)
 
   -- opt <- O.execParser options
   tests <- mapM genTest ["+", "-"]
@@ -113,6 +112,11 @@ main = do
       putStrLn "Reporting coverage"
       coverageReport
 #endif
+
+single :: PactGen -> ExprType -> IO ()
+single g t = do
+  expr <- Gen.sample $ runReaderT (g t) defaultEnv
+  putStrLn $ toLisp expr
 
 #if defined(GAS_MODEL)
 
@@ -168,15 +172,16 @@ gasTest name exprs =
 #endif
 
 type PactGen = ExprType -> ReaderT Env Gen LispExpr
+
 type Scope = HashMap String LispExpr
 
--- jww (2022-09-26): More things needed here
 data Env = Env
-  { scopes :: [Scope]
+  { scopes :: [Scope],
+    depth :: Int -- how deeply can expressions be nested?
   }
 
 defaultEnv :: Env
-defaultEnv = Env []
+defaultEnv = Env [] 3
 
 -- Although "any" is technically a valid type, we only generate values in this
 -- module whose type we know at time of generation.
@@ -190,6 +195,7 @@ data ExprType
   | TList ExprType
   | TObj Schema
   | TTable Schema
+  | TArrow [ExprType] ExprType
   deriving (Eq, Show)
 
 -- jww (2022-09-26): Is this all that a scheme needs to be?
@@ -239,7 +245,7 @@ data LispExpr
   | ETime UTCTime
   | EKeyset
   | EList [LispExpr]
-  | EObject Schema -- jww (2022-09-26): should data corresponding to a scheme
+  | EObj Schema -- jww (2022-09-26): should data corresponding to a scheme
   | ETable Schema
   | EModule
   | ESym String
@@ -257,7 +263,7 @@ toLisp = \case
   ETime _ -> "!time!" -- jww (2022-09-26): TODO
   EKeyset -> "!keyset!" -- jww (2022-09-26): TODO
   EList xs -> "[" ++ intercalate ", " (map toLisp xs) ++ "]"
-  EObject _ -> "!object!" -- jww (2022-09-26): TODO
+  EObj _ -> "!object!" -- jww (2022-09-26): TODO
   ETable _ -> "!table!" -- jww (2022-09-26): TODO
   EModule -> "!module!" -- jww (2022-09-26): TODO
   ESym s -> s
@@ -307,7 +313,11 @@ genTime = ETime <$> genUTCTime
 
 genSchema :: MonadGen m => m Schema
 genSchema =
-  Gen.list (Range.exponential 0 4) ((,) <$> Gen.string (Range.linear 2 5) Gen.alpha <*> genType)
+  Gen.list (Range.exponential 0 4)
+    ((,) <$> Gen.string (Range.linear 2 5) Gen.alpha <*> genType)
+
+genObj :: MonadGen m => Schema -> m LispExpr
+genObj _sch = EObj <$> error "jww (2022-12-06): genObj NYI"
 
 genLitType :: MonadGen m => m ExprType
 genLitType = Gen.element [TStr, TInt, TDec, TBool]
@@ -335,9 +345,10 @@ genExpr = \case
   TTime -> genTime
   TKeyset -> pure EKeyset -- jww (2022-09-26): TODO
   TList t -> genList t
-  TObj sch -> pure $ EObject sch
+  TObj sch -> pure $ EObj sch
   -- elp (2022-10-26): should this even exist?
   TTable sch -> pure $ ETable sch -- jww (2022-09-26): TODO
+  TArrow doms cod -> genArrow doms cod
 
 listRange :: Range Int
 listRange = Range.constant 0 10
@@ -345,10 +356,58 @@ listRange = Range.constant 0 10
 genList :: PactGen
 genList t = EList <$> Gen.list listRange (genExpr t)
 
-genBuiltin :: String -> PactGen
-genBuiltin name t = case M.lookup name builtins of
+genArrow :: [ExprType] -> PactGen
+genArrow _doms _cod = error "jww (2022-12-06): genArrow NYI"
+
+genBuiltinByName :: String -> PactGen
+genBuiltinByName name t = case M.lookup name builtins of
   Just gen -> gen t
   Nothing -> fail $ "Unknown builtin: " ++ name
+
+genBuiltin :: PactGen
+genBuiltin t = case t of
+  TStr ->
+    Gen.choice
+      [ gen_at t
+      , gen_base64_decode t
+      , gen_base64_encode t
+      , gen_concat t
+      , gen_constantly t
+      , gen_drop t
+      , gen_format t
+      , gen_hash t
+      , gen_int_to_str t
+      , gen_namespace t
+      , gen_pact_id t
+      , gen_pact_version t
+      , gen_read_string t
+      , gen_take t
+      , gen_tx_hash t
+      , gen_typeof t
+      ]
+  TInt ->
+    Gen.choice
+      [ gen_length t
+      , gen_str_to_int t
+      ]
+  TDec ->
+    Gen.choice
+      [ gen_read_decimal t
+      ]
+  TBool ->
+    Gen.choice
+      [ gen_contains t
+      , gen_enforce t
+      , gen_enforce_one t
+      , gen_enforce_pact_version t
+      , gen_is_charset t
+      ]
+  TTime -> undefined
+  TKeyset -> undefined
+  TList _ -> undefined
+  TObj _ -> undefined
+  TTable _ -> undefined
+  TArrow _ _ -> undefined
 
 ------------------------------------------------------------------------
 -- Builtins
@@ -505,6 +564,7 @@ builtins =
       -- "interface" -> Just $ interfaceTests nativeName
     ]
 
+--NOTED
 gen_at :: PactGen
 gen_at t = do
   l@(EList xs) <- genList t
@@ -512,258 +572,371 @@ gen_at t = do
   i <- Gen.integral $ Range.constant 0 (pred (length xs))
   pure $ EParens [ESym "at", EInt (fromIntegral i), l]
 
+--NOTED
 gen_base64_decode :: PactGen
 gen_base64_decode t@TStr = do
   -- elp (2022-10-24):
   --
-  -- In order to properly stress this, we have to generate 2 strings:
-  -- one (the first part) encoded as valid base64, and then the second
-  -- being (potential) garbage so that we can stress the error path
-  -- more effectively.
-  --
+  -- In order to properly stress this, we have to generate 2 strings: one (the
+  -- first part) encoded as valid base64, and then the second being
+  -- (potential) garbage so that we can stress the error path more
+  -- effectively.
   EStr x <- genExpr t
   EStr y <- genExpr t
-
-  let z = Text.unpack
-        . toB64UrlUnpaddedText
-        . Text.encodeUtf8
-        . Text.pack
-        $ x
-
+  let z =
+        Text.unpack
+          . toB64UrlUnpaddedText
+          . Text.encodeUtf8
+          . Text.pack
+          $ x
   pure $ EParens [ESym "base64-decode", EStr $ z ++ y]
 gen_base64_decode _ = mzero
 
+--NOTED
 gen_base64_encode :: PactGen
 gen_base64_encode t@TStr = do
   x <- genExpr t
   pure $ EParens [ESym "base64-encode", x]
 gen_base64_encode _ = mzero
 
+--TODO
 gen_bind :: PactGen
-gen_bind t@TObj{} = do
+gen_bind t@TObj {} = do
   x <- genExpr t
   y <- genExpr t
-  z <- genExpr =<< lift genType
+  z <- genExpr =<< genType
   pure $ EParens [ESym "bind", x, y, z]
 gen_bind _ = mzero
 
+--TODO
 gen_chain_data :: PactGen
 gen_chain_data _ = pure $ EParens [ESym "chain-data"]
 
+--TODO
 gen_compose :: PactGen
 gen_compose _ = mzero -- jww (2022-09-26): TODO
 
+--NOTED
 gen_concat :: PactGen
-gen_concat t = do
+gen_concat t@TStr = do
   x <- genList t
   y <- genList t
   pure $ EParens [ESym "concat", x, y]
+gen_concat _ = mzero
 
+--NOTED
 gen_constantly :: PactGen
 gen_constantly t = do
   x <- genExpr t
-  y <- lift genType >>= genExpr
+  y <- genType >>= genExpr
   pure $ EParens [ESym "constantly", x, y]
 
+--NOTED
 gen_contains :: PactGen
-gen_contains t = do
-  x <- genList t
-  a <- genExpr t
+gen_contains TBool = do
+  x <- genType >>= genExpr
+  a <- genType >>= genExpr
   pure $ EParens [ESym "contains", a, x]
+gen_contains _ = mzero
 
+--TODO
 gen_define_namespace :: PactGen
-gen_define_namespace t@TStr = do
-  x <- genExpr t
-  pure $ EParens [ESym "define-namespace", x]
+gen_define_namespace (TObj _sch) = do
+  n <- genExpr TStr
+  g1 <- error "jww (2022-12-06): NYI" -- genGuard
+  g2 <- error "jww (2022-12-06): NYI" -- genGuard
+  pure $ EParens [ESym "define-namespace", n, g1, g2]
 gen_define_namespace _ = mzero
 
+--NOTED
 gen_drop :: PactGen
-gen_drop t = do
-  i <- lift genInt
+gen_drop TStr = do
+  i <- genInt
+  x <- genStr
+  pure $ EParens [ESym "drop", i, x]
+gen_drop (TList t) = do
+  i <- genInt
   x <- genList t
   pure $ EParens [ESym "drop", i, x]
+gen_drop (TObj _sch) = mzero -- jww (2022-12-06): TODO
+gen_drop _ = mzero
 
+--NOTED
 gen_enforce :: PactGen
 gen_enforce t@TBool = do
   x <- genExpr t
-  msg <- lift genStr
+  msg <- genStr
   pure $ EParens [ESym "enforce", x, msg]
 gen_enforce _ = mzero
 
+--NOTED
 gen_enforce_one :: PactGen
 gen_enforce_one t@TBool = do
-  x <- lift genStr
+  x <- genStr
   y <- genList t
   pure $ EParens [ESym "enforce-one", x, y]
 gen_enforce_one _ = mzero
 
+--NOTED
 gen_enforce_pact_version :: PactGen
-gen_enforce_pact_version _ = mzero -- jww (2022-09-26): TODO
+gen_enforce_pact_version TBool = do
+  ver <- genStr -- jww (2022-09-26): TODO
+  pure $ EParens [ESym "enforce-pact-version", ver]
+gen_enforce_pact_version _ = mzero
 
+--TODO
 gen_enumerate :: PactGen
-gen_enumerate t@TInt = do
-  x <- genExpr t
-  y <- genExpr t
-  pure $ EParens [ESym "enumerate", x, y]
+gen_enumerate (TList TInt) = do
+  x <- genInt
+  y <- genInt
+  EBool b <- genBool
+  if b
+    then do
+      z <- genInt
+      pure $ EParens [ESym "enumerate", x, y, z]
+    else do
+      pure $ EParens [ESym "enumerate", x, y]
 gen_enumerate _ = mzero
 
+--TODO
 gen_filter :: PactGen
-gen_filter _ = mzero -- jww (2022-09-26): TODO
+gen_filter (TList t) = do
+  f <- genArrow [t] TBool
+  l <- genList t
+  pure $ EParens [ESym "filter", f, l]
+gen_filter _ = mzero
 
+--TODO
 gen_fold :: PactGen
-gen_fold _ = mzero -- jww (2022-09-26): TODO
+gen_fold a = do
+  b <- genType
+  f <- genArrow [a, b] a
+  z <- genExpr a
+  l <- genList b
+  pure $ EParens [ESym "fold", f, z, l]
 
+--NOTED
 gen_format :: PactGen
-gen_format t = do
-  x@(EList l) <- genList t
-
+gen_format TStr = do
+  x@(EList l) <- genList TStr
   let i = length l
       -- creates a string of the shape "{}-{}-{}-{}-{}-{}"
       -- etc for the length of the list.
       s = intercalate "-" $ replicate i "{}"
-
   pure $ EParens [ESym "format", EStr s, x]
+gen_format _ = mzero
 
-
+--NOTED
 gen_hash :: PactGen
-gen_hash t = do
-  x <- genExpr t
+gen_hash TStr = do
+  x <- genType >>= genExpr
   pure $ EParens [ESym "hash", x]
+gen_hash _ = mzero
 
+--TODO
 gen_identity :: PactGen
 gen_identity t = do
   x <- genExpr t
-  pure $ EParens [ESym "identity", x]  -- jww (2022-09-26): TODO
+  pure $ EParens [ESym "identity", x]
 
+--TODO
 gen_if :: PactGen
-gen_if t@TBool = do
+gen_if t = do
+  b <- genBool
   x <- genExpr t
   y <- genExpr t
-  pure $ EParens [ESym "if", x, y]
-gen_if _ = mzero
+  pure $ EParens [ESym "if", b, x, y]
 
+--NOTED
 gen_int_to_str :: PactGen
-gen_int_to_str t@TInt = do
-  x <- genExpr t
+gen_int_to_str TStr = do
+  x <- genInt
   -- defaulting to 16 for the base conversion since
   -- it should be the upper bound in terms of
   -- computational cost
   pure $ EParens [ESym "int-to-str", EInt 16, x]
 gen_int_to_str _ = mzero
 
+--NOTED
 gen_is_charset :: PactGen
-gen_is_charset t@TStr = do
-  x <- genExpr t
+gen_is_charset TBool = do
+  x <- genStr
   -- latin1 is the upperbound in terms of complexity for
   -- this native.
   pure $ EParens [ESym "is-charset", EStr "CHARSET_LATIN1", x]
 gen_is_charset _ = mzero
 
+--NOTED
 gen_length :: PactGen
-gen_length t@TList{} = do
-  x <- genExpr t
+gen_length TInt = do
+  x <- genType >>= genList
   pure $ EParens [ESym "length", x]
 gen_length _ = mzero
 
+--TODO
 gen_list_modules :: PactGen
-gen_list_modules _ = pure $ EParens [ESym "list-modules"]
+gen_list_modules (TList TStr) = do
+  pure $ EParens [ESym "list-modules"]
+gen_list_modules _ = mzero
 
+--TODO
 gen_make_list :: PactGen
-gen_make_list t = do
-  n <- lift genInt -- n <= 0 defaults to the empty list
-  x <- genList t
-  pure $ EParens [ESym "make-list", n, x]
-
-gen_map :: PactGen
-gen_map _ = mzero -- jww (2022-09-26): TODO
-
-gen_zip :: PactGen
-gen_zip _ = mzero -- jww (2022-09-26): TODO
-
-gen_namespace :: PactGen
-gen_namespace t@TStr = do
+gen_make_list (TList t) = do
+  n <- Gen.integral listRange
   x <- genExpr t
+  pure $ EParens [ESym "make-list", EInt (fromIntegral n), x]
+gen_make_list _ = mzero
+
+--TODO
+gen_map :: PactGen
+gen_map (TList a) = do
+  b <- genType
+  f <- genArrow [b] a
+  l <- genList b
+  pure $ EParens [ESym "map", f, l]
+gen_map _ = mzero
+
+--TODO
+gen_zip :: PactGen
+gen_zip (TList c) = do
+  a <- genType
+  b <- genType
+  f <- genArrow [a, b] c
+  la <- genList a
+  lb <- genList b
+  pure $ EParens [ESym "zip", f, la, lb]
+gen_zip _ = mzero
+
+--NOTED
+gen_namespace :: PactGen
+gen_namespace TStr = do
+  x <- genStr
   pure $ EParens [ESym "namespace", x]
 gen_namespace _ = mzero
 
+--NOTED
 gen_pact_id :: PactGen
-gen_pact_id _ = pure $ EParens [ESym "pact-id"]
+gen_pact_id TStr = pure $ EParens [ESym "pact-id"]
+gen_pact_id _ = mzero
 
+--NOTED
 gen_pact_version :: PactGen
-gen_pact_version _ = pure $ EParens [ESym "pact-version"]
+gen_pact_version TStr = pure $ EParens [ESym "pact-version"]
+gen_pact_version _ = mzero
 
+--NOTED
 gen_read_decimal :: PactGen
+gen_read_decimal TDec = do
+  key <- genStr
+  pure $ EParens [ESym "read-decimal", key]
 gen_read_decimal _ = mzero
 
+--NOTED
 gen_read_integer :: PactGen
-gen_read_integer _ = mzero -- jww (2022-09-26): TODO
+gen_read_integer TInt = do
+  key <- genStr
+  pure $ EParens [ESym "read-decimal", key]
+gen_read_integer _ = mzero
 
+--TODO
 gen_read_msg :: PactGen
-gen_read_msg _ = mzero -- jww (2022-09-26): TODO
+gen_read_msg _t = do
+  EBool b <- genBool
+  if b
+   then do
+     key <- genStr
+     pure $ EParens [ESym "read-msg", key]
+   else do
+     pure $ EParens [ESym "read-msg"]
 
+--NOTED
 gen_read_string :: PactGen
-gen_read_string _ = mzero -- jww (2022-09-26): TODO
+gen_read_string TStr = do
+  key <- genStr
+  pure $ EParens [ESym "read-string", key]
+gen_read_string _ = mzero
 
+--TODO
 gen_remove :: PactGen
-gen_remove t@(TObj sch) = do
-  x <- genExpr t
+gen_remove (TObj sch) = do
+  x <- genObj sch
   (a, _) <- Gen.element sch
   pure $ EParens [ESym "remove", EStr a, x]
 gen_remove _ = mzero
 
+--TODO
 gen_resume :: PactGen
 gen_resume _ = mzero -- jww (2022-09-26): TODO
 
+--TODO
 gen_reverse :: PactGen
-gen_reverse t@TList{} = do
-  x <- genExpr t
+gen_reverse (TList t) = do
+  x <- genList t
   pure $ EParens [ESym "reverse", x]
 gen_reverse _ = mzero
 
+--TODO
 gen_sort :: PactGen
-gen_sort t@TList{} = do
-  x <- genExpr t
+gen_sort (TList t) = do
+  x <- genList t
   pure $ EParens [ESym "sort", x]
-gen_sort _ = mzero -- jww (2022-09-26): TODO
+gen_sort (TObj sch) = do
+  let _fields = map fst sch
+  mzero -- jww (2022-12-06): TODO
+gen_sort _ = mzero
 
+--NOTED
 gen_str_to_int :: PactGen
-gen_str_to_int t@TStr = do
-  x <- genExpr t
-  -- same as base64 decode - this needs to be
-  -- 2 strings concatenated to stress error paths
+gen_str_to_int TInt = do
+  x <- genStr
   pure $ EParens [ESym "str-to-int", x]
 gen_str_to_int _ = mzero
 
+--TODO
 gen_str_to_list :: PactGen
-gen_str_to_list t@TStr = do
-  x <- genExpr t
+gen_str_to_list (TList TStr) = do
+  x <- genStr
   pure $ EParens [ESym "str-to-list", x]
 gen_str_to_list _ = mzero
 
+--TODO
 gen_take :: PactGen
-gen_take t = do
-  x <- genExpr t
-  i <- lift genInt
+gen_take TStr = do
+  i <- genInt
+  x <- genStr
   pure $ EParens [ESym "take", i, x]
+gen_take (TList t) = do
+  i <- genInt
+  x <- genList t
+  pure $ EParens [ESym "take", i, x]
+gen_take (TObj _sch) = mzero -- jww (2022-12-06): TODO
+gen_take _ = mzero
 
+--TODO
 gen_try :: PactGen
 gen_try t = do
   x <- genExpr t
   y <- genExpr t
   pure $ EParens [ESym "try", x, y]
 
+--NOTED
 gen_tx_hash :: PactGen
-gen_tx_hash _ = pure $ EParens [ESym "tx-hash"]
+gen_tx_hash TStr = pure $ EParens [ESym "tx-hash"]
+gen_tx_hash _ = mzero
 
+--NOTED
 gen_typeof :: PactGen
-gen_typeof t = do
-  x <- genExpr t
+gen_typeof TStr = do
+  x <- genType >>= genExpr
   pure $ EParens [ESym "typeof", x]
+gen_typeof _ = mzero
 
+--TODO
 gen_distinct :: PactGen
-gen_distinct t = do
+gen_distinct (TList t) = do
   x <- genList t
   pure $ EParens [ESym "distinct", x]
+gen_distinct _ = mzero
 
 gen_where :: PactGen
 gen_where _ = mzero -- jww (2022-09-26): TODO
