@@ -346,7 +346,6 @@ library pact-core
     FlexibleInstances
 
   exposed-modules:
-    Pact.Core.Compile
     Pact.Core.Builtin
     Pact.Core.Names
     Pact.Core.Literal
@@ -394,6 +393,7 @@ library pact-core
     Pact.Core.Repl.Utils
     Pact.Core.Repl.Runtime
     Pact.Core.Repl.Runtime.ReplBuiltin
+    Pact.Core.Repl.Compile
 
 
 executable pact-core-repl

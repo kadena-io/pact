@@ -12,12 +12,10 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE InstanceSigs #-}
 
+
 module Pact.Core.Untyped.Eval.Runtime
  ( CEKTLEnv
  , CEKEnv
---  , HasTLEnv
---  , HasBuiltinEnv
---  , HasRuntimeEnv
  , CEKRuntimeEnv(..)
  , BuiltinFn(..)
  , EvalM(..)
@@ -25,14 +23,11 @@ module Pact.Core.Untyped.Eval.Runtime
  , CEKValue(..)
  , Cont(..)
  , mkBuiltinFn
---  , cekGas
---  , cekEvalLog
  , cekBuiltins
  , cekLoaded
  , cekGasModel
  , fromPactValue
  , checkPactValueType
---  , contHandler
  , CEKErrorHandler(..)
  , MonadCEKEnv(..)
  , MonadCEK

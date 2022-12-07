@@ -160,8 +160,19 @@ desugarLispTerm = \case
     let
       expr' = desugarLispTerm expr
     in foldr (binderToLet i) expr' binders
-  Lisp.Lam _name nsts body i ->
+  Lisp.Lam _name [] body i -> let
+    n = BN (BareName "#unitLamArg")
+    nty = Just TyUnit
+    body' = desugarLispTerm body
+    in Lam (pure (n, nty)) body' i
+  Lisp.Suspend body i -> let
+    n = BN (BareName "#unitLamArg")
+    nty = Just TyUnit
+    body' = desugarLispTerm body
+    in Lam (pure (n, nty)) body' i
+  Lisp.Lam _name (x:xs) body i ->
     let
+      nsts = x :| xs
       (ns, ts) = NE.unzip nsts
       ns' = BN . BareName <$> ns
       ts' = fmap desugarType <$> ts
@@ -177,6 +188,9 @@ desugarLispTerm = \case
   -- `(f)` to mean `(f ())`. Whether this stays or not is tentative.
   Lisp.App e [] i -> case desugarLispTerm e of
     v@Var{} ->
+      let arg = Constant LUnit i :| []
+      in App v arg i
+    v@Lam{} ->
       let arg = Constant LUnit i :| []
       in App v arg i
     e' -> e'

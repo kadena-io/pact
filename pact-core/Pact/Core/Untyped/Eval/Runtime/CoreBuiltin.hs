@@ -127,7 +127,11 @@ mulInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 mulInt = binaryIntFn (*)
 
 divInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-divInt = binaryIntFn quot
+divInt = mkBuiltinFn $ \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] ->
+    if i' == 0 then throwExecutionError' (ArithmeticException "div by zero")
+    else pure (VLiteral (LInteger (div i i')))
+  _ -> failInvariant "binary int function"
 
 negateInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 negateInt = unaryIntFn negate
@@ -212,7 +216,11 @@ mulDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 mulDec = binaryDecFn (*)
 
 divDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-divDec = binaryDecFn (/)
+divDec =  mkBuiltinFn \case
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+    if i' == 0 then throwExecutionError' (ArithmeticException "div by zero, decimal")
+    else pure (VLiteral (LDecimal (i / i')))
+  _ -> failInvariant "binary decimal function"
 
 negateDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 negateDec = unaryDecFn negate

@@ -1108,7 +1108,7 @@ replBuiltinType f = \case
   RExpectFailure -> let
     aVar = nd "a" 0
     aTv = TyVar aVar
-    in TypeScheme [aVar] [] (TyString :~> aTv :~> aTv :~> TyUnit)
+    in TypeScheme [aVar] [] (TyString :~> aTv :~> TyUnit)
   RExpectThat -> let
     aVar = nd "a" 0
     aTv = TyVar aVar

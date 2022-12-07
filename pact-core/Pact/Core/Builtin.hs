@@ -221,14 +221,14 @@ rawBuiltinToText = \case
   RawSub -> "(-)"
   RawMultiply -> "(*)"
   RawDivide -> "(/)"
-  RawNegate -> "(-)"
+  RawNegate -> "negate"
   RawAbs -> "abs"
   -- Bolean ops
   RawAnd -> "(&&)"
   RawOr -> "||"
   RawNot -> "not"
   -- Eq
-  RawEq -> "(==)"
+  RawEq -> "(=)"
   RawNeq -> "(!=)"
   -- Ord
   RawGT -> "(>)"
@@ -401,7 +401,7 @@ instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
     RExpect -> 5
-    RExpectFailure -> 3
+    RExpectFailure -> 2
     RExpectThat -> 3
     RPrint -> 2
     -- RLoad -> 1
@@ -448,7 +448,7 @@ replBuiltinToText f = \case
   RBuiltinWrap b -> f b
   RExpect -> "expect"
   RExpectFailure -> "expect-failure"
-  RExpectThat -> "expect"
+  RExpectThat -> "expect-that"
   RPrint -> "print"
   -- RLoad -> "load"
 
@@ -687,7 +687,7 @@ instance BuiltinArity CoreBuiltin where
     GEQList -> 2
     LTList -> 2
     LEQList -> 2
-    ShowList -> 1
+    ShowList -> 2
     AddList -> 2
     TakeList -> 2
     DropList -> 2
