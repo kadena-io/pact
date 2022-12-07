@@ -64,6 +64,7 @@ import Pact.Core.Syntax.Lisp.LexUtils
   progn      { PosToken TokenBlockIntro _ }
   err        { PosToken TokenError _ }
   try        { PosToken TokenTry _ }
+  suspend    { PosToken TokenSuspend _ }
   '{'        { PosToken TokenOpenBrace _ }
   '}'        { PosToken TokenCloseBrace _ }
   '('        { PosToken TokenOpenParens _ }
@@ -232,6 +233,7 @@ SExpr :: { LineInfo -> ParsedExpr }
   | ErrExpr { $1 }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
+  | SuspendExpr { $1 }
 
 ExprCommaSep :: { [ParsedExpr] }
   : ExprCommaSep ',' Expr { $3:$1 }
@@ -239,7 +241,7 @@ ExprCommaSep :: { [ParsedExpr] }
   | {- empty -} { [] }
 
 LamExpr :: { LineInfo -> ParsedExpr }
-  : lam '(' LamArgs ')' Expr { Lam ln0 (NE.fromList (reverse $3)) $5 }
+  : lam '(' LamArgs ')' Expr { Lam ln0 (reverse $3) $5 }
 
 IfExpr :: { LineInfo -> ParsedExpr }
   : if Expr Expr Expr { If $2 $3 $4 }
@@ -247,14 +249,18 @@ IfExpr :: { LineInfo -> ParsedExpr }
 TryExpr :: { LineInfo -> ParsedExpr }
   : try Expr Expr { Try $2 $3 }
 
+SuspendExpr :: { LineInfo -> ParsedExpr }
+  : suspend Expr { Suspend $2 }
+
 ErrExpr :: { LineInfo -> ParsedExpr }
   : err STR { Error (getStr $2) }
 
 LamArgs :: { [(Text, Maybe Type)] }
   : LamArgs IDENT ':' Type { (getIdent $2, Just $4):$1 }
   | LamArgs IDENT { (getIdent $2, Nothing):$1 }
-  | IDENT ':' Type { [(getIdent $1, Just $3)] }
-  | IDENT { [(getIdent $1, Nothing)] }
+  -- | IDENT ':' Type { [(getIdent $1, Just $3)] }
+  -- | IDENT { [(getIdent $1, Nothing)] }
+  | {- empty -} { [] }
 
 LetExpr :: { LineInfo -> ParsedExpr }
   : let '(' Binders ')' Block { LetIn (NE.fromList (reverse $3)) $5 }
@@ -347,14 +353,16 @@ getStr (PosToken (TokenString x) _ ) = x
 getIdentField = Field . getIdent
 
 mkIntegerConstant n i =
-  let strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
-  in Constant (LInteger (strToNum 0 n)) i
+  let (n', f) = if T.head n == '-' then (T.drop 1 n, negate) else (n, id)
+      strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
+  in Constant (LInteger (f (strToNum 0 n'))) i
 
 mkDecimal num dec i = do
-  let strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
+  let (num', f) = if T.head num == '-' then (T.drop 1 num, negate) else (num, id)
+      strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
       prec = T.length dec
   when (prec > 255) $ throwParseError (PrecisionOverflowError prec) i
-  let out = Decimal (fromIntegral prec) (strToNum (strToNum 0 num) dec)
+  let out = Decimal (fromIntegral prec) (f (strToNum (strToNum 0 num') dec))
   pure $ Constant (LDecimal out) i
 
 mkQualName ns (mod, (Just ident)) info =

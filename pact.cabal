@@ -335,6 +335,15 @@ library pact-core
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
+  default-extensions:
+    OverloadedStrings
+    ViewPatterns
+    LambdaCase
+    TupleSections
+    BangPatterns
+    ScopedTypeVariables
+    FlexibleContexts
+    FlexibleInstances
 
   exposed-modules:
     Pact.Core.Compile
@@ -347,7 +356,6 @@ library pact-core
     Pact.Core.Hash
     Pact.Core.Type
     Pact.Core.Pretty
-    Pact.Core.Runtime
     Pact.Core.Gas
     Pact.Core.Info
     Pact.Core.Errors
@@ -384,6 +392,9 @@ library pact-core
 
     -- Repl
     Pact.Core.Repl.Utils
+    Pact.Core.Repl.Runtime
+    Pact.Core.Repl.Runtime.ReplBuiltin
+    Pact.Core.Repl.Compile
 
 
 executable pact-core-repl

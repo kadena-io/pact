@@ -109,6 +109,7 @@ data Token
   | TokenTrue
   | TokenFalse
   | TokenBlockIntro
+  | TokenSuspend
   -- Layout
   | TokenEOF
   deriving (Eq, Show)
@@ -280,6 +281,7 @@ renderTokenText = \case
   TokenTrue -> "true"
   TokenFalse -> "false"
   TokenEOF -> "EOF"
+  TokenSuspend -> "suspend"
 
 
 instance Pretty Token where

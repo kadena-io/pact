@@ -21,20 +21,20 @@
 --
 
 module Pact.Core.Untyped.Eval.CEK
- ( CEKTLEnv
- , CEKEnv
- , CEKValue(..)
- , BuiltinFn(..)
- , runCEK
- , eval
- , Cont(..)
+ ( eval
+ , failInvariant
+ , throwExecutionError'
+ , unsafeApplyOne
+ , unsafeApplyTwo
  ) where
 
 import Control.Lens
-import Control.Monad(when)
-import Control.Monad.Catch
-import Control.Monad.IO.Class
-import Data.IORef
+import Control.Monad.Except
+-- import Control.Monad(when)
+-- import Control.Monad.Catch
+-- import Control.Monad.IO.Class
+-- import Data.IORef
+import Data.Default
 import Data.Text(Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
@@ -48,53 +48,58 @@ import Pact.Core.Gas
 import Pact.Core.Untyped.Term
 import Pact.Core.Untyped.Eval.Runtime
 
-chargeGas :: Gas -> EvalT b i ()
-chargeGas g = do
-  ref <- view cekGas
-  gCurr <- liftIO (readIORef ref)
-  gLimit <- view (cekGasModel . geGasLimit)
-  let gUsed = g + gCurr
-      msg = "Gas Limit (" <> T.pack (show gLimit) <> ") exceeeded: " <> T.pack (show gUsed)
-  when (gUsed > gLimit) $ throwM (GasExceeded msg)
+-- chargeGas :: MonadCEK b i m => Gas -> m ()
+-- chargeGas g = do
+  -- ref <- view cekGas
+  -- gCurr <- liftIO (readIORef ref)
+  -- gLimit <- view (cekGasModel . geGasLimit)
+  -- let gUsed = g + gCurr
+  --     msg = "Gas Limit (" <> T.pack (show gLimit) <> ") exceeeded: " <> T.pack (show gUsed)
+  -- when (gUsed > gLimit) $ throwM (GasExceeded msg)
 
-chargeNodeGas :: NodeType -> EvalT b i ()
+chargeNodeGas :: MonadCEK b i m => NodeType -> m ()
 chargeNodeGas nt = do
-  gm <- view (cekGasModel . geGasModel . gmNodes)
-  chargeGas (gm nt)
+  gm <- view (cekGasModel . geGasModel . gmNodes) <$> cekReadEnv
+  cekChargeGas (gm nt)
+  -- gm <- view (cekGasModel . geGasModel . gmNodes)
+  -- chargeGas (gm nt)
 
-chargeNative :: b -> EvalT b i ()
+chargeNative :: MonadCEK b i m => b -> m ()
 chargeNative native = do
-  gm <- view (cekGasModel . geGasModel . gmNatives)
-  chargeGas (gm native)
+  gm <- view (cekGasModel . geGasModel . gmNatives) <$> cekReadEnv
+  cekChargeGas (gm native)
+  -- gm <- view (cekGasModel . geGasModel . gmNatives)
+  -- chargeGas (gm native)
 
 -- Todo: exception handling? do we want labels
 -- Todo: `traverse` usage should be perf tested.
 -- It might be worth making `Arg` frames incremental, as opposed to a traverse call
 eval
-  :: CEKEnv b i
+  :: forall b i m. (MonadCEK b i m)
+  => CEKEnv b i m
   -> EvalTerm b i
-  -> EvalT b i (CEKValue b i)
+  -> m (CEKValue b i m)
 eval = evalCEK Mt CEKNoHandler
   where
   evalCEK
-    :: Cont b i
-    -> CEKErrorHandler b i
-    -> CEKEnv b i
+    :: Cont b i m
+    -> CEKErrorHandler b i m
+    -> CEKEnv b i m
     -> EvalTerm b i
-    -> EvalT b i (CEKValue b i)
-  evalCEK cont handler env (Var n _)  = do
+    -> m (CEKValue b i m)
+  evalCEK cont handler env (Var n info)  = do
     chargeNodeGas VarNode
     case _nKind n of
       NBound i -> case RAList.lookup env i of
         Just v -> returnCEK cont handler v
-        Nothing -> failInvariant $ "unbound identifier" <> T.pack (show n)
+        Nothing -> failInvariant' ("unbound identifier" <> T.pack (show n)) info
         -- returnCEK cont (env RAList.!! i)
       -- Top level names are not closures, so we wipe the env
       NTopLevel mname mh -> do
         let fqn = FullyQualifiedName mname (_nName n) mh
-        views cekLoaded (Map.lookup fqn) >>= \case
+        cekReadEnv >>= \renv -> case views cekLoaded (Map.lookup fqn) renv of
           Just d -> evalCEK cont handler RAList.Nil (defTerm d)
-          Nothing -> failInvariant ("top level name " <> T.pack (show fqn) <> " not in scope")
+          Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
   evalCEK cont handler _env (Constant l _) = do
     chargeNodeGas ConstantNode
     returnCEK cont handler (VLiteral l)
@@ -106,7 +111,7 @@ eval = evalCEK Mt CEKNoHandler
     returnCEK cont handler (VClosure body env)
   evalCEK cont handler _env (Builtin b _) = do
     chargeNodeGas BuiltinNode
-    builtins <- view cekBuiltins
+    builtins <- view cekBuiltins <$> cekReadEnv
     returnCEK cont handler (VNative (builtins b))
   evalCEK cont handler env (Sequence e1 e2 _) = do
     chargeNodeGas SeqNode
@@ -123,10 +128,10 @@ eval = evalCEK Mt CEKNoHandler
   evalCEK _ handler _ (Error e _) =
     returnCEK Mt handler (VError e)
   returnCEK
-    :: Cont b i
-    -> CEKErrorHandler b i
-    -> CEKValue b i
-    -> EvalT b i (CEKValue b i)
+    :: Cont b i m
+    -> CEKErrorHandler b i m
+    -> CEKValue b i m
+    -> m (CEKValue b i m)
   returnCEK Mt handler v =
     case handler of
       CEKNoHandler -> return v
@@ -156,17 +161,51 @@ eval = evalCEK Mt CEKNoHandler
       chargeNative b
       fn (reverse (arg:args)) >>= returnCEK cont handler
     | otherwise = returnCEK cont handler (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
-  applyLam _ _ _ _ = failInvariant "Applying value to non-function"
+  applyLam _ _ _ _ = failInvariant' "Applying value to non-function" def
 
-runCEK
-  :: CEKRuntimeEnv b i
-  -- ^ runtime environment
-  -> EvalTerm b i
-  -- ^ Term to evaluate
-  -> IO (CEKValue b i)
-runCEK env term =
-  runEvalT env (eval RAList.Nil term)
+-- runCEK
+--   :: forall b i m. MonadCEK b i m
+--   => CEKRuntimeEnv b i m
+--   -- ^ runtime environment
+--   -> EvalTerm b i
+--   -- ^ Term to evaluate
+--   -> m (CEKValue b i m)
+-- runCEK env term =
+--   runEvalT env (eval RAList.Nil term)
 
-failInvariant :: Text -> EvalT b i a
+failInvariant :: MonadCEK b i m => Text -> m a
 failInvariant b =
-  throwM (FatalExecutionError ("invariant failure, native arg failure: " <> b))
+  let e = PEExecutionError (FatalExecutionError b) def
+  in throwError e
+
+failInvariant' :: MonadCEK b i m => Text -> i -> m a
+failInvariant' b i =
+  let e = PEExecutionError (FatalExecutionError b) i
+  in throwError e
+
+throwExecutionError' :: (MonadCEK b i m) => ExecutionError -> m a
+throwExecutionError' e = throwError (PEExecutionError e def)
+
+unsafeApplyOne
+  :: MonadCEK b i m
+  => CEKValue b i m
+  -> CEKValue b i m
+  -> m (CEKValue b i m)
+unsafeApplyOne (VClosure body env) arg = eval (RAList.cons arg env) body
+unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
+  if arity - 1 <= 0 then fn (reverse (arg:args))
+  else pure (VNative (BuiltinFn b fn (arity -1) (arg:args)))
+unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
+
+unsafeApplyTwo
+  :: MonadCEK b i m
+  => CEKValue b i m
+  -> CEKValue b i m
+  -> CEKValue b i m
+  -> m (CEKValue b i m)
+unsafeApplyTwo (VClosure (Lam body _) env) arg1 arg2 =
+  eval (RAList.cons arg2 (RAList.cons arg1 env)) body
+unsafeApplyTwo (VNative (BuiltinFn b fn arity args)) arg1 arg2 =
+  if arity - 2 <= 0 then fn (reverse (arg1:arg2:args))
+  else pure $ VNative $ BuiltinFn b fn (arity - 2) (arg1:arg2:args)
+unsafeApplyTwo _ _ _ = failInvariant "Applied argument to non-closure in native"

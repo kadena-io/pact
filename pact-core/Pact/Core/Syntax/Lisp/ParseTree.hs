@@ -9,6 +9,7 @@ import Control.Lens hiding (List, op)
 import Data.Foldable(fold)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.List(intersperse)
 
 import qualified Data.List.NonEmpty as NE
 
@@ -29,7 +30,7 @@ instance Pretty (Binder i) where
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam ParsedName (NonEmpty (Text, Maybe Type)) (Expr i) i
+  | Lam ParsedName [(Text, Maybe Type)] (Expr i) i
   | If (Expr i) (Expr i) (Expr i) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
@@ -37,6 +38,7 @@ data Expr i
   | List [Expr i] i
   | Constant Literal i
   | Try (Expr i) (Expr i) i
+  | Suspend (Expr i) i
   | Error Text i
   deriving Show
 
@@ -59,6 +61,8 @@ termInfo f = \case
     Operator op <$> f i
   List nel i ->
     List nel <$> f i
+  Suspend e i ->
+    Suspend e <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
   Constant l i ->
     Constant l <$> f i
@@ -89,6 +93,8 @@ instance Pretty (Expr i) where
       parens ("try" <+> pretty e1 <+> pretty e2)
     Error e _ ->
       parens ("error \"" <> pretty e <> "\"")
+    Suspend e _ ->
+      parens ("suspend" <+> pretty e)
     -- UnaryOp uop e1 _ ->
     --   pretty uop <> pretty e1
     -- Object m _ ->
@@ -104,4 +110,4 @@ instance Pretty (Expr i) where
     renderLamPair (n, mt) = case mt of
       Nothing -> pretty n
       Just t -> parens $ pretty n <+> ":" <+> pretty t
-    renderLamTypes = fold . NE.intersperse " " . fmap renderLamPair
+    renderLamTypes = fold . intersperse " " . fmap renderLamPair

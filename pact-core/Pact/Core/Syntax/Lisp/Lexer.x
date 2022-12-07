@@ -29,10 +29,12 @@ $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
-@integer = [$digit]+
+@integer = [\-]?[$digit]+
+@comment = [\;][\;][.]*[\n]
 
 
 tokens :-
+    @comment;
     $white+;
     -- Keywords
     let          { token TokenLet }
@@ -71,7 +73,10 @@ tokens :-
     try          { token TokenTry }
     error        { token TokenError }
     progn        { token TokenBlockIntro }
+    suspend      { token TokenSuspend }
 
+    @integer     { emit TokenNumber }
+    @ident       { emit TokenIdent }
     \(           { token TokenOpenParens }
     \)           { token TokenCloseParens }
     \{           { token TokenOpenBrace }
@@ -96,8 +101,6 @@ tokens :-
     \&           { token TokenBitAnd }
     \|           { token TokenBitAnd }
     \"           { stringLiteral }
-    @integer     { emit TokenNumber }
-    @ident       { emit TokenIdent }
     \-\>         { token TokenTyArrow }
 
 {

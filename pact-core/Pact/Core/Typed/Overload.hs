@@ -1,12 +1,11 @@
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 
 
 module Pact.Core.Typed.Overload
@@ -18,6 +17,7 @@ module Pact.Core.Typed.Overload
  , runOverloadReplProgram
  ) where
 
+import Control.Lens
 import Control.Monad.Except
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
@@ -42,10 +42,20 @@ newtype OverloadM info a =
 throwOverloadError :: String -> i -> OverloadM i a
 throwOverloadError e = throwError . PEOverloadError (OverloadError (T.pack e))
 
+class SolveOverload raw resolved | raw -> resolved where
+  solveOverload
+    :: info
+    -> raw
+    -> [Type tyname]
+    -> [Pred tyname]
+    -> OverloadM info (Term Name tyname resolved info)
+  liftRaw :: RawBuiltin -> raw
+
 resolveTerm
-  :: forall info tyname.
-     OverloadedTerm tyname RawBuiltin info
-  -> OverloadM info (CoreEvalTerm tyname info)
+  :: forall tyname raw reso info.
+    (SolveOverload raw reso)
+  => OverloadedTerm tyname raw info
+  -> OverloadM info (Term Name tyname reso info)
 resolveTerm = \case
   Var n i -> pure (Var n i)
   Lam nts e i ->
@@ -62,95 +72,148 @@ resolveTerm = \case
     ListLit tn <$> traverse resolveTerm ts <*> pure i
   Constant lit i ->
     pure (Constant lit i)
-  Builtin b i ->
-    solveOverload i b
+  Builtin (bs, tys, preds) i ->
+    solveOverload i bs tys preds
   Try e1 e2 i ->
     Try <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
   TyAbs ns term i ->
     TyAbs ns <$> resolveTerm term <*> pure i
   Error t e i ->
     pure (Error t e i)
-  where
-  listEqualityInstance i raw inst (Pred tc t) = do
-    b <- solveOverload i (raw, [t], [Pred tc t])
-    let a1Var = Name "" (NBound 1)
-        a1 = (a1Var, TyList t)
-        a2Var = Name "" (NBound 0)
-        a2 = (a2Var, TyList t)
-        app = App (Builtin inst i) (b :| [Var a1Var i, Var a2Var i]) i
-    pure (Lam (a1 :| [a2]) app i)
 
-  specializeAdd
-    :: info
-    -> Pred tyname
-    -> OverloadM info (CoreEvalTerm tyname info)
-  specializeAdd i (Pred _ t) = case t of
-    TyInt -> pure (Builtin AddInt i)
-    TyDecimal -> pure (Builtin AddDec i)
-    TyString -> pure (Builtin AddStr i)
-    TyList _ -> pure (Builtin AddList i)
-    _ -> throwOverloadError "unable to resolve overload for Add Operation" i
+withTyApps
+  :: Term name tyname builtin info
+  -> [Type tyname]
+  -> Term name tyname builtin info
+withTyApps t = \case
+  x:xs -> TyApp t (x :| xs) (view termInfo t)
+  [] -> t
 
-  specializeNumOp
-    :: info
-    -> NumResolution
-    -> Pred tyname
-    -> OverloadM info (CoreEvalTerm tyname info)
-  specializeNumOp i reso (Pred _ t) = case t of
-    TyInt -> pure (Builtin (_nrIntInstance reso) i)
-    TyDecimal -> pure (Builtin (_nrDecInstance reso) i)
-    _ -> throwOverloadError "unable to resolve overload for Num Operation" i
+instance SolveOverload RawBuiltin CoreBuiltin where
+  solveOverload = solveCoreOverload
+  liftRaw = id
 
-  specializeEq
-    :: info
-    -> RawBuiltin
-    -> EqResolution
-    -> Pred tyname
-    -> OverloadM info (CoreEvalTerm tyname info)
-  specializeEq i raw reso (Pred _ t) = case t of
-    TyInt -> pure (Builtin (_erIntInstance reso) i)
-    TyDecimal -> pure (Builtin (_erDecInstance reso) i)
-    TyString -> pure (Builtin (_erStrInstance reso) i)
-    TyUnit -> pure (Builtin (_erUnitInstance reso) i)
-    TyBool -> pure (Builtin (_erBoolInstance reso) i)
-    TyList t' ->
-      listEqualityInstance i raw (_erListInstance reso) (Pred Eq t')
-    _ -> throwOverloadError "unable to resolve overload for Eq Operation" i
+instance (SolveOverload raw resolved) => SolveOverload (ReplBuiltin raw) (ReplBuiltin resolved) where
+  solveOverload i b tys preds = case b of
+    RBuiltinWrap raw -> over termBuiltin RBuiltinWrap <$> solveOverload i raw tys preds
+    RExpect ->
+      case preds of
+        [Pred Eq t1, Pred Show t2] -> do
+          pEq <- solveOverload i (liftRaw RawEq :: ReplBuiltin raw) tys [Pred Eq t1]
+          pShow <- solveOverload i (liftRaw RawShow :: ReplBuiltin raw) tys [Pred Show t2]
+          let bApp = withTyApps (Builtin RExpect i) tys
+          pure (App bApp (pEq :| [pShow]) i)
+        _ -> throwOverloadError "Expect" i
+    RExpectFailure -> pure $ withTyApps (Builtin RExpectFailure i) tys
+    RExpectThat -> pure $ withTyApps (Builtin RExpectThat i) tys
+    RPrint -> case preds of
+      [Pred Show t1] -> do
+        eqT <- solveOverload i (liftRaw RawShow :: ReplBuiltin raw) tys [Pred Show t1]
+        let bApp = withTyApps (Builtin RPrint i) tys
+        pure (App bApp (pure eqT) i)
+      _ -> throwOverloadError "Print" i
+  liftRaw r = RBuiltinWrap (liftRaw r)
 
-  specializeOrd
-    :: info
-    -> RawBuiltin
-    -> OrdResolution
-    -> Pred tyname
-    -> OverloadM info (CoreEvalTerm tyname info)
-  specializeOrd i raw reso (Pred _ t) = case t of
-    TyInt -> pure (Builtin (_orIntInstance reso) i)
-    TyDecimal -> pure (Builtin (_orDecInstance reso) i)
-    TyString -> pure (Builtin (_orStrInstance reso) i)
-    TyUnit -> pure (Builtin (_orUnitInstance reso) i)
-    TyList t' ->
-      listEqualityInstance i raw (_orListInstance reso) (Pred Ord t')
-    _ -> throwOverloadError "unable to resolve overload for Ord Operation" i
 
-  specializeFracOp
-    :: info
-    -> FracResolution
-    -> Pred tyname
-    -> OverloadM info (CoreEvalTerm tyname info)
-  specializeFracOp i reso (Pred _ t) = case t of
-    TyInt -> pure (Builtin (_frIntInstance reso) i)
-    TyDecimal -> pure (Builtin (_frDecInstance reso) i)
-    _ -> throwOverloadError "unable to resolve overload for Fractional Operation" i
+listEqualityInstance
+  :: info
+  -> RawBuiltin
+  -> CoreBuiltin
+  -> Pred tyname
+  -> OverloadM info (Term Name tyname CoreBuiltin info)
+listEqualityInstance i raw inst (Pred tc t) = do
+  b <- solveCoreOverload i raw [t] [Pred tc t]
+  let tyApp = TyApp (Builtin inst i) (t :| []) i
+  pure $ App tyApp (b :| []) i
 
-  specializeListLikeOp
-    :: info
-    -> ListLikeResolution
-    -> Pred tyname
-    -> OverloadM info (CoreEvalTerm tyname info)
-  specializeListLikeOp i reso (Pred _ t) = case t of
-    TyString -> pure (Builtin (_llrStrInstance reso) i)
-    TyList _ -> pure (Builtin (_llrListInstance reso) i)
-    _ -> throwOverloadError "unable to resolve overload for ListLike Operation" i
+specializeAdd
+  :: info
+  -> Pred tyname
+  -> OverloadM info (CoreEvalTerm tyname info)
+specializeAdd i (Pred _ t) = case t of
+  TyInt -> pure (Builtin AddInt i)
+  TyDecimal -> pure (Builtin AddDec i)
+  TyString -> pure (Builtin AddStr i)
+  TyList _ -> pure (Builtin AddList i)
+  _ -> throwOverloadError "unable to resolve overload for Add Operation" i
+
+specializeNumOp
+  :: info
+  -> NumResolution
+  -> Pred tyname
+  -> OverloadM info (CoreEvalTerm tyname info)
+specializeNumOp i reso (Pred _ t) = case t of
+  TyInt -> pure (Builtin (_nrIntInstance reso) i)
+  TyDecimal -> pure (Builtin (_nrDecInstance reso) i)
+  _ -> throwOverloadError "unable to resolve overload for Num Operation" i
+
+specializeEq
+  :: info
+  -> RawBuiltin
+  -> EqResolution
+  -> Pred tyname
+  -> OverloadM info (CoreEvalTerm tyname info)
+specializeEq i raw reso (Pred _ t) = case t of
+  TyInt -> pure (Builtin (_erIntInstance reso) i)
+  TyDecimal -> pure (Builtin (_erDecInstance reso) i)
+  TyString -> pure (Builtin (_erStrInstance reso) i)
+  TyUnit -> pure (Builtin (_erUnitInstance reso) i)
+  TyBool -> pure (Builtin (_erBoolInstance reso) i)
+  TyList t' ->
+    listEqualityInstance i raw (_erListInstance reso) (Pred Eq t')
+  _ -> throwOverloadError "unable to resolve overload for Eq Operation" i
+
+specializeOrd
+  :: info
+  -> RawBuiltin
+  -> OrdResolution
+  -> Pred tyname
+  -> OverloadM info (CoreEvalTerm tyname info)
+specializeOrd i raw reso (Pred _ t) = case t of
+  TyInt -> pure (Builtin (_orIntInstance reso) i)
+  TyDecimal -> pure (Builtin (_orDecInstance reso) i)
+  TyString -> pure (Builtin (_orStrInstance reso) i)
+  TyUnit -> pure (Builtin (_orUnitInstance reso) i)
+  TyList t' ->
+    listEqualityInstance i raw (_orListInstance reso) (Pred Ord t')
+  _ -> throwOverloadError "unable to resolve overload for Ord Operation" i
+
+specializeFracOp
+  :: info
+  -> FracResolution
+  -> Pred tyname
+  -> OverloadM info (CoreEvalTerm tyname info)
+specializeFracOp i reso (Pred _ t) = case t of
+  TyInt -> pure (Builtin (_frIntInstance reso) i)
+  TyDecimal -> pure (Builtin (_frDecInstance reso) i)
+  _ -> throwOverloadError "unable to resolve overload for Fractional Operation" i
+
+specializeShow
+  :: i
+  -> Pred tyname
+  -> OverloadM i (Term Name tyname CoreBuiltin i)
+specializeShow i (Pred _ t) = case t of
+  TyInt -> pure (Builtin ShowInt i)
+  TyDecimal -> pure (Builtin ShowDec i)
+  TyString -> pure (Builtin ShowStr i)
+  TyUnit -> pure (Builtin ShowUnit i)
+  TyBool -> pure (Builtin ShowBool i)
+  TyList t' -> do
+    b <- solveCoreOverload i RawShow [t'] [Pred Show t']
+    let tyApp = TyApp (Builtin ShowList i) (t' :| []) i
+    pure $ App tyApp (b :| []) i
+  _ -> throwOverloadError "Show" i
+
+specializeListLikeOp
+  :: info
+  -> ListLikeResolution
+  -> Pred tyname
+  -> OverloadM info (CoreEvalTerm tyname info)
+specializeListLikeOp i reso (Pred _ t) = case t of
+  TyString -> pure (Builtin (_llrStrInstance reso) i)
+  TyList _ -> pure (Builtin (_llrListInstance reso) i)
+  _ -> throwOverloadError "unable to resolve overload for ListLike Operation" i
+
   -- We specialize here on the common case
   -- and solve overloaded variables.
   -- see: [Typeclasses and Instances] in
@@ -160,147 +223,265 @@ resolveTerm = \case
   -- to the builtins
   -- Todo: refactor to get an exhaustivity check
   -- on the raw builtins
-  solveOverload
-    :: info
-    -> (RawBuiltin, [Type tyname], [Pred tyname])
-    -> OverloadM info (CoreEvalTerm tyname info)
-  solveOverload i = \case
+solveCoreOverload
+  :: info
+  -> RawBuiltin
+  -> [Type tyname]
+  -> [Pred tyname]
+  -> OverloadM info (CoreEvalTerm tyname info)
+solveCoreOverload i b tys preds = case b of
+  RawAdd ->
+    singlePred preds i (specializeAdd i) "Add"
+  RawSub ->
+    singlePred preds i (specializeNumOp i subResolve) "Subtract"
+  RawMultiply ->
+    singlePred preds i (specializeNumOp i mulResolve) "Multiply"
+  RawDivide ->
+    singlePred preds i (specializeNumOp i divResolve) "Divide"
+  RawNegate ->
+    singlePred preds i (specializeNumOp i negateResolve) "Negate"
+  RawAbs ->
+    singlePred preds i (specializeNumOp i absResolve) "Abs"
+  RawAnd ->
+    pure (Builtin AndBool i)
+  RawOr ->
+    pure (Builtin OrBool i)
+  RawNot ->
+    pure (Builtin NotBool i)
+  RawEq ->
+    singlePred preds i (specializeEq i RawEq eqResolve) "Eq"
+  RawNeq ->
+    singlePred preds i (specializeEq i RawNeq neqResolve) "Neq"
+  RawGT ->
+    singlePred preds i (specializeOrd i RawGT gtResolve) "GT"
+  RawGEQ ->
+    singlePred preds i (specializeOrd i RawGEQ geqResolve) "GEQ"
+  RawLT ->
+    singlePred preds i (specializeOrd i RawLT ltResolve) "LT"
+  RawLEQ ->
+    singlePred preds i (specializeOrd i RawLEQ leqResolve) "LEQ"
+  RawBitwiseAnd ->
+    pure (Builtin BitAndInt i)
+  RawBitwiseOr ->
+    pure (Builtin BitOrInt i)
+  RawBitwiseXor ->
+    pure (Builtin BitXorInt i)
+  RawBitwiseFlip ->
+    pure (Builtin BitComplementInt i)
+  RawBitShift ->
+    pure (Builtin BitShiftInt i)
+  RawRound ->
+    pure (Builtin RoundDec i)
+  RawCeiling ->
+    pure (Builtin CeilingDec i)
+  RawFloor ->
+    pure (Builtin FloorDec i)
+  RawExp ->
+    singlePred preds i (specializeFracOp i expResolve) "Exp"
+  RawLn ->
+    singlePred preds i (specializeFracOp i lnResolve) "Ln"
+  RawSqrt ->
+    singlePred preds i (specializeFracOp i sqrtResolve) "Sqrt"
+  RawLogBase ->
+    singlePred preds i (specializeFracOp i logBaseResolve) "Log"
+  RawLength ->
+    singlePred preds i (specializeListLikeOp i lengthResolve) "Length"
+  RawTake ->
+    singlePred preds i (specializeListLikeOp i takeResolve) "Take"
+  RawDrop ->
+    singlePred preds i (specializeListLikeOp i dropResolve) "Drop"
+  RawConcat ->
+    singlePred preds i (specializeListLikeOp i concatResolve) "Concat"
+  RawReverse ->
+    singlePred preds i (specializeListLikeOp i reverseResolve) "Reverse"
+  RawMod ->
+    pure (Builtin ModInt i)
+  RawMap -> case tys of
+    [t1, t2] ->
+      let bt = Builtin MapList i
+      in pure (TyApp bt (t1:|[t2]) i)
+    _ -> throwOverloadError "Invalid map type variables" i
+  RawFilter -> case tys of
+    [t1] -> do
+      let bt = Builtin FilterList i
+      pure (TyApp bt (t1:|[]) i)
+    _ -> throwOverloadError "Filter" i
+  RawZip -> case tys of
+    [t1, t2, t3] -> do
+      let bt = Builtin ZipList i
+      pure (TyApp bt (t1:|[t2, t3]) i)
+    _ -> throwOverloadError "Zip" i
+  RawIf -> case tys of
+    [t1] -> do
+      let bt = Builtin IfElse i
+      pure (TyApp bt (t1:|[]) i)
+    _ -> throwOverloadError "If" i
+  RawIntToStr -> error "Todo: implement"
+  RawStrToInt -> error "Todo: implement"
+  RawFold -> case tys of
+    [l, r] ->
+      let bt = Builtin FoldList i
+      in pure (TyApp bt (l :| [r]) i)
+    _ -> throwOverloadError "Fold" i
+  RawDistinct -> error "Distinct"
+  RawEnforce ->
+    pure (Builtin Enforce i)
+  RawEnforceOne ->
+    pure (Builtin EnforceOne i)
+  RawEnumerate ->
+    pure (Builtin Enumerate i)
+  RawEnumerateStepN ->
+    pure (Builtin EnumerateStepN i)
+  RawShow ->
+    singlePred preds i (specializeShow i) "Show"
+  RawReadInteger ->
+    pure (Builtin ReadInteger i)
+  RawReadDecimal ->
+    pure (Builtin ReadDecimal i)
+  RawReadString ->
+    pure (Builtin ReadString i)
+  RawListAccess ->
+    pure (Builtin ListAccess i)
+  RawB64Encode ->
+    pure (Builtin B64Encode i)
+  RawB64Decode ->
+    pure (Builtin B64Decode i)
     -- Addition
     -- Note, we can also sanity check this here.
     -- (+) Add instances for base types + dynamic access
-    (RawAdd, [_], [p]) ->
-      specializeAdd i p
+    -- (RawAdd, [_], [p]) ->
+    --   specializeAdd i p
 
-    -- (-) Num instances
-    (RawSub, [_], [p]) ->
-      specializeNumOp i subResolve p
+    -- -- (-) Num instances
+    -- (RawSub, [_], [p]) ->
+    --   specializeNumOp i subResolve p
 
-    -- (*) Instances + Dynamic access
-    (RawMultiply, [_], [p]) ->
-      specializeNumOp i mulResolve p
+    -- -- (*) Instances + Dynamic access
+    -- (RawMultiply, [_], [p]) ->
+    --   specializeNumOp i mulResolve p
 
-    -- (/) instances + dynamic access
-    (RawDivide, [_], [p]) ->
-      specializeNumOp i divResolve p
-    -- (negate) instances + dynamic access
-    (RawNegate, [_], [p]) ->
-      specializeNumOp i negateResolve p
+    -- -- (/) instances + dynamic access
+    -- (RawDivide, [_], [p]) ->
+    --   specializeNumOp i divResolve p
+    -- -- (negate) instances + dynamic access
+    -- (RawNegate, [_], [p]) ->
+    --   specializeNumOp i negateResolve p
 
-    (RawAbs, [_], [p]) ->
-      specializeNumOp i absResolve p
-    -- bool ops
-    (RawAnd, [] , []) ->
-      pure (Builtin AndBool i)
-    (RawOr, [], []) ->
-      pure (Builtin OrBool i)
-    (RawNot, [], []) ->
-      pure (Builtin NotBool i)
-    -- (==) instance + dyn access
-    -- TODO: TIME
-    (RawEq, [_], [p]) ->
-      specializeEq i RawEq eqResolve p
-    -- (/=) instance + dyn access
-    (RawNeq, [_], [p]) ->
-      specializeEq i RawNeq neqResolve p
-    -- Ord : GT (>) instances
-    -- todo: time
-    (RawGT, [_], [p]) ->
-      specializeOrd i RawGT gtResolve p
-    -- Ord : GEQ
-    (RawGEQ, [_], [p]) ->
-      specializeOrd i RawGEQ geqResolve p
-    -- Ord: LT
-    (RawLT, [_], [p]) ->
-      specializeOrd i RawLT ltResolve p
-    -- Ord : LEQ
-    (RawLEQ, [_], [p]) ->
-      specializeOrd i RawLEQ leqResolve p
+    -- (RawAbs, [_], [p]) ->
+    --   specializeNumOp i absResolve p
+    -- -- bool ops
+    -- (RawAnd, [] , []) ->
+    --   pure (Builtin AndBool i)
+    -- (RawOr, [], []) ->
+    --   pure (Builtin OrBool i)
+    -- (RawNot, [], []) ->
+    --   pure (Builtin NotBool i)
+    -- -- (==) instance + dyn access
+    -- -- TODO: TIME
+    -- (RawEq, [_], [p]) ->
+    --   specializeEq i RawEq eqResolve p
+    -- -- (/=) instance + dyn access
+    -- (RawNeq, [_], [p]) ->
+    --   specializeEq i RawNeq neqResolve p
+    -- -- Ord : GT (>) instances
+    -- -- todo: time
+    -- (RawGT, [_], [p]) ->
+    --   specializeOrd i RawGT gtResolve p
+    -- -- Ord : GEQ
+    -- (RawGEQ, [_], [p]) ->
+    --   specializeOrd i RawGEQ geqResolve p
+    -- -- Ord: LT
+    -- (RawLT, [_], [p]) ->
+    --   specializeOrd i RawLT ltResolve p
+    -- -- Ord : LEQ
+    -- (RawLEQ, [_], [p]) ->
+    --   specializeOrd i RawLEQ leqResolve p
 
-    (RawBitwiseAnd, _, _) ->
-      pure (Builtin BitAndInt i)
+    -- (RawBitwiseAnd, _, _) ->
+    --   pure (Builtin BitAndInt i)
 
-    (RawBitwiseOr, _, _) ->
-      pure (Builtin BitOrInt i)
+    -- (RawBitwiseOr, _, _) ->
+    --   pure (Builtin BitOrInt i)
 
-    (RawBitwiseXor, _, _) ->
-      pure (Builtin BitXorInt i)
+    -- (RawBitwiseXor, _, _) ->
+    --   pure (Builtin BitXorInt i)
 
-    (RawBitwiseFlip, _, _) ->
-      pure (Builtin BitComplementInt i)
+    -- (RawBitwiseFlip, _, _) ->
+    --   pure (Builtin BitComplementInt i)
 
-    (RawBitShift, _,  _) ->
-      pure (Builtin BitShiftInt i)
-    (RawRound, [], []) ->
-      pure (Builtin RoundDec i)
-    (RawCeiling, [], []) ->
-      pure (Builtin CeilingDec i)
-    (RawFloor, [], []) ->
-      pure (Builtin FloorDec i)
-    -- Fractional instnaces
-    (RawExp, [_], [p]) ->
-      specializeFracOp i expResolve p
-    (RawLn, [_], [p]) ->
-      specializeFracOp i lnResolve p
-    (RawSqrt, [_], [p]) ->
-      specializeFracOp i sqrtResolve p
-    (RawLogBase, [_], [p]) ->
-      specializeFracOp i logBaseResolve p
-    -- ListLike instances
-    (RawLength, [_], [p]) ->
-      specializeListLikeOp i lengthResolve p
-    (RawTake, [_], [p]) ->
-      specializeListLikeOp i takeResolve p
-    (RawDrop, [_], [p]) ->
-      specializeListLikeOp i dropResolve p
-    (RawConcat, [_], [p]) ->
-      specializeListLikeOp i concatResolve p
-    (RawReverse, [_], [p]) ->
-      specializeListLikeOp i reverseResolve p
+    -- (RawBitShift, _,  _) ->
+    --   pure (Builtin BitShiftInt i)
+    -- (RawRound, [], []) ->
+    --   pure (Builtin RoundDec i)
+    -- (RawCeiling, [], []) ->
+    --   pure (Builtin CeilingDec i)
+    -- (RawFloor, [], []) ->
+    --   pure (Builtin FloorDec i)
+    -- -- Fractional instnaces
+    -- (RawExp, [_], [p]) ->
+    --   specializeFracOp i expResolve p
+    -- (RawLn, [_], [p]) ->
+    --   specializeFracOp i lnResolve p
+    -- (RawSqrt, [_], [p]) ->
+    --   specializeFracOp i sqrtResolve p
+    -- (RawLogBase, [_], [p]) ->
+    --   specializeFracOp i logBaseResolve p
+    -- -- ListLike instances
+    -- (RawLength, [_], [p]) ->
+    --   specializeListLikeOp i lengthResolve p
+    -- (RawTake, [_], [p]) ->
+    --   specializeListLikeOp i takeResolve p
+    -- (RawDrop, [_], [p]) ->
+    --   specializeListLikeOp i dropResolve p
+    -- (RawConcat, [_], [p]) ->
+    --   specializeListLikeOp i concatResolve p
+    -- (RawReverse, [_], [p]) ->
+    --   specializeListLikeOp i reverseResolve p
     -- Todo: overload logbase
-    (RawMod, [], []) ->
-      pure (Builtin ModInt i)
-    -- General
-    (RawMap, [t1, t2], []) -> do
-      let b = Builtin MapList i
-      pure (TyApp b (t1:|[t2]) i)
-    (RawFilter, [t1], []) ->  do
-      let b = Builtin FilterList i
-      pure (TyApp b (t1:|[]) i)
-    (RawZip, [t1, t2, t3], []) ->  do
-      let b = Builtin ZipList i
-      pure (TyApp b (t1:|[t2, t3]) i)
-    (RawIf, [t1], []) -> do
-      let b = Builtin IfElse i
-      pure (TyApp b (t1:|[]) i)
-    (RawShow, [TyInt], _) ->
-      pure (Builtin ShowInt i)
-    (RawShow, [TyDecimal], _) ->
-      pure (Builtin ShowDec i)
-    (RawShow, [TyString], _) ->
-      pure (Builtin ShowStr i)
-    (RawShow, [TyUnit], _) ->
-      pure (Builtin ShowUnit i)
-    (RawShow, [TyBool], _) ->
-      pure (Builtin ShowBool i)
-    (RawShow, [TyList t], [_]) -> do
-      b <- solveOverload i (RawShow, [t], [Pred Show t])
-      let a1Var = Name "" (NBound 0)
-          a1 = (a1Var, t)
-          app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
-      pure (Lam (a1 :| []) app i)
-    (RawEnumerate, [], []) ->
-      pure (Builtin Enumerate i)
-    (RawEnumerateStepN, [], []) ->
-      pure (Builtin EnumerateStepN i)
-    (RawFold, [l, r], []) ->
-      let b = Builtin FoldList i
-      in pure (TyApp b (l :| [r]) i)
-    (RawReadInteger, _, _) ->
-      pure (Builtin ReadInteger i)
-    (RawReadDecimal, _, _) ->
-      pure (Builtin ReadDecimal i)
-    (RawReadString, _, _) ->
-      pure (Builtin ReadString i)
+    -- (RawMod, [], []) ->
+    --   pure (Builtin ModInt i)
+    -- -- General
+    -- (RawMap, [t1, t2], []) -> do
+    --   let b = Builtin MapList i
+    --   pure (TyApp b (t1:|[t2]) i)
+    -- (RawFilter, [t1], []) ->  do
+    --   let b = Builtin FilterList i
+    --   pure (TyApp b (t1:|[]) i)
+    -- (RawZip, [t1, t2, t3], []) ->  do
+    --   let b = Builtin ZipList i
+    --   pure (TyApp b (t1:|[t2, t3]) i)
+    -- (RawIf, [t1], []) -> do
+    --   let b = Builtin IfElse i
+    --   pure (TyApp b (t1:|[]) i)
+    -- (RawShow, [TyInt], _) ->
+    --   pure (Builtin ShowInt i)
+    -- (RawShow, [TyDecimal], _) ->
+    --   pure (Builtin ShowDec i)
+    -- (RawShow, [TyString], _) ->
+    --   pure (Builtin ShowStr i)
+    -- (RawShow, [TyUnit], _) ->
+    --   pure (Builtin ShowUnit i)
+    -- (RawShow, [TyBool], _) ->
+    --   pure (Builtin ShowBool i)
+    -- (RawShow, [TyList t], [_]) -> do
+    --   b <- solveOverload i (RawShow, [t], [Pred Show t])
+    --   let a1Var = Name "" (NBound 0)
+    --       a1 = (a1Var, t)
+    --       app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
+    --   pure (Lam (a1 :| []) app i)
+    -- (RawEnumerate, [], []) ->
+    --   pure (Builtin Enumerate i)
+    -- (RawEnumerateStepN, [], []) ->
+    --   pure (Builtin EnumerateStepN i)
+    -- (RawFold, [l, r], []) ->
+    --   let b = Builtin FoldList i
+    --   in pure (TyApp b (l :| [r]) i)
+    -- (RawReadInteger, _, _) ->
+    --   pure (Builtin ReadInteger i)
+    -- (RawReadDecimal, _, _) ->
+    --   pure (Builtin ReadDecimal i)
+    -- (RawReadString, _, _) ->
+    --   pure (Builtin ReadString i)
     -- (RawReadKeyset, _, _) ->
     --   pure (Builtin ReadKeyset i)
     -- (RawEnforceGuard, _, _) ->
@@ -309,24 +490,31 @@ resolveTerm = \case
     --   pure (Builtin KeysetRefGuard i)
     -- (RawCreateUserGuard, _, _) ->
     --   pure (Builtin CreateUserGuard i)
-    (RawListAccess, _, _) ->
-      pure (Builtin ListAccess i)
-    (RawB64Encode, _, _) ->
-      pure (Builtin B64Encode i)
-    (RawB64Decode, _, _) ->
-      pure (Builtin B64Decode i)
-    _ -> throwOverloadError "could not resolve overload" i
+    -- (RawListAccess, _, _) ->
+    --   pure (Builtin ListAccess i)
+    -- (RawB64Encode, _, _) ->
+    --   pure (Builtin B64Encode i)
+    -- (RawB64Decode, _, _) ->
+    --   pure (Builtin B64Decode i)
+    -- _ -> throwOverloadError "could not resolve overload" i
+
+singlePred :: [t] -> i -> (t -> OverloadM i a) -> String -> OverloadM i a
+singlePred preds i f msg = case preds of
+  [p] -> f p
+  _ -> throwOverloadError msg i
 
 resolveDefun
-  :: OverloadedDefun tyname RawBuiltin info
-  -> OverloadM info (CoreEvalDefun tyname info)
+  :: SolveOverload raw reso
+  => OverloadedDefun tyname raw info
+  -> OverloadM info (Defun Name tyname reso info)
 resolveDefun (Defun dname ty term info) = do
   term' <- resolveTerm term
   pure (Defun dname ty term' info)
 
 resolveDefConst
-  :: OverloadedDefConst tyname RawBuiltin info
-  -> OverloadM info (CoreEvalDefConst tyname info)
+  :: SolveOverload raw reso
+  => OverloadedDefConst tyname raw info
+  -> OverloadM info (DefConst Name tyname reso info)
 resolveDefConst (DefConst dname ty term info) = do
   term' <- resolveTerm term
   pure (DefConst dname ty term' info)
@@ -340,37 +528,42 @@ resolveDefConst (DefConst dname ty term info) = do
 --   pure (DefCap dname dargs term' captype' termtype info)
 
 resolveDef
-  :: OverloadedDef tyname RawBuiltin info
-  -> OverloadM info (CoreEvalDef tyname info)
+  :: SolveOverload raw reso
+  => OverloadedDef tyname raw info
+  -> OverloadM info (Def Name tyname reso info)
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
   -- DCap d -> DCap <$> resolveDefCap d
 
 resolveModule
-  :: OverloadedModule tyname RawBuiltin info
-  -> OverloadM info (CoreEvalModule tyname info)
+  :: SolveOverload raw reso
+  => OverloadedModule tyname raw info
+  -> OverloadM info (Module Name tyname reso info)
 resolveModule m = do
   defs' <- traverse resolveDef (_mDefs m)
   -- let gov' = unsafeToTLName <$> _mGovernance m
   pure m{_mDefs=defs'}
 
 resolveTopLevel
-  :: OverloadedTopLevel tyname RawBuiltin info
-  -> OverloadM info (CoreEvalTopLevel tyname info)
+  :: SolveOverload raw reso
+  => OverloadedTopLevel tyname raw info
+  -> OverloadM info (TopLevel Name tyname reso info)
 resolveTopLevel = \case
   TLModule m -> TLModule <$> resolveModule m
   TLTerm t -> TLTerm <$> resolveTerm t
   _ -> error "unimplemented"
 
 resolveProgram
-  :: [OverloadedTopLevel tyname RawBuiltin info]
-  -> OverloadM info [CoreEvalTopLevel tyname info]
+  :: SolveOverload raw reso
+  => [OverloadedTopLevel tyname raw info]
+  -> OverloadM info [TopLevel Name tyname reso info]
 resolveProgram  = traverse resolveTopLevel
 
 resolveReplTopLevel
-  :: OverloadedReplTopLevel tyname RawBuiltin info
-  -> OverloadM info (CoreEvalReplTopLevel tyname info)
+  :: SolveOverload raw reso
+  => OverloadedReplTopLevel tyname raw info
+  -> OverloadM info (ReplTopLevel Name tyname reso info)
 resolveReplTopLevel = \case
   RTLModule m -> RTLModule <$> resolveModule m
   RTLTerm t -> RTLTerm <$> resolveTerm t
@@ -378,8 +571,9 @@ resolveReplTopLevel = \case
   RTLDefConst d -> RTLDefConst <$> resolveDefConst d
 
 resolveReplProgram
-  :: [OverloadedReplTopLevel tyname RawBuiltin info]
-  -> OverloadM info [CoreEvalReplTopLevel tyname info]
+  :: SolveOverload raw reso
+  => [OverloadedReplTopLevel tyname raw info]
+  -> OverloadM info [ReplTopLevel Name tyname reso info]
 resolveReplProgram = traverse resolveReplTopLevel
 
 -------------------------------------------------
@@ -864,31 +1058,37 @@ runOverload
 runOverload (OverloadM e) = e
 
 runOverloadTerm
-  :: OverloadedTerm tyname RawBuiltin i
-  -> Either (PactError i) (CoreEvalTerm tyname i)
+  :: SolveOverload raw reso
+  => OverloadedTerm tyname raw i
+  -> Either (PactError i) (Term Name tyname reso i)
 runOverloadTerm t = runOverload (resolveTerm t)
 
 runOverloadModule
-  :: OverloadedModule tyname RawBuiltin i
-  -> Either (PactError i) (CoreEvalModule tyname i)
+  :: SolveOverload raw reso
+  => OverloadedModule tyname raw i
+  -> Either (PactError i) (Module Name tyname reso i)
 runOverloadModule m = runOverload (resolveModule m)
 
 runOverloadTopLevel
-  :: OverloadedTopLevel tyname RawBuiltin info
-  -> Either (PactError info) (CoreEvalTopLevel tyname info)
+  :: SolveOverload raw reso
+  => OverloadedTopLevel tyname raw info
+  -> Either (PactError info) (TopLevel Name tyname reso info)
 runOverloadTopLevel tl = runOverload (resolveTopLevel tl)
 
 runOverloadReplTopLevel
-  :: OverloadedReplTopLevel tyname RawBuiltin info
-  -> Either (PactError info) (CoreEvalReplTopLevel tyname info)
+  :: SolveOverload raw reso
+  => OverloadedReplTopLevel tyname raw info
+  -> Either (PactError info) (ReplTopLevel Name tyname reso info)
 runOverloadReplTopLevel tl = runOverload (resolveReplTopLevel tl)
 
 runOverloadProgram
-  :: [OverloadedTopLevel tyname RawBuiltin info]
-  -> Either (PactError info) [CoreEvalTopLevel tyname info]
+  :: SolveOverload raw reso
+  => [OverloadedTopLevel tyname raw info]
+  -> Either (PactError info) [TopLevel Name tyname reso info]
 runOverloadProgram prog = runOverload (resolveProgram prog)
 
 runOverloadReplProgram
-  :: [OverloadedReplTopLevel tyname RawBuiltin info]
-  -> Either (PactError info) [CoreEvalReplTopLevel tyname info]
+  :: SolveOverload raw reso
+  => [OverloadedReplTopLevel tyname raw info]
+  -> Either (PactError info) [ReplTopLevel Name tyname reso info]
 runOverloadReplProgram prog = runOverload (resolveReplProgram prog)

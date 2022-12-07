@@ -20,6 +20,7 @@ module Pact.Core.Typed.Term
  , Literal(..)
  , TyVarType(..)
  , termInfo
+ , termBuiltin
  -- Post-overload
  , OverloadedTerm
  , OverloadedDefun
@@ -253,6 +254,36 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       Pretty.parens ("error \"" <> pretty e <> "\"")
     where
     prettyTyApp ty = "@(" <> pretty ty <> ")"
+
+termBuiltin
+  :: Traversal (Term name tyname builtin info)
+               (Term name tyname builtin' info)
+               builtin
+               builtin'
+termBuiltin f = \case
+  Var name info -> pure (Var name info)
+  Lam ne te info ->
+    Lam ne <$> termBuiltin f te <*> pure info
+  App te ne info ->
+    App <$> termBuiltin f te <*> traverse (termBuiltin f) ne <*> pure info
+  Let name e1 e2 info ->
+    Let name <$> termBuiltin f e1 <*> termBuiltin f e2 <*> pure info
+  Builtin builtin info ->
+    Builtin <$> f builtin <*> pure info
+  Constant lit info ->
+    pure (Constant lit info)
+  TyApp te ne info ->
+    TyApp <$> termBuiltin f te <*> pure ne <*> pure info
+  TyAbs ne te info ->
+    TyAbs ne <$> termBuiltin f te <*> pure info
+  Sequence te te' info ->
+    Sequence <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
+  ListLit ty tes info ->
+    ListLit ty <$> traverse (termBuiltin f) tes <*> pure info
+  Try te te' info ->
+    Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
+  Error ty txt info ->
+    pure (Error ty txt info)
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case

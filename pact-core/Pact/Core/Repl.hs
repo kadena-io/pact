@@ -30,13 +30,14 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Set as Set
 
-import Pact.Core.Compile
-import Pact.Core.Repl.Utils
 import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Info
+
+import Pact.Core.Repl.Compile
+import Pact.Core.Repl.Utils
 
 main :: IO ()
 main = do
