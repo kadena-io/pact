@@ -228,10 +228,7 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: pact-applications.${{ matrix.ghc }}.${{ matrix.os }}
-        path: .
-    - name: Extract artifacts
-      run: |
-        tar -xzf "pact-applications.${{ matrix.ghc }}.${{ matrix.os }}"
+        path: pact
     - name: Create Dockerfile
       run: |
         cat > Dockerfile <<EOF
