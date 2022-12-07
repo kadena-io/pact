@@ -1105,15 +1105,15 @@ replBuiltinType f = \case
   RExpect -> let
     aVar = nd "a" 0
     aTv = TyVar aVar
-    in TypeScheme [aVar] [Pred Eq aTv, Pred Show aTv] (TyString :~> aTv :~> (TyUnit :~> aTv) :~> TyUnit)
+    in TypeScheme [aVar] [Pred Eq aTv, Pred Show aTv] (TyString :~> aTv :~> (TyUnit :~> aTv) :~> TyString)
   RExpectFailure -> let
     aVar = nd "a" 0
     aTv = TyVar aVar
-    in TypeScheme [aVar] [] (TyString :~> (TyUnit :~> aTv) :~> TyUnit)
+    in TypeScheme [aVar] [] (TyString :~> (TyUnit :~> aTv) :~> TyString)
   RExpectThat -> let
     aVar = nd "a" 0
     aTv = TyVar aVar
-    in TypeScheme [aVar] [] (TyString :~> (aTv :~> TyBool) :~> aTv :~> TyUnit)
+    in TypeScheme [aVar] [] (TyString :~> (aTv :~> TyBool) :~> aTv :~> TyString)
   RPrint -> let
     aVar = nd "a" 0
     aTv = TyVar aVar
@@ -1341,17 +1341,6 @@ runInferTerm
   -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedGenTerm b i)
 runInferTerm loaded bfn term0 = runST $
   runInfer loaded bfn $ inferTermGen term0
-    -- let info = view IR.termInfo term0
-    -- enterLevel
-    -- (ty, term1, preds) <- inferTerm term0
-    -- leaveLevel
-    -- (tys', term', deferred) <- generalizeWithTerm ty preds term1
-    -- unless (null deferred) $ do
-    --   deferred' <- traverse _dbgPred deferred
-    --   throwTypecheckError (UnsupportedTypeclassGeneralization deferred') info
-    -- dbjTyScheme <- debruijnizeTypeScheme info tys'
-    -- dbjTerm <- debruijnizeTermTypes info term'
-    -- pure (dbjTyScheme, dbjTerm)
 
 runInferTermNonGen
   :: Loaded b' i'

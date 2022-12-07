@@ -40,7 +40,6 @@ newtype ReplEvalState b i
   { _reEnv :: CEKRuntimeEnv b i (ReplEvalM b i)
   }
 
-
 -- Todo: are we going to inject state as the reader monad here?
 newtype ReplEvalM b i a =
   ReplEvalM (ExceptT (PactError i) (StateT (ReplEvalState b i) (ReaderT (ReplEvalEnv b i) IO)) a)

@@ -58,8 +58,7 @@ coreExpect = mkReplBuiltinFn $ \case
         v2s <- asString =<< unsafeApplyOne showFn v2
         pure $ VError $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
        True -> do
-        liftIO $ print $ "Expect: success " <> msg
-        pure (VLiteral LUnit)
+        pure (VLiteral (LString ("Expect: success " <> msg)))
   _ -> failInvariant "Expect"
 
 coreExpectThat :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
@@ -67,11 +66,9 @@ coreExpectThat = mkReplBuiltinFn $ \case
   [VLiteral (LString msg), vclo, v] -> do
     unsafeApplyOne vclo v >>= asBool >>= \case
       True -> do
-        liftIO $ print $ "Expect-that: success " <> msg
-        pure (VLiteral LUnit)
+        pure (VLiteral (LString ("Expect-that: success " <> msg)))
       False -> do
-        liftIO $ print $ "FAILURE: Expect-that: Did not satisfy condition: " <> msg
-        pure (VLiteral LUnit)
+        pure (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
   _ -> failInvariant "Expect"
 
 coreExpectFailure :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
@@ -79,12 +76,11 @@ coreExpectFailure = mkReplBuiltinFn $ \case
   [VLiteral (LString toMatch), vclo] -> do
     tryError (unsafeApplyOne vclo (VLiteral LUnit)) >>= \case
       Right (VError _e) ->
-        liftIO $ print $ "Expect failure: Success: " <> toMatch
+        pure $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Left _err -> do
-        liftIO $ print $ "Expect failure: Success: " <> toMatch
+        pure $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Right _ ->
-        liftIO $ print $ "FAILURE: " <> toMatch <> ": expected failure, got result"
-    pure (VLiteral LUnit)
+        pure $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   _ -> failInvariant "Expect-failure"
 
 
