@@ -5,10 +5,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 
 -- |
@@ -28,7 +26,6 @@ import Control.Exception(throw)
 import Data.Bits
 import Data.Decimal(roundTo', Decimal)
 import Data.Text(Text)
-import qualified Data.RAList as RAList
 import qualified Data.Vector as V
 -- import qualified Data.Primitive.Array as Array
 import qualified Data.Text as T
@@ -39,7 +36,6 @@ import Pact.Core.Literal
 import Pact.Core.Errors
 import Pact.Core.Hash
 
-import Pact.Core.Untyped.Term
 import Pact.Core.Untyped.Eval.Runtime
 import Pact.Core.Untyped.Eval.CEK
 
@@ -56,45 +52,6 @@ import Pact.Core.Untyped.Eval.CEK
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
 ----------------------------------------------------------------------
-applyTwo
-  :: MonadCEK b i m
-  => EvalTerm b i
-  -> CEKEnv b i m
-  -> CEKValue b i m
-  -> CEKValue b i m -> m (CEKValue b i m)
-applyTwo body env arg1 arg2 = eval (RAList.cons arg2 (RAList.cons arg1 env)) body
-
-unsafeApplyOne
-  :: MonadCEK b i m
-  => CEKValue b i m
-  -> CEKValue b i m
-  -> m (CEKValue b i m)
-unsafeApplyOne (VClosure body env) arg = eval (RAList.cons arg env) body
-unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
-  if arity - 1 <= 0 then fn (reverse (arg:args))
-  else pure (VNative (BuiltinFn b fn (arity -1) (arg:args)))
-unsafeApplyOne _ _ = error "impossible"
-
-unsafeApplyTwo
-  :: MonadCEK b i m
-  => CEKValue b i m
-  -> CEKValue b i m
-  -> CEKValue b i m
-  -> m (CEKValue b i m)
-unsafeApplyTwo (VClosure (Lam body _) env) arg1 arg2 = applyTwo body env arg1 arg2
-unsafeApplyTwo (VNative (BuiltinFn b fn arity args)) arg1 arg2 =
-  if arity - 2 <= 0 then fn (reverse (arg1:arg2:args))
-  else pure $ VNative $ BuiltinFn b fn (arity - 2) (arg1:arg2:args)
-unsafeApplyTwo _ _ _ = error "impossible"
-
-mkBuiltinFn
-  :: (BuiltinArity b)
-  => ([CEKValue b i m] -> m (CEKValue b i m))
-  -> b
-  -> BuiltinFn b i m
-mkBuiltinFn fn b =
-  BuiltinFn b fn (builtinArity b) []
-{-# INLINABLE mkBuiltinFn #-}
 
 -- -- Todo: runtime error
 unaryIntFn :: (BuiltinArity b, MonadCEK b i m) => (Integer -> Integer) -> b -> BuiltinFn b i m
@@ -650,7 +607,7 @@ coreEnumerateStepN = mkBuiltinFn \case
     | to' > from' && step > 0 = pure $ toVecList $ V.enumFromStepN from' step (fromIntegral ((to' - from' + 1) `quot` step))
     | from' > to' && step < 0 = pure $ toVecList $ V.enumFromStepN from' step (fromIntegral ((from' - to' + 1) `quot` step))
     | from' == to' && step == 0 = pure $ toVecList $ V.singleton from'
-    | otherwise = cekThrowExecutionError (EnumeratationError "enumerate outside interval bounds")
+    | otherwise = throwExecutionError' (EnumeratationError "enumerate outside interval bounds")
 
 coreTake :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 coreTake = mkBuiltinFn \case
@@ -790,7 +747,7 @@ listAccess = mkBuiltinFn \case
     case vec V.!? fromIntegral i of
       Just v -> pure v
       Nothing ->
-        cekThrowExecutionError (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
+        throwExecutionError' (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
   _ -> failInvariant "list-access"
 
 -----------------------------------
@@ -813,7 +770,7 @@ coreB64Encode = mkBuiltinFn \case
 coreB64Decode :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 coreB64Decode = mkBuiltinFn \case
   [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
-    Left{} -> cekThrowExecutionError (DecodeError "invalid b64 encoding")
+    Left{} -> throwExecutionError' (DecodeError "invalid b64 encoding")
     Right txt -> pure (VLiteral (LString txt))
   _ -> failInvariant "base64-encode"
 

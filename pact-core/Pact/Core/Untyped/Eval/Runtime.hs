@@ -24,6 +24,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , runEvalT
  , CEKValue(..)
  , Cont(..)
+ , mkBuiltinFn
 --  , cekGas
 --  , cekEvalLog
  , cekBuiltins
@@ -32,7 +33,6 @@ module Pact.Core.Untyped.Eval.Runtime
  , fromPactValue
  , checkPactValueType
 --  , contHandler
- , Closure(..)
  , CEKErrorHandler(..)
  , MonadCEKEnv(..)
  , MonadCEK
@@ -46,11 +46,11 @@ import Control.Monad.Except
 import Data.Void
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Data.Default
 -- import Data.Set(Set)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
 import Data.IORef
-import Data.Typeable(Typeable)
 import qualified Data.Vector as V
 
 import Pact.Core.Names
@@ -59,6 +59,7 @@ import Pact.Core.Pretty(Pretty(..), (<+>))
 import Pact.Core.Gas
 import Pact.Core.PactValue
 import Pact.Core.Errors
+import Pact.Core.Builtin
 -- import Pact.Core.Hash
 import Pact.Core.Untyped.Term
 import Pact.Core.Literal
@@ -68,21 +69,12 @@ import qualified Pact.Core.Pretty as P
 
 -- | The top level env map
 type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
+
 -- | Locally bound variables
 type CEKEnv b i m = RAList (CEKValue b i m)
 
--- | Top level constraint
--- type HasTLEnv b i = (?cekLoaded :: CEKTLEnv b i)
 -- | List of builtins
-type BuiltinEnv b i m = b -> i -> BuiltinFn b i m
--- | runtime env
--- type HasRuntimeEnv b i = (?cekRuntimeEnv :: RuntimeEnv b i)
-
--- type CEKRuntime b i = (HasTLEnv b i, HasBuiltinEnv b i, HasRuntimeEnv b i, Enum b)
-
-data Closure b i m
-  = Closure !(EvalTerm b i) !(CEKEnv b i m)
-  deriving Show
+type BuiltinEnv b i m = b -> BuiltinFn b i m
 
 -- | The type of our semantic runtime values
 data CEKValue b i m
@@ -94,7 +86,7 @@ data CEKValue b i m
   | VError !Text
   deriving (Show)
 
-type MonadCEK b i m = (MonadCEKEnv b i m, MonadError (PactError i) m)
+type MonadCEK b i m = (MonadCEKEnv b i m, MonadError (PactError i) m, Default i)
 
 class (Monad m) => MonadCEKEnv b i m | m -> b, m -> i where
   cekReadEnv :: m (CEKRuntimeEnv b i m)
@@ -128,8 +120,16 @@ data BuiltinFn b i m
   , _nativeFn :: (MonadCEK b i m) => [CEKValue b i m] -> m (CEKValue b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeAppliedArgs :: [CEKValue b i m]
-  , _nativeLoc :: i
   }
+
+mkBuiltinFn
+  :: (BuiltinArity b)
+  => ([CEKValue b i m] -> m (CEKValue b i m))
+  -> b
+  -> BuiltinFn b i m
+mkBuiltinFn fn b =
+  BuiltinFn b fn (builtinArity b) []
+{-# INLINE mkBuiltinFn #-}
 
 data ExecutionMode
   = Transactional
@@ -164,20 +164,20 @@ data CEKRuntimeEnv b i m
   -- , _ckePactDb :: PactDb b i
   }
 
-instance (Pretty b) => Show (BuiltinFn b i m) where
-  show (BuiltinFn b _ arity args _) = unwords
+instance (Show i, Show b) => Show (BuiltinFn b i m) where
+  show (BuiltinFn b _ arity args) = unwords
     ["(BuiltinFn"
-    , show (pretty b)
+    , show b
     , "#fn"
     , show arity
-    , show (pretty args)
+    , show args
     , ")"
     ]
 
-instance (Pretty b) => Pretty (BuiltinFn b i m) where
+instance (Pretty b, Show i, Show b) => Pretty (BuiltinFn b i m) where
   pretty = pretty . show
 
-instance Pretty b => Pretty (CEKValue b i m) where
+instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
   pretty = \case
     VLiteral i ->
       pretty i
@@ -210,7 +210,7 @@ checkPactValueType ty = \case
 
 makeLenses ''EvalMEnv
 
-instance (Show i, Typeable i) => MonadCEKEnv b i (EvalM b i) where
+instance MonadCEKEnv b i (EvalM b i) where
   cekReadEnv = view emRuntimeEnv
   cekLogGas msg g = do
     r <- view emGasLog

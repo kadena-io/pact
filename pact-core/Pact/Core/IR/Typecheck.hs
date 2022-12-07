@@ -28,6 +28,7 @@ module Pact.Core.IR.Typecheck
  , runInferTopLevel
  , runInferReplProgram
  , rawBuiltinType
+ , replBuiltinType
  ) where
 
 import Control.Lens hiding (Level)
@@ -692,12 +693,6 @@ generalizeWithTerm' ty pp term = do
 liftType :: Type Void -> Type a
 liftType = fmap absurd
 
--- toOName :: Name -> OverloadedName b
--- toOName (Name n nk u) =
---   OverloadedName n $ case nk of
---     IRBound -> OBound u
---     IRTopLevel m mh -> OTopLevel m mh
-
 -- Todo: bidirectionality
 inferTerm :: IRTerm b i -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
 inferTerm = \case
@@ -1103,6 +1098,27 @@ dbjTyp i env depth = \case
 -- -----------------------------------------
 -- --- Built-in type wiring
 -- ------------------------------------------
+replBuiltinType :: (b -> TypeScheme NamedDeBruijn) -> ReplBuiltin b -> TypeScheme NamedDeBruijn
+replBuiltinType f = \case
+  RBuiltinWrap b -> f b
+  RExpect -> let
+    aVar = nd "a" 0
+    aTv = TyVar aVar
+    in TypeScheme [aVar] [Pred Eq aTv, Pred Show aTv] (TyString :~> aTv :~> (TyUnit :~> aTv) :~> TyUnit)
+  RExpectFailure -> let
+    aVar = nd "a" 0
+    aTv = TyVar aVar
+    in TypeScheme [aVar] [] (TyString :~> aTv :~> aTv :~> TyUnit)
+  RExpectThat -> let
+    aVar = nd "a" 0
+    aTv = TyVar aVar
+    in TypeScheme [aVar] [] (TyString :~> (aTv :~> TyBool) :~> aTv :~> TyUnit)
+  RPrint -> let
+    aVar = nd "a" 0
+    aTv = TyVar aVar
+    in TypeScheme [aVar] [Pred Show aTv] (aTv :~> TyUnit)
+  where
+  nd b a = NamedDeBruijn a b
 
 -- -- todo: debruijnize automatically
 rawBuiltinType :: RawBuiltin -> TypeScheme NamedDeBruijn

@@ -18,6 +18,8 @@ module Pact.Core.Builtin
 --  , CapType(..)
 --  , DefType(..)
  , CoreBuiltin(..)
+ , ReplRawBuiltin
+ , ReplCoreBuiltin
  )where
 
 import Data.Text(Text)
@@ -26,6 +28,9 @@ import Data.Map.Strict(Map)
 import qualified Data.Map.Strict as Map
 
 import Pact.Core.Pretty(Pretty(..))
+
+type ReplRawBuiltin = ReplBuiltin RawBuiltin
+type ReplCoreBuiltin = ReplBuiltin CoreBuiltin
 
 -- Todo: Objects to be added later @ a later milestone
 -- data ObjectOp o
@@ -389,21 +394,21 @@ data ReplBuiltin b
   -- | RTestCapability
   -- | RVerify
   -- | RWithAppliedEnv
-  | RLoad
+  -- | RLoad
   deriving (Eq, Show)
 
 instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
-    RExpect -> 3
+    RExpect -> 5
     RExpectFailure -> 3
     RExpectThat -> 3
-    RPrint -> 1
-    RLoad -> 1
+    RPrint -> 2
+    -- RLoad -> 1
 
 instance Bounded b => Bounded (ReplBuiltin b) where
   minBound = RBuiltinWrap minBound
-  maxBound = RLoad
+  maxBound = RPrint
 
 instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
   toEnum  = replBToEnum
@@ -420,7 +425,7 @@ replBToEnum i =
     2 -> RExpectFailure
     3 -> RExpectThat
     4 -> RPrint
-    5 -> RLoad
+    -- 5 -> RLoad
     _ -> error "invalid"
   where
   mbound = fromEnum (maxBound :: b)
@@ -435,7 +440,7 @@ replBFromEnum e =
     RExpectFailure -> maxContained + 2
     RExpectThat -> maxContained + 3
     RPrint -> maxContained + 4
-    RLoad -> maxContained + 5
+    -- RLoad -> maxContained + 5
 {-# INLINE replBFromEnum #-}
 
 replBuiltinToText :: (b -> Text) -> ReplBuiltin b -> Text
@@ -445,13 +450,14 @@ replBuiltinToText f = \case
   RExpectFailure -> "expect-failure"
   RExpectThat -> "expect"
   RPrint -> "print"
-  RLoad -> "load"
+  -- RLoad -> "load"
 
 replRawBuiltinNames :: [Text]
 replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. maxBound]
 
 replRawBuiltinMap :: Map Text (ReplBuiltin RawBuiltin)
-replRawBuiltinMap = Map.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+replRawBuiltinMap =
+  Map.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.

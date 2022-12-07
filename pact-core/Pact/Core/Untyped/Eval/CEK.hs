@@ -23,6 +23,9 @@
 module Pact.Core.Untyped.Eval.CEK
  ( eval
  , failInvariant
+ , throwExecutionError'
+ , unsafeApplyOne
+ , unsafeApplyTwo
  ) where
 
 import Control.Lens
@@ -31,6 +34,7 @@ import Control.Monad.Except
 -- import Control.Monad.Catch
 -- import Control.Monad.IO.Class
 -- import Data.IORef
+import Data.Default
 import Data.Text(Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
@@ -88,14 +92,14 @@ eval = evalCEK Mt CEKNoHandler
     case _nKind n of
       NBound i -> case RAList.lookup env i of
         Just v -> returnCEK cont handler v
-        Nothing -> failInvariant ("unbound identifier" <> T.pack (show n)) info
+        Nothing -> failInvariant' ("unbound identifier" <> T.pack (show n)) info
         -- returnCEK cont (env RAList.!! i)
       -- Top level names are not closures, so we wipe the env
       NTopLevel mname mh -> do
         let fqn = FullyQualifiedName mname (_nName n) mh
         cekReadEnv >>= \renv -> case views cekLoaded (Map.lookup fqn) renv of
           Just d -> evalCEK cont handler RAList.Nil (defTerm d)
-          Nothing -> failInvariant ("top level name " <> T.pack (show fqn) <> " not in scope") info
+          Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
   evalCEK cont handler _env (Constant l _) = do
     chargeNodeGas ConstantNode
     returnCEK cont handler (VLiteral l)
@@ -152,12 +156,12 @@ eval = evalCEK Mt CEKNoHandler
         evalCEK (ListC env es (v:vals) cont) handler env e
   applyLam (VClosure body env) arg cont handler =
     evalCEK cont handler (RAList.cons arg env) body
-  applyLam (VNative (BuiltinFn b fn arity args i)) arg cont handler
+  applyLam (VNative (BuiltinFn b fn arity args)) arg cont handler
     | arity - 1 == 0 = do
       chargeNative b
       fn (reverse (arg:args)) >>= returnCEK cont handler
-    | otherwise = returnCEK cont handler (VNative (BuiltinFn b fn (arity - 1) (arg:args) i))
-  applyLam _ _ _ _ = failInvariant "Applying value to non-function"
+    | otherwise = returnCEK cont handler (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
+  applyLam _ _ _ _ = failInvariant' "Applying value to non-function" def
 
 -- runCEK
 --   :: forall b i m. MonadCEK b i m
@@ -169,7 +173,39 @@ eval = evalCEK Mt CEKNoHandler
 -- runCEK env term =
 --   runEvalT env (eval RAList.Nil term)
 
-failInvariant :: MonadCEK b i m => Text -> i -> m a
-failInvariant b i =
+failInvariant :: MonadCEK b i m => Text -> m a
+failInvariant b =
+  let e = PEExecutionError (FatalExecutionError b) def
+  in throwError e
+
+failInvariant' :: MonadCEK b i m => Text -> i -> m a
+failInvariant' b i =
   let e = PEExecutionError (FatalExecutionError b) i
   in throwError e
+
+throwExecutionError' :: (MonadCEK b i m) => ExecutionError -> m a
+throwExecutionError' e = throwError (PEExecutionError e def)
+
+unsafeApplyOne
+  :: MonadCEK b i m
+  => CEKValue b i m
+  -> CEKValue b i m
+  -> m (CEKValue b i m)
+unsafeApplyOne (VClosure body env) arg = eval (RAList.cons arg env) body
+unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
+  if arity - 1 <= 0 then fn (reverse (arg:args))
+  else pure (VNative (BuiltinFn b fn (arity -1) (arg:args)))
+unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
+
+unsafeApplyTwo
+  :: MonadCEK b i m
+  => CEKValue b i m
+  -> CEKValue b i m
+  -> CEKValue b i m
+  -> m (CEKValue b i m)
+unsafeApplyTwo (VClosure (Lam body _) env) arg1 arg2 =
+  eval (RAList.cons arg2 (RAList.cons arg1 env)) body
+unsafeApplyTwo (VNative (BuiltinFn b fn arity args)) arg1 arg2 =
+  if arity - 2 <= 0 then fn (reverse (arg1:arg2:args))
+  else pure $ VNative $ BuiltinFn b fn (arity - 2) (arg1:arg2:args)
+unsafeApplyTwo _ _ _ = failInvariant "Applied argument to non-closure in native"

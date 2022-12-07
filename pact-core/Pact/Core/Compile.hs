@@ -45,15 +45,16 @@ import Pact.Core.Type
 import Pact.Core.Typed.Overload
 
 import Pact.Core.Untyped.Eval.Runtime
+import Pact.Core.Repl.Runtime
+import Pact.Core.Repl.Runtime.ReplBuiltin
 
 import qualified Pact.Core.IR.Term as IR
-import qualified Pact.Core.Untyped.Eval.Runtime.CoreBuiltin as Runtime
 
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
 data InterpretOutput b i
-  = InterpretValue (CEKValue b i)
+  = InterpretValue (CEKValue b i (ReplEvalM ReplCoreBuiltin LineInfo))
   | InterpretLog Text
   deriving Show
 
@@ -61,9 +62,9 @@ data InterpretOutput b i
 -- to assist in swapping from the lisp frontend
 data InterpretBundle
   = InterpretBundle
-  { expr :: ByteString -> ReplM CoreBuiltin (CEKValue CoreBuiltin LineInfo)
-  , exprType :: ByteString -> ReplM CoreBuiltin (TypeScheme NamedDeBruijn)
-  , program :: ByteString -> ReplM CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
+  { expr :: ByteString -> ReplM ReplCoreBuiltin (ReplCEKValue CoreBuiltin LineInfo)
+  , exprType :: ByteString -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
+  , program :: ByteString -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
   }
 
 -- newInterpretBundle :: InterpretBundle
@@ -91,7 +92,9 @@ lispInterpretBundle =
 --   desugared <- liftIO (runDesugarTermNew pactdb loaded parsed)
 --   interpretExpr desugared
 
-interpretExprLisp :: ByteString -> ReplM CoreBuiltin (CEKValue CoreBuiltin LineInfo)
+interpretExprLisp
+  :: ByteString
+  -> ReplM (ReplBuiltin CoreBuiltin) (CEKValue (ReplBuiltin CoreBuiltin) LineInfo (ReplEvalM (ReplBuiltin CoreBuiltin) LineInfo))
 interpretExprLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
@@ -103,10 +106,10 @@ interpretExprLisp source = do
   interpretExpr desugared
 
 interpretExpr
-  :: DesugarOutput CoreBuiltin LineInfo (IR.Term Name RawBuiltin LineInfo)
-  -> ReplM CoreBuiltin (CEKValue CoreBuiltin LineInfo)
+  :: DesugarOutput (ReplBuiltin CoreBuiltin) LineInfo (IR.Term Name (ReplBuiltin RawBuiltin) LineInfo)
+  -> ReplM (ReplBuiltin CoreBuiltin) (ReplCEKValue CoreBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
-  (ty, typed) <- liftEither (runInferTerm loaded' rawBuiltinType desugared)
+  (ty, typed) <- liftEither (runInferTerm loaded' (replBuiltinType rawBuiltinType) desugared)
   debugIfFlagSet DebugTypecheckerType ty
   debugIfFlagSet DebugTypechecker typed
   resolved <- liftEither (runOverloadTerm typed)
@@ -115,13 +118,13 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet DebugUntyped untyped
   evalGas <- use replGas
   evalLog <- use replEvalLog
-  let renv = CEKRuntimeEnv
-             { _cekGas = evalGas
-             , _cekEvalLog = evalLog
-             , _cekBuiltins = Runtime.coreBuiltinRuntime
+  let rEnv = ReplEvalEnv evalGas evalLog
+      cekEnv = CEKRuntimeEnv
+             { _cekBuiltins = replCoreBuiltinRuntime
              , _cekLoaded = _loAllLoaded loaded'
              , _cekGasModel = freeGasEnv }
-  value <- liftIO (Runtime.runCoreCEK  renv untyped)
+      rState = ReplEvalState cekEnv
+  value <- liftEither =<< liftIO (runReplCEK rEnv rState untyped)
   replLoaded .= loaded'
   pure value
 
@@ -136,7 +139,7 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
 --   replLoaded .= loaded'
 --   pure value
 
-interpretExprTypeLisp :: ByteString -> ReplM CoreBuiltin (TypeScheme NamedDeBruijn)
+interpretExprTypeLisp :: ByteString -> ReplM (ReplBuiltin CoreBuiltin) (TypeScheme NamedDeBruijn)
 interpretExprTypeLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
@@ -159,10 +162,10 @@ interpretExprTypeLisp source = do
 --   interpretExprType desugared
 
 interpretExprType
-  :: DesugarOutput CoreBuiltin LineInfo (IR.Term Name RawBuiltin LineInfo)
-  -> ReplM CoreBuiltin (TypeScheme NamedDeBruijn)
+  :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
+  -> ReplM (ReplBuiltin CoreBuiltin) (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
-  (ty, typed) <- either (error . show) pure (runInferTerm loaded' rawBuiltinType desugared)
+  (ty, typed) <- either (error . show) pure (runInferTerm loaded' (replBuiltinType rawBuiltinType) desugared)
   debugIfFlagSet DebugTypecheckerType ty
   debugIfFlagSet DebugTypechecker typed
   pure ty
@@ -179,10 +182,10 @@ interpretExprType (DesugarOutput desugared loaded' _) = do
 --   parsed <- either throwM pure $ New.parseProgram lexx
 --   traverse (liftIO . runDesugarTopLevelNew pactdb loaded >=> interpretTopLevel) parsed
 
-interpretProgramFileLisp :: FilePath -> ReplM CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
+interpretProgramFileLisp :: FilePath -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
 interpretProgramFileLisp source = liftIO (B.readFile source) >>= interpretProgramLisp
 
-interpretProgramLisp :: ByteString -> ReplM CoreBuiltin [InterpretOutput CoreBuiltin LineInfo]
+interpretProgramLisp :: ByteString -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
 interpretProgramLisp source = do
   loaded <- use replLoaded
   pactdb <- use replPactDb
@@ -224,11 +227,12 @@ interpretProgramLisp source = do
 --     TLInterface _ -> error "interfaces not yet supported"
 
 interpretTopLevel
-  :: DesugarOutput CoreBuiltin LineInfo (IR.TopLevel Name RawBuiltin LineInfo)
-  -> ReplM CoreBuiltin (InterpretOutput CoreBuiltin LineInfo)
+  :: DesugarOutput ReplCoreBuiltin LineInfo (IR.TopLevel Name ReplRawBuiltin LineInfo)
+  -> ReplM ReplCoreBuiltin (InterpretOutput ReplCoreBuiltin LineInfo)
 interpretTopLevel (DesugarOutput desugared loaded deps) = do
   p <- use replPactDb
-  typechecked <- liftEither (runInferTopLevel loaded rawBuiltinType desugared)
+  let btyp = replBuiltinType rawBuiltinType
+  typechecked <- liftEither (runInferTopLevel loaded btyp desugared)
   overloaded <- liftEither (runOverloadTopLevel typechecked)
   case fromTypedTopLevel overloaded of
     TLModule m -> do
@@ -252,13 +256,13 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
     TLTerm resolved -> do
       evalGas <- use replGas
       evalLog <- use replEvalLog
-      let renv = CEKRuntimeEnv
-                 { _cekGas = evalGas
-                 , _cekEvalLog = evalLog
-                 , _cekBuiltins = Runtime.coreBuiltinRuntime
+      let rEnv = ReplEvalEnv evalGas evalLog
+          cekEnv = CEKRuntimeEnv
+                 { _cekBuiltins = replCoreBuiltinRuntime
                  , _cekLoaded = _loAllLoaded loaded
                  , _cekGasModel = freeGasEnv }
-      value <- liftIO (Runtime.runCoreCEK renv resolved)
+          rState = ReplEvalState cekEnv
+      value <- liftEither =<< liftIO (runReplCEK rEnv rState resolved)
       replLoaded .= loaded
       pure (InterpretValue value)
     TLInterface _ -> error "interfaces not yet supported"
