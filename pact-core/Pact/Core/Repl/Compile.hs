@@ -21,7 +21,6 @@ module Pact.Core.Repl.Compile
  ) where
 
 import Control.Lens
--- import Control.Monad.Catch
 import Control.Monad.Except
 import Data.Text as Text
 import Data.ByteString(ByteString)

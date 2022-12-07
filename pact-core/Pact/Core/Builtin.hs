@@ -224,8 +224,8 @@ rawBuiltinToText = \case
   RawNegate -> "negate"
   RawAbs -> "abs"
   -- Bolean ops
-  RawAnd -> "(&&)"
-  RawOr -> "||"
+  RawAnd -> "and"
+  RawOr -> "or"
   RawNot -> "not"
   -- Eq
   RawEq -> "(=)"
@@ -294,7 +294,7 @@ instance BuiltinArity RawBuiltin where
     -- Boolean Ops ->
     RawAnd -> 2
     RawOr -> 2
-    RawNot -> 2
+    RawNot -> 1
     -- Equality and Comparisons ->
     RawEq -> 2
     RawNeq -> 2
@@ -662,7 +662,7 @@ instance BuiltinArity CoreBuiltin where
     LEQDec -> 2
     AndBool -> 2
     OrBool -> 2
-    NotBool -> 2
+    NotBool -> 1
     EqBool -> 2
     NeqBool -> 2
     ShowBool -> 1
