@@ -374,40 +374,188 @@ genBuiltin t = case t of
       , gen_concat t
       , gen_constantly t
       , gen_drop t
+      , gen_fold t
       , gen_format t
       , gen_hash t
+      , gen_identity t
+      , gen_if t
       , gen_int_to_str t
       , gen_namespace t
       , gen_pact_id t
       , gen_pact_version t
+      , gen_read_msg t
       , gen_read_string t
       , gen_take t
+      , gen_try t
       , gen_tx_hash t
       , gen_typeof t
+      --
+      , gen_plus t
       ]
   TInt ->
     Gen.choice
-      [ gen_length t
+      [ gen_at t
+      , gen_constantly t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_length t
       , gen_str_to_int t
+      , gen_read_msg t
+      , gen_try t
+      --
+      , gen_bitwise_and t
+      , gen_mult t
+      , gen_plus t
+      , gen_minus t
+      , gen_divide t
+      , gen_pow t
+      , gen_abs t
+      , gen_ceiling t
+      , gen_exp t
+      , gen_floor t
+      , gen_ln t
+      , gen_log t
+      , gen_mod t
+      , gen_round t
+      , gen_shift t
+      , gen_sqrt t
+      , gen_xor t
+      , gen_bitwise_or t
+      , gen_bitwise_complement t
+      , gen_days t
       ]
   TDec ->
     Gen.choice
-      [ gen_read_decimal t
+      [ gen_at t
+      , gen_constantly t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_read_decimal t
+      , gen_read_msg t
+      , gen_try t
+      --
+      , gen_mult t
+      , gen_plus t
+      , gen_minus t
+      , gen_divide t
+      , gen_pow t
+      , gen_abs t
+      , gen_exp t
+      , gen_ln t
+      , gen_log t
+      , gen_sqrt t
+      , gen_days t
       ]
   TBool ->
     Gen.choice
-      [ gen_contains t
+      [ gen_at t
+      , gen_constantly t
+      , gen_contains t
       , gen_enforce t
       , gen_enforce_one t
       , gen_enforce_pact_version t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
       , gen_is_charset t
+      , gen_read_msg t
+      , gen_try t
+      , gen_not t
+      --
+      , gen_neq t
+      , gen_lt t
+      , gen_lte t
+      , gen_eq t
+      , gen_gt t
+      , gen_gte t
+      , gen_and t
+      , gen_or t
       ]
-  TTime -> undefined
-  TKeyset -> undefined
-  TList _ -> undefined
-  TObj _ -> undefined
-  TTable _ -> undefined
-  TArrow _ _ -> undefined
+  TTime ->
+    Gen.choice
+      [ gen_at t
+      , gen_constantly t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_read_msg t
+      , gen_try t
+      --
+      , gen_add_time t
+      ]
+  TKeyset ->
+    Gen.choice
+      [ gen_at t
+      , gen_constantly t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_read_msg t
+      , gen_try t
+      ]
+  TList _ ->
+    Gen.choice $
+      [ gen_at t
+      , gen_constantly t
+      , gen_drop t
+      , gen_filter t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_make_list t
+      , gen_map t
+      , gen_zip t
+      , gen_read_msg t
+      , gen_reverse t
+      , gen_sort t
+      , gen_take t
+      , gen_try t
+      , gen_distinct t
+      --
+      , gen_plus t
+      ]
+      ++ [ gen_enumerate t    | t == TInt ]
+      ++ [ gen_list_modules t | t == TStr ]
+      ++ [ gen_str_to_list t  | t == TStr ]
+  TObj _ ->
+    Gen.choice
+      [ gen_at t
+      , gen_constantly t
+      , gen_bind t
+      , gen_chain_data t
+      , gen_define_namespace t
+      , gen_drop t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_read_msg t
+      , gen_remove t
+      , gen_sort t
+      , gen_take t
+      , gen_try t
+      ]
+  TTable _ ->
+    Gen.choice
+      [ gen_at t
+      , gen_constantly t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_read_msg t
+      , gen_try t
+      ]
+  TArrow _ _ ->
+    Gen.choice
+      [ gen_compose t
+      , gen_constantly t
+      , gen_fold t
+      , gen_identity t
+      , gen_if t
+      , gen_read_msg t
+      , gen_try t
+      ]
 
 ------------------------------------------------------------------------
 -- Builtins
@@ -599,7 +747,7 @@ gen_base64_encode t@TStr = do
   pure $ EParens [ESym "base64-encode", x]
 gen_base64_encode _ = mzero
 
---TODO
+--NOTED
 gen_bind :: PactGen
 gen_bind t@TObj {} = do
   x <- genExpr t
@@ -608,13 +756,23 @@ gen_bind t@TObj {} = do
   pure $ EParens [ESym "bind", x, y, z]
 gen_bind _ = mzero
 
---TODO
-gen_chain_data :: PactGen
-gen_chain_data _ = pure $ EParens [ESym "chain-data"]
+public_chain_data :: Schema
+public_chain_data = error "jww (2022-12-07): public_chain_data NYI"
 
---TODO
+--NOTED
+gen_chain_data :: PactGen
+gen_chain_data (TObj sch) | sch == public_chain_data =
+  pure $ EParens [ESym "chain-data"]
+gen_chain_data _ = mzero
+
+--NOTED
 gen_compose :: PactGen
-gen_compose _ = mzero -- jww (2022-09-26): TODO
+gen_compose (TArrow [a] c) = do
+  b :: ExprType <- genType
+  g <- genArrow [a] b
+  f <- genArrow [b] c
+  pure $ EParens [ESym "compose", f, g]
+gen_compose _ = mzero
 
 --NOTED
 gen_concat :: PactGen
@@ -639,7 +797,7 @@ gen_contains TBool = do
   pure $ EParens [ESym "contains", a, x]
 gen_contains _ = mzero
 
---TODO
+--NOTED
 gen_define_namespace :: PactGen
 gen_define_namespace (TObj _sch) = do
   n <- genExpr TStr
@@ -684,7 +842,7 @@ gen_enforce_pact_version TBool = do
   pure $ EParens [ESym "enforce-pact-version", ver]
 gen_enforce_pact_version _ = mzero
 
---TODO
+--NOTED
 gen_enumerate :: PactGen
 gen_enumerate (TList TInt) = do
   x <- genInt
@@ -698,7 +856,7 @@ gen_enumerate (TList TInt) = do
       pure $ EParens [ESym "enumerate", x, y]
 gen_enumerate _ = mzero
 
---TODO
+--NOTED
 gen_filter :: PactGen
 gen_filter (TList t) = do
   f <- genArrow [t] TBool
@@ -706,7 +864,7 @@ gen_filter (TList t) = do
   pure $ EParens [ESym "filter", f, l]
 gen_filter _ = mzero
 
---TODO
+--NOTED
 gen_fold :: PactGen
 gen_fold a = do
   b <- genType
@@ -733,13 +891,13 @@ gen_hash TStr = do
   pure $ EParens [ESym "hash", x]
 gen_hash _ = mzero
 
---TODO
+--NOTED
 gen_identity :: PactGen
 gen_identity t = do
   x <- genExpr t
   pure $ EParens [ESym "identity", x]
 
---TODO
+--NOTED
 gen_if :: PactGen
 gen_if t = do
   b <- genBool
@@ -773,13 +931,13 @@ gen_length TInt = do
   pure $ EParens [ESym "length", x]
 gen_length _ = mzero
 
---TODO
+--NOTED
 gen_list_modules :: PactGen
 gen_list_modules (TList TStr) = do
   pure $ EParens [ESym "list-modules"]
 gen_list_modules _ = mzero
 
---TODO
+--NOTED
 gen_make_list :: PactGen
 gen_make_list (TList t) = do
   n <- Gen.integral listRange
@@ -787,7 +945,7 @@ gen_make_list (TList t) = do
   pure $ EParens [ESym "make-list", EInt (fromIntegral n), x]
 gen_make_list _ = mzero
 
---TODO
+--NOTED
 gen_map :: PactGen
 gen_map (TList a) = do
   b <- genType
@@ -796,7 +954,7 @@ gen_map (TList a) = do
   pure $ EParens [ESym "map", f, l]
 gen_map _ = mzero
 
---TODO
+--NOTED
 gen_zip :: PactGen
 gen_zip (TList c) = do
   a <- genType
@@ -838,7 +996,7 @@ gen_read_integer TInt = do
   pure $ EParens [ESym "read-decimal", key]
 gen_read_integer _ = mzero
 
---TODO
+--NOTED
 gen_read_msg :: PactGen
 gen_read_msg _t = do
   EBool b <- genBool
@@ -856,7 +1014,7 @@ gen_read_string TStr = do
   pure $ EParens [ESym "read-string", key]
 gen_read_string _ = mzero
 
---TODO
+--NOTED
 gen_remove :: PactGen
 gen_remove (TObj sch) = do
   x <- genObj sch
@@ -866,16 +1024,16 @@ gen_remove _ = mzero
 
 --TODO
 gen_resume :: PactGen
-gen_resume _ = mzero -- jww (2022-09-26): TODO
+gen_resume _ = mzero -- jww (2022-12-07): TODO
 
---TODO
+--NOTED
 gen_reverse :: PactGen
 gen_reverse (TList t) = do
   x <- genList t
   pure $ EParens [ESym "reverse", x]
 gen_reverse _ = mzero
 
---TODO
+--NOTED
 gen_sort :: PactGen
 gen_sort (TList t) = do
   x <- genList t
@@ -892,14 +1050,14 @@ gen_str_to_int TInt = do
   pure $ EParens [ESym "str-to-int", x]
 gen_str_to_int _ = mzero
 
---TODO
+--NOTED
 gen_str_to_list :: PactGen
 gen_str_to_list (TList TStr) = do
   x <- genStr
   pure $ EParens [ESym "str-to-list", x]
 gen_str_to_list _ = mzero
 
---TODO
+--NOTED
 gen_take :: PactGen
 gen_take TStr = do
   i <- genInt
@@ -912,7 +1070,7 @@ gen_take (TList t) = do
 gen_take (TObj _sch) = mzero -- jww (2022-12-06): TODO
 gen_take _ = mzero
 
---TODO
+--NOTED
 gen_try :: PactGen
 gen_try t = do
   x <- genExpr t
@@ -931,16 +1089,18 @@ gen_typeof TStr = do
   pure $ EParens [ESym "typeof", x]
 gen_typeof _ = mzero
 
---TODO
+--NOTED
 gen_distinct :: PactGen
 gen_distinct (TList t) = do
   x <- genList t
   pure $ EParens [ESym "distinct", x]
 gen_distinct _ = mzero
 
+--TODO
 gen_where :: PactGen
 gen_where _ = mzero -- jww (2022-09-26): TODO
 
+--TODO
 gen_yield :: PactGen
 gen_yield _ = mzero -- jww (2022-09-26): TODO
 
@@ -991,6 +1151,7 @@ canCmp TBool = True
 canCmp TTime = True
 canCmp _ = False
 
+--NOTED
 gen_neq :: PactGen
 gen_neq TBool = do
   t <- genType
@@ -998,15 +1159,18 @@ gen_neq TBool = do
   arity2 "!=" t
 gen_neq _ = mzero
 
+--NOTED
 gen_bitwise_and :: PactGen
 gen_bitwise_and t@TInt = arity2 "&" t
 gen_bitwise_and _ = mzero
 
+--NOTED
 gen_mult :: PactGen
 gen_mult t@TDec = arity2_int_or_dec "*" t
 gen_mult t@TInt = arity2 "*" t
 gen_mult _ = mzero
 
+--NOTED
 gen_plus :: PactGen
 gen_plus t@TDec = arity2_int_or_dec "+" t
 gen_plus t@TInt = arity2 "+" t
@@ -1016,16 +1180,19 @@ gen_plus t@(TList _) = arity2 "+" t
 -- gen_plus t@(TObj _) = arity2 "+" t
 gen_plus _ = mzero
 
+--NOTED
 gen_minus :: PactGen
 gen_minus t@TDec = arity2_int_or_dec "-" t
 gen_minus t@TInt = arity2 "-" t
 gen_minus _ = mzero
 
+--NOTED
 gen_divide :: PactGen
 gen_divide t@TDec = arity2_int_or_dec "/" t
 gen_divide t@TInt = arity2 "/" t
 gen_divide _ = mzero
 
+--NOTED
 gen_lt :: PactGen
 gen_lt TBool = do
   t <- genType
@@ -1033,6 +1200,7 @@ gen_lt TBool = do
   arity2 "<" t
 gen_lt _ = mzero
 
+--NOTED
 gen_lte :: PactGen
 gen_lte TBool = do
   t <- genType
@@ -1040,6 +1208,7 @@ gen_lte TBool = do
   arity2 "<=" t
 gen_lte _ = mzero
 
+--NOTED
 gen_eq :: PactGen
 gen_eq TBool = do
   t <- genType
@@ -1047,6 +1216,7 @@ gen_eq TBool = do
   arity2 "==" t
 gen_eq _ = mzero
 
+--NOTED
 gen_gt :: PactGen
 gen_gt TBool = do
   t <- genType
@@ -1054,6 +1224,7 @@ gen_gt TBool = do
   arity2 ">" t
 gen_gt _ = mzero
 
+--NOTED
 gen_gte :: PactGen
 gen_gte TBool = do
   t <- genType
@@ -1061,87 +1232,110 @@ gen_gte TBool = do
   arity2 ">=" t
 gen_gte _ = mzero
 
+--NOTED
 gen_pow :: PactGen
 gen_pow t@TInt = arity2 "^" t
 gen_pow t@TDec = arity2_int_or_dec "^" t
 gen_pow _ = mzero
 
+--NOTED
 gen_abs :: PactGen
 gen_abs t@TInt = arity1 "abs" t
 gen_abs t@TDec = arity1 "abs" t
 gen_abs _ = mzero
 
+--NOTED
 gen_and :: PactGen
 gen_and t@TBool = arity1 "and" t
 gen_and _ = mzero
 
+--TODO
 gen_and_question :: PactGen
 gen_and_question _ = mzero -- jww (2022-09-26): TODO
 
+--NOTED
 gen_ceiling :: PactGen
 gen_ceiling TInt = arity1 "ceiling" TDec
 gen_ceiling _ = mzero
 
+--NOTED
 gen_exp :: PactGen
-gen_exp t@TDec = arity1_int_or_dec "exp" t
+gen_exp t@TInt = arity1 "exp" t
+gen_exp t@TDec = arity1 "exp" t
 gen_exp _ = mzero
 
+--NOTED
 gen_floor :: PactGen
 gen_floor TInt = arity1 "floor" TDec
 gen_floor _ = mzero
 
+--NOTED
 gen_ln :: PactGen
-gen_ln t@TDec = arity1_int_or_dec "ln" t
+gen_ln t@TInt = arity1 "ln" t
+gen_ln t@TDec = arity1 "ln" t
 gen_ln _ = mzero
 
+--NOTED
 gen_log :: PactGen
 gen_log t@TInt = arity2 "log" t
 gen_log t@TDec = arity2_int_or_dec "log" t
 gen_log _ = mzero
 
+--NOTED
 gen_mod :: PactGen
 gen_mod t@TInt = arity2 "mod" t
 gen_mod _ = mzero
 
+--NOTED
 gen_not :: PactGen
 gen_not t@TBool = arity1 "not" t
 gen_not _ = mzero
 
+--TODO
 gen_not_question :: PactGen
 gen_not_question _ = mzero -- jww (2022-09-26): TODO
 
+--NOTED
 gen_or :: PactGen
 gen_or t@TBool = arity2 "or" t
 gen_or _ = mzero
 
+--TODO
 gen_or_question :: PactGen
 gen_or_question _ = mzero -- jww (2022-09-26): TODO
 
+--NOTED
 gen_round :: PactGen
 gen_round TInt = arity1 "round" TDec
 gen_round _ = mzero
 
+--NOTED
 gen_shift :: PactGen
 gen_shift t@TInt = arity2 "shift" t
 gen_shift _ = mzero
 
+--NOTED
 gen_sqrt :: PactGen
 gen_sqrt t@TInt = arity1 "sqrt" t
 gen_sqrt t@TDec = arity1 "sqrt" t
 gen_sqrt _ = mzero
 
+--NOTED
 gen_xor :: PactGen
 gen_xor t@TInt = arity2 "xor" t
 gen_xor _ = mzero
 
+--NOTED
 gen_bitwise_or :: PactGen
 gen_bitwise_or t@TInt = arity2 "|" t
 gen_bitwise_or _ = mzero
 
+--NOTED
 gen_bitwise_complement :: PactGen
 gen_bitwise_complement t@TInt = arity1 "~" t
 gen_bitwise_complement _ = mzero
 
+--NOTED
 gen_add_time :: PactGen
 gen_add_time TTime = do
   t <- genTime
@@ -1149,6 +1343,7 @@ gen_add_time TTime = do
   return $ EParens [ESym "add-time", t, s]
 gen_add_time _ = mzero
 
+--NOTED
 gen_days :: PactGen
 gen_days t@TInt = arity1 "days" t
 gen_days t@TDec = arity1 "days" t
