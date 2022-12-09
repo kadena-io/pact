@@ -18,6 +18,7 @@ import Control.Lens
 import Data.Aeson (encode)
 import Data.Attoparsec.Text
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as SBS
 import Data.ByteString.Lazy (toStrict)
 import Data.Foldable
 import Data.Functor (void)
@@ -108,7 +109,7 @@ principalParser (getInfo -> i) = kParser
       f c = c `elem` base64UrlUnpaddedAlphabet
 
     hexKeyFormat =
-      PublicKey . T.encodeUtf8 . T.pack <$> count 64 (satisfy isHexDigit)
+      PublicKey . SBS.toShort . T.encodeUtf8 . T.pack <$> count 64 (satisfy isHexDigit)
 
     char' = void . char
     eof' = void eof
@@ -186,7 +187,7 @@ guardToPrincipal chargeGas = \case
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
     ([k],"keys-all") -> chargeGas 1 >> pure (K k)
     (l,fun) -> do
-      h <- mkHash $ map _pubKey l
+      h <- mkHash $ map (SBS.fromShort . _pubKey) l
       pure $ W (asString h) fun
   GKeySetRef ksn -> chargeGas 1 >> pure (R ksn)
   GModule (ModuleGuard mn n) -> chargeGas 1 >> pure (M mn n)

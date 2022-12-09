@@ -46,7 +46,7 @@ import Control.Monad
 import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Attoparsec.Text (parseOnly, takeText, Parser)
-import Data.ByteString (ByteString)
+import Data.ByteString.Short (ShortByteString, fromShort, toShort)
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.UTF8 as BSU
 import Data.Char
@@ -75,21 +75,21 @@ import Text.Parser.Token
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
-newtype PublicKey = PublicKey { _pubKey :: ByteString }
+newtype PublicKey = PublicKey { _pubKey :: ShortByteString }
   deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
 
 instance Arbitrary PublicKey where
-  arbitrary = PublicKey . encodeUtf8 . T.pack <$> vectorOf 64 genValidPublicKeyChar
+  arbitrary = PublicKey . toShort . encodeUtf8 . T.pack <$> vectorOf 64 genValidPublicKeyChar
     where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
 instance Serialize PublicKey
 instance NFData PublicKey
 instance FromJSON PublicKey where
-  parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
+  parseJSON = withText "PublicKey" (return . PublicKey . toShort . encodeUtf8)
 instance ToJSON PublicKey where
-  toJSON = toJSON . decodeUtf8 . _pubKey
+  toJSON = toJSON . decodeUtf8 . fromShort . _pubKey
 
 instance Pretty PublicKey where
-  pretty (PublicKey s) = prettyString (BSU.toString s)
+  pretty (PublicKey s) = prettyString (BSU.toString $ fromShort s)
 
 -- -------------------------------------------------------------------------- --
 -- KeySet
@@ -232,7 +232,9 @@ type KeyFormat = PublicKey -> Bool
 
 -- | Current "Kadena" ED-25519 key format: 64-length hex.
 ed25519Hex :: KeyFormat
-ed25519Hex (PublicKey k) = BSC.length k == 64 && BSC.all isHexDigitLower k
+ed25519Hex (PublicKey k) = BSC.length b == 64 && BSC.all isHexDigitLower b
+  where
+    b = fromShort k
 
 -- | Lower-case hex numbers.
 isHexDigitLower :: Char -> Bool

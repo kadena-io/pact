@@ -44,6 +44,7 @@ import Control.Monad.State (modify)
 import Control.Lens
 
 import Data.Aeson
+import qualified Data.ByteString.Short as SBS
 import Data.Default
 import Data.HashMap.Strict (HashMap)
 import qualified Data.Map.Strict as M
@@ -195,7 +196,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
-            pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+            pk = PublicKey $ SBS.toShort $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
 
 
 initRefStore :: RefStore
@@ -240,7 +241,7 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
 
   where
 
-    withRollback act = 
+    withRollback act =
       act `onException` safeRollback
 
     safeRollback =

@@ -53,6 +53,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Data.ByteString.Short as SB
 import qualified Text.Trifecta as Trifecta
 import Data.Char
 import Data.Either (isRight)
@@ -180,6 +181,7 @@ class AsString a where asString :: a -> Text
 instance AsString String where asString = pack
 instance AsString Text where asString = id
 instance AsString B.ByteString where asString = asString . decodeUtf8
+instance AsString SB.ShortByteString where asString = asString . decodeUtf8 . SB.fromShort
 instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
 instance AsString Integer where asString = pack . show
 instance AsString a => AsString (Maybe a) where asString = maybe "" asString

@@ -47,6 +47,7 @@ import Control.Monad.Reader
 import Control.Concurrent.Chan
 import Data.Maybe
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Short as SBS
 import qualified Data.Set as S
 import Data.Text.Encoding
 import Data.HashSet (HashSet)
@@ -65,7 +66,7 @@ import Pact.Types.SPV
 -- if specified, otherwise pubkey
 userSigToPactPubKey :: Signer -> Pact.PublicKey
 userSigToPactPubKey Signer{..} =
-  Pact.PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+  Pact.PublicKey $ SBS.toShort $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
 
 
 -- | See 'userSigToPactPubKey'

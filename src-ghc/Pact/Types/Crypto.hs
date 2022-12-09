@@ -50,6 +50,7 @@ import Prelude
 import GHC.Generics
 
 import Data.ByteString    (ByteString)
+import Data.ByteString.Short (fromShort)
 import Data.String        (IsString(..))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -163,8 +164,8 @@ instance Scheme (SPPKScheme 'ED25519) where
   type PrivateKey (SPPKScheme 'ED25519) = Ed25519.SecretKey
   type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
 
-  _sign _ (Hash msg) pub priv = return $ Ed25519.sign priv pub msg
-  _valid _ (Hash msg) pub sig = Ed25519.verify pub msg sig
+  _sign _ (Hash msg) pub priv = return $ Ed25519.sign priv pub (fromShort msg)
+  _valid _ (Hash msg) pub sig = Ed25519.verify pub (fromShort msg) sig
   _genKeyPair _ = ed25519GenKeyPair
   _getPublic _ = Just . ed25519GetPublicKey
   _formatPublicKey _ p = toBS p
@@ -226,8 +227,8 @@ instance Scheme (SPPKScheme 'ETH) where
   type Signature (SPPKScheme 'ETH) = ECDSA.Signature
 
 
-  _sign _ (Hash msg) pub priv = ECDSA.signETH msg pub priv
-  _valid _ (Hash msg) pub sig = ECDSA.validETH msg pub sig
+  _sign _ (Hash msg) pub priv = ECDSA.signETH (fromShort msg) pub priv
+  _valid _ (Hash msg) pub sig = ECDSA.validETH (fromShort msg) pub sig
   _genKeyPair _ = ECDSA.genKeyPair
   _getPublic _ = Just . ECDSA.getPublicKey
   _formatPublicKey _ p = ECDSA.formatPublicKeyETH (toBS p)

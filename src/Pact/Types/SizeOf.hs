@@ -29,6 +29,7 @@ module Pact.Types.SizeOf
 
 import Bound
 import qualified Data.ByteString.UTF8 as BS
+import qualified Data.ByteString.Short as SBS
 import Data.Decimal
 import Data.Int (Int64)
 import qualified Data.List as L
@@ -142,6 +143,12 @@ instance SizeOf BS.ByteString where
     where
       byteStringSize = (9 * wordSize) + byteStringLength
       byteStringLength = fromIntegral (BS.length bs)
+
+instance SizeOf SBS.ShortByteString where
+  sizeOf _ bs = byteStringSize
+    where
+      byteStringSize = (9 * wordSize) + byteStringLength
+      byteStringLength = fromIntegral (SBS.length bs)
 
 instance SizeOf Text where
   sizeOf _ t = (6 * wordSize) + (2 * (fromIntegral (T.length t)))

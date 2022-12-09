@@ -45,6 +45,7 @@ import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Short as SBS
 import Data.Default (def)
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
@@ -358,7 +359,7 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       let signSingle kp = do
-            sig <- signHash (fromUntypedHash $ Hash h) kp
+            sig <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
             return $ toB16Text (getPublic kp) .= _usSig sig
       sigs <- mapM signSingle kps
       return $ Y.encode $ object sigs
