@@ -148,7 +148,8 @@ instance SizeOf SBS.ShortByteString where
   sizeOf _ bs = byteStringSize
     where
       byteStringSize = (9 * wordSize) + byteStringLength
-      byteStringLength = fromIntegral (SBS.length bs)
+      -- byteStringLength = fromIntegral (SBS.length bs)
+      byteStringLength = fromIntegral (BS.length $ SBS.fromShort bs)
 
 instance SizeOf Text where
   sizeOf _ t = (6 * wordSize) + (2 * (fromIntegral (T.length t)))
