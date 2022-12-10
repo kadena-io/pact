@@ -830,8 +830,7 @@ gen_compose _ = mzero
 gen_concat :: PactGen
 gen_concat t@TStr = do
   x <- genExpr (TList t)
-  y <- genExpr (TList t)
-  pure $ EParens [ESym "concat", x, y]
+  pure $ EParens [ESym "concat", x]
 gen_concat _ = mzero
 
 gen_constantly :: PactGen
@@ -1039,6 +1038,8 @@ gen_read_integer TInt = do
   pure $ EParens [ESym "read-decimal", key]
 gen_read_integer _ = mzero
 
+-- jww (2022-12-09): This needs to read from an environment map that gets
+-- setup as part of the Pact exe environment.
 gen_read_msg :: PactGen
 gen_read_msg _t = do
   EBool b <- genBool
@@ -1301,8 +1302,12 @@ gen_ln t@TDec = arity1 "ln" t
 gen_ln _ = mzero
 
 gen_log :: PactGen
-gen_log t@TInt = arity2 "log" t
-gen_log t@TDec = arity2_int_or_dec "log" t
+gen_log t@TInt = do
+  EParens [sym, n, m] <- arity2 "log" t
+  pure $ EParens [sym, EParens [ESym "abs", n], m]
+gen_log t@TDec = do
+  EParens [sym, n, m] <- arity2_int_or_dec "log" t
+  pure $ EParens [sym, EParens [ESym "abs", n], m]
 gen_log _ = mzero
 
 gen_mod :: PactGen
