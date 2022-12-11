@@ -48,7 +48,6 @@ import Data.Aeson
 import Data.Attoparsec.Text (parseOnly, takeText, Parser)
 import Data.ByteString.Short (ShortByteString, fromShort, toShort)
 import qualified Data.ByteString.Char8 as BSC
-import qualified Data.ByteString.UTF8 as BSU
 import Data.Char
 import Data.Default
 import Data.Foldable
@@ -59,6 +58,7 @@ import qualified Data.Set as S
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Text.Encoding
 import GHC.Generics
 import Test.QuickCheck
@@ -75,6 +75,10 @@ import Text.Parser.Token
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
+-- | Public key in UTF8 encoded textual format
+--
+-- TODO: what exactly is the format?
+--
 newtype PublicKey = PublicKey { _pubKey :: ShortByteString }
   deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
 
@@ -89,7 +93,7 @@ instance ToJSON PublicKey where
   toJSON = toJSON . decodeUtf8 . fromShort . _pubKey
 
 instance Pretty PublicKey where
-  pretty (PublicKey s) = prettyString (BSU.toString $ fromShort s)
+  pretty (PublicKey s) = pretty (T.decodeUtf8 $ fromShort s)
 
 -- -------------------------------------------------------------------------- --
 -- KeySet
