@@ -368,7 +368,7 @@ setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
-  setenv eeMsgSigs $ M.fromList ((,mempty) . PublicKey . encodeUtf8 <$> V.toList ks)
+  setenv eeMsgSigs $ M.fromList ((,mempty) . PublicKeyText <$> V.toList ks)
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
@@ -383,7 +383,7 @@ setsigs' _ [TList ts _ _] = do
               caps <- forM clist $ \cap -> case cap of
                 (TApp a _) -> view _1 <$> appToCap a
                 o -> evalError' o $ "Expected capability invocation"
-              return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+              return (PublicKeyText k,S.fromList (V.toList caps))
             _ -> evalError' k' "Expected string value"
         _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
     _ -> evalError' t $ "Expected object"

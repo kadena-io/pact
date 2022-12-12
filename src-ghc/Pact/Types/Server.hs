@@ -48,7 +48,6 @@ import Control.Concurrent.Chan
 import Data.Maybe
 import Data.ByteString (ByteString)
 import qualified Data.Set as S
-import Data.Text.Encoding
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
 
@@ -63,13 +62,13 @@ import Pact.Types.SPV
 
 -- | Grab "runtime" public key from Signer, which is address
 -- if specified, otherwise pubkey
-userSigToPactPubKey :: Signer -> Pact.PublicKey
+userSigToPactPubKey :: Signer -> Pact.PublicKeyText
 userSigToPactPubKey Signer{..} =
-  Pact.PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+  Pact.PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 
 -- | See 'userSigToPactPubKey'
-userSigsToPactKeySet :: [Signer] -> S.Set Pact.PublicKey
+userSigsToPactKeySet :: [Signer] -> S.Set Pact.PublicKeyText
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
 

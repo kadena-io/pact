@@ -111,8 +111,9 @@ smtConfig = SBV.z3
 
 -- | Solver timeout in millis. Usually timeout is a bad sign
 -- but can always try larger values here.
+--
 timeout :: Integer
-timeout = 10000
+timeout = 20000
 
 newtype VerificationWarnings = VerificationWarnings [Text]
   deriving (Eq, Show)

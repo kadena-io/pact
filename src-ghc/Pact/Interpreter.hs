@@ -51,7 +51,6 @@ import Data.IORef
 import Data.Maybe
 import qualified Data.Set as S
 import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8)
 import System.Directory
 
 import Pact.Compile
@@ -195,7 +194,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
-            pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+            pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 
 initRefStore :: RefStore
@@ -240,7 +239,7 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
 
   where
 
-    withRollback act = 
+    withRollback act =
       act `onException` safeRollback
 
     safeRollback =

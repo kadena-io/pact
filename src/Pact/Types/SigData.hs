@@ -31,7 +31,7 @@ import GHC.Generics
 
 import Pact.Parse
 import Pact.Types.Command
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
   deriving (Eq,Ord,Show,Generic)
