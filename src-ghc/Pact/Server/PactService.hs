@@ -32,7 +32,7 @@ import Pact.Types.Gas
 import Pact.Types.Logger
 import Pact.Types.Persistence
 import Pact.Types.RPC
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 import Pact.Types.Server
 import Pact.Types.Pretty (viaShow)
 import Pact.Types.PactValue (PactValue)
@@ -97,7 +97,7 @@ applyCmd _ _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
            (PactError TxFailure def def . viaShow $ s)
 applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode _ (ProcSucc cmd) = do
   blocktime <-  (((*) 1000000) <$> systemSeconds <$> getSystemTime)
-  
+
   let payload = _cmdPayload cmd
       gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
       pd = PublicData pubMeta bh blocktime pbh

@@ -68,7 +68,7 @@ import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Crypto
 import Pact.Types.RPC
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
 

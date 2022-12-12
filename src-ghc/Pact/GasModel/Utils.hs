@@ -382,16 +382,16 @@ sampleLoadedKeysetName = "some-loaded-keyset"
 sampleLoadedMultisigKeysetName :: T.Text
 sampleLoadedMultisigKeysetName = "some-loaded-multisig-keyset"
 
-samplePubKeys :: [PublicKey]
-samplePubKeys = [PublicKey "something"]
+samplePubKeys :: [PublicKeyText]
+samplePubKeys = [PublicKeyText "something"]
 
-sampleMultiPubKeys :: [PublicKey]
+sampleMultiPubKeys :: [PublicKeyText]
 sampleMultiPubKeys =
-  [ PublicKey "key1"
-  , PublicKey "key2"
+  [ PublicKeyText "key1"
+  , PublicKeyText "key2"
   ]
 
-samplePubKeysWithCaps :: [(PublicKey, S.Set SigCapability)]
+samplePubKeysWithCaps :: [(PublicKeyText, S.Set SigCapability)]
 samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
 
 sampleKeyset :: KeySet

@@ -193,7 +193,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(M.Map PublicKey (S.Set UserCapability))
+    , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode

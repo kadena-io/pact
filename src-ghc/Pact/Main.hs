@@ -47,7 +47,7 @@ import Text.Trifecta as TF hiding (err)
 import Pact.Coverage
 import Pact.Repl
 import Pact.Parse
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 import Pact.Server.Server
 import Pact.ReplTools
 import Pact.Repl.Types

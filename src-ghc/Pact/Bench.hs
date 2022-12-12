@@ -19,7 +19,6 @@ import Criterion.Main hiding (env)
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Short as SBS
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
@@ -210,12 +209,12 @@ benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
   \p -> benchNFIO (fst p) $ execPure pt dbEnv p
 
 benchKeySet :: KeySet
-benchKeySet = mkKeySet [PublicKey "benchadmin"] ">"
+benchKeySet = mkKeySet [PublicKeyText "benchadmin"] ">"
 
 acctRow :: RowData
 acctRow = RowData RDV1 $ fmap pactValueToRowData $ ObjectMap $ M.fromList
   [("balance",PLiteral (LDecimal 100.0))
-  ,("guard",PGuard $ GKeySet (mkKeySet [PublicKey $ SBS.toShort $ encodeUtf8 pk] "keys-all"))
+  ,("guard",PGuard $ GKeySet (mkKeySet [PublicKeyText pk] "keys-all"))
   ]
 
 benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)
