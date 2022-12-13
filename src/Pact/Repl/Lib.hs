@@ -28,7 +28,7 @@ import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 
-import Data.Aeson (eitherDecode,toJSON)
+import Data.Aeson (eitherDecode)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable

@@ -60,7 +60,6 @@ module Pact.GasModel.Utils
 
 import Bound (abstract, Scope)
 import Control.Exception (throwIO)
-import Data.Aeson (toJSON, ToJSON(..))
 import Data.Default (def)
 import NeatInterpolation (text)
 
