@@ -45,6 +45,7 @@ import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Short as SBS
 import Data.Default (def)
 import qualified Data.HashMap.Strict as HM
 import Data.List
@@ -68,7 +69,7 @@ import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Crypto
 import Pact.Types.RPC
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
 import Pact.Utils.LegacyValue
@@ -438,7 +439,7 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       fmap (Y.encode . HM.fromList) $ forM kps $ \kp -> do
-            sig <- signHash (fromUntypedHash $ Hash h) kp
+            sig <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
             return (B16JsonBytes (getPublic kp), _usSig sig)
 
 withKeypairsOrSigner

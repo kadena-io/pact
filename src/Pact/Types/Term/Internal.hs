@@ -12,7 +12,7 @@ module Pact.Types.Term.Internal
 ( Meta(..)
 , mDocs
 , mModel
-, PublicKey(..)
+, PublicKeyText(..)
 , KeySet(..)
 , mkKeySet
 , KeySetName(..)

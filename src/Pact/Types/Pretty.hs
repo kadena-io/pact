@@ -61,13 +61,13 @@ import           Control.DeepSeq      (NFData(..))
 import           GHC.Generics         (Generic(..))
 import           Bound.Var
 import           Data.Aeson           (Value(..))
-import qualified Data.ByteString.UTF8 as UTF8
 import           Data.Foldable        (toList)
 import qualified Data.Aeson.KeyMap  as HM
 import           Data.Aeson.Key       (toText)
 import           Data.Int
 import           Data.Text            (Text, pack, unpack)
 import qualified Data.Text            as Text
+import qualified Data.Text.Encoding   as Text
 import           Data.Text.Prettyprint.Doc
   (SimpleDocStream, annotate, unAnnotate, layoutPretty,
   defaultLayoutOptions, vsep, hsep, (<+>), colon, angles, list, braces,
@@ -220,7 +220,7 @@ instance Pretty Delta where
         Columns c _         -> prettyDelta interactive 0 c
         Tab x y _           -> prettyDelta interactive 0 (nextTab x + y)
         Lines l c _ _       -> prettyDelta interactive l c
-        Directed fn l c _ _ -> prettyDelta (UTF8.toString fn) l c
+        Directed fn l c _ _ -> prettyDelta (unpack $ Text.decodeUtf8 fn) l c
       where
         prettyDelta
             :: String -- Source description

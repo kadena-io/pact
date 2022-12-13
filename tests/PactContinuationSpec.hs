@@ -11,6 +11,7 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Data.ByteString.Short as SBS
 import Data.Decimal
 import Data.Default (def)
 import qualified Data.HashMap.Strict as HM
@@ -98,7 +99,7 @@ testElideModRefEvents = do
 
 mkModuleHash :: Text -> IO ModuleHash
 mkModuleHash =
-  either (fail . show) (return . ModuleHash . Hash) . parseB64UrlUnpaddedText'
+  either (fail . show) (return . ModuleHash . Hash . SBS.toShort) . parseB64UrlUnpaddedText'
 
 testManagedCaps :: Spec
 testManagedCaps = do
