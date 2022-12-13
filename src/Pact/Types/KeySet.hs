@@ -88,7 +88,7 @@ instance Arbitrary PublicKeyText where
 instance Serialize PublicKeyText
 instance NFData PublicKeyText
 instance FromJSON PublicKeyText where
-  parseJSON = withText "PublicKeyText" (return . PublicKeyText)
+  parseJSON = withText "PublicKey" (return . PublicKeyText)
 instance ToJSON PublicKeyText where
   toJSON = toJSON . _pubKey
 
