@@ -24,7 +24,7 @@
         (final: prev: {
           pact =
             final.haskell-nix.project' {
-              src = ./.;
+              src = pkgs.haskell-nix.haskellLib.cleanGit { src = ./.; name = "pact"; };
               compiler-nix-name = "ghc8107";
               shell.tools = {
                 cabal = {};
