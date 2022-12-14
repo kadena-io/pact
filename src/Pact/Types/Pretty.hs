@@ -68,19 +68,19 @@ import           Data.Aeson.Key       (toText)
 import           Data.Int
 import           Data.Text            (Text, pack, unpack)
 import qualified Data.Text            as Text
-import           Data.Text.Prettyprint.Doc
+import           Prettyprinter
   (SimpleDocStream, annotate, unAnnotate, layoutPretty,
   defaultLayoutOptions, vsep, hsep, (<+>), colon, angles, list, braces,
   brackets, encloseSep, parens, sep, line, dquotes, viaShow, punctuate, dot,
   encloseSep, space, nest, align, hardline, tupled, indent, equals, reAnnotate,
   reAnnotateS, fillSep)
-import qualified Data.Text.Prettyprint.Doc as PP
-import qualified Data.Text.Prettyprint.Doc.Internal.Type as PP
-import qualified Data.Text.Prettyprint.Doc.Render.String as PP
-import           Data.Text.Prettyprint.Doc.Render.Terminal
+import qualified Prettyprinter as PP
+import qualified Prettyprinter.Internal.Type as PP
+import qualified Prettyprinter.Render.String as PP
+import           Prettyprinter.Render.Terminal
   (color, Color(..), AnsiStyle)
-import qualified Data.Text.Prettyprint.Doc.Render.Terminal as Term
-import           Data.Text.Prettyprint.Doc.Render.Text as RText
+import qualified Prettyprinter.Render.Terminal as Term
+import           Prettyprinter.Render.Text as RText
 import           Text.Trifecta.Delta hiding (prettyDelta)
 
 data RenderColor = RColor | RPlain
