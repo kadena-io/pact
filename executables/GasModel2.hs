@@ -43,7 +43,7 @@ import Statistics.Types (Estimate (..))
 
 main :: IO ()
 main = do
-  putStrLn "x1:"
+  putStrLn "Checking that generation works:"
   xs1 <-
     Gen.sample $
       replicateM 10 $
@@ -62,7 +62,7 @@ main = do
                         genExpr =<< genType)
 
   -- opt <- O.execParser options
-  tests <- mapM genTest (map (show :: Int -> String) [1..100])
+  tests <- mapM genTest (map (show :: Int -> String) [1..1000])
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
@@ -168,6 +168,9 @@ gasTest name exprs =
           ]
         , "pred" A..= ("keys-all" :: T.Text)
         ]
+      , "msg" A..= ("hello" :: T.Text)
+      , "int" A..= (123 :: Int)
+      , "dec" A..= (456.0 :: Float)
       ]
 
 type PactGen = ExprType -> ReaderT Env Gen LispExpr
@@ -433,9 +436,9 @@ genBuiltin t = case t of
       , gen_identity t
       , gen_if t
       , gen_int_to_str t
-      -- , gen_namespace t -- jww (2022-12-09):  TODO
+      -- , gen_namespace t -- jww (2022-12-09): TODO
       , gen_pact_id t
-      , gen_pact_version t
+      -- , gen_pact_version t -- jww (2022-12-14): TODO
       , gen_read_msg t
       , gen_read_string t
       , gen_take t
@@ -508,7 +511,7 @@ genBuiltin t = case t of
       , gen_contains t
       , gen_enforce t
       , gen_enforce_one t
-      , gen_enforce_pact_version t
+      -- , gen_enforce_pact_version t -- jww (2022-12-14): TODO
       , gen_fold t
       , gen_identity t
       , gen_if t
@@ -633,7 +636,7 @@ builtins =
       ("drop", gen_drop),
       ("enforce", gen_enforce),
       ("enforce-one", gen_enforce_one),
-      ("enforce-pact-version", gen_enforce_pact_version),
+      -- ("enforce-pact-version", gen_enforce_pact_version), -- jww (2022-12-14):  NYI
       ("enumerate", gen_enumerate),
       ("filter", gen_filter),
       ("fold", gen_fold),
@@ -888,10 +891,13 @@ gen_enforce t@TBool = do
 gen_enforce _ = mzero
 
 gen_enforce_one :: PactGen
-gen_enforce_one t@TBool = do
+gen_enforce_one TBool = do
   x <- genExpr TStr
-  y <- genExpr (TList t)
-  pure $ EParens [ESym "enforce-one", x, y]
+  -- jww (2022-12-14): NYI
+  -- y <- genExpr (TList t)
+  EList y <- genList TBool
+  guard $ length y > 0
+  pure $ EParens [ESym "enforce-one", x, EList y]
 gen_enforce_one _ = mzero
 
 gen_enforce_pact_version :: PactGen
@@ -969,10 +975,11 @@ gen_int_to_str _ = mzero
 
 gen_is_charset :: PactGen
 gen_is_charset TBool = do
+  c <- Gen.element ["CHARSET_ASCII", "CHARSET_LATIN1"]
   x <- genExpr TStr
   -- latin1 is the upperbound in terms of complexity for
   -- this native.
-  pure $ EParens [ESym "is-charset", EStr "CHARSET_LATIN1", x]
+  pure $ EParens [ESym "is-charset", ESym c, x]
 gen_is_charset _ = mzero
 
 gen_length :: PactGen
@@ -1028,31 +1035,48 @@ gen_pact_version _ = mzero
 
 gen_read_decimal :: PactGen
 gen_read_decimal TDec = do
-  key <- genExpr TStr
+  -- jww (2022-12-14): This should really be a key chosen from a map
+  -- provided in the environment.
+  -- key <- genExpr TStr
+  let key = EStr "dec"
   pure $ EParens [ESym "read-decimal", key]
 gen_read_decimal _ = mzero
 
 gen_read_integer :: PactGen
 gen_read_integer TInt = do
-  key <- genExpr TStr
-  pure $ EParens [ESym "read-decimal", key]
+  -- jww (2022-12-14): This should really be a key chosen from a map
+  -- provided in the environment.
+  -- key <- genExpr TStr
+  let key = EStr "int"
+  pure $ EParens [ESym "read-integer", key]
 gen_read_integer _ = mzero
 
 -- jww (2022-12-09): This needs to read from an environment map that gets
--- setup as part of the Pact exe environment.
+-- setup as part of the Pact exe environment. For now, we only provide a
+-- single string value under the key "msg".
 gen_read_msg :: PactGen
-gen_read_msg _t = do
-  EBool b <- genBool
+gen_read_msg TStr = do
+  -- jww (2022-12-14): `read-msg` with no arguments is the "type inference"
+  -- version of read-msg.
+  -- EBool b <- genBool
+  let b = True
   if b
-   then do
-     key <- genExpr TStr
-     pure $ EParens [ESym "read-msg", key]
-   else do
-     pure $ EParens [ESym "read-msg"]
+    then do
+      -- jww (2022-12-14): This should really be a key chosen from a map
+      -- provided in the environment.
+      -- key <- genExpr TStr
+      let key = EStr "msg"
+      pure $ EParens [ESym "read-msg", key]
+    else do
+      pure $ EParens [ESym "read-msg"]
+gen_read_msg _ = mzero
 
 gen_read_string :: PactGen
 gen_read_string TStr = do
-  key <- genExpr TStr
+  -- jww (2022-12-14): This should really be a key chosen from a map
+  -- provided in the environment.
+  -- key <- genExpr TStr
+  let key = EStr "msg"
   pure $ EParens [ESym "read-string", key]
 gen_read_string _ = mzero
 
@@ -1086,8 +1110,22 @@ gen_sort _ = mzero
 
 gen_str_to_int :: PactGen
 gen_str_to_int TInt = do
-  x <- genExpr TStr
-  pure $ EParens [ESym "str-to-int", x]
+  EBool b <- genBool
+  if b
+    then do
+      EStr s <- genStr
+      guard $ all (`elem` ("0123456789" :: String)) s
+      pure $ EParens [ESym "str-to-int", EStr s]
+    else do
+      n <- Gen.element [2, 8, 10, 16]
+      EStr s <- genStr
+      case n of
+          2  -> guard $ all (`elem` ("01" :: String)) s
+          8  -> guard $ all (`elem` ("01234567" :: String)) s
+          10 -> guard $ all (`elem` ("0123456789" :: String)) s
+          16 -> guard $ all (`elem` ("0123456789abcdef" :: String)) s
+          _  -> error "Impossible"
+      pure $ EParens [ESym "str-to-int", EInt n, EStr s]
 gen_str_to_int _ = mzero
 
 gen_str_to_list :: PactGen
@@ -1193,7 +1231,6 @@ canCmp :: ExprType -> Bool
 canCmp TStr = True
 canCmp TInt = True
 canCmp TDec = True
-canCmp TBool = True
 canCmp TTime = True
 canCmp _ = False
 
@@ -1249,7 +1286,7 @@ gen_eq :: PactGen
 gen_eq TBool = do
   t <- genType
   guard (canEq t)
-  arity2 "==" t
+  arity2 "=" t
 gen_eq _ = mzero
 
 gen_gt :: PactGen
@@ -1267,8 +1304,19 @@ gen_gte TBool = do
 gen_gte _ = mzero
 
 gen_pow :: PactGen
-gen_pow t@TInt = arity2 "^" t
-gen_pow t@TDec = arity2_int_or_dec "^" t
+gen_pow t@TInt = do
+  EParens [sym, n, _] <- arity2 "^" t
+  EInt m <- genInt
+  guard $ m > 0 && m < 100
+  pure $ EParens [sym, n, EInt m]
+gen_pow t@TDec = do
+  EParens [sym, n, _] <- arity2_int_or_dec "^" t
+  m <- Gen.choice [genInt, genDec]
+  case m of
+      EInt m' -> guard $ m' > 0 && m' < 100
+      EDec m' -> guard $ m' > 0 && m' < 100
+      _ -> error "Impossible"
+  pure $ EParens [sym, n, m]
 gen_pow _ = mzero
 
 gen_abs :: PactGen
@@ -1277,7 +1325,7 @@ gen_abs t@TDec = arity1 "abs" t
 gen_abs _ = mzero
 
 gen_and :: PactGen
-gen_and t@TBool = arity1 "and" t
+gen_and t@TBool = arity2 "and" t
 gen_and _ = mzero
 
 gen_and_question :: PactGen
@@ -1297,17 +1345,23 @@ gen_floor TInt = arity1 "floor" TDec
 gen_floor _ = mzero
 
 gen_ln :: PactGen
-gen_ln t@TInt = arity1 "ln" t
-gen_ln t@TDec = arity1 "ln" t
+gen_ln t@TInt = do
+  EParens [sym, n] <- arity1 "ln" t
+  pure $ EParens [sym, EParens [ESym "abs", n]]
+gen_ln t@TDec = do
+  EParens [sym, n] <- arity1 "ln" t
+  pure $ EParens [sym, EParens [ESym "abs", n]]
 gen_ln _ = mzero
 
 gen_log :: PactGen
 gen_log t@TInt = do
-  EParens [sym, n, m] <- arity2 "log" t
-  pure $ EParens [sym, EParens [ESym "abs", n], m]
+  EParens [sym, _, m] <- arity2 "log" t
+  n <- EInt <$> Gen.element [2, 8, 10, 16, 64]
+  pure $ EParens [sym, n, EParens [ESym "abs", m]]
 gen_log t@TDec = do
-  EParens [sym, n, m] <- arity2_int_or_dec "log" t
-  pure $ EParens [sym, EParens [ESym "abs", n], m]
+  EParens [sym, _, m] <- arity2_int_or_dec "log" t
+  n <- EInt <$> Gen.element [2, 8, 10, 16, 64]
+  pure $ EParens [sym, n, EParens [ESym "abs", m]]
 gen_log _ = mzero
 
 gen_mod :: PactGen
@@ -1337,8 +1391,12 @@ gen_shift t@TInt = arity2 "shift" t
 gen_shift _ = mzero
 
 gen_sqrt :: PactGen
-gen_sqrt t@TInt = arity1 "sqrt" t
-gen_sqrt t@TDec = arity1 "sqrt" t
+gen_sqrt t@TInt = do
+  EParens [sym, n] <- arity1 "sqrt" t
+  pure $ EParens [sym, EParens [ESym "abs", n]]
+gen_sqrt t@TDec = do
+  EParens [sym, n] <- arity1 "sqrt" t
+  pure $ EParens [sym, EParens [ESym "abs", n]]
 gen_sqrt _ = mzero
 
 gen_xor :: PactGen
