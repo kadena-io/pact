@@ -65,7 +65,6 @@ import Control.Monad.State.Strict
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.UTF8 as BS
 import Data.Char
 import Data.Default
 import Data.List
@@ -194,7 +193,7 @@ getDelta :: Repl Delta
 getDelta = do
   m <- use rMode
   case m of
-    (Script _ file) -> return $ Directed (BS.fromString file) 0 0 0 0
+    (Script _ file) -> return $ Directed (encodeUtf8 $ pack file) 0 0 0 0
     _ -> return mempty
 
 handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)) -> Repl (Either String a)
@@ -287,7 +286,7 @@ renderErr a
   | peInfo a == def = do
       m <- use rMode
       let i = case m of
-                Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
+                Script _ f -> Info (Just (mempty,Parsed (Directed (encodeUtf8 $ pack f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
       return $ renderInfo i ++ ": " ++ renderCompactString' (peDoc a)
   | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peDoc a)

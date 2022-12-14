@@ -264,8 +264,8 @@ revokeAllCapabilities = evalCapabilities .= def
 
 -- | Check signature caps against current granted set.
 checkSigCaps
-  :: M.Map PublicKey (S.Set UserCapability)
-     -> Eval e (M.Map PublicKey (S.Set UserCapability))
+  :: M.Map PublicKeyText (S.Set UserCapability)
+     -> Eval e (M.Map PublicKeyText (S.Set UserCapability))
 checkSigCaps sigs = go
   where
     go = do

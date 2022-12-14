@@ -33,7 +33,7 @@ import Test.QuickCheck
 
 import Pact.Parse
 import Pact.Types.Command
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 import qualified Pact.Utils.LegacyHashMap as LHM
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }

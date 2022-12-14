@@ -12,22 +12,17 @@ jobs:
       matrix:
         ghc: ['8.10.7']
         cabal: ['3.8']
-        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest' ]
+        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
-        - os: 'ubuntu-20.04'
+        - os: 'ubuntu-22.04'
           ghc: '8.10.7'
           cabal: '3.8'
           cabalcache: 'true'
           flags: '-build-tool'
-        - os: 'ubuntu-20.04'
-          ghc: '9.0.2'
-          cabal: '3.8'
-          cabalcache: 'true'
-          flags: '+build-tool'
         - os: 'ubuntu-22.04'
-          ghc: '9.2.4'
+          ghc: '9.0.2'
           cabal: '3.8'
           cabalcache: 'true'
           flags: '+build-tool'
@@ -46,19 +41,27 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     # Non Haskell dependencies
+    - name: Install z3 (ubuntu-20.04, ubuntu-22.04)
+      if: contains(matrix.os, 'ubuntu-20.04')
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y z3
     - name: Install z3 (ubuntu-22.04)
       if: contains(matrix.os, 'ubuntu-22.04')
       uses: pavpanchekha/setup-z3@v0.3.0
       with:
         version: "4.11.2"
-    - name: Install z3 (ubuntu-20.04)
-      if: contains(matrix.os, 'ubuntu-20.04')
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y z3
+        architecture: "x64"
+    - name: Install z3 (ubuntu-18.04)
+      if: contains(matrix.os, 'ubuntu-18.04')
+      uses: pavpanchekha/setup-z3@v0.3.0
+      with:
+        version: "4.8.10"
+        architecture: "x64"
+        distribution: "ubuntu-18.04"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
       uses: pavpanchekha/setup-z3@v0.3.0
@@ -72,7 +75,7 @@ jobs:
 
     # Haskell Setup
     - name: Install GHC and Cabal
-      uses: haskell/actions/setup@v2.0.1
+      uses: haskell/actions/setup@v2
       with:
          ghc-version: ${{ matrix.ghc }}
          cabal-version: ${{ matrix.cabal }}
@@ -109,7 +112,7 @@ jobs:
           optimization: 1
           flags: ${{ matrix.flags }} +cryptonite-ed25519
         EOF
-    - name: Extend cabal.project.local for GHC-9.0.1
+    - name: Extend cabal.project.local for GHC-9.0.2
       if: "startsWith(matrix.ghc, '9')"
       shell: bash
       run: |
@@ -120,7 +123,6 @@ jobs:
         EOF
     - name: Add check for unused packages
       shell: bash
-      if: "! startsWith(matrix.ghc, '8.6') && ! startsWith(matrix.ghc, 8.8)"
       run: |
         cat >> cabal.project.local <<EOF
         package pact
@@ -129,7 +131,7 @@ jobs:
     - name: Print cabal.project.local
       shell: bash
       run: cat cabal.project.local
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       name: Cache dist-newstyle
       with:
         path: |
@@ -177,24 +179,111 @@ jobs:
       shell: bash
       run: |
         export VER=$(grep '^version' pact.cabal | sed -e 's/.*: *//')
-        mkdir -p dist-newstyle/artifacts/applications
-        cp $(cabal list-bin pact) dist-newstyle/artifacts/applications
+        mkdir -p artifacts/pact
+        cp $(cabal list-bin pact) artifacts/pact
+        cp CHANGELOG.md artifacts/pact
+        cp README.md artifacts/pact
+        cp LICENSE artifacts/pact
+        cp pact.cabal artifacts/pact
+        cp cabal.project artifacts/pact
+        cp cabal.project.local artifacts/pact
+        cp cabal.project.freeze artifacts/pact
     - name: Publish applications
       if: "!contains(matrix.flags, '-build-tool')"
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v3
       with:
         name: pact-applications.${{ matrix.ghc }}.${{ matrix.os }}
-        path: dist-newstyle/artifacts/applications
+        path: artifacts/pact
 
     # Publish to S3
     - name: Publish applications to S3
       if: "!contains(matrix.flags, '-build-tool') && !contains(matrix.os, 'windows')"
       shell: bash
       run: |
-        tar -C ./dist-newstyle/artifacts/applications/ -czf $BINFILE '.'
+        tar -C ./artifacts/pact/ -czf $BINFILE '.'
         echo "created tar file: $BINFILE"
         ls $BINFILE
         aws s3 cp $BINFILE s3://$ARTIFACT_BUCKET/pact/
         echo "uploaded tar file to S3"
         aws s3api put-object-acl --bucket $ARTIFACT_BUCKET --key=pact/$BINFILE --acl public-read
         echo "set public read permission"
+
+  # ########################################################################## #
+  # Build and publish docker image
+
+  docker-image:
+    name: Build and publish docker image
+    needs: [build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - ghc: "8.10.7"
+          os: "ubuntu-20.04"
+    env:
+      OS: ${{ matrix.os }}
+    steps:
+    - name: Get build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: pact-applications.${{ matrix.ghc }}.${{ matrix.os }}
+        path: pact
+    - name: Create Dockerfile
+      run: |
+        chmod 755 pact/pact
+        cat > Dockerfile <<EOF
+        FROM ubuntu:${OS#ubuntu-}
+        LABEL com.chainweb.docker.image.compiler="ghc-${{ matrix.ghc }}"
+        LABEL com.chainweb.docker.image.os="${{ matrix.os }}"
+        RUN apt-get update && apt-get install -y ca-certificates libgmp10 libssl1.1 zlib1g locales && rm -rf /var/lib/apt/lists/* && locale-gen en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+        ENV LANG=en_US.UTF-8
+        WORKDIR /pact
+        COPY pact/pact .
+        COPY pact/LICENSE .
+        COPY pact/README.md .
+        COPY pact/CHANGELOG.md .
+        COPY pact/pact.cabal .
+        COPY pact/cabal.project .
+        COPY pact/cabal.project.local .
+        COPY pact/cabal.project.freeze .
+        STOPSIGNAL SIGTERM
+        ENTRYPOINT [ "/pact/pact" ]
+        EOF
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v3
+      with:
+        images: ghcr.io/kadena-io/pact
+        tags: |
+          type=sha
+          type=ref,event=branch
+          type=ref,event=tag
+          type=ref,event=pr
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    - name: Cache Docker layers
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: kadena-build
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build and push
+      id: docker_build
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        context: .
+        file: ./Dockerfile
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache
+

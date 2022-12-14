@@ -681,7 +681,7 @@ genParseTime = do
         StrLit timeStr
   pure (etm, emptyGenState)
 
-alice, bob :: Pact.PublicKey
+alice, bob :: Pact.PublicKeyText
 alice = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"
 bob   = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"
 

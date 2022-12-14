@@ -74,7 +74,7 @@ import Pact.Types.ChainId
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 
 import Pact.Utils.LegacyValue
 

@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.4
+version:             4.4.1
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -29,7 +29,7 @@ extra-source-files:
 
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
-  default:     False
+  default:     True
   manual:      True
 
 flag build-tool
@@ -201,6 +201,7 @@ library
     , vector >= 0.11.0.0
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
+    , time
 
   -- GHCJS
   if impl(ghcjs)
