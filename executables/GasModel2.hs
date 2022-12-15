@@ -414,7 +414,9 @@ genListBy gen t =
       then pure $ EList []
       else EList <$> Gen.list (listRange (len (depth env))) (gen t)
   where
-    len n | n < 1 = 5 -- jww (2022-12-09): Should be higher?
+    -- These numbers determine how long lists can be at various recursion
+    -- depths.
+    len n | n < 1 = 5
           | n < 2 = 4
           | n < 3 = 3
           | otherwise = 2
@@ -423,7 +425,7 @@ genList :: PactGen
 genList = genListBy genExpr
 
 genArrow :: [ExprType] -> PactGen
-genArrow _doms _cod = mzero -- jww (2022-12-06): genArrow NYI
+genArrow _doms _cod = mzero -- jww (2022-12-06): genArrow TODO
 
 genBuiltinByName :: String -> PactGen
 genBuiltinByName name t = case M.lookup name builtins of
@@ -446,9 +448,9 @@ genBuiltin t = case t of
       , gen_identity t
       , gen_if t
       , gen_int_to_str t
-      -- , gen_namespace t -- jww (2022-12-09): TODO
+      , gen_namespace t
       , gen_pact_id t
-      -- , gen_pact_version t -- jww (2022-12-14): TODO
+      , gen_pact_version t
       , gen_read_msg t
       , gen_read_string t
       , gen_take t
@@ -521,7 +523,7 @@ genBuiltin t = case t of
       , gen_contains t
       , gen_enforce t
       , gen_enforce_one t
-      -- , gen_enforce_pact_version t -- jww (2022-12-14): TODO
+      , gen_enforce_pact_version t
       , gen_fold t
       , gen_identity t
       , gen_if t
@@ -589,9 +591,9 @@ genBuiltin t = case t of
     Gen.choice
       [ gen_at t
       , gen_constantly t
-      -- , gen_bind t -- jww (2022-12-09): NYI
+      , gen_bind t
       , gen_chain_data t
-      -- , gen_define_namespace t -- jww (2022-12-09): NYI
+      , gen_define_namespace t
       , gen_drop t
       , gen_fold t
       , gen_identity t
@@ -633,149 +635,151 @@ builtins :: HashMap String PactGen
 builtins =
   M.fromList
     [ -- General native functions
-      ("at", gen_at),
-      ("base64-decode", gen_base64_decode),
-      ("base64-encode", gen_base64_encode),
-      -- ("bind", gen_bind), -- jww (2022-12-09): NYI
-      ("chain-data", gen_chain_data),
-      ("compose", gen_compose),
-      ("concat", gen_concat),
-      ("constantly", gen_constantly),
-      ("contains", gen_contains),
-      -- ("define-namespace", gen_define_namespace), -- jww (2022-12-09): NYI
-      ("drop", gen_drop),
-      ("enforce", gen_enforce),
-      ("enforce-one", gen_enforce_one),
-      -- ("enforce-pact-version", gen_enforce_pact_version), -- jww (2022-12-14):  NYI
-      ("enumerate", gen_enumerate),
-      ("filter", gen_filter),
-      ("fold", gen_fold),
-      ("format", gen_format),
-      ("hash", gen_hash),
-      ("identity", gen_identity),
-      ("if", gen_if),
-      ("int-to-str", gen_int_to_str),
-      ("is-charset", gen_is_charset),
-      ("length", gen_length),
-      ("list-modules", gen_list_modules),
-      ("make-list", gen_make_list),
-      ("map", gen_map),
-      ("zip", gen_zip),
-      -- ("namespace", gen_namespace), -- jww (2022-12-09):  TODO
-      ("pact-id", gen_pact_id),
-      -- ("pact-version", gen_pact_version), -- jww (2022-12-09): NYI
-      ("read-decimal", gen_read_decimal),
-      ("read-integer", gen_read_integer),
-      ("read-msg", gen_read_msg),
-      ("read-string", gen_read_string),
-      ("remove", gen_remove),
-      ("resume", gen_resume),
-      ("reverse", gen_reverse),
-      ("sort", gen_sort),
-      ("str-to-int", gen_str_to_int),
-      ("str-to-list", gen_str_to_list),
-      ("take", gen_take),
-      ("try", gen_try),
-      ("tx-hash", gen_tx_hash),
-      ("typeof", gen_typeof),
-      ("distinct", gen_distinct),
-      ("where", gen_where),
-      ("yield", gen_yield),
+      ("at",                   gen_at),
+      ("base64-decode",        gen_base64_decode),
+      ("base64-encode",        gen_base64_encode),
+      ("bind",                 gen_bind),
+      ("chain-data",           gen_chain_data),
+      ("compose",              gen_compose),
+      ("concat",               gen_concat),
+      ("constantly",           gen_constantly),
+      ("contains",             gen_contains),
+      ("define-namespace",     gen_define_namespace),
+      ("drop",                 gen_drop),
+      ("enforce",              gen_enforce),
+      ("enforce-one",          gen_enforce_one),
+      ("enforce-pact-version", gen_enforce_pact_version),
+      ("enumerate",            gen_enumerate),
+      ("filter",               gen_filter),
+      ("fold",                 gen_fold),
+      ("format",               gen_format),
+      ("hash",                 gen_hash),
+      ("identity",             gen_identity),
+      ("if",                   gen_if),
+      ("int-to-str",           gen_int_to_str),
+      ("is-charset",           gen_is_charset),
+      ("length",               gen_length),
+      ("list-modules",         gen_list_modules),
+      ("make-list",            gen_make_list),
+      ("map",                  gen_map),
+      ("zip",                  gen_zip),
+      ("namespace",            gen_namespace),
+      ("pact-id",              gen_pact_id),
+      ("pact-version",         gen_pact_version),
+      ("read-decimal",         gen_read_decimal),
+      ("read-integer",         gen_read_integer),
+      ("read-msg",             gen_read_msg),
+      ("read-string",          gen_read_string),
+      ("remove",               gen_remove),
+      ("resume",               gen_resume),
+      ("reverse",              gen_reverse),
+      ("sort",                 gen_sort),
+      ("str-to-int",           gen_str_to_int),
+      ("str-to-list",          gen_str_to_list),
+      ("take",                 gen_take),
+      ("try",                  gen_try),
+      ("tx-hash",              gen_tx_hash),
+      ("typeof",               gen_typeof),
+      ("distinct",             gen_distinct),
+      ("where",                gen_where),
+      ("yield",                gen_yield),
+
       -- Operators native functions
-      ("!=", gen_neq),
-      ("&", gen_bitwise_and),
-      ("*", gen_mult),
-      ("+", gen_plus),
-      ("-", gen_minus),
-      ("/", gen_divide),
-      ("<", gen_lt),
-      ("<=", gen_lte),
-      ("=", gen_eq),
-      (">", gen_gt),
-      (">=", gen_gte),
-      ("^", gen_pow),
-      ("abs", gen_abs),
-      ("and", gen_and),
-      ("and?", gen_and_question),
-      ("ceiling", gen_ceiling),
-      ("exp", gen_exp),
-      ("floor", gen_floor),
-      ("ln", gen_ln),
-      ("log", gen_log),
-      ("mod", gen_mod),
-      ("not", gen_not),
-      ("not?", gen_not_question),
-      ("or", gen_or),
-      ("or?", gen_or_question),
-      ("round", gen_round),
-      ("shift", gen_shift),
-      ("sqrt", gen_sqrt),
-      ("xor", gen_xor),
-      ("|", gen_bitwise_or),
-      ("~", gen_bitwise_complement),
+      ("!=",                   gen_neq),
+      ("&",                    gen_bitwise_and),
+      ("*",                    gen_mult),
+      ("+",                    gen_plus),
+      ("-",                    gen_minus),
+      ("/",                    gen_divide),
+      ("<",                    gen_lt),
+      ("<=",                   gen_lte),
+      ("=",                    gen_eq),
+      (">",                    gen_gt),
+      (">=",                   gen_gte),
+      ("^",                    gen_pow),
+      ("abs",                  gen_abs),
+      ("and",                  gen_and),
+      ("and?",                 gen_and_question),
+      ("ceiling",              gen_ceiling),
+      ("exp",                  gen_exp),
+      ("floor",                gen_floor),
+      ("ln",                   gen_ln),
+      ("log",                  gen_log),
+      ("mod",                  gen_mod),
+      ("not",                  gen_not),
+      ("not?",                 gen_not_question),
+      ("or",                   gen_or),
+      ("or?",                  gen_or_question),
+      ("round",                gen_round),
+      ("shift",                gen_shift),
+      ("sqrt",                 gen_sqrt),
+      ("xor",                  gen_xor),
+      ("|",                    gen_bitwise_or),
+      ("~",                    gen_bitwise_complement),
+
       -- Time native functions
-      ("add-time", gen_add_time),
-      ("days", gen_days)
-      -- "diff-time"   -> Just $ diffTimeTests nativeName
-      -- "format-time" -> Just $ formatTimeTests nativeName
-      -- "hours"       -> Just $ hoursTests nativeName
-      -- "minutes"     -> Just $ minutesTests nativeName
-      -- "parse-time"  -> Just $ parseTimeTests nativeName
-      -- "time"        -> Just $ timeTests nativeName
+      ("add-time",             gen_add_time),
+      ("days",                 gen_days),
+      ("diff-time",            gen_diff_time),
+      ("format-time",          gen_format_time),
+      ("hours",                gen_hours),
+      ("minutes",              gen_minutes),
+      ("parse-time",           gen_parse_time),
+      ("time",                 gen_time),
 
       -- Commitments native functions
-      -- "decrypt-cc20p1305" -> Just $ decryptCc20p1305Tests nativeName
-      -- "validate-keypair"  -> Just $ validateKeypairTests nativeName
+      ("decrypt-cc20p1305",    gen_decrypt_cc20p1305),
+      ("validate-keypair",     gen_validate_keypair),
 
       -- Keyset native functions
-      -- "define-keyset"  -> Just $ defineKeysetTests nativeName
-      -- "enforce-keyset" -> Just $ enforceKeysetTests nativeName
-      -- "keys-2"         -> Just $ keys2Tests nativeName
-      -- "keys-all"       -> Just $ keysAllTests nativeName
-      -- "keys-any"       -> Just $ keysAnyTests nativeName
-      -- "read-keyset"    -> Just $ readKeysetTests nativeName
+      ("define-keyset",        gen_define_keyset),
+      ("enforce-keyset",       gen_enforce_keyset),
+      ("keys-2",               gen_keys_2),
+      ("keys-all",             gen_keys_all),
+      ("keys-any",             gen_keys_any),
+      ("read-keyset",          gen_read_keyset),
 
       -- Database native functions
-      -- "create-table"       -> Just $ createTableTests nativeName
-      -- "describe-keyset"    -> Just $ describeKeysetTests nativeName
-      -- "describe-module"    -> Just $ describeModuleTests nativeName
-      -- "describe-table"     -> Just $ describeTableTests nativeName
-      -- "describe-namespace" -> Just $ describeNamespaceTests nativeName
-      -- "insert"             -> Just $ insertTests nativeName
-      -- "keylog"             -> Just $ keylogTests nativeName
-      -- "keys"               -> Just $ keysTests nativeName
-      -- "read"               -> Just $ readTests nativeName
-      -- "select"             -> Just $ selectTests nativeName
-      -- "txids"              -> Just $ txidsTests nativeName
-      -- "txlog"              -> Just $ txlogTests nativeName
-      -- "update"             -> Just $ updateTests nativeName
-      -- "with-default-read"  -> Just $ withDefaultReadTests nativeName
-      -- "with-read"          -> Just $ withReadTests nativeName
-      -- "write"              -> Just $ writeTests nativeName
-      -- "fold-db"            -> Just $ foldDBTests nativeName
+      ("create-table",         gen_create_table),
+      ("describe-keyset",      gen_describe_keyset),
+      ("describe-module",      gen_describe_module),
+      ("describe-table",       gen_describe_table),
+      ("describe-namespace",   gen_describe_namespace),
+      ("insert",               gen_insert),
+      ("keylog",               gen_keylog),
+      ("keys",                 gen_keys),
+      ("read",                 gen_read),
+      ("select",               gen_select),
+      ("txids",                gen_txids),
+      ("txlog",                gen_txlog),
+      ("update",               gen_update),
+      ("with-default-read",    gen_with_default_read),
+      ("with-read",            gen_with_read),
+      ("write",                gen_write),
+      ("fold-db",              gen_fold_db),
 
       -- Capabilities native functions
-      -- "compose-capability"  -> Just $ composeCapabilityTests nativeName
-      -- "create-module-guard" -> Just $ createModuleGuardTests nativeName
-      -- "create-pact-guard"   -> Just $ createPactGuardTests nativeName
-      -- "create-user-guard"   -> Just $ createUserGuardTests nativeName
-      -- "enforce-guard"       -> Just $ enforceGuardTests nativeName
-      -- "install-capability"  -> Just $ installCapabilityTests nativeName
-      -- "keyset-ref-guard"    -> Just $ keysetRefGuardTests nativeName
-      -- "require-capability"  -> Just $ requireCapabilityTests nativeName
-      -- "with-capability"     -> Just $ withCapabilityTests nativeName
-      -- "emit-event"          -> Just $ emitEventTests nativeName
+      ("compose-capability",   gen_compose_capability),
+      ("create-module-guard",  gen_create_module_guard),
+      ("create-pact-guard",    gen_create_pact_guard),
+      ("create-user-guard",    gen_create_user_guard),
+      ("enforce-guard",        gen_enforce_guard),
+      ("install-capability",   gen_install_capability),
+      ("keyset-ref-guard",     gen_keyset_ref_guard),
+      ("require-capability",   gen_require_capability),
+      ("with-capability",      gen_with_capability),
+      ("emit-event",           gen_emit_event),
 
       -- Principal creation and validation
-      -- "create-principal"   -> Just $ createPrincipalTests nativeName
-      -- "validate-principal" -> Just $ validatePrincipalTests nativeName
-      -- "is-principal"       -> Just $ isPrincipalTests nativeName
-      -- "typeof-principal"   -> Just $ typeofPrincipalTests nativeName
+      ("create-principal",     gen_create_principal),
+      ("validate-principal",   gen_validate_principal),
+      ("is-principal",         gen_is_principal),
+      ("typeof-principal",     gen_typeof_principal),
 
       -- Non-native concepts to benchmark
-      -- "use"       -> Just $ useTests nativeName
-      -- "module"    -> Just $ moduleTests nativeName
-      -- "interface" -> Just $ interfaceTests nativeName
+      ("use",                  gen_use),
+      ("module",               gen_module),
+      ("interface",            gen_interface)
     ]
 
 gen_at :: PactGen
@@ -807,14 +811,13 @@ gen_base64_encode t@TStr = do
   pure $ EParens [ESym "base64-encode", x]
 gen_base64_encode _ = mzero
 
---TODO
 gen_bind :: PactGen
-gen_bind t@TObj {} = do
-  x <- genExpr t
-  y <- genExpr t
-  z <- genExpr =<< genType
-  pure $ EParens [ESym "bind", x, y, z]
-gen_bind _ = mzero
+-- gen_bind t@TObj {} = do
+--   x <- genExpr t
+--   y <- genExpr t
+--   z <- genExpr =<< genType
+--   pure $ EParens [ESym "bind", x, y, z]
+gen_bind _ = mzero -- jww (2022-12-15): TODO
 
 public_chain_data :: Schema
 public_chain_data =
@@ -893,12 +896,12 @@ gen_contains TBool = do
 gen_contains _ = mzero
 
 gen_define_namespace :: PactGen
-gen_define_namespace (TObj _sch) = do
-  n <- genExpr TStr
-  g1 <- error "jww (2022-12-06): gen_define_namespace" -- genGuard
-  g2 <- error "jww (2022-12-06): gen_define_namespace" -- genGuard
-  pure $ EParens [ESym "define-namespace", n, g1, g2]
-gen_define_namespace _ = mzero
+-- gen_define_namespace (TObj _sch) = do
+--   n <- genExpr TStr
+--   g1 <- genGuard
+--   g2 <- genGuard
+--   pure $ EParens [ESym "define-namespace", n, g1, g2]
+gen_define_namespace _ = mzero -- jww (2022-12-15): TODO
 
 gen_drop :: PactGen
 gen_drop TStr = do
@@ -943,7 +946,7 @@ gen_enforce _ = mzero
 gen_enforce_one :: PactGen
 gen_enforce_one TBool = do
   s <- genExpr TStr
-  -- jww (2022-12-14): NYI
+  -- jww (2022-12-14): TODO
   -- y <- genExpr (TList t)
   EList y <- genList TBool
   guard $ length y > 0
@@ -952,10 +955,10 @@ gen_enforce_one TBool = do
 gen_enforce_one _ = mzero
 
 gen_enforce_pact_version :: PactGen
-gen_enforce_pact_version TBool = do
-  ver <- genExpr TStr -- jww (2022-09-26): TODO
-  pure $ EParens [ESym "enforce-pact-version", ver]
-gen_enforce_pact_version _ = mzero
+-- gen_enforce_pact_version TBool = do
+--   ver <- genExpr TStr
+--   pure $ EParens [ESym "enforce-pact-version", ver]
+gen_enforce_pact_version _ = mzero -- jww (2022-12-15): TODO
 
 gen_enumerate :: PactGen
 gen_enumerate (TList TInt) = do
@@ -1069,20 +1072,19 @@ gen_zip (TList c) = do
   pure $ EParens [ESym "zip", f, la, lb]
 gen_zip _ = mzero
 
--- jww (2022-12-09): TODO
 gen_namespace :: PactGen
-gen_namespace TStr = do
-  x <- genExpr TStr
-  pure $ EParens [ESym "namespace", x]
-gen_namespace _ = mzero
+-- gen_namespace TStr = do
+--   x <- genExpr TStr
+--   pure $ EParens [ESym "namespace", x]
+gen_namespace _ = mzero -- jww (2022-12-09): TODO
 
 gen_pact_id :: PactGen
 gen_pact_id TStr = pure $ EParens [ESym "pact-id"]
 gen_pact_id _ = mzero
 
 gen_pact_version :: PactGen
-gen_pact_version TStr = pure $ EParens [ESym "pact-version"]
-gen_pact_version _ = mzero
+-- gen_pact_version TStr = pure $ EParens [ESym "pact-version"]
+gen_pact_version _ = mzero -- jww (2022-12-15): TODO
 
 gen_read_decimal :: PactGen
 gen_read_decimal TDec = do
@@ -1496,3 +1498,146 @@ gen_days :: PactGen
 gen_days t@TDec = arity1_int_or_dec "days" t
 gen_days _ = mzero
 
+gen_diff_time :: PactGen
+gen_diff_time _ = mzero -- jww (2022-12-15): TODO
+
+gen_format_time :: PactGen
+gen_format_time _ = mzero -- jww (2022-12-15): TODO
+
+gen_hours :: PactGen
+gen_hours _ = mzero -- jww (2022-12-15): TODO
+
+gen_minutes :: PactGen
+gen_minutes _ = mzero -- jww (2022-12-15): TODO
+
+gen_parse_time :: PactGen
+gen_parse_time _ = mzero -- jww (2022-12-15): TODO
+
+gen_time :: PactGen
+gen_time _ = mzero -- jww (2022-12-15): TODO
+
+gen_decrypt_cc20p1305 :: PactGen
+gen_decrypt_cc20p1305 _ = mzero -- jww (2022-12-15): TODO
+
+gen_validate_keypair :: PactGen
+gen_validate_keypair _ = mzero -- jww (2022-12-15): TODO
+
+gen_define_keyset :: PactGen
+gen_define_keyset _ = mzero -- jww (2022-12-15): TODO
+
+gen_enforce_keyset :: PactGen
+gen_enforce_keyset _ = mzero -- jww (2022-12-15): TODO
+
+gen_keys_2 :: PactGen
+gen_keys_2 _ = mzero -- jww (2022-12-15): TODO
+
+gen_keys_all :: PactGen
+gen_keys_all _ = mzero -- jww (2022-12-15): TODO
+
+gen_keys_any :: PactGen
+gen_keys_any _ = mzero -- jww (2022-12-15): TODO
+
+gen_read_keyset :: PactGen
+gen_read_keyset _ = mzero -- jww (2022-12-15): TODO
+
+gen_create_table :: PactGen
+gen_create_table _ = mzero -- jww (2022-12-15): TODO
+
+gen_describe_keyset :: PactGen
+gen_describe_keyset _ = mzero -- jww (2022-12-15): TODO
+
+gen_describe_module :: PactGen
+gen_describe_module _ = mzero -- jww (2022-12-15): TODO
+
+gen_describe_table :: PactGen
+gen_describe_table _ = mzero -- jww (2022-12-15): TODO
+
+gen_describe_namespace :: PactGen
+gen_describe_namespace _ = mzero -- jww (2022-12-15): TODO
+
+gen_insert :: PactGen
+gen_insert _ = mzero -- jww (2022-12-15): TODO
+
+gen_keylog :: PactGen
+gen_keylog _ = mzero -- jww (2022-12-15): TODO
+
+gen_keys :: PactGen
+gen_keys _ = mzero -- jww (2022-12-15): TODO
+
+gen_read :: PactGen
+gen_read _ = mzero -- jww (2022-12-15): TODO
+
+gen_select :: PactGen
+gen_select _ = mzero -- jww (2022-12-15): TODO
+
+gen_txids :: PactGen
+gen_txids _ = mzero -- jww (2022-12-15): TODO
+
+gen_txlog :: PactGen
+gen_txlog _ = mzero -- jww (2022-12-15): TODO
+
+gen_update :: PactGen
+gen_update _ = mzero -- jww (2022-12-15): TODO
+
+gen_with_default_read :: PactGen
+gen_with_default_read _ = mzero -- jww (2022-12-15): TODO
+
+gen_with_read :: PactGen
+gen_with_read _ = mzero -- jww (2022-12-15): TODO
+
+gen_write :: PactGen
+gen_write _ = mzero -- jww (2022-12-15): TODO
+
+gen_fold_db :: PactGen
+gen_fold_db _ = mzero -- jww (2022-12-15): TODO
+
+gen_compose_capability :: PactGen
+gen_compose_capability _ = mzero -- jww (2022-12-15): TODO
+
+gen_create_module_guard :: PactGen
+gen_create_module_guard _ = mzero -- jww (2022-12-15): TODO
+
+gen_create_pact_guard :: PactGen
+gen_create_pact_guard _ = mzero -- jww (2022-12-15): TODO
+
+gen_create_user_guard :: PactGen
+gen_create_user_guard _ = mzero -- jww (2022-12-15): TODO
+
+gen_enforce_guard :: PactGen
+gen_enforce_guard _ = mzero -- jww (2022-12-15): TODO
+
+gen_install_capability :: PactGen
+gen_install_capability _ = mzero -- jww (2022-12-15): TODO
+
+gen_keyset_ref_guard :: PactGen
+gen_keyset_ref_guard _ = mzero -- jww (2022-12-15): TODO
+
+gen_require_capability :: PactGen
+gen_require_capability _ = mzero -- jww (2022-12-15): TODO
+
+gen_with_capability :: PactGen
+gen_with_capability _ = mzero -- jww (2022-12-15): TODO
+
+gen_emit_event :: PactGen
+gen_emit_event _ = mzero -- jww (2022-12-15): TODO
+
+gen_create_principal :: PactGen
+gen_create_principal _ = mzero -- jww (2022-12-15): TODO
+
+gen_validate_principal :: PactGen
+gen_validate_principal _ = mzero -- jww (2022-12-15): TODO
+
+gen_is_principal :: PactGen
+gen_is_principal _ = mzero -- jww (2022-12-15): TODO
+
+gen_typeof_principal :: PactGen
+gen_typeof_principal _ = mzero -- jww (2022-12-15): TODO
+
+gen_use :: PactGen
+gen_use _ = mzero -- jww (2022-12-15): TODO
+
+gen_module :: PactGen
+gen_module _ = mzero -- jww (2022-12-15): TODO
+
+gen_interface :: PactGen
+gen_interface _ = mzero -- jww (2022-12-15): TODO
