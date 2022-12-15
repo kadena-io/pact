@@ -355,6 +355,7 @@ executable gasmodel2
                      , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
                      , criterion
                      , data-default
+                     , deepseq >= 1.4.2.0 && < 1.5
                      , hedgehog >= 1.0.1 && < 1.3
                      , lens
                      , pact

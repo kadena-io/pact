@@ -1,4 +1,7 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
@@ -6,10 +9,13 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE TupleSections #-}
 
 module Main where
 
+import Control.DeepSeq
 import Control.Exception (bracket)
 import Control.Lens
 import Control.Monad
@@ -25,10 +31,12 @@ import Data.HashMap.Strict qualified as M
 import Data.IORef
 import Data.List
 import Data.List.NonEmpty qualified as NE
+import Data.Maybe (isJust, isNothing)
 import Data.Text qualified as T
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time
+import GHC.Generics
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -53,20 +61,17 @@ main = do
     -- print x1
     putStrLn $ toLisp x1
 
-  let genTest name = do
-        (Pact.NativeDefName (T.pack name),)
-            <$> fmap (gasTest name)
-                  (Gen.sample $
-                    replicateM 1 $
-                      flip runReaderT defaultEnv $
-                        genExpr =<< genType)
-
-  -- opt <- O.execParser options
-  tests <- mapM genTest (map (show :: Int -> String) [1..1000])
+  let mkGasTest !name = do
+        expr <- Gen.sample $ runReaderT (genExpr =<< genType) defaultEnv
+        return $! expr `deepseq` gasTest name [expr]
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
-  mapM_ (mockRuns . snd) tests
+  tests <- forM ([1..100000] :: [Int]) $ \i -> do
+    t <- mkGasTest (show i)
+    mockRuns t
+    pure $! (Pact.NativeDefName (T.pack (show i)), t)
+  putStrLn "Doing dry run of benchmark tests...done"
 
   putStrLn "Running benchmark(s)"
   if True -- _oBenchOnly opt
@@ -183,7 +188,7 @@ data Env = Env
   }
 
 defaultEnv :: Env
-defaultEnv = Env [] 3
+defaultEnv = Env [] 5
 
 -- Although "any" is technically a valid type, we only generate values in this
 -- module whose type we know at time of generation.
@@ -194,11 +199,11 @@ data ExprType
   | TBool
   | TTime
   | TKeyset
-  | TList ExprType
-  | TObj Schema
-  | TTable Schema
-  | TArrow [ExprType] ExprType
-  deriving (Eq, Show)
+  | TList !ExprType
+  | TObj !Schema
+  | TTable !Schema
+  | TArrow ![ExprType] !ExprType
+  deriving (Eq, Show, Generic, NFData)
 
 type Schema = [(String, ExprType)]
 
@@ -239,19 +244,19 @@ isTTable (TTable _) = True
 isTTable _ = False
 
 data LispExpr
-  = EStr String
-  | EInt Integer
-  | EDec Decimal
-  | EBool Bool
-  | ETime UTCTime
+  = EStr !String
+  | EInt !Integer
+  | EDec !Decimal
+  | EBool !Bool
+  | ETime !UTCTime
   | EKeyset
-  | EList [LispExpr]
-  | EObj [(String, LispExpr)]
-  | ETable Schema
+  | EList ![LispExpr]
+  | EObj ![(String, LispExpr)]
+  | ETable !Schema
   | EModule
-  | ESym String
-  | EParens [LispExpr]
-  deriving (Eq, Show)
+  | ESym !String
+  | EParens ![LispExpr]
+  deriving (Eq, Show, Generic, NFData)
 
 toLisp :: LispExpr -> String
 toLisp = \case
@@ -346,9 +351,12 @@ genSchema =
 
 genObjBy :: PactGen -> Schema -> ReaderT Env Gen LispExpr
 genObjBy gen sch =
-  local (\e -> e { depth = depth e - 1 }) $
-    ReaderT $ \env ->
-      EObj <$> traverse (\(fld, ty) -> (fld,) <$> runReaderT (gen ty) env) sch
+  local (\e -> e { depth = depth e - 1 }) $ do
+    env <- ask
+    if depth env <= 0
+      then pure $ EObj []
+      else ReaderT $ \_ ->
+        EObj <$> traverse (\(fld, ty) -> (fld,) <$> runReaderT (gen ty) env) sch
 
 genObj :: Schema -> ReaderT Env Gen LispExpr
 genObj = genObjBy genExpr
@@ -386,7 +394,7 @@ genAtom = \case
 genExpr :: PactGen
 genExpr t = do
   env <- ask
-  if depth env == 0
+  if depth env <= 0
     then genAtom t
     else do
       EBool b <- genBool
@@ -402,12 +410,14 @@ genListBy :: PactGen -> PactGen
 genListBy gen t =
   local (\e -> e { depth = depth e - 1 }) $ do
     env <- ask
-    EList <$> Gen.list (listRange (len (depth env))) (gen t)
+    if depth env <= 0
+      then pure $ EList []
+      else EList <$> Gen.list (listRange (len (depth env))) (gen t)
   where
-    len n | n < 1 = 4 -- jww (2022-12-09): Should be higher?
-          | n < 2 = 3
-          | n < 3 = 2
-          | otherwise = 1
+    len n | n < 1 = 5 -- jww (2022-12-09): Should be higher?
+          | n < 2 = 4
+          | n < 3 = 3
+          | otherwise = 2
 
 genList :: PactGen
 genList = genListBy genExpr
@@ -844,9 +854,42 @@ gen_constantly t = do
 
 gen_contains :: PactGen
 gen_contains TBool = do
-  x <- genType >>= genExpr
-  a <- genType >>= genExpr
-  pure $ EParens [ESym "contains", a, x]
+  EBool b1 <- genBool
+  if b1
+    then do -- value <a> list [<a>] → bool
+      t <- genType
+      x <- genExpr t
+      l <- genExpr (TList t)
+      pure $ EParens [ESym "contains", x, l]
+    else do
+      EBool b2 <- genBool
+      if b2
+        then do -- key <a> object object:<{o}> → bool
+          EBool b3 <- genBool
+          if b3
+            then do -- key <a> object object:<{o}> → bool
+              k <- genExpr TStr
+              sch <- genSchema
+              o <- genExpr (TObj sch)
+              pure $ EParens [ESym "contains", k, o]
+            else do -- key <a> object object:<{o}> → bool
+              EStr k <- genStr
+              sch <- genSchema
+              o <- genObj sch
+              guard $ isJust (lookup k sch)
+              pure $ EParens [ESym "contains", EStr k, o]
+        else do -- value string string string → bool
+          EBool b3 <- genBool
+          if b3
+            then do -- value string string string → bool
+              x <- genExpr TStr
+              y <- genExpr TStr
+              pure $ EParens [ESym "contains", x, y]
+            else do -- value string string string → bool
+              EStr x <- genStr
+              EStr y <- genStr
+              guard $ x `isInfixOf` y
+              pure $ EParens [ESym "contains", EStr x, EStr y]
 gen_contains _ = mzero
 
 gen_define_namespace :: PactGen
@@ -877,27 +920,35 @@ gen_drop (TList t) = do
       else Gen.integral $ Range.constant (- length l) (length l)
   pure $ EParens [ESym "drop", EInt (fromIntegral n), x]
 gen_drop (TObj sch) = do
-  o <- genExpr (TObj sch)
-  let fields = map fst sch
-  s <- Gen.subsequence fields
-  pure $ EParens [ESym "drop", EList (map EStr s), o]
+  sch2 <- genSchema
+  forM_ sch2 $ \(k, _) ->
+    guard $ isNothing $ lookup k sch
+  EBool b <- genBool
+  if b
+    then do
+      o <- genExpr (TObj (sch ++ sch2))
+      pure $ EParens [ESym "drop", EList (map (EStr . fst) sch2), o]
+    else do
+      o <- genExpr (TObj sch)
+      pure $ EParens [ESym "drop", EList (map (EStr . fst) sch2), o]
 gen_drop _ = mzero
 
 gen_enforce :: PactGen
 gen_enforce t@TBool = do
   x <- genExpr t
   msg <- genExpr TStr
-  pure $ EParens [ESym "enforce", x, msg]
+  pure $ EParens [ESym "enforce", EParens [ESym "or", x, ESym "true"], msg]
 gen_enforce _ = mzero
 
 gen_enforce_one :: PactGen
 gen_enforce_one TBool = do
-  x <- genExpr TStr
+  s <- genExpr TStr
   -- jww (2022-12-14): NYI
   -- y <- genExpr (TList t)
   EList y <- genList TBool
   guard $ length y > 0
-  pure $ EParens [ESym "enforce-one", x, EList y]
+  pure $ EParens [ESym "enforce-one", s,
+                  EList (map (\b -> EParens [ESym "or", b, ESym "true"]) y)]
 gen_enforce_one _ = mzero
 
 gen_enforce_pact_version :: PactGen
@@ -970,7 +1021,7 @@ gen_int_to_str TStr = do
   -- defaulting to 16 for the base conversion since
   -- it should be the upper bound in terms of
   -- computational cost
-  pure $ EParens [ESym "int-to-str", EInt 16, x]
+  pure $ EParens [ESym "int-to-str", EInt 16, EParens [ESym "abs", x]]
 gen_int_to_str _ = mzero
 
 gen_is_charset :: PactGen
@@ -1082,9 +1133,12 @@ gen_read_string _ = mzero
 
 gen_remove :: PactGen
 gen_remove (TObj sch) = do
-  x <- genExpr (TObj sch)
-  (a, _) <- Gen.element sch
-  pure $ EParens [ESym "remove", EStr a, x]
+  t <- genType
+  EStr e <- genStr
+  guard $ length e > 0
+  guard $ isNothing $ lookup e sch
+  x <- genExpr (TObj ((e,t):sch))
+  pure $ EParens [ESym "remove", EStr e, x]
 gen_remove _ = mzero
 
 gen_resume :: PactGen
@@ -1097,12 +1151,13 @@ gen_reverse (TList t) = do
 gen_reverse _ = mzero
 
 gen_sort :: PactGen
-gen_sort t@(TList (TObj sch)) = do
-  l <- genExpr t
+gen_sort (TList (TObj sch)) = do
+  EList l <- genList (TObj sch)
+  guard $ length l > 1
   let fields = map fst sch
   s <- Gen.subsequence fields
   guard $ length s > 0
-  pure $ EParens [ESym "sort", EList (map EStr s), l]
+  pure $ EParens [ESym "sort", EList (map EStr s), EList l]
 gen_sort (TList t) = do
   x <- genExpr (TList t)
   pure $ EParens [ESym "sort", x]
@@ -1115,6 +1170,7 @@ gen_str_to_int TInt = do
     then do
       EStr s <- genStr
       guard $ all (`elem` ("0123456789" :: String)) s
+      guard $ length s > 0
       pure $ EParens [ESym "str-to-int", EStr s]
     else do
       n <- Gen.element [2, 8, 10, 16]
@@ -1125,6 +1181,7 @@ gen_str_to_int TInt = do
           10 -> guard $ all (`elem` ("0123456789" :: String)) s
           16 -> guard $ all (`elem` ("0123456789abcdef" :: String)) s
           _  -> error "Impossible"
+      guard $ length s > 0
       pure $ EParens [ESym "str-to-int", EInt n, EStr s]
 gen_str_to_int _ = mzero
 
@@ -1154,10 +1211,11 @@ gen_take (TList t) = do
       else Gen.integral $ Range.constant (- length l) (length l)
   pure $ EParens [ESym "take", EInt (fromIntegral n), x]
 gen_take (TObj sch) = do
-  o <- genExpr (TObj sch)
-  let fields = map fst sch
-  s <- Gen.subsequence fields
-  pure $ EParens [ESym "take", EList (map EStr s), o]
+  sch2 <- genSchema
+  forM_ sch2 $ \(k, _) ->
+    guard $ isNothing $ lookup k sch
+  o <- genExpr (TObj (sch ++ sch2))
+  pure $ EParens [ESym "take", EList (map (EStr . fst) sch), o]
 gen_take _ = mzero
 
 gen_try :: PactGen
@@ -1264,8 +1322,21 @@ gen_minus t@TInt = arity2 "-" t
 gen_minus _ = mzero
 
 gen_divide :: PactGen
-gen_divide t@TDec = arity2_int_or_dec "/" t
-gen_divide t@TInt = arity2 "/" t
+gen_divide TDec = do
+  x <- genExpr TDec
+  y <- Gen.choice [ do EInt y <- genInt
+                       guard $ y /= 0
+                       pure $ EInt y
+                  , do EDec y <- genDec
+                       guard $ y /= 0
+                       pure $ EDec y
+                  ]
+  pure $ EParens [ESym "/", x, y]
+gen_divide TInt = do
+  x <- genExpr TInt
+  EInt y <- genInt
+  guard $ y /= 0
+  pure $ EParens [ESym "/", x, EInt y]
 gen_divide _ = mzero
 
 gen_lt :: PactGen
@@ -1336,8 +1407,7 @@ gen_ceiling TInt = arity1 "ceiling" TDec
 gen_ceiling _ = mzero
 
 gen_exp :: PactGen
-gen_exp t@TInt = arity1 "exp" t
-gen_exp t@TDec = arity1 "exp" t
+gen_exp t@TDec = arity1_int_or_dec "exp" t
 gen_exp _ = mzero
 
 gen_floor :: PactGen
@@ -1345,27 +1415,34 @@ gen_floor TInt = arity1 "floor" TDec
 gen_floor _ = mzero
 
 gen_ln :: PactGen
-gen_ln t@TInt = do
-  EParens [sym, n] <- arity1 "ln" t
-  pure $ EParens [sym, EParens [ESym "abs", n]]
-gen_ln t@TDec = do
-  EParens [sym, n] <- arity1 "ln" t
-  pure $ EParens [sym, EParens [ESym "abs", n]]
+gen_ln TDec = do
+  n <- Gen.choice [genInt, genDec]
+  case n of
+      EInt n' -> guard $ n' > 0
+      EDec n' -> guard $ n' > 0
+      _ -> error "Impossible"
+  pure $ EParens [ESym "ln", n]
 gen_ln _ = mzero
 
 gen_log :: PactGen
-gen_log t@TInt = do
-  EParens [sym, _, m] <- arity2 "log" t
+gen_log TInt = do
   n <- EInt <$> Gen.element [2, 8, 10, 16, 64]
-  pure $ EParens [sym, n, EParens [ESym "abs", m]]
-gen_log t@TDec = do
-  EParens [sym, _, m] <- arity2_int_or_dec "log" t
+  EInt x <- genInt
+  guard $ x > 0
+  pure $ EParens [ESym "log", n, EInt x]
+gen_log TDec = do
   n <- EInt <$> Gen.element [2, 8, 10, 16, 64]
-  pure $ EParens [sym, n, EParens [ESym "abs", m]]
+  EDec x <- genDec
+  guard $ x > 0
+  pure $ EParens [ESym "log", n, EDec x]
 gen_log _ = mzero
 
 gen_mod :: PactGen
-gen_mod t@TInt = arity2 "mod" t
+gen_mod TInt = do
+  x <- genExpr TInt
+  EInt y <- genInt
+  guard $ y /= 0
+  pure $ EParens [ESym "mod", x, EInt y]
 gen_mod _ = mzero
 
 gen_not :: PactGen
@@ -1391,9 +1468,6 @@ gen_shift t@TInt = arity2 "shift" t
 gen_shift _ = mzero
 
 gen_sqrt :: PactGen
-gen_sqrt t@TInt = do
-  EParens [sym, n] <- arity1 "sqrt" t
-  pure $ EParens [sym, EParens [ESym "abs", n]]
 gen_sqrt t@TDec = do
   EParens [sym, n] <- arity1 "sqrt" t
   pure $ EParens [sym, EParens [ESym "abs", n]]
@@ -1419,7 +1493,6 @@ gen_add_time TTime = do
 gen_add_time _ = mzero
 
 gen_days :: PactGen
-gen_days t@TInt = arity1 "days" t
-gen_days t@TDec = arity1 "days" t
+gen_days t@TDec = arity1_int_or_dec "days" t
 gen_days _ = mzero
 
