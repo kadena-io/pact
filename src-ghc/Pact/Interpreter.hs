@@ -38,8 +38,8 @@ module Pact.Interpreter
   ) where
 
 import Control.Concurrent
-import Control.Monad.Catch
-import Control.Monad.Except
+import Control.Exception.Safe
+import Control.Monad
 import Control.Monad.State (modify)
 import Control.Lens
 
@@ -51,7 +51,6 @@ import Data.IORef
 import Data.Maybe
 import qualified Data.Set as S
 import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8)
 import System.Directory
 
 import Pact.Compile
@@ -195,7 +194,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
-            pk = PublicKey $ encodeUtf8 $ fromMaybe _siPubKey _siAddress
+            pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 
 initRefStore :: RefStore
@@ -240,10 +239,11 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
 
   where
 
-    withRollback act = handle (\(e :: SomeException) -> safeRollback >> throwM e) act
+    withRollback act =
+      act `onException` safeRollback
 
     safeRollback =
-        void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
+      void (tryAny (evalRollbackTx def))
 
     start act = do
       txid <- evalBeginTx def

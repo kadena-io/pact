@@ -94,6 +94,14 @@ pattern AST_CreateModuleGuard :: AST Node -> AST Node
 pattern AST_CreateModuleGuard name <-
   App _node (NativeFunc "create-module-guard") [name]
 
+pattern AST_CreateCapabilityGuard :: AST Node -> AST Node
+pattern AST_CreateCapabilityGuard app <-
+  App _node (NativeFunc "create-capability-guard") [app]
+
+pattern AST_CreateCapabilityPactGuard :: AST Node -> AST Node
+pattern AST_CreateCapabilityPactGuard app <-
+  App _node (NativeFunc "create-capability-pact-guard") [app]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)

@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 module Pact.Types.Principal
@@ -16,6 +17,7 @@ import Control.Lens
 
 import Data.Aeson (encode)
 import Data.Attoparsec.Text
+import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.Foldable
 import Data.Functor (void)
@@ -23,19 +25,20 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
-import Pact.Eval (enforcePactValue')
 import Pact.Types.Hash
 import Pact.Types.Info
 import Pact.Types.KeySet (keysetNameParser)
 import Pact.Types.Names
-import Pact.Types.Runtime
+import Pact.Types.PactValue (PactValue)
+import Pact.Types.Term
+import Pact.Types.Util
 
 import Text.Parser.Combinators (eof)
 import Data.Char (isHexDigit)
 
 
 data Principal
-  = K PublicKey
+  = K PublicKeyText
     -- ^ format: `k:public key`, where hex public key
     -- is the text public key of the underlying keyset
   | W Text Text
@@ -52,6 +55,8 @@ data Principal
     -- ^ format: `m:fq module name:fqn of module guard function
   | P PactId Text
     -- ^ format: `p:pactid:fqn of pact function
+  | C Text
+    -- ^ format: `c:hash of cap name + cap params + pactId if any
   deriving Eq
 makePrisms ''Principal
 
@@ -64,12 +69,13 @@ instance Show Principal where
 --
 mkPrincipalIdent :: Principal -> Text
 mkPrincipalIdent = \case
-  P pid n -> "p:" <> asString pid <> ":" <> asString n
+  P pid n -> "p:" <> asString pid <> ":" <> n
   K pk -> "k:" <> asString pk
-  W ph n -> "w:" <> ph <> ":" <> asString n
+  W ph n -> "w:" <> ph <> ":" <> n
   R n -> "r:" <> asString n
-  U n ph -> "u:" <> asString n <> ":" <> asString ph
-  M mn n -> "m:" <> asString mn <> ":" <> asString n
+  U n ph -> "u:" <> n <> ":" <> ph
+  M mn n -> "m:" <> asString mn <> ":" <> n
+  C c -> "c:" <> c
 
 -- | Show a principal guard type as a textual value
 --
@@ -81,6 +87,7 @@ showPrincipalType = \case
   U{} -> "u:"
   M{} -> "m:"
   P{} -> "p:"
+  C{} -> "c:"
 
 -- | Parser producing a principal value from a textual representation.
 --
@@ -91,6 +98,7 @@ principalParser (getInfo -> i) = kParser
   <|> uParser
   <|> mParser
   <|> pParser
+  <|> cParser
   where
     base64UrlUnpaddedAlphabet :: String
     base64UrlUnpaddedAlphabet =
@@ -100,7 +108,7 @@ principalParser (getInfo -> i) = kParser
       f c = c `elem` base64UrlUnpaddedAlphabet
 
     hexKeyFormat =
-      PublicKey . T.encodeUtf8 . T.pack <$> count 64 (satisfy isHexDigit)
+      PublicKeyText . T.pack <$> count 64 (satisfy isHexDigit)
 
     char' = void . char
     eof' = void eof
@@ -156,22 +164,44 @@ principalParser (getInfo -> i) = kParser
       eof'
       pure $ U n h
 
--- | Given a pact guard, convert to a principal type
---
-guardToPrincipal :: Guard (Term Name) -> Eval e Principal
-guardToPrincipal = \case
-  GPact (PactGuard pid n) -> pure $ P pid n
+    cParser = do
+      char' 'c'
+      char' ':'
+      h <- base64UrlHashParser
+      eof'
+      pure $ C h
+
+
+-- | Given a pact guard, convert to a principal type.
+-- Parameterized for use with non-Eval contexts.
+guardToPrincipal
+    :: Monad m
+    => (Int -> m ())
+    -- ^ gas charger
+    -> Guard PactValue
+    -> m Principal
+guardToPrincipal chargeGas = \case
+  GPact (PactGuard pid n) -> chargeGas 1 >> pure (P pid n)
   -- TODO later: revisit structure of principal k and w accounts in light of namespaces
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
-    ([k],"keys-all") -> pure $ K k
-    (l,fun) -> pure $ W (asString $ mkHash $ map _pubKey l) fun
-  GKeySetRef ksn -> pure $ R ksn
-  GModule (ModuleGuard mn n) -> pure $ M mn n
+    ([k],"keys-all") -> chargeGas 1 >> pure (K k)
+    (l,fun) -> do
+      h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+      pure $ W (asString h) fun
+  GKeySetRef ksn -> chargeGas 1 >> pure (R ksn)
+  GModule (ModuleGuard mn n) -> chargeGas 1 >> pure (M mn n)
   GUser (UserGuard f args) -> do
-    args' <- enforcePactValue' args
-    let a = asString $ mkHash $ map toJSONPactValue args'
-        f' = asString  f
-    pure $ U f' a
+    a <- mkHash $ map toJSONPactValue args
+    pure $ U (asString f) (asString a)
+  GCapability (CapabilityGuard f args pid) -> do
+    let args' = map toJSONPactValue args
+        f' = T.encodeUtf8 $ asString f
+        pid' = T.encodeUtf8 . asString <$> pid
+    h <- mkHash $ (f':args') ++ maybe [] pure pid'
+    pure $ C $ asString h
   where
-    mkHash bs = pactHash $ mconcat bs
+    mkHash bss = do
+      let bs = mconcat bss
+      chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
+      return $ pactHash bs
     toJSONPactValue = toStrict . encode

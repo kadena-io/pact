@@ -47,7 +47,7 @@ import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Namespace
 import Pact.Parse
-import Pact.Types.SizeOf(Bytes)
+import Pact.Types.SizeOf(Bytes, SizeOfVersion)
 
 
 parseGT0 :: (FromJSON a,Num a,Ord a) => Value -> Parser a
@@ -126,7 +126,7 @@ data GasArgs
   -- ^ Cost of using a native function
   | GPostRead !ReadValue
   -- ^ Cost for reading from database
-  | GPreWrite !WriteValue
+  | GPreWrite !WriteValue SizeOfVersion
   -- ^ Cost of writing to the database
   | GModuleMember !(ModuleDef (Term Name))
   -- ^ TODO documentation
@@ -148,6 +148,8 @@ data GasArgs
   -- ^ the cost of principal creation and validation
   | GIntegerOpCost !Integer Integer
   -- ^ Integer costs
+  | GMakeList2 !Integer !(Maybe Integer)
+  -- ^ List versioning 2
 
 instance Pretty GasArgs where
   pretty g = case g of
@@ -156,7 +158,7 @@ instance Pretty GasArgs where
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
     GUnreduced {} -> "GUnreduced"
     GPostRead rv -> "GPostRead:" <> pretty rv
-    GPreWrite wv -> "GWrite:" <> pretty wv
+    GPreWrite wv szVer -> "GWrite:" <> pretty wv <> colon <> pretty szVer
     GModuleMember {} -> "GModuleMember"
     GModuleDecl {} -> "GModuleDecl"
     GUse {} -> "GUse"
@@ -169,6 +171,7 @@ instance Pretty GasArgs where
     GModuleMemory i -> "GModuleMemory: " <> pretty i
     GPrincipal i -> "GPrincipal: " <> pretty i
     GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
+    GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)

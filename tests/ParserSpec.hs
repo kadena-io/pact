@@ -20,10 +20,10 @@ import Pact.Types.Term
 
 spec :: Spec
 spec = do
-  describe "loadBadParens" $ loadBadParens
-  describe "runBadTests" $ runBadTests
-  describe "prettyLit" $ prettyLit
-  describe "narrowTryBackCompat" $ narrowTryBackCompat
+  describe "loadBadParens" loadBadParens
+  describe "runBadTests" runBadTests
+  describe "prettyLit" prettyLit
+  describe "narrowTryBackCompat" narrowTryBackCompat
   parseNames
 
 evalString' :: String -> IO (Either String (Term Name), ReplState)
@@ -31,22 +31,27 @@ evalString' cmd = initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
 
 loadBadParens :: Spec
 loadBadParens = do
-  (r,_s) <- runIO $ execScript' Quiet "tests/pact/bad/bad-parens.repl"
-  it "should fail due to extra close-parens" $ r `shouldSatisfy` isLeft
+  it "should fail due to extra close-parens" $ do
+    (r,_s) <- execScript' Quiet "tests/pact/bad/bad-parens.repl"
+    r `shouldSatisfy` isLeft
 
-  (r',_s) <- runIO $ execScript' Quiet "tests/pact/parsing.repl"
-  it "should parse correctly" $ r' `shouldSatisfy` isRight
+  it "should parse correctly" $ do
+    (r',_s) <- execScript' Quiet "tests/pact/parsing.repl"
+    r' `shouldSatisfy` isRight
 
-  (r'',_s) <- runIO $ execScript' Quiet "tests/pact/bad/bad-pact.repl"
-  it "should fail due to a rollback on the last step" $ r'' `shouldSatisfy` isLeft
+  it "should fail due to a rollback on the last step" $ do
+    (r'',_s) <- execScript' Quiet "tests/pact/bad/bad-pact.repl"
+    r'' `shouldSatisfy` isLeft
 
 runBadTests :: Spec
 runBadTests = do
-  (r,_s) <- runIO $ evalString' "{ 'a: 1 'b: 2}"
-  it "should not parse bad object" $ r `shouldSatisfy` isLeft
+  it "should not parse bad object" $ do
+    (r,_s) <- evalString' "{ 'a: 1 'b: 2}"
+    r `shouldSatisfy` isLeft
 
-  (r',_s) <- runIO $ evalString' "2.5000000000000082438366423843257667709673523588188657691908576057841129660246632518344756443840469044035563870195392340918714818321610099200359876739795884554030084775850222523998548261336376757270608452858970446458373412193311600907493698300484416227447910"
-  it "should not parse overly-long decimal literals" $ r' `shouldSatisfy` isLeft
+  it "should not parse overly-long decimal literals" $ do
+    (r',_s) <- evalString' "2.5000000000000082438366423843257667709673523588188657691908576057841129660246632518344756443840469044035563870195392340918714818321610099200359876739795884554030084775850222523998548261336376757270608452858970446458373412193311600907493698300484416227447910"
+    r' `shouldSatisfy` isLeft
 
 prettyLit :: Spec
 prettyLit = do

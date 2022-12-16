@@ -12,41 +12,41 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (findOf, ix, matching, (&),
-                                               (.~), (^..), _Left)
-import           Control.Monad                (unless)
-import           Control.Monad.Except         (runExceptT)
-import           Control.Monad.State.Strict   (runStateT)
-import           Data.Either                  (isLeft, isRight)
-import           Data.Foldable                (asum, find, for_)
-import qualified Data.HashMap.Strict          as HM
-import           Data.Map                     (Map)
-import qualified Data.Map                     as Map
-import           Data.Maybe
-import           Data.SBV                     (isConcretely)
-import           Data.SBV.Internals           (SBV (SBV))
-import           Data.Text                    (Text)
-import qualified Data.Text                    as T
-import           NeatInterpolation            (text)
-import           Prelude                      hiding (read)
-import           Test.Hspec
+import Control.Lens (findOf, ix, matching, (&),
+                     (.~), (^..), _Left)
+import Control.Monad (unless)
+import Control.Monad.Except (runExceptT)
+import Control.Monad.State.Strict (runStateT)
+import Data.Either (isLeft, isRight)
+import Data.Foldable (asum, find, for_)
+import qualified Data.HashMap.Strict as HM
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Maybe
+import Data.SBV (isConcretely)
+import Data.SBV.Internals (SBV (SBV))
+import Data.Text (Text)
+import qualified Data.Text as T
+import NeatInterpolation (text)
+import Prelude hiding (read)
+import Test.Hspec hiding (xdescribe)
 
-import           Pact.Parse                   (parseExprs)
-import           Pact.Repl                    (evalRepl', initReplState, replLookupModule)
-import           Pact.Repl.Types              (ReplMode (StringEval))
-import           Pact.Types.Runtime           (Exp, Info, ModuleData(..), Ref, ModuleName)
-import           Pact.Runtime.Utils
-import           Pact.Types.Pretty
-import           Pact.Types.Util              (tShow)
+import Pact.Parse (parseExprs)
+import Pact.Repl (evalRepl', initReplState, replLookupModule)
+import Pact.Repl.Types (ReplMode (StringEval))
+import Pact.Types.Runtime (Exp, Info, ModuleData(..), Ref, ModuleName)
+import Pact.Runtime.Utils
+import Pact.Types.Pretty
+import Pact.Types.Util (tShow)
 
-import           Pact.Analyze.Check
-import           Pact.Analyze.Eval.Numerical  (banker'sMethodS)
-import qualified Pact.Analyze.Model           as Model
-import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
-                                               expToProp, inferProp)
-import           Pact.Analyze.PrenexNormalize (prenexConvert)
-import           Pact.Analyze.Types
-import           Pact.Analyze.Util
+import Pact.Analyze.Check
+import Pact.Analyze.Eval.Numerical (banker'sMethodS)
+import qualified Pact.Analyze.Model as Model
+import Pact.Analyze.Parse (PreProp (..), TableEnv,
+                           expToProp, inferProp)
+import Pact.Analyze.PrenexNormalize (prenexConvert)
+import Pact.Analyze.Types
+import Pact.Analyze.Util
 
 wrap :: Text -> Text -> Text
 wrap code model =
@@ -302,6 +302,9 @@ pattern Abort' = PropSpecific Abort
 
 pattern Result' :: Prop t
 pattern Result' = PropSpecific Result
+
+xdescribeWith :: HasCallStack => String -> String -> SpecWith a -> SpecWith a
+xdescribeWith reason label = before_ (pendingWith reason) . describe label
 
 spec :: Spec
 spec = describe "analyze" $ do
@@ -1017,6 +1020,59 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+
+  describe "create-capability-guard: success" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                (enforce-guard (create-capability-guard (CAP 1)))))
+          |]
+    expectPass code $ Valid Success'
+
+  describe "create-capability-guard: failure" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 2)
+                (enforce-guard (create-capability-guard (CAP 1)))))
+          |]
+    expectPass code $ Valid Abort'
+
+  -- sadly doesn't look like pact guard func can really do much in FV. #1061
+  xdescribeWith "TODO fix pact guard FV #1061" "create-capability-pact-guard: failure" $ do
+    expectFalsified [text|
+        (defcap CAP (i:integer)
+          true)
+
+        (defpact testpact ()
+          (step
+            (with-capability (CAP 2)
+              (enforce-guard
+                (create-capability-pact-guard (CAP 1)))))
+          (step true))
+        |]
+
+  -- same issue here. TODO make pact guards work in FV. #1061
+  xdescribeWith "TODO fix pact guard FV #1061" "create-capability-pact-guard: failure, not in pact" $ do
+    let code =
+          [text|
+            (defcap CAP (i:integer)
+              true)
+
+            (defun test:bool ()
+              (with-capability (CAP 1)
+                (enforce-guard (create-capability-pact-guard (CAP 1)))))
+          |]
+    expectPass code $ Valid Abort'
+
+
   describe "call-by-value semantics for inlining" $ do
     let code =
           [text|
@@ -1261,21 +1317,20 @@ spec = describe "analyze" $ do
     expectCapGovPass code $ Satisfiable Abort'
 
   describe "property language can describe whether cap-based governance passes" $ do
-      res <- runIO $ runVerification $
-        [text|
-          (begin-tx)
-          (module test GOV
-              (defcap GOV ()
-                true)
+      it "passes in-code checks" $ do
+        res <- runVerification
+          [text|
+            (begin-tx)
+            (module test GOV
+                (defcap GOV ()
+                  true)
 
-              (defun test:bool ()
-                @model [(property governance-passes)]
-                (enforce-guard (create-module-guard "governance")))
-            )
-          (commit-tx)
-        |]
-
-      it "passes in-code checks" $
+                (defun test:bool ()
+                  @model [(property governance-passes)]
+                  (enforce-guard (create-module-guard "governance")))
+              )
+            (commit-tx)
+          |]
         handlePositiveTestResult res
 
   describe "property language can describe whether ks-based governance passes without mentioning the keyset" $ do
@@ -1906,48 +1961,49 @@ spec = describe "analyze" $ do
                 (update accounts to   { "balance": (+ to-bal amount) })))
           |]
 
-    eModuleData <- runIO $ compile $ wrapNoTable code
-    case eModuleData of
-      Left err -> it "failed to compile" $ expectationFailure (show err)
-      Right moduleData -> do
-        results <- runIO $
-          verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
-        case results of
-          Left failure -> it "unexpectedly failed verification" $
-            expectationFailure $ show failure
-          Right (ModuleChecks propResults _stepResults invariantResults _) -> do
-            it "should have no prop results" $
-              propResults `shouldBe` HM.singleton "test" []
+    let prep = do
+          eModuleData <- compile $ wrapNoTable code
+          case eModuleData of
+            Left err -> error $ "failed to compile: " <> show err
+            Right moduleData -> do
+              results <- verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
+              case results of
+                Left failure -> error $ "unexpectedly failed verification: " <> show failure
+                Right x -> return x
 
-            case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
-              -- see https://github.com/Z3Prover/z3/issues/1819
-              [CheckFailure _ (SmtFailure (SortMismatch msg))] ->
-                it "...nevermind..." $ pendingWith msg
-              [CheckFailure _ (SmtFailure (Invalid model))] -> do
-                let (Model args ModelTags{_mtWrites} ksProvs _) = model
+    beforeAll prep $ do
+      it "should have no prop results" $ \(ModuleChecks propResults _ _ _) ->
+        propResults `shouldBe` HM.singleton "test" []
 
-                it "should have a negative amount" $
-                  case find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse of
-                    Just (Located _ (_, (_, AVal _prov amount))) ->
-                      (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
-                    _ -> fail "Failed pattern match"
+      it "has valid invariantResults" $ \(ModuleChecks _ _ invariantResults _) -> do
+        case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
+          -- see https://github.com/Z3Prover/z3/issues/1819
+          [CheckFailure _ (SmtFailure (SortMismatch msg))] ->
+            pendingWith $ "... nevermind:" <> msg
+          [CheckFailure _ (SmtFailure (Invalid model))] -> do
+            let (Model args ModelTags{_mtWrites} ksProvs _) = model
 
-                let negativeWrite (UObject m) = case m Map.! "balance" of
-                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
-                      _                   -> False
+            -- it "should have a negative amount"
+            case find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse of
+             Just (Located _ (_, (_, AVal _prov amount))) ->
+               (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+             _ -> fail "Failed pattern match"
 
-                balanceWrite <- pure $ find negativeWrite
-                  $ _mtWrites ^.. traverse . located . accObject
+            let negativeWrite (UObject m) = case m Map.! "balance" of
+                  (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                  _                   -> False
 
-                it "should have a negative write" $
-                  balanceWrite `shouldSatisfy` isJust
+                balanceWrite = find negativeWrite $ _mtWrites ^.. traverse . located . accObject
 
-                it "should have no keyset provenance" $ do
-                  ksProvs `shouldBe` Map.empty
+            -- it "should have a negative write"
+            balanceWrite `shouldSatisfy` isJust
 
-              [] -> runIO $ expectationFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+            -- it "should have no keyset provenance"
+            ksProvs `shouldBe` Map.empty
 
-              other -> runIO $ expectationFailure $ show other
+          [] -> expectationFailure "expected a CheckFailure corresponding to a violation of the balance invariant due to updating with a negative amount"
+
+          other -> expectationFailure $ show other
 
   describe "cell-delta.integer" $ do
     let code =
@@ -2885,6 +2941,23 @@ spec = describe "analyze" $ do
       textToProp SDecimal "(+ 0 1)"
         `shouldBe`
         Left "in (+ 0 1), unexpected argument types for (+): integer and integer"
+
+    it "checks abs" $ do
+      textToProp SInteger "(abs 10)"
+        `shouldBe`
+        Right (Inj (IntUnaryArithOp Abs 10 :: Numerical Prop 'TyInteger))
+
+      textToProp SDecimal "(abs 10.0)"
+        `shouldBe`
+        Right (Inj (DecUnaryArithOp Abs 10 :: Numerical Prop 'TyDecimal))
+
+      inferProp'' "(abs 10)"
+        `shouldBe`
+        Right (Some SInteger (Inj (IntUnaryArithOp Abs 10 :: Numerical Prop 'TyInteger)))
+
+      inferProp'' "(abs 10.0)"
+        `shouldBe`
+        Right (Some SDecimal (Inj (DecUnaryArithOp Abs 10 :: Numerical Prop 'TyDecimal)))
 
     it "check take/drop" $ do
       textToProp SStr "(take 2 \"asdf\")"
@@ -3918,14 +3991,12 @@ spec = describe "analyze" $ do
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
 
-#if !darwin_HOST_OS
     describe "associativity of list concatenation" $ do
       expectVerified [text|
         (defun test:bool (a:[integer] b:[integer] c:[integer])
           @model [ (property result) ]
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
-#endif
 
     describe "testing monotonicity of a function" $ do
       expectVerified [text|
@@ -4104,7 +4175,7 @@ spec = describe "analyze" $ do
               "bar")))
         |]
 
-    xdescribe "defpact property timeout on 2nd step only" $
+    xdescribeWith "disabled, for exercising timeout" "defpact property timeout on 2nd step only" $
       expectVerified [text|
 
         (defpact foo (a:string)
@@ -4201,27 +4272,29 @@ spec = describe "analyze" $ do
       "(defun test:bool (x:integer) (enforce (> x 0) \"\"))"
 
   describe "scope-checking interfaces" $ do
-    res <- runIO $ checkInterface [text|
-      (interface coin-sig
-        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
-          @model [ (property (> amount 0.0))
-                   (property (not (= sender reciever)))
-                 ]
-          )
-      )
-      |]
-    it "flags reciever != receiver" $ isJust res
+    it "flags reciever != receiver" $ do
+      res <- checkInterface [text|
+        (interface coin-sig
+          (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+            @model [ (property (> amount 0.0))
+                     (property (not (= sender reciever)))
+                   ]
+            )
+        )
+        |]
+      res `shouldSatisfy` isJust
 
-    res' <- runIO $ checkInterface [text|
-      (interface coin-sig
-        (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
-          @model [ (property (> amount 0.0))
-                   (property (not (= sender receiver)))
-                 ]
-          )
-      )
-      |]
-    it "checks when spelled correctly" $ isNothing res'
+    it "checks when spelled correctly" $ do
+      res' <- checkInterface [text|
+        (interface coin-sig
+          (defun transfer:string (sender:string receiver:string receiver-guard:guard amount:decimal)
+            @model [ (property (> amount 0.0))
+                     (property (not (= sender receiver)))
+                   ]
+            )
+        )
+        |]
+      res' `shouldSatisfy` isNothing
 
   describe "vacuous property produces error" $ do
     expectFalsifiedMessage [text|
