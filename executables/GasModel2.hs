@@ -99,7 +99,7 @@ main = do
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
-  tests <- forM ([1..100] :: [Int]) $ \i -> do
+  tests <- forM ([1..10_000] :: [Int]) $ \i -> do
     t <- mkGasTest (show i)
     mockRuns t
     pure $! (Pact.NativeDefName (T.pack (show i)), t)
@@ -127,7 +127,7 @@ main = do
       results <- mapM displayGasPrice tests
 
       BL.putStr $ Csv.encodeByName
-        (V.fromList ["test","gas","time","rate","expr"])
+        (V.fromList ["testName","gasCost","timeSpent","gasRate","pactExpr"])
         (GasResult {
            testName = "baseline",
            gasCost = baselineGas,
@@ -161,7 +161,7 @@ bench expr dbSetup = do
   terms <- compileCode (_pactExpressionFull expr)
   putStrLn $ T.unpack (getDescription expr dbSetup)
   (gas, rep) <- bracket setup teardown $ \s@(NoopNFData (env, state)) -> do
-    _   <- exec state env terms
+    _   <- terms `deepseq` exec state env terms
     gas <- readIORef (_eeGas env)
     rep <- C.benchmark' (run terms s)
     pure (gas, rep)
@@ -232,7 +232,7 @@ data Env = Env
   }
 
 defaultEnv :: Env
-defaultEnv = Env [] 5
+defaultEnv = Env [] 6
 
 -- Although "any" is technically a valid type, we only generate values in this
 -- module whose type we know at time of generation.
@@ -463,9 +463,9 @@ genListBy gen t =
   where
     -- These numbers determine how long lists can be at various recursion
     -- depths.
-    len n | n < 1 = 5
-          | n < 2 = 4
-          | n < 3 = 3
+    len n | n < 1 = 8
+          | n < 2 = 6
+          | n < 3 = 4
           | otherwise = 2
 
 genList :: PactGen
@@ -681,7 +681,10 @@ genBuiltin t = case t of
 builtins :: HashMap String PactGen
 builtins =
   M.fromList
-    [ -- General native functions
+    [ -- Language constructs
+      ("let",                  gen_let),
+
+      -- General native functions
       ("at",                   gen_at),
       ("base64-decode",        gen_base64_decode),
       ("base64-encode",        gen_base64_encode),
@@ -828,6 +831,16 @@ builtins =
       ("module",               gen_module),
       ("interface",            gen_interface)
     ]
+
+gen_let :: PactGen
+gen_let t = do
+  -- Note that the list here cannot be a call to a builtin, because then we
+  -- wouldn't know the length in order to construct a valid index.
+  x <- genExpr t
+  -- jww (2022-12-16): We need to synthesize some names and values, add them
+  -- to the Reader environment, and then allow `genExpr` to pick symbols from
+  -- this environment.
+  pure $ EParens [ESym "let", EParens [EParens [ESym "x", EInt 0]], x]
 
 gen_at :: PactGen
 gen_at t = do
