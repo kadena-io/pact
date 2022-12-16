@@ -108,6 +108,14 @@ main = do
   putStrLn "Running benchmark(s)"
   if True -- _oBenchOnly opt
     then do
+      let baseline = GasResult {
+           testName = "baseline",
+           gasCost = baselineGas,
+           timeSpent = baselineTime,
+           gasRate = 0.0,
+           pactExpr = "true"
+         }
+      print baseline
       let displayGasPrice (funName, gt@(GasUnitTests (t NE.:| []))) = do
             res <- benchesOnce gt
             let [(gas, time)] = map _gasTestResultSqliteDb res
@@ -128,13 +136,7 @@ main = do
 
       BL.putStr $ Csv.encodeByName
         (V.fromList ["testName","gasCost","timeSpent","gasRate","pactExpr"])
-        (GasResult {
-           testName = "baseline",
-           gasCost = baselineGas,
-           timeSpent = baselineTime,
-           gasRate = 0.0,
-           pactExpr = "true"
-         } : results)
+        (baseline : results)
     else do
       let testsSorted = sortOn fst tests
       allBenches <- mapM benchesMultiple testsSorted
