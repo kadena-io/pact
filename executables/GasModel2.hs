@@ -98,7 +98,7 @@ main = do
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
-  tests <- forM ([1..10_000] :: [Int]) $ \i -> do
+  tests <- forM ([1..5_000] :: [Int]) $ \i -> do
     t <- mkGasTest (show i)
     mockRuns t
     pure $! (Pact.NativeDefName (T.pack (show i)), t)
