@@ -3,15 +3,19 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE TupleSections #-}
+
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Main where
 
@@ -23,7 +27,9 @@ import Control.Monad.Trans.Reader
 import Criterion qualified as C
 import qualified Data.Aeson as A
 import Criterion.Types qualified as C
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Base64 as B64
+import Data.Csv qualified as Csv
 import Data.Decimal
 import Data.Default
 import Data.HashMap.Strict (HashMap)
@@ -36,6 +42,8 @@ import Data.Text qualified as T
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time
+import Data.Time.Format.ISO8601
+import Data.Vector qualified as V
 import GHC.Generics
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
@@ -46,8 +54,27 @@ import Pact.GasModel.Utils
 import Pact.Types.Lang qualified as Pact
 import Pact.Types.Runtime (EvalEnv (_eeGas), eeMsgBody,
                            evalCallStack, evalPactExec)
-import Pact.Types.Term (Gas)
+import Pact.Types.Term (Gas(..))
 import Statistics.Types (Estimate (..))
+
+instance Csv.FromField Gas where
+  parseField s = Gas <$> Csv.parseField s
+instance Csv.ToField Gas where
+  toField (Gas s) = Csv.toField s
+
+deriving instance Csv.FromRecord Gas
+deriving instance Csv.ToRecord Gas
+
+data GasResult = GasResult {
+  testName :: String,
+  gasCost :: Gas,
+  timeSpent :: NanoSeconds,
+  gasRate :: NanoSeconds,
+  pactExpr :: T.Text
+  }
+  deriving (Show, Generic,
+            Csv.FromRecord, Csv.ToRecord,
+            Csv.FromNamedRecord, Csv.ToNamedRecord)
 
 main :: IO ()
 main = do
@@ -62,12 +89,17 @@ main = do
     putStrLn $ toLisp x1
 
   let mkGasTest !name = do
-        expr <- Gen.sample $ runReaderT (genExpr =<< genType) defaultEnv
-        return $! expr `deepseq` gasTest name [expr]
+        expr <- Gen.sample $ runReaderT (genBuiltin =<< genType) defaultEnv
+        return $! expr `deepseq` gasTest name expr
+
+  putStrLn "Establishing gas baseline"
+  baselineReport <- benchesOnce $ gasTest "baseline" (ESym "true")
+  let [(baselineGas, baselineTime)] =
+        map _gasTestResultSqliteDb baselineReport
 
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
-  tests <- forM ([1..100000] :: [Int]) $ \i -> do
+  tests <- forM ([1..100] :: [Int]) $ \i -> do
     t <- mkGasTest (show i)
     mockRuns t
     pure $! (Pact.NativeDefName (T.pack (show i)), t)
@@ -75,15 +107,34 @@ main = do
 
   putStrLn "Running benchmark(s)"
   if True -- _oBenchOnly opt
-    then
-      let displayGasPrice (funName, t) = do
-            res <- benchesOnce t
-            putStrLn $
-              (T.unpack (Pact.asString funName))
-                ++ ": "
-                ++ show (map _gasTestResultSqliteDb res)
-            putStrLn ""
-       in mapM_ displayGasPrice tests
+    then do
+      let displayGasPrice (funName, gt@(GasUnitTests (t NE.:| []))) = do
+            res <- benchesOnce gt
+            let [(gas, time)] = map _gasTestResultSqliteDb res
+            let Gas gas' = gas - baselineGas
+            let time' = time - baselineTime
+            let result = GasResult {
+                      testName = T.unpack (Pact.asString funName),
+                      gasCost = Gas gas',
+                      timeSpent = time',
+                      gasRate = if gas' > 0
+                                then time' / fromIntegral gas'
+                                else time',
+                      pactExpr = _pactExpressionFull (_gasTestExpression t)
+                    }
+            print result
+            pure result
+      results <- mapM displayGasPrice tests
+
+      BL.putStr $ Csv.encodeByName
+        (V.fromList ["test","gas","time","rate","expr"])
+        (GasResult {
+           testName = "baseline",
+           gasCost = baselineGas,
+           timeSpent = baselineTime,
+           gasRate = 0.0,
+           pactExpr = "true"
+         } : results)
     else do
       let testsSorted = sortOn fst tests
       allBenches <- mapM benchesMultiple testsSorted
@@ -110,7 +161,7 @@ bench expr dbSetup = do
   terms <- compileCode (_pactExpressionFull expr)
   putStrLn $ T.unpack (getDescription expr dbSetup)
   (gas, rep) <- bracket setup teardown $ \s@(NoopNFData (env, state)) -> do
-    _ <- exec state env terms
+    _   <- exec state env terms
     gas <- readIORef (_eeGas env)
     rep <- C.benchmark' (run terms s)
     pure (gas, rep)
@@ -138,19 +189,12 @@ benchesOnce tests = runGasUnitTests tests bench mockFun
     mockFun :: PactExpression -> GasSetup () -> IO (Gas, NanoSeconds)
     mockFun _ _ = pure (0, 0)
 
-gasTest :: String -> [LispExpr] -> GasUnitTests
-gasTest name exprs =
+gasTest :: String -> LispExpr -> GasUnitTests
+gasTest name expr =
   createGasUnitTests
     (updateWithPactExec . updateStackFrame . updateEnv)
     (updateWithPactExec . updateStackFrame . updateEnv)
-    ( NE.fromList
-        ( map
-            ( \expr ->
-                PactExpression (T.pack (toLisp expr)) Nothing
-            )
-            exprs
-        )
-    )
+    (PactExpression (T.pack (toLisp expr)) Nothing NE.:| [])
     (Pact.NativeDefName (T.pack name))
   where
     updateStackFrame = setState (set evalCallStack [someStackFrame])
@@ -260,13 +304,16 @@ data LispExpr
 
 toLisp :: LispExpr -> String
 toLisp = \case
-  -- jww (2022-09-20): Need to escape 's'
-  EStr s -> "\"" ++ s ++ "\""
+  EStr s -> show s
   EInt i -> show i
   EDec d -> show d
   EBool True -> "true"
   EBool False -> "false"
-  ETime _ -> "!time!" -- jww (2022-09-26): TODO
+  ETime t ->
+    -- jww (2022-12-15): Stuart says that extra precision can affect storage,
+    -- so we need to generate those as well.
+    let t' = t { utctDayTime = fromIntegral (round (utctDayTime t) :: Integer) }
+    in "(time \"" ++ iso8601Show t' ++ "\")"
   EKeyset -> "!keyset!" -- jww (2022-09-26): TODO
   EList xs -> "[" ++ intercalate ", " (map toLisp xs) ++ "]"
   EObj sch ->

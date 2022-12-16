@@ -353,6 +353,8 @@ executable gasmodel2
                      , Decimal
                      , aeson >= 0.11.3.0 && < 1.6
                      , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
+                     , bytestring >=0.10.8.1 && < 0.12
+                     , cassava >= 0.5
                      , criterion
                      , data-default
                      , deepseq >= 1.4.2.0 && < 1.5
@@ -366,6 +368,7 @@ executable gasmodel2
                      , time
                      , transformers
                      , unordered-containers
+                     , vector >= 0.11.0.0 && < 0.13
   hs-source-dirs:      executables
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
