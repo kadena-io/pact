@@ -36,7 +36,6 @@ import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as M
 import Data.IORef
 import Data.List
-import Data.List.NonEmpty qualified as NE
 import Data.Maybe (isJust, isNothing)
 import Data.Text qualified as T
 import Data.Text qualified as Text
@@ -116,7 +115,7 @@ main = do
            pactExpr = "true"
          }
       print baseline
-      let displayGasPrice (funName, gt@(GasUnitTests (t NE.:| []))) = do
+      let displayGasPrice (funName, gt@(GasUnitTests [t])) = do
             res <- benchesOnce gt
             let [(gas, time)] = map _gasTestResultSqliteDb res
             let Gas gas' = gas - baselineGas
@@ -196,7 +195,7 @@ gasTest name expr =
   createGasUnitTests
     (updateWithPactExec . updateStackFrame . updateEnv)
     (updateWithPactExec . updateStackFrame . updateEnv)
-    (PactExpression (T.pack (toLisp expr)) Nothing NE.:| [])
+    [PactExpression (T.pack (toLisp expr)) Nothing]
     (Pact.NativeDefName (T.pack name))
   where
     updateStackFrame = setState (set evalCallStack [someStackFrame])
