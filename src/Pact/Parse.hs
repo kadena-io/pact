@@ -58,6 +58,7 @@ import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
 import Test.QuickCheck (Arbitrary, arbitrary)
 
+import qualified Pact.JSON.Encode as J
 
 
 -- | Main parser for Pact expressions.
@@ -157,6 +158,10 @@ instance A.ToJSON ParsedDecimal where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode ParsedDecimal where
+  build (ParsedDecimal d) = J.build $ J.Aeson @Scientific $ fromRational $ toRational d
+  {-# INLINE build #-}
+
 instance Show ParsedDecimal where
   show (ParsedDecimal d) = show d
 
@@ -190,6 +195,10 @@ instance A.ToJSON ParsedInteger where
   toEncoding (ParsedInteger i) = A.toEncoding @Scientific (fromIntegral i)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode ParsedInteger where
+  build (ParsedInteger i) = J.build $ J.Aeson i
+  {-# INLINE build #-}
 
 instance Arbitrary ParsedInteger where
   arbitrary = ParsedInteger <$> arbitrary

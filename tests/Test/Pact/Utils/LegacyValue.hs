@@ -1,16 +1,22 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
+
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- |
 -- Module: Json.Compat
@@ -58,7 +64,9 @@ import Pact.Types.SigData
 import Pact.Types.SPV
 import Pact.Types.Term.Arbitrary ()
 
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
+
+import qualified Pact.JSON.Encode as J
 
 -- -------------------------------------------------------------------------- --
 -- Roundtrips
@@ -75,6 +83,12 @@ prop_checkRoundtrip a = eitherDecode (encode a) === Right a
 
 checkRoundtrip :: Eq a => Show a => ToJSON a => FromJSON a => (String, a -> Property)
 checkRoundtrip = ("roundtrip", prop_checkRoundtrip)
+
+prop_checkRoundtrip2 :: Eq a => Show a => J.Encode a => FromJSON a => a -> Property
+prop_checkRoundtrip2 a = eitherDecode (J.encode a) === Right a
+
+checkRoundtrip2 :: Eq a => Show a => J.Encode a => FromJSON a => (String, a -> Property)
+checkRoundtrip2 = ("roundtrip2", prop_checkRoundtrip2)
 
 -- -------------------------------------------------------------------------- --
 -- LegacyValue Compat
@@ -97,6 +111,17 @@ prop_checkLegacyValueCompat a = encode a === encode (toLegacyJson a)
 checkLegacyValueCompat :: ToJSON a => (String, a -> Property)
 checkLegacyValueCompat =
   ("encoding is compatible with toLegacyJson encoding", prop_checkLegacyValueCompat)
+
+-- -------------------------------------------------------------------------- --
+--
+
+prop_checkAesonCompat :: ToJSON a => J.Encode a => a -> Property
+prop_checkAesonCompat a = encode a === J.encode a
+
+checkAesonCompat :: ToJSON a => J.Encode a => (String, a -> Property)
+checkAesonCompat =
+  ("encoding is compatible with Aeson encoding", prop_checkAesonCompat)
+
 
 -- -------------------------------------------------------------------------- --
 -- LegacyHashable Compat
@@ -147,33 +172,785 @@ spec_case props =
 #endif
 
 -- -------------------------------------------------------------------------- --
--- Spec
+-- Orphans
+
+deriving newtype instance ToJSON a => ToJSON (J.Aeson a)
+deriving newtype instance FromJSON a => FromJSON (J.Aeson a)
+deriving newtype instance Show a => Show (J.Aeson a)
+deriving newtype instance Eq a => Eq (J.Aeson a)
+deriving newtype instance Arbitrary a => Arbitrary (J.Aeson a)
+deriving instance Functor J.Aeson
+deriving instance Foldable J.Aeson
+deriving instance Traversable J.Aeson
+
+instance J.Encode [J.Aeson ()] where
+  build a = J.build $ J.Array a
+
+instance J.Encode [Var Int [J.Aeson ()]] where
+  build a = J.build $ J.Array a
+
+-- -------------------------------------------------------------------------- --
+-- Specs
+
+type A = J.Aeson
+
+spec_pact_types_orphans :: Spec
+spec_pact_types_orphans =
+  describe "Pact.Types.Orphans" $ do
+   spec_case @(Var Int (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Var () (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Scope Int [] (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Scope Int (Var ()) (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_namespace :: Spec
+spec_pact_types_namespace =
+  describe "Pact.Types.Namespace" $ do
+   spec_case @(Namespace (A ()))
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_chainid :: Spec
+spec_pact_types_chainid =
+  describe "Pact.Types.ChainId" $ do
+   spec_case @ChainId
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @NetworkId
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_parse :: Spec
+spec_pact_types_parse =
+  describe "Pact.Parse" $ do
+   spec_case @ParsedInteger
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ParsedDecimal
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_gas :: Spec
+spec_pact_types_gas =
+  describe "Pact.Types.Gas" $ do
+   spec_case @GasLimit
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @GasPrice
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_chainmeta :: Spec
+spec_pact_types_chainmeta =
+  describe "Pact.Types.ChainMeta" $ do
+   spec_case @EntityName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @TTLSeconds
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @TxCreationTime
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @Address
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PrivateMeta
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PublicMeta
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PublicData
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_info :: Spec
+spec_pact_types_info =
+  describe "Pact.Types.Info" $ do
+   spec_case @Info
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @Code
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+  -- ---------------------------------------------- --
+spec_pact_types_names :: Spec
+spec_pact_types_names =
+  describe "Pact.Types.Names" $ do
+   spec_case @NamespaceName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ModuleName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @DefName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @FullyQualifiedName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @QualifiedName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   -- spec_case @BareName [ ]
+   spec_case @DynamicName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+   spec_case @Name
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @NativeDefName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @TableName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+-- ---------------------------------------------- --
+
+spec_pact_types_keyset :: Spec
+spec_pact_types_keyset =
+  describe "Pact.Types.KeySet" $ do
+   spec_case @KeySet
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @KeySetName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_exp :: Spec
+spec_pact_types_exp =
+  describe "Pact.Types.Exp" $ do
+   spec_case @Literal
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ListDelimiter
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @Separator
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(LiteralExp (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(AtomExp (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(ListExp (A ()))
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(SeparatorExp (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Exp (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_type :: Spec
+spec_pact_types_type =
+  describe "Pact.Types.Type" $ do
+   spec_case @TypeName
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Arg (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(FunType (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @GuardType
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PrimType
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @SchemaType
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @TypeVarName
+      [ Case checkRoundtrip
+      , Case checkLegacyValueCompat
+      , Case checkAesonCompat
+      , Case checkRoundtrip2
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(TypeVar (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @SchemaPartial
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Type (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_term :: Spec
+spec_pact_types_term =
+  describe "Pact.Types.Term" $ do
+   spec_case @Meta
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PactId
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(UserGuard (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @DefType
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @Gas
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(BindType (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(BindPair (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(App (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Governance (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ModuleHash
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(DefcapMeta (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(DefMeta (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(ConstVal (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   -- spec_case @Example []
+   spec_case @FieldKey
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Step (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ModRef
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ModuleGuard
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PactGuard
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(ObjectMap (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @Use
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(CapabilityGuard (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Guard (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Module (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @Interface
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(ModuleDef (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @FunApp
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   -- spec_case @Ref [ ]
+   -- spec_case @NativeDFun [ ]
+   spec_case @(Def (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Lam (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Object (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(Term (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_pactvalue :: Spec
+spec_pact_types_pactvalue =
+  describe "Pact.Types.PactValue" $ do
+   spec_case @PactValue
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_continuation :: Spec
+spec_pact_types_continuation =
+  describe "Pact.Types.Continuation" $ do
+   spec_case @Provenance
+      [ Case checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @Yield
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PactContinuation
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @NestedPactExec
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PactExec
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_hash :: Spec
+spec_pact_types_hash =
+  describe "Pact.Types.Hash" $ do
+   spec_case @Hash
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PactHash
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_scheme :: Spec
+spec_pact_types_scheme =
+  describe "Pact.Types.Scheme" $ do
+   spec_case @PPKScheme
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_runtime :: Spec
+spec_pact_types_runtime =
+  describe "Pact.Types.Runtime" $ do
+   spec_case @PactEvent
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ExecutionConfig
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @ExecutionFlag
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_spv :: Spec
+spec_pact_types_spv =
+  describe "Pact.Types.SPV" $ do
+   spec_case @ContProof
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_capability :: Spec
+spec_pact_types_capability =
+  describe "Pact.Types.Capability" $ do
+   spec_case @SigCapability
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- -------------------------------------------------------------------------- --
+--
 
 spec :: Spec
 spec = describe "JSON encoding backward compatibility" $ do
 
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Orphans" $ do
-   spec_case @(Var Int ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Var () ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Scope Int [] ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Scope Int (Var ()) ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
+  spec_pact_types_orphans
 
   -- ---------------------------------------------- --
   describe "Pact.Types.PactError" $ do
@@ -203,475 +980,21 @@ spec = describe "JSON encoding backward compatibility" $ do
       , CaseOldHashable checkLegacyHashableCompat
       ]
 
-  -- ---------------------------------------------- --
-  describe "Pact.Types.ChainId" $ do
-   spec_case @ChainId
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @NetworkId
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Namespace" $ do
-   spec_case @(Namespace ())
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Gas" $ do
-   spec_case @GasLimit
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @GasPrice
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Parse" $ do
-   spec_case @ParsedInteger
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @ParsedDecimal
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.ChainMeta" $ do
-   spec_case @EntityName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @TTLSeconds
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @TxCreationTime
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @Address
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PrivateMeta
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PublicMeta
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PublicData
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Info" $ do
-   spec_case @Info
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @Code
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Names" $ do
-   spec_case @NamespaceName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @ModuleName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @DefName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @FullyQualifiedName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @QualifiedName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   -- spec_case @BareName [ ]
-   spec_case @DynamicName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-   spec_case @Name
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @NativeDefName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @TableName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.KeySet" $ do
-   spec_case @KeySet
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @KeySetName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Exp" $ do
-   spec_case @Literal
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @ListDelimiter
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @Separator
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(LiteralExp ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(AtomExp ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(ListExp ())
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(SeparatorExp ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Exp ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Type" $ do
-   spec_case @TypeName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Arg ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(FunType ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @GuardType
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PrimType
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @SchemaType
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @TypeVarName
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(TypeVar ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @SchemaPartial
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Type ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Term" $ do
-   spec_case @Meta
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PactId
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(UserGuard ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @DefType
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @Gas
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(BindType ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(BindPair ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(App ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Governance ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @ModuleHash
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(DefcapMeta ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(DefMeta ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(ConstVal ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   -- spec_case @Example []
-   spec_case @FieldKey
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Step ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @ModRef
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @ModuleGuard
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PactGuard
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(ObjectMap ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @Use
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(CapabilityGuard ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Guard ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Module ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @Interface
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(ModuleDef ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @FunApp
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   -- spec_case @Ref [ ]
-   -- spec_case @NativeDFun [ ]
-   spec_case @(Def ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Lam ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Object ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(Term ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.PactValue" $ do
-   spec_case @PactValue
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Continuation" $ do
-   spec_case @Provenance
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @Yield
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PactContinuation
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @NestedPactExec
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PactExec
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Hash" $ do
-   spec_case @Hash
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PactHash
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Scheme" $ do
-   spec_case @PPKScheme
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
+  spec_pact_types_namespace
+  spec_pact_types_chainid
+  spec_pact_types_parse
+  spec_pact_types_gas
+  spec_pact_types_chainmeta
+  spec_pact_types_info
+  spec_pact_types_names
+  spec_pact_types_keyset
+  spec_pact_types_exp
+  spec_pact_types_type
+  spec_pact_types_term
+  spec_pact_types_pactvalue
+  spec_pact_types_continuation
+  spec_pact_types_hash
+  spec_pact_types_scheme
 
   -- ---------------------------------------------- --
   describe "Pact.Types.Persistence" $ do
@@ -707,34 +1030,9 @@ spec = describe "JSON encoding backward compatibility" $ do
       , CaseOldHashable checkLegacyHashableCompat
       ]
 
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Runtime" $ do
-   spec_case @PactEvent
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @ExecutionFlag
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.SPV" $ do
-   spec_case @ContProof
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Capability" $ do
-   spec_case @SigCapability
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
+  spec_pact_types_runtime
+  spec_pact_types_spv
+  spec_pact_types_capability
 
   -- ---------------------------------------------- --
   describe "Pact.Types.RPC" $ do

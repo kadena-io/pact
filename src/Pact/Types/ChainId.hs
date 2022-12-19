@@ -38,6 +38,8 @@ import Pact.Types.SizeOf
 import Pact.Types.Term (ToTerm(..))
 import Pact.Types.Util (genBareText,AsString(..))
 
+import qualified Pact.JSON.Encode as J
+
 -- | Expresses unique platform-specific chain identifier.
 --
 newtype ChainId = ChainId { _chainId :: Text }
@@ -46,7 +48,7 @@ newtype ChainId = ChainId { _chainId :: Text }
     ( Show, Pretty, IsString
     , ToJSON, FromJSON
     , Serialize, ToTerm, NFData
-    , SizeOf, AsString
+    , SizeOf, AsString, J.Encode
     )
 
 instance Arbitrary ChainId where
@@ -68,7 +70,7 @@ newtype NetworkId = NetworkId { _networkId :: Text }
   deriving stock (Eq, Generic)
   deriving newtype
     ( Show, Pretty, IsString
-    , ToJSON, FromJSON
+    , ToJSON, FromJSON, J.Encode
     , Serialize, ToTerm, NFData
     )
 

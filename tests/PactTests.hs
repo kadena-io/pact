@@ -6,8 +6,6 @@ import qualified Blake2Spec
 import qualified KeysetSpec
 import qualified RoundTripSpec
 import qualified PrincipalSpec
-import qualified Test.Pact.Utils.LegacyHashable
-import qualified Test.Pact.Utils.LegacyHashMap
 import qualified Test.Pact.Utils.LegacyValue
 import qualified SizeOfSpec
 
@@ -40,8 +38,6 @@ main = hspec $ parallel $ do
   describe "KeysetSpec" KeysetSpec.spec
   describe "RoundTripSpec" RoundTripSpec.spec
   describe "PrincipalSpec" PrincipalSpec.spec
-  describe "Test.Pact.Utils.LegacyHashable" Test.Pact.Utils.LegacyHashable.spec
-  describe "Test.Pact.Utils.LegacyHashMap" Test.Pact.Utils.LegacyHashMap.spec
   describe "Test.Pact.Utils.LegacyValue" Test.Pact.Utils.LegacyValue.spec
   describe "SizeOfSpec" SizeOfSpec.spec
 

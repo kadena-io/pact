@@ -89,7 +89,7 @@ import Pact.Types.Logger
 import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 -- | for use in GHCI
 repl :: IO (Either () (Term Name))

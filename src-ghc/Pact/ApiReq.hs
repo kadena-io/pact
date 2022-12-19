@@ -72,7 +72,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {

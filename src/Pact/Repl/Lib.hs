@@ -78,7 +78,7 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState

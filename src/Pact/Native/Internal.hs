@@ -61,7 +61,7 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Runtime.Utils
 import Pact.Types.KeySet (parseAnyKeysetName)
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm

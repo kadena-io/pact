@@ -51,6 +51,7 @@ import Pact.Types.Namespace
 import Pact.Parse
 import Pact.Types.SizeOf(Bytes, SizeOfVersion)
 
+import qualified Pact.JSON.Encode as J
 
 parseGT0 :: (FromJSON a,Num a,Ord a) => Value -> Parser a
 parseGT0 v = parseJSON v >>= \a ->
@@ -60,7 +61,7 @@ parseGT0 v = parseJSON v >>= \a ->
 
 -- | API Price value, basically a newtype over `Decimal`
 newtype GasPrice = GasPrice ParsedDecimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON,Pretty)
+  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON,Pretty,J.Encode)
 instance Show GasPrice where
   show (GasPrice (ParsedDecimal d)) = show d
 
@@ -179,7 +180,7 @@ instance Pretty GasArgs where
     GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
 
 newtype GasLimit = GasLimit ParsedInteger
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
+  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty,J.Encode)
 
 instance Arbitrary GasLimit where
   arbitrary = GasLimit <$> (getPositive <$> arbitrary)

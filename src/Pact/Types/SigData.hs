@@ -34,7 +34,7 @@ import Test.QuickCheck
 import Pact.Parse
 import Pact.Types.Command
 import Pact.Types.Runtime
-import qualified Pact.Utils.LegacyHashMap as LHM
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
   deriving (Eq,Ord,Show,Generic)

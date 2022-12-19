@@ -51,6 +51,64 @@ flag tests-in-lib
   default:     False
   manual:      True
 
+-- -------------------------------------------------------------------------- --
+-- Internal Libraries
+
+library json
+  hs-source-dirs: lib/json
+  default-language: Haskell2010
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  exposed-modules:
+    Pact.JSON.Decode
+    Pact.JSON.Encode
+    Pact.JSON.Legacy.HashMap
+    Pact.JSON.Legacy.Hashable
+    Pact.JSON.Legacy.Value
+    Pact.JSON.Value
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , containers
+    , deepseq
+    , hashable
+    , reflection
+    , scientific
+    , text
+    , unordered-containers
+    , vector
+
+test-suite json-tests
+  main-is: Main.hs
+  type: exitcode-stdio-1.0
+  hs-source-dirs: lib/test/json
+  default-language: Haskell2010
+  ghc-options: -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  other-modules:
+    Test.Pact.JSON.Legacy.Hashable
+    Test.Pact.JSON.Legacy.HashMap
+  build-depends:
+    -- internal
+    , json
+
+    -- external
+    , QuickCheck >=2.14
+    , aeson
+    , base
+    , hashable
+    , hspec >=2.10
+    , quickcheck-instances >=0.3
+    , scientific >=0.3
+    , text >=2.0
+    , unordered-containers
+    -- , bytestring
+
+  other-modules:
+    Test.Pact.JSON.Encode
+
+-- -------------------------------------------------------------------------- --
+-- Pact library
+
 library
 
   -- common to all configurations:
@@ -145,9 +203,6 @@ library
     Pact.Types.Version
     Pact.Types.Typecheck
     Pact.Typechecker
-    Pact.Utils.LegacyHashable
-    Pact.Utils.LegacyHashMap
-    Pact.Utils.LegacyValue
   if flag(with-integer-gmp)
     build-depends:
         , base >= 4.15.0.0
@@ -180,6 +235,7 @@ library
     , exceptions >= 0.8.3 && < 0.11
     , filepath >= 1.4.1.0 && < 1.5
     , hashable >= 1.4
+    , json
     , lens >= 4.14 && < 5.3
     , lens-aeson >= 1.0.0.5 && < 1.3
     , megaparsec >= 9
@@ -329,6 +385,9 @@ library
         , hw-hspec-hedgehog == 0.1.*
         , intervals
 
+-- -------------------------------------------------------------------------- --
+-- Executables and Benchmarks
+
 executable pact
   if impl(ghcjs) || !flag(build-tool)
     buildable: False
@@ -377,13 +436,16 @@ benchmark json-decode
     , base
     , bytestring
     , clock
+    , deepseq
     , pact
     , text
-    , deepseq
   hs-source-dirs: bench
   ghc-options: -Wall -threaded -rtsopts "-with-rtsopts=-N"
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language: Haskell2010
+
+-- -------------------------------------------------------------------------- --
+-- Test Suite
 
 test-suite hspec
   main-is:          PactTests.hs
@@ -417,8 +479,6 @@ test-suite hspec
       ParserSpec
       SchemeSpec
       SignatureSpec
-      Test.Pact.Utils.LegacyHashable
-      Test.Pact.Utils.LegacyHashMap
       Test.Pact.Utils.LegacyValue
 
     build-depends:
@@ -427,12 +487,13 @@ test-suite hspec
       , directory
       , errors
       , filepath
+      -- only used via CPP min version macro:
       , hashable
+      , json
       , lens
       , mtl
       , text
       , transformers
-      , quickcheck-instances
       , vector
 
     if flag(build-tool)
@@ -473,3 +534,4 @@ test-suite hspec
         , servant-client >= 0.16
         , temporary >= 1.3
         , yaml
+

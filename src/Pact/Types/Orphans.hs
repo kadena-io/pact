@@ -34,6 +34,7 @@ import Test.QuickCheck (Arbitrary(..))
 
 import Pact.Types.Util
 
+import qualified Pact.JSON.Encode as J
 
 instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
   arbitrary = Decimal <$> arbitrary <*> arbitrary
@@ -83,6 +84,11 @@ instance (A.ToJSON a, A.ToJSON b) => A.ToJSON (Var b a) where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance (J.Encode a, J.Encode (J.Aeson b)) => J.Encode (Var b a) where
+  build (B b) = J.object ["b" J..= J.Aeson b]
+  build (F a) = J.object ["f" J..= a]
+  {-# INLINE build #-}
+
 instance (A.FromJSON a, A.FromJSON b) =>
   A.FromJSON (Var b a) where
   parseJSON = A.withObject "Var" $ \v ->
@@ -94,6 +100,10 @@ instance (Functor f, A.ToJSON (f (Var b (f a)))) => A.ToJSON (Scope b f a) where
   toEncoding (Scope s) = A.pairs ("scope" A..= s)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance (J.Encode (f (Var b (f a)))) => J.Encode (Scope b f a) where
+  build (Scope s) = J.object ["scope" J..= s]
+  {-# INLINE build #-}
 
 instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value), A.FromJSON (f a)) =>
   A.FromJSON (Scope b f a) where

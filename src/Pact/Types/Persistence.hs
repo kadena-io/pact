@@ -64,8 +64,8 @@ import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow, JsonProperties, enableToJSON, (.?=))
 import Pact.Types.Namespace
-import Pact.Utils.LegacyValue
-import qualified Pact.Utils.LegacyHashMap as LHM
+import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 data PersistDirect =
     PDValue PactValue

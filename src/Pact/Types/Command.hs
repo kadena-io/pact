@@ -76,7 +76,7 @@ import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
 import Pact.Types.Runtime
 
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 
 #if !defined(ghcjs_HOST_OS)

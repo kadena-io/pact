@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Pact.Utils.LegacyValue
+module Pact.JSON.Legacy.Value
 ( -- LegacyValue
   LegacyValue(..)
 , toLegacyJson
@@ -27,6 +27,7 @@ module Pact.Utils.LegacyValue
 -- * Tools
 , legacyJsonPropertySort
 , legacyJsonPropertySortPairs
+, legacyHashSetToList
 ) where
 
 import Control.DeepSeq
@@ -36,6 +37,7 @@ import qualified Data.Aeson.Key as AK
 import qualified Data.Aeson.KeyMap as AKM
 import Data.Bifunctor
 import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 import Data.Reflection
 import qualified Data.Text as T
@@ -43,8 +45,10 @@ import Data.Typeable
 
 import GHC.Stack
 
-import Pact.Utils.LegacyHashable
-import qualified Pact.Utils.LegacyHashMap as LHM
+import Pact.JSON.Legacy.Hashable
+import qualified Pact.JSON.Legacy.HashMap as LHM
+
+import qualified Pact.JSON.Encode as J
 
 -- -------------------------------------------------------------------------- --
 -- Aeson-2 Migration Plan
@@ -92,51 +96,13 @@ import qualified Pact.Utils.LegacyHashMap as LHM
 newtype LegacyValue = LegacyValue { _getLegacyValue :: Value }
   deriving (Show, Eq, NFData)
 
--- | This datatype is used to signal if it is safe to call 'toJSON' on a
--- 'LegacyValue'. 'toJSON' must not be called as a submethod of 'encode' to
--- serialize a 'Value', because that code path does not preserve the the legacy
--- ordering of JSON properties. For that reason the a type class instance for
--- 'Given' is used to inject default value of 'LegacyValueForbidden' into calls
--- of 'toJSON' in the 'ToJSON' instance of 'LegacyValue'. This behavior can be
--- "overridden" by use of 'given' in contexts where calling 'toJSON' is safe.
---
-data LegacyValuePolicy = LegacyValueForbidden | LegacyValueAllowed
-  deriving (Show, Eq)
-
--- | Define "default" behavior of 'toJSON' for 'LegacyValue'. This behavior can
--- be overwritten by using 'give' to provide a local instance. Current versions
--- of GHC give precedence to the local instance.
---
--- @
--- λ> (given @LegacyValueWitness, give LegacyValueAllowed $ given @LegacyValueWitness )
--- (LegacyValueForbidden,LegacyValueAllowed)
--- @
---
--- Since the exact behavior of given is implementation dependent when there is
--- more than one instance in scope, there must be test case that validates the
--- behavior for the respective GHC instance in use.
---
-instance Given LegacyValuePolicy where
-    given = LegacyValueForbidden
-    {-# NOINLINE given #-}
-    -- The NOINLINE pragma forces GHC to give precedence to locally defined
-    -- instances that are passed as implicit arguments.
-
-instance Given LegacyValuePolicy => ToJSON LegacyValue where
-  toJSON :: HasCallStack => LegacyValue -> Value
-  toJSON v = case given of
-    LegacyValueForbidden -> error $ "Pact.Utils.Json.LegacyValue: attempt to call toJSON on " <> show v
-    LegacyValueAllowed -> toJSON (_getLegacyValue v)
+instance ToJSON LegacyValue where
+  toJSON :: LegacyValue -> Value
+  toJSON =  _getLegacyValue
         -- this case is only safe when 'LegacyValues' are created. It allows to
         -- nest 'LegacyValue' values in inner datastructers into a new top-level
         -- 'LegacyValue'.
-
-  toEncoding (LegacyValue (Object o)) = toEncoding $ LegacyValue <$> legacyKeyMap o
-  toEncoding (LegacyValue (Array a)) = toEncoding $ LegacyValue <$> a
-  toEncoding (LegacyValue v) = toEncoding v
-
   {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
 
 instance FromJSON LegacyValue where
   parseJSON = fmap LegacyValue . parseJSON
@@ -156,8 +122,20 @@ instance FromJSON LegacyValue where
 -- the value to JSON.
 --
 toLegacyJson :: ToJSON a => a -> LegacyValue
-toLegacyJson a = LegacyValue (give LegacyValueAllowed $ toJSON a)
+toLegacyJson = LegacyValue . toJSON
 {-# INLINE toLegacyJson #-}
+
+-- Encode an aeson 'Value' in a way that is compatible with aeson <2
+--
+-- TODO: we should probalby create a dedicated value data type 'LegacyValue' for
+-- it instead of just newtype wrapping 'Value'
+--
+instance J.Encode LegacyValue where
+  build (LegacyValue (Object o)) = J.build $ LegacyValue <$> legacyKeyMap o
+  build (LegacyValue (Array a)) = J.build $ J.Array $ LegacyValue <$> a
+  build (LegacyValue v) = J.build v
+
+  {-# INLINE build #-}
 
 -- -------------------------------------------------------------------------- --
 -- Utils
@@ -190,8 +168,8 @@ enforceTextKeys = case toJSONKey of
 -- | Convert a 'AKM.KeyMap' that has a textual JSON key into LegacyHashMap which
 -- perserve the legacy ordering of keys.
 --
-legacyKeyMap :: AKM.KeyMap v -> LHM.HashMap AK.Key v
-legacyKeyMap = LHM.fromList . AKM.toList
+legacyKeyMap :: HasCallStack => AKM.KeyMap v -> LHM.HashMap T.Text v
+legacyKeyMap = LHM.fromList . fmap (first AK.toText) . AKM.toList
 {-# INLINE legacyKeyMap #-}
 
 -- -------------------------------------------------------------------------- --
@@ -266,4 +244,8 @@ legacyJsonPropertySort = LHM.sort
 legacyJsonPropertySortPairs :: [T.Text] -> [T.Text]
 legacyJsonPropertySortPairs = LHM.sort
 {-# INLINE legacyJsonPropertySortPairs #-}
+
+legacyHashSetToList :: HS.HashSet T.Text -> [T.Text]
+legacyHashSetToList = legacyJsonPropertySort . HS.toList
+{-# INLINE legacyHashSetToList #-}
 

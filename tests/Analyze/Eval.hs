@@ -42,7 +42,7 @@ import           Pact.Types.Runtime       (EvalEnv, PactError (..),
                                            PactErrorType (EvalError), eeMsgBody,
                                            runEval)
 import qualified Pact.Types.Term          as Pact
-import           Pact.Utils.LegacyValue
+import           Pact.JSON.Legacy.Value
 
 import           Analyze.Gen
 import           Analyze.Translate

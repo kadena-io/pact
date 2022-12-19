@@ -54,6 +54,8 @@ import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
 import Pact.Types.Util (enableToJSON)
 
+import qualified Pact.JSON.Encode as J
+
 data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
@@ -79,6 +81,18 @@ instance ToJSON PactValue where
   toEncoding (PGuard x) = toEncoding x
   toEncoding (PModRef m) = pairs $ modRefProperties_ m
     -- this uses a non-standard alternative JSON encoding for 'ModRef'
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance J.Encode PactValue where
+  build (PLiteral l) = J.build l
+  build (PObject o) = J.build o
+  build (PList v) = J.build (J.Array v)
+  build (PGuard x) = J.build x
+  build (PModRef m) = J.object $ modRefKeyValues_ m
+    -- this uses a non-standard alternative JSON encoding for 'ModRef'
+  {-# INLINE build #-}
 
 instance FromJSON PactValue where
   parseJSON v =
@@ -106,7 +120,6 @@ instance SizeOf PactValue where
   sizeOf ver (PObject o) = (constructorCost 1) + (sizeOf ver o)
   sizeOf ver (PGuard g) = (constructorCost 1) + (sizeOf ver g)
   sizeOf ver (PModRef m) = (constructorCost 1) + (sizeOf ver m)
-
 
 -- | Strict conversion.
 toPactValue :: Pretty n => Term n -> Either Text PactValue

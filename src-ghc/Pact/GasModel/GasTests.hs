@@ -35,7 +35,7 @@ import Pact.Types.Capability
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 
 -- | Gas benchmark tests for Pact native functions

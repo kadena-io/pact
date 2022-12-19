@@ -58,7 +58,7 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Capability
 import Pact.Runtime.Utils
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 -- | Flags for enabling file-based perf bracketing,
 -- see 'mkFilePerf' below.

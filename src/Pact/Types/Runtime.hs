@@ -89,8 +89,9 @@ import Pact.Types.SPV
 import Pact.Types.Util
 import Pact.Types.Namespace
 
-import Pact.Utils.LegacyValue (LegacyValue(..))
+import Pact.JSON.Legacy.Value (LegacyValue(..))
 
+import qualified Pact.JSON.Encode as J
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -174,11 +175,17 @@ flagReps = M.fromList $ map go [minBound .. maxBound]
 
 instance Pretty ExecutionFlag where
   pretty = pretty . flagRep
+
 instance ToJSON ExecutionFlag where
   toJSON = enableToJSON "Pact.Types.Runtime.ExecutionFlat" . String . flagRep
   toEncoding = toEncoding . flagRep
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode ExecutionFlag where
+  build = J.build . flagRep
+  {-# INLINE build #-}
+
 instance FromJSON ExecutionFlag where
   parseJSON = withText "ExecutionFlag" $ \t -> case M.lookup t flagReps of
     Nothing -> fail "Invalid ExecutionFlag value"
@@ -195,6 +202,13 @@ makeLenses ''ExecutionConfig
 instance Default ExecutionConfig where def = ExecutionConfig def
 instance Pretty ExecutionConfig where
   pretty = pretty . S.toList . _ecFlags
+
+instance Arbitrary ExecutionConfig where
+  arbitrary = ExecutionConfig <$> arbitrary
+
+instance J.Encode ExecutionConfig where
+  build o = J.build $ J.Array (_ecFlags o)
+  {-# INLINE build #-}
 
 mkExecutionConfig :: [ExecutionFlag] -> ExecutionConfig
 mkExecutionConfig = ExecutionConfig . S.fromList
@@ -247,7 +261,7 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Text (Ref, Maybe (ModuleHash))
+      _rsLoaded :: HM.HashMap Text (Ref, Maybe ModuleHash)
       -- | Modules that were loaded, and flag if updated.
     , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
       -- | Current Namespace
@@ -281,6 +295,15 @@ instance ToJSON PactEvent where
   toEncoding = pairs . mconcat . pactEventProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PactEvent where
+  build o = J.object
+    [ "params" J..= J.Array (_eventParams o)
+    , "name" J..= _eventName o
+    , "module" J..= _eventModule o
+    , "moduleHash" J..= _eventModuleHash o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
 

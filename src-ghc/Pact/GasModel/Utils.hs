@@ -81,7 +81,7 @@ import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.Namespace
 import Pact.Parse
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 
 -- | General helper functions

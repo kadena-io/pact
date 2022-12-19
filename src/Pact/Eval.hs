@@ -87,7 +87,7 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
 
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 #ifdef ADVICE
 import Pact.Types.Advice

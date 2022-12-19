@@ -4,7 +4,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 -- |
--- Module: Pact.Utils.LegacyHash
+-- Module: Pact.JSON.Legacy.Hash
 -- Copyright: Copyright © 2022 Kadena LLC.
 -- License: BSD-3
 --
@@ -15,7 +15,7 @@
 -- provided instances for base types the behavior is independent of the version
 -- of base that is used.
 --
-module Pact.Utils.LegacyHashable
+module Pact.JSON.Legacy.Hashable
 ( LegacyHashable(..)
 , LegacyHashed(..)
 , legacyHashSort

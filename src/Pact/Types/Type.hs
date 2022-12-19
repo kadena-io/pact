@@ -102,9 +102,11 @@ import Pact.Types.Pretty
 import Pact.Types.Util
 import Pact.Types.SizeOf
 
+import qualified Pact.JSON.Encode as J
+
 
 newtype TypeName = TypeName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show,J.Encode)
 
 instance SizeOf TypeName where
   sizeOf ver (TypeName n) = sizeOf ver n
@@ -137,6 +139,14 @@ instance ToJSON o => ToJSON (Arg o) where
   toEncoding = pairs . mconcat . argProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode o => J.Encode (Arg o) where
+  build o = J.object
+    [ "name" J..= _aName o
+    , "type" J..= _aType o
+    , "info" J..= _aInfo o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON o => FromJSON (Arg o) where
   parseJSON = withObject "Arg" $ \o -> Arg
@@ -172,6 +182,13 @@ instance ToJSON o => ToJSON (FunType o) where
   toEncoding = pairs . mconcat . funTypeProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode o => J.Encode (FunType o) where
+  build o = J.object
+    [ "args" J..= J.array (_ftArgs o)
+    , "return" J..= _ftReturn o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON o => FromJSON (FunType o) where
   parseJSON = withObject "FunType" $ \o -> FunType
@@ -224,6 +241,15 @@ instance ToJSON GuardType where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode GuardType where
+  build GTyKeySet = J.text "keyset"
+  build GTyKeySetName = J.text "keysetref"
+  build GTyPact = J.text "pact"
+  build GTyUser = J.text "user"
+  build GTyModule = J.text "module"
+  build GTyCapability = J.text "capability"
+  {-# INLINE build #-}
+
 instance FromJSON GuardType where
   parseJSON = withText "GuardType" $ \case
     "keyset" -> pure GTyKeySet
@@ -269,6 +295,15 @@ instance ToJSON PrimType where
     TyGuard g -> pairs ("guard" .= g)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PrimType where
+  build TyInteger = J.build tyInteger
+  build TyDecimal = J.build tyDecimal
+  build TyTime = J.build tyTime
+  build TyBool = J.build tyBool
+  build TyString = J.build tyString
+  build (TyGuard g) = J.object [ "guard" J..= g ]
+  {-# INLINE build #-}
 
 instance FromJSON PrimType where
   parseJSON v = withText "PrimType" doStr v <|> withObject "PrimType" doObj v
@@ -339,6 +374,12 @@ instance ToJSON SchemaType where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode SchemaType where
+  build TyTable = J.text "table"
+  build TyObject = J.text "object"
+  build TyBinding = J.text "binding"
+  {-# INLINE build #-}
+
 instance FromJSON SchemaType where
   parseJSON = withText "SchemaType" $ \case
     "table" -> pure TyTable
@@ -360,7 +401,7 @@ instance Arbitrary SchemaType where
   arbitrary = elements [TyTable, TyObject, TyBinding]
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData,J.Encode)
 
 instance Arbitrary TypeVarName where
   arbitrary = TypeVarName <$> arbitrary
@@ -392,6 +433,18 @@ instance ToJSON v => ToJSON (TypeVar v) where
   toEncoding = pairs . mconcat . typeVarProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode v => J.Encode (TypeVar v) where
+  build o@TypeVar{} = J.object
+    [ "tag" J..= J.text "TypeVar"
+    , "name" J..= _tvName o
+    , "constraint" J..= J.Array (_tvConstraint o)
+    ]
+  build o@SchemaVar{} = J.object
+    [ "tag" J..= J.text "SchemaVar"
+    , "name" J..= _tvName o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON v => FromJSON (TypeVar v) where
   parseJSON = withObject "TypeVar" $ \o -> (o .: "tag") >>= \case
@@ -448,6 +501,12 @@ instance ToJSON SchemaPartial where
     (PartialSchema s) -> toEncoding s
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode SchemaPartial where
+  build FullSchema = J.text "full"
+  build AnySubschema = J.text "any"
+  build (PartialSchema s) = J.build $ J.Array s
+  {-# INLINE build #-}
 
 instance FromJSON SchemaPartial where
   parseJSON v =
@@ -542,6 +601,17 @@ instance ToJSON v => ToJSON (Type v) where
     TyModule is -> pairs ("modspec" .= is)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode v => J.Encode (Type v) where
+  build TyAny = J.text "*"
+  build (TyVar n) = J.build n
+  build (TyPrim pt) = J.build pt
+  build (TyList l) = J.object [ "list" J..= l ]
+  build (TySchema st ty p) = J.object [ "schema" J..= st, "type" J..= ty, "partial" J..= p ]
+  build (TyFun f) = J.build f
+  build (TyUser v) = J.build v
+  build (TyModule is) = J.object [ "modspec" J..= (J.Array <$> is) ]
+  {-# INLINE build #-}
 
 instance FromJSON v => FromJSON (Type v) where
   parseJSON v =

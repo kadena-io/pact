@@ -39,7 +39,7 @@ import Pact.Types.PactValue (PactValue)
 import Pact.Types.SPV
 import Data.Time.Clock.System
 
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 initPactService
   :: CommandConfig

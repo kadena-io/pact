@@ -4,11 +4,11 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- |
--- Module: Test.Pact.Utils.LegacyHashMap
+-- Module: Test.Pact.JSON.Legacy.HashMap
 -- Copyright: Copyright © 2022 Kadena LLC.
 -- License: BSD-3
 --
-module Test.Pact.Utils.LegacyHashMap
+module Test.Pact.JSON.Legacy.HashMap
 ( spec
 ) where
 
@@ -21,7 +21,7 @@ import Test.QuickCheck.Instances ()
 
 -- internal modules
 
-import qualified Pact.Utils.LegacyHashMap as LHM
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 spec :: Spec
 spec = describe "LegacyHashMap" $ do

@@ -38,7 +38,7 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 spec :: Spec
 spec = do

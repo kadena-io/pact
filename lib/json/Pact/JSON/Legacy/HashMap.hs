@@ -1,12 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
 -- |
--- Module: Pact.Utils.LegacyHashMap
+-- Module: Pact.JSON.Legacy.HashMap
 -- Copyright: Copyright © 2022 Kadena LLC.
 -- License: BSD-3
 --
@@ -27,7 +28,7 @@
 -- released under the BSD-3 license and copyright of 2010-2014 Johan Tibell,
 -- 2010 Edward Z. Yang.
 --
-module Pact.Utils.LegacyHashMap
+module Pact.JSON.Legacy.HashMap
 ( HashMap
 
 -- * Creation
@@ -60,6 +61,7 @@ import Data.Bifoldable
 import Data.Bits
 import Data.Foldable (foldl')
 import qualified Data.Foldable as F
+import qualified Data.Text as T
 import Data.Word
 
 import GHC.Stack
@@ -68,7 +70,8 @@ import Prelude hiding (null)
 
 -- internal modules
 
-import Pact.Utils.LegacyHashable
+import qualified Pact.JSON.Encode as J
+import Pact.JSON.Legacy.Hashable
 
 -- -------------------------------------------------------------------------- --
 -- Backward Compat
@@ -87,7 +90,7 @@ type Bitmap = Word64
 type Shift  = Int
 
 data Leaf k v = L !k v
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- | A 'HashMap' that preserves the behavior of `Data.HashMap.Strict' from
 -- unordered-containers-0.2.15.0.
@@ -98,7 +101,7 @@ data HashMap k v
   | Leaf !Hash !(Leaf k v)
   | Full ![HashMap k v]
   | Collision !Hash ![Leaf k v]
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance ToJSONKey k => ToJSON1 (HashMap k) where
   liftToJSON _ _ = error "Pact.Utils.LegacyHashMap: Using toJSON on Legacy HashMaps is not supported"
@@ -113,6 +116,10 @@ instance (ToJSON v, ToJSONKey k) => ToJSON (HashMap k v) where
   toEncoding = toEncoding1
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode v => J.Encode (HashMap T.Text v) where
+  build = J.object . fmap (uncurry (J..=)) . toList
+  {-# INLINE build #-}
 
 instance Functor (HashMap k) where
   fmap = mapWithKey . const

@@ -8,7 +8,7 @@ import Data.String
 import Data.Default
 import Pact.Interpreter
 
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 rc :: a -> Method e a
 rc = const . return

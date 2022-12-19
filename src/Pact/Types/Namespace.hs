@@ -21,6 +21,8 @@ import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Util
 
+import qualified Pact.JSON.Encode as J
+
 import GHC.Generics
 
 import Test.QuickCheck
@@ -58,6 +60,14 @@ instance ToJSON a => ToJSON (Namespace a) where
   toEncoding = pairs . mconcat . namespaceProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode a => J.Encode (Namespace a) where
+  build o = J.object
+    [ "admin" J..= _nsAdmin o
+    , "user" J..= _nsUser o
+    , "name" J..= _nsName o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON a => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
 

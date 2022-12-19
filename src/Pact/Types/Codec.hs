@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -16,7 +17,7 @@ module Pact.Types.Codec
   , integerCodec
   , decimalCodec
   , timeCodec
-  , valueCodec
+  -- , valueCodec
   , pactISO8601Format
   , highPrecFormat
   , roundtripCodec
@@ -28,12 +29,14 @@ import qualified Data.Aeson as A
 import qualified Data.Aeson.Encoding as A
 import Data.Aeson hiding (Object)
 import Data.Aeson.Types (Parser,parse)
-import Data.Text (Text,unpack)
+import Data.Text (Text,pack,unpack)
+import Data.Scientific
 import Pact.Time
 import Data.Decimal (Decimal,DecimalRaw(..))
 import Text.Read (readMaybe)
 import Data.Ratio ((%), denominator)
 
+import qualified Pact.JSON.Encode as J
 
 
 -- | Min, max values that Javascript doesn't mess up.
@@ -50,18 +53,19 @@ isSafeInteger i = i >= l && i <= h
 
 -- | JSON codec pair.
 data Codec a = Codec {
-  encoder :: a -> Encoding,
+  encoder :: a -> J.Builder,
   decoder :: Value -> Parser a,
-  valueEncoder :: a -> Value
+  valueEncoder :: a -> Value,
+  aesonEncoder :: a -> Encoding
   }
 
 -- | Integers encode to an object that uses Number if in reasonable JS bounds or String otherwise.
 integerCodec :: Codec Integer
-integerCodec = Codec encodeInteger decodeInteger encodeIntegerToValue
+integerCodec = Codec encodeInteger decodeInteger encodeIntegerToValue aesonEncodeInteger
   where
     encodeInteger i
-      | isSafeInteger i = pairs ( field .= i )
-      | otherwise = pairs ( field .= show i )
+      | isSafeInteger i = J.object [ "int" J..= J.Aeson i ]
+      | otherwise = J.object [ "int" J..= pack (show i) ]
     {-# INLINE encodeInteger #-}
     encodeIntegerToValue i
       | isSafeInteger i = object [ field .= i ]
@@ -76,17 +80,20 @@ integerCodec = Codec encodeInteger decodeInteger encodeIntegerToValue
           Nothing -> fail $ "Invalid integer value: " ++ show s
         _ -> fail $ "Invalid integer value: " ++ show s
     {-# INLINE decodeInteger #-}
+    aesonEncodeInteger i
+      | isSafeInteger i = pairs ( field .= i )
+      | otherwise = pairs ( field .= show i )
     field = "int"
 
 -- | Decimals encode to a Scientific, which is encoded as an object + String
 -- if mantissa precision exceeds JS.
 -- TODO fromRational . toRational may not be the speediest.
 decimalCodec :: Codec Decimal
-decimalCodec = Codec enc dec encValue
+decimalCodec = Codec enc dec encValue aesonEnc
   where
     enc d@(Decimal _places mantissa)
-      | isSafeInteger mantissa = A.scientific $ fromRational $ toRational d
-      | otherwise = pairs ( field .= show d )
+      | isSafeInteger mantissa = J.build $ J.Aeson @Scientific $ fromRational $ toRational d
+      | otherwise = J.object [ "decimal" J..= pack (show d) ]
     {-# INLINE enc #-}
     encValue d@(Decimal _places mantissa)
       | isSafeInteger mantissa = Number $ fromRational $ toRational d
@@ -98,6 +105,10 @@ decimalCodec = Codec enc dec encValue
       Nothing -> fail $ "Invalid decimal value: " ++ show s
     dec v = fail $ "Invalid decimal value: " ++ show v
     {-# INLINE dec #-}
+    aesonEnc d@(Decimal _places mantissa)
+      | isSafeInteger mantissa = A.scientific $ fromRational $ toRational d
+      | otherwise = pairs ( field .= show d )
+    {-# INLINE aesonEnc #-}
     field = "decimal"
 
 -- | default Pact ISO8601 format
@@ -110,11 +121,11 @@ highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
 
 -- | Time uses
 timeCodec :: Codec UTCTime
-timeCodec = Codec enc dec encValue
+timeCodec = Codec enc dec encValue aesonEnc
   where
     enc t
-      | 1 == denom t = pairs ( field .= formatTime pactISO8601Format t )
-      | otherwise = pairs ( highprec .= formatTime highPrecFormat t )
+      | 1 == denom t = J.object [ "time" J..= pack (formatTime pactISO8601Format t) ]
+      | otherwise = J.object [ "timep" J..= pack (formatTime highPrecFormat t) ]
     {-# INLINE enc #-}
     encValue t
       | 1 == denom t = object [ field .= formatTime pactISO8601Format t ]
@@ -129,23 +140,28 @@ timeCodec = Codec enc dec encValue
               Just t -> return t
               Nothing -> fail $ "Invalid time value, expected " ++ fmt
     {-# INLINE dec #-}
+    aesonEnc t
+      | 1 == denom t = pairs ( field .= formatTime pactISO8601Format t )
+      | otherwise = pairs ( highprec .= formatTime highPrecFormat t )
+    {-# INLINE aesonEnc #-}
     field = "time"
     highprec = "timep"
 
     denom :: UTCTime -> Integer
-    denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
+    denom = denominator . (% 1000000) . fromIntegral . toPosixTimestampMicros
 
+{-
 valueCodec :: Codec Value
 valueCodec = Codec enc dec encVal
   where
-    enc v = pairs (field .= v)
+    enc v = J.object ["_P_val" J..= v]
     {-# INLINE enc #-}
     encVal v = object [field .= v]
     {-# INLINE encVal #-}
     dec = withObject "Value" $ \o -> o .: field
     {-# INLINE dec #-}
     field = "_P_val"
-
+-}
 
 roundtripCodec :: Codec t -> t -> Result t
 roundtripCodec c t = parse (decoder c) $ valueEncoder c t

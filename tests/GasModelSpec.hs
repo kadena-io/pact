@@ -42,8 +42,8 @@ import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
 
-import Pact.Utils.LegacyValue
-import qualified Pact.Utils.LegacyHashMap as LHM
+import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 import Test.Hspec.Core.Spec
 

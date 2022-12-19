@@ -21,7 +21,7 @@ import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromJSON')
 import Pact.Types.RPC
 import Pact.Types.Hash
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----

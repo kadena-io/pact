@@ -37,6 +37,7 @@ import Pact.Types.Continuation (PactExec)
 import Pact.Types.Pretty (Pretty(..), prettyString)
 import Pact.Types.Term (Object, Name)
 
+import qualified Pact.JSON.Encode as J
 
 newtype ContProof = ContProof { _contProof :: ByteString }
   deriving (Eq, Ord, Show, Generic)
@@ -49,6 +50,11 @@ instance ToJSON ContProof where
   toEncoding (ContProof bs) = toEncoding (decodeUtf8 bs)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode ContProof where
+  build (ContProof bs) = J.build $ decodeUtf8 bs
+  {-# INLINE build #-}
+
 instance FromJSON ContProof where
   parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
 instance Pretty ContProof where

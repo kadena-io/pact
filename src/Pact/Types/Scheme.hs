@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies, GADTs, DataKinds #-}
 
 
@@ -18,8 +19,11 @@ import Data.Kind (Type)
 import Data.Serialize
 import Data.Aeson
 import Test.QuickCheck
+import qualified Data.Text as T
 
 import Pact.Types.Util (ParseText(..))
+
+import qualified Pact.JSON.Encode as J
 
 
 --------- PPKSCHEME DATA TYPE ---------
@@ -30,9 +34,16 @@ data PPKScheme = ED25519 | ETH
 
 instance NFData PPKScheme
 instance Serialize PPKScheme
+
 instance ToJSON PPKScheme where
   toJSON ED25519 = "ED25519"
   toJSON ETH = "ETH"
+
+  toEncoding ED25519 = toEncoding @T.Text "ED25519"
+  toEncoding ETH = toEncoding @T.Text "ETH"
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" parseText
   {-# INLINE parseJSON #-}
@@ -45,6 +56,11 @@ instance ParseText PPKScheme where
 
 instance Arbitrary PPKScheme where
   arbitrary = elements [ED25519, ETH]
+
+instance J.Encode PPKScheme where
+  build ED25519 = J.text "ED25519"
+  build ETH = J.text "ETH"
+  {-# INLINE build #-}
 
 
 defPPKScheme :: PPKScheme

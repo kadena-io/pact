@@ -1,8 +1,9 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- |
 -- Module      :  Pact.Types.Info
@@ -51,6 +52,8 @@ import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Util
 
+import qualified Pact.JSON.Encode as J
+
 --import Pact.Types.Crypto (Hash(..))
 
 -- | Code location, length from parsing.
@@ -76,7 +79,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,SizeOf)
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,SizeOf,J.Encode)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c)
@@ -181,6 +184,22 @@ instance ToJSON Info where
     , "c" .= code
     ]
    where pl = _pLength
+
+instance J.Encode Info where
+  build (Info Nothing) = J.null
+  build (Info (Just (code,Parsed{..}))) = J.object
+    [ case _pDelta of
+      (Directed a b c d e) -> "d" J..= J.Array (i pl, decodeUtf8 a, i b, i c, i d, i e)
+      (Lines a b c d) -> "d" J..= J.Array (i pl, i a, i b, i c, i d)
+      (Columns a b) -> "d" J..= J.Array (i pl, i a, i b)
+      (Tab a b c) -> "d" J..= J.Array (i pl, i a, i b, i c)
+    , "c" J..= code
+    ]
+   where
+    pl = _pLength
+    i :: forall n . n -> J.Aeson n
+    i = J.Aeson
+
 
 instance FromJSON Info where
   parseJSON Null = pure $ Info Nothing

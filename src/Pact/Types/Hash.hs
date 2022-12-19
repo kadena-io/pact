@@ -43,6 +43,8 @@ import Data.Proxy
 import Test.QuickCheck
 import Test.QuickCheck.Instances()
 
+import qualified Pact.JSON.Encode as J
+
 #if !defined(ghcjs_HOST_OS)
 
 import qualified Data.ByteArray as ByteArray
@@ -82,6 +84,10 @@ instance ToJSON Hash where
   toEncoding = toEncoding . hashToText
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode Hash where
+  build = J.build . hashToText
+  {-# INLINE build #-}
 
 instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
@@ -146,6 +152,10 @@ instance ToJSON (TypedHash h) where
   toEncoding = toEncoding . typedHashToText
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode (TypedHash h) where
+  build = J.build . typedHashToText
+  {-# INLINE build #-}
 
 instance FromJSON (TypedHash h) where
   parseJSON = withText "Hash" parseText

@@ -69,6 +69,8 @@ import Pact.Types.Parser (style)
 import Text.Parser.Combinators (eof)
 import Text.Parser.Token
 
+import qualified Pact.JSON.Encode as J
+
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
@@ -94,6 +96,10 @@ instance ToJSON PublicKeyText where
   toEncoding = toEncoding . _pubKey
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PublicKeyText where
+  build = J.build . _pubKey
+  {-# INLINE build #-}
 
 instance Pretty PublicKeyText where
   pretty (PublicKeyText s) = pretty s
@@ -158,6 +164,13 @@ instance ToJSON KeySet where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode KeySet where
+  build o = J.object
+    [ "pred" J..= _ksPredFun o
+    , "keys" J..= J.Array (_ksKeys o)
+    ]
+  {-# INLINE build #-}
+
 -- -------------------------------------------------------------------------- --
 -- KeySetName
 
@@ -205,6 +218,15 @@ instance ToJSON KeySetName where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode KeySetName where
+  build ks@(KeySetName k n) = case n of
+    Nothing -> J.build k
+    Just{} -> J.object
+      [ "ns" J..= _ksnNamespace ks
+      , "ksn" J..= _ksnName ks
+      ]
+  {-# INLINE build #-}
 
 instance AsString KeySetName where
   asString (KeySetName n mns) = case mns of

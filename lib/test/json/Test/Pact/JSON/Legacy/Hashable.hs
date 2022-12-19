@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 -- |
--- Module: Test.Pact.Utils.LegacyHashable
+-- Module: Test.Pact.JSON.Legacy.Hashable
 -- Copyright: Copyright © 2022 Kadena LLC.
 -- License: MIT
 -- Maintainer: Lars Kuhtz <lars@kadena.io>
@@ -14,7 +14,7 @@
 --
 -- TODO
 --
-module Test.Pact.Utils.LegacyHashable
+module Test.Pact.JSON.Legacy.Hashable
 ( spec
 ) where
 
@@ -28,7 +28,7 @@ import Test.QuickCheck
 import Test.QuickCheck.Instances ()
 
 -- internal modules
-import Pact.Utils.LegacyHashable
+import Pact.JSON.Legacy.Hashable
 
 -- -------------------------------------------------------------------------- --
 -- Arbitray Instance

@@ -68,7 +68,7 @@ module Pact.Types.Term
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
-   ModRef(..),modRefName,modRefSpec,modRefInfo,modRefProperties_,
+   ModRef(..),modRefName,modRefSpec,modRefInfo,modRefProperties_, modRefKeyValues_,
    modRefTy,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
@@ -135,6 +135,8 @@ import Pact.Types.Util
 
 import Pact.Types.Term.Internal
 
+import qualified Pact.JSON.Encode as J
+
 -- -------------------------------------------------------------------------- --
 -- The following types have cyclic dependencies. There must be no TH splice
 -- in between the definitions of these types.
@@ -179,6 +181,17 @@ instance ToJSON FunApp where
   toEncoding = A.pairs . mconcat . funAppProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode FunApp where
+  build o = J.object
+    [ "defType" J..= _faDefType o
+    , "types" J..= J.Array (_faTypes o)
+    , "name" J..= _faName o
+    , "module" J..= _faModule o
+    , "docs" J..= _faDocs o
+    , "info" J..= _faInfo o
+    ]
+  {-# INLINEABLE build #-}
 
 instance FromJSON FunApp where parseJSON = lensyParseJSON 3
 instance HasInfo FunApp where getInfo = _faInfo
@@ -277,6 +290,19 @@ instance ToJSON n => ToJSON (Def n) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode n => J.Encode (Def n) where
+  build o = J.object
+    [ "defType" J..= _dDefType o
+    , "defMeta" J..= _dDefMeta o
+    , "funType" J..= _dFunType o
+    , "defName" J..= _dDefName o
+    , "defBody" J..= _dDefBody o
+    , "module" J..= _dModule o
+    , "meta" J..= _dMeta o
+    , "info" J..= _dInfo o
+    ]
+  {-# INLINEABLE build #-}
+
 instance FromJSON n => FromJSON (Def n) where parseJSON = lensyParseJSON 2
 
 derefDef :: Def n -> Name
@@ -322,6 +348,15 @@ instance ToJSON n => ToJSON (Lam n) where
   toEncoding = A.pairs . mconcat . lamProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode n => J.Encode (Lam n) where
+  build o = J.object
+    [ "amArg" J..= _lamArg o
+    , "amInfo" J..= _lamInfo o
+    , "amBindBody" J..= _lamBindBody o
+    , "amTy" J..= _lamTy o
+    ]
+  {-# INLINEABLE build #-}
 
 instance FromJSON n => FromJSON (Lam n) where
   parseJSON = lensyParseJSON 2
@@ -369,6 +404,15 @@ instance ToJSON n => ToJSON (Object n) where
   toEncoding = A.pairs . objectProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode n => J.Encode (Object n) where
+  build o = J.object
+    [ "obj" J..= _oObject o
+    , "keyorder" J..?= (J.Array <$> _oKeyOrder o)
+    , "type" J..= _oObjectType o
+    , "i" J..= _oInfo o
+    ]
+  {-# INLINEABLE build #-}
 
 instance FromJSON n => FromJSON (Object n) where
   parseJSON = withObject "Object" $ \o ->
@@ -864,6 +908,97 @@ termEnc kv val = \case
  where
   p = prop @Key
   inf i = ("i" :: Key) .= i
+
+-- termEnc
+--   :: KeyValue kv
+--   => ToJSON n
+--   => ([kv] -> e)
+--   -> (forall a . ToJSON a => a -> e)
+--   -> Term n
+--   -> e
+--
+--   toEncoding = termEnc (A.pairs . mconcat) toEncoding
+
+instance J.Encode n => J.Encode (Term n) where
+  build = \case
+    (TModule d b i) -> J.object
+      [ prop TermBody J..= b
+      , prop TermModule J..= d
+      , inf i
+      ]
+    (TList ts ty i) -> J.object
+      [ prop TermList J..= J.Array ts
+      , prop TermType J..= ty
+      , inf i
+      ]
+    (TDef d _i) -> J.build d
+    -- TNative intentionally not marshallable
+    (TNative n _fn tys _exs d tl i) -> J.object
+      [ prop TermNatFunTypes J..= J.Array tys
+      , prop TermName J..= n
+      , prop TermFun J..= J.null {- TODO fn -}
+      , prop TermNatTopLevel J..= tl
+      , prop TermNatExamples J..= J.null {- TODO exs -}
+      , prop TermNatDocs J..= d
+      , inf i
+      ]
+    (TConst d m c met i) -> J.object
+      [ prop TermModName J..= m
+      , prop TermConstArg J..= d
+      , prop TermMeta J..= met
+      , prop TermConstVal J..= c
+      , inf i
+      ]
+    (TApp a _i) -> J.build a
+    (TVar n i) -> J.object
+      [ prop TermVar J..= n
+      , inf i
+      ]
+    (TBinding bs b c i) -> J.object
+      [ prop TermBody J..= b
+      , prop TermPairs J..= J.Array bs
+      , prop TermType J..= c
+      , inf i
+      ]
+    (TObject o _i) -> J.build o
+    (TLiteral l i) -> J.object
+      [ inf i
+      , prop TermLiteral J..= l
+      ]
+    (TLam tlam _i) -> J.build tlam
+    (TGuard k i) -> J.object
+      [ prop TermGuard J..= k
+      , inf i
+      ]
+    (TUse u _i) -> J.build u
+    (TStep s tmeta i) -> J.object
+      [ prop TermBody J..= s
+      , prop TermMeta J..= tmeta
+      , inf i
+      ]
+    (TSchema sn smod smeta sfs i) -> J.object
+      [ prop TermModName J..= smod
+      , prop TermName J..= sn
+      , prop TermMeta J..= smeta
+      , inf i
+      , prop TermFields J..= J.Array sfs
+      ]
+    (TTable tn tmod th tty tmeta i) -> J.object
+      [ prop TermHash J..= th
+      , prop TermModName J..= tmod
+      , prop TermName J..= tn
+      , prop TermMeta J..= tmeta
+      , prop TermType J..= tty
+      , inf i
+      ]
+    (TDynamic r m i) -> J.object
+     [ prop TermDynRef J..= r
+     , inf i
+     , prop TermDynMem J..= m
+     ]
+    (TModRef mr _i) -> J.build mr
+   where
+    inf i = "i" J..= i
 
 instance FromJSON n => FromJSON (Term n) where
 

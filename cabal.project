@@ -7,7 +7,7 @@ constraints: base64-bytestring <1.1
 
 allow-newer: base64-bytestring:*
 allow-newer: base16-bytestring:*
-allow-newer: prettyprint:*
+allow-newer: prettyprinter:*
 
 -- test upper bounds
 constraints: hspec-golden <0.2

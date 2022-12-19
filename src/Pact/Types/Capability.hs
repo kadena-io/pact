@@ -45,6 +45,7 @@ import Pact.Types.Orphans ()
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 
+import qualified Pact.JSON.Encode as J
 
 
 data Capability
@@ -81,6 +82,13 @@ instance ToJSON SigCapability where
   toEncoding = pairs . mconcat . sigCapabilityProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode SigCapability where
+  build o = J.object
+    [ "args" J..= J.Array (_scArgs o)
+    , "name" J..= _scName o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON SigCapability where
   parseJSON = withObject "SigCapability" $ \o -> SigCapability

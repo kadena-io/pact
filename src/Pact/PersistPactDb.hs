@@ -52,7 +52,7 @@ import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger
 
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
 
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv

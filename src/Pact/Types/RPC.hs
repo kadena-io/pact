@@ -26,7 +26,8 @@ module Pact.Types.RPC
 import Control.Applicative
 import Control.DeepSeq
 
-import Data.Aeson as A
+-- Remove once migration is complete
+import Data.Aeson (toEncoding)
 
 import GHC.Generics
 
@@ -35,7 +36,11 @@ import Test.QuickCheck
 import Pact.Types.Orphans ()
 import Pact.Types.Runtime
 import Pact.Types.SPV
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Value
+
+import Pact.JSON.Decode
+import Pact.JSON.Value
+import qualified Pact.JSON.Encode as J
 
 
 data PactRPC c =
@@ -60,6 +65,11 @@ instance ToJSON c => ToJSON (PactRPC c) where
     {-# INLINE toJSON #-}
     {-# INLINE toEncoding #-}
 
+instance J.Encode c => J.Encode (PactRPC c) where
+  build (Exec p) = J.object ["cont" J..= p]
+  build (Continuation p) = J.object ["cont" J..= p]
+  {-# INLINE build #-}
+
 instance Arbitrary c => Arbitrary (PactRPC c) where
   arbitrary = oneof [Exec <$> arbitrary, Continuation <$> arbitrary]
 
@@ -70,23 +80,30 @@ data ExecMsg c = ExecMsg
 
 instance NFData c => NFData (ExecMsg c)
 instance FromJSON c => FromJSON (ExecMsg c) where
-    parseJSON =
-        withObject "PactMsg" $ \o ->
-            ExecMsg <$> o .: "code" <*> o .: "data"
-    {-# INLINE parseJSON #-}
+  parseJSON =
+      withObject "PactMsg" $ \o ->
+          ExecMsg <$> o .: "code" <*> o .: "data"
+  {-# INLINE parseJSON #-}
 
 execMsgProperties :: ToJSON c => JsonProperties (ExecMsg c)
 execMsgProperties o =
-    [ "data" .= _pmData o
-    , "code" .= _pmCode o
-    ]
+  [ "data" .= _pmData o
+  , "code" .= _pmCode o
+  ]
 {-# INLINE execMsgProperties #-}
 
 instance ToJSON c => ToJSON (ExecMsg c) where
-    toJSON = enableToJSON "Pact.Types.RPC.ExecMsg" . object . execMsgProperties
-    toEncoding = pairs . mconcat . execMsgProperties
-    {-# INLINE toJSON #-}
-    {-# INLINE toEncoding #-}
+  toJSON = enableToJSON "Pact.Types.RPC.ExecMsg" . object . execMsgProperties
+  toEncoding = pairs . mconcat . execMsgProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance J.Encode c => J.Encode (ExecMsg c) where
+  build o = J.object
+    [ "data" J..= _pmData o
+    , "code" J..= _pmCode o
+    ]
+  {-# INLINE build #-}
 
 instance Arbitrary c => Arbitrary (ExecMsg c) where
   arbitrary = ExecMsg <$> arbitrary <*> pure (toLegacyJson $ String "JSON VALUE")
@@ -101,27 +118,37 @@ data ContMsg = ContMsg
 
 instance NFData ContMsg
 instance FromJSON ContMsg where
-    parseJSON =
-        withObject "ContMsg" $ \o ->
-            ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
-            <*> o .: "proof"
-    {-# INLINE parseJSON #-}
+  parseJSON =
+      withObject "ContMsg" $ \o ->
+          ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
+          <*> o .: "proof"
+  {-# INLINE parseJSON #-}
 
 contMsgProperties :: JsonProperties ContMsg
 contMsgProperties o =
-    [ "proof" .= _cmProof o
-    , "data" .= _cmData o
-    , "pactId" .= _cmPactId o
-    , "rollback" .= _cmRollback o
-    , "step" .= _cmStep o
-    ]
+  [ "proof" .= _cmProof o
+  , "data" .= _cmData o
+  , "pactId" .= _cmPactId o
+  , "rollback" .= _cmRollback o
+  , "step" .= _cmStep o
+  ]
 {-# INLINE contMsgProperties #-}
 
 instance ToJSON ContMsg where
-    toJSON = enableToJSON "Pact.Types.RPC.ContMsg" . object . contMsgProperties
-    toEncoding = pairs . mconcat . contMsgProperties
-    {-# INLINE toJSON #-}
-    {-# INLINE toEncoding #-}
+  toJSON = enableToJSON "Pact.Types.RPC.ContMsg" . object . contMsgProperties
+  toEncoding = pairs . mconcat . contMsgProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance J.Encode ContMsg where
+  build o = J.object
+    [ "proof" J..= _cmProof o
+    , "data" J..= _cmData o
+    , "pactId" J..= _cmPactId o
+    , "rollback" J..= _cmRollback o
+    , "step" J..= J.Aeson (_cmStep o)
+    ]
+  {-# INLINE build #-}
 
 instance Arbitrary ContMsg where
   arbitrary = ContMsg

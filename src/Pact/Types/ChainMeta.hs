@@ -54,10 +54,12 @@ import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON, JsonProperties, enableToJSON)
 
+import qualified Pact.JSON.Encode as J
+
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.
 newtype EntityName = EntityName Text
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString)
+  deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString, J.Encode)
 
 instance Arbitrary EntityName where
   arbitrary = EntityName <$> arbitrary
@@ -66,7 +68,7 @@ instance Arbitrary EntityName where
 --
 newtype TTLSeconds = TTLSeconds ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
+  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize, J.Encode)
 
 instance Arbitrary TTLSeconds where
   arbitrary = TTLSeconds <$> arbitrary
@@ -75,7 +77,7 @@ instance Arbitrary TTLSeconds where
 --
 newtype TxCreationTime = TxCreationTime ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
+  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize, J.Encode)
 
 instance Arbitrary TxCreationTime where
   arbitrary = TxCreationTime <$> arbitrary
@@ -113,6 +115,13 @@ instance ToJSON Address where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode Address where
+  build o = J.object
+    [ "to" J..= J.Array (_aTo o)
+    , "from" J..= _aFrom o
+    ]
+  {-# INLINE build #-}
+
 instance FromJSON Address where parseJSON = lensyParseJSON 2
 makeLenses ''Address
 
@@ -135,6 +144,10 @@ instance ToJSON PrivateMeta where
   toEncoding = pairs . mconcat . privateMetaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PrivateMeta where
+  build o = J.object [ "address" J..= _pmAddress o ]
+  {-# INLINE build #-}
 
 instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
@@ -185,6 +198,17 @@ instance ToJSON PublicMeta where
   toEncoding = pairs . mconcat . publicMetaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PublicMeta where
+  build o = J.object
+    [ "creationTime" J..= _pmCreationTime o
+    , "ttl" J..= _pmTTL o
+    , "gasLimit" J..= _pmGasLimit o
+    , "chainId" J..= _pmChainId o
+    , "gasPrice" J..= _pmGasPrice o
+    , "sender" J..= _pmSender o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON PublicMeta where
   parseJSON = withObject "PublicMeta" $ \o -> PublicMeta
@@ -243,6 +267,15 @@ instance ToJSON PublicData where
   toEncoding = pairs. mconcat . publicDataProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PublicData where
+  build o = J.object
+    [ "publicMeta" J..= _pdPublicMeta o
+    , "blockTime" J..= J.Aeson (_pdBlockTime o)
+    , "prevBlockHash" J..= _pdPrevBlockHash o
+    , "blockHeight" J..= J.Aeson (_pdBlockHeight o)
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
 instance Default PublicData where def = PublicData def def def def

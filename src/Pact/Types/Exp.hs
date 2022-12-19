@@ -50,6 +50,7 @@ import Prelude
 import Data.Text (Text,pack)
 import Data.Aeson
 import Data.Maybe (fromMaybe)
+import Data.Monoid (Any(..))
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
@@ -66,6 +67,7 @@ import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText, JsonProperties, JsonMProperties, enableToJSON, (.?=))
 
+import qualified Pact.JSON.Encode as J
 
 
 -- | Custom generator of arbitrary UTCTime from
@@ -150,13 +152,22 @@ instance ToJSON Literal where
     toJSON (LTime t) = enableToJSON "Pact.Types.Exp.Literal" $ valueEncoder timeCodec t
 
     toEncoding (LString s) = toEncoding s
-    toEncoding (LInteger i) = encoder integerCodec i
-    toEncoding (LDecimal r) = encoder decimalCodec r
+    toEncoding (LInteger i) = aesonEncoder integerCodec i
+    toEncoding (LDecimal r) = aesonEncoder decimalCodec r
     toEncoding (LBool b) = toEncoding b
-    toEncoding (LTime t) = encoder timeCodec t
+    toEncoding (LTime t) = aesonEncoder timeCodec t
 
     {-# INLINE toJSON #-}
     {-# INLINE toEncoding #-}
+
+instance J.Encode Literal where
+    build (LString s) = J.build s
+    build (LInteger i) = encoder integerCodec i
+    build (LDecimal r) = encoder decimalCodec r
+    build (LBool b) = J.build b
+    build (LTime t) = encoder timeCodec t
+    {-# INLINE build #-}
+
 
 instance FromJSON Literal where
   parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
@@ -189,6 +200,12 @@ instance ToJSON ListDelimiter where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode ListDelimiter where
+  build Parens = J.build @Text "()"
+  build Brackets = J.build @Text "[]"
+  build Braces = J.build @Text "{}"
+  {-# INLINE build #-}
+
 instance Arbitrary ListDelimiter where
   arbitrary = elements [ Parens, Brackets, Braces ]
 
@@ -220,6 +237,13 @@ instance ToJSON Separator where
   toEncoding Colon = toEncoding @String ":"
   toEncoding ColonEquals = toEncoding @String ":="
   toEncoding Comma = toEncoding @String ","
+
+instance J.Encode Separator where
+  build Colon = J.build @Text ":"
+  build ColonEquals = J.build @Text ":="
+  build Comma = J.build @Text ","
+  {-# INLINE build #-}
+
 instance FromJSON Separator where
   parseJSON = withText "Separator" $ \t -> case t of
     ":" -> pure Colon
@@ -257,6 +281,13 @@ instance ToJSON i => ToJSON (LiteralExp i) where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode i => J.Encode (LiteralExp i) where
+  build o = J.object
+    [ expInfoField J..= _litInfo o
+    , "lit" J..= _litLiteral o
+    ]
+  {-# INLINE build #-}
+
 instance FromJSON i => FromJSON (LiteralExp i) where
   parseJSON = withObject "LiteralExp" $ \o ->
     LiteralExp <$> o .: "lit" <*> o .: expInfoField
@@ -290,6 +321,15 @@ instance ToJSON i => ToJSON (AtomExp i) where
   toEncoding = pairs . atomExpProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode i => J.Encode (AtomExp i) where
+  build o = J.object
+    [ "atom" J..= _atomAtom o
+    , "dyn" J..??= Any (_atomDynamic o)
+    , "q" J..= J.array (_atomQualifiers o)
+    , expInfoField J..= _atomInfo o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON i => FromJSON (AtomExp i) where
   parseJSON = withObject "AtomExp" $ \o ->
@@ -328,6 +368,14 @@ instance ToJSON i => ToJSON (ListExp i) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode i => J.Encode (ListExp i) where
+  build o = J.object
+    [ "list" J..= J.array (_listList o)
+    , "d" J..= _listDelimiter o
+    , expInfoField J..= _listInfo o
+    ]
+  {-# INLINE build #-}
+
 instance FromJSON i => FromJSON (ListExp i) where
   parseJSON = withObject "ListExp" $ \o ->
     ListExp <$> o .: "list" <*> o .: "d" <*> o .: expInfoField
@@ -364,6 +412,13 @@ instance ToJSON i => ToJSON (SeparatorExp i) where
 instance FromJSON i => FromJSON (SeparatorExp i) where
   parseJSON = withObject "SeparatorExp" $ \o ->
     SeparatorExp <$> o .: "sep" <*> o.: expInfoField
+
+instance J.Encode i => J.Encode (SeparatorExp i) where
+  build o = J.object
+    [ "sep" J..= _sepSeparator o
+    , expInfoField J..= _sepInfo o
+    ]
+  {-# INLINE build #-}
 
 instance Pretty (SeparatorExp i) where
   pretty (SeparatorExp sep' _) = pretty sep'
@@ -416,6 +471,13 @@ instance ToJSON i => ToJSON (Exp i) where
   toEncoding (EList a) = toEncoding a
   toEncoding (ESeparator a) = toEncoding a
 
+instance J.Encode i => J.Encode (Exp i) where
+  build (ELiteral a) = J.build a
+  build (EAtom a) = J.build a
+  build (EList a) = J.build a
+  build (ESeparator a) = J.build a
+  {-# INLINE build #-}
+
 instance FromJSON i => FromJSON (Exp i) where
   parseJSON v =
     (ELiteral <$> parseJSON v) <|>
@@ -446,9 +508,6 @@ pattern CommaExp <- ESeparator (SeparatorExp Comma _i)
 
 pattern ColonExp :: Exp t
 pattern ColonExp <- ESeparator (SeparatorExp Colon _i)
-
-
-
 
 -- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode

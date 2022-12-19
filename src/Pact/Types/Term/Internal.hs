@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -83,6 +84,7 @@ module Pact.Types.Term.Internal
 , modRefSpec
 , modRefInfo
 , modRefProperties_
+, modRefKeyValues_
 , Gas(..)
 ) where
 
@@ -125,8 +127,10 @@ import Pact.Types.SizeOf
 import Pact.Types.Type
 import Pact.Types.Util
 
-import Pact.Utils.LegacyHashable
-import Pact.Utils.LegacyValue
+import Pact.JSON.Legacy.Hashable
+import Pact.JSON.Legacy.Value
+
+import qualified Pact.JSON.Encode as J
 
 -- -------------------------------------------------------------------------- --
 -- Meta
@@ -161,6 +165,12 @@ instance ToJSON Meta where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode Meta where
+  build o = J.object
+    [ "model" J..= J.array (_mModel o)
+    , "docs" J..= _mDocs o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON Meta where parseJSON = lensyParseJSON 2
 
@@ -176,7 +186,7 @@ instance Monoid Meta where
 -- PactId
 
 newtype PactId = PactId Text
-    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON, FromJSONKey, ToJSONKey, Generic,NFData,SizeOf,LegacyHashable)
+    deriving (Eq,Ord,Show,Pretty,AsString,IsString,FromJSON,ToJSON,FromJSONKey,ToJSONKey,Generic,NFData,SizeOf,LegacyHashable,J.Encode)
 
 -- -------------------------------------------------------------------------- --
 -- UserGuard
@@ -196,7 +206,7 @@ instance Pretty a => Pretty (UserGuard a) where
 
 instance (SizeOf p) => SizeOf (UserGuard p) where
   sizeOf ver (UserGuard n arr) =
-    (constructorCost 2) + (sizeOf ver n) + (sizeOf ver arr)
+    constructorCost 2 + sizeOf ver n + sizeOf ver arr
 
 userGuardProperties :: ToJSON a => JsonProperties (UserGuard a)
 userGuardProperties o =
@@ -210,6 +220,13 @@ instance ToJSON a => ToJSON (UserGuard a) where
   toEncoding = A.pairs . mconcat . userGuardProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode a => J.Encode (UserGuard a) where
+  build o = J.object
+    [ "args" J..= J.array (_ugArgs o)
+    , "fun" J..= _ugFun o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON a => FromJSON (UserGuard a) where parseJSON = lensyParseJSON 3
 
@@ -225,6 +242,12 @@ data DefType
 instance FromJSON DefType
 instance ToJSON DefType
 instance NFData DefType
+
+instance J.Encode DefType where
+  build Defun = J.text "Defun"
+  build Defpact = J.text "Defpact"
+  build Defcap = J.text "Defcap"
+  {-# INLINE build #-}
 
 instance SizeOf DefType where
   sizeOf _ _ = 0
@@ -243,6 +266,7 @@ instance Pretty DefType where
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
   deriving (Eq,Ord,Num,Real,Integral,Enum,ToJSON,FromJSON,Generic,NFData)
+  deriving J.Encode via (J.Aeson Int64)
 
 instance Show Gas where show (Gas g) = show g
 
@@ -279,6 +303,11 @@ instance ToJSON n => ToJSON (BindType n) where
 
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode n => J.Encode (BindType n) where
+  build BindLet = J.text "let"
+  build (BindSchema s) = J.object [ "bind" J..= s ]
+  {-# INLINEABLE build #-}
 
 instance FromJSON n => FromJSON (BindType n) where
   parseJSON v =
@@ -318,6 +347,13 @@ instance ToJSON n => ToJSON (BindPair n) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode n => J.Encode (BindPair n) where
+  build o = J.object
+    [ "arg" J..= _bpArg o
+    , "val" J..= _bpVal o
+    ]
+  {-# INLINEABLE build #-}
+
 instance FromJSON n => FromJSON (BindPair n) where parseJSON = lensyParseJSON 3
 
 instance (SizeOf n) => SizeOf (BindPair n)
@@ -346,6 +382,14 @@ instance ToJSON t => ToJSON (App t) where
   toEncoding = A.pairs . mconcat . appProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode t => J.Encode (App t) where
+  build o = J.object
+    [ "args" J..= J.Array (_appArgs o)
+    , "fun" J..= _appFun o
+    , "info" J..= _appInfo o
+    ]
+  {-# INLINEABLE build #-}
 
 instance FromJSON t => FromJSON (App t) where
   parseJSON = withObject "App" $ \o -> App
@@ -385,6 +429,11 @@ instance ToJSON g => ToJSON (Governance g) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode g => J.Encode (Governance g) where
+  build (Governance (Left ks)) = J.object [ "keyset" J..= ks ]
+  build (Governance (Right c)) = J.object [ "capability" J..= c ]
+  {-# INLINEABLE build #-}
+
 instance FromJSON g => FromJSON (Governance g) where
   parseJSON = withObject "Governance" $ \o ->
     Governance <$> (Left <$> o .: "keyset" <|>
@@ -396,7 +445,7 @@ instance FromJSON g => FromJSON (Governance g) where
 -- | Newtype wrapper differentiating 'Hash'es from module hashes
 --
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
-  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText)
+  deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText, J.Encode)
   deriving newtype (NFData, SizeOf)
 
 -- -------------------------------------------------------------------------- --
@@ -438,10 +487,19 @@ instance ToJSON n => ToJSON (DefcapMeta n) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode n => J.Encode (DefcapMeta n) where
+  build (DefcapManaged (Just (p,f))) = J.object
+    [ "managedParam" J..= p
+    , "managerFun" J..= f
+    ]
+  build (DefcapManaged Nothing) = J.object [ "managerAuto" J..= True ]
+  build DefcapEvent = J.text "event"
+  {-# INLINEABLE build #-}
+
 instance FromJSON n => FromJSON (DefcapMeta n) where
   parseJSON v = parseUser v <|> parseAuto v <|> parseEvent v
     where
-      parseUser = withObject "DefcapMeta" $ \o -> (DefcapManaged . Just) <$>
+      parseUser = withObject "DefcapMeta" $ \o -> DefcapManaged . Just <$>
         ((,) <$> o .: "managedParam" <*> o .: "managerFun")
       parseAuto = withObject "DefcapMeta" $ \o -> do
         b <- o .: "managerAuto"
@@ -472,6 +530,10 @@ instance ToJSON n => ToJSON (DefMeta n) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode n => J.Encode (DefMeta n) where
+  build (DMDefcap m) = J.build m
+  {-# INLINEABLE build #-}
+
 instance FromJSON n => FromJSON (DefMeta n) where
   parseJSON = fmap DMDefcap . parseJSON
 
@@ -498,6 +560,11 @@ instance ToJSON n => ToJSON (ConstVal n) where
   toEncoding = A.pairs . mconcat . constValProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode n => J.Encode (ConstVal n) where
+  build (CVRaw n) = J.object [ "raw" J..= n ]
+  build (CVEval n m) = J.object [ "raw" J..= n, "eval" J..= m ]
+  {-# INLINEABLE build #-}
 
 instance FromJSON n => FromJSON (ConstVal n) where
   parseJSON v =
@@ -543,7 +610,7 @@ instance SizeOf Example
 
 -- | Label type for objects.
 newtype FieldKey = FieldKey Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey,SizeOf,LegacyHashable)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Show,NFData,Generic,ToJSONKey,SizeOf,LegacyHashable,J.Encode)
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
@@ -572,6 +639,15 @@ instance ToJSON n => ToJSON (Step n) where
   toEncoding = A.pairs . mconcat . stepProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode n => J.Encode (Step n) where
+  build o = J.object
+    [ "exec" J..= _sExec o
+    , "rollback" J..= _sRollback o
+    , "entity" J..= _sEntity o
+    , "info" J..= _sInfo o
+    ]
+  {-# INLINEABLE build #-}
 
 instance FromJSON n => FromJSON (Step n) where
   parseJSON = withObject "Step" $ \o -> Step
@@ -631,6 +707,14 @@ instance ToJSON ModRef where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode ModRef where
+  build o = J.object
+    [ "refSpec" J..= (J.Array <$> _modRefSpec o)
+    , "refInfo" J..= _modRefInfo o
+    , "refName" J..= _modRefName o
+    ]
+  {-# INLINEABLE build #-}
+
 instance FromJSON ModRef where parseJSON = lensyParseJSON 4
 instance Ord ModRef where
   (ModRef a b _) `compare` (ModRef c d _) = (a,b) `compare` (c,d)
@@ -656,6 +740,17 @@ modRefProperties_ o = mconcat
   refInfo = _modRefInfo o
 {-# INLINEABLE modRefProperties_ #-}
 
+modRefKeyValues_ :: ModRef -> [Maybe J.KeyValue]
+modRefKeyValues_ o =
+    [ "refSpec" J..= (J.Array <$> _modRefSpec o)
+    , "refInfo" J..?= if refInfo /= def then Just refInfo else Nothing
+      -- this property is different from the instance Pact.Types.Term.ModRef
+    , "refName" J..= _modRefName o
+    ]
+ where
+  refInfo = _modRefInfo o
+{-# INLINEABLE modRefKeyValues_ #-}
+
 -- -------------------------------------------------------------------------- --
 -- ModuleGuard
 
@@ -674,7 +769,7 @@ instance Pretty ModuleGuard where
 
 instance SizeOf ModuleGuard where
   sizeOf ver (ModuleGuard md n) =
-    (constructorCost 2) + (sizeOf ver md) + (sizeOf ver n)
+    constructorCost 2 + sizeOf ver md + sizeOf ver n
 
 moduleGuardProperties :: JsonProperties ModuleGuard
 moduleGuardProperties o =
@@ -688,6 +783,13 @@ instance ToJSON ModuleGuard where
   toEncoding = A.pairs . mconcat . moduleGuardProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode ModuleGuard where
+  build o = J.object
+    [ "moduleName" J..= _mgModuleName o
+    , "name" J..= _mgName o
+    ]
+  {-# INLINABLE build #-}
 
 instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
 
@@ -724,6 +826,13 @@ instance ToJSON PactGuard where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode PactGuard where
+  build o = J.object
+    [ "pactId" J..= _pgPactId o
+    , "name" J..= _pgName o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
@@ -751,6 +860,10 @@ instance ToJSON v => ToJSON (ObjectMap v) where
   toEncoding (ObjectMap om) = toEncoding $ legacyMap om
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode v => J.Encode (ObjectMap v) where
+  build (ObjectMap om) = J.build $ legacyMap om
+  {-# INLINEABLE build #-}
 
 instance FromJSON v => FromJSON (ObjectMap v) where
   parseJSON v = flip (withObject "ObjectMap") v $ \_ ->
@@ -790,6 +903,15 @@ instance ToJSON Use where
   toEncoding = A.pairs . mconcat . useProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode Use where
+  build o = J.object
+    [ "hash" J..= _uModuleHash o
+    , "imports" J..= (J.Array <$> _uImports o)
+    , "module" J..= _uModuleName o
+    ,  "i" J..= _uInfo o
+    ]
+  {-# INLINABLE build #-}
 
 instance FromJSON Use where
   parseJSON = withObject "Use" $ \o ->
@@ -838,6 +960,14 @@ instance ToJSON a => ToJSON (CapabilityGuard a) where
   toEncoding = A.pairs . mconcat . capabilityGuardProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode a => J.Encode (CapabilityGuard a) where
+  build o = J.object
+    [ "cgPactId" J..= _cgPactId o
+    , "cgArgs" J..= J.Array (_cgArgs o)
+    , "cgName" J..= _cgName o
+    ]
+  {-# INLINABLE build #-}
 
 instance FromJSON a => FromJSON (CapabilityGuard a) where
   parseJSON = lensyParseJSON 1
@@ -944,6 +1074,15 @@ instance ToJSON a => ToJSON (Guard a) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode a => J.Encode (Guard a) where
+  build (GKeySet k) = J.build k
+  build (GKeySetRef n) = J.object ["keysetref" J..= n]
+  build (GPact g) = J.build g
+  build (GModule g) = J.build g
+  build (GUser g) = J.build g
+  build (GCapability g) = J.build g
+  {-# INLINEABLE build #-}
+
 instance FromJSON a => FromJSON (Guard a) where
   parseJSON v = case props v of
     [GuardKeys, GuardPred] -> GKeySet <$> parseJSON v
@@ -1000,6 +1139,21 @@ instance ToJSON g => ToJSON (Module g) where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode g => J.Encode (Module g) where
+  build o = J.object
+    [ "hash" J..= _mHash o
+    , "blessed" J..= J.Array (legacyHashSetToList (HS.map moduleHashText (_mBlessed o)))
+    , "interfaces" J..= J.Array (_mInterfaces o)
+    , "imports" J..= J.Array (_mImports o)
+    , "name" J..= _mName o
+    , "code" J..= _mCode o
+    , "meta" J..= _mMeta o
+    , "governance" J..= _mGovernance o
+    ]
+   where
+    moduleHashText = hashToText . _mhHash
+  {-# INLINEABLE build #-}
+
 instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
 
 instance (SizeOf g) => SizeOf (Module g)
@@ -1031,6 +1185,15 @@ instance ToJSON Interface where
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
 
+instance J.Encode Interface where
+  build o = J.object
+    [ "imports" J..= J.Array (_interfaceImports o)
+    , "name" J..= _interfaceName o
+    , "code" J..= _interfaceCode o
+    , "meta" J..= _interfaceMeta o
+    ]
+  {-# INLINEABLE build #-}
+
 instance FromJSON Interface where parseJSON = lensyParseJSON 10
 
 instance NFData Interface
@@ -1061,6 +1224,11 @@ instance ToJSON g => ToJSON (ModuleDef g) where
 
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+
+instance J.Encode g => J.Encode (ModuleDef g) where
+  build (MDModule m) = J.build m
+  build (MDInterface i) = J.build i
+  {-# INLINEABLE build #-}
 
 instance FromJSON g => FromJSON (ModuleDef g) where
   parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v

@@ -23,3 +23,9 @@ cradle:
 
     - path: "./tests"
       component: "pact:test:hspec"
+
+    - path: "./lib/json"
+      component: "pact:lib:json"
+
+    - path: "./lib/test/json"
+      component: "pact:test:json"
