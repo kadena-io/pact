@@ -54,9 +54,9 @@ instance Readable RowKey where
   readable = ReadKey
 instance Readable TxId where
   readable = const ReadTxId
-instance Readable (TxLog RowData) where
+instance Readable TxLog where
   readable = ReadData . _txValue
-instance Readable (TxId, TxLog RowData) where
+instance Readable (TxId, TxLog) where
   readable = ReadData . _txValue . snd
 
 -- | Parameterize calls to 'guardTable' with op.
