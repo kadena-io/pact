@@ -44,6 +44,7 @@ import Data.Text.Encoding
 
 import Text.Trifecta as TF hiding (err)
 
+import qualified Pact.Analyze.Check as Check
 import Pact.Coverage
 import Pact.Repl
 import Pact.Parse
@@ -62,6 +63,7 @@ data Option =
   | OBuiltins
   | OGenKey
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oCoverage :: Bool, _oFile :: String }
+  | OVerify { _oVerifyFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
   | OUnsignedReq { _oReqYaml :: FilePath }
@@ -94,6 +96,10 @@ replOpts =
          (O.short 'c' <> O.long "coverage" <> O.help "Generate coverage report coverage/lcov.info")
      <*> O.argument O.str
         (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")
+    ) <|>
+    (OVerify
+      <$> O.strOption (O.long "verify" <> O.metavar "FILE" <> 
+          O.help "File path to .pact file to run verification.")
     ) <|>
     (OApiReq <$> O.strOption (O.short 'a' <> O.long "apireq" <> O.metavar "REQ_YAML" <>
                              O.help "Format API request JSON using REQ_YAML file")
@@ -167,6 +173,8 @@ main = O.execParser argParser >>= \as -> case as of
               Nothing -> compileOnly fp >>= exitLoad
         | otherwise -> runScript dolog fp coverage
 
+    OVerify fp -> runVerification fp
+
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
 
     OGenKey -> genKeys
@@ -199,6 +207,23 @@ main = O.execParser argParser >>= \as -> case as of
             (ref,adv) <- mkCoverageAdvice
             return (Just ref, set (rEnv . eeAdvice) adv)
 
+    runVerification fp = do
+      (r, rs) <- execScript' (Script False fp) fp
+      case r of
+        Left err -> die err
+        Right _ -> do
+          mods <- replGetModules rs
+          case mods of 
+            Left err -> putStrLn $ show err
+            Right (hm, _) -> do
+              let modNames = HM.keys hm
+              putStrLn $ "Found [" <> intercalate " " (asString' <$> modNames) <> "] modules:"
+              vrs <- mapM (Check.verifyModule mempty hm) (HM.elems hm)
+              forM_ (modNames `zip` vrs) $ \(name, vr) ->
+                let renderedLines = Check.renderVerifiedModule vr
+                in if any ((== OutputFailure) . _roType) renderedLines
+                  then putStrLn $ "\tVerification of " <> asString' name <> " failed." 
+                  else putStrLn $ "\tVerification of " <> asString' name <> " succeeded."
 
 getMode :: IO ReplMode
 #ifdef mingw32_HOST_OS
