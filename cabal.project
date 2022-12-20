@@ -1,5 +1,7 @@
 packages: .
 
+packages: ../pact-json
+
 -- these upper bounds are required in order to not break payload validation in chainweb
 constraints: base16-bytestring <1
 constraints: prettyprinter <1.6.1
