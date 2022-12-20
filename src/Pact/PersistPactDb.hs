@@ -75,7 +75,7 @@ initDbEnv loggers funrec p = DbEnv {
   _mode = Nothing
   }
 
-data UserTableInfo = UserTableInfo
+newtype UserTableInfo = UserTableInfo
   { utModule :: ModuleName
   } deriving (Eq,Show,Generic,Typeable)
 
