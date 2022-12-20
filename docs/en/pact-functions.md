@@ -2147,8 +2147,14 @@ Typecheck MODULE, optionally enabling DEBUG output.
 
 *module*&nbsp;`string` *&rarr;*&nbsp;`string`
 
+*module*&nbsp;`string` *filepath*&nbsp;`string` *&rarr;*&nbsp;`string`
 
-Verify MODULE, checking that all properties hold.
+
+Verify MODULE, checking that all properties hold, optionally enabling SMTLib2 file generation by supplying a FILEPATH
+```lisp
+(verify "module")
+(verify "module" "/path/to/out.smt")
+```
 
 
 ### with-applied-env {#with-applied-env}
