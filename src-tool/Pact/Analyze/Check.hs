@@ -77,7 +77,7 @@ import           Pact.Types.Pretty          (renderCompactText)
 import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
                                              Ref, Ref' (Ref),
                                              Term (TConst, TDef, TSchema, TTable),
-                                             asString, getInfo, mdModule,
+                                             asString, asString', getInfo, mdModule,
                                              mdRefMap, tShow)
 import qualified Pact.Types.Runtime         as Pact
 import           Pact.Types.Term            (DefName (..),
@@ -384,15 +384,14 @@ analysisArgs = fmap (view (located._2._2))
 -- | Check that all invariants hold for a function (this is actually used for
 -- defun, defpact, and step)
 verifyFunctionInvariants
-  :: Maybe FilePath
+  :: Bool
   -> CheckEnv
   -> FunData
   -> Text
   -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants tf (CheckEnv tables _consts _pDefs moduleData caps gov _de)
+verifyFunctionInvariants debug (CheckEnv tables _consts _pDefs moduleData caps gov _de)
   (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
-    let modName = moduleDefName $ _mdModule moduleData
 
     -- ignoring warnings here as they will be collected in 'verifyFunctionProperty'
     (args, stepChoices, tm, graph, _) <- hoist generalize $
@@ -452,23 +451,26 @@ verifyFunctionInvariants tf (CheckEnv tables _consts _pDefs moduleData caps gov 
     catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
       pure $ Left $ CheckFailure funInfo $ SmtFailure $ UnexpectedFailure e
 
+    modName = moduleDefName $ _mdModule moduleData
+
+    debugFile = if debug then Just $ ".pact-verify-"<> asString' modName else Nothing
+
     runSymbolic :: Symbolic a -> IO a
-    runSymbolic = SBV.runSMTWith smtConfig{SBVI.transcript = tf}
+    runSymbolic = SBV.runSMTWith smtConfig{SBVI.transcript = debugFile}
 
 -- | Check that a specific property holds for a function (this is actually used
 -- for defun, defpact, and step)
 verifyFunctionProperty
-  :: Maybe FilePath
+  :: Bool
   -> CheckEnv
   -> FunData
   -> Text
   -> CheckableType
   -> Located Check
   -> IO [Either CheckFailure CheckSuccess]
-verifyFunctionProperty tf (CheckEnv tables _consts _propDefs moduleData caps gov _de)
+verifyFunctionProperty debug (CheckEnv tables _consts _propDefs moduleData caps gov _de)
   (FunData funInfo pactArgs body) funName checkType
   (Located propInfo check) = fmap sequence' $ runExceptT $ do
-    let modName = moduleDefName (_mdModule moduleData)
     (args, stepChoices, tm, graph, warnings) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation modName funName funInfo caps pactArgs body checkType
@@ -537,6 +539,8 @@ verifyFunctionProperty tf (CheckEnv tables _consts _propDefs moduleData caps gov
       return $ (Right r : map (Left . translateToCheckFailure) warnings)
 
   where
+    modName = moduleDefName (_mdModule moduleData)
+
     goal :: Goal
     goal = checkGoal check
 
@@ -550,15 +554,17 @@ verifyFunctionProperty tf (CheckEnv tables _consts _propDefs moduleData caps gov
     catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
       pure $ Left $ smtToCheckFailure propInfo $ UnexpectedFailure e
 
+    debugFile = if debug then Just $ ".pact-verify-"<> asString' modName else Nothing
+
     -- Run a 'Symbolic' in sat mode
     runSymbolicSat :: Symbolic a -> IO a
-    runSymbolicSat = SBV.runSMTWith smtConfig{SBVI.transcript = tf}
+    runSymbolicSat = SBV.runSMTWith smtConfig{SBVI.transcript = debugFile}
 
     -- Run a 'Symbolic' in the mode corresponding to our goal
     runSymbolicGoal :: Symbolic a -> IO a
     runSymbolicGoal = fmap fst
       . SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup
-        (goal == Satisfaction) smtConfig{SBVI.transcript = tf})
+        (goal == Satisfaction) smtConfig{SBVI.transcript = debugFile})
 
 -- | Get the set of tables in the specified modules.
 moduleTables
@@ -1012,11 +1018,11 @@ getConsts de defconstRefs = do
 -- properties of individual steps here. Invariants are checked in at the
 -- defpact level.
 getStepChecks
-  :: Maybe FilePath
+  :: Bool
   -> CheckEnv
   -> HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult])
-getStepChecks tf env@(CheckEnv tables consts propDefs _ _ _ de) defpactRefs = do
+getStepChecks debug env@(CheckEnv tables consts propDefs _ _ _ de) defpactRefs = do
 
   (steps :: HM.HashMap (Text, Int)
     ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
@@ -1052,20 +1058,20 @@ getStepChecks tf env@(CheckEnv tables consts propDefs _ _ _ de) defpactRefs = do
 
   lift $ fmap (fmap (nub . concat)) $ ifor stepChecks' $
     \(name, _stepNum) ((node, args, info), checks) -> for checks $
-     verifyFunctionProperty tf env (FunData info args [node]) name CheckPactStep
+     verifyFunctionProperty debug env (FunData info args [node]) name CheckPactStep
 
 
 -- | Get the set of property and invariant check results for functions (defun
 -- and defpact)
 getFunChecks
-  :: Maybe FilePath
+  :: Bool 
   -> CheckEnv
   -> HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO
     ( HM.HashMap Text [CheckResult]
     , HM.HashMap Text (TableMap [CheckResult])
     )
-getFunChecks tf env@(CheckEnv tables consts propDefs moduleData _cs _g de) refs = do
+getFunChecks debug env@(CheckEnv tables consts propDefs moduleData _cs _g de) refs = do
   ModelDecl _ checkExps <-
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
@@ -1110,14 +1116,14 @@ getFunChecks tf env@(CheckEnv tables consts propDefs moduleData _cs _g de) refs 
   invariantChecks <- ifor invariantCheckable $ \name (toplevel, checkType) ->
     case toplevel of
       TopFun fun _ -> withExceptT ModuleCheckFailure $ ExceptT $
-        verifyFunctionInvariants tf env (mkFunInfo fun) name checkType
+        verifyFunctionInvariants debug env (mkFunInfo fun) name checkType
       _ -> error "invariant violation: anything but a TopFun is unexpected in \
         \invariantCheckable"
 
   funChecks'' <- lift $ ifor funChecks' $ \name ((toplevel, checkType), checks)
     -> case toplevel of
       TopFun fun _ -> for checks $
-        verifyFunctionProperty tf env (mkFunInfo fun) name checkType
+        verifyFunctionProperty debug env (mkFunInfo fun) name checkType
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
 
@@ -1174,12 +1180,12 @@ moduleGovernance moduleData = case _mdModule moduleData of
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
-  :: Maybe FilePath                         -- ^ transcription file
+  :: Bool
   -> DynEnv
   -> HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
-verifyModule tf de modules moduleData@(ModuleData modDef allRefs _) = runExceptT $ do
+verifyModule debug de modules moduleData@(ModuleData modDef allRefs _) = runExceptT $ do
   let modRefs = moduleRefs moduleData
 
   consts <- getConsts de $ modRefs ^. defconsts
@@ -1239,8 +1245,8 @@ verifyModule tf de modules moduleData@(ModuleData modDef allRefs _) = runExceptT
       -- Note that invariants are only checked at the defpact level, not in
       -- individual steps.
       (funChecks, invariantChecks)
-        <- getFunChecks tf  checkEnv $ defunRefs <> defpactRefs
-      stepChecks <- getStepChecks tf checkEnv defpactRefs
+        <- getFunChecks debug checkEnv $ defunRefs <> defpactRefs
+      stepChecks <- getStepChecks debug checkEnv defpactRefs
 
       pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
 
@@ -1280,14 +1286,14 @@ renderVerifiedModule = \case
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
-  :: Maybe FilePath
+  :: Bool
   -> DynEnv
   -> ModuleData Ref -- ^ the module we're verifying
   -> Text           -- ^ the name of the function
   -> Check          -- ^ the check we're running
   -> CheckableType
   -> ExceptT VerificationFailure IO [CheckResult]
-verifyCheck ft de moduleData funName check checkType = do
+verifyCheck debug de moduleData funName check checkType = do
   let info       = dummyInfo
       moduleName = moduleDefName $ moduleData ^. mdModule
       modules    = HM.fromList [(moduleName, moduleData)]
@@ -1308,7 +1314,7 @@ verifyCheck ft de moduleData funName check checkType = do
       case toplevel of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
         Right (TopFun fun _) -> ExceptT $ fmap Right $
-          verifyFunctionProperty ft checkEnv (mkFunInfo fun) funName checkType $
+          verifyFunctionProperty debug checkEnv (mkFunInfo fun) funName checkType $
             Located info check
         Right _
           -> error "invariant violation: verifyCheck called on non-function"

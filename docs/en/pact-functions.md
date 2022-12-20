@@ -2147,13 +2147,13 @@ Typecheck MODULE, optionally enabling DEBUG output.
 
 *module*&nbsp;`string` *&rarr;*&nbsp;`string`
 
-*module*&nbsp;`string` *filepath*&nbsp;`string` *&rarr;*&nbsp;`string`
+*module*&nbsp;`string` *debug*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
 
-Verify MODULE, checking that all properties hold, optionally enabling SMTLib2 file generation by supplying a FILEPATH
+Verify MODULE, checking that all properties hold. Optionally enabling SMTLib2 output to ".pact-verify-MODULE" file.
 ```lisp
 (verify "module")
-(verify "module" "/path/to/out.smt")
+(verify "module" true)
 ```
 
 

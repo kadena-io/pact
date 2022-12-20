@@ -88,7 +88,7 @@ verifyModule fp mn = it (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
   mModules <- replGetModules replState
   checkResult <- case mModules of
     Left err           -> die def (show err)
-    Right (modules, _) -> Check.verifyModule Nothing def (inlineModuleData <$> modules) (inlineModuleData modul)
+    Right (modules, _) -> Check.verifyModule False def (inlineModuleData <$> modules) (inlineModuleData modul)
   let ros = Check.renderVerifiedModule checkResult
   when (any ((== OutputFailure) . _roType) ros) $
     expectationFailure $ T.unpack $
