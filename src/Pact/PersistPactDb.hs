@@ -59,7 +59,7 @@ data DbEnv p = DbEnv
   { _db :: !p
   , _persist :: !(Persister p)
   , _logger :: !Logger
-  , _txRecord :: !(M.Map TxTable [TxLog])
+  , _txRecord :: !(M.Map TxTable [TxLog LegacyValue])
   , _txId :: !TxId
   , _mode :: !(Maybe ExecutionMode)
   }
@@ -201,7 +201,7 @@ doBegin m = do
     Local -> pure Nothing
 {-# INLINE doBegin #-}
 
-doCommit :: MVState p [TxLog]
+doCommit :: MVState p [TxLog LegacyValue]
 doCommit = use mode >>= \case
     Nothing -> rollback >> throwDbError "doCommit: Not in transaction"
     Just m -> do
@@ -228,7 +228,7 @@ rollback = do
   resetTemp
 
 
-getLogs :: forall p k . Domain k LegacyValue -> TxId -> MVState p [TxLog]
+getLogs :: forall v p k . FromJSON v => Domain k v -> TxId -> MVState p [TxLog v]
 getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn d) (fromIntegral tid))
   where
     tn :: Domain k v -> TxTable
@@ -237,7 +237,7 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn Namespaces = TxTable namespacesTable
     tn Pacts = TxTable pactsTable
     tn (UserTables t) = userTxRecord t
-    convLog :: TxLog -> MVState p TxLog
+    convLog :: TxLog LegacyValue -> MVState p (TxLog v)
     convLog tl = case fromJSON (_getLegacyValue $ _txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl

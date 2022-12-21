@@ -87,6 +87,8 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
 
+import Pact.JSON.Legacy.Value
+
 #ifdef ADVICE
 import Pact.Types.Advice
 #endif
@@ -99,7 +101,7 @@ evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx :: Info -> Eval e [TxLog]
+evalCommitTx :: Info -> Eval e [TxLog LegacyValue]
 evalCommitTx i = do
   revokeAllCapabilities
   -- backend now handles local exec

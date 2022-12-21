@@ -44,6 +44,7 @@ import Control.Lens (makeLenses)
 import Data.Aeson hiding (Object)
 import qualified Data.Aeson as A
 import Data.Default
+import Data.Hashable (Hashable)
 import Data.Maybe(fromMaybe)
 import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
@@ -222,17 +223,17 @@ instance AsString (Domain k v) where
     asString Pacts = "SYS:Pacts"
 
 -- | Transaction record.
-data TxLog =
+data TxLog v =
     TxLog {
       _txDomain :: !Text
     , _txKey :: !Text
-    , _txValue :: !LegacyValue
+    , _txValue :: !v
     }
-    deriving (Eq,Show,Typeable,Generic)
-    deriving anyclass (NFData)
+    deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
+    deriving anyclass (Hashable, NFData)
 makeLenses ''TxLog
 
-txLogProperties :: JsonProperties TxLog
+txLogProperties :: (ToJSON v) => JsonProperties (TxLog v)
 txLogProperties o =
   [ "value" .= _txValue o
   , "key" .= _txKey o
@@ -240,25 +241,25 @@ txLogProperties o =
   ]
 {-# INLINE txLogProperties #-}
 
-instance ToJSON TxLog where
+instance ToJSON v => ToJSON (TxLog v) where
   toJSON = enableToJSON "Pact.Types.Persistence.TxLog" . object . txLogProperties
   toEncoding = pairs . mconcat . txLogProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
-instance FromJSON TxLog where
+instance FromJSON v => FromJSON (TxLog v) where
     parseJSON = withObject "TxLog" $ \o ->
                 TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"
 
-instance Pretty TxLog where
+instance Pretty v => Pretty (TxLog v) where
   pretty (TxLog domain key value) = commaBrackets
     [ "table: " <> pretty domain
     , "key: "   <> pretty key
-    , "value: " <> pretty (_getLegacyValue value)
+    , "value: " <> pretty value
     ]
 
--- instance Arbitrary TxLog where
---   arbitrary = TxLog <$> arbitrary <*> arbitrary <*> arbitrary
+instance Arbitrary v => Arbitrary (TxLog v) where
+  arbitrary = TxLog <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- | Instruction for '_writeRow'.
 data WriteType =
@@ -330,12 +331,13 @@ data PactDb e = PactDb {
     -- In transactional mode, commits backend to TxId.
     -- In Local mode, releases TxId for re-use.
     -- Returns all TxLogs.
-  , _commitTx ::  Method e [TxLog]
+  , _commitTx ::  Method e [TxLog LegacyValue]
     -- | Conclude transactional state with rollback.
     -- Safe to call at any time.
     -- Rollback all backend changes.
     -- Releases TxId for re-use.
   , _rollbackTx :: Method e ()
     -- | Get transaction log for table. TxLogs are expected to be user-visible format.
-  , _getTxLog :: forall k . IsString k => Domain k LegacyValue -> TxId -> Method e [TxLog]
+  , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
+                 Domain k v -> TxId -> Method e [TxLog v]
 }

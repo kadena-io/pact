@@ -128,8 +128,8 @@ class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactDbValue v where
 
 instance PactDbValue LegacyValue where
   prettyPactDbValue (LegacyValue v) = prettyPactDbValue v
-instance PactDbValue TxLog where
-  prettyPactDbValue = pretty
+instance PactDbValue v => PactDbValue (TxLog v) where
+  prettyPactDbValue = pretty . fmap (SomeDoc . prettyPactDbValue)
 instance PactDbValue RowData where
   prettyPactDbValue = pretty
 instance PactDbValue a => PactDbValue [a] where
