@@ -907,11 +907,11 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
       TConst{..} -> case _tModule of
         -- if modulename is nothing, it's a builtin
         Nothing -> toAST $ return $ Left (Direct $ constTerm _tConstVal)
-        _ -> die i $ "Non-native constant value in native context: " ++ show t
+        _ -> die i $ "Non-native constant value in native context: " <> showPretty t
       TGuard{..} -> do
         g <- traverse (toAST . return . Left . Direct) _tGuard
         trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard g)
-      _ -> die i $ "Native in value context: " <> show t
+      _ -> die i $ "Native in value context: " <> showPretty t
   (Right t) -> return t
 
 toAST (TApp Term.App{..} _) = do
@@ -958,9 +958,9 @@ toAST (TApp Term.App{..} _) = do
                 freshArg <- trackIdNode =<<
                   freshId (_tiInfo (_aId (_aNode argAST')))
                   (_fName (_aAppFun argAST) <> "_" <> lamArgName <> "_p")
-                debug $ "Adding fresh arg to partial application: " ++ show freshArg
+                debug $ "Adding fresh arg to partial application: " ++ showPretty freshArg
                 return $ over aAppArgs (++ [Var freshArg]) argAST'
-            (TyFun t,a) -> die'' argAST $ "App required for funtype argument: " ++ show t ++ ", found: " ++ show a
+            (TyFun t,a) -> die'' argAST $ "App required for funtype argument: " ++ showPretty t ++ ", found: " ++ showPretty a
             _ -> return argAST
 
       -- other special forms: bindings, yield/resume
