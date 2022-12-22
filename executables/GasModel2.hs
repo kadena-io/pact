@@ -23,6 +23,7 @@ import Control.DeepSeq
 import Control.Exception (bracket)
 import Control.Lens
 import Control.Monad
+import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
 import Criterion qualified as C
 import qualified Data.Aeson as A
@@ -87,19 +88,10 @@ main = do
     -- print x1
     putStrLn $ toLisp x1
 
-  let mkGasTest !name = do
-        expr <- Gen.sample $ runReaderT (genBuiltin =<< genType) defaultEnv
-        return $! expr `deepseq` gasTest name expr
-
-  putStrLn "Establishing gas baseline"
-  baselineReport <- benchesOnce $ gasTest "baseline" (ESym "true")
-  let [(baselineGas, baselineTime)] =
-        map _gasTestResultSqliteDb baselineReport
-
   -- Enforces that unit tests succeed
   putStrLn "Doing dry run of benchmark tests"
   tests <- forM ([1..5_000] :: [Int]) $ \i -> do
-    t <- mkGasTest (show i)
+    t <- mkGasTest (show i) genBuiltin genType
     mockRuns t
     pure $! (Pact.NativeDefName (T.pack (show i)), t)
   putStrLn "Doing dry run of benchmark tests...done"
@@ -107,32 +99,10 @@ main = do
   putStrLn "Running benchmark(s)"
   if True -- _oBenchOnly opt
     then do
-      let baseline = GasResult {
-           testName = "baseline",
-           gasCost = baselineGas,
-           timeSpent = baselineTime,
-           gasRate = 0.0,
-           pactExpr = "true"
-         }
-      print baseline
-      let displayGasPrice (funName, gt@(GasUnitTests [t])) = do
-            res <- benchesOnce gt
-            let [(gas, time)] = map _gasTestResultSqliteDb res
-            let Gas gas' = gas - baselineGas
-            let time' = time - baselineTime
-            let result = GasResult {
-                      testName = T.unpack (Pact.asString funName),
-                      gasCost = Gas gas',
-                      timeSpent = time',
-                      gasRate = if gas' > 0
-                                then time' / fromIntegral gas'
-                                else time',
-                      pactExpr = _pactExpressionFull (_gasTestExpression t)
-                    }
-            print result
-            pure result
-      results <- mapM displayGasPrice tests
+      putStrLn "Establishing gas baseline"
+      baseline <- establishBaseline
 
+      results <- mapM (uncurry (displayGasPrice baseline)) tests
       BL.putStr $ Csv.encodeByName
         (V.fromList ["testName","gasCost","timeSpent","gasRate","pactExpr"])
         (baseline : results)
@@ -149,10 +119,60 @@ main = do
       putStrLn "Reporting coverage"
       coverageReport
 
-single :: PactGen -> ExprType -> IO ()
-single g t = do
-  expr <- Gen.sample $ runReaderT (g t) defaultEnv
-  putStrLn $ toLisp expr
+singleGasTestExpr :: GasUnitTests -> String
+singleGasTestExpr (GasUnitTests [t]) =
+  T.unpack (_pactExpressionFull (_gasTestExpression t))
+singleGasTestExpr _ = error "Unexpected"
+
+mkGasTest :: String -> PactGen -> Gen ExprType -> IO GasUnitTests
+mkGasTest !name g t = do
+  expr <- Gen.sample $ runReaderT (g =<< lift t) defaultEnv
+  return $! expr `deepseq` gasTest name expr
+
+single :: PactGen -> Gen ExprType -> IO ()
+single g t = putStrLn =<< singleGasTestExpr <$> mkGasTest "single" g t
+
+establishBaseline :: IO GasResult
+establishBaseline = do
+  baselineReport <- benchesOnce $ gasTest "baseline" (ESym "true")
+  let [(baselineGas, baselineTime)] =
+        map _gasTestResultSqliteDb baselineReport
+  pure GasResult {
+      testName = "baseline",
+      gasCost = baselineGas,
+      timeSpent = baselineTime,
+      gasRate = 0.0,
+      pactExpr = "true"
+    }
+
+displayGasPrice
+  :: Pact.AsString a
+  => GasResult -> a -> GasUnitTests -> IO GasResult
+displayGasPrice baseline funName gt@(GasUnitTests [t]) = do
+  res <- benchesOnce gt
+  let [(gas, time)] = map _gasTestResultSqliteDb res
+  let Gas gas' = gas - gasCost baseline
+  let time' = time - timeSpent baseline
+  pure GasResult {
+      testName = T.unpack (Pact.asString funName),
+      gasCost = Gas gas',
+      timeSpent = time',
+      gasRate = if gas' > 0
+                then time' / fromIntegral gas'
+                else time',
+      pactExpr = _pactExpressionFull (_gasTestExpression t)
+    }
+
+runSingleWithBaseline :: GasResult -> PactGen -> Gen ExprType -> IO ()
+runSingleWithBaseline baseline g t =
+  print
+    =<< displayGasPrice baseline ("single" :: String)
+    =<< mkGasTest "single" g t
+
+runSingle :: PactGen -> Gen ExprType -> IO ()
+runSingle g t = do
+  baseline <- establishBaseline
+  runSingleWithBaseline baseline g t
 
 bench ::
   PactExpression ->
@@ -496,9 +516,9 @@ genBuiltin t = case t of
       , gen_identity t
       , gen_if t
       , gen_int_to_str t
-      , gen_namespace t
+      , tl_gen_namespace t
       , gen_pact_id t
-      , gen_pact_version t
+      , tl_gen_pact_version t
       , gen_read_msg t
       , gen_read_string t
       , gen_take t
@@ -571,7 +591,7 @@ genBuiltin t = case t of
       , gen_contains t
       , gen_enforce t
       , gen_enforce_one t
-      , gen_enforce_pact_version t
+      , tl_gen_enforce_pact_version t
       , gen_fold t
       , gen_identity t
       , gen_if t
@@ -633,7 +653,7 @@ genBuiltin t = case t of
       , gen_plus t
       ]
       ++ [ gen_enumerate t    | t == TInt ]
-      ++ [ gen_list_modules t | t == TStr ]
+      ++ [ tl_gen_list_modules t | t == TStr ]
       ++ [ gen_str_to_list t  | t == TStr ]
   TObj _ ->
     Gen.choice
@@ -641,7 +661,7 @@ genBuiltin t = case t of
       , gen_constantly t
       , gen_bind t
       , gen_chain_data t
-      , gen_define_namespace t
+      , tl_gen_define_namespace t
       , gen_drop t
       , gen_fold t
       , gen_identity t
@@ -695,11 +715,11 @@ builtins =
       ("concat",               gen_concat),
       ("constantly",           gen_constantly),
       ("contains",             gen_contains),
-      ("define-namespace",     gen_define_namespace),
+      ("define-namespace",     tl_gen_define_namespace),
       ("drop",                 gen_drop),
       ("enforce",              gen_enforce),
       ("enforce-one",          gen_enforce_one),
-      ("enforce-pact-version", gen_enforce_pact_version),
+      ("enforce-pact-version", tl_gen_enforce_pact_version),
       ("enumerate",            gen_enumerate),
       ("filter",               gen_filter),
       ("fold",                 gen_fold),
@@ -710,13 +730,13 @@ builtins =
       ("int-to-str",           gen_int_to_str),
       ("is-charset",           gen_is_charset),
       ("length",               gen_length),
-      ("list-modules",         gen_list_modules),
+      ("list-modules",         tl_gen_list_modules),
       ("make-list",            gen_make_list),
       ("map",                  gen_map),
       ("zip",                  gen_zip),
-      ("namespace",            gen_namespace),
+      ("namespace",            tl_gen_namespace),
       ("pact-id",              gen_pact_id),
-      ("pact-version",         gen_pact_version),
+      ("pact-version",         tl_gen_pact_version),
       ("read-decimal",         gen_read_decimal),
       ("read-integer",         gen_read_integer),
       ("read-msg",             gen_read_msg),
@@ -783,7 +803,7 @@ builtins =
       ("validate-keypair",     gen_validate_keypair),
 
       -- Keyset native functions
-      ("define-keyset",        gen_define_keyset),
+      ("define-keyset",        tl_gen_define_keyset),
       ("enforce-keyset",       gen_enforce_keyset),
       ("keys-2",               gen_keys_2),
       ("keys-all",             gen_keys_all),
@@ -791,11 +811,11 @@ builtins =
       ("read-keyset",          gen_read_keyset),
 
       -- Database native functions
-      ("create-table",         gen_create_table),
-      ("describe-keyset",      gen_describe_keyset),
-      ("describe-module",      gen_describe_module),
-      ("describe-table",       gen_describe_table),
-      ("describe-namespace",   gen_describe_namespace),
+      ("create-table",         tl_gen_create_table),
+      ("describe-keyset",      tl_gen_describe_keyset),
+      ("describe-module",      tl_gen_describe_module),
+      ("describe-table",       tl_gen_describe_table),
+      ("describe-namespace",   tl_gen_describe_namespace),
       ("insert",               gen_insert),
       ("keylog",               gen_keylog),
       ("keys",                 gen_keys),
@@ -956,13 +976,13 @@ gen_contains TBool = do
               pure $ EParens [ESym "contains", EStr x, EStr y]
 gen_contains _ = mzero
 
-gen_define_namespace :: PactGen
--- gen_define_namespace (TObj _sch) = do
+tl_gen_define_namespace :: PactGen
+-- tl_gen_define_namespace (TObj _sch) = do
 --   n <- genExpr TStr
 --   g1 <- genGuard
 --   g2 <- genGuard
 --   pure $ EParens [ESym "define-namespace", n, g1, g2]
-gen_define_namespace _ = mzero -- jww (2022-12-15): TODO
+tl_gen_define_namespace _ = mzero -- jww (2022-12-15): TODO
 
 gen_drop :: PactGen
 gen_drop TStr = do
@@ -1015,11 +1035,11 @@ gen_enforce_one TBool = do
                   EList (map (\b -> EParens [ESym "or", b, ESym "true"]) y)]
 gen_enforce_one _ = mzero
 
-gen_enforce_pact_version :: PactGen
--- gen_enforce_pact_version TBool = do
+tl_gen_enforce_pact_version :: PactGen
+-- tl_gen_enforce_pact_version TBool = do
 --   ver <- genExpr TStr
 --   pure $ EParens [ESym "enforce-pact-version", ver]
-gen_enforce_pact_version _ = mzero -- jww (2022-12-15): TODO
+tl_gen_enforce_pact_version _ = mzero -- jww (2022-12-15): TODO
 
 gen_enumerate :: PactGen
 gen_enumerate (TList TInt) = do
@@ -1103,10 +1123,10 @@ gen_length TInt = do
   pure $ EParens [ESym "length", x]
 gen_length _ = mzero
 
-gen_list_modules :: PactGen
-gen_list_modules (TList TStr) = do
+tl_gen_list_modules :: PactGen
+tl_gen_list_modules (TList TStr) = do
   pure $ EParens [ESym "list-modules"]
-gen_list_modules _ = mzero
+tl_gen_list_modules _ = mzero
 
 gen_make_list :: PactGen
 gen_make_list (TList t) = do
@@ -1133,19 +1153,19 @@ gen_zip (TList c) = do
   pure $ EParens [ESym "zip", f, la, lb]
 gen_zip _ = mzero
 
-gen_namespace :: PactGen
--- gen_namespace TStr = do
+tl_gen_namespace :: PactGen
+-- tl_gen_namespace TStr = do
 --   x <- genExpr TStr
 --   pure $ EParens [ESym "namespace", x]
-gen_namespace _ = mzero -- jww (2022-12-09): TODO
+tl_gen_namespace _ = mzero -- jww (2022-12-09): TODO
 
 gen_pact_id :: PactGen
 gen_pact_id TStr = pure $ EParens [ESym "pact-id"]
 gen_pact_id _ = mzero
 
-gen_pact_version :: PactGen
--- gen_pact_version TStr = pure $ EParens [ESym "pact-version"]
-gen_pact_version _ = mzero -- jww (2022-12-15): TODO
+tl_gen_pact_version :: PactGen
+-- tl_gen_pact_version TStr = pure $ EParens [ESym "pact-version"]
+tl_gen_pact_version _ = mzero -- jww (2022-12-15): TODO
 
 gen_read_decimal :: PactGen
 gen_read_decimal TDec = do
@@ -1583,8 +1603,8 @@ gen_decrypt_cc20p1305 _ = mzero -- jww (2022-12-15): TODO
 gen_validate_keypair :: PactGen
 gen_validate_keypair _ = mzero -- jww (2022-12-15): TODO
 
-gen_define_keyset :: PactGen
-gen_define_keyset _ = mzero -- jww (2022-12-15): TODO
+tl_gen_define_keyset :: PactGen
+tl_gen_define_keyset _ = mzero -- jww (2022-12-15): TODO
 
 gen_enforce_keyset :: PactGen
 gen_enforce_keyset _ = mzero -- jww (2022-12-15): TODO
@@ -1601,20 +1621,20 @@ gen_keys_any _ = mzero -- jww (2022-12-15): TODO
 gen_read_keyset :: PactGen
 gen_read_keyset _ = mzero -- jww (2022-12-15): TODO
 
-gen_create_table :: PactGen
-gen_create_table _ = mzero -- jww (2022-12-15): TODO
+tl_gen_create_table :: PactGen
+tl_gen_create_table _ = mzero -- jww (2022-12-15): TODO
 
-gen_describe_keyset :: PactGen
-gen_describe_keyset _ = mzero -- jww (2022-12-15): TODO
+tl_gen_describe_keyset :: PactGen
+tl_gen_describe_keyset _ = mzero -- jww (2022-12-15): TODO
 
-gen_describe_module :: PactGen
-gen_describe_module _ = mzero -- jww (2022-12-15): TODO
+tl_gen_describe_module :: PactGen
+tl_gen_describe_module _ = mzero -- jww (2022-12-15): TODO
 
-gen_describe_table :: PactGen
-gen_describe_table _ = mzero -- jww (2022-12-15): TODO
+tl_gen_describe_table :: PactGen
+tl_gen_describe_table _ = mzero -- jww (2022-12-15): TODO
 
-gen_describe_namespace :: PactGen
-gen_describe_namespace _ = mzero -- jww (2022-12-15): TODO
+tl_gen_describe_namespace :: PactGen
+tl_gen_describe_namespace _ = mzero -- jww (2022-12-15): TODO
 
 gen_insert :: PactGen
 gen_insert _ = mzero -- jww (2022-12-15): TODO
