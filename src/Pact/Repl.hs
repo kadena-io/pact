@@ -309,7 +309,7 @@ updateForOp i a = do
     Output es -> forM_ es (outStrLn HErr . renderPrettyString RColor) >> return (Right a)
     Print t -> do
       let rep = case t of TLitString s -> unpack s
-                          _ -> show t
+                          _ -> showPretty t
       outStrLn HOut rep
       return (Right a)
 
