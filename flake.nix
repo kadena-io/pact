@@ -29,9 +29,7 @@
               modules = [{
                 # Replace `extra-libraries` dependencies
                 packages.mysql.components.library.libs = pkgs.lib.mkForce (with pkgs;
-                    [ libmysqlclient ]);
-                packages.mysql-simple.components.library.libs = pkgs.lib.mkForce (with pkgs;
-                    [ libmysqlclient ]);
+                    [ libmysqlclient openssl zlib ]);
               }];
               shell.tools = {
                 cabal = {};

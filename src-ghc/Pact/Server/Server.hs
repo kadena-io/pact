@@ -26,7 +26,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Exception
 
-import Data.Aeson
+import Data.Aeson (withObject, parseJSON ToJSON, FromJSON)
 import Data.Maybe
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
@@ -65,6 +65,25 @@ data Config = Config {
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
+
+instance FromJSON Config where
+  parseJSON = withObject "Config" $ \obj -> do
+    _port <- obj .: "port"
+    _verbose <- obj .: "verbose"
+    _entity <- obj .: "entity"
+    _gasLimit <- obj .: "gasLimit"
+    _gasRate <- obj .: "gasRate"
+    _execConfig <- obj .: "execConfig"
+
+    _persistDir <- obj .: "persistDir"
+    _pragmas <- obj .:? "pragmas" .!= pure []
+
+    _postgresConnectionString <- obj .: "postgresConnectionString"
+
+    _mysqlConnectionString <- obj .: "mysqlConnectionString"
+
+    pure Config{..}
+
 
 usage :: String
 usage =
