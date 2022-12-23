@@ -20,12 +20,19 @@
       flake = pkgs.pact.flake {
         # crossPlatforms = p: [ p.ghcjs ];
       };
-      overlays = [ haskellNix.overlay
-        (final: prev: {
+
+      haskellOverlay = (final: prev: {
           pact =
             final.haskell-nix.project' {
               src = ./.;
               compiler-nix-name = "ghc8107";
+              modules = [{
+                # Replace `extra-libraries` dependencies
+                packages.mysql.components.library.libs = pkgs.lib.mkForce (with pkgs;
+                    [ libmysqlclient ]);
+                packages.mysql-simple.components.library.libs = pkgs.lib.mkForce (with pkgs;
+                    [ libmysqlclient ]);
+              }];
               shell.tools = {
                 cabal = {};
                 # hlint = {};
@@ -33,13 +40,27 @@
               shell.buildInputs = with pkgs; [
                 zlib
                 z3
+                pcre
+                libmysqlclient
                 pkgconfig
               ];
               # shell.crossPlatforms = p: [ p.ghcjs ];
             };
-        })
-      ];
+          haskell-nix = prev.haskell-nix // {
+            extraPkgconfigMappings = prev.haskell-nix.extraPkgconfigMappings // {
+            # String pkgconfig-depends names are mapped to lists of Nixpkgs
+            # package names
+            "mysqlclient" = [ "libmysqlclient" ];
+            "mysql" = [ "libmysqlclient" ];
+          };
+    };
+
+      }
+      );
+
+      overlays = [ haskellNix.overlay haskellOverlay];
     in flake // {
-      packages.default = flake.packages."pact:exe:pact";
+      packages.default = builtins.trace (builtins.attrNames flake.packages) flake.packages."pact:exe:pact";
+      overlay = haskellOverlay;
     });
 }

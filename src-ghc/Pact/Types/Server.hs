@@ -23,11 +23,12 @@
 --
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
-  , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
+  , CommandConfig(..), ccPersist, ccEntity, ccGasLimit, ccGasRate
   , ccExecutionConfig
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger
   , cePublicData, ceGasEnv, ceSPVSupport, ceNetworkId
   , ceExecutionConfig
+  , PersistConfig(SqLite, MySQL, NoPersist)
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -54,7 +55,8 @@ import Data.HashMap.Strict (HashMap)
 import Pact.Types.ChainId
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
-import Pact.Types.SQLite
+import Pact.Types.SQLite (SQLiteConfig)
+import Pact.Persist.MySQL (MySqlConfig)
 import Pact.Types.Command
 import Pact.Types.Logger
 import Pact.Interpreter
@@ -71,9 +73,13 @@ userSigToPactPubKey Signer{..} =
 userSigsToPactKeySet :: [Signer] -> S.Set Pact.PublicKeyText
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
+data PersistConfig
+  = SqLite SQLiteConfig
+  | MySQL MySqlConfig
+  | NoPersist
 
 data CommandConfig = CommandConfig {
-      _ccSqlite :: Maybe SQLiteConfig
+     _ccPersist :: PersistConfig
     , _ccEntity :: Maybe EntityName
     , _ccGasLimit :: Maybe Int
     , _ccGasRate :: Maybe Int

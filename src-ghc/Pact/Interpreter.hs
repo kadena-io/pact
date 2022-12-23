@@ -27,6 +27,7 @@ module Pact.Interpreter
   , setupEvalEnv
   , initRefStore
   , mkSQLiteEnv
+  , mkMySqlEnv
   , mkPureEnv
   , mkPactDbEnv
   , initSchema
@@ -66,6 +67,7 @@ import Pact.Types.PactValue
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import qualified Pact.Persist.MySQL as PMSQL
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
@@ -209,6 +211,13 @@ mkSQLiteEnv initLog deleteOldFile c loggers = do
       removeFile (PSL._dbFile c)
   dbe <- initDbEnv loggers PSL.persister <$> PSL.initSQLite c loggers
   mkPactDbEnv pactdb dbe
+
+mkMySqlEnv :: Logger -> Bool -> PMSQL.MySqlConfig -> Loggers -> IO (PactDbEnv (DbEnv PMSQL.MySQL))
+mkMySqlEnv _initLog resetDatabase c loggers = do
+  when resetDatabase (error "MySQL database reset unimplemented")
+  dbe <- initDbEnv loggers PMSQL.persister <$> PMSQL.initMySQL c loggers
+  mkPactDbEnv pactdb dbe
+
 
 mkPureEnv :: Loggers -> IO (PactDbEnv (DbEnv Pure.PureDb))
 mkPureEnv loggers = mkPactDbEnv pactdb $ initDbEnv loggers Pure.persister Pure.initPureDb

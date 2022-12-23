@@ -68,13 +68,16 @@ initPactService CommandConfig {..} loggers spv = do
             blockHeight blockTime prevBlockHash
             spv _ccExecutionConfig
           }
-  case _ccSqlite of
-    Nothing -> do
+  case _ccPersist of
+    NoPersist -> do
       klog "Initializing pure pact"
       mkPureEnv loggers >>= mkCEI
-    Just sqlc -> do
+    SqLite sqlc -> do
       klog "Initializing pact SQLLite"
       mkSQLiteEnv logger True sqlc loggers >>= mkCEI
+    MySQL mysql -> do
+      klog "Initializing pact MySQL"
+      mkMySqlEnv logger True mysql loggers >>= mkCEI
 
 
 applyCmd :: Logger ->

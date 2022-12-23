@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -29,6 +30,7 @@ import Data.Aeson
 import Data.Maybe
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
+import Data.Text (Text)
 
 import qualified Data.HashMap.Strict as HashMap
 
@@ -37,6 +39,7 @@ import GHC.Generics
 import System.Log.FastLogger
 import Data.Default
 
+import qualified Pact.Persist.MySQL as PMSQL
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (Update)
 import Pact.Types.SQLite
@@ -50,6 +53,8 @@ import Pact.Server.PactService
 data Config = Config {
   _port :: Word16,
   _persistDir :: Maybe FilePath,
+  _postgresConnectionString :: Maybe Text,
+  _mysqlConnectionString :: Maybe Text,
   _logDir :: FilePath,
   _pragmas :: [Pragma],
   _verbose :: Bool,
@@ -86,9 +91,18 @@ serve = serve_ False
 serveLocal :: FilePath -> SPVSupport -> IO ()
 serveLocal = serve_ True
 
+persistConfig :: Config -> Either Text PersistConfig
+persistConfig Config { _persistDir, _mysqlConnectionString, _pragmas } =
+  case (_persistDir, _mysqlConnectionString) of
+    (Just persistDir, Nothing) ->
+      Right $ SqLite (SQLiteConfig (persistDir ++ "/pact.sqlite") _pragmas)
+    (Nothing, Just msqlString) -> fmap MySQL $ PMSQL.parseConnectionString msqlString
+    (Nothing, Nothing) -> Right NoPersist
+    _ -> error "TODO: Explain mutually exclusive db config"
+
 serve_ :: Bool -> FilePath -> SPVSupport -> IO ()
 serve_ isLocal configFile spv = do
-  Config {..} <- Y.decodeFileEither configFile >>= \case
+  cfg@Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
       throwIO (userError ("Error loading config file: " ++ show e))
@@ -96,12 +110,15 @@ serve_ isLocal configFile spv = do
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())
-  let cmdConfig = CommandConfig
-          (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
-          _entity
-          _gasLimit
-          _gasRate
-          (fromMaybe def _execConfig)
+  let cmdConfig = case persistConfig cfg of
+        Left _e -> undefined
+        Right persist ->
+          CommandConfig
+            persist
+            _entity
+            _gasLimit
+            _gasRate
+            (fromMaybe def _execConfig)
 
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
 
@@ -117,7 +134,7 @@ serve_ isLocal configFile spv = do
 
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
 withTestServe configFile spv app = do
-  Config {..} <- Y.decodeFileEither configFile >>= \case
+  cfg@Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
       throwIO (userError ("Error loading config file: " ++ show e))
@@ -125,12 +142,15 @@ withTestServe configFile spv app = do
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())
-  let cmdConfig = CommandConfig
-          (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
-          _entity
-          _gasLimit
-          _gasRate
-          (fromMaybe def _execConfig)
+  let cmdConfig = case persistConfig cfg of
+        Left _e -> undefined
+        Right persist ->
+          CommandConfig
+            persist
+            _entity
+            _gasLimit
+            _gasRate
+            (fromMaybe def _execConfig)
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
       cmd = startCmdThread cmdConfig inC histC replayFromDisk' debugFn spv
       hist = runHistoryService histConf Nothing

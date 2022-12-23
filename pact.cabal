@@ -51,6 +51,16 @@ flag tests-in-lib
   default:     False
   manual:      True
 
+flag postgres-backend
+  description: Enable postgres as the backend for commands and user tables
+  default:     True
+  manual:      True
+
+flag mysql
+  description: Enable MySQL as the backend for commands and user tables
+  default:     True
+  manual:      True
+
 library
 
   -- common to all configurations:
@@ -178,6 +188,7 @@ library
     , lens-aeson >= 1.0.0.5 && < 1.3
     , megaparsec >= 9
     , mtl >= 2.2.1 && < 2.3
+    , mysql-simple >= 0.4.7 && < 0.5
     , pact-time >= 0.2
     , parsers >= 0.12.4 && < 0.13
     , prettyprinter >= 1.2 && < 1.6.1
@@ -220,6 +231,7 @@ library
       Pact.MockDb
       Pact.Persist.MockPersist
       Pact.Persist.SQLite
+      Pact.Persist.MySQL
       Pact.PersistPactDb.Regression
       Pact.Server.PactService
       Pact.Types.Crypto
