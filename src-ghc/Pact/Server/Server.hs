@@ -26,7 +26,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Exception
 
-import Data.Aeson (withObject, parseJSON ToJSON, FromJSON)
+import Data.Aeson ((.:), (.:?), (.!=), withObject, parseJSON, ToJSON, FromJSON)
 import Data.Maybe
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
@@ -64,23 +64,24 @@ data Config = Config {
   _execConfig :: Maybe ExecutionConfig
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
-instance FromJSON Config where parseJSON = lensyParseJSON 1
+-- instance FromJSON Config where parseJSON = lensyParseJSON 1
 
 instance FromJSON Config where
   parseJSON = withObject "Config" $ \obj -> do
     _port <- obj .: "port"
+    _logDir <- obj .: "logDir"
     _verbose <- obj .: "verbose"
-    _entity <- obj .: "entity"
-    _gasLimit <- obj .: "gasLimit"
-    _gasRate <- obj .: "gasRate"
-    _execConfig <- obj .: "execConfig"
+    _entity <- obj .:? "entity"
+    _gasLimit <- obj .:? "gasLimit"
+    _gasRate <- obj .:? "gasRate"
+    _execConfig <- obj .:? "execConfig"
 
-    _persistDir <- obj .: "persistDir"
-    _pragmas <- obj .:? "pragmas" .!= pure []
+    _persistDir <- obj .:? "persistDir"
+    _pragmas <- obj .:? "pragmas" .!= []
 
-    _postgresConnectionString <- obj .: "postgresConnectionString"
+    _postgresConnectionString <- obj .:? "postgresConnectionString"
 
-    _mysqlConnectionString <- obj .: "mysqlConnectionString"
+    _mysqlConnectionString <- obj .:? "mysqlConnectionString"
 
     pure Config{..}
 
@@ -110,12 +111,15 @@ serve = serve_ False
 serveLocal :: FilePath -> SPVSupport -> IO ()
 serveLocal = serve_ True
 
+-- | Construct our persistence configuration from the global configuration.
 persistConfig :: Config -> Either Text PersistConfig
 persistConfig Config { _persistDir, _mysqlConnectionString, _pragmas } =
   case (_persistDir, _mysqlConnectionString) of
     (Just persistDir, Nothing) ->
       Right $ SqLite (SQLiteConfig (persistDir ++ "/pact.sqlite") _pragmas)
-    (Nothing, Just msqlString) -> fmap MySQL $ PMSQL.parseConnectionString msqlString
+    (Nothing, Just msqlString) -> do
+      mysqlConfig <- PMSQL.parseConnectionString msqlString
+      return $ MySQL $ mysqlConfig { PMSQL.userDatabase = "pact" }
     (Nothing, Nothing) -> Right NoPersist
     _ -> error "TODO: Explain mutually exclusive db config"
 
@@ -194,6 +198,7 @@ startCmdThread
 startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn spv = do
   CommandExecInterface {..} <- initPactService cmdConfig (initLoggers debugFn doLog def) spv
   -- we wait for the history service to light up, possibly giving us backups from disk to replay
+  putStrLn "Finished initPactService. About to replay from disk."
   replayFromDisk' <- liftIO $ takeMVar rp
   when (null replayFromDisk') $ liftIO $ debugFn "[disk replay]: No replay found"
   unless (null replayFromDisk') $
@@ -201,6 +206,7 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn spv = do
       liftIO $ debugFn $ "[disk replay]: replaying => " ++ show cmd
       liftIO $ _ceiApplyCmd Transactional cmd
       -- NB: we don't want to update history with the results from the replay
+  putStrLn "Forever handle chan"
   forever $ do
     -- now we're prepared, so start taking new entries
     inb <- liftIO $ readInbound inChan

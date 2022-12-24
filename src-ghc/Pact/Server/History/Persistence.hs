@@ -78,7 +78,7 @@ eitherToError :: Show e => String -> Either e a -> a
 eitherToError _ (Right v) = v
 eitherToError s (Left e) = error $ "SQLite Error in History exec: " ++ s ++ "\nWith Error: "++ show e
 
-createDB :: FilePath -> IO DbEnv
+createDB :: FilePath -> IO (DbEnv db)
 createDB f = do
   conn' <- eitherToError "OpenDB" <$> open (Utf8 $ encodeUtf8 $ T.pack f)
   eitherToError "CreateTable" <$> exec conn' sqlDbSchema

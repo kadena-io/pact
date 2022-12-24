@@ -34,23 +34,30 @@ data HistoryEnv = HistoryEnv
 makeLenses ''HistoryEnv
 
 data DbEnv = DbEnv
-  { _conn :: !Database
+  { _conn :: !db
   , _insertStatement :: !Statement
   , _qryExistingStmt :: !Statement
   , _qryCompletedStmt :: !Statement
   , _qrySelectAllCmds :: !Statement
   }
 
+type Method e a = MVar e -> IO a
+
+data HistoryDb e = HistoryDb {
+  _createDB :: ()
+  , _writeEntry :: ()
+                             }
+
 data PersistenceSystem =
   InMemory
     { inMemResults :: !(HashMap RequestKey (Command ByteString, Maybe (CommandResult Hash)))} |
   OnDisk
     { incompleteRequestKeys :: !(HashMap RequestKey (Command ByteString))
-    , dbConn :: !DbEnv}
+    , dbConn :: DbEnv }
 
-data HistoryState = HistoryState
+data HistoryState db = HistoryState
   { _registeredListeners :: !(HashMap RequestKey [MVar ListenerResult])
-  , _persistence :: !PersistenceSystem
+  , _persistence :: !(PersistenceSystem)
   }
 makeLenses ''HistoryState
 

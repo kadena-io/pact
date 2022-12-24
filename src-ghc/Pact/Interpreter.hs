@@ -213,9 +213,12 @@ mkSQLiteEnv initLog deleteOldFile c loggers = do
   mkPactDbEnv pactdb dbe
 
 mkMySqlEnv :: Logger -> Bool -> PMSQL.MySqlConfig -> Loggers -> IO (PactDbEnv (DbEnv PMSQL.MySQL))
-mkMySqlEnv _initLog resetDatabase c loggers = do
-  when resetDatabase (error "MySQL database reset unimplemented")
+mkMySqlEnv initLog resetDatabase c loggers = do
+  when resetDatabase $ do
+    logLog initLog "INIT" "Deleting Pact DB database"
+    (error "MySQL database reset unimplemented") -- TODO: Do this.
   dbe <- initDbEnv loggers PMSQL.persister <$> PMSQL.initMySQL c loggers
+  putStrLn $ "Created dbe"
   mkPactDbEnv pactdb dbe
 
 

@@ -94,7 +94,10 @@ tableName (TxTable t) = T.unpack $ sanitize t <> "_TX"
 
 initMySQL :: MySqlConfig -> Loggers -> IO MySQL
 initMySQL cfg@MySqlConfig { connectInfo } loggers_ = do
-    c <- connect connectInfo
+
+    putStrLn "About to connect"
+    c <- connect (connectInfo { connectDatabase = "test" })
+    putStrLn "About to autocommit"
     autocommit c False
     return MySQL
       { conn = c
@@ -304,8 +307,18 @@ test cfg = do
     run' $ rollbackTx p
     run' (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))
 
-newtype MySqlConfig = MySqlConfig {
-  connectInfo :: ConnectInfo
+-- | A MySQL connection is defined by is base connection config
+--  (username, password, DB host, etc), and by the names of two
+--  databases:
+--    - One that stores processed transactions.
+--    - And one that stores the user-defined tables.
+--
+--  The `ConnectInfo` contains a database name, too. This will be ignored by
+--  pact.
+data MySqlConfig = MySqlConfig {
+  connectInfo :: ConnectInfo,
+  transactionDatabase :: Text,
+  userDatabase :: Text
 }
 
 parseConnectionString :: Text -> Either Text MySqlConfig
@@ -326,16 +339,24 @@ parseConnectionString s = do
     Nothing -> Right (connectPort defaultConnectInfo)
     Just v  -> note ("Could not parse " <> T.pack v <> " as port") (readMaybe v)
 
-  return $ MySqlConfig $ ConnectInfo
-    { connectHost = fromMaybe "localhost" $ Map.lookup "host" attributes
-    , connectPort
-    , connectUser = fromMaybe "root" $ Map.lookup "user" attributes
-    , connectPassword = fromMaybe "" $ Map.lookup "password" attributes
-    , connectDatabase = fromMaybe "main" $ Map.lookup "database" attributes
-    , connectOptions = [] -- TODO: Parse this.
-    , connectPath = "" -- TODO: Parse this.
-    , connectSSL = Nothing -- TODO: Parse this somehow.
-    }
+  connectDatabase <- case Map.lookup "database" attributes of
+    Nothing -> Right ""
+    Just _  -> Left "The database name may not be specified manually."
+
+  return $ MySqlConfig {
+    connectInfo = ConnectInfo
+      { connectHost = fromMaybe "localhost" $ Map.lookup "host" attributes
+      , connectPort
+      , connectUser = fromMaybe "root" $ Map.lookup "user" attributes
+      , connectPassword = fromMaybe "" $ Map.lookup "password" attributes
+      , connectDatabase
+      , connectOptions = [] -- TODO: Parse this.
+      , connectPath = "" -- TODO: Parse this.
+      , connectSSL = Nothing -- TODO: Parse this somehow.
+      },
+    transactionDatabase = "commands",
+    userDatabase = "pact"
+  }
 
 
 testConnectInfo :: ConnectInfo

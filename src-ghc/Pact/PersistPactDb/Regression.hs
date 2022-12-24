@@ -51,6 +51,7 @@ nativeLookup (NativeDefName n) = case HM.lookup n nativeDefs of
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
 runRegression p = do
+  putStrLn "About to runRegression"
   v <- newMVar p
   createSchema v
   (Just t1) <- begin v
