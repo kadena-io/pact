@@ -8,6 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Typechecker
@@ -32,7 +33,6 @@
 --
 
 module Pact.Typechecker where
-
 import Bound.Scope
 import Control.Arrow hiding ((<+>))
 import Control.Lens hiding (List,Fold)
@@ -1193,7 +1193,13 @@ singLens = iso pure head
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
-typecheck f@(TopFun FDefun {} _) = typecheckBody f (tlFun . fBody)
+typecheck f@(TopFun FDefun {} _) = typecheckBody f (tlFun . fBody) >>= \case
+  TopFun fd@FDefun{} i | not (null $ _fBody fd) ->
+                         let rt = view (aNode . aTy) (last $ _fBody fd)
+                             fd' = set (fType . ftReturn) rt fd
+                         in pure $ TopFun fd' i
+  a -> pure a
+
 typecheck c@TopConst {..} = do
   assocAstTy (_aNode _tlConstVal) _tlType
   typecheckBody c (tlConstVal . singLens)
