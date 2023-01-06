@@ -1194,7 +1194,7 @@ singLens = iso pure head
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
 typecheck f@(TopFun FDefun {} _) = typecheckBody f (tlFun . fBody) >>= \case
-  TopFun fd@FDefun{} i |  x:_ <- reverse $ _fBody fd ->
+  TopFun fd@FDefun{} i |  x:_ <- reverse (_fBody fd) ->
                           let rt = view (aNode . aTy) x
                               fd' = set (fType . ftReturn) rt fd
                           in pure $ TopFun fd' i
