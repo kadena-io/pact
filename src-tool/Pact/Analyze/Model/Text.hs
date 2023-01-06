@@ -24,6 +24,7 @@ import qualified Data.SBV.Internals         as SBVI
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
+import qualified Data.Decimal as Pact
 
 import qualified Pact.Types.Info            as Pact
 import qualified Pact.Types.Lang            as Pact
@@ -216,6 +217,11 @@ showEvent ksProvs tags event = do
         let displayVids show' =
               (\vid -> indent1 $ display mtVars vid show') <$> vids
 
+            displayWarning m =
+              let headerLine = "warning, decimal precision might cause underflow/overflow due to limited precision (at most 255 decimal places) in:"
+                  varNames = (\(_, Unmunged n) -> indent1 $ "argument '" <> n <> "'") <$> Map.toList m
+               in if null varNames then [] else headerLine : varNames ++ [emptyLine]
+
             displayCallScope :: Text -> Pact.ModuleName -> Text -> [Text]
             displayCallScope noun modName funName =
               -- TODO(joel): convert all of this to Doc
@@ -229,7 +235,18 @@ showEvent ksProvs tags event = do
                   argLines = case length vids of
                                0 -> []
                                _ -> displayVids showArg ++ [emptyLine]
-              in headerLine : argLines
+
+                  vals :: Map VarId Unmunged
+                  vals = Map.mapMaybe (\case Located _ (n, (EType SDecimal, AVal p sval)) ->
+                                               case unliteralS $ mkS p sval of
+                                                 Just v | Pact.decimalPlaces (toPact decimalIso v) == 255 -> Just n
+                                                 _ -> Nothing
+                                             _ -> Nothing) $  tags ^. mtVars
+                  warnLines = case Map.size vals of
+                                0 -> []
+                                _ -> displayWarning vals
+
+              in headerLine : argLines ++ warnLines
 
         pure $ case scopeTy of
           LetScope ->
