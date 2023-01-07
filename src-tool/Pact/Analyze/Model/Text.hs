@@ -239,7 +239,7 @@ showEvent ksProvs tags event = do
                   vals :: Map VarId Unmunged
                   vals = Map.mapMaybe (\case Located _ (n, (EType SDecimal, AVal p sval)) ->
                                                case unliteralS $ mkS p sval of
-                                                 Just v | Pact.decimalPlaces (toPact decimalIso v) == 255 -> Just n
+                                                 Just v | Pact.decimalPlaces (toPact decimalIso v) == maxBound -> Just n
                                                  _ -> Nothing
                                              _ -> Nothing) $  tags ^. mtVars
                   warnLines = case Map.size vals of
