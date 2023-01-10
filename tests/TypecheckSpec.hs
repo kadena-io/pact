@@ -125,7 +125,7 @@ customFunChecks :: Text -> SpecWith TCResult
 customFunChecks name = case name of
   "tests/pact/tc.repl.tc-update-partial" -> do
     -- TODO top levels don't get inferred return type, so we have to dig in here
-    it (show name ++ ":specializes partial type") $ \(tl, _) -> do
+    it (unpack name ++ ":specializes partial type") $ \(tl, _) -> do
       shouldBe
         (preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl)
         (Just $ PartialSchema $ Set.singleton "name")
