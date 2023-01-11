@@ -21,7 +21,6 @@
 
 module Pact.Repl.Lib where
 
-import System.Directory
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
@@ -57,6 +56,7 @@ import Statistics.Types (Estimate(..))
 
 # ifdef BUILD_TOOL
 import qualified Pact.Analyze.Check as Check
+import System.Directory
 # endif
 import qualified Pact.Types.Crypto as Crypto
 #endif
@@ -648,7 +648,7 @@ verify :: RNativeFun LibState
 verify i = \case
   [TLitString modName] -> go modName False
   [TLitString modName, TLitBool d] -> go modName d
-  as -> argsError i as
+  other -> argsError i other
   where
     go modName d = do
 #if defined(ghcjs_HOST_OS)
@@ -679,7 +679,7 @@ verify i = \case
         else return $ tStr $ "Verification of " <> modName <> " succeeded"
 #else
     -- ghc - build-tool: typecheck only
-      tc i _as
+      tc i [TLiteral (LString modName) def, TLiteral (LBool d) def]
 #endif
     _failureMessage modName = tStr $ "Verification of " <> modName <> " failed"
     _loadModules modName =
