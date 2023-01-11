@@ -285,6 +285,10 @@ tableGasModel gasConfig =
         GMakeList2 len msz ->
           let glen = fromIntegral len
           in glen + maybe 0 ((* glen) . intCost) msz
+        GZKArgs arg -> case arg of
+          PointAdd g -> pointAddGas g
+          ScalarMult g -> scalarMulGas g
+          Pairing np -> pairingGas np
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
@@ -292,6 +296,23 @@ tableGasModel gasConfig =
       }
 {-# INLINE tableGasModel #-}
 
+pointAddGas :: ZKGroup -> Gas
+pointAddGas = \case
+  ZKG1 -> 5
+  ZKG2 -> 30
+
+scalarMulGas :: ZKGroup -> Gas
+scalarMulGas = \case
+  ZKG1 -> 360
+  ZKG2 -> 1450
+
+pairingGas :: Int -> Gas
+pairingGas npairs
+  | npairs > 0 = fromIntegral (npairs * slope + intercept)
+  | otherwise = 100
+  where
+  slope = 3760
+  intercept = 11600
 
 perByteFactor :: Rational
 perByteFactor = 1%10

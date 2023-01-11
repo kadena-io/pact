@@ -54,7 +54,7 @@ import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
 import Data.Semiring (Semiring, Ring)
 import Data.Field (Field)
-import Data.Foldable (forM_, foldl')
+import Data.Foldable (forM_, foldl', traverse_)
 import qualified Data.Vector as G
 import qualified Data.Vector.Mutable as MG
 import qualified Data.Semiring as SR
@@ -662,12 +662,14 @@ pointAdditionDef =
         p1' <- toG1 i p1
         p2' <- toG1 i p2
         unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ evalError' i "Point not on curve"
+        _ <- computeGas (Right i) (GZKArgs (PointAdd ZKG1))
         let p3' = add p1' p2'
         pure $ TObject (fromG1 p3') def
       "g2" -> do
         p1' <- toG2 i p1
         p2' <- toG2 i p2
         unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ evalError' i "Point not on curve"
+        _ <- computeGas (Right i) (GZKArgs (PointAdd ZKG2))
         let p3' = add p1' p2'
         pure $ TObject (fromG2 p3') def
       _ -> argsError i as
@@ -691,11 +693,13 @@ scalarMultDef =
       "g1" -> do
         p1' <- toG1 i p1
         unless (isOnCurve p1' b1) $ evalError' i "Point not on curve"
+        _ <- computeGas (Right i) (GZKArgs (ScalarMult ZKG1))
         let p2' = multiply p1' scalar'
         pure $ TObject (fromG1 p2') def
       "g2" -> do
         p1' <- toG2 i p1
         unless (isOnCurve p1' b2) $ evalError' i "Point not on curve"
+        _ <- computeGas (Right i) (GZKArgs (ScalarMult ZKG2))
         let p2' = multiply p1' scalar'
         pure $ TObject (fromG2 p2') def
       _ -> argsError i as
@@ -713,8 +717,14 @@ pairingCheckDef =
   pairingCheck' i [TList p1s _ _, TList p2s _ _] = do
     g1s <- traverse termToG1 $ G.toList p1s
     g2s <- traverse termToG2 $ G.toList p2s
-    pure $ toTerm $ pairingCheck (zip g1s g2s)
+    traverse_ (`ensureOnCurve` b1) g1s
+    traverse_ (`ensureOnCurve` b2) g2s
+    let pairs = zip g1s g2s
+    _ <- computeGas (Right i) (GZKArgs (Pairing (length pairs)))
+    pure $ toTerm $ pairingCheck pairs
       where
+      ensureOnCurve :: (Num p, Eq p) => CurvePoint p -> p -> Eval e ()
+      ensureOnCurve p bp = unless (isOnCurve p bp) $ evalError' i "Point not on curve"
       termToG1 (TObject o _) = toG1 i o
       termToG1 _ = evalError' i "not a point"
       termToG2 (TObject o _) = toG2 i o
