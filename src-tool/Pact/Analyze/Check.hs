@@ -391,7 +391,7 @@ verifyFunctionInvariants
   -> Text
   -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants (CheckEnv  tables _consts _pDefs moduleData caps gov _de mDebug)
+verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de mDebug)
   (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
     let modName = moduleDefName $ _mdModule moduleData
 
