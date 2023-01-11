@@ -89,10 +89,10 @@ setupPersistence dbg (Just dbPath') (ReplayFromDisk rp) = do
   return OnDisk { incompleteRequestKeys = HashMap.empty
                 , dbConn = conn }
 
-setupMySqlPersistence :: (Sting -> IO ()) -> MySqlConfig -> ReplayFromDisk -> IO PersistenceSystem
-setupMySqlPersistence dbg mysql (ReplayFromDisk rp) = do
-  dbg $ "[history] Perlistence Enabled as MySQL Database"
-  dbExists <-
+-- setupMySqlPersistence :: (Sting -> IO ()) -> MySqlConfig -> ReplayFromDisk -> IO PersistenceSystem
+-- setupMySqlPersistence dbg mysql (ReplayFromDisk rp) = do
+--   dbg $ "[history] Perlistence Enabled as MySQL Database"
+--   dbExists <-
 
 
 handle :: HistoryChannel -> HistoryService ()
