@@ -564,6 +564,11 @@ inferPreProp preProp = case preProp of
     _   <- expectColumnType tn' cn' SGuard
     Some SBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp SStr rk
 
+  PreApp (toOp unaryArithOpP -> Just _) _ -> asum
+    [ Some SInteger <$> checkPreProp SInteger preProp
+    , Some SDecimal <$> checkPreProp SDecimal preProp
+    ]
+
   -- For unary / binary arithmetic operations, we switch polarity to checking.
   -- Same for string concatenation. For list concatenation, we infer both
   -- lists, then check that they have the same type. For object merges, we

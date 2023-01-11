@@ -24,7 +24,7 @@ module Pact.Repl.Lib where
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
-import Control.Monad.Catch
+import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 
@@ -321,12 +321,10 @@ setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 envDynRef :: RNativeFun LibState
-envDynRef i [TModRef iface _,TModRef impl _] =
-  lookupModule i (_modRefName impl) >>= \r -> case r of
-    Nothing -> evalError' i "Unable to resolve impl module"
-    Just md -> do
-      setLibState $ over rlsDynEnv $ M.insert (_modRefName iface) md
-      return $ tStr "Added dynamic ref to environment."
+envDynRef i [TModRef iface _,TModRef impl _] = do
+  md <- inlineModuleData <$> getModule i (_modRefName impl)
+  setLibState $ over rlsDynEnv $ M.insert (_modRefName iface) md
+  return $ tStr "Added dynamic ref to environment."
 envDynRef _i [] = do
   setLibState $ set rlsDynEnv def
   return $ tStr "Cleared dynamic ref environment."
@@ -368,7 +366,7 @@ setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
-  setenv eeMsgSigs $ M.fromList ((,mempty) . PublicKey . encodeUtf8 <$> V.toList ks)
+  setenv eeMsgSigs $ M.fromList ((,mempty) . PublicKeyText <$> V.toList ks)
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
@@ -383,7 +381,7 @@ setsigs' _ [TList ts _ _] = do
               caps <- forM clist $ \cap -> case cap of
                 (TApp a _) -> view _1 <$> appToCap a
                 o -> evalError' o $ "Expected capability invocation"
-              return (PublicKey $ encodeUtf8 k,S.fromList (V.toList caps))
+              return (PublicKeyText k,S.fromList (V.toList caps))
             _ -> evalError' k' "Expected string value"
         _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
     _ -> evalError' t $ "Expected object"

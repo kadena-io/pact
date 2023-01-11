@@ -41,8 +41,8 @@ instance Pretty (Namespace a) where
   pretty Namespace{..} = "(namespace " <> prettyString (asString' _nsName) <> ")"
 
 instance (SizeOf n) => SizeOf (Namespace n) where
-  sizeOf (Namespace name ug ag) =
-    (constructorCost 3) + (sizeOf name) + (sizeOf ug) + (sizeOf ag)
+  sizeOf ver (Namespace name ug ag) =
+    (constructorCost 3) + (sizeOf ver name) + (sizeOf ver ug) + (sizeOf ver ag)
 
 instance (ToJSON a, FromJSON a) => ToJSON (Namespace a) where toJSON = lensyToJSON 3
 instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3

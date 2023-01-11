@@ -103,7 +103,7 @@ newtype TypeName = TypeName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show)
 
 instance SizeOf TypeName where
-  sizeOf (TypeName n) = sizeOf n
+  sizeOf ver (TypeName n) = sizeOf ver n
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
@@ -152,6 +152,7 @@ data GuardType
   | GTyPact
   | GTyUser
   | GTyModule
+  | GTyCapability
   deriving (Eq,Ord,Generic,Show)
 
 instance ToJSON GuardType where
@@ -161,6 +162,7 @@ instance ToJSON GuardType where
     GTyPact -> "pact"
     GTyUser -> "user"
     GTyModule -> "module"
+    GTyCapability -> "capability"
 instance FromJSON GuardType where
   parseJSON = withText "GuardType" $ \t -> case t of
     "keyset" -> pure GTyKeySet
@@ -168,6 +170,7 @@ instance FromJSON GuardType where
     "pact" -> pure GTyPact
     "user" -> pure GTyUser
     "module" -> pure GTyModule
+    "capability" -> pure GTyCapability
     _ -> fail "Unrecognized guard type"
 
 instance NFData GuardType
@@ -205,7 +208,7 @@ instance FromJSON PrimType where
       doObj o = TyGuard <$> o .: "guard"
 
 instance SizeOf PrimType where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,
   tyKeySet,tyTable,tyGuard :: Text
@@ -255,7 +258,7 @@ instance Pretty SchemaType where
   pretty TyBinding = "binding"
 
 instance SizeOf SchemaType where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
@@ -263,7 +266,7 @@ newtype TypeVarName = TypeVarName { _typeVarName :: Text }
 instance Show TypeVarName where show (TypeVarName t) = show t
 
 instance SizeOf TypeVarName where
-  sizeOf = sizeOf . _typeVarName
+  sizeOf ver = sizeOf ver . _typeVarName
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =

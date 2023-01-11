@@ -9,8 +9,6 @@ module RemoteVerifySpec (spec) where
 
 import Test.Hspec
 
-import Control.Concurrent
-import Control.Exception (finally)
 import Control.Lens
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Except
@@ -21,16 +19,16 @@ import Data.Text (Text, unpack)
 
 import NeatInterpolation (text)
 
-import qualified Network.HTTP.Client as HTTP
-
 import Servant.Client
 
-import Pact.Analyze.Remote.Server (runServantServer)
+import Pact.Analyze.Remote.Server (withTestServantServer)
 import qualified Pact.Analyze.Remote.Types as Remote
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Server.API
 import Pact.Types.Runtime
+
+import Utils
 
 #if ! MIN_VERSION_servant_client(0,16,0)
 type ClientError = ServantError
@@ -56,23 +54,23 @@ loadCode code = do
 stateModuleData :: ModuleName -> ReplState -> IO (Either String (ModuleData Ref))
 stateModuleData nm replState = replLookupModule replState nm
 
-serve :: Int -> IO ThreadId
-serve port = forkIO $ runServantServer port
-
-serveAndRequest :: Int -> Remote.Request -> IO (Either ClientError Remote.Response)
-serveAndRequest port body = do
-  let url = "http://localhost:" ++ show port
-  verifyBaseUrl <- parseBaseUrl url
-  mgr <- HTTP.newManager HTTP.defaultManagerSettings
-  let clientEnv = mkClientEnv mgr verifyBaseUrl
-  tid <- serve port
-  finally
-    (runClientM (verifyClient body) clientEnv)
-    (killThread tid)
+serveAndRequest :: Remote.Request -> IO (Either ClientError Remote.Response)
+serveAndRequest body =
+  withTestServantServer $ \port -> do
+    verifyBaseUrl <- parseBaseUrl $ "http://localhost:" ++ show port
+    runClientM (verifyClient body) (mkClientEnv testMgr verifyBaseUrl)
 
 testSingleModule :: Spec
-testSingleModule = do
-  replState0 <- runIO $ either (error.show) id <$> loadCode
+testSingleModule = beforeAll load $ do
+  it "loads locally" $
+    stateModuleData "mod1" >=> (`shouldSatisfy` isRight)
+
+  it "verifies over the network" $ \replState0 -> do
+    (ModuleData mod1 _refs _) <- either error id <$> stateModuleData "mod1" replState0
+    resp <- serveAndRequest $ Remote.Request [derefDef <$> mod1] "mod1"
+    fmap (view Remote.responseLines) resp `shouldBe` Right []
+ where
+   load = either (error.show) id <$> loadCode
     [text|
       (env-exec-config ["DisablePact44"])
       (env-keys ["admin"])
@@ -89,35 +87,22 @@ testSingleModule = do
       (commit-tx)
     |]
 
-  it "loads locally" $ do
-    stateModuleData "mod1" replState0 >>= (`shouldSatisfy` isRight)
-
-  (ModuleData mod1 _refs _) <- runIO $ either error id <$> stateModuleData "mod1" replState0
-
-  resp <- runIO $ serveAndRequest 3000 $ Remote.Request [derefDef <$> mod1] "mod1"
-
-  it "verifies over the network" $
-    fmap (view Remote.responseLines) resp `shouldBe`
-    (Right [])
-
 testUnsortedModules :: Spec
-testUnsortedModules = do
-  replState0 <- runIO $ either (error . show) id <$> loadCode code
+testUnsortedModules = beforeAll load $ do
 
-  it "loads when topologically sorted locally" $ do
-    stateModuleData "mod2" replState0 >>= (`shouldSatisfy` isRight)
+  it "loads when topologically sorted locally" $
+    stateModuleData "mod2" >=> (`shouldSatisfy` isRight)
 
-  resp <- runIO . runExceptT $ do
-    ModuleData mod1 _refs _ <- ExceptT $ stateModuleData "mod1" replState0
-    ModuleData mod2 _refs _ <- ExceptT $ stateModuleData "mod2" replState0
-    ExceptT . fmap (first show) . serveAndRequest 3001 $
-      Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
-
-  it "verifies over the network" $
-    fmap (view Remote.responseLines) resp `shouldBe`
-    (Right [])
-  where
-    code = [text|
+  it "verifies over the network" $ \replState0  -> do
+    resp <- runExceptT $ do
+      ModuleData mod1 _refs _ <- ExceptT $ stateModuleData "mod1" replState0
+      ModuleData mod2 _refs _ <- ExceptT $ stateModuleData "mod2" replState0
+      ExceptT . fmap (first show) . serveAndRequest $
+        Remote.Request [derefDef <$> mod2, derefDef <$> mod1] "mod2"
+    fmap (view Remote.responseLines) resp `shouldBe` Right []
+ where
+  load = either (error . show) id <$> loadCode
+    [text|
       (env-exec-config ["DisablePact44"])
       (env-keys ["admin"])
       (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })

@@ -27,7 +27,7 @@ import Data.Text.Encoding
 
 import Pact.Native.Internal
 import Pact.Types.Pretty
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 #if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteArray as BA
 import Crypto.PubKey.Curve25519

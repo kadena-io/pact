@@ -19,7 +19,10 @@
 --
 
 module Pact.Types.Runtime
- ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
+ ( evalError,evalError',
+   failTx,failTx',
+   argsError,argsError',
+   throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
@@ -55,8 +58,7 @@ module Pact.Types.Runtime
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)
-import Control.Monad.Catch
-import Control.Monad.Except
+import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.DeepSeq
@@ -153,6 +155,8 @@ data ExecutionFlag
   | FlagDisablePact44
   -- | Disable new transcendental impls
   | FlagDisableNewTrans
+  -- | Disable Pact 4.5 Features
+  | FlagDisablePact45
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -189,7 +193,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(M.Map PublicKey (S.Set UserCapability))
+    , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode
@@ -280,7 +284,7 @@ instance Default EvalState where def = EvalState def def def def def def
 newtype Eval e a =
     Eval { unEval :: ReaderT (EvalEnv e) (StateT EvalState IO) a }
     deriving (Functor,Applicative,Monad,MonadState EvalState,
-                     MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
+                     MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadMask,MonadIO)
 
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
@@ -335,7 +339,7 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAny (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 --
@@ -412,6 +416,9 @@ evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
 failTx i = throwErr TxFailure i
+
+failTx' :: HasInfo i => i -> Doc -> Eval e a
+failTx' = failTx . getInfo
 
 throwDbError :: MonadThrow m => Doc -> m a
 throwDbError = throwM . PactError DbError def def

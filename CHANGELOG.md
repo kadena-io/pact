@@ -1,3 +1,14 @@
+4.4.1
+---
+* Export `ApiReq` constituent data structures (#1055)
+* Fix test tree creation to allow tests to run faster, safer to run on a single core,
+  and prevents test servers from being exposed to public environs (#1060, #1062)
+* Added capability guards (#1057)
+* Lazily evaluate `enforce` to reduce gas usage on evaluation (#1069)
+* Gas adjustment for various natives (#1071)
+* Fix FV regression that disallowed the verification of unary operators like `abs` (#1079)
+* Documentation link fixes (thanks @przemeklach! #1075)
+
 4.4
 ---
 * Document VSCode support - thanks JeremeyJS! (#965)

@@ -807,6 +807,8 @@
   - 3
 - - (txids accounts.accounts 0)
   - 100000
+- - (create-capability-pact-guard (accounts.MANAGEDCAP "foo" "bar"))
+  - 1
 - - (ln longNumber)
   - 6
 - - (ln medNumber)
@@ -1098,4 +1100,6 @@
 - - (typeof smallNumber)
   - 2
 - - (pact-version)
+  - 1
+- - (create-capability-guard (accounts.MANAGEDCAP "foo" "bar"))
   - 1

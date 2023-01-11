@@ -626,6 +626,7 @@ evalTerm = \case
   --
   MkKsRefGuard nameT -> resolveGuard =<< symRegistryName <$> evalTerm nameT
 
+  -- TODO doesn't really work, and doesn't handle pact ID
   MkPactGuard _nameT -> do
     whetherInPact <- view inPact
     succeeds %= (.&& whetherInPact)
@@ -648,6 +649,14 @@ evalTerm = \case
 
   MkModuleGuard _nameT ->
     view moduleGuard
+
+  MkCapabilityGuard cap (unzip -> (_, vids)) isPact -> do
+    when isPact $ do
+      whetherInPact <- view inPact
+      succeeds %= (.&& whetherInPact)
+    granted <- isGranted =<< capabilityAppToken cap vids
+    succeeds %= (.&& granted)
+    view aeTrivialGuard
 
   GuardPasses tid guardT -> do
     guard <- evalTerm guardT

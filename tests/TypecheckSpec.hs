@@ -50,85 +50,85 @@ getUnresolvedTys tl = filter isUnresolvedTy (map _aTy (toList tl))
 checkFailures :: TCResultCheck Failure
 checkFailures (_,s) test = toList (_tcFailures s) `test` []
 
-topLevelTypechecks :: Text -> TCResult -> Spec
-topLevelTypechecks n r = it (unpack n ++ " typechecks") $ checkUnresolvedTys r shouldBe
+topLevelTypechecks :: Text -> SpecWith TCResult
+topLevelTypechecks n = it (unpack n ++ " typechecks") $ \r ->
+  checkUnresolvedTys r shouldBe
 
-topLevelNoFailures :: Text -> TCResult -> Spec
-topLevelNoFailures n r =
-  it (unpack n ++ " has no failures") $ checkFailures r shouldBe
+topLevelNoFailures :: Text -> SpecWith TCResult
+topLevelNoFailures n = it (unpack n ++ " has no failures") $ \r ->
+  checkFailures r shouldBe
 
-topLevelFails :: Text -> TCResult -> Spec
-topLevelFails n r =
-  it (unpack n ++ " should fail") $ checkFailures r shouldNotBe
+topLevelFails :: Text -> SpecWith TCResult
+topLevelFails n = it (unpack n ++ " should fail") $ \r ->
+  r `checkFailures` shouldNotBe
 
-topLevelChecks :: Text -> TCResult -> Spec
-topLevelChecks n r = topLevelTypechecks n r >> topLevelNoFailures n r
+topLevelChecks :: Text -> SpecWith TCResult
+topLevelChecks n = topLevelTypechecks n  >> topLevelNoFailures n
 
 checkModule :: FilePath -> ModuleName -> Spec
 checkModule fp mn = describe (fp ++ ": " ++ moduleName mn ++ " typechecks") $ do
-  (tls,fs) <- runIO $ inferModule False fp mn
-  it (moduleName mn ++ ": module has no failures") $ map prettyFail fs `shouldBe` []
-  it (moduleName mn ++ ": all toplevels typecheck") $ concatMap getUnresolvedTys tls `shouldBe` []
+  beforeAll (inferModule False fp mn) $ do
+    it (moduleName mn ++ ": module has no failures") $ \(_, fs) ->
+      map prettyFail fs `shouldBe` []
+    it (moduleName mn ++ ": all toplevels typecheck") $ \(tls, _) ->
+      concatMap getUnresolvedTys tls `shouldBe` []
 
 moduleName :: ModuleName -> String
 moduleName = unpack . asString
 
 -- | Check that this module has no verification failures
 verifyModule :: FilePath -> ModuleName -> Spec
-verifyModule fp mn = describe (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
-  success <- runIO $ do
-    (resultTm, replState) <- execScript' Quiet fp
-    either (die def) (const (pure ())) resultTm
-    eModule <- replLookupModule replState mn
-    modul <- case eModule of
-      Left e      -> die def $ "Module not found: " ++ show (fp,mn,e)
-      Right modul -> pure modul
-    mModules <- replGetModules replState
-    checkResult <- case mModules of
-      Left err           -> die def (show err)
-      Right (modules, _) -> Check.verifyModule def (inlineModuleData <$> modules) (inlineModuleData modul)
-    let ros = Check.renderVerifiedModule checkResult
-    pure $ if any ((== OutputFailure) . _roType) ros
-       then expectationFailure $ T.unpack $
-            "Verification errors found: " <> T.intercalate "\n" (map renderCompactText ros)
-       else pure ()
-  it (moduleName mn ++ ": module verifies") success
+verifyModule fp mn = it (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
+  (resultTm, replState) <- execScript' Quiet fp
+  either (die def) (const (pure ())) resultTm
+  eModule <- replLookupModule replState mn
+  modul <- case eModule of
+    Left e      -> die def $ "Module not found: " ++ show (fp,mn,e)
+    Right modul -> pure modul
+  mModules <- replGetModules replState
+  checkResult <- case mModules of
+    Left err           -> die def (show err)
+    Right (modules, _) -> Check.verifyModule def (inlineModuleData <$> modules) (inlineModuleData modul)
+  let ros = Check.renderVerifiedModule checkResult
+  when (any ((== OutputFailure) . _roType) ros) $
+    expectationFailure $ T.unpack $
+      "Verification errors found: " <> T.intercalate "\n" (map renderCompactText ros)
 
 prettyFail :: Failure -> String
 prettyFail (Failure TcId{..} msg) = renderInfo _tiInfo ++ ": " ++ msg
 
 
 checkFun :: FilePath -> ModuleName -> Text -> Spec
-checkFun fp mn fn = do
-  r <- runIO $ inferFun False fp mn fn
-  topLevelChecks (asString mn <> "." <> fn) r
+checkFun fp mn fn =
+  beforeAll (inferFun False fp mn fn) $
+    topLevelChecks (asString mn <> "." <> fn)
 
 
 checkFuns :: Spec
 checkFuns = describe "pact typecheck" $ do
   let mn = "tests/pact/tc.repl"
-  (ModuleData _ m _) <- runIO $ fmap inlineModuleData $ loadModule mn "tctest"
+  -- runIO is needed here to construct the test tree
+  (ModuleData _ m _) <- runIO $ inlineModuleData <$> loadModule mn "tctest"
   forM_ (HM.toList m) $ \(fn,ref) -> do
-    let doTc = runIO $ runTC 0 False (typecheckTopLevel ref)
+    let doTc = beforeAll (runTC 0 False (typecheckTopLevel ref))
         n = asString mn <> "." <> fn
     when (take 3 fn == "tc-") $
-      doTc >>= \r -> do
-      topLevelChecks n r
-      customFunChecks n r
+      doTc $ do
+        topLevelChecks n
+        customFunChecks n
     when (take 6 fn == "fails-") $
-      doTc >>= \r -> do
-        topLevelTypechecks n r
-        topLevelFails n r
+      doTc $ do
+        topLevelTypechecks n
+        topLevelFails n
 
-
-customFunChecks :: Text -> TCResult -> Spec
-customFunChecks name (tl,_) = case name of
+customFunChecks :: Text -> SpecWith TCResult
+customFunChecks name = case name of
   "tests/pact/tc.repl.tc-update-partial" -> do
     -- TODO top levels don't get inferred return type, so we have to dig in here
-    it (show name ++ ":specializes partial type") $
-      preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl
-        `shouldBe`
-      (Just $ PartialSchema $ Set.singleton "name")
+    it (unpack name ++ ":specializes partial type") $ \(tl, _) -> do
+      shouldBe
+        (preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl)
+        (Just $ PartialSchema $ Set.singleton "name")
   _ -> return ()
 
 loadModule :: FilePath -> ModuleName -> IO (ModuleData Ref)

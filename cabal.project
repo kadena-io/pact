@@ -12,22 +12,3 @@ constraints: unordered-containers <0.2.16
 -- test upper bounds
 constraints: hspec-golden <0.2
 
--- Entropy 0.4.1.9 has a build error on a bad flag
--- TODO: remove this as soon as entropy releases a fixed version
-constraints: entropy <0.4.1.9
-
-source-repository-package
-    type: git
-    location: https://github.com/adjoint-io/galois-field.git
-    tag: 3b13705fe26ea1dc03e1a6d7dac4089085c5362d
-
-source-repository-package
-    type: git
-    location: https://github.com/adjoint-io/elliptic-curve.git
-    tag: 445e196a550e36e0f25bd4d9d6a38676b4cf2be8
-
-source-repository-package
-    type: git
-    location: https://github.com/adjoint-io/pairing.git
-    tag: 9e3fd026fb43fd64917a3b267d0d8d351eba77cc
-

@@ -23,6 +23,7 @@ module Pact.Types.RPC
     PactRPC(..)
   , ExecMsg(..)
   , ContMsg(..)
+  , contMsgJsonPairs
   ) where
 
 import Control.Applicative
@@ -78,6 +79,15 @@ data ContMsg = ContMsg
   , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show,Generic)
 
+contMsgJsonPairs :: (Monoid a, KeyValue a) => ContMsg -> a
+contMsgJsonPairs ContMsg{..} = mconcat
+  [ "pactId" .= _cmPactId
+  , "step" .= _cmStep
+  , "rollback" .= _cmRollback
+  , "data" .= _cmData
+  , "proof" .= _cmProof
+  ]
+
 instance NFData ContMsg
 instance FromJSON ContMsg where
     parseJSON =
@@ -87,5 +97,5 @@ instance FromJSON ContMsg where
     {-# INLINE parseJSON #-}
 
 instance ToJSON ContMsg where
-    toJSON ContMsg{..} = object
-      [ "pactId" .= _cmPactId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData, "proof" .= _cmProof]
+    toJSON = A.Object . contMsgJsonPairs
+
