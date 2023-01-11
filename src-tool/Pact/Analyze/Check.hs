@@ -67,14 +67,13 @@ import           Data.Traversable           (for)
 import           Prelude                    hiding (exp)
 
 import           Pact.Typechecker           (typecheckTopLevel)
-import           Pact.Types.Lang            (pattern ColonExp, pattern CommaExp,
-                                             Def (..), DefType (..), Info,
+import           Pact.Types.Lang            (Def (..), DefType (..), Info,
                                              dFunType, dMeta, mModel,
                                              renderInfo, tDef, tInfo, tMeta,
                                              _aName, _dMeta, _mModel, _tDef)
 import Pact.Types.PactError
 import           Pact.Types.Pretty          (renderCompactText)
-import           Pact.Types.Runtime         (Exp, ModuleData (..), ModuleName,
+import           Pact.Types.Runtime         (ModuleData (..), ModuleName,
                                              Ref, Ref' (Ref),
                                              Term (TConst, TDef, TSchema, TTable),
                                              asString, getInfo, mdModule,
@@ -101,6 +100,7 @@ import           Pact.Analyze.Parse         hiding (tableEnv)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
+import Pact.Types.Exp
 
 smtConfig :: SBV.SMTConfig
 smtConfig = SBV.z3
@@ -233,6 +233,7 @@ data VerificationFailure
   | SchemalessTable Info
   | ScopeErrors [ScopeError]
   | NonDefTerm (Pact.Term (Ref' (Pact.Term Pact.Name)))
+  | ResultInDefpact
   deriving Show
 
 _describeCheckSuccess :: CheckSuccess -> Text
@@ -1226,6 +1227,24 @@ verifyModule de modules moduleData@(ModuleData modDef allRefs _) = runExceptT $ 
       let defunRefs, defpactRefs :: HM.HashMap Text Ref
           ModuleRefs defunRefs defpactRefs _ _ = modRefs
 
+          -- rs 2023-01-11: Usage of `result` is undefined within the defpact model,
+          -- hence we throw an `ResultInDefpact` error
+          resultProps = HM.filter (\case
+            Ref TDef{..} ->
+              let hasResult = \case
+                    EList (ListExp xs _ _) -> any hasResult xs
+                    EAtom (AtomExp "result" _ _ _) -> True
+                    _ -> False
+                  hasProperty = \case
+                    (EList (ListExp (EAtom (AtomExp "property" _ _ _):xs) _ _)) ->
+                      any hasResult xs
+                    _ -> False
+                  v = filter hasProperty (_tDef ^. (dMeta . mModel))
+              in not (null v)
+
+            _ -> False) defpactRefs
+      unless (null resultProps) $ throwError ResultInDefpact
+
       caps   <- moduleCapabilities de allModules
       gov    <- moduleGovernance moduleData
 
@@ -1264,6 +1283,7 @@ renderVerifiedModule = \case
     ]
   Left (ScopeErrors errs) ->
     renderFatal <$> ("Scope checking errors" : fmap describeScopeError errs)
+  Left ResultInDefpact -> [renderFatal $ "Invalid usage of `result` within a defpact model"]
   Right (ModuleChecks propResults stepResults invariantResults warnings) ->
     let propResults'      = toListOf (traverse.each)          propResults
         stepResults'      = toListOf (traverse.each)          stepResults
