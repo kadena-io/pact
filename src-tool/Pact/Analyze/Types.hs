@@ -115,6 +115,7 @@ data CheckableType
   | CheckDefpact
   | CheckDefconst
   | CheckPactStep
+  deriving Show
 
 makeLenses ''Table
 

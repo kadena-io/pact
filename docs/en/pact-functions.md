@@ -2145,10 +2145,14 @@ Typecheck MODULE, optionally enabling DEBUG output.
 
 ### verify {#verify}
 
-*module*&nbsp;`string` *&rarr;*&nbsp;`string`
+*module*&nbsp;`string` *debug*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
 
-Verify MODULE, checking that all properties hold.
+Verify MODULE, checking that all properties hold. Optionally enable debug output to "pact-verify-MODULE" directory.
+```lisp
+(verify "module")
+(verify "module" true
+```
 
 
 ### with-applied-env {#with-applied-env}
