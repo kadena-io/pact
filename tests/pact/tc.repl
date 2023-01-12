@@ -16,6 +16,9 @@
   (implements tctest-iface)
 
   (defun tcmodref-spec:bool (s:string)
+    (impl-fun s))
+
+  (defun impl-fun:bool (s:string)
     true)
 )
 
