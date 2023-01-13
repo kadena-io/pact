@@ -16,6 +16,9 @@
   (implements tctest-iface)
 
   (defun tcmodref-spec:bool (s:string)
+    (impl-fun s))
+
+  (defun impl-fun:bool (s:string)
     true)
 )
 
@@ -53,6 +56,14 @@
     dob:time)
 
   (defconst FOUR (+ 2 2))
+
+  (defconst LIST (enumerate 0 10))
+
+  (defconst MODREF tc-test-impl)
+
+  (defconst OBJ (tc-test-inner))
+
+  (defconst GUARD (keyset-ref-guard 'keyset))
 
   (deftable persons:{person})
 
@@ -271,6 +282,10 @@
     "test compliant modrefs with varying impl lists"
     (tc-eq-modref tc-test-impl tc-test-impl-both)
     )
+
+  (defun tc-native-const:bool ()
+    "test handling of native consts"
+    (= 0 CHARSET_ASCII))
 )
 
 (create-table persons)
