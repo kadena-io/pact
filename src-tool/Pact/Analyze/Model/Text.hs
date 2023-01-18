@@ -24,7 +24,7 @@ import qualified Data.SBV.Internals         as SBVI
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
-import qualified Data.Decimal as Pact
+import qualified Data.Decimal               as Pact
 
 import qualified Pact.Types.Info            as Pact
 import qualified Pact.Types.Lang            as Pact
