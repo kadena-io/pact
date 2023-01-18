@@ -220,8 +220,8 @@ replDefs = ("Repl",
       ("Queries, or with arguments, sets execution config flags. Valid flags: " <>
        tShow (M.keys flagReps))
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString), ("debug", tTyBool)])
-       [LitExample "(verify \"module\")", LitExample "(verify \"module\" true"]
-       "Verify MODULE, checking that all properties hold. Optionally enable debug output to \"pact-verify-MODULE\" directory."
+       [LitExample "(verify \"module\")", LitExample "(verify \"module\" true)"]
+       "Verify MODULE, checking that all properties hold. Optionally, if DEBUG is set to true, write debug output to \"pact-verify-MODULE\" directory."
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
        "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
