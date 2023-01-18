@@ -25,6 +25,7 @@ module Pact.Types.Persistence
   (
    RowKey(..),
    Domain(..),
+   TxLogJson(..),
    TxLog(..),txDomain,txKey,txValue,
    WriteType(..),
    Method,
@@ -222,6 +223,10 @@ instance AsString (Domain k v) where
     asString Namespaces = "SYS:Namespaces"
     asString Pacts = "SYS:Pacts"
 
+-- | Serialized JSON Text
+--
+newtype TxLogJson = TxLogJson { _getTxLogJson :: Text }
+
 -- | Transaction record.
 data TxLog v =
     TxLog {
@@ -303,8 +308,6 @@ data ExecutionMode =
     Local
     deriving (Eq,Show)
 
-
-
 -- | Shape of back-end methods: use MVar for state, run in IO.
 type Method e a = MVar e -> IO a
 
@@ -331,7 +334,7 @@ data PactDb e = PactDb {
     -- In transactional mode, commits backend to TxId.
     -- In Local mode, releases TxId for re-use.
     -- Returns all TxLogs.
-  , _commitTx ::  Method e [TxLog LegacyValue]
+  , _commitTx :: Method e [TxLogJson]
     -- | Conclude transactional state with rollback.
     -- Safe to call at any time.
     -- Rollback all backend changes.

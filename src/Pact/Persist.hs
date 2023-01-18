@@ -160,7 +160,7 @@ data Persister s = Persister {
   ,
   readValue :: forall k v . (PactDbKey k, PactDbValue v) => Table k -> k -> Persist s (Maybe v)
   ,
-  writeValue :: forall k v . (PactDbKey k, PactDbValue v) => Table k -> WriteType -> k -> v -> Persist s ()
+  writeValue :: forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ()
   ,
   refreshConn :: Persist s ()
   }

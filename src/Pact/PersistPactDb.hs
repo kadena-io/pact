@@ -40,7 +40,9 @@ import Control.Monad.State.Strict
 import Data.String
 
 import Data.Aeson hiding ((.=))
+import qualified Data.ByteString.Lazy as BL
 import Data.Text (unpack)
+import qualified Data.Text.Encoding as T
 import GHC.Generics
 
 import qualified Data.Map.Strict as M
@@ -52,14 +54,12 @@ import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger
 
-import Pact.JSON.Legacy.Value
-
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
   { _db :: !p
   , _persist :: !(Persister p)
   , _logger :: !Logger
-  , _txRecord :: !(M.Map TxTable [TxLog LegacyValue])
+  , _txRecord :: !(M.Map TxTable [TxLogJson])
   , _txId :: !TxId
   , _mode :: !(Maybe ExecutionMode)
   }
@@ -201,7 +201,7 @@ doBegin m = do
     Local -> pure Nothing
 {-# INLINE doBegin #-}
 
-doCommit :: MVState p [TxLog LegacyValue]
+doCommit :: MVState p [TxLogJson]
 doCommit = use mode >>= \case
     Nothing -> rollback >> throwDbError "doCommit: Not in transaction"
     Just m -> do
@@ -229,7 +229,9 @@ rollback = do
 
 
 getLogs :: forall v p k . FromJSON v => Domain k v -> TxId -> MVState p [TxLog v]
-getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn d) (fromIntegral tid))
+getLogs d tid = do
+    x <- doPersist (\p -> readValue p (tn d) (fromIntegral tid))
+    mapM convLog $ fromMaybe [] x
   where
     tn :: Domain k v -> TxTable
     tn KeySets    = TxTable keysetsTable
@@ -237,8 +239,9 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn Namespaces = TxTable namespacesTable
     tn Pacts = TxTable pactsTable
     tn (UserTables t) = userTxRecord t
-    convLog :: TxLog LegacyValue -> MVState p (TxLog v)
-    convLog tl = case fromJSON (_getLegacyValue $ _txValue tl) of
+
+    convLog :: TxLog Value -> MVState p (TxLog v)
+    convLog tl = case fromJSON (_txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl
 {-# INLINE getLogs #-}
@@ -301,11 +304,16 @@ writeUser s wt tn rk row = runMVState s $ do
 record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
 record tt k v = modify'
     $ over txRecord
-    $ M.insertWith (flip append) tt [TxLog (asString (tableId tt)) (asString k) (LegacyValue $ toJSON v)]
+    $ M.insertWith
+        (flip append)
+        tt
+        (encodeTxLog <$> [TxLog (asString (tableId tt)) (asString k) v])
   where
     -- strict append (it would be better to use a datastructure with efficient append)
     append [] b = b
     append (h:t) b = let !x = append t b in h : x
+
+    encodeTxLog = TxLogJson . T.decodeUtf8 . BL.toStrict . encode
 {-# INLINE record #-}
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName

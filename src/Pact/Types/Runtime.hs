@@ -431,7 +431,7 @@ beginTx :: Info -> ExecutionMode -> Eval e (Maybe TxId)
 beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx
-commitTx :: Info -> Eval e [TxLog LegacyValue]
+commitTx :: Info -> Eval e [TxLogJson]
 commitTx i = method i $ \db -> _commitTx db
 
 -- | Invoke _rollbackTx
