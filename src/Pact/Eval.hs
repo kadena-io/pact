@@ -249,6 +249,7 @@ enforceModuleAdmin i modGov =
         _ -> evalError i "enforceModuleAdmin: module governance must be defcap"
 
 
+
 -- | Evaluate current namespace and prepend namespace to the
 -- module name. This should be done before any lookups, as
 -- 'namespace.modulename' is the name we will associate
