@@ -57,6 +57,10 @@ data Principal
     -- ^ format: `p:pactid:fqn of pact function
   | C Text
     -- ^ format: `c:hash of cap name + cap params + pactId if any
+  | Sess Text
+    -- ^ format: `sess:fqn of session function`.
+    -- The public-key will be inferred from the runtime environment
+    -- for users logged in via webauthn.
   deriving Eq
 makePrisms ''Principal
 
@@ -76,6 +80,7 @@ mkPrincipalIdent = \case
   U n ph -> "u:" <> n <> ":" <> ph
   M mn n -> "m:" <> asString mn <> ":" <> n
   C c -> "c:" <> c
+  Sess n -> "sess:" <> n
 
 -- | Show a principal guard type as a textual value
 --
@@ -88,6 +93,7 @@ showPrincipalType = \case
   M{} -> "m:"
   P{} -> "p:"
   C{} -> "c:"
+  Sess{} -> "sess:"
 
 -- | Parser producing a principal value from a textual representation.
 --
@@ -99,6 +105,7 @@ principalParser (getInfo -> i) = kParser
   <|> mParser
   <|> pParser
   <|> cParser
+  <|> sessionParser
   where
     base64UrlUnpaddedAlphabet :: String
     base64UrlUnpaddedAlphabet =
@@ -171,6 +178,12 @@ principalParser (getInfo -> i) = kParser
       eof'
       pure $ C h
 
+    sessionParser = do
+      _ <- string "sess"
+      char' ':'
+      n <- nameParser' i
+      pure $ Sess n
+
 
 -- | Given a pact guard, convert to a principal type.
 -- Parameterized for use with non-Eval contexts.
@@ -199,6 +212,9 @@ guardToPrincipal chargeGas = \case
         pid' = T.encodeUtf8 . asString <$> pid
     h <- mkHash $ (f':args') ++ maybe [] pure pid'
     pure $ C $ asString h
+  GSession (SessionGuard _sn) -> do
+    chargeGas 1
+    pure $ Sess _sn
   where
     mkHash bss = do
       let bs = mconcat bss

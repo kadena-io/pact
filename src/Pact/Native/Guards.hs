@@ -37,6 +37,7 @@ guardDefs =
     [ createUserGuard
     , createPactGuard
     , createModuleGuard
+    , createSessionGuard
     , createCapabilityGuard
     , createCapabilityPactGuard
     , keysetRefGuard
@@ -79,6 +80,18 @@ createModuleGuard =
         return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
       Nothing -> evalError' i "create-module-guard: must call within module"
     createModuleGuard' i as = argsError i as
+
+createSessionGuard :: NativeDef
+createSessionGuard =
+  defRNative "create-session-guard" createSessionGuard'
+  (funType (tTyGuard (Just GTySession)) [("name", tTyString)])
+  []
+  "Defines a guard by NAME that enforces the command was issued by a user with an active session."
+  where
+    createSessionGuard' :: RNativeFun e
+    createSessionGuard' i [TLitString name] =
+      pure $ TGuard (GSession $ SessionGuard name) (_faInfo i)
+    createSessionGuard' i as = argsError i as
 
 keysetRefGuard :: NativeDef
 keysetRefGuard =

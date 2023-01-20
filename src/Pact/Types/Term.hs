@@ -42,6 +42,7 @@ module Pact.Types.Term
    PactId(..),
    UserGuard(..),
    ModuleGuard(..),
+   SessionGuard(..),
    CapabilityGuard(..),
    Guard(..),_GPact,_GKeySet,_GKeySetRef,_GModule,_GUser,
    DefType(..),_Defun,_Defpact,_Defcap,
@@ -589,6 +590,30 @@ instance ToJSON PactGuard where toJSON = lensyToJSON 3
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 
 -- -------------------------------------------------------------------------- --
+-- SessionGuard
+
+data SessionGuard = SessionGuard
+  { _sgName :: !Text
+  } deriving (Eq, Generic, Show, Ord)
+
+instance Arbitrary SessionGuard where
+  arbitrary = SessionGuard <$> genBareText
+
+instance NFData SessionGuard
+
+instance Pretty SessionGuard where
+  pretty SessionGuard{..} = "SessionGuard" <+> commaBraces
+    [ "name: " <> pretty _sgName
+    ]
+
+instance SizeOf SessionGuard where
+  sizeOf ver (SessionGuard sn) =
+    (constructorCost 1) + (sizeOf ver sn)
+
+instance ToJSON SessionGuard where toJSON = lensyToJSON 3
+instance FromJSON SessionGuard where parseJSON = lensyParseJSON 3
+
+-- -------------------------------------------------------------------------- --
 -- ObjectMap
 
 -- | Simple dictionary for object values.
@@ -699,6 +724,7 @@ data Guard a
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
   | GCapability !(CapabilityGuard a)
+  | GSession !SessionGuard
   deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 -- potentially long output due to constrained recursion of PactValue
@@ -721,6 +747,7 @@ instance Pretty a => Pretty (Guard a) where
   pretty (GUser g) = pretty g
   pretty (GModule g) = pretty g
   pretty (GCapability g) = pretty g
+  pretty (GSession g) = pretty g
 
 instance (SizeOf p) => SizeOf (Guard p) where
   sizeOf ver (GPact pg) = (constructorCost 1) + (sizeOf ver pg)
@@ -729,6 +756,7 @@ instance (SizeOf p) => SizeOf (Guard p) where
   sizeOf ver (GModule mg) = (constructorCost 1) + (sizeOf ver mg)
   sizeOf ver (GUser ug) = (constructorCost 1) + (sizeOf ver ug)
   sizeOf ver (GCapability g) = (constructorCost 1) + (sizeOf ver g)
+  sizeOf ver (GSession g) = (constructorCost 1) + (sizeOf ver g)
 
 guardCodec :: (ToJSON a, FromJSON a) => Codec (Guard a)
 guardCodec = Codec enc dec
@@ -739,6 +767,7 @@ guardCodec = Codec enc dec
     enc (GModule g) = toJSON g
     enc (GUser g) = toJSON g
     enc (GCapability g) = toJSON g
+    enc (GSession g) = toJSON g
     {-# INLINE enc #-}
     dec v =
       (GKeySet <$> parseJSON v) <|>
@@ -1443,6 +1472,7 @@ guardTypeOf g = case g of
   GUser {} -> GTyUser
   GModule {} -> GTyModule
   GCapability {} -> GTyCapability
+  GSession {} -> GTySession
 
 -- | Return a Pact type, or a String description of non-value Terms.
 -- Does not handle partial schema types.

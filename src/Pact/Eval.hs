@@ -116,6 +116,13 @@ enforceKeySetName mi ksn = do
   runSysOnly $ enforceKeySet mi (Just ksn) ks
 {-# INLINE enforceKeySetName #-}
 
+
+enforceSession :: Eval e ()
+enforceSession = undefined
+  -- TODO: extract something (call it "foo") from EnvState.
+  -- foo must be inserted into EnvState before `enforceSession` is called (e.g.
+  -- right after the login webauthn ceremony).
+
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
@@ -160,6 +167,7 @@ enforceGuard i g = case g of
         else
           void $ acquireModuleAdmin (getInfo i) _mName _mGovernance
       MDInterface{} -> evalError' i $ "ModuleGuard not allowed on interface: " <> pretty mg
+  GSession SessionGuard{} -> enforceSession
   GUser UserGuard{..} ->
     void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
   GCapability CapabilityGuard{..} -> do
@@ -239,7 +247,6 @@ enforceModuleAdmin i modGov =
           g <- computeUserAppGas d _dInfo
           void $ evalUserAppBody d af _dInfo g reduceBody
         _ -> evalError i "enforceModuleAdmin: module governance must be defcap"
-
 
 
 -- | Evaluate current namespace and prepend namespace to the

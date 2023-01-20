@@ -399,6 +399,7 @@ toGuardPactValue g = case g of
   (GKeySetRef k) -> Right (GKeySetRef k)
   (GModule m) -> Right (GModule m)
   (GPact p) -> Right (GPact p)
+  (GSession s) -> Right (GSession s)
 
 
 fromGuardPactValue :: Guard PactValue -> Guard (Term Name)
@@ -410,6 +411,7 @@ fromGuardPactValue g = case g of
   (GKeySetRef k) -> GKeySetRef k
   (GModule m) -> GModule m
   (GPact p) -> GPact p
+  (GSession s) -> GSession s
 
 toNamespacePactValue :: Info -> Namespace (Term Name) -> Eval e (Namespace PactValue)
 toNamespacePactValue info (Namespace name userg adming) = do
