@@ -33,6 +33,7 @@ import Pact.Types.Capability
 import Pact.Types.KeySet (parseAnyKeysetName)
 import Pact.Types.PactValue
 import Pact.Types.Pretty
+import Pact.Types.Purity (PureSysOnly)
 import Pact.Types.Runtime
 
 capDefs :: NativeModule
@@ -257,23 +258,23 @@ emitEventDef =
         DefcapEvent -> return ()
       _ -> evalError' i $ "emit-event: must be managed or event defcap"
 
-enforceSessionDef :: NativeDef
+enforceSessionDef :: forall e. PureSysOnly e => NativeDef
 enforceSessionDef =
   defRNative "enforce-session" enforceSession'
-  (funType tTyBool [("keyset", tTyGuard (Just GTyKeySet))] <>
-   funType tTyBool [("keyset", tTyString)])
+  (funType tTyBool [("keyset", tTyGuard (Just GTyKeySet))])
   [LitExample "(enforce-keyset keyset)"]
   "Enforce that the current environment contains a Signer with a key that \
   \satisfies the keyset parameter. The environment will contain a Signer \
   \when running in a context with an authenticated webauthn user."
   where
-    enforceSession' :: RNativeFun e
+    enforceSession' :: PureSysOnly e => RNativeFun e
     enforceSession' i [TLitString k] = do
       case parseAnyKeysetName k of
         Left{} -> evalError' i "incorrect keyset name format"
-        Right ksn -> enforceGuard i (GKeySetRef ksn) >> return (toTerm True)
+        -- Right ksn -> enforceGuard i (GKeySetRef ksn) >> return (toTerm True)
+        -- Right ksn -> enforceKeySetAgainstSessionKey i (GKeySetRef ksn) >> return (toTerm True)
     enforceSession' i [TGuard{_tGuard}] = case _tGuard of
-      GKeySetRef ksr -> enforceGuard i (GKeySetRef ksr) >> return (toTerm True)
-      GKeySet ks -> enforceGuard i (GKeySet ks) >> return (toTerm True)
+      -- GKeySetRef ksr -> enforceGuard i (GKeySetRef ksr) >> return (toTerm True)
+      GKeySet ks -> enforceKeySetAgainstSessionKey (getInfo i) Nothing ks >> return (toTerm True)
       _ -> evalError' i "incorrect guard type, must be keyset ref or keyset"
     enforceSession' i as = argsError i as
