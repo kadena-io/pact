@@ -26,7 +26,7 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeSessionSig,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice,
    toPactId,
@@ -194,7 +194,7 @@ data EvalEnv e = EvalEnv {
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
     , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
-      -- | Keys of the user who has an active Webauthn session.
+      -- | Verified key of the user who has an active Webauthn session.
     , _eeSessionSig :: !(Maybe (PublicKeyText, S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value

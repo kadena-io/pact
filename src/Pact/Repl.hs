@@ -134,6 +134,7 @@ initEvalEnv ls = do
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
+    , _eeSessionSig = Nothing
     , _eeMsgBody = Null
     , _eeMode = Transactional
     , _eeEntity = Nothing

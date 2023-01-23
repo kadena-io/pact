@@ -34,7 +34,7 @@ module Pact.Eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
     ,resolveFreeVars,resolveArg,resolveRef
-    ,enforceKeySet,enforceKeySetName
+    ,enforceKeySet,enforceKeySetAgainstSessionKey,enforceKeySetName
     ,enforceGuard
     ,deref
     ,liftTerm,apply
@@ -145,6 +145,39 @@ enforceKeySet i ksn KeySet{..} = do
         runBuiltIn p | p count matched = return ()
                      | otherwise = failed
 {-# INLINE enforceKeySet #-}
+
+-- | Enforce keyset against session key.
+enforceKeySetAgainstSessionKey :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
+enforceKeySetAgainstSessionKey i ksn KeySet{..} = do
+  sigs <- maybeToMap <$> (view eeSessionSig)
+  sigs' <- checkSigCaps sigs
+  runPred (M.size sigs')
+  where
+    maybeToMap mayKV =
+      maybe M.empty (\(k,v) -> if k `elem` _ksKeys
+                      then M.singleton k v
+                      else M.empty) mayKV
+    failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
+      maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
+    atLeast t m = m >= t
+    elide pk | T.length pk < 8 = pk
+             | otherwise = T.take 8 pk <> "..."
+    count = length _ksKeys
+    runPred matched =
+      case M.lookup _ksPredFun keyPredBuiltins of
+        Just KeysAll -> runBuiltIn (\c m -> atLeast c m)
+        Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
+        Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
+        Nothing -> do
+          r <- evalByName _ksPredFun [toTerm count,toTerm matched] i
+          case r of
+            (TLiteral (LBool b) _) | b -> return ()
+                                   | otherwise -> failed
+            _ -> evalError i $ "Invalid response from keyset predicate: " <> pretty r
+      where
+        runBuiltIn p | p count matched = return ()
+                     | otherwise = failed
+{-# INLINE enforceKeySetAgainstSessionKey #-}
 
 enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of
