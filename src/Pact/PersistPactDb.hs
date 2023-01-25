@@ -48,6 +48,8 @@ import GHC.Generics
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
+import Test.QuickCheck (Arbitrary)
+
 import Pact.Types.RowData
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -79,7 +81,7 @@ initDbEnv loggers funrec p = DbEnv {
 
 newtype UserTableInfo = UserTableInfo
   { utModule :: ModuleName
-  } deriving (Eq,Show,Generic,Typeable)
+  } deriving (Eq,Show,Generic,Typeable,Arbitrary)
 
 instance Pretty UserTableInfo where
   pretty (UserTableInfo mod') = "UserTableInfo " <> commaBraces

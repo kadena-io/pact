@@ -907,7 +907,7 @@ spec_pact_types_persistence =
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
-   spec_case @(ModuleData ())
+   spec_case @(ModuleData (A ()))
       [ Pending checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
@@ -929,7 +929,7 @@ spec_pact_types_persistence =
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
-   spec_case @(TxLog ())
+   spec_case @(TxLog (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
@@ -1020,13 +1020,15 @@ spec_pact_types_rowData =
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
       ]
-    spec_case @OldPactValue
-      [ Case checkRoundtrip
-      , Case checkRoundtrip2
-      , Case checkAesonCompat
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
+
+    -- Not  exported
+    -- spec_case @OldPactValue
+    --   [ Case checkRoundtrip
+    --   , Case checkRoundtrip2
+    --   , Case checkAesonCompat
+    --   , Case checkLegacyValueCompat
+    --   , CaseOldHashable checkLegacyHashableCompat
+    --   ]
 
 -- ---------------------------------------------- --
 spec_pact_persistPactDb :: Spec

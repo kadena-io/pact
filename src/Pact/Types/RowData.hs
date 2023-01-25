@@ -134,6 +134,9 @@ data RowDataVersion = RDV0 | RDV1
 
 instance NFData RowDataVersion
 
+instance Arbitrary RowDataVersion where
+  arbitrary = elements [RDV0, RDV1]
+
 instance ToJSON RowDataVersion where
   toJSON = toJSON . fromEnum
   toEncoding = toEncoding . fromEnum
@@ -160,6 +163,9 @@ data RowData = RowData
   deriving (Eq,Show,Generic,Ord)
 instance NFData RowData
 instance Pretty RowData where pretty (RowData _ m) = pretty m
+
+instance Arbitrary RowData where
+  arbitrary = RowData <$> arbitrary <*> arbitrary
 
 pactValueToRowData :: PactValue -> RowDataValue
 pactValueToRowData pv = case pv of
