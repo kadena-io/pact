@@ -58,11 +58,13 @@ import Pact.Types.PactValue
 import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Persistence
 import Pact.Types.RPC
+import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.Scheme
 import Pact.Types.SigData
 import Pact.Types.SPV
 import Pact.Types.Term.Arbitrary ()
+import Pact.PersistPactDb
 
 import Pact.JSON.Legacy.Value
 
@@ -895,6 +897,54 @@ spec_pact_types_scheme =
       ]
 
 -- ---------------------------------------------- --
+spec_pact_types_persistence :: Spec
+spec_pact_types_persistence =
+  describe "Pact.Types.Persistence" $ do
+   spec_case @PersistDirect
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(ModuleData ())
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @PersistModuleData
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   -- spec_case @RowKey [ ]
+   spec_case @(Ref' PersistDirect)
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @(TxLog ())
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+   spec_case @TxId
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
 spec_pact_types_runtime :: Spec
 spec_pact_types_runtime =
   describe "Pact.Types.Runtime" $ do
@@ -939,6 +989,52 @@ spec_pact_types_capability =
    spec_case @SigCapability
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+
+-- ---------------------------------------------- --
+spec_pact_types_rowData :: Spec
+spec_pact_types_rowData =
+  describe "Pact.Types.RowData" $ do
+    spec_case @RowDataValue
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+    spec_case @RowDataVersion
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+    spec_case @RowData
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+    spec_case @OldPactValue
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      , CaseOldHashable checkLegacyHashableCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_persistPactDb :: Spec
+spec_pact_persistPactDb =
+  describe "Pact.PersistPactDb" $ do
+    spec_case @UserTableInfo
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
@@ -995,41 +1091,7 @@ spec = describe "JSON encoding backward compatibility" $ do
   spec_pact_types_continuation
   spec_pact_types_hash
   spec_pact_types_scheme
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Persistence" $ do
-   spec_case @PersistDirect
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(ModuleData ())
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @PersistModuleData
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   -- spec_case @RowKey [ ]
-   spec_case @(Ref' PersistDirect)
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @(TxLog ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-   spec_case @TxId
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
-      ]
-
+  spec_pact_types_persistence
   spec_pact_types_runtime
   spec_pact_types_spv
   spec_pact_types_capability
@@ -1103,3 +1165,6 @@ spec = describe "JSON encoding backward compatibility" $ do
       , CaseOldHashable checkLegacyHashableCompat
       ]
 
+  spec_pact_types_rowData
+
+  spec_pact_persistPactDb

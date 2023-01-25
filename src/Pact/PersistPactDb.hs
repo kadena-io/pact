@@ -40,9 +40,9 @@ import Control.Monad.State.Strict
 import Data.String
 
 import Data.Aeson hiding ((.=))
-import qualified Data.ByteString.Lazy as BL
+import qualified Data.Aeson as A ((.=))
+import qualified Data.ByteString as B
 import Data.Text (unpack)
-import qualified Data.Text.Encoding as T
 import GHC.Generics
 
 import qualified Data.Map.Strict as M
@@ -53,6 +53,8 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger
+
+import qualified Pact.JSON.Encode as J
 
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
@@ -86,7 +88,20 @@ instance Pretty UserTableInfo where
 
 instance PactDbValue UserTableInfo where prettyPactDbValue = pretty
 instance FromJSON UserTableInfo
-instance ToJSON UserTableInfo
+
+instance ToJSON UserTableInfo where
+  toJSON o = object
+    [ "utModule" A..= utModule o ]
+  toEncoding o = pairs
+    $ "utModule" A..= utModule o
+
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
+
+instance J.Encode UserTableInfo where
+  build o = J.object
+    [ "utModule" J..= utModule o ]
+  {-# INLINE build #-}
 
 userTable :: TableName -> TableId
 userTable tn = TableId $ "USER_" <> asString tn
@@ -206,11 +221,11 @@ doCommit = use mode >>= \case
     Nothing -> rollback >> throwDbError "doCommit: Not in transaction"
     Just m -> do
       txrs <- M.toList <$> use txRecord
-      if (m == Transactional) then do
+      if m == Transactional then do
         -- grab current txid and increment in state
         tid' <- state (fromIntegral . _txId &&& over txId succ)
         -- write txlog
-        forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
+        forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' (encodeTxLogJsonArray es)
         -- commit
         doPersist P.commitTx
         resetTemp
@@ -218,6 +233,8 @@ doCommit = use mode >>= \case
       return (concatMap snd txrs)
 {-# INLINE doCommit #-}
 
+encodeTxLogJsonArray :: [TxLogJson] -> B.ByteString
+encodeTxLogJsonArray logs = J.encodeStrict $ J.array $ J.embedJson . _getTxLogJson <$> logs
 
 rollback :: MVState p ()
 rollback = do
@@ -268,10 +285,10 @@ resetTemp :: MVState p ()
 resetTemp = txRecord .=! M.empty >> mode .=! Nothing
 {-# INLINE resetTemp #-}
 
-writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
+writeSys :: (AsString k, J.Encode v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
 writeSys s wt tbl k v = runMVState s $ do
   debug "writeSys" (tbl,asString k)
-  doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) v
+  doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) (J.encodeStrict v)
   record (TxTable tbl) k v
 
 {-# INLINE writeSys #-}
@@ -284,12 +301,12 @@ writeUser s wt tn rk row = runMVState s $ do
   olds <- readUserTable' tn rk
   let ins = do
         debug "writeUser: insert" (tn,rk)
-        doPersist $ \p -> writeValue p ut Insert rk' row
+        doPersist $ \p -> writeValue p ut Insert rk' (J.encodeStrict row)
         finish row
       upd oldrow = do
         -- version follows new input
         let row' = RowData (_rdVersion row) $ ObjectMap (M.union (_objectMap $ _rdData row) (_objectMap $ _rdData oldrow))
-        doPersist $ \p -> writeValue p ut Update rk' row'
+        doPersist $ \p -> writeValue p ut Update rk' (J.encodeStrict row')
         finish row'
       finish row' = record tt rk row'
   case (olds,wt) of
@@ -301,7 +318,7 @@ writeUser s wt tn rk row = runMVState s $ do
     (Nothing,Update) -> throwDbError $ "Update: no row found for key " <> pretty rk
 {-# INLINE writeUser #-}
 
-record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
+record :: (AsString k, J.Encode v) => TxTable -> k -> v -> MVState p ()
 record tt k v = modify'
     $ over txRecord
     $ M.insertWith
@@ -313,7 +330,7 @@ record tt k v = modify'
     append [] b = b
     append (h:t) b = let !x = append t b in h : x
 
-    encodeTxLog = TxLogJson . T.decodeUtf8 . BL.toStrict . encode
+    encodeTxLog = TxLogJson . J.encodeJsonText
 {-# INLINE record #-}
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName
@@ -328,7 +345,7 @@ getUserTableInfo' e tn = runMVState e $ do
 createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> IO ()
 createUserTable' s tn mn = runMVState s $ do
   let uti = UserTableInfo mn
-  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) uti
+  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) (J.encodeStrict uti)
   record (TxTable userTableInfo) tn uti
   createTable' (userTable tn)
 

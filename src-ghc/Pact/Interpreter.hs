@@ -95,7 +95,7 @@ initMsgData h = MsgData (toLegacyJson Null) def h def
 type EvalInput = Either (Maybe PactExec) [Term Name]
 
 -- | Captures results of execution
-type EvalOutput = ([Term Name],[TxLog LegacyValue],Maybe TxId)
+type EvalOutput = ([Term Name],[TxLogJson],Maybe TxId)
 
 -- | Interpreter indirection for executing user action.
 newtype Interpreter e = Interpreter
@@ -116,7 +116,7 @@ data EvalResult = EvalResult
     -- ^ compiled user input
   , _erOutput :: ![PactValue]
     -- ^ Output values
-  , _erLogs :: ![TxLog LegacyValue]
+  , _erLogs :: ![TxLogJson]
     -- ^ Transaction logs
   , _erExec :: !(Maybe PactExec)
     -- ^ Result of defpact execution if any

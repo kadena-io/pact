@@ -407,7 +407,7 @@ readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v
 readRow i d k = method i $ \db -> _readRow db d k
 
 -- | Invoke '_writeRow'
-writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
+writeRow :: (AsString k,J.Encode v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
 writeRow i w d k v = method i $ \db -> _writeRow db w d k v
 
 -- | Invoke '_keys'

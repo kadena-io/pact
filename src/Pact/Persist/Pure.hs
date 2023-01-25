@@ -10,7 +10,6 @@
 
 module Pact.Persist.Pure
   (
-    PValue (..),
     Tbl(..),tbl,
     Tables(..),tbls,tblType,
     Db(..),dataTables,txTables,
@@ -22,22 +21,23 @@ module Pact.Persist.Pure
 import qualified Data.Map.Strict as M
 import Control.Lens hiding (op)
 import Data.Aeson
+import qualified Data.ByteString as B
 import Control.Monad.Reader ()
 import Control.Monad.State
 import Data.Default
-import Data.Proxy
-import Data.Typeable
 
 import Pact.Types.Persistence
 import Pact.Persist hiding (compileQuery)
 import Pact.Types.Pretty
 
-data PValue = forall a . (PactDbValue a) => PValue a
-instance Show PValue where show (PValue a) = show a
+import qualified Pact.JSON.Encode as J
+
+-- data PValue = forall a . (PactDbValue a) => PValue a
+-- instance Show PValue where show (PValue a) = show a
 
 
 newtype Tbl k = Tbl {
-  _tbl :: M.Map k PValue
+  _tbl :: M.Map k B.ByteString
   } deriving (Show,Semigroup,Monoid)
 makeLenses ''Tbl
 
@@ -69,7 +69,8 @@ initPureDb :: PureDb
 initPureDb = def
 
 overM :: s -> Lens' s a -> (a -> IO a) -> IO s
-overM s l f = f (view l s) >>= \a -> return (set l a s)
+-- overM s l f = f (view l s) >>= \a -> return (set l a s)
+overM s l f = l f s
 {-# INLINE overM #-}
 
 persister :: Persister PureDb
@@ -91,12 +92,13 @@ persister = Persister {
   ,
   readValue = \t k s -> fmap (s,) $ traverse conv $ firstOf (temp . tblType t . tbls . ix t . tbl . ix k) s
   ,
+  -- writeValue :: forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ()
   writeValue = \t wt k v s -> fmap (,()) $ overM s (temp . tblType t . tbls) $ \ts -> case M.lookup t ts of
       Nothing -> throwDbError $ "writeValue: no such table: " <> pretty t
       Just tb -> fmap (\nt -> M.insert t nt ts) $ overM tb tbl $ \m -> case (M.lookup k m,wt) of
         (Just _,Insert) -> throwDbError $ "Insert: value already at key: " <> pretty k
         (Nothing,Update) -> throwDbError $ "Update: no value at key: " <> pretty k
-        _ -> return $ M.insert k (PValue v) m
+        _ -> return $ M.insert k v m
   ,
   refreshConn = return . (,())
   }
@@ -119,17 +121,18 @@ compileQuery (Just kq) = compile kq
     conj OR = (||)
 {-# INLINE compileQuery #-}
 
-qry :: PactDbKey k => Table k -> Maybe (KeyQuery k) -> PureDb -> IO [(k,PValue)]
+qry :: PactDbKey k => Table k -> Maybe (KeyQuery k) -> PureDb -> IO [(k,B.ByteString)]
 qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
   Nothing -> throwDbError $ "query: no such table: " <> pretty t
   Just m -> return $ filter (compileQuery kq . fst) $ M.toList m
 {-# INLINE qry #-}
 
 
-conv :: forall v . (PactDbValue v) => PValue -> IO v
-conv (PValue v) = case cast v of
+conv :: forall v . (FromJSON v) => B.ByteString -> IO v
+conv v = case decodeStrict v of
   Nothing -> throwDbError $
-    "Failed to reify DB value: " <> prettyPactDbValue v <> " as " <> pretty (show (typeRep (Proxy @v)))
+       "FIXME"
+  --   "Failed to reify DB value: " <> prettyPactDbValue v <> " as " <> pretty (show (typeRep (Proxy @v)))
   Just s -> return s
 {-# INLINE conv #-}
 
@@ -153,10 +156,10 @@ _test = do
     run $ createTable p tt
     run $ commitTx p
     run $ beginTx p Transactional
-    run $ writeValue p dt Insert "stuff" (String "hello")
-    run $ writeValue p dt Insert "tough" (String "goodbye")
-    run $ writeValue p tt Write 1 (String "txy goodness")
-    run $ writeValue p tt Insert 2 (String "txalicious")
+    run $ writeValue p dt Insert "stuff" (J.encodeStrict $ J.text "hello")
+    run $ writeValue p dt Insert "tough" (J.encodeStrict $ J.text "goodbye")
+    run $ writeValue p tt Write 1 (J.encodeStrict $ J.text "txy goodness")
+    run $ writeValue p tt Insert 2 (J.encodeStrict $ J.text "txalicious")
     run $ commitTx p
     run (readValue p dt "stuff") >>= (liftIO . (print :: Maybe Value -> IO ()))
     run (query p dt (Just (KQKey KEQ "stuff"))) >>=
@@ -165,7 +168,7 @@ _test = do
     run (query p tt (Just (KQKey KGT 0 `kAnd` KQKey KLT 2))) >>=
       (liftIO . (print :: [(TxKey,Value)] -> IO ()))
     run $ beginTx p Transactional
-    run $ writeValue p tt Update 2 (String "txalicious-2!")
+    run $ writeValue p tt Update 2 (J.encodeStrict $ J.text "txalicious-2!")
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))
     run $ rollbackTx p
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))

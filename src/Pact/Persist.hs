@@ -20,6 +20,7 @@ module Pact.Persist
    ) where
 
 import Data.Aeson
+import qualified Data.ByteString as B
 import Data.String
 import Data.Hashable
 import Data.Text (Text)
@@ -156,9 +157,9 @@ data Persister s = Persister {
   ,
   queryKeys :: forall k . PactDbKey k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
   ,
-  query :: forall k v . (PactDbKey k, PactDbValue v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
+  query :: forall k v . (PactDbKey k, FromJSON v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
   ,
-  readValue :: forall k v . (PactDbKey k, PactDbValue v) => Table k -> k -> Persist s (Maybe v)
+  readValue :: forall k v . (PactDbKey k, FromJSON v) => Table k -> k -> Persist s (Maybe v)
   ,
   writeValue :: forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ()
   ,

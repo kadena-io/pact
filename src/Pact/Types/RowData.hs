@@ -37,6 +37,11 @@ import Pact.Types.Pretty
 import Pact.Types.Term
 import Pact.Types.Util
 
+import qualified Pact.JSON.Encode as E
+
+-- -------------------------------------------------------------------------- --
+-- RowDataValue
+
 data RowDataValue
     = RDLiteral Literal
     | RDList (Vector RowDataValue)
@@ -100,10 +105,35 @@ instance FromJSON RowDataValue where
           <*> o .: "refSpec"
           <*> pure def
 
+instance E.Encode RowDataValue where
+  build (RDLiteral l) = E.build l
+  build (RDList l) = E.build $ E.array l
+  build (RDObject o) = tagged "o" o
+  build (RDGuard g) = tagged "g" g
+  build (RDModRef (ModRef refName refSpec _)) = E.object
+    [ "$t" E..= E.text "m"
+    , "$v" E..= E.object
+      [ "refSpec" E..= (E.array <$> refSpec)
+      , "refName" E..= refName
+      ]
+    ]
+  {-# INLINE build #-}
+
+tagged :: E.Encode v => Text -> v -> E.Builder
+tagged t rv = E.object
+  [ "$t" E..= t
+  , "$v" E..= rv
+  ]
+{-# INLINE tagged #-}
+
+-- -------------------------------------------------------------------------- --
+-- RowDataVersion
 
 data RowDataVersion = RDV0 | RDV1
   deriving (Eq,Show,Generic,Ord,Enum,Bounded)
+
 instance NFData RowDataVersion
+
 instance ToJSON RowDataVersion where
   toJSON = toJSON . fromEnum
   toEncoding = toEncoding . fromEnum
@@ -115,6 +145,13 @@ instance FromJSON RowDataVersion where
     0 -> pure RDV0
     1 -> pure RDV1
     _ -> fail "RowDataVersion"
+
+instance E.Encode RowDataVersion where
+  build = E.build . E.Base10 . fromEnum
+  {-# INLINE build #-}
+
+-- -------------------------------------------------------------------------- --
+-- RowData
 
 data RowData = RowData
     { _rdVersion :: RowDataVersion
@@ -166,6 +203,36 @@ instance ToJSON RowData where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance E.Encode RowData where
+  build o = E.object
+    [ "$d" E..= _rdData o
+    , "$v" E..= _rdVersion o
+    ]
+  {-# INLINE build #-}
+
+instance FromJSON RowData where
+  parseJSON v =
+    parseVersioned v <|>
+    -- note: Parsing into `OldPactValue` here defaults to the code used in
+    -- the old FromJSON instance for PactValue, prior to the fix of moving
+    -- the `PModRef` parsing before PObject
+    RowData RDV0 . fmap oldPactValueToRowData <$> parseJSON v
+    where
+      oldPactValueToRowData = \case
+        OldPLiteral l -> RDLiteral l
+        OldPList l -> RDList $ recur l
+        OldPObject o -> RDObject $ recur o
+        OldPGuard g -> RDGuard $ recur g
+        OldPModRef m -> RDModRef m
+      recur :: Functor f => f OldPactValue -> f RowDataValue
+      recur = fmap oldPactValueToRowData
+      parseVersioned = withObject "RowData" $ \o -> RowData
+          <$> o .: "$v"
+          <*> o .: "$d"
+
+-- -------------------------------------------------------------------------- --
+-- OldPactValue
+
 data OldPactValue
   = OldPLiteral Literal
   | OldPList (Vector OldPactValue)
@@ -194,6 +261,15 @@ instance ToJSON OldPactValue where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance E.Encode OldPactValue where
+  build (OldPLiteral l) = E.build l
+  build (OldPObject o) = E.build o
+  build (OldPList v) = E.array v
+  build (OldPGuard x) = E.build x
+  build (OldPModRef m) = E.object $ modRefKeyValues_ m
+      -- this uses a non-standard alternative JSON encoding for 'ModRef'
+  {-# INLINE build #-}
+
 instance FromJSON OldPactValue where
   parseJSON v =
     (OldPLiteral <$> parseJSON v) <|>
@@ -207,22 +283,3 @@ instance FromJSON OldPactValue where
         <*> o .: "refSpec"
         <*> (fromMaybe def <$> o .:? "refInfo")
 
-instance FromJSON RowData where
-  parseJSON v =
-    parseVersioned v <|>
-    -- note: Parsing into `OldPactValue` here defaults to the code used in
-    -- the old FromJSON instance for PactValue, prior to the fix of moving
-    -- the `PModRef` parsing before PObject
-    RowData RDV0 . fmap oldPactValueToRowData <$> parseJSON v
-    where
-      oldPactValueToRowData = \case
-        OldPLiteral l -> RDLiteral l
-        OldPList l -> RDList $ recur l
-        OldPObject o -> RDObject $ recur o
-        OldPGuard g -> RDGuard $ recur g
-        OldPModRef m -> RDModRef m
-      recur :: Functor f => f OldPactValue -> f RowDataValue
-      recur = fmap oldPactValueToRowData
-      parseVersioned = withObject "RowData" $ \o -> RowData
-          <$> o .: "$v"
-          <*> o .: "$d"

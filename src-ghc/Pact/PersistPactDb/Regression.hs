@@ -29,6 +29,7 @@ import Pact.Repl.Types
 import Pact.Native (nativeDefs)
 import Pact.Types.RowData
 
+import qualified Pact.JSON.Encode as J
 import Pact.JSON.Legacy.Value
 
 loadModule :: IO (ModuleName, ModuleData Ref, PersistModuleData)
@@ -61,14 +62,14 @@ runRegression p = do
       toPV = toPactValueLenient . toTerm'
   createUserTable' v user1 "free.some-Module"
   assertEquals' "output of commit 2"
-    [TxLog "SYS_usertables" "user1" $
-     LegacyValue $ object
+    [ TxLogJson $ J.encodeJsonText $ TxLog "SYS_usertables" "user1" $
+      LegacyValue $ object
        [ "utModule" .= object
          [ "name" .= String "some-Module"
          , "namespace" .= String "free"
          ]
        ]
-     ]
+    ]
     (commit v)
   void $ begin v
   assertEquals' "user table info correct" "free.some-Module" $ _getUserTableInfo pactdb user1 v
@@ -87,24 +88,26 @@ runRegression p = do
   assertEquals "module native repopulation" (Right modRef) $
     traverse (traverse (fromPersistDirect nativeLookup)) mod'
   assertEquals' "result of commit 3"
+    ( TxLogJson . J.encodeJsonText <$>
 
-    [ TxLog { _txDomain = "SYS_keysets"
-            , _txKey = "ks1"
-            , _txValue = toLegacyJson ks
-            }
-    , TxLog { _txDomain = "SYS_modules"
-            , _txKey = asString modName
-            , _txValue = toLegacyJson mod'
-            }
-    , TxLog { _txDomain = "USER_user1"
-            , _txKey = "key1"
-            , _txValue = toLegacyJson row
-            }
-    , TxLog { _txDomain = "USER_user1"
-            , _txKey = "key1"
-            , _txValue = toLegacyJson row'
-            }
-    ]
+      [ TxLog { _txDomain = "SYS_keysets"
+              , _txKey = "ks1"
+              , _txValue = toLegacyJson ks
+              }
+      , TxLog { _txDomain = "SYS_modules"
+              , _txKey = asString modName
+              , _txValue = toLegacyJson mod'
+              }
+      , TxLog { _txDomain = "USER_user1"
+              , _txKey = "key1"
+              , _txValue = toLegacyJson row
+              }
+      , TxLog { _txDomain = "USER_user1"
+              , _txKey = "key1"
+              , _txValue = toLegacyJson row'
+              }
+      ]
+    )
     (commit v)
   void $ begin v
   tids <- _txids pactdb user1 t1 v
@@ -129,10 +132,10 @@ toTerm' :: ToTerm a => a -> Term Name
 toTerm' = toTerm
 
 begin :: MVar (DbEnv p) -> IO (Maybe TxId)
-begin v = _beginTx pactdb Transactional v
+begin = _beginTx pactdb Transactional
 
-commit :: MVar (DbEnv p) -> IO [TxLog LegacyValue]
-commit v = _commitTx pactdb v
+commit :: MVar (DbEnv p) -> IO [TxLogJson]
+commit = _commitTx pactdb
 
 throwFail :: String -> IO a
 throwFail = throwIO . userError

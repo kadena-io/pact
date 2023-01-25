@@ -21,8 +21,6 @@ import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word64)
 import Data.Default
-import Data.Aeson (encode)
-import qualified Data.ByteString.Lazy  as BSL
 import Data.Text (Text)
 
 import Pact.Gas
@@ -39,6 +37,7 @@ import Pact.Types.PactValue (PactValue)
 import Pact.Types.SPV
 import Data.Time.Clock.System
 
+import qualified Pact.JSON.Encode as J
 import Pact.JSON.Legacy.Value
 
 initPactService
@@ -128,16 +127,16 @@ resultSuccess :: Maybe TxId ->
                  Gas ->
                  PactValue ->
                  Maybe PactExec ->
-                 [TxLog LegacyValue] ->
+                 [TxLogJson] ->
                  [PactEvent] ->
                  CommandResult Hash
-resultSuccess tx cmd gas a pe l evs =
-  CommandResult cmd tx (PactResult $ Right a)
-    gas (Just hshLog) pe Nothing evs
-  where hshLog = fullToHashLogCr l
+resultSuccess tx cmd gas a pe l =
+  CommandResult cmd tx (PactResult $ Right a) gas (Just hshLog) pe Nothing
+ where
+  hshLog = fullToHashLogCr l
 
-fullToHashLogCr :: [TxLog LegacyValue] -> Hash
-fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
+fullToHashLogCr :: [TxLogJson] -> Hash
+fullToHashLogCr = pactHash . J.encodeStrict . J.array . fmap (J.embedJson . _getTxLogJson)
 
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p (CommandResult Hash)

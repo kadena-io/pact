@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -67,6 +68,7 @@ import Pact.Types.Util (AsString(..), tShow, JsonProperties, enableToJSON, (.?=)
 import Pact.Types.Namespace
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Legacy.HashMap as LHM
+import qualified Pact.JSON.Encode as J
 
 data PersistDirect =
     PDValue PactValue
@@ -88,6 +90,12 @@ instance ToJSON PersistDirect where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PersistDirect where
+  build (PDValue v) = J.object ["pdval" J..= v]
+  build (PDNative n) = J.object ["pdnat" J..= n]
+  build (PDFreeVar n) = J.object ["pdfv" J..= n]
+  {-# INLINE build #-}
 
 instance FromJSON PersistDirect where
   parseJSON v =
@@ -159,6 +167,14 @@ instance ToJSON r => ToJSON (ModuleData r) where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode r => J.Encode (ModuleData r) where
+  build o = J.object
+    [ "dependencies" J..?= J.ifMaybe LHM.null (legacyHashMap (_mdDependencies o))
+    , "module" J..= _mdModule o
+    , "refMap" J..= legacyHashMap (_mdRefMap o)
+    ]
+  {-# INLINE build #-}
+
 instance (FromJSON r) => FromJSON (ModuleData r) where
   parseJSON =
     withObject "ModuleData" $ \o ->
@@ -185,6 +201,11 @@ instance ToJSON (Ref' PersistDirect) where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode (Ref' PersistDirect) where
+  build (Ref t) = J.object ["ref" J..= t]
+  build (Direct pd) = J.object ["direct" J..= pd]
+  {-# INLINE build #-}
 
 instance FromJSON (Ref' PersistDirect) where
   parseJSON v =
@@ -225,7 +246,9 @@ instance AsString (Domain k v) where
 
 -- | Serialized JSON Text
 --
-newtype TxLogJson = TxLogJson { _getTxLogJson :: Text }
+newtype TxLogJson = TxLogJson { _getTxLogJson :: J.JsonText }
+    deriving (Show, Eq, Ord)
+    deriving newtype (NFData)
 
 -- | Transaction record.
 data TxLog v =
@@ -251,6 +274,13 @@ instance ToJSON v => ToJSON (TxLog v) where
   toEncoding = pairs . mconcat . txLogProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode v => J.Encode (TxLog v) where
+    build o = J.object
+        [ "value" J..= _txValue o
+        , "key" J..= _txKey o
+        , "table" J..= _txDomain o
+        ]
 
 instance FromJSON v => FromJSON (TxLog v) where
     parseJSON = withObject "TxLog" $ \o ->
@@ -291,6 +321,7 @@ instance Pretty WriteType where
 newtype TxId = TxId Word64
     deriving (Eq,Ord,Generic)
     deriving newtype (Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON)
+    deriving J.Encode via (J.Base10 Word64)
 
 instance NFData TxId
 instance Show TxId where
@@ -317,7 +348,7 @@ data PactDb e = PactDb {
     _readRow :: forall k v . (IsString k,FromJSON v) =>
                 Domain k v -> k -> Method e (Maybe v)
     -- | Write a domain value at key. WriteType argument governs key behavior.
-  , _writeRow :: forall k v . (AsString k,ToJSON v) =>
+  , _writeRow :: forall k v . (AsString k,J.Encode v) =>
                  WriteType -> Domain k v -> k -> v -> Method e ()
     -- | Retrieve all keys for a domain, Key output guaranteed sorted.
   , _keys :: forall k v . (IsString k,AsString k) => Domain k v -> Method e [k]
