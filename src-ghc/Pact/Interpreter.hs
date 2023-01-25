@@ -79,7 +79,7 @@ data MsgData = MsgData {
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
   mdSigners :: [Signer],
-  mdSessionSigner :: Maybe Signer
+  mdSessionSigner :: Maybe (Text, Signer)
   }
 
 
@@ -173,7 +173,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
-  , _eeSessionSig = toPair <$> mdSessionSigner msgData
+  , _eeSessionSig = (\(username,Signer{..}) -> ((username, PublicKeyText (fromMaybe _siPubKey _siAddress)), S.fromList _siCapList)) <$> mdSessionSigner msgData
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent

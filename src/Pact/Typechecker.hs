@@ -987,6 +987,7 @@ toAST (TApp Term.App{..} _) = do
           case sf of
             Bind -> specialBind
             WithRead -> specialBind
+            WithSession -> specialBind
             WithDefaultRead -> specialBind
             WithCapability -> specialBind
             YieldSF -> do

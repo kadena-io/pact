@@ -154,7 +154,7 @@ enforceKeySetAgainstSessionKey i ksn KeySet{..} = do
   runPred (M.size sigs')
   where
     maybeToMap mayKV =
-      maybe M.empty (\(k,v) -> if k `elem` _ksKeys
+      maybe M.empty (\((_username,k),v) -> if k `elem` _ksKeys
                       then M.singleton k v
                       else M.empty) mayKV
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>

@@ -194,8 +194,8 @@ data EvalEnv e = EvalEnv {
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
     , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
-      -- | Verified key of the user who has an active Webauthn session.
-    , _eeSessionSig :: !(Maybe (PublicKeyText, S.Set UserCapability))
+      -- | Verified username and key of the user who has an active Webauthn session.
+    , _eeSessionSig :: !(Maybe ((Text, PublicKeyText), S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode

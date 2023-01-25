@@ -275,7 +275,7 @@ data Payload m c = Payload
   , _pNonce :: !Text
   , _pMeta :: !m
   , _pSigners :: ![Signer]
-  , _pSessionSigner :: !(Maybe Signer)
+  , _pSessionSigner :: !(Maybe (Text, Signer))
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)

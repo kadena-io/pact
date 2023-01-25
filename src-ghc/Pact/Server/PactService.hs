@@ -145,7 +145,7 @@ runPayload c@Command{..} = case (_pPayload _cmdPayload) of
   Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) (_pSessionSigner _cmdPayload) ym
 
 
-applyExec :: RequestKey -> PactHash -> [Signer] -> Maybe Signer -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
+applyExec :: RequestKey -> PactHash -> [Signer] -> Maybe (Text, Signer) -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
 applyExec rk hsh signers sessionSigner (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
@@ -159,7 +159,7 @@ applyExec rk hsh signers sessionSigner (ExecMsg parsedCode edata) = do
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
 
 
-applyContinuation :: RequestKey -> PactHash -> [Signer] -> Maybe Signer -> ContMsg -> CommandM p (CommandResult Hash)
+applyContinuation :: RequestKey -> PactHash -> [Signer] -> Maybe (Text, Signer) -> ContMsg -> CommandM p (CommandResult Hash)
 applyContinuation rk hsh signers sessionSigner cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result

@@ -10,6 +10,7 @@ import Control.Arrow
 
 data SpecialForm =
   WithRead |
+  WithSession |
   WithDefaultRead |
   Bind |
   Select |
@@ -21,6 +22,7 @@ data SpecialForm =
 
 instance AsString SpecialForm where
   asString WithRead = "with-read"
+  asString WithSession = "with-session"
   asString WithDefaultRead = "with-default-read"
   asString Bind = "bind"
   asString Select = "select"
