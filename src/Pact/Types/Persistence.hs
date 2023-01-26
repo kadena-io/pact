@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -27,6 +26,8 @@ module Pact.Types.Persistence
    RowKey(..),
    Domain(..),
    TxLogJson(..),
+   encodeTxLog,
+   encodeTxLogJsonArray,
    TxLog(..),txDomain,txKey,txValue,
    WriteType(..),
    Method,
@@ -43,9 +44,11 @@ import Control.Applicative ((<|>))
 import Control.Concurrent.MVar (MVar)
 import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
+
 import Data.Aeson hiding (Object)
 import qualified Data.Aeson as A
 import Data.Default
+import qualified Data.ByteString as B
 import Data.Hashable (Hashable)
 import Data.Maybe(fromMaybe)
 import qualified Data.HashMap.Strict as HM
@@ -69,6 +72,9 @@ import Pact.Types.Namespace
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import qualified Pact.JSON.Encode as J
+
+-- -------------------------------------------------------------------------- --
+-- PersistDirect
 
 data PersistDirect =
     PDValue PactValue
@@ -103,7 +109,6 @@ instance FromJSON PersistDirect where
     withObject "PDValue" (\o -> PDValue <$> o .: "pdval") v <|>
     withObject "PDNative" (\o -> PDNative <$> o .: "pdnat") v
 
-
 instance Pretty PersistDirect where
   pretty (PDValue v) = pretty v
   pretty (PDNative n) = pretty $ "<native>" <> asString n
@@ -134,6 +139,9 @@ allModuleExports md = case _mdModule md of
     let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
     in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
   _ -> HM.empty
+
+-- -------------------------------------------------------------------------- --
+-- ModuleData
 
 -- | Module ref store
 data ModuleData r = ModuleData
@@ -189,6 +197,9 @@ instance Arbitrary r => Arbitrary (ModuleData r) where
     <*> scale (min 10) arbitrary
     <*> scale (min 10) arbitrary
 
+-- -------------------------------------------------------------------------- --
+-- PersistModuleData
+
 type PersistModuleData = ModuleData (Ref' PersistDirect)
 
 instance ToJSON (Ref' PersistDirect) where
@@ -213,6 +224,9 @@ instance FromJSON (Ref' PersistDirect) where
     withObject "Direct" (\o -> Direct <$> o .: "direct") v
   {-# INLINE parseJSON #-}
 
+-- -------------------------------------------------------------------------- --
+-- RowKey
+
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,Generic)
@@ -220,6 +234,9 @@ newtype RowKey = RowKey Text
 
 instance Arbitrary RowKey where
   arbitrary = RowKey <$> arbitrary
+
+-- -------------------------------------------------------------------------- --
+-- Domain
 
 -- | Specify key and value types for database domains.
 data Domain k v where
@@ -244,11 +261,8 @@ instance AsString (Domain k v) where
     asString Namespaces = "SYS:Namespaces"
     asString Pacts = "SYS:Pacts"
 
--- | Serialized JSON Text
---
-newtype TxLogJson = TxLogJson { _getTxLogJson :: J.JsonText }
-    deriving (Show, Eq, Ord)
-    deriving newtype (NFData)
+-- -------------------------------------------------------------------------- --
+-- TxLog
 
 -- | Transaction record.
 data TxLog v =
@@ -281,6 +295,7 @@ instance J.Encode v => J.Encode (TxLog v) where
         , "key" J..= _txKey o
         , "table" J..= _txDomain o
         ]
+    {-# INLINE build #-}
 
 instance FromJSON v => FromJSON (TxLog v) where
     parseJSON = withObject "TxLog" $ \o ->
@@ -295,6 +310,29 @@ instance Pretty v => Pretty (TxLog v) where
 
 instance Arbitrary v => Arbitrary (TxLog v) where
   arbitrary = TxLog <$> arbitrary <*> arbitrary <*> arbitrary
+
+-- -------------------------------------------------------------------------- --
+-- TXLogsJson
+
+-- | Serialized JSON Text
+--
+newtype TxLogJson = TxLogJson { _getTxLogJson :: J.JsonText }
+    deriving (Show, Eq, Ord)
+    deriving newtype (NFData)
+
+-- | Encode TxLog as TxLogJson
+--
+encodeTxLog :: J.Encode v => TxLog v -> TxLogJson
+encodeTxLog = TxLogJson . J.encodeJsonText
+
+-- | Encode list of TxLogJson to a JSON ByteString
+--
+encodeTxLogJsonArray :: [TxLogJson] -> B.ByteString
+encodeTxLogJsonArray =
+    J.encodeStrict . J.array . fmap (J.embedJson . _getTxLogJson)
+
+-- -------------------------------------------------------------------------- --
+-- WriteType
 
 -- | Instruction for '_writeRow'.
 data WriteType =
@@ -315,6 +353,8 @@ instance Pretty WriteType where
     Update -> "Update"
     Write -> "Write"
 
+-- -------------------------------------------------------------------------- --
+-- TxId
 
 -- | Transaction ids are non-negative 64-bit integers and
 --   are expected to be monotonically increasing.
@@ -333,6 +373,9 @@ instance AsString TxId where asString = pack . show
 
 instance Arbitrary TxId where
   arbitrary = TxId <$> arbitrary
+
+-- -------------------------------------------------------------------------- --
+-- PactDb
 
 data ExecutionMode =
     Transactional |

@@ -9,7 +9,7 @@ module Pact.Persist
   (Persist,
    Table(..),DataTable,TxTable,
    TableId(..),tableId,
-   PactDbKey,PactDbValue(..),
+   PactDbKey,
    DataKey(..),TxKey(..),
    KeyCmp(..),cmpToOp,
    KeyConj(..),conjToOp,
@@ -24,15 +24,10 @@ import qualified Data.ByteString as B
 import Data.String
 import Data.Hashable
 import Data.Text (Text)
-import Data.Typeable
+import Data.Typeable (Typeable)
 
-import Pact.Types.PactValue
 import Pact.Types.Pretty
-import Pact.Types.RowData
 import Pact.Types.Runtime
-import Pact.Types.Namespace
-
-import Pact.JSON.Legacy.Value
 
 type Persist s a = s -> IO (s,a)
 
@@ -124,28 +119,6 @@ class (Ord k,Show k,Eq k,Hashable k,Pretty k) => PactDbKey k
 instance PactDbKey TxKey
 instance PactDbKey DataKey
 
-class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactDbValue v where
-  prettyPactDbValue :: v -> Doc
-
-instance PactDbValue LegacyValue where
-  prettyPactDbValue (LegacyValue v) = prettyPactDbValue v
-instance PactDbValue v => PactDbValue (TxLog v) where
-  prettyPactDbValue = pretty . fmap (SomeDoc . prettyPactDbValue)
-instance PactDbValue RowData where
-  prettyPactDbValue = pretty
-instance PactDbValue a => PactDbValue [a] where
-  prettyPactDbValue = prettyList . fmap (SomeDoc . prettyPactDbValue)
-instance PactDbValue PersistModuleData where
-  prettyPactDbValue = (pretty . _mdModule)
-instance PactDbValue KeySet where
-  prettyPactDbValue = pretty
-instance PactDbValue Value where
-  prettyPactDbValue = pretty
-instance PactDbValue (Namespace PactValue) where
-  prettyPactDbValue = pretty
-instance PactDbValue (Maybe PactExec) where
-  prettyPactDbValue = pretty
-
 data Persister s = Persister {
   createTable :: forall k . PactDbKey k => Table k -> Persist s ()
   ,
@@ -157,9 +130,9 @@ data Persister s = Persister {
   ,
   queryKeys :: forall k . PactDbKey k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
   ,
-  query :: forall k v . (PactDbKey k, FromJSON v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
+  query :: forall k v . (PactDbKey k, FromJSON v, Typeable v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
   ,
-  readValue :: forall k v . (PactDbKey k, FromJSON v) => Table k -> k -> Persist s (Maybe v)
+  readValue :: forall k v . (PactDbKey k, FromJSON v, Typeable v) => Table k -> k -> Persist s (Maybe v)
   ,
   writeValue :: forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ()
   ,

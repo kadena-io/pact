@@ -25,16 +25,13 @@ import qualified Data.ByteString as B
 import Control.Monad.Reader ()
 import Control.Monad.State
 import Data.Default
+import Data.Typeable
 
 import Pact.Types.Persistence
 import Pact.Persist hiding (compileQuery)
 import Pact.Types.Pretty
 
 import qualified Pact.JSON.Encode as J
-
--- data PValue = forall a . (PactDbValue a) => PValue a
--- instance Show PValue where show (PValue a) = show a
-
 
 newtype Tbl k = Tbl {
   _tbl :: M.Map k B.ByteString
@@ -92,7 +89,6 @@ persister = Persister {
   ,
   readValue = \t k s -> fmap (s,) $ traverse conv $ firstOf (temp . tblType t . tbls . ix t . tbl . ix k) s
   ,
-  -- writeValue :: forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ()
   writeValue = \t wt k v s -> fmap (,()) $ overM s (temp . tblType t . tbls) $ \ts -> case M.lookup t ts of
       Nothing -> throwDbError $ "writeValue: no such table: " <> pretty t
       Just tb -> fmap (\nt -> M.insert t nt ts) $ overM tb tbl $ \m -> case (M.lookup k m,wt) of
@@ -127,17 +123,12 @@ qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
   Just m -> return $ filter (compileQuery kq . fst) $ M.toList m
 {-# INLINE qry #-}
 
-
-conv :: forall v . (FromJSON v) => B.ByteString -> IO v
-conv v = case decodeStrict v of
-  Nothing -> throwDbError $
-       "FIXME"
-  --   "Failed to reify DB value: " <> prettyPactDbValue v <> " as " <> pretty (show (typeRep (Proxy @v)))
-  Just s -> return s
+conv :: forall v . (FromJSON v, Typeable v) => B.ByteString -> IO v
+conv v = case eitherDecodeStrict' v of
+  Left e -> throwDbError $
+    "Failed to reify DB value: " <> pretty e <> ". " <> pretty (show v) <> " as " <> pretty (show (typeRep (Proxy @v)))
+  Right s -> return s
 {-# INLINE conv #-}
-
-
-
 
 _test :: IO ()
 _test = do

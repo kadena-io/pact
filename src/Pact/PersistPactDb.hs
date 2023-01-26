@@ -41,7 +41,6 @@ import Data.String
 
 import Data.Aeson hiding ((.=))
 import qualified Data.Aeson as A ((.=))
-import qualified Data.ByteString as B
 import Data.Text (unpack)
 import GHC.Generics
 
@@ -88,7 +87,6 @@ instance Pretty UserTableInfo where
     [ "module: " <> pretty mod'
     ]
 
-instance PactDbValue UserTableInfo where prettyPactDbValue = pretty
 instance FromJSON UserTableInfo
 
 instance ToJSON UserTableInfo where
@@ -235,9 +233,6 @@ doCommit = use mode >>= \case
       return (concatMap snd txrs)
 {-# INLINE doCommit #-}
 
-encodeTxLogJsonArray :: [TxLogJson] -> B.ByteString
-encodeTxLogJsonArray logs = J.encodeStrict $ J.array $ J.embedJson . _getTxLogJson <$> logs
-
 rollback :: MVState p ()
 rollback = do
   (r :: Either SomeException ()) <- try (doPersist P.rollbackTx)
@@ -279,7 +274,7 @@ readUserTable' :: TableName -> RowKey -> MVState p (Maybe RowData)
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
 {-# INLINE readUserTable' #-}
 
-readSysTable :: PactDbValue v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
+readSysTable :: FromJSON v => Typeable v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
 readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
 {-# INLINE readSysTable #-}
 
@@ -331,8 +326,6 @@ record tt k v = modify'
     -- strict append (it would be better to use a datastructure with efficient append)
     append [] b = b
     append (h:t) b = let !x = append t b in h : x
-
-    encodeTxLog = TxLogJson . J.encodeJsonText
 {-# INLINE record #-}
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName
