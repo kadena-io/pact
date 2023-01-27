@@ -22,7 +22,7 @@ import Pact.Types.Native (RNativeFun)
 import Pact.Types.Pretty (pretty)
 import Pact.Types.Purity (PureSysOnly, runSysOnly)
 import Pact.Types.Runtime (getInfo, evalError, evalError', ifExecutionFlagSet, ExecutionFlag(FlagDisablePact44), readRow, Domain(KeySets), argsError)
-import Pact.Types.Term (Example(LitExample), Guard(GKeySet), pattern TLitString, Term(TGuard), _tGuard, toTerm)
+import Pact.Types.Term (Example(LitExample), Guard(GKeySet, GKeySetRef), pattern TLitString, Term(TGuard), _tGuard, toTerm)
 import Pact.Types.Type (GuardType(GTyKeySet))
 
 sessionDefs :: NativeModule
@@ -37,12 +37,21 @@ enforceSessionDef =
   )
   [LitExample "(enforce-session keyset)"]
   "Enforce that the current environment contains a Signer with a key that \
-  \satisfies the keyset parameter. The environment will contain a Signer \
-  \when running in a context with an authenticated webauthn user."
+  \satisfies the keyset parameter. The execution environment is responsible \
+  \for setting the session signer, usually in response to an authorization \
+  \flow."
   where
+
+    lookupEnvironmentKeyset i keySetName = do
+      readRow (getInfo i) KeySets keySetName >>= \case
+        Nothing -> evalError (getInfo i) $ "No such keyset: " <> pretty keySetName
+        Just keySet -> pure keySet
+
     enforceSession' :: PureSysOnly e => RNativeFun e
     enforceSession' i [TGuard{_tGuard}] = case _tGuard of
-      -- GKeySetRef ksr -> enforceGuard i (GKeySetRef ksr) >> return (toTerm True)
+      GKeySetRef (ksr) -> do
+        ks <- lookupEnvironmentKeyset i ksr
+        enforceKeySetSession (getInfo i) Nothing ks >> return (toTerm True)
       GKeySet ks -> enforceKeySetSession (getInfo i) Nothing ks >> return (toTerm True)
       _ -> evalError' i "incorrect guard type, must be keyset ref or keyset"
     enforceSession' i [TLitString k] = do
