@@ -26,7 +26,9 @@ import Pact.Types.Hash
 ---- HELPER DATA TYPES AND FUNCTIONS ----
 
 getByteString :: ByteString -> ByteString
-getByteString = fst . B16.decode
+getByteString bs = case B16.decode bs of
+  Left e -> error (show e)
+  Right bytes -> bytes
 
 
 type Address = Maybe Text
@@ -82,7 +84,7 @@ toSigners kps = return $ map makeSigner kps
 toExecPayload :: [Signer] -> Text -> ByteString
 toExecPayload signers t = BSL.toStrict $ A.encode payload
   where
-    payload = Payload (Exec (ExecMsg t Null)) "nonce" () signers Nothing
+    payload = Payload (Exec (ExecMsg t Null)) "nonce" () signers Nothing Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Expectation

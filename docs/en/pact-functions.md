@@ -1570,6 +1570,17 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```
 
 
+### enforce-session {#enforce-session}
+
+*keyset*&nbsp;`keyset` *&rarr;*&nbsp;`bool`
+
+
+Enforce that the current environment contains a Signer with a key that satisfies the keyset parameter. The environment will contain a Signer when running in a context with an authenticated webauthn user.
+```lisp
+(enforce-keyset keyset)
+```
+
+
 ### install-capability {#install-capability}
 
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
@@ -1993,6 +2004,14 @@ Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
 ```lisp
 (env-namespace-policy (my-ns-policy-fun))
 ```
+
+
+### env-session {#env-session}
+
+*public-key*&nbsp;`string` *caps*&nbsp;`[string]` *&rarr;*&nbsp;`string`
+
+
+
 
 
 ### env-sigs {#env-sigs}

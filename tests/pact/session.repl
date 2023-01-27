@@ -1,0 +1,19 @@
+;;
+;; session.repl: test setting the session keyset
+;;
+
+(begin-tx)
+(env-exec-config ["DisablePact44"])
+
+(env-session "my-key" [])
+
+(env-data { "keyset": ["my-key"] })
+
+(define-keyset 'k (read-keyset "keyset"))
+
+(enforce-session 'k)
+
+
+(+ 1 2)
+
+(commit-tx)
