@@ -26,10 +26,7 @@ import Pact.Types.Hash
 ---- HELPER DATA TYPES AND FUNCTIONS ----
 
 getByteString :: ByteString -> ByteString
-getByteString bs = case B16.decode bs of
-  Left e -> error (show e)
-  Right bytes -> bytes
-
+getByteString = fst . B16.decode
 
 type Address = Maybe Text
 
