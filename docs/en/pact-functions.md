@@ -1570,17 +1570,6 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```
 
 
-### enforce-session {#enforce-session}
-
-*keyset*&nbsp;`keyset` *&rarr;*&nbsp;`bool`
-
-
-Enforce that the current environment contains a Signer with a key that satisfies the keyset parameter. The environment will contain a Signer when running in a context with an authenticated webauthn user.
-```lisp
-(enforce-keyset keyset)
-```
-
-
 ### install-capability {#install-capability}
 
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
@@ -1749,6 +1738,20 @@ Return the protocol type of a given PRINCIPAL value. If input value is not a pri
 Validate that PRINCIPAL unambiguously identifies GUARD.
 ```lisp
 (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
+```
+
+## Session {#Session}
+
+### enforce-session {#enforce-session}
+
+*keyset*&nbsp;`keyset` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that the current environment contains a Signer with a key that satisfies the keyset parameter. The environment will contain a Signer when running in a context with an authenticated webauthn user.
+```lisp
+(enforce-session keyset)
 ```
 
 ## REPL-only functions {#repl-lib}

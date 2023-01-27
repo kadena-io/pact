@@ -32,7 +32,6 @@ import Pact.Runtime.Capabilities
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
-import Pact.Types.Purity (PureSysOnly, runSysOnly)
 import Pact.Types.Runtime
 
 capDefs :: NativeModule
@@ -41,7 +40,6 @@ capDefs =
    [ withCapability
    , installCapability
    , enforceGuardDef "enforce-guard"
-   , enforceSessionDef
    , requireCapability
    , composeCapability
    , emitEventDef
@@ -256,19 +254,3 @@ emitEventDef =
         DefcapManaged {} -> return ()
         DefcapEvent -> return ()
       _ -> evalError' i $ "emit-event: must be managed or event defcap"
-
-enforceSessionDef :: NativeDef
-enforceSessionDef =
-  defRNative "enforce-session" (\i as -> runSysOnly $ enforceSession' i as)
-  (funType tTyBool [("keyset", tTyGuard (Just GTyKeySet))])
-  [LitExample "(enforce-keyset keyset)"]
-  "Enforce that the current environment contains a Signer with a key that \
-  \satisfies the keyset parameter. The environment will contain a Signer \
-  \when running in a context with an authenticated webauthn user."
-  where
-    enforceSession' :: PureSysOnly e => RNativeFun e
-    enforceSession' i [TGuard{_tGuard}] = case _tGuard of
-      GKeySetRef ksr -> enforceGuard i (GKeySetRef ksr) >> return (toTerm True)
-      GKeySet ks -> enforceKeySetAgainstSessionKey (getInfo i) Nothing ks >> return (toTerm True)
-      _ -> evalError' i "incorrect guard type, must be keyset ref or keyset"
-    enforceSession' i as = argsError i as

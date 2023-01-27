@@ -1,33 +1,60 @@
 -- |
+-- Module      :  Pact.Native.Session
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Builtins for working with sessions.
+--
 
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
-module Pact.Native.Session (sessionDefs) where
+module Pact.Native.Session (sessionDefs, enforceSessionDef) where
 
-import Data.Default (def)
 
-import Pact.Native.Internal(NativeModule, NativeDef, SpecialForm(WithSession), defNative, funType)
-import Pact.Types.Runtime (argsError')
-import Pact.Types.Native (NativeFun, specialForm)
-import Pact.Types.Term (Example(LitExample), Term(TBinding), BindType(BindSchema))
-import Pact.Types.Type (Type(TySchema), SchemaType(TyBinding), mkSchemaVar, mkTyVar)
+import Pact.Eval (enforceKeySetSession)
+import Pact.Native.Internal(NativeDef, NativeModule, defRNative, funType, tTyBool, tTyGuard, tTyString)
+import Pact.Types.KeySet (KeySetName(..), parseAnyKeysetName)
+import Pact.Types.Native (RNativeFun)
+import Pact.Types.Pretty (pretty)
+import Pact.Types.Purity (PureSysOnly, runSysOnly)
+import Pact.Types.Runtime (getInfo, evalError, evalError', ifExecutionFlagSet, ExecutionFlag(FlagDisablePact44), readRow, Domain(KeySets), argsError)
+import Pact.Types.Term (Example(LitExample), Guard(GKeySet), pattern TLitString, Term(TGuard), _tGuard, toTerm)
+import Pact.Types.Type (GuardType(GTyKeySet))
 
 sessionDefs :: NativeModule
 sessionDefs =
-  ("Session",[withSessionDef])
+  ("Session",[enforceSessionDef])
 
-withSessionDef :: NativeDef
-withSessionDef =
-  let
-    rt = mkSchemaVar "row"
-    a = mkTyVar "a" []
-    bindTy = TySchema TyBinding rt def
-  in
-    defNative (specialForm WithSession) withSession
-    (funType a [("bindings", bindTy)])
-    [ LitExample "(with-session { \"user\":=username \"user-keyset\":=keyset })"]
-    ""
+enforceSessionDef :: NativeDef
+enforceSessionDef =
+  defRNative "enforce-session" (\i as -> runSysOnly $ enforceSession' i as)
+  (funType tTyBool [("keyset", tTyGuard (Just GTyKeySet))]
+   <> funType tTyBool [("keysetname",tTyString)]
+  )
+  [LitExample "(enforce-session keyset)"]
+  "Enforce that the current environment contains a Signer with a key that \
+  \satisfies the keyset parameter. The environment will contain a Signer \
+  \when running in a context with an authenticated webauthn user."
+  where
+    enforceSession' :: PureSysOnly e => RNativeFun e
+    enforceSession' i [TGuard{_tGuard}] = case _tGuard of
+      -- GKeySetRef ksr -> enforceGuard i (GKeySetRef ksr) >> return (toTerm True)
+      GKeySet ks -> enforceKeySetSession (getInfo i) Nothing ks >> return (toTerm True)
+      _ -> evalError' i "incorrect guard type, must be keyset ref or keyset"
+    enforceSession' i [TLitString k] = do
+      keySetName <- ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName k Nothing)
+        (case parseAnyKeysetName k of
+           Left{} -> evalError' i "incorrect keyset name format"
+           Right ksn -> return ksn
+        )
+      ks <- readRow (getInfo i) KeySets keySetName >>= \case
+        Nothing -> evalError (getInfo i) $ "No such keyset: " <> pretty keySetName
+        Just ks -> pure ks
+      enforceKeySetSession (getInfo i) (Just keySetName) ks >> return (toTerm True)
 
-withSession :: NativeFun e
-withSession fi as@[b@(TBinding ps bd (BindSchema _) _)] = undefined
-withSession fi as = argsError' fi as
+    enforceSession' i as = argsError i as

@@ -34,7 +34,7 @@ module Pact.Eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
     ,resolveFreeVars,resolveArg,resolveRef
-    ,enforceKeySet,enforceKeySetAgainstSessionKey,enforceKeySetName
+    ,enforceKeySet,enforceKeySetSession,enforceKeySetName
     ,enforceGuard
     ,deref
     ,liftTerm,apply
@@ -116,7 +116,7 @@ enforceKeySetName mi ksn = do
   runSysOnly $ enforceKeySet mi (Just ksn) ks
 {-# INLINE enforceKeySetName #-}
 
--- | Enforce keyset against environment.
+-- | Enforce keyset against signer keys from the environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- M.filterWithKey matchKey <$> view eeMsgSigs
@@ -146,9 +146,9 @@ enforceKeySet i ksn KeySet{..} = do
                      | otherwise = failed
 {-# INLINE enforceKeySet #-}
 
--- | Enforce keyset against session key.
-enforceKeySetAgainstSessionKey :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySetAgainstSessionKey i ksn KeySet{..} = do
+-- | Enforce keyset against session key from the environment.
+enforceKeySetSession :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
+enforceKeySetSession i ksn KeySet{..} = do
   sigs <- maybeToMap <$> (view eeSessionSig)
   sigs' <- checkSigCaps sigs
   runPred (M.size sigs')
@@ -177,7 +177,7 @@ enforceKeySetAgainstSessionKey i ksn KeySet{..} = do
       where
         runBuiltIn p | p count matched = return ()
                      | otherwise = failed
-{-# INLINE enforceKeySetAgainstSessionKey #-}
+{-# INLINE enforceKeySetSession #-}
 
 enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of

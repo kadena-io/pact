@@ -2,18 +2,23 @@
 ;; session.repl: test setting the session keyset
 ;;
 
-(begin-tx)
 (env-exec-config ["DisablePact44"])
 
+;; Inject the public key "my-key" into the environment's session.
 (env-session "my-key" [])
 
-(env-data { "keyset": ["my-key"] })
-
+;; Populate the environment with two keysets.
+(env-data { "keyset": ["my-key"], "bad-keyset": ["other-key"] })
 (define-keyset 'k (read-keyset "keyset"))
+(define-keyset 'bad-keyset (read-keyset "bad-keyset"))
 
-(enforce-session 'k)
+;; Enforcing the session against the first keyset (which the session
+;; key satisfies) should succeed.
+(expect "session satisfies the keyset 'k"
+  (enforce-session 'k)
+  true)
 
-
-(+ 1 2)
-
-(commit-tx)
+;; Enforcing the session against a keyset that isn't satisfied
+;; by the session key should fail.
+(expect-failure "session key is not in bad-keyset"
+  (enforce-session 'bad-keyset))
