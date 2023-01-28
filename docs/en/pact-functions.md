@@ -1749,7 +1749,7 @@ Validate that PRINCIPAL unambiguously identifies GUARD.
 *keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Enforce that the current environment contains a Signer with a key that satisfies the keyset parameter. The execution environment is responsible for setting the session signer, usually in response to an authorization flow.
+Enforce that the current environment contains a session signer with a key that satisfies the keyset parameter. The execution environment is responsible for setting the session signer, usually in response to an authorization flow.
 ```lisp
 (enforce-session keyset)
 ```
