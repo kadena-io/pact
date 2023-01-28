@@ -22,7 +22,6 @@ module Pact.Types.PactError
   , PactError(..)
   , PactErrorType(..)
 
-
   , RenderedOutput(..)
   , OutputType(..)
   , roText
@@ -33,9 +32,7 @@ module Pact.Types.PactError
   , _OutputFailure
   , _OutputWarning
   , _OutputTrace
-
   ) where
-
 
 import Control.Applicative
 import Control.Lens hiding ((.=),DefName, elements)
@@ -55,6 +52,8 @@ import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.Pretty
 
+import qualified Pact.JSON.Encode as J
+
 data StackFrame = StackFrame {
       _sfName :: !Text
     , _sfLoc :: !Info
@@ -66,6 +65,10 @@ instance ToJSON StackFrame where
   toEncoding = toEncoding . show
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode StackFrame where
+  build = J.text . T.pack . show
+  {-# INLINE build #-}
 
 -- | BIG HUGE CAVEAT: Back compat requires maintaining the pre-existing
 -- 'ToJSON' instance, so this is ONLY for UX coming out of serialized
@@ -119,6 +122,15 @@ instance NFData PactErrorType
 instance ToJSON PactErrorType
 instance FromJSON PactErrorType
 
+instance J.Encode PactErrorType where
+  build EvalError = J.text "EvalError"
+  build ArgsError = J.text "ArgsError"
+  build DbError = J.text "DbError"
+  build TxFailure = J.text "TxFailure"
+  build SyntaxError = J.text "SyntaxError"
+  build GasError = J.text "GasError"
+  {-# INLINE build #-}
+
 instance Arbitrary PactErrorType where
   arbitrary = elements [ EvalError, ArgsError, DbError, TxFailure, SyntaxError, GasError ]
 
@@ -145,6 +157,15 @@ instance ToJSON PactError where
   toEncoding = pairs . mconcat . pactErrorProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode PactError where
+  build o = J.object
+    [ "callStack" J..= J.array (peCallStack o)
+    , "type" J..= peType o
+    , "message" J..= J.text (T.pack (show (peDoc o)))
+    , "info" J..= J.text (T.pack (renderInfo (peInfo o)))
+    ]
+  {-# INLINE build #-}
 
 -- CAVEAT: this is "UX only" due to issues with Info, StackFrame, and that
 -- historically these were ignored here. As such this is a "lenient" parser returning

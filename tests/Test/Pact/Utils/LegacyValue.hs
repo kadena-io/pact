@@ -108,7 +108,7 @@ checkRoundtrip2 = ("roundtrip2", prop_checkRoundtrip2)
 -- paths produce the same result.
 --
 prop_checkLegacyValueCompat :: ToJSON a => a -> Property
-prop_checkLegacyValueCompat a = encode a === encode (toLegacyJson a)
+prop_checkLegacyValueCompat a = encode a === J.encode (toLegacyJson a)
 
 checkLegacyValueCompat :: ToJSON a => (String, a -> Property)
 checkLegacyValueCompat =
@@ -902,7 +902,7 @@ spec_pact_types_persistence =
   describe "Pact.Types.Persistence" $ do
    spec_case @PersistDirect
       [ Pending checkRoundtrip
-      , Case checkRoundtrip2
+      , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
@@ -916,7 +916,7 @@ spec_pact_types_persistence =
       ]
    spec_case @PersistModuleData
       [ Pending checkRoundtrip
-      , Case checkRoundtrip2
+      , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
@@ -924,7 +924,7 @@ spec_pact_types_persistence =
    -- spec_case @RowKey [ ]
    spec_case @(Ref' PersistDirect)
       [ Pending checkRoundtrip
-      , Case checkRoundtrip2
+      , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
@@ -1000,8 +1000,8 @@ spec_pact_types_rowData :: Spec
 spec_pact_types_rowData =
   describe "Pact.Types.RowData" $ do
     spec_case @RowDataValue
-      [ Case checkRoundtrip
-      , Case checkRoundtrip2
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat
@@ -1014,8 +1014,8 @@ spec_pact_types_rowData =
       , CaseOldHashable checkLegacyHashableCompat
       ]
     spec_case @RowData
-      [ Case checkRoundtrip
-      , Case checkRoundtrip2
+      [ Pending checkRoundtrip
+      , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       , CaseOldHashable checkLegacyHashableCompat

@@ -37,7 +37,7 @@ import Pact.Types.Pretty
 import Pact.Types.Term
 import Pact.Types.Util
 
-import qualified Pact.JSON.Encode as E
+import qualified Pact.JSON.Encode as J
 
 -- -------------------------------------------------------------------------- --
 -- RowDataValue
@@ -105,24 +105,24 @@ instance FromJSON RowDataValue where
           <*> o .: "refSpec"
           <*> pure def
 
-instance E.Encode RowDataValue where
-  build (RDLiteral l) = E.build l
-  build (RDList l) = E.build $ E.array l
+instance J.Encode RowDataValue where
+  build (RDLiteral l) = J.build l
+  build (RDList l) = J.build $ J.array l
   build (RDObject o) = tagged "o" o
   build (RDGuard g) = tagged "g" g
-  build (RDModRef (ModRef refName refSpec _)) = E.object
-    [ "$t" E..= E.text "m"
-    , "$v" E..= E.object
-      [ "refSpec" E..= (E.array <$> refSpec)
-      , "refName" E..= refName
+  build (RDModRef (ModRef refName refSpec _)) = J.object
+    [ "$t" J..= J.text "m"
+    , "$v" J..= J.object
+      [ "refSpec" J..= (J.array <$> refSpec)
+      , "refName" J..= refName
       ]
     ]
   {-# INLINE build #-}
 
-tagged :: E.Encode v => Text -> v -> E.Builder
-tagged t rv = E.object
-  [ "$t" E..= t
-  , "$v" E..= rv
+tagged :: J.Encode v => Text -> v -> J.Builder
+tagged t rv = J.object
+  [ "$t" J..= t
+  , "$v" J..= rv
   ]
 {-# INLINE tagged #-}
 
@@ -149,8 +149,8 @@ instance FromJSON RowDataVersion where
     1 -> pure RDV1
     _ -> fail "RowDataVersion"
 
-instance E.Encode RowDataVersion where
-  build = E.build . E.Base10 . fromEnum
+instance J.Encode RowDataVersion where
+  build = J.build . J.Aeson . fromEnum
   {-# INLINE build #-}
 
 -- -------------------------------------------------------------------------- --
@@ -209,10 +209,11 @@ instance ToJSON RowData where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
-instance E.Encode RowData where
-  build o = E.object
-    [ "$d" E..= _rdData o
-    , "$v" E..= _rdVersion o
+instance J.Encode RowData where
+  build (RowData RDV0 m) = J.build $ fmap rowDataToPactValue m
+  build o = J.object
+    [ "$d" J..= _rdData o
+    , "$v" J..= _rdVersion o
     ]
   {-# INLINE build #-}
 
@@ -267,12 +268,12 @@ instance ToJSON OldPactValue where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
-instance E.Encode OldPactValue where
-  build (OldPLiteral l) = E.build l
-  build (OldPObject o) = E.build o
-  build (OldPList v) = E.array v
-  build (OldPGuard x) = E.build x
-  build (OldPModRef m) = E.object $ modRefKeyValues_ m
+instance J.Encode OldPactValue where
+  build (OldPLiteral l) = J.build l
+  build (OldPObject o) = J.build o
+  build (OldPList v) = J.array v
+  build (OldPGuard x) = J.build x
+  build (OldPModRef m) = J.object $ modRefKeyValues_ m
       -- this uses a non-standard alternative JSON encoding for 'ModRef'
   {-# INLINE build #-}
 

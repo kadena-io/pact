@@ -25,10 +25,13 @@ module Pact.Types.Persistence
   (
    RowKey(..),
    Domain(..),
+   TxLog(..),txDomain,txKey,txValue,
+   TxLogRaw,
+   RawTxLogData(..),
    TxLogJson(..),
    encodeTxLog,
    encodeTxLogJsonArray,
-   TxLog(..),txDomain,txKey,txValue,
+   decodeTxLogJson,
    WriteType(..),
    Method,
    PactDb(..),
@@ -175,9 +178,9 @@ instance ToJSON r => ToJSON (ModuleData r) where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
-instance J.Encode r => J.Encode (ModuleData r) where
+instance (J.Encode r, Eq r) => J.Encode (ModuleData r) where
   build o = J.object
-    [ "dependencies" J..?= J.ifMaybe LHM.null (legacyHashMap (_mdDependencies o))
+    [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap (_mdDependencies o)))
     , "module" J..= _mdModule o
     , "refMap" J..= legacyHashMap (_mdRefMap o)
     ]
@@ -290,16 +293,18 @@ instance ToJSON v => ToJSON (TxLog v) where
   {-# INLINE toEncoding #-}
 
 instance J.Encode v => J.Encode (TxLog v) where
-    build o = J.object
-        [ "value" J..= _txValue o
-        , "key" J..= _txKey o
-        , "table" J..= _txDomain o
-        ]
-    {-# INLINE build #-}
+  build o = J.object
+    [ "value" J..= _txValue o
+    , "key" J..= _txKey o
+    , "table" J..= _txDomain o
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON v => FromJSON (TxLog v) where
-    parseJSON = withObject "TxLog" $ \o ->
-                TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"
+  parseJSON = withObject "TxLog" $ \o -> TxLog
+    <$> o .: "table"
+    <*> o .: "key"
+    <*> o .: "value"
 
 instance Pretty v => Pretty (TxLog v) where
   pretty (TxLog domain key value) = commaBrackets
@@ -312,13 +317,46 @@ instance Arbitrary v => Arbitrary (TxLog v) where
   arbitrary = TxLog <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- -------------------------------------------------------------------------- --
+-- Raw TxLog
+
+-- | TxLog that contains the raw data bytes as it is stored in the database.
+--
+-- It can usually expected that the data is valid JSON text (in UTF-8 encoding),
+-- but the code doesn't guarantee that.
+--
+type TxLogRaw = TxLog RawTxLogData
+
+-- | Raw TxLog Data encoded as JSON Value
+--
+-- This is only used by `getTxLogs` and the related "historic" pact db queries.
+--
+-- We respresent the raw TxLog values as JSON Value. However we wrap it into a
+-- newtype to prevent it from being serialized to JSON directly. The reason is
+-- that we use the content of TxLogs to compute hashes and serialization via
+-- Value doesn't roundtrip safely. Ideally, we'd like to ban the direct use of
+-- Value for anything but use as an ephemeral type during JSON serialization.
+-- However, the API for getTxLogs and the related "historic" pact db queries are
+-- currently depends on it as a generic representation of db content. So for now
+-- we keep it but tag it. Eventually it should be removed from the code base.
+--
+newtype RawTxLogData = RawTxLogData Value
+  deriving (Show, Eq)
+  deriving newtype (FromJSON, NFData)
+
+-- -------------------------------------------------------------------------- --
 -- TXLogsJson
 
--- | Serialized JSON Text
+-- | Serialized JSON Text of a TxLog.
+--
+-- The full TxLog (table, key, and value) is encoded as JSON.
 --
 newtype TxLogJson = TxLogJson { _getTxLogJson :: J.JsonText }
-    deriving (Show, Eq, Ord)
-    deriving newtype (NFData)
+  deriving (Show, Eq, Ord)
+  deriving newtype (NFData)
+
+instance J.Encode TxLogJson where
+  build = J.build . _getTxLogJson
+  {-# INLINE build #-}
 
 -- | Encode TxLog as TxLogJson
 --
@@ -328,8 +366,10 @@ encodeTxLog = TxLogJson . J.encodeJsonText
 -- | Encode list of TxLogJson to a JSON ByteString
 --
 encodeTxLogJsonArray :: [TxLogJson] -> B.ByteString
-encodeTxLogJsonArray =
-    J.encodeStrict . J.array . fmap (J.embedJson . _getTxLogJson)
+encodeTxLogJsonArray = J.encodeStrict . J.array
+
+decodeTxLogJson :: FromJSON v => TxLogJson -> Either String v
+decodeTxLogJson = eitherDecodeStrict'  . J.encodeStrict
 
 -- -------------------------------------------------------------------------- --
 -- WriteType
@@ -361,7 +401,7 @@ instance Pretty WriteType where
 newtype TxId = TxId Word64
     deriving (Eq,Ord,Generic)
     deriving newtype (Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON)
-    deriving J.Encode via (J.Base10 Word64)
+    deriving J.Encode via (J.Aeson Word64)
 
 instance NFData TxId
 instance Show TxId where
@@ -389,18 +429,18 @@ type Method e a = MVar e -> IO a
 data PactDb e = PactDb {
     -- | Read a domain value at key, throwing an exception if not found.
     _readRow :: forall k v . (IsString k,FromJSON v) =>
-                Domain k v -> k -> Method e (Maybe v)
+      Domain k v -> k -> Method e (Maybe v)
     -- | Write a domain value at key. WriteType argument governs key behavior.
   , _writeRow :: forall k v . (AsString k,J.Encode v) =>
-                 WriteType -> Domain k v -> k -> v -> Method e ()
+      WriteType -> Domain k v -> k -> v -> Method e ()
     -- | Retrieve all keys for a domain, Key output guaranteed sorted.
   , _keys :: forall k v . (IsString k,AsString k) => Domain k v -> Method e [k]
     -- | Retrieve all transaction ids greater than supplied txid for table.
   , _txids ::  TableName -> TxId -> Method e [TxId]
     -- | Create a user table.
-  , _createUserTable ::  TableName -> ModuleName -> Method e ()
+  , _createUserTable :: TableName -> ModuleName -> Method e ()
     -- | Get module, keyset for user table.
-  , _getUserTableInfo ::  TableName -> Method e ModuleName
+  , _getUserTableInfo :: TableName -> Method e ModuleName
     -- | Initiate transactional state. Returns txid for 'Transactional' mode
     -- or Nothing for 'Local' mode. If state already initiated, rollback and throw error.
   , _beginTx :: ExecutionMode -> Method e (Maybe TxId)
@@ -415,6 +455,6 @@ data PactDb e = PactDb {
     -- Releases TxId for re-use.
   , _rollbackTx :: Method e ()
     -- | Get transaction log for table. TxLogs are expected to be user-visible format.
-  , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
-                 Domain k v -> TxId -> Method e [TxLog v]
+  , _getTxLog :: forall k . IsString k =>
+      Domain k RowData -> TxId -> Method e [TxLog RowData]
 }

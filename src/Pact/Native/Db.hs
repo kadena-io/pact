@@ -399,6 +399,7 @@ txlog g i [table@TTable {},TLitInteger tid] = do
       guardTable i table GtTxLog
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog _ i as = argsError i as
+-- gasPostReads :: Readable r => FunApp -> Gas -> ([r] -> a) -> Eval e [r] -> Eval e (Gas,a)
 
 txlogToObj :: TxLog RowData -> Term Name
 txlogToObj TxLog{..} = toTObject TyAny def

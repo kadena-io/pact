@@ -1,7 +1,5 @@
 packages: .
 
-packages: ../pact-json
-
 -- these upper bounds are required in order to not break payload validation in chainweb
 constraints: base16-bytestring <1
 constraints: prettyprinter <1.6.1
@@ -25,6 +23,11 @@ source-repository-package
   type: git
   tag: f991ffb74a1a1ab86f14e751d7c4f4ba549785b3
   location: https://github.com/hackage-package-forks/trifecta
+
+source-repository-package
+  type: git
+  tag: c0b22ff1cbc8fb2bdbc04e1378300235554fa850
+  location: https://github.com/kadena-io/pact-json
 
 -- Servant is notoriously forcing outdated upper bounds onto its users.
 -- It is usually safe to just ignore those.

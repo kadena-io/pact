@@ -85,6 +85,7 @@ import Pact.Types.PactValue
 import Pact.Types.Advice
 import Pact.Types.Persistence
 import Pact.Types.Pretty
+import Pact.Types.RowData
 import Pact.Types.SPV
 import Pact.Types.Util
 import Pact.Types.Namespace
@@ -439,7 +440,7 @@ rollbackTx :: Info -> Eval e ()
 rollbackTx i = method i $ \db -> _rollbackTx db
 
 -- | Invoke _getTxLog
-getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog v]
+getTxLog :: IsString k => Info -> Domain k RowData -> TxId -> Eval e [TxLog RowData]
 getTxLog i d t = method i $ \db -> _getTxLog db d t
 
 

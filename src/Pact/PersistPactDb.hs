@@ -242,7 +242,7 @@ rollback = do
   resetTemp
 
 
-getLogs :: forall v p k . FromJSON v => Domain k v -> TxId -> MVState p [TxLog v]
+getLogs :: forall p k . Domain k RowData -> TxId -> MVState p [TxLog RowData]
 getLogs d tid = do
     x <- doPersist (\p -> readValue p (tn d) (fromIntegral tid))
     mapM convLog $ fromMaybe [] x
@@ -254,7 +254,7 @@ getLogs d tid = do
     tn Pacts = TxTable pactsTable
     tn (UserTables t) = userTxRecord t
 
-    convLog :: TxLog Value -> MVState p (TxLog v)
+    convLog :: TxLog Value -> MVState p (TxLog RowData)
     convLog tl = case fromJSON (_txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl

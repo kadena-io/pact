@@ -64,9 +64,9 @@ initPactService CommandConfig {..} loggers spv = do
                 spv _ccExecutionConfig
                 eMode cmd (verifyCommand cmd)
           , _ceiApplyPPCmd =
-            applyCmd logger _ccEntity p gasModel
-            blockHeight blockTime prevBlockHash
-            spv _ccExecutionConfig
+              applyCmd logger _ccEntity p gasModel
+                blockHeight blockTime prevBlockHash
+                spv _ccExecutionConfig
           }
   case _ccSqlite of
     Nothing -> do

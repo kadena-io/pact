@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -77,6 +78,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 
 import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Encode as J
 
 
 #if !defined(ghcjs_HOST_OS)
@@ -368,6 +370,17 @@ instance ToJSON PactResult where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode PactResult where
+  build (PactResult (Right s)) = J.object
+    [ "status" J..= J.text "success"
+    , "data" J..= s
+    ]
+  build (PactResult (Left f)) = J.object
+    [ "status" J..= J.text "failure"
+    , "error" J..= f
+    ]
+  {-# INLINE build #-}
+
 instance FromJSON PactResult where
   parseJSON (A.Object o) = PactResult <$>
                            ((Left <$> o .: "error") <|>
@@ -395,7 +408,7 @@ data CommandResult l = CommandResult {
   , _crMetaData :: !(Maybe Value)
   -- | Events
   , _crEvents :: [PactEvent]
-  } deriving (Eq,Show,Generic)
+  } deriving (Eq,Show,Generic,Functor)
 
 commandResultProperties
   :: ToJSON l
@@ -421,6 +434,19 @@ instance (ToJSON l) => ToJSON (CommandResult l) where
   toEncoding = pairs . commandResultProperties toLegacyJson
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode l => J.Encode (CommandResult l) where
+  build o = J.object
+    [ "gas" J..= _crGas o
+    , "result" J..= _crResult o
+    , "reqKey" J..= _crReqKey o
+    , "logs" J..= _crLogs o
+    , "events" J..??= J.Array (_crEvents o)
+    , "metaData" J..= fmap toLegacyJson (_crMetaData o)
+    , "continuation" J..= _crContinuation o
+    , "txId" J..= _crTxId o
+    ]
+  {-# INLINE build #-}
 
 instance (FromJSON l) => FromJSON (CommandResult l) where
   parseJSON = withObject "CommandResult" $ \o -> CommandResult
@@ -465,7 +491,8 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, FromJSONKey, NFData)
+  deriving (Eq, Ord, Generic)
+  deriving newtype (Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, FromJSONKey, NFData, J.Encode)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

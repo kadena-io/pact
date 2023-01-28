@@ -1123,7 +1123,7 @@ instance Pretty g => Pretty (Module g) where
 moduleProperties :: ToJSON g => JsonProperties (Module g)
 moduleProperties o =
   [ "hash" .= _mHash o
-  , "blessed" .= _mBlessed o
+  , "blessed" .= legacyHashSetToList (HS.map moduleHashText (_mBlessed o))
   , "interfaces" .= _mInterfaces o
   , "imports" .= _mImports o
   , "name" .= _mName o
@@ -1131,10 +1131,12 @@ moduleProperties o =
   , "meta" .= _mMeta o
   , "governance" .= _mGovernance o
   ]
+ where
+  moduleHashText = hashToText . _mhHash
 {-# INLINE moduleProperties #-}
 
 instance ToJSON g => ToJSON (Module g) where
-  toJSON = enableToJSON "Pact.Types.Term.Module g" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Term.Module g" . object . moduleProperties
   toEncoding = A.pairs . mconcat . moduleProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
