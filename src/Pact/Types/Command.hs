@@ -405,7 +405,7 @@ data CommandResult l = CommandResult {
   -- | Output of a Continuation if one occurred in the command.
   , _crContinuation :: !(Maybe PactExec)
   -- | Platform-specific data
-  , _crMetaData :: !(Maybe Value)
+  , _crMetaData :: !(Maybe LegacyValue)
   -- | Events
   , _crEvents :: [PactEvent]
   } deriving (Eq,Show,Generic,Functor)
@@ -413,7 +413,7 @@ data CommandResult l = CommandResult {
 commandResultProperties
   :: ToJSON l
   => ToJSON a
-  => (Value -> a)
+  => (LegacyValue -> a)
   -> JsonMProperties (CommandResult l)
 commandResultProperties toVal o = mconcat
     [ "gas" .= _crGas o
@@ -471,7 +471,7 @@ instance Arbitrary l => Arbitrary (CommandResult l) where
     <*> arbitrary
     <*> arbitrary
     <*> arbitrary
-    <*> elements [Nothing, Just (String "JSON VALUE")]
+    <*> elements [Nothing, Just (LegacyValue $ String "JSON VALUE")]
     <*> scale (min 10) arbitrary
 
 cmdToRequestKey :: Command a -> RequestKey

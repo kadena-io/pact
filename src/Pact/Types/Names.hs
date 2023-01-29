@@ -37,7 +37,7 @@ module Pact.Types.Names
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
-import Data.Aeson (ToJSON(..), FromJSON(..), withText, pairs, (.=), FromJSONKey(..), ToJSONKey(..), ToJSONKeyFunction(..), FromJSONKeyFunction(..), Value(String))
+import Data.Aeson (ToJSON(..), FromJSON(..), withText, pairs, object, (.=), FromJSONKey(..), ToJSONKey(..), ToJSONKeyFunction(..), FromJSONKeyFunction(..), Value(String))
 import Data.Aeson.Encoding (text)
 import qualified Data.Aeson.Key as AK
 import qualified Data.Attoparsec.Text as AP
@@ -117,7 +117,7 @@ moduleNameProperties o =
 {-# INLINE moduleNameProperties #-}
 
 instance ToJSON ModuleName where
-  toJSON = enableToJSON "Pact.Types.Names.ModuleName" . lensyToJSON 3
+  toJSON = enableToJSON "Pact.Types.Names.ModuleName" . object . moduleNameProperties
   toEncoding = pairs . mconcat . moduleNameProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
