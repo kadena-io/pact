@@ -151,7 +151,7 @@ mkCommand
   -> PactRPC c
   -> IO (Command ByteString)
 mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
-  where encodedPayload = BSL.toStrict $ A.encode payload
+  where encodedPayload = BSL.toStrict $ A.encode $ toLegacyJson payload
         payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
 keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
@@ -312,7 +312,8 @@ payloadProperties o =
 {-# INLINE payloadProperties #-}
 
 instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
-  toJSON = enableToJSON "Pact.Types.Command.Payload m a" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Command.Payload m a" . object . payloadProperties
+  -- toJSON = enableToJSON "Pact.Types.Command.Payload m a" . lensyToJSON 2
   toEncoding = pairs . mconcat . payloadProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
@@ -405,7 +406,7 @@ data CommandResult l = CommandResult {
   -- | Output of a Continuation if one occurred in the command.
   , _crContinuation :: !(Maybe PactExec)
   -- | Platform-specific data
-  , _crMetaData :: !(Maybe LegacyValue)
+  , _crMetaData :: !(Maybe Value)
   -- | Events
   , _crEvents :: [PactEvent]
   } deriving (Eq,Show,Generic,Functor)
@@ -413,7 +414,7 @@ data CommandResult l = CommandResult {
 commandResultProperties
   :: ToJSON l
   => ToJSON a
-  => (LegacyValue -> a)
+  => (Value -> a)
   -> JsonMProperties (CommandResult l)
 commandResultProperties toVal o = mconcat
     [ "gas" .= _crGas o
@@ -471,7 +472,7 @@ instance Arbitrary l => Arbitrary (CommandResult l) where
     <*> arbitrary
     <*> arbitrary
     <*> arbitrary
-    <*> elements [Nothing, Just (LegacyValue $ String "JSON VALUE")]
+    <*> elements [Nothing, Just (String "JSON VALUE")]
     <*> scale (min 10) arbitrary
 
 cmdToRequestKey :: Command a -> RequestKey
