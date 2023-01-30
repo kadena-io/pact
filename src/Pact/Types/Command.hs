@@ -151,7 +151,7 @@ mkCommand
   -> PactRPC c
   -> IO (Command ByteString)
 mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
-  where encodedPayload = BSL.toStrict $ A.encode $ toLegacyJson payload
+  where encodedPayload = J.encodeStrict $ toLegacyJson payload
         payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
 keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
@@ -312,8 +312,7 @@ payloadProperties o =
 {-# INLINE payloadProperties #-}
 
 instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
-  toJSON = enableToJSON "Pact.Types.Command.Payload m a" . object . payloadProperties
-  -- toJSON = enableToJSON "Pact.Types.Command.Payload m a" . lensyToJSON 2
+  toJSON = enableToJSON "Pact.Types.Command.Payload m a" . lensyToJSON 2
   toEncoding = pairs . mconcat . payloadProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
