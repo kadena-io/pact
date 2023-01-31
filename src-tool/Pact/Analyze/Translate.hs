@@ -1322,6 +1322,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
+  AST_Select node _tn _columns _filters -> translateType node >>= \case
+    EType (SList tableSchema) -> do
+      let elist = Some (SList tableSchema) EmptyList
+      shimNative' node "select" [] "[]" elist
+    _ -> unexpectedNode astNode
+
   AST_WithRead node table key bindings schemaNode body -> translateType schemaNode >>= \case
     EType rowTy@SObject{} -> translateNode key >>= \case
       Some SStr key' -> typeOfPartialBind rowTy bindings >>= \case
