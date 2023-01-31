@@ -231,6 +231,13 @@ expectFalsifiedMessage code needleMsg =
       Just (TestCheckFailure cf) ->
         needleMsg `isInCheckFailure` cf
       _ -> False
+expectVerificationFailure :: HasCallStack => Text -> Spec
+expectVerificationFailure code =
+  before (runVerification $ wrap code "") $
+  it "fails in-code checks" $ \res ->
+    res `shouldSatisfy` \case
+      Just (VerificationFailure _) -> True
+      _ -> False
 
 isInCheckFailure :: Text -> CheckFailure -> Bool
 isInCheckFailure needle cf = needle `T.isInfixOf` renderCompactText (describeCheckFailure cf)
@@ -4111,6 +4118,12 @@ spec = describe "analyze" $ do
             (with-read accounts acct { "balance" := bal }
               (update accounts acct { "balance": (+ bal amt) }))))
         |]
+    describe "result in defpact property" $ do
+      expectVerificationFailure [text|
+        (defpact err ()
+          @model [ (property (= result 1)) ]
+          (step 1))
+          |]
 
     describe "nontrivial many step pact" $
       expectVerified [text|

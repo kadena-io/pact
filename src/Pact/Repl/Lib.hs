@@ -322,12 +322,10 @@ setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 envDynRef :: RNativeFun LibState
-envDynRef i [TModRef iface _,TModRef impl _] =
-  lookupModule i (_modRefName impl) >>= \r -> case r of
-    Nothing -> evalError' i "Unable to resolve impl module"
-    Just md -> do
-      setLibState $ over rlsDynEnv $ M.insert (_modRefName iface) md
-      return $ tStr "Added dynamic ref to environment."
+envDynRef i [TModRef iface _,TModRef impl _] = do
+  md <- inlineModuleData <$> getModule i (_modRefName impl)
+  setLibState $ over rlsDynEnv $ M.insert (_modRefName iface) md
+  return $ tStr "Added dynamic ref to environment."
 envDynRef _i [] = do
   setLibState $ set rlsDynEnv def
   return $ tStr "Cleared dynamic ref environment."

@@ -8,6 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Typechecker
@@ -32,7 +33,6 @@
 --
 
 module Pact.Typechecker where
-
 import Bound.Scope
 import Control.Arrow hiding ((<+>))
 import Control.Lens hiding (List,Fold)
@@ -881,6 +881,19 @@ notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
 notEmpty i msg [] = die i msg
 notEmpty _ _ as = return as
 
+-- | Safely return 'Term Name' to 'Term Ref' for value types and consts
+hoistValueTerm :: MonadThrow m => Term Name -> m (Term Ref)
+hoistValueTerm (TLiteral l i) = pure $ TLiteral l i
+hoistValueTerm (TList vs ty i) =
+  TList <$> traverse hoistValueTerm vs <*> traverse hoistValueTerm ty <*> pure i
+hoistValueTerm (TObject o i) = TObject <$> traverse bottom o <*> pure i
+  where
+    bottom n = die i $ "Unexpected reference in value context: " <> showPretty n
+hoistValueTerm (TGuard g i) = TGuard <$> traverse hoistValueTerm g <*> pure i
+hoistValueTerm (TModRef m i) = pure $ TModRef m i
+hoistValueTerm (TConst a n v m i) =
+  TConst <$> traverse hoistValueTerm a <*> pure n <*> traverse hoistValueTerm v <*> pure m <*> pure i
+hoistValueTerm t = die (getInfo t) $ "Unexpected term in value context: " <> showPretty t
 
 -- | Build ASTs from terms.
 toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
@@ -897,21 +910,9 @@ toAST TModRef{..} = do
 
   n <- trackNode ty tcid
   return $ ModRef n (_modRefName _tModRef) (_modRefSpec _tModRef)
-toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
+toAST (TVar v _i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
-  (Left (Direct t)) ->
-    case t of
-      TLiteral {..} ->
-        -- Handle references to pre-evaluated constants:
-        trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
-      TConst{..} -> case _tModule of
-        -- if modulename is nothing, it's a builtin
-        Nothing -> toAST $ return $ Left (Direct $ constTerm _tConstVal)
-        _ -> die i $ "Non-native constant value in native context: " ++ show t
-      TGuard{..} -> do
-        g <- traverse (toAST . return . Left . Direct) _tGuard
-        trackPrim _tInfo (TyGuard $ Just $ guardTypeOf _tGuard) (PrimGuard g)
-      _ -> die i $ "Native in value context: " <> show t
+  (Left (Direct t)) -> hoistValueTerm t >>= toAST . fmap Left
   (Right t) -> return t
 
 toAST (TApp Term.App{..} _) = do
@@ -958,9 +959,9 @@ toAST (TApp Term.App{..} _) = do
                 freshArg <- trackIdNode =<<
                   freshId (_tiInfo (_aId (_aNode argAST')))
                   (_fName (_aAppFun argAST) <> "_" <> lamArgName <> "_p")
-                debug $ "Adding fresh arg to partial application: " ++ show freshArg
+                debug $ "Adding fresh arg to partial application: " ++ showPretty freshArg
                 return $ over aAppArgs (++ [Var freshArg]) argAST'
-            (TyFun t,a) -> die'' argAST $ "App required for funtype argument: " ++ show t ++ ", found: " ++ show a
+            (TyFun t,a) -> die'' argAST $ "App required for funtype argument: " ++ showPretty t ++ ", found: " ++ showPretty a
             _ -> return argAST
 
       -- other special forms: bindings, yield/resume
@@ -1193,7 +1194,13 @@ singLens = iso pure head
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
-typecheck f@(TopFun FDefun {} _) = typecheckBody f (tlFun . fBody)
+typecheck f@(TopFun FDefun {} _) = typecheckBody f (tlFun . fBody) >>= \case
+  TopFun fd@FDefun{} i |  x:_ <- reverse (_fBody fd) ->
+                          let rt = view (aNode . aTy) x
+                              fd' = set (fType . ftReturn) rt fd
+                          in pure $ TopFun fd' i
+  a -> pure a
+
 typecheck c@TopConst {..} = do
   assocAstTy (_aNode _tlConstVal) _tlType
   typecheckBody c (tlConstVal . singLens)
