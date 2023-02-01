@@ -56,6 +56,7 @@ import Statistics.Types (Estimate(..))
 
 # ifdef BUILD_TOOL
 import qualified Pact.Analyze.Check as Check
+import System.Directory
 # endif
 import qualified Pact.Types.Crypto as Crypto
 #endif
@@ -218,9 +219,9 @@ replDefs = ("Repl",
       ["(env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)"]
       ("Queries, or with arguments, sets execution config flags. Valid flags: " <>
        tShow (M.keys flagReps))
-     ,defZRNative "verify" verify (funType tTyString [("module",tTyString)])
-       []
-       "Verify MODULE, checking that all properties hold."
+     ,defZRNative "verify" verify (funType tTyString [("module",tTyString), ("debug", tTyBool)])
+       [LitExample "(verify \"module\")", LitExample "(verify \"module\" true)"]
+       "Verify MODULE, checking that all properties hold. Optionally, if DEBUG is set to true, write debug output to \"pact-verify-MODULE\" directory."
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
        []
        "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
@@ -642,37 +643,47 @@ tc i as = case as of
             return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 verify :: RNativeFun LibState
-verify i _as@[TLitString modName] = do
+verify i = \case
+  [TLitString modName] -> go modName False
+  [TLitString modName, TLitBool d] -> go modName d
+  other -> argsError i other
+  where
+    go modName d = do
 #if defined(ghcjs_HOST_OS)
-    -- ghcjs: use remote server
-    (md,modules) <- _loadModules
+      -- ghcjs: use remote server
+      (md,modules) <- _loadModules
 
-    uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
-    renderedLines <- liftIO $
-                     RemoteClient.verifyModule modules md uri
-    setop $ Output renderedLines
-    return _failureMessage
+      uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
+      renderedLines <- liftIO $
+                       RemoteClient.verifyModule modules md uri
+      setop $ Output renderedLines
+      return _failureMessage
 #elif defined(BUILD_TOOL)
     -- ghc + build-tool: run verify
-    (md,modules) <- _loadModules
-    de <- viewLibState _rlsDynEnv
-    modResult <- liftIO $ Check.verifyModule de modules md
-    let renderedLines = Check.renderVerifiedModule modResult
-    setop $ Output renderedLines
-    if any ((== OutputFailure) . _roType) renderedLines
-      then return _failureMessage
-      else return $ tStr $ "Verification of " <> modName <> " succeeded"
+      (md,modules) <- _loadModules modName
+      de <- viewLibState _rlsDynEnv
+
+
+      let debugPath = "pact-verify-" <> unpack modName
+          mDebug = if d then Just debugPath else Nothing
+      existDebugDir <- liftIO (doesDirectoryExist debugPath)
+      when (d && not existDebugDir) $ liftIO (createDirectory debugPath)
+
+      modResult <- liftIO $ Check.verifyModule mDebug de modules md
+      let renderedLines = Check.renderVerifiedModule modResult
+      setop $ Output renderedLines
+      if any ((== OutputFailure) . _roType) renderedLines
+        then return (_failureMessage modName)
+        else return $ tStr $ "Verification of " <> modName <> " succeeded"
 #else
     -- ghc - build-tool: typecheck only
-    tc i _as
+      tc i [TLiteral (LString modName) def, TLiteral (LBool d) def]
 #endif
-  where
-    _failureMessage = tStr $ "Verification of " <> modName <> " failed"
-    _loadModules =
+    _failureMessage modName = tStr $ "Verification of " <> modName <> " failed"
+    _loadModules modName =
       (,)
         <$> (inlineModuleData <$> getModule i (ModuleName modName Nothing))
         <*> (fmap inlineModuleData <$> getAllModules i)
-verify i as = argsError i as
 
 
 sigKeyset :: RNativeFun LibState

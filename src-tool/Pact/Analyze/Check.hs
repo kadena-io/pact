@@ -39,6 +39,7 @@ module Pact.Analyze.Check
   , verifyFunctionInvariants
   ) where
 
+import           System.FilePath
 import           Control.Exception          as E
 import           Control.Lens hiding (DefName)
 import           Control.Monad
@@ -203,6 +204,7 @@ data CheckEnv = CheckEnv
   , _caps       :: [Capability]
   , _moduleGov  :: Governance
   , _dynEnv     :: DynEnv
+  , _debugPath  :: Maybe FilePath
   }
 
 -- | Essential data used to check a function (where function could actually be
@@ -390,7 +392,7 @@ verifyFunctionInvariants
   -> Text
   -> CheckableType
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de)
+verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de mDebug)
   (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
     let modName = moduleDefName $ _mdModule moduleData
 
@@ -451,9 +453,9 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
       -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
       pure $ Left $ CheckFailure funInfo $ SmtFailure $ UnexpectedFailure e
-
+    debugFile = (</> ("invariant-" <> T.unpack funName <> "-" <> show checkType <> ".smt")) <$> mDebug
     runSymbolic :: Symbolic a -> IO a
-    runSymbolic = SBV.runSMTWith smtConfig
+    runSymbolic = SBV.runSMTWith smtConfig{SBVI.transcript = debugFile}
 
 -- | Check that a specific property holds for a function (this is actually used
 -- for defun, defpact, and step)
@@ -464,7 +466,7 @@ verifyFunctionProperty
   -> CheckableType
   -> Located Check
   -> IO [Either CheckFailure CheckSuccess]
-verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _de)
+verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _de mDebug)
   (FunData funInfo pactArgs body) funName checkType
   (Located propInfo check) = fmap sequence' $ runExceptT $ do
     let modName = moduleDefName (_mdModule moduleData)
@@ -492,7 +494,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     -- First we check whether the query definitely succeeds. Queries don't
     -- succeed if the (pure) property throws an error (eg division by 0 or
     -- indexing to an invalid array position). If the query fails we bail.
-    _ <- ExceptT $ catchingExceptions $ runSymbolicSat $ runExceptT $ do
+    _ <- ExceptT $ catchingExceptions $ runSymbolicSat (toDebugFile "validation") $ runExceptT $ do
       (AnalysisResult querySucceeds _txSucc _ _, model) <- setupSmtProblem
 
       void $ lift $ SBV.output $ SBV.sNot $ successBool querySucceeds
@@ -515,7 +517,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     --
     case check of
       PropertyHolds _ ->
-        void $ ExceptT $ catchingExceptions $ runSymbolicSat $ runExceptT $ do
+        void $ ExceptT $ catchingExceptions $ runSymbolicSat (toDebugFile "satisfaction") $ runExceptT $ do
           (AnalysisResult _ txSuccess _ _, model) <- setupSmtProblem
           void $ lift $ SBV.output txSuccess
           hoist SBV.query $ do
@@ -533,7 +535,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
           resultQuery goal model
       -- note here that it is important that the main result is first
       -- for 'verifyCheck'/unit tests
-      return $ (Right r : map (Left . translateToCheckFailure) warnings)
+      return (Right r : map (Left . translateToCheckFailure) warnings)
 
   where
     goal :: Goal
@@ -549,9 +551,11 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
       pure $ Left $ smtToCheckFailure propInfo $ UnexpectedFailure e
 
+    toDebugFile :: String -> Maybe FilePath
+    toDebugFile suffix = (</> ("property-" <> T.unpack funName <> "-" <> show checkType <> "-" <> suffix <>".smt")) <$> mDebug
     -- Run a 'Symbolic' in sat mode
-    runSymbolicSat :: Symbolic a -> IO a
-    runSymbolicSat = SBV.runSMTWith smtConfig
+    runSymbolicSat :: Maybe FilePath -> Symbolic a -> IO a
+    runSymbolicSat debugPath = SBV.runSMTWith smtConfig{SBVI.transcript = debugPath}
 
     -- Run a 'Symbolic' in the mode corresponding to our goal
     runSymbolicGoal :: Symbolic a -> IO a
@@ -1014,7 +1018,7 @@ getStepChecks
   :: CheckEnv
   -> HM.HashMap Text Ref
   -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult])
-getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de) defpactRefs = do
+getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de _) defpactRefs = do
 
   (steps :: HM.HashMap (Text, Int)
     ((AST Node, [Named Node], Info), Pact.FunType TC.UserType))
@@ -1062,7 +1066,7 @@ getFunChecks
     ( HM.HashMap Text [CheckResult]
     , HM.HashMap Text (TableMap [CheckResult])
     )
-getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de) refs = do
+getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de _) refs = do
   ModelDecl _ checkExps <-
     withExceptT ModuleParseFailure $ liftEither $
       moduleModelDecl moduleData
@@ -1171,11 +1175,12 @@ moduleGovernance moduleData = case _mdModule moduleData of
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
-  :: DynEnv
+  :: Maybe FilePath
+  -> DynEnv
   -> HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> ModuleData Ref                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
-verifyModule de modules moduleData@(ModuleData modDef allRefs _) = runExceptT $ do
+verifyModule mDebug de modules moduleData@(ModuleData modDef allRefs _) = runExceptT $ do
   let modRefs = moduleRefs moduleData
 
   consts <- getConsts de $ modRefs ^. defconsts
@@ -1248,7 +1253,7 @@ verifyModule de modules moduleData@(ModuleData modDef allRefs _) = runExceptT $ 
       caps   <- moduleCapabilities de allModules
       gov    <- moduleGovernance moduleData
 
-      let checkEnv = CheckEnv tables consts propDefs moduleData caps gov de
+      let checkEnv = CheckEnv tables consts propDefs moduleData caps gov de mDebug
 
       -- Note that invariants are only checked at the defpact level, not in
       -- individual steps.
@@ -1314,7 +1319,7 @@ verifyCheck de moduleData funName check checkType = do
   tables <- moduleTables modules modRefs consts
   gov    <- moduleGovernance moduleData
 
-  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov de
+  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov de Nothing -- rs check
 
   case moduleFun moduleData funName of
     Just funRef -> do
