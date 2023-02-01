@@ -461,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.4.1"
+"4.6.0"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -2148,10 +2148,10 @@ Typecheck MODULE, optionally enabling DEBUG output.
 *module*&nbsp;`string` *debug*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
 
-Verify MODULE, checking that all properties hold. Optionally enable debug output to "pact-verify-MODULE" directory.
+Verify MODULE, checking that all properties hold. Optionally, if DEBUG is set to true, write debug output to "pact-verify-MODULE" directory.
 ```lisp
 (verify "module")
-(verify "module" true
+(verify "module" true)
 ```
 
 

@@ -517,7 +517,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "4.4"
+   "4.6.0"
 
 Top level only: this function will fail if used in module code.
 
@@ -846,9 +846,9 @@ by the ordering of keys.
 
 .. code:: lisp
 
-   (let*
+   (let* 
     ((qry (lambda (k obj) true)) ;; select all rows
-     (f (lambda (x) [(at 'firstName x), (at 'b x)]))
+     (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
     )
     (fold-db people (qry) (f))
    )
@@ -1727,34 +1727,6 @@ in INNER-CAP being granted in the scope of OUTER-BODY.
 
    (compose-capability (TRANSFER src dest))
 
-create-module-guard
-~~~~~~~~~~~~~~~~~~~
-
-*name* ``string`` *→* ``guard``
-
-Defines a guard by NAME that enforces the current module admin
-predicate.
-
-create-pact-guard
-~~~~~~~~~~~~~~~~~
-
-*name* ``string`` *→* ``guard``
-
-Defines a guard predicate by NAME that captures the results of
-‘pact-id’. At enforcement time, the success condition is that at that
-time ‘pact-id’ must return the same value. In effect this ensures that
-the guard will only succeed within the multi-transaction identified by
-the pact id.
-
-create-user-guard
-~~~~~~~~~~~~~~~~~
-
-*closure* ``-> bool`` *→* ``guard``
-
-Defines a custom guard CLOSURE whose arguments are strictly evaluated at
-definition time, to be supplied to indicated function at enforcement
-time.
-
 emit-event
 ~~~~~~~~~~
 
@@ -1831,16 +1803,6 @@ one installed with this function.
 .. code:: lisp
 
    (install-capability (PAY "alice" "bob" 10.0))
-
-keyset-ref-guard
-~~~~~~~~~~~~~~~~
-
-*keyset-ref* ``string`` *→* ``guard``
-
-Creates a guard for the keyset registered as KEYSET-REF with
-‘define-keyset’. Concrete keysets are themselves guard types; this
-function is specifically to store references alongside other guards in
-the database, etc.
 
 require-capability
 ~~~~~~~~~~~~~~~~~~
@@ -1938,6 +1900,48 @@ are base-16 strings of length 32.
 Guards
 ------
 
+create-capability-guard
+~~~~~~~~~~~~~~~~~~~~~~~
+
+*capability* ``-> bool`` *→* ``guard``
+
+Creates a guard that will enforce that CAPABILITY is acquired.
+
+.. code:: lisp
+
+   (create-capability-guard (BANK_DEBIT 10.0))
+
+create-capability-pact-guard
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*capability* ``-> bool`` *→* ``guard``
+
+Creates a guard that will enforce that CAPABILITY is acquired and that
+the currently-executing defpact is operational.
+
+.. code:: lisp
+
+   (create-capability-pact-guard (ESCROW owner))
+
+create-module-guard
+~~~~~~~~~~~~~~~~~~~
+
+*name* ``string`` *→* ``guard``
+
+Defines a guard by NAME that enforces the current module admin
+predicate.
+
+create-pact-guard
+~~~~~~~~~~~~~~~~~
+
+*name* ``string`` *→* ``guard``
+
+Defines a guard predicate by NAME that captures the results of
+‘pact-id’. At enforcement time, the success condition is that at that
+time ‘pact-id’ must return the same value. In effect this ensures that
+the guard will only succeed within the multi-transaction identified by
+the pact id.
+
 create-principal
 ~~~~~~~~~~~~~~~~
 
@@ -1953,6 +1957,15 @@ Create a principal which unambiguously identifies GUARD.
    (create-principal (create-user-guard 'user-guard))
    (create-principal (create-pact-guard 'pact-guard))
 
+create-user-guard
+~~~~~~~~~~~~~~~~~
+
+*closure* ``-> bool`` *→* ``guard``
+
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at
+definition time, to be supplied to indicated function at enforcement
+time.
+
 is-principal
 ~~~~~~~~~~~~
 
@@ -1964,6 +1977,16 @@ proving validity.
 .. code:: lisp
 
    (enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+
+keyset-ref-guard
+~~~~~~~~~~~~~~~~
+
+*keyset-ref* ``string`` *→* ``guard``
+
+Creates a guard for the keyset registered as KEYSET-REF with
+‘define-keyset’. Concrete keysets are themselves guard types; this
+function is specifically to store references alongside other guards in
+the database, etc.
 
 typeof-principal
 ~~~~~~~~~~~~~~~~
@@ -2149,7 +2172,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisableNewTrans”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePact45”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
 
 .. code:: lisp
 
@@ -2427,9 +2450,15 @@ Typecheck MODULE, optionally enabling DEBUG output.
 verify
 ~~~~~~
 
-*module* ``string`` *→* ``string``
+*module* ``string`` *debug* ``bool`` *→* ``string``
 
-Verify MODULE, checking that all properties hold.
+Verify MODULE, checking that all properties hold. Optionally, if DEBUG
+is set to true, write debug output to “pact-verify-MODULE” directory.
+
+.. code:: lisp
+
+   (verify "module")
+   (verify "module" true)
 
 with-applied-env
 ~~~~~~~~~~~~~~~~
