@@ -99,7 +99,7 @@ subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
     minus :: RNativeFun e
     minus _ [TLiteral (LInteger n) _] = return (toTerm (negate n))
     minus _ [TLiteral (LDecimal n) _] = return (toTerm (negate n))
-    minus i as = binop' "+" (-) (-) i as
+    minus i as = binop' "-" (-) (-) i as
     {-# INLINE minus #-}
 
     unaryNumTys :: FunTypes n

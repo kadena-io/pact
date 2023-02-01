@@ -247,7 +247,7 @@ pureEval ei e = do
     Right a -> do
         wref <- use (rEnv . eeWarnings)
         warnings <- liftIO $ readIORef wref
-        traverse_ (outStrLn HOut . show . pretty) warnings
+        traverse_ (outStrLn HOut . renderCompactString) warnings
         liftIO $ writeIORef wref []
         doOut ei mode a
         rEvalState .= es
