@@ -132,7 +132,7 @@ initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
   gasRef <- newIORef 0
-  warnRef <- newIORef []
+  warnRef <- newIORef mempty
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
@@ -248,7 +248,7 @@ pureEval ei e = do
         wref <- use (rEnv . eeWarnings)
         warnings <- liftIO $ readIORef wref
         traverse_ (outStrLn HOut . renderCompactString) warnings
-        liftIO $ writeIORef wref []
+        liftIO $ writeIORef wref mempty
         doOut ei mode a
         rEvalState .= es
         updateForOp ei a

@@ -128,6 +128,8 @@ data EvalResult = EvalResult
     -- ^ Details on each gas consumed/charged
   , _erEvents :: [PactEvent]
     -- ^ emitted events
+  , _erWarnings :: S.Set PactWarning
+    -- ^ emitted warning
   } deriving (Eq,Show)
 
 -- | Execute pact statements.
@@ -169,7 +171,7 @@ setupEvalEnv
   -> IO (EvalEnv e)
 setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   gasRef <- newIORef 0
-  warnRef <- newIORef []
+  warnRef <- newIORef mempty
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
@@ -227,6 +229,7 @@ interpret runner evalEnv terms = do
   ((rs,logs,txid),state) <-
     runEval def evalEnv $ evalTerms runner terms
   gas <- readIORef (_eeGas evalEnv)
+  warnings <- readIORef (_eeWarnings evalEnv)
   let gasLogs = _evalLogGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
@@ -234,7 +237,7 @@ interpret runner evalEnv terms = do
   return $! EvalResult
     terms
     (map (elideModRefInfo . toPactValueLenient) rs)
-    logs pactExec gas modules txid gasLogs (_evalEvents state)
+    logs pactExec gas modules txid gasLogs (_evalEvents state) warnings
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
 evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)

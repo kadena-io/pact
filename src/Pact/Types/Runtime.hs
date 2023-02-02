@@ -74,6 +74,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,pack)
+import Data.Set(Set)
 import GHC.Generics (Generic)
 
 import Pact.Types.Capability
@@ -125,7 +126,7 @@ data PactWarning
   = DeprecatedNative NativeDefName Text
   -- | Deprecated overload with help message
   | DeprecatedOverload NativeDefName Text
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 instance Pretty PactWarning where
   pretty = \case
@@ -246,7 +247,7 @@ data EvalEnv e = EvalEnv {
       -- | Are we in the repl? If not, ignore info
     , _eeInRepl :: Bool
       -- | Warnings ref
-    , _eeWarnings :: IORef [PactWarning]
+    , _eeWarnings :: IORef (Set PactWarning)
     }
 makeLenses ''EvalEnv
 
@@ -364,7 +365,7 @@ method i f = do
 
 emitPactWarning :: PactWarning -> Eval e ()
 emitPactWarning pw =
-  view eeWarnings >>= \e -> liftIO (modifyIORef' e (pw:))
+  view eeWarnings >>= \e -> liftIO (modifyIORef' e (S.insert pw))
 --
 -- Methods for invoking backend function-record function.
 --
