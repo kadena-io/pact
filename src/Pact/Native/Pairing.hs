@@ -647,7 +647,6 @@ zkDefs = ("Zk",
 
 -- | Pointwise addition on two points on the curve BN254,
 -- either from G1 or G2.
--- TODO: Gas
 pointAdditionDef :: NativeDef
 pointAdditionDef =
   defRNative "point-add" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("point2", a)])
@@ -676,7 +675,6 @@ pointAdditionDef =
   pactPointAdd i as = argsError i as
 
 -- | Scalar multiplication of two points.
--- TODO: Gas for this function
 scalarMultDef :: NativeDef
 scalarMultDef =
   defRNative "scalar-mult" scalarMul (funType a [("type", tTyString), ("point1", a), ("scalar", tTyInteger)])
