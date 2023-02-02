@@ -126,7 +126,10 @@ data PactWarning
   = DeprecatedNative NativeDefName Text
   -- | Deprecated overload with help message
   | DeprecatedOverload NativeDefName Text
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
+
+instance ToJSON PactWarning
+instance FromJSON PactWarning
 
 instance Pretty PactWarning where
   pretty = \case
