@@ -8,6 +8,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
+
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -28,7 +30,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eeAdvice,
+   eeAdvice, eeWarnings,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
@@ -44,6 +46,8 @@ module Pact.Types.Runtime
    mkExecutionConfig,
    ifExecutionFlagSet,ifExecutionFlagSet',
    whenExecutionFlagSet, unlessExecutionFlagSet,
+   emitPactWarning,
+   PactWarning(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -64,7 +68,7 @@ import Control.Monad.State.Strict
 import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
-import Data.IORef(IORef)
+import Data.IORef(IORef, modifyIORef')
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -114,6 +118,21 @@ data Purity =
   PImpure
   deriving (Eq,Show,Ord,Bounded,Enum)
 instance Default Purity where def = PImpure
+
+-- All warnings pact emits at runtime
+data PactWarning
+  -- | Deprecated native, with help message
+  = DeprecatedNative NativeDefName Text
+  -- | Deprecated overload with help message
+  | DeprecatedOverload NativeDefName Text
+  deriving (Show)
+
+instance Pretty PactWarning where
+  pretty = \case
+    DeprecatedNative ndef msg ->
+      "Warning: Using deprecated native" <+> pretty ndef <> ":" <+> pretty msg
+    DeprecatedOverload ndef msg ->
+      "Warning: using deprecated native overload for" <+> pretty ndef <> ":" <+> pretty msg
 
 
 -- | Execution flags specify behavior of the runtime environment,
@@ -224,8 +243,10 @@ data EvalEnv e = EvalEnv {
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
-      -- | Are we in the repl? If so, ignore info
+      -- | Are we in the repl? If not, ignore info
     , _eeInRepl :: Bool
+      -- | Warnings ref
+    , _eeWarnings :: IORef [PactWarning]
     }
 makeLenses ''EvalEnv
 
@@ -341,7 +362,9 @@ method i f = do
   EvalEnv {..} <- ask
   handleAny (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
 
-
+emitPactWarning :: PactWarning -> Eval e ()
+emitPactWarning pw =
+  view eeWarnings >>= \e -> liftIO (modifyIORef' e (pw:))
 --
 -- Methods for invoking backend function-record function.
 --
