@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns               #-}
 
 -- | Symbolic evaluation of program 'Term's (as opposed to the 'Invariant' or

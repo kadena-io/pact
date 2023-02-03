@@ -10,14 +10,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.10.7']
+        ghc: ['8.10.7', '9.2.4', '9.4.2']
         cabal: ['3.8']
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
         - os: 'ubuntu-22.04'
-          ghc: '8.10.7'
+          ghc: '9.4.2'
           cabal: '3.8'
           cabalcache: 'true'
           flags: '-build-tool'
@@ -117,7 +117,6 @@ jobs:
       shell: bash
       run: |
         cat >> cabal.project.local <<EOF
-        allow-newer: hashable:*
         package pact
           ghc-options: -Wwarn -Wunused-packages
         EOF
