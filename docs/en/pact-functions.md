@@ -359,7 +359,7 @@ pact> (int-to-str 64 43981)
 *charset*&nbsp;`integer` *input*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Check that a string INPUT conforms to the a supported character set CHARSET.       Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be added in the future.
+Check that a string INPUT conforms to the supported character set CHARSET.       Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be added in the future.
 ```lisp
 pact> (is-charset CHARSET_ASCII "hello world")
 true
