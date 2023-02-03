@@ -2779,7 +2779,7 @@ expressions in a module include:
 
    (interface coin-sig
      "'coin-sig' represents the Kadena Coin Contract interface. This contract     \
-     \provides both the the general interface for a Kadena's token, supplying a   \
+     \provides both the general interface for a Kadena's token, supplying a   \
      \transfer function, coinbase, account creation and balance query."
      (defun create-account:string (account:string guard:guard)
        @doc "Create an account for ACCOUNT, with GUARD controlling access to the  \
