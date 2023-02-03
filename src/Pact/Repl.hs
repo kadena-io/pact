@@ -74,6 +74,7 @@ import qualified Data.Map.Strict as M
 import Data.Monoid (appEndo)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Foldable(traverse_)
 
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import Text.Trifecta.Delta
@@ -132,6 +133,7 @@ initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
   gasRef <- newIORef 0
+  warnRef <- newIORef mempty
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
@@ -151,6 +153,7 @@ initEvalEnv ls = do
     , _eeExecutionConfig = def
     , _eeAdvice = def
     , _eeInRepl = True
+    , _eeWarnings = warnRef
     }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport
@@ -243,6 +246,10 @@ pureEval ei e = do
   mode <- use rMode
   case r of
     Right a -> do
+        wref <- use (rEnv . eeWarnings)
+        warnings <- liftIO $ readIORef wref
+        traverse_ (outStrLn HOut . renderCompactString) warnings
+        liftIO $ writeIORef wref mempty
         doOut ei mode a
         rEvalState .= es
         updateForOp ei a

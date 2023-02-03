@@ -61,6 +61,8 @@ createPactGuard =
   where
     createPactGuard' :: RNativeFun e
     createPactGuard' i [TLitString name] = do
+      emitPactWarning $ DeprecatedNative "create-pact-guard"
+                        "Pact guards have been deprecate and will be removed in a future release, please switch to capability guards"
       pid <- getPactId i
       return $ (`TGuard` (_faInfo i)) $ GPact $ PactGuard pid name
     createPactGuard' i as = argsError i as
@@ -74,10 +76,13 @@ createModuleGuard =
   "Defines a guard by NAME that enforces the current module admin predicate."
   where
     createModuleGuard' :: RNativeFun e
-    createModuleGuard' i [TLitString name] = findCallingModule >>= \case
-      Just mn ->
-        return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
-      Nothing -> evalError' i "create-module-guard: must call within module"
+    createModuleGuard' i [TLitString name] = do
+      emitPactWarning $ DeprecatedNative "create-module-guard"
+                        "Module guards have been deprecate and will be removed in a future release, please switch to capability guards"
+      findCallingModule >>= \case
+        Just mn ->
+          return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
+        Nothing -> evalError' i "create-module-guard: must call within module"
     createModuleGuard' i as = argsError i as
 
 keysetRefGuard :: NativeDef

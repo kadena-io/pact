@@ -203,7 +203,7 @@ hash = TypedHash . toShort . go
 #else
 
 hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
-hash bs = TypedHash go
+hash bs = TypedHash (toShort go)
   where
     algo = reflect (Proxy :: Proxy h)
     go = case algo of
