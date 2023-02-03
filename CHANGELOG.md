@@ -1,7 +1,7 @@
 4.6.0
 ---
 * Add Zero Knowledge native operations (#1052)
-* Add deprecation warning system (#TODO)
+* Add deprecation warning system (#1127)
 * Build support for Nix flakes (#1083)
 * Passage of time simulation in local pact server build (#1082)
 * Fixed parsing failure message for Public Keys (#1097)
