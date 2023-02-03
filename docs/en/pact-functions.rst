@@ -406,7 +406,7 @@ is-charset
 
 *charset* ``integer`` *input* ``string`` *→* ``bool``
 
-Check that a string INPUT conforms to the a supported character set
+Check that a string INPUT conforms to the supported character set
 CHARSET. Character sets currently supported are: ‘CHARSET_LATIN1’
 (ISO-8859-1), and ‘CHARSET_ASCII’ (ASCII). Support for sets up through
 ISO 8859-5 supplement will be added in the future.
