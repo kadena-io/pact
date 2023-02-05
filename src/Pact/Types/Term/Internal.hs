@@ -128,6 +128,7 @@ import Pact.Types.Type
 import Pact.Types.Util
 
 import Pact.JSON.Legacy.Hashable
+import qualified Pact.JSON.Legacy.HashMap as LHM
 import Pact.JSON.Legacy.Value
 
 import qualified Pact.JSON.Encode as J
@@ -446,6 +447,7 @@ instance FromJSON g => FromJSON (Governance g) where
 --
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show, Generic, Hashable, Serialize, AsString, Pretty, ToJSON, FromJSON, ParseText, J.Encode)
+  deriving newtype (LegacyHashable)
   deriving newtype (NFData, SizeOf)
 
 -- -------------------------------------------------------------------------- --
@@ -1123,7 +1125,7 @@ instance Pretty g => Pretty (Module g) where
 moduleProperties :: ToJSON g => JsonProperties (Module g)
 moduleProperties o =
   [ "hash" .= _mHash o
-  , "blessed" .= legacyHashSetToList (HS.map moduleHashText (_mBlessed o))
+  , "blessed" .=  LHM.sort (HS.toList $ _mBlessed o)
   , "interfaces" .= _mInterfaces o
   , "imports" .= _mImports o
   , "name" .= _mName o
@@ -1131,8 +1133,6 @@ moduleProperties o =
   , "meta" .= _mMeta o
   , "governance" .= _mGovernance o
   ]
- where
-  moduleHashText = hashToText . _mhHash
 {-# INLINE moduleProperties #-}
 
 instance ToJSON g => ToJSON (Module g) where
@@ -1144,7 +1144,7 @@ instance ToJSON g => ToJSON (Module g) where
 instance J.Encode g => J.Encode (Module g) where
   build o = J.object
     [ "hash" J..= _mHash o
-    , "blessed" J..= J.Array (legacyHashSetToList (HS.map moduleHashText (_mBlessed o)))
+    , "blessed" J..= J.Array (LHM.sort $ HS.toList $ _mBlessed o)
     , "interfaces" J..= J.Array (_mInterfaces o)
     , "imports" J..= J.Array (_mImports o)
     , "name" J..= _mName o
@@ -1152,8 +1152,6 @@ instance J.Encode g => J.Encode (Module g) where
     , "meta" J..= _mMeta o
     , "governance" J..= _mGovernance o
     ]
-   where
-    moduleHashText = hashToText . _mhHash
   {-# INLINEABLE build #-}
 
 instance FromJSON g => FromJSON (Module g) where parseJSON = lensyParseJSON 2
