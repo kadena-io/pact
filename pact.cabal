@@ -383,9 +383,6 @@ test-suite hspec
     , pact
     , unordered-containers
 
-  build-tools:
-    , happy == 1.19.12
-
   other-modules:
     Blake2Spec
     KeysetSpec
