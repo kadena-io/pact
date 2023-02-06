@@ -10,5 +10,6 @@ constraints: base64-bytestring <1.1
 constraints: unordered-containers <0.2.16
 
 -- test upper bounds
-constraints: hspec-golden <0.2
+constraints: hspec-golden <0.2,
+             any.happy == 1.19.12
 

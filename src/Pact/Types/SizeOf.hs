@@ -6,6 +6,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE CPP #-}
+#if defined(ghcjs_HOST_OS)
+{-# LANGUAGE TypeApplications #-}
+#endif
 
 
 
