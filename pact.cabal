@@ -94,6 +94,7 @@ library
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
+    Pact.Native.Pairing
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
@@ -202,6 +203,10 @@ library
     , vector >= 0.11.0.0
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
+    , groups
+    , semirings
+    , mod >= 0.1.2 && < 0.2
+    , poly >= 0.5.0 && < 0.6
     , time
 
   -- GHCJS
@@ -441,6 +446,8 @@ test-suite hspec
         RemoteVerifySpec
         TypecheckSpec
         PactCLISpec
+        ZkSpec
+        PairingSpec
         Utils
 
       build-depends:
@@ -451,11 +458,16 @@ test-suite hspec
         , hedgehog >= 1.0.1
         , hspec-core
         , hspec-golden >= 0.1.0.2
+        , hspec-expectations
+        , hspec-hedgehog
+        , groups
         , http-client
         , hw-hspec-hedgehog == 0.1.*
         , intervals
         , mmorph
         , neat-interpolation
+        , semirings
+        , prettyprinter
         , sbv
         , servant-client >= 0.16
         , temporary >= 1.3

@@ -478,13 +478,14 @@ binop
 binop ndef dop iop fi as@[TLiteral a _,TLiteral b _] = do
   case (a,b) of
     (LInteger i,LInteger j) -> toTerm <$> (i `iop` j)
-    (LDecimal i,LDecimal j) -> do
-      emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
+    (LDecimal i,LDecimal j) ->
       toTerm <$> (i `dop` j)
     (LInteger i,LDecimal j) -> do
       emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
       toTerm <$> (fromIntegral i `dop` j)
-    (LDecimal i,LInteger j) -> toTerm <$> (i `dop` fromIntegral j)
+    (LDecimal i,LInteger j) -> do
+      emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
+      toTerm <$> (i `dop` fromIntegral j)
     _ -> argsError fi as
 binop _ _ _ fi as = argsError fi as
 {-# INLINE binop #-}

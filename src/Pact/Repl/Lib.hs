@@ -652,13 +652,13 @@ verify i = \case
     go modName d = do
 #if defined(ghcjs_HOST_OS)
       -- ghcjs: use remote server
-      (md,modules) <- _loadModules
+      (md,modules) <- _loadModules modName
 
       uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
       renderedLines <- liftIO $
                        RemoteClient.verifyModule modules md uri
       setop $ Output renderedLines
-      return _failureMessage
+      return (_failureMessage modName)
 #elif defined(BUILD_TOOL)
     -- ghc + build-tool: run verify
       (md,modules) <- _loadModules modName
