@@ -20,7 +20,7 @@
     SMTLib file on a per-module basis. (#1122)
   - Add shim for `select` in FV (#1090)
 
-Thanks to everyone for their contributions, especially new contributor @qooboodoop, and welcome to our newest Pact team member, @rsoeldner!.
+Thanks to everyone for their contributions, especially new contributors @qooboodoop and @omahs, and welcome to our newest Pact team member, @rsoeldner!.
 
 4.4.1
 ---
