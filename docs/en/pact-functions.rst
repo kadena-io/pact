@@ -2011,6 +2011,44 @@ Validate that PRINCIPAL unambiguously identifies GUARD.
 
    (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 
+.. _Zk:
+
+Zk
+--
+
+pairing-check
+~~~~~~~~~~~~~
+
+*points-g1* ``[<a>]`` *points-g2* ``[<b>]`` *→* ``bool``
+
+Perform pairing and final exponentiation points in G1 and G2 in BN254,
+check if the result is 1
+
+point-add
+~~~~~~~~~
+
+*type* ``string`` *point1* ``<a>`` *point2* ``<a>`` *→* ``<a>``
+
+Add two points together that lie on the curve BN254. Point addition
+either in Fq or in Fq2
+
+.. code:: lisp
+
+   pact> (point-add 'g1 {'x: 1, 'y: 2}  {'x: 1, 'y: 2})
+   {"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
+
+scalar-mult
+~~~~~~~~~~~
+
+*type* ``string`` *point1* ``<a>`` *scalar* ``integer`` *→* ``<a>``
+
+Multiply a point that lies on the curve BN254 by an integer value
+
+.. code:: lisp
+
+   pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
+   {"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
+
 .. _repl-lib:
 
 REPL-only functions
