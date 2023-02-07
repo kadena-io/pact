@@ -10,7 +10,8 @@ allow-newer: base16-bytestring:*
 allow-newer: prettyprinter:*
 
 -- test upper bounds
-constraints: hspec-golden <0.2
+constraints: hspec-golden <0.2,
+             any.happy == 1.19.12
 
 -- The following fork provides trifecta-2.`1.1.1 which is compatible with
 -- hashable >=1.4 and prettyprinter <1.7
