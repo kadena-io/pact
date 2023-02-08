@@ -9,7 +9,7 @@
 * `print` native now pretty prints output using term pretty printing (#1106)
 * Typechecker:
   - now handles all const value types (#1116)
-  - inilines mock dynamic references (#1120)
+  - inlines mock dynamic references (#1120)
 
 * Formal Verification:
   - Prevent usage of `result` fixed binding in `defpact` verification. (#1113)
