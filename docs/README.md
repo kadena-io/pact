@@ -88,7 +88,7 @@ Once finished, commit the `.md` files that changed *and* their corresponding `.r
 
 ## Localization
 
-As mentiond in *File Layout*, Pact documentation has several translations.
+As mentioned in *File Layout*, Pact documentation has several translations.
 Unlike the English, no content is auto-generated from Haskell files.
 Instead, updates to the English must be manually ported to each translation.
 
