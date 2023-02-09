@@ -23,7 +23,7 @@ source-repository-package
 
 source-repository-package
   type: git
-  tag: 259848e717a87c18620399b769fadeafd24b37a2
+  tag: 0e68e70f11613cfb843cce61e81361115050dc2e
   location: https://github.com/kadena-io/pact-json
 
 -- Servant is notoriously forcing outdated upper bounds onto its users.
