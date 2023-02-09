@@ -279,6 +279,14 @@ instance ToJSON Signer where
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
 
+instance J.Encode Signer where
+  build o = J.object
+    [ "addr" J..?= _siAddress o
+    , "scheme" J..?= _siScheme o
+    , "pubKey" J..= _siPubKey o
+    , "clist" J..??= J.Array (_siCapList o)
+    ]
+
 instance FromJSON Signer where
   parseJSON = withObject "Signer" $ \o -> Signer
     <$> o .:? "scheme"
@@ -316,6 +324,16 @@ instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
   toEncoding = pairs . mconcat . payloadProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
+  build o = J.object
+    [ "networkId" J..= _pNetworkId o
+    , "payload" J..= _pPayload o
+    , "signers" J..= J.Array (_pSigners o)
+    , "meta" J..= _pMeta o
+    , "nonce" J..= _pNonce o
+    ]
+  {-# INLINE build #-}
 
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
