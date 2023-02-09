@@ -88,7 +88,7 @@ verifyModule fp mn = it (fp ++ ": " ++ moduleName mn ++ " verifies") $ do
   mModules <- replGetModules replState
   checkResult <- case mModules of
     Left err           -> die def (show err)
-    Right (modules, _) -> Check.verifyModule def (inlineModuleData <$> modules) (inlineModuleData modul)
+    Right (modules, _) -> Check.verifyModule Nothing def (inlineModuleData <$> modules) (inlineModuleData modul)
   let ros = Check.renderVerifiedModule checkResult
   when (any ((== OutputFailure) . _roType) ros) $
     expectationFailure $ T.unpack $
@@ -125,7 +125,7 @@ customFunChecks :: Text -> SpecWith TCResult
 customFunChecks name = case name of
   "tests/pact/tc.repl.tc-update-partial" -> do
     -- TODO top levels don't get inferred return type, so we have to dig in here
-    it (show name ++ ":specializes partial type") $ \(tl, _) -> do
+    it (unpack name ++ ":specializes partial type") $ \(tl, _) -> do
       shouldBe
         (preview (tlFun . fBody . _head . aNode . aTy . tySchemaPartial) tl)
         (Just $ PartialSchema $ Set.singleton "name")

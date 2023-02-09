@@ -39,6 +39,7 @@ import Control.DeepSeq
 import Control.Lens (makeLenses)
 import Data.Aeson (ToJSON(..), FromJSON(..), withText, FromJSONKey(..), ToJSONKey(..))
 import qualified Data.Attoparsec.Text as AP
+import qualified Data.ByteString.Short as SB
 import Data.Default
 import Data.Hashable
 import Data.Set (Set)
@@ -299,7 +300,7 @@ fullyQualNameParser = do
   oname <- optional (dot *> ident style)
   h <- dot *> (between (char '{') (char '}') $ some (alphaNum <|> char '-' <|> char '_'))
   hash' <- case parseB64UrlUnpaddedText' (T.pack h) of
-    Right hash' -> pure hash'
+    Right hash' -> pure $ SB.toShort hash'
     Left _ -> fail "invalid hash encoding"
   case oname of
     Just nn ->

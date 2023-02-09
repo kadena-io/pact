@@ -2,12 +2,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE CPP #-}
+#if defined(ghcjs_HOST_OS)
+{-# LANGUAGE TypeApplications #-}
+#endif
 
 
 
@@ -28,7 +29,9 @@ module Pact.Types.SizeOf
   ) where
 
 import Bound
-import qualified Data.ByteString.UTF8 as BS
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.UTF8 as UTF8
+import qualified Data.ByteString.Short as SBS
 import Data.Decimal
 import Data.Int (Int64)
 import qualified Data.List as L
@@ -141,7 +144,15 @@ instance SizeOf BS.ByteString where
   sizeOf _ bs = byteStringSize
     where
       byteStringSize = (9 * wordSize) + byteStringLength
-      byteStringLength = fromIntegral (BS.length bs)
+
+      -- 'UTF8.length' returns different values than 'BS.length'. Moreoever,
+      -- 'BS.length' is \(O(1)\) but 'UTF8.length' is \(O(n)\), with a pretty
+      -- bad constant factor.
+      --
+      byteStringLength = fromIntegral (UTF8.length bs)
+
+instance SizeOf SBS.ShortByteString where
+  sizeOf ver = sizeOf ver . SBS.fromShort
 
 instance SizeOf Text where
   sizeOf _ t = (6 * wordSize) + (2 * (fromIntegral (T.length t)))

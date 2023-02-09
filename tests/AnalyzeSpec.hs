@@ -145,7 +145,7 @@ runVerification code = do
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      results <- verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
+      results <- verifyModule Nothing mempty (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
         Right (ModuleChecks propResults stepResults invariantResults _) ->
@@ -183,7 +183,7 @@ checkInterface code = do
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      result <- verifyModule mempty HM.empty moduleData
+      result <- verifyModule Nothing mempty HM.empty moduleData
       pure $ case result of
         Left failure -> Just $ VerificationFailure failure
         Right _      -> Nothing
@@ -230,6 +230,13 @@ expectFalsifiedMessage code needleMsg =
     res `shouldSatisfy` \case
       Just (TestCheckFailure cf) ->
         needleMsg `isInCheckFailure` cf
+      _ -> False
+expectVerificationFailure :: HasCallStack => Text -> Spec
+expectVerificationFailure code =
+  before (runVerification $ wrap code "") $
+  it "fails in-code checks" $ \res ->
+    res `shouldSatisfy` \case
+      Just (VerificationFailure _) -> True
       _ -> False
 
 isInCheckFailure :: Text -> CheckFailure -> Bool
@@ -1966,7 +1973,7 @@ spec = describe "analyze" $ do
           case eModuleData of
             Left err -> error $ "failed to compile: " <> show err
             Right moduleData -> do
-              results <- verifyModule mempty (HM.fromList [("test", moduleData)]) moduleData
+              results <- verifyModule Nothing mempty (HM.fromList [("test", moduleData)]) moduleData
               case results of
                 Left failure -> error $ "unexpectedly failed verification: " <> show failure
                 Right x -> return x
@@ -3991,14 +3998,12 @@ spec = describe "analyze" $ do
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
 
-#if !darwin_HOST_OS
     describe "associativity of list concatenation" $ do
       expectVerified [text|
         (defun test:bool (a:[integer] b:[integer] c:[integer])
           @model [ (property result) ]
           (= (+ a (+ b c)) (+ (+ a b) c)))
         |]
-#endif
 
     describe "testing monotonicity of a function" $ do
       expectVerified [text|
@@ -4113,6 +4118,12 @@ spec = describe "analyze" $ do
             (with-read accounts acct { "balance" := bal }
               (update accounts acct { "balance": (+ bal amt) }))))
         |]
+    describe "result in defpact property" $ do
+      expectVerificationFailure [text|
+        (defpact err ()
+          @model [ (property (= result 1)) ]
+          (step 1))
+          |]
 
     describe "nontrivial many step pact" $
       expectVerified [text|

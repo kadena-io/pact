@@ -3,6 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Types.Gas
@@ -22,6 +23,8 @@ module Pact.Types.Gas
   , GasModel(..)
   , GasArgs(..)
   , GasLimit(..)
+  , ZKGroup(..)
+  , ZKArg(..)
     -- * optics
   , geGasLimit
   , geGasPrice
@@ -153,6 +156,36 @@ data GasArgs
   -- ^ Decimal costs
   | GMakeList2 !Integer !(Maybe Integer)
   -- ^ List versioning 2
+  | GZKArgs ZKArg
+
+-- | The elliptic curve pairing group we are
+-- handling
+data ZKGroup
+  = ZKG1
+  -- ^ Group one, that is Fq in Pairing
+  | ZKG2
+  -- ^ Group two, that is, Fq2 Pairing
+  deriving Show
+
+data ZKArg
+  = PointAdd ZKGroup
+  -- ^ Point addition Gas arguments, where the gas is dependent on the group.
+  | ScalarMult ZKGroup
+  -- ^ Scalar multiplication gas, group dependent
+  | Pairing Int
+  -- ^ Pairing function gas, dependent on number of pairs
+  deriving Show
+
+instance Pretty ZKGroup where
+  pretty = \case
+    ZKG1 -> "G1"
+    ZKG2 -> "G2"
+
+instance Pretty ZKArg where
+  pretty = \case
+    PointAdd g -> "PointAdd" <> parens (pretty g)
+    ScalarMult g-> "ScalarMult" <> parens (pretty g)
+    Pairing n -> "Pairing" <> parens (pretty n)
 
 instance Pretty GasArgs where
   pretty g = case g of
@@ -176,6 +209,7 @@ instance Pretty GasArgs where
     GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
     GDecimalOpCost i j -> "GDecimalOpCost:" <> pretty (show i) <> colon <> pretty (show j)
     GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
+    GZKArgs arg -> "GZKArgs:" <> pretty arg
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)

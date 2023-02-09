@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.4
+version:             4.6.0
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -29,7 +29,7 @@ extra-source-files:
 
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
-  default:     False
+  default:     True
   manual:      True
 
 flag build-tool
@@ -91,6 +91,7 @@ library
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
+    Pact.Native.Pairing
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
@@ -195,6 +196,11 @@ library
     , vector >= 0.11.0.0 && < 0.13
     , vector-algorithms >= 0.7
     , vector-space >= 0.10.4 && < 0.17
+    , groups
+    , semirings
+    , mod >= 0.1.2
+    , poly >= 0.5.0
+    , time
 
   -- GHCJS
   if impl(ghcjs)
@@ -421,6 +427,8 @@ test-suite hspec
         RemoteVerifySpec
         TypecheckSpec
         PactCLISpec
+        ZkSpec
+        PairingSpec
         Utils
 
       build-depends:
@@ -431,11 +439,16 @@ test-suite hspec
         , exceptions
         , hedgehog >= 1.0.1 && < 1.2
         , hspec-golden >= 0.1.0.2
+        , hspec-expectations
+        , hspec-hedgehog
+        , groups
         , http-client
         , hw-hspec-hedgehog == 0.1.*
         , intervals
         , mmorph
         , neat-interpolation
+        , semirings
+        , prettyprinter
         , sbv
         , servant-client
         , temporary >= 1.3
