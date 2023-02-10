@@ -83,6 +83,8 @@ jobs:
       run: |
         ghc --version
         cabal --version
+    - name: Set permissions for .ghcup
+      run: sudo chown -R $USER /usr/local/.ghcup
     - name: Setup PATHs (windows)
       if: "contains(matrix.os, 'windows')"
       shell: bash
