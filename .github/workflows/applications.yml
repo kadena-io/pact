@@ -74,11 +74,18 @@ jobs:
       run: choco install -y -r awscli
 
     # Haskell Setup
+    # - name: Install GHC and Cabal
+    #   uses: haskell/actions/setup@v2.3.3
+    #   with:
+    #      ghc-version: ${{ matrix.ghc }}
+    #      cabal-version: ${{ matrix.cabal }}
     - name: Install GHC and Cabal
-      uses: haskell/actions/setup@v2.3.3
-      with:
-         ghc-version: ${{ matrix.ghc }}
-         cabal-version: ${{ matrix.cabal }}
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+        ghcup install cabal ${{ matrix.cabal }}
+        ghcup install ghc ${{ matrix.ghc }}
+        ghcup set cabal ${{ matrix.cabal }}
+        ghcup set ghc ${{ matrix.ghc }}
     - name: Confirm GHC and Cabal installation
       run: |
         ghc --version
