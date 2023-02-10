@@ -74,16 +74,8 @@ jobs:
       run: choco install -y -r awscli
 
     # Haskell Setup
-    - name: Set permissions for .ghcup (ubuntu-20.04)
-      if: contains(matrix.os, 'ubuntu-20.04')
-      run: sudo chown -R $USER /usr/local/.ghcup
-
-    - name: Set permissions for .ghcup (ubuntu-22.04)
-      if: contains(matrix.os, 'ubuntu-22.04')
-      run: sudo chown -R $USER /usr/local/.ghcup
-
-    - name: Set permissions for .ghcup (ubuntu-18.04)
-      if: contains(matrix.os, 'ubuntu-18.04')
+    - name: Set permissions for .ghcup (ubuntu)
+      if: startsWith(matrix.os, 'ubuntu-')
       run: sudo chown -R $USER /usr/local/.ghcup
     - name: Install GHC and Cabal
       uses: haskell/actions/setup@v2
