@@ -81,6 +81,8 @@ jobs:
     #      cabal-version: ${{ matrix.cabal }}
     - name: Install GHC and Cabal
       run: |
+        sudo mkdir -p /usr/local/.ghcup
+        sudo chown -R $USER /usr/local/.ghcup
         curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
         ghcup install cabal ${{ matrix.cabal }}
         ghcup install ghc ${{ matrix.ghc }}
