@@ -75,7 +75,7 @@ jobs:
 
     # Haskell Setup
     - name: Install GHC and Cabal
-      uses: haskell/actions/setup@v2
+      uses: haskell/actions/setup@v2.3.3
       with:
          ghc-version: ${{ matrix.ghc }}
          cabal-version: ${{ matrix.cabal }}
