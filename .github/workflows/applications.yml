@@ -75,7 +75,7 @@ jobs:
 
     # Haskell Setup
     - name: Set permissions for .ghcup
-      if: contains(matrix.os, 'ubuntu-18.04')
+      if: contains(matrix.os, 'ubuntu-*')
       run: sudo chown -R $USER /usr/local/.ghcup
     - name: Install GHC and Cabal
       uses: haskell/actions/setup@v2
