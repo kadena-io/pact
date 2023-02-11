@@ -74,6 +74,9 @@ jobs:
       run: choco install -y -r awscli
 
     # Haskell Setup
+    - name: Set permissions for .ghcup (ubuntu)
+      if: startsWith(matrix.os, 'ubuntu-')
+      run: sudo chown -R $USER /usr/local/.ghcup
     - name: Install GHC and Cabal
       uses: haskell/actions/setup@v2
       with:
