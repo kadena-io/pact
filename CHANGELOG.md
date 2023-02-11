@@ -1,3 +1,27 @@
+4.6.0
+---
+* Add `DisablePact46` execution flag (#TODO)
+* Add Zero Knowledge native operations (#1052)
+* Add deprecation warning system (#1127)
+* Build support for Nix flakes (#1083)
+* Passage of time simulation in local pact server build (#1082)
+* Fixed parsing failure message for Public Keys (#1097)
+* `print` native now pretty prints output using term pretty printing (#1106)
+* Typechecker:
+  - now handles all const value types (#1116)
+  - inlines mock dynamic references (#1120)
+
+* Formal Verification:
+  - Prevent usage of `result` fixed binding in `defpact` verification. (#1113)
+  - Warning added for invaliding models when decimals are too high a
+    precision (#1113)
+  - Typechecker now correctly infers function type arguments (#1112)
+  - Added debug flag to `verify` native, allowing outputs to be directed to
+    SMTLib file on a per-module basis. (#1122)
+  - Add shim for `select` in FV (#1090)
+
+Thanks to everyone for their contributions, especially new contributors @qooboodoop and @omahs, and welcome to our newest Pact team member, @rsoeldner!.
+
 4.4.1
 ---
 * Export `ApiReq` constituent data structures (#1055)

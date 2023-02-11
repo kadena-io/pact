@@ -134,10 +134,13 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 #if defined(ghcjs_HOST_OS)
     binop "^" (\a' b' -> liftDecF i (**) a' b') intPow i as
 #else
-    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecF i (**)) (liftDecF i trans_pow)
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecPowF i (**)) (liftDecPowF i trans_pow)
     binop "^" decimalPow intPow i as
 #endif
     where
+    liftDecPowF fi f lop rop = do
+      _ <- computeGasCommit def "" (GDecimalOpCost lop rop)
+      liftDecF fi f lop rop
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
       liftIntegerOp (^) b' e
@@ -161,7 +164,14 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 
 twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
 twoArgIntOpGas loperand roperand =
-  computeGasCommit def "" (GIntegerOpCost loperand roperand)
+  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing))
+
+twoArgDecOpGas :: Decimal -> Decimal -> Eval e Gas
+twoArgDecOpGas loperand roperand =
+  computeGasCommit def ""
+  (GIntegerOpCost
+    (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
+    (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand))))
 
 legalLogArg :: Literal -> Bool
 legalLogArg = \case
@@ -178,6 +188,9 @@ litGt0 = \case
 logDef :: NativeDef
 logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
+  liftLogDec fi f a b = do
+    _ <- computeGasCommit def "" (GDecimalOpCost a b)
+    liftDecF fi f a b
   log' :: RNativeFun e
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
@@ -190,7 +203,7 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
           as
 #else
     decimalLogBase <-
-      ifExecutionFlagSet' FlagDisableNewTrans (liftDecF fi logBase) (liftDecF fi trans_log)
+      ifExecutionFlagSet' FlagDisableNewTrans (liftLogDec fi logBase) (liftLogDec fi trans_log)
     integerLogBase <-
       ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntF fi trans_log)
     binop "log" decimalLogBase integerLogBase fi as
@@ -458,7 +471,7 @@ liftIntegerOp f a b = do
 
 liftDecimalOp :: (Decimal -> Decimal -> Decimal) -> Decimal -> Decimal -> Eval e Decimal
 liftDecimalOp f a b = do
-  unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas (decimalMantissa a) (decimalMantissa b)
+  unlessExecutionFlagSet FlagDisablePact43 $ twoArgDecOpGas a b
   pure (f a b)
 
 

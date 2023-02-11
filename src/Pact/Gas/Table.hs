@@ -234,7 +234,8 @@ tableGasModel gasConfig =
           Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
           _ -> _gasCostConfig_functionApplicationCost gasConfig
         GIntegerOpCost i j ->
-          intCost i + intCost j
+          intCost (fst i) + intCost (fst j)
+        GDecimalOpCost _ _ -> 0
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
         GDistinct len -> expLengthPenalty len

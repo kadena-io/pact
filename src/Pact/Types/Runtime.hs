@@ -186,6 +186,8 @@ data ExecutionFlag
   | FlagDisableNewTrans
   -- | Disable Pact 4.5 Features
   | FlagDisablePact45
+    -- | Disable Pact 4.6 Features
+  | FlagDisablePact46
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
