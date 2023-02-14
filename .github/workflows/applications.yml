@@ -221,7 +221,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - ghc: "8.10.7"
+        - ghc: "9.4.4"
           os: "ubuntu-20.04"
     env:
       OS: ${{ matrix.os }}
