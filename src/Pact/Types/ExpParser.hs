@@ -12,6 +12,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
+
+-- megaparsec <9.3 backard compatiblity
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+
 -- |
 -- Module      :  Pact.Types.ExpParser
 -- Copyright   :  (C) 2018 Stuart Popejoy
@@ -222,7 +226,7 @@ pTokenEpsilon test ps = ParsecT $ \s@(State input o pst _) _ _ eok eerr ->
 -- {-# INLINE pToken #-}
 
 -- | Call commit continuation with current state.
-pCommit :: forall e s m. ParsecT e s m ()
+pCommit :: forall e s m. Ord (Token s) => ParsecT e s m ()
 pCommit = ParsecT $ \s cok _ _ _ -> cok () s mempty
 
 -- | Commit any previous recognitions.

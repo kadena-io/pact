@@ -94,6 +94,14 @@ pattern AST_CreateModuleGuard :: AST Node -> AST Node
 pattern AST_CreateModuleGuard name <-
   App _node (NativeFunc "create-module-guard") [name]
 
+pattern AST_CreateCapabilityGuard :: AST Node -> AST Node
+pattern AST_CreateCapabilityGuard app <-
+  App _node (NativeFunc "create-capability-guard") [app]
+
+pattern AST_CreateCapabilityPactGuard :: AST Node -> AST Node
+pattern AST_CreateCapabilityPactGuard app <-
+  App _node (NativeFunc "create-capability-pact-guard") [app]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)
@@ -257,6 +265,10 @@ pattern ShortTableName tn <- Table _node (Lang.TableName tn)
 
 pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
 pattern NativeFuncSpecial f bdy <- FNative _ f _ (Just (_,SBinding bdy))
+
+pattern AST_Select :: Node -> Text -> [AST Node] -> AST Node -> AST Node
+pattern AST_Select node tn columns filters
+  <- App node (NativeFunc "select") [ShortTableName tn, List _ columns, filters]
 
 pattern AST_Read :: Node -> Text -> AST Node -> AST Node
 pattern AST_Read node tn key <- App node (NativeFunc "read") [ShortTableName tn, key]

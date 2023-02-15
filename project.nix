@@ -47,6 +47,48 @@ in {
           sha256 = "14g2qax1vc7q4g78fa562dviqvcd0l52kd5jmgv90g3g3ci15bnl";
         } {});
 
+        mod = self.callHackageDirect {
+          pkg = "mod";
+          ver = "0.1.2.2";
+          sha256 = "09x2i8crbpyvfzs478r5xky4vrfg6xjv11g3vaj3kb16pbd1raqn";
+        } {};
+
+        poly = dontCheck (self.callHackageDirect {
+          pkg = "poly";
+          ver = "0.5.1.0";
+          sha256 = "1c65qcgvvbx3hlfgd5pzx2g5aam806w89x9nl7nhwx069mnixvn1";
+        } {});
+
+        quickcheck-classes = self.callHackageDirect {
+          pkg = "quickcheck-classes";
+          ver = "0.6.5.0";
+          sha256 = "12sksx6sxv6h0bnd5q71d5fm6f6mf40vigncg04sqqry90x5gfdg";
+        } {};
+
+        quickcheck-classes-base = self.callHackageDirect {
+          pkg = "quickcheck-classes-base";
+          ver = "0.6.2.0";
+          sha256 = "1kzw9kx9ab1apdyka8r63pkd35jpmdb21ds4x0s0hlyv2rka3f8w";
+        } {};
+
+        semirings = self.callHackageDirect {
+          pkg = "semirings";
+          ver = "0.6";
+          sha256 = "0nzj3fpdyvmx3z6hd1zbxyfmz2w6f95s01yr5cwgq0bp86vqpnfa";
+        } {};
+
+        vector-algorithms = self.callHackageDirect {
+          pkg = "vector-algorithms";
+          ver = "0.8.0.4";
+          sha256 = "15zwgdi80ihy6cypqm3g24418kshlydxjk5c2dvdd534wylyw8pp";
+        } {};
+
+        vector-sized = self.callHackageDirect {
+          pkg = "vector-sized";
+          ver = "1.4.2";
+          sha256 = "0ijazq59892zpjjfxqa8c6jmv8llrjdr9ypjwz5yrkhvxc8mqld3";
+        } {};
+
         pact-do-benchmark = overrideCabal (doBenchmark (dontCheck super.pact)) (oldDrv: {
           benchmarkSystemDepends = [ pkgs.z3 ];
           postBuild = ''

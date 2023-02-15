@@ -4,7 +4,6 @@
 {-# LANGUAGE RecordWildCards #-}
 module PactTestsSpec (spec) where
 
-
 import Test.Hspec
 
 import Control.Concurrent
@@ -34,27 +33,24 @@ import qualified Pact.Native.Trans.Musl as M
 import qualified Pact.Native.Trans.Types as T
 import qualified Pact.Native.Trans.TOps as T
 
-
 import System.Directory
 import System.FilePath
 
 spec :: Spec
 spec = do
-  pactTests
+  tests <- runIO findTests
+  pactTests tests
   badTests
   accountsTest
   cpTest
   verifiedAccountsTest
-  prodParserTests
-  legacyProdParserTests
-  floatingPointTests
+  prodParserTests tests
+  legacyProdParserTests tests
+  floatingPointTests tests
 
 
-pactTests :: Spec
-pactTests = do
-  describe "pact tests" $ do
-    fs <- runIO findTests
-    forM_ fs runScript
+pactTests :: [FilePath] -> Spec
+pactTests tests = describe "pact tests" $ mapM_ runScript tests
 
 badTests :: Spec
 badTests = do
@@ -79,29 +75,31 @@ findTests = findTests' $ "tests" </> "pact"
 findTests' :: FilePath -> IO [FilePath]
 findTests' tdir = (map (tdir </>) . filter ((== ".repl") . reverse . take 5 . reverse)) <$> getDirectoryContents tdir
 
-
 runScript :: String -> SpecWith ()
-runScript fp = describe fp $ do
-  (r,ReplState{..}) <- runIO $ do
-    (PactDbEnv _ pdb) <- mkSQLiteEnv (newLogger neverLog "") False (SQLiteConfig "" []) neverLog
-    ls <- initLibState' (LibDb pdb) Nothing
-    rs <- initReplState' ls Quiet
-    execScriptState' fp rs id
+runScript fp = it fp $ do
+  (PactDbEnv _ pdb) <- mkSQLiteEnv (newLogger neverLog "") False (SQLiteConfig "" []) neverLog
+  ls <- initLibState' (LibDb pdb) Nothing
+  rs <- initReplState' ls Quiet
+  (r, ReplState{..}) <- execScriptState' fp rs id
   case r of
-    Left e -> it ("failed to load " ++ fp) $ expectationFailure e
+    Left e -> expectationFailure e
     Right _ -> do
-      LibState{..} <- runIO $ readMVar $ _eePactDbVar _rEnv
-      forM_ _rlsTests $ \TestResult {..} -> it (unpack trName) $ case trFailure of
+      LibState{..} <- readMVar $ _eePactDbVar _rEnv
+      forM_ _rlsTests $ \TestResult {..} -> case trFailure of
         Nothing -> return ()
         Just (i,e) -> expectationFailure $ renderInfo (_faInfo i) ++ ": " ++ unpack e
 
 runBadScript :: String -> SpecWith ()
 runBadScript fp = describe ("bad-" ++ fp) $ do
-  (r,ReplState{}) <- runIO $ execScript' Quiet fp
-  let expectedError = M.lookup fp badErrors
-  it "has error in badErrors" $ expectedError `shouldSatisfy` isJust
-  it ("failed as expected: " ++ show expectedError) $
-    r `shouldSatisfy` isCorrectError expectedError
+  beforeAll prep $ do
+    it "has error in badErrors" $ \(_, expectedError) ->
+        expectedError `shouldSatisfy` isJust
+    it "failed as expected" $ \(r, expectedError) ->
+      r `shouldSatisfy` isCorrectError expectedError
+ where
+  prep = do
+   (r,ReplState{}) <- execScript' Quiet fp
+   return (r, M.lookup fp badErrors)
 
 isCorrectError :: Maybe String -> Either String (Term Name) -> Bool
 isCorrectError Nothing _ = False
@@ -165,38 +163,43 @@ _evalRefMap cmd = fmap (_rsLoadedModules . _evalRefs . _rEvalState . snd)
 -- -------------------------------------------------------------------------- --
 -- Production Parser Tests
 
-prodParserTests :: Spec
-prodParserTests =
-  describe "test production parser" $ do
-    fs <- runIO findTests
-    forM_ fs $ \fp ->
+prodParserTests :: [FilePath] -> Spec
+prodParserTests tests =
+  describe "test production parser" $
+    forM_ tests $ \fp ->
         checkProdParser (notElem fp badParserTests) fp
  where
   badParserTests =
    [ "tests/pact/bad/bad-parens.repl"
    ]
 
-legacyProdParserTests :: Spec
+legacyProdParserTests :: [FilePath] -> Spec
 legacyProdParserTests =
-  describe "test legacy production parser" $ do
-    fs <- runIO findTests
-    forM_ fs (checkLegacyProdParser True)
+  describe "test legacy production parser" . mapM_ (checkLegacyProdParser True)
 
 checkProdParser :: Bool -> String -> SpecWith ()
 checkProdParser expectSuccess fp = describe fp $ do
-  source <- runIO $ T.readFile fp
-  let pc = parsePact source
   if expectSuccess
-    then it "parsing succeeds" $ pc `shouldSatisfy` isRight
-    else it "parsing fails as expected" $ pc `shouldSatisfy` isLeft
+    then it "parsing succeeds" $ do
+      pc <- parse
+      pc `shouldSatisfy` isRight
+    else it "parsing fails as expected" $ do
+      pc <- parse
+      pc `shouldSatisfy` isLeft
+ where
+  parse = parsePact <$> T.readFile fp
 
 checkLegacyProdParser :: Bool -> String -> SpecWith ()
 checkLegacyProdParser expectSuccess fp = describe fp $ do
-  source <- runIO $ T.readFile fp
-  let pc = legacyParsePact source
   if expectSuccess
-    then it "parsing succeeds" $ pc `shouldSatisfy` isRight
-    else it "parsing fails as expected" $ pc `shouldSatisfy` isLeft
+    then it "parsing succeeds" $ do
+      pc <- parse
+      pc `shouldSatisfy` isRight
+    else it "parsing fails as expected" $ do
+      pc <- parse
+      pc `shouldSatisfy` isLeft
+ where
+  parse = legacyParsePact <$> T.readFile fp
 
 dec2F :: Decimal -> Double
 dec2F = fromRational . toRational

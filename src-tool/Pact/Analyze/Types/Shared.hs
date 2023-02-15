@@ -216,7 +216,7 @@ instance IsString ColumnName where
 
 newtype CapName
   = CapName String
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Pretty)
 
 instance IsString CapName where
   fromString = CapName

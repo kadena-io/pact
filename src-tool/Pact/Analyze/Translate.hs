@@ -896,6 +896,20 @@ translateCapabilityApp modName capName bindingsA appBodyA = do
       fmap (mapExistential $ Granting cap vids) $
         translateBody appBodyA
 
+-- | translate cap and vars for HasGrant or cap guard creation
+translateCapRef
+  :: Pact.ModuleName
+  -> Text
+  -> [Located Binding]
+  -> TranslateM (Capability, [(Text, VarId)])
+translateCapRef modName funName bindingTs = do
+    cap <- lookupCapability $ mkCapName modName funName
+    let vars = (\b -> (_mungedName . _bmName $ b, _bVid b)) . _located <$>
+               bindingTs
+    return (cap,vars)
+
+
+
 genGuard :: TranslateM Guard
 genGuard = do
   g <- use tsNextGuard
@@ -1026,6 +1040,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_CreateModuleGuard strA -> translateNode strA >>= \case
     Some SStr strT -> pure $ Some SGuard $ MkModuleGuard strT
     _ -> unexpectedNode astNode
+
+  AST_CreateCapabilityGuard (AST_InlinedApp modName funName _ bindings _) ->
+    withTranslatedBindings bindings $ \bindingTs -> do
+      (cap,vars) <- translateCapRef modName funName bindingTs
+      pure $ Some SGuard $ MkCapabilityGuard cap vars False
+
+  AST_CreateCapabilityPactGuard (AST_InlinedApp modName funName _ bindings _) ->
+    withTranslatedBindings bindings $ \bindingTs -> do
+      (cap,vars) <- translateCapRef modName funName bindingTs
+      pure $ Some SGuard $ MkCapabilityGuard cap vars True
 
   AST_Enforce _ cond -> translateNode cond >>= \case
     Some SBool condTerm -> do
@@ -1298,6 +1322,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _node "pact-version" [] -> pure $ Some SStr PactVersion
 
+  AST_Select node _tn _columns _filters -> translateType node >>= \case
+    EType (SList tableSchema) -> do
+      let elist = Some (SList tableSchema) EmptyList
+      shimNative' node "select" [] "[]" elist
+    _ -> unexpectedNode astNode
+
   AST_WithRead node table key bindings schemaNode body -> translateType schemaNode >>= \case
     EType rowTy@SObject{} -> translateNode key >>= \case
       Some SStr key' -> typeOfPartialBind rowTy bindings >>= \case
@@ -1349,12 +1379,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
       translateBody withBodyA
     pure $ Some ty $ WithCapability appET withBodyT
 
-  AST_RequireCapability node (AST_InlinedApp modName funName _ bindings _) -> do
-    let capName = mkCapName modName funName
-    cap <- lookupCapability capName
+  AST_RequireCapability node (AST_InlinedApp modName funName _ bindings _) ->
     withTranslatedBindings bindings $ \bindingTs -> do
-      let vars = (\b -> (_mungedName . _bmName $ b, _bVid b)) . _located <$>
-            bindingTs
+      (cap@(Capability _ capName), vars) <- translateCapRef modName funName bindingTs
       recov <- view teRecoverability
       tid <- genTagId
       inScope <- Set.member capName <$> use tsStaticCapsInScope

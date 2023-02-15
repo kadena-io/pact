@@ -9,13 +9,13 @@
 [![Build Status](https://travis-ci.org/kadena-io/pact.svg?branch=master)](https://travis-ci.org/kadena-io/pact)
 
 
-[Pact](http://kadena.io/pact) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
+[Pact](http://kadena.io/build) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
 
 Read the whitepaper:
 
 - [The Pact Smart Contract Language](https://d31d887a-c1e0-47c2-aa51-c69f9f998b07.filesusr.com/ugd/86a16f_442a542b64554cb2a4c1ae7f528ce4c3.pdf)
 
-For additional information, press, and development inquires, please refer to the Kadena [website](https://kadena.io)
+For additional information, press, and development inquiries, please refer to the Kadena [website](https://kadena.io)
 
 
 ## Table Of Contents

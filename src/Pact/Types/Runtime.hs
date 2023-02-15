@@ -8,6 +8,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
+
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -19,13 +21,16 @@
 --
 
 module Pact.Types.Runtime
- ( evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwEitherText,throwErr,
+ ( evalError,evalError',
+   failTx,failTx',
+   argsError,argsError',
+   throwDbError,throwEither,throwEitherText,throwErr,
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eeAdvice,
+   eeAdvice, eeWarnings,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
@@ -41,6 +46,8 @@ module Pact.Types.Runtime
    mkExecutionConfig,
    ifExecutionFlagSet,ifExecutionFlagSet',
    whenExecutionFlagSet, unlessExecutionFlagSet,
+   emitPactWarning,
+   PactWarning(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -55,19 +62,19 @@ module Pact.Types.Runtime
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName)
-import Control.Monad.Catch
-import Control.Monad.Except
+import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
-import Data.IORef(IORef)
+import Data.IORef(IORef, modifyIORef')
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,pack)
+import Data.Set(Set)
 import GHC.Generics (Generic)
 
 import Pact.Types.Capability
@@ -113,6 +120,24 @@ data Purity =
   deriving (Eq,Show,Ord,Bounded,Enum)
 instance Default Purity where def = PImpure
 
+-- All warnings pact emits at runtime
+data PactWarning
+  -- | Deprecated native, with help message
+  = DeprecatedNative NativeDefName Text
+  -- | Deprecated overload with help message
+  | DeprecatedOverload NativeDefName Text
+  deriving (Show, Eq, Ord, Generic)
+
+instance ToJSON PactWarning
+instance FromJSON PactWarning
+
+instance Pretty PactWarning where
+  pretty = \case
+    DeprecatedNative ndef msg ->
+      "Warning: Using deprecated native" <+> pretty ndef <> ":" <+> pretty msg
+    DeprecatedOverload ndef msg ->
+      "Warning: using deprecated native overload for" <+> pretty ndef <> ":" <+> pretty msg
+
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -155,6 +180,10 @@ data ExecutionFlag
   | FlagDisableNewTrans
   -- | Disable new transcendental impls via MPFR
   | FlagDisableNewTransMPFR
+  -- | Disable Pact 4.5 Features
+  | FlagDisablePact45
+    -- | Disable Pact 4.6 Features
+  | FlagDisablePact46
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -191,7 +220,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(M.Map PublicKey (S.Set UserCapability))
+    , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode
@@ -222,8 +251,10 @@ data EvalEnv e = EvalEnv {
     , _eeExecutionConfig :: ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
-      -- | Are we in the repl? If so, ignore info
+      -- | Are we in the repl? If not, ignore info
     , _eeInRepl :: Bool
+      -- | Warnings ref
+    , _eeWarnings :: IORef (Set PactWarning)
     }
 makeLenses ''EvalEnv
 
@@ -282,7 +313,7 @@ instance Default EvalState where def = EvalState def def def def def def
 newtype Eval e a =
     Eval { unEval :: ReaderT (EvalEnv e) (StateT EvalState IO) a }
     deriving (Functor,Applicative,Monad,MonadState EvalState,
-                     MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
+                     MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadMask,MonadIO)
 
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
@@ -337,9 +368,11 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAny (throwErr DbError i . viaShow) (liftIO $ f _eePactDb _eePactDbVar)
 
-
+emitPactWarning :: PactWarning -> Eval e ()
+emitPactWarning pw =
+  view eeWarnings >>= \e -> liftIO (modifyIORef' e (S.insert pw))
 --
 -- Methods for invoking backend function-record function.
 --
@@ -414,6 +447,9 @@ evalError' = evalError . getInfo
 
 failTx :: Info -> Doc -> Eval e a
 failTx i = throwErr TxFailure i
+
+failTx' :: HasInfo i => i -> Doc -> Eval e a
+failTx' = failTx . getInfo
 
 throwDbError :: MonadThrow m => Doc -> m a
 throwDbError = throwM . PactError DbError def def

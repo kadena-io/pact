@@ -8,7 +8,7 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- A Pact Keyset encapsulates the notion of a 'PublicKey'
+-- A Pact Keyset encapsulates the notion of a 'PublicKeyText'
 -- into a predicate that matches the image of the public key
 -- against some set in the environment representing public keys
 -- used to sign the currently operational transaction.
@@ -22,7 +22,7 @@
 --
 
 module Pact.Types.KeySet
-  ( PublicKey(..)
+  ( PublicKeyText(..)
   , KeySet(..)
   , KeySetName(..)
   , mkKeySet
@@ -46,9 +46,6 @@ import Control.Monad
 import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Attoparsec.Text (parseOnly, takeText, Parser)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BSC
-import qualified Data.ByteString.UTF8 as BSU
 import Data.Char
 import Data.Default
 import Data.Foldable
@@ -59,7 +56,7 @@ import qualified Data.Set as S
 import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.Encoding
+import qualified Data.Text.Encoding as T
 import GHC.Generics
 import Test.QuickCheck
 
@@ -75,28 +72,35 @@ import Text.Parser.Token
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
-newtype PublicKey = PublicKey { _pubKey :: ByteString }
-  deriving (Eq,Ord,Generic,IsString,AsString,Show,SizeOf)
+-- | Public key in UTF8 encoded textual format
+--
+-- TODO: what exactly is the format?
+--
+newtype PublicKeyText = PublicKeyText { _pubKey :: T.Text }
+  deriving (Eq,Ord,Generic,IsString,AsString,Show)
 
-instance Arbitrary PublicKey where
-  arbitrary = PublicKey . encodeUtf8 . T.pack <$> vectorOf 64 genValidPublicKeyChar
+instance SizeOf PublicKeyText where
+    sizeOf ver (PublicKeyText k) = sizeOf ver (T.encodeUtf8 k)
+
+instance Arbitrary PublicKeyText where
+  arbitrary = PublicKeyText . T.pack <$> vectorOf 64 genValidPublicKeyChar
     where genValidPublicKeyChar = suchThat arbitraryASCIIChar isAlphaNum
-instance Serialize PublicKey
-instance NFData PublicKey
-instance FromJSON PublicKey where
-  parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
-instance ToJSON PublicKey where
-  toJSON = toJSON . decodeUtf8 . _pubKey
+instance Serialize PublicKeyText
+instance NFData PublicKeyText
+instance FromJSON PublicKeyText where
+  parseJSON = withText "PublicKey" (return . PublicKeyText)
+instance ToJSON PublicKeyText where
+  toJSON = toJSON . _pubKey
 
-instance Pretty PublicKey where
-  pretty (PublicKey s) = prettyString (BSU.toString s)
+instance Pretty PublicKeyText where
+  pretty (PublicKeyText s) = pretty s
 
 -- -------------------------------------------------------------------------- --
 -- KeySet
 
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet
-  { _ksKeys :: !(Set PublicKey)
+  { _ksKeys :: !(Set PublicKeyText)
   , _ksPredFun :: !Name
   } deriving (Eq,Generic,Show,Ord)
 makeLenses ''KeySet
@@ -110,8 +114,8 @@ instance Pretty KeySet where
     ]
 
 instance SizeOf KeySet where
-  sizeOf (KeySet pkArr ksPred) =
-    (constructorCost 2) + (sizeOf pkArr) + (sizeOf ksPred)
+  sizeOf ver (KeySet pkArr ksPred) =
+    (constructorCost 2) + (sizeOf ver pkArr) + (sizeOf ver ksPred)
 
 instance Arbitrary KeySet where
   arbitrary = do
@@ -162,7 +166,7 @@ instance IsString KeySetName where
 instance NFData KeySetName
 
 instance SizeOf KeySetName where
-  sizeOf = sizeOf . asString
+  sizeOf ver = sizeOf ver . asString
 
 instance FromJSON KeySetName where
   parseJSON v =
@@ -222,17 +226,17 @@ parseQualifiedKeySetName
   = parseOnly qualifiedKeysetNameParser
 
 -- | Smart constructor for a simple list and barename predicate.
-mkKeySet :: [PublicKey] -> Text -> KeySet
+mkKeySet :: [PublicKeyText] -> Text -> KeySet
 mkKeySet pks p = KeySet
   (S.fromList pks)
   (Name $ BareName p def)
 
 -- | A predicate for public key format validation.
-type KeyFormat = PublicKey -> Bool
+type KeyFormat = PublicKeyText -> Bool
 
 -- | Current "Kadena" ED-25519 key format: 64-length hex.
 ed25519Hex :: KeyFormat
-ed25519Hex (PublicKey k) = BSC.length k == 64 && BSC.all isHexDigitLower k
+ed25519Hex (PublicKeyText k) = T.length k == 64 && T.all isHexDigitLower k
 
 -- | Lower-case hex numbers.
 isHexDigitLower :: Char -> Bool
@@ -244,12 +248,12 @@ isHexDigitLower c =
 keyFormats :: [KeyFormat]
 keyFormats = [ed25519Hex]
 
--- | Validate 'PublicKey' against 'keyFormats'.
-validateKeyFormat :: PublicKey -> Bool
+-- | Validate 'PublicKeyText' against 'keyFormats'.
+validateKeyFormat :: PublicKeyText -> Bool
 validateKeyFormat k = any ($ k) keyFormats
 
 -- | Enforce valid 'KeySet' keys, evaluating error action on failure.
-enforceKeyFormats :: Monad m => (PublicKey -> m ()) -> KeySet -> m ()
+enforceKeyFormats :: Monad m => (PublicKeyText -> m ()) -> KeySet -> m ()
 enforceKeyFormats err (KeySet ks _p) = traverse_ go ks
   where
     go k = unless (validateKeyFormat k) $ err k

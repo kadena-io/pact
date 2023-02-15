@@ -27,6 +27,7 @@ module Pact.Types.Hash
 
 import Control.DeepSeq
 import Data.ByteString (ByteString)
+import Data.ByteString.Short (ShortByteString, fromShort, toShort)
 import Data.Hashable (Hashable(hashWithSalt))
 import Data.Serialize (Serialize(..))
 import Pact.Types.Pretty
@@ -57,7 +58,7 @@ import Crypto.Hash.Blake2Native
 -- | Untyped hash value, encoded with unpadded base64url.
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
-newtype Hash = Hash { unHash :: ByteString }
+newtype Hash = Hash { unHash :: ShortByteString }
   deriving (Eq, Ord, Generic, Hashable, Serialize,SizeOf)
 
 instance Arbitrary Hash where
@@ -65,13 +66,13 @@ instance Arbitrary Hash where
   arbitrary = pactHash <$> encodeUtf8 <$> resize 1000 arbitrary
 
 instance Show Hash where
-  show (Hash h) = show $ encodeBase64UrlUnpadded h
+  show (Hash h) = show $ encodeBase64UrlUnpadded $ fromShort h
 
 instance Pretty Hash where
   pretty = pretty . asString
 
 instance AsString Hash where
-  asString (Hash h) = decodeUtf8 (encodeBase64UrlUnpadded h)
+  asString (Hash h) = decodeUtf8 (encodeBase64UrlUnpadded $ fromShort h)
 
 instance NFData Hash
 
@@ -85,12 +86,12 @@ instance FromJSON Hash where
   {-# INLINE parseJSON #-}
 
 instance ParseText Hash where
-  parseText s = Hash <$> parseB64UrlUnpaddedText s
+  parseText s = Hash . toShort <$> parseB64UrlUnpaddedText s
   {-# INLINE parseText #-}
 
 
 hashToText :: Hash -> Text
-hashToText (Hash h) = toB64UrlUnpaddedText h
+hashToText (Hash h) = toB64UrlUnpaddedText $ fromShort h
 
 
 -- | All supported hashes in Pact (although not necessarily GHCJS pact).
@@ -110,7 +111,7 @@ hashLength SHA3_256 = 32
 
 -- | Typed hash, to indicate algorithm
 data TypedHash (h :: HashAlgo) where
-  TypedHash :: ByteString -> TypedHash h
+  TypedHash :: ShortByteString -> TypedHash h
   deriving (Eq, Ord, Generic)
 
 instance Hashable (TypedHash h) where
@@ -121,13 +122,13 @@ instance Serialize (TypedHash h) where
   get = fromUntypedHash <$> get
 
 instance Show (TypedHash h) where
-  show (TypedHash h) = show $ encodeBase64UrlUnpadded h
+  show (TypedHash h) = show $ encodeBase64UrlUnpadded $ fromShort h
 
 instance Pretty (TypedHash h) where
   pretty = pretty . asString
 
 instance AsString (TypedHash h) where
-  asString (TypedHash h) = decodeUtf8 (encodeBase64UrlUnpadded h)
+  asString (TypedHash h) = decodeUtf8 (encodeBase64UrlUnpadded $ fromShort h)
 
 instance NFData (TypedHash h)
 
@@ -139,11 +140,11 @@ instance FromJSON (TypedHash h) where
   {-# INLINE parseJSON #-}
 
 instance ParseText (TypedHash h) where
-  parseText s = TypedHash <$> parseB64UrlUnpaddedText s
+  parseText s = TypedHash . toShort <$> parseB64UrlUnpaddedText s
   {-# INLINE parseText #-}
 
 typedHashToText :: TypedHash h -> Text
-typedHashToText (TypedHash h) = toB64UrlUnpaddedText h
+typedHashToText (TypedHash h) = toB64UrlUnpaddedText $ fromShort h
 
 toUntypedHash :: TypedHash h -> Hash
 toUntypedHash (TypedHash h) = Hash h
@@ -166,7 +167,7 @@ pactHashLength = hashLength Blake2b_256
 #if !defined(ghcjs_HOST_OS)
 
 hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
-hash = TypedHash . go
+hash = TypedHash . toShort . go
   where
     algo = reflect (Proxy :: Proxy h)
     go = case algo of
@@ -177,7 +178,7 @@ hash = TypedHash . go
 #else
 
 hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
-hash bs = TypedHash go
+hash bs = TypedHash (toShort go)
   where
     algo = reflect (Proxy :: Proxy h)
     go = case algo of

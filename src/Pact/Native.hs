@@ -58,9 +58,9 @@ module Pact.Native
     ) where
 
 import Control.Arrow hiding (app)
+import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
-import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
@@ -94,6 +94,7 @@ import Pact.Native.Keysets
 import Pact.Native.Ops
 import Pact.Native.SPV
 import Pact.Native.Time
+import Pact.Native.Pairing(zkDefs)
 import Pact.Parse
 import Pact.Runtime.Utils(lookupFreeVar)
 import Pact.Types.Hash
@@ -117,6 +118,7 @@ natives =
   , spvDefs
   , decryptDefs
   , guardDefs
+  , zkDefs
   ]
 
 
@@ -144,14 +146,27 @@ enforceDef = defNative "enforce" enforce
   where
 
     enforce :: NativeFun e
-    enforce i as = runSysOnly $ gasUnreduced i as $ mapM reduce as >>= enforce' i
+    enforce i as = runSysOnly $ gasUnreduced i as $
+      ifExecutionFlagSet FlagDisablePact45
+      (mapM reduce as >>= enforce' i)
+      (enforceLazy i as)
 
     enforce' :: RNativeFun e
     enforce' i [TLiteral (LBool b') _,TLitString msg]
         | b' = return $ TLiteral (LBool True) def
         | otherwise = failTx (_faInfo i) $ pretty msg
     enforce' i as = argsError i as
-    {-# INLINE enforce' #-}
+
+    enforceLazy i [cond, msg] =
+      reduce cond >>= \case
+        TLiteral (LBool b') _ ->
+          if b' then
+            return (TLiteral (LBool True) def)
+          else reduce msg >>= \case
+            TLitString msg' -> failTx (_faInfo i) $ pretty msg'
+            e -> evalError' i $ "Invalid message argument, expected string " <> pretty e
+        cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
+    enforceLazy i as = mapM reduce as >>= argsError i
 
 enforceOneDef :: NativeDef
 enforceOneDef =
@@ -379,14 +394,20 @@ toGuardPactValue g = case g of
   (GUser (UserGuard n ts)) -> do
     pvs <- map elideModRefInfo <$> traverse toPactValue ts
     return (GUser (UserGuard n pvs))
+  (GCapability (CapabilityGuard n ts pid)) -> do
+    pvs <- map elideModRefInfo <$> traverse toPactValue ts
+    return (GCapability (CapabilityGuard n pvs pid))
   (GKeySet k) -> Right (GKeySet k)
   (GKeySetRef k) -> Right (GKeySetRef k)
   (GModule m) -> Right (GModule m)
   (GPact p) -> Right (GPact p)
 
+
 fromGuardPactValue :: Guard PactValue -> Guard (Term Name)
 fromGuardPactValue g = case g of
   (GUser (UserGuard n ts)) -> GUser (UserGuard n (map fromPactValue ts))
+  (GCapability (CapabilityGuard n ts pid)) ->
+    GCapability (CapabilityGuard n (map fromPactValue ts) pid)
   (GKeySet k) -> GKeySet k
   (GKeySetRef k) -> GKeySetRef k
   (GModule m) -> GModule m
@@ -470,17 +491,18 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
           newNs = Namespace name ug ag
       newNsPactValue <- toNamespacePactValue info newNs
       mOldNs <- readRow info Namespaces name
+      szVer <- getSizeOfVersion
       case (fromNamespacePactValue <$> mOldNs) of
         Just ns@(Namespace _ _ oldg) -> do
           -- if namespace is defined, enforce old guard
           nsPactValue <- toNamespacePactValue info ns
           (g1,_) <- computeGas' g0 fi (GPostRead (ReadNamespace nsPactValue)) $ return ()
           enforceGuard fi oldg
-          computeGas' g1 fi (GPreWrite (WriteNamespace newNsPactValue)) $
+          computeGas' g1 fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
         Nothing -> do
           enforcePolicy info name newNs
-          computeGas' g0 fi (GPreWrite (WriteNamespace newNsPactValue)) $
+          computeGas' g0 fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
 
     enforcePolicy info nn ns = do
@@ -890,7 +912,10 @@ list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set 
 
 makeList :: GasRNativeFun e
 makeList g i [TLitInteger len,value] = case typeof value of
-  Right ty -> computeGas' g i (GMakeList len) $ return $ toTList ty def $ replicate (fromIntegral len) value
+  Right ty -> do
+    ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
+    computeGas' g i ga $ return $
+      toTListV ty def $ V.replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList _ i as = argsError i as
 
@@ -903,11 +928,17 @@ enumerate g i = \case
     as -> argsError i as
   where
 
-    computeList :: Integer -> V.Vector Integer -> Eval e (Gas, Term Name)
-    computeList gas = computeGas' g i (GMakeList gas)
-      . pure
-      . toTListV tTyInteger def
-      . fmap toTerm
+    computeList
+      :: Integer
+      -- ^ the length of the list
+      -> Integer
+      -- ^ size of the largest element.
+      -> V.Vector Integer
+      -- ^ The generated vector
+      -> Eval e (Gas, Term Name)
+    computeList len sz v = do
+      ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len (Just sz))
+      computeGas' g i ga $ pure $ toTListV tTyInteger def $ fmap toTerm v
 
     step to' inc acc
       | acc > to', inc > 0 = Nothing
@@ -915,15 +946,15 @@ enumerate g i = \case
       | otherwise = Just (acc, acc + inc)
 
     createEnumerateList from' to' inc
-      | from' == to' = computeList 1 (V.singleton from')
-      | inc == 0 = computeList 1 mempty
+      | from' == to' = computeList 1 from' (V.singleton from')
+      | inc == 0 = computeList 1 0 mempty
       | from' < to', from' + inc < from' =
         evalError' i "enumerate: increment diverges below from interval bounds."
       | from' > to', from' + inc > from' =
         evalError' i "enumerate: increment diverges above from interval bounds."
       | otherwise = do
         let g' = succ $ (abs (from' - to')) `div` (abs inc)
-        computeList g' $ V.unfoldr (step to' inc) from'
+        computeList g' (max (abs from') (abs to')) $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList V.reverse l
@@ -1085,7 +1116,8 @@ yield g i as = case as of
               if _peStepHasRollback pe
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
                 else fmap (\p -> Yield o' p sourceChain) $ provenanceOf i t
-          computeGas' g i (GPreWrite (WriteYield y)) $ do
+          szVer <- getSizeOfVersion
+          computeGas' g i (GPreWrite (WriteYield y) szVer) $ do
             evalPactExec . _Just . peYield .= Just y
             return u
 
@@ -1219,8 +1251,10 @@ stringToCharList :: Text -> V.Vector (Term a)
 stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
 
 strToList :: GasRNativeFun e
-strToList g i [TLitString s] = computeGas' g i (GMakeList $ fromIntegral $ T.length s) $
-  return $ toTListV tTyString def $ stringToCharList s
+strToList g i [TLitString s] = do
+  let len = fromIntegral $ T.length s
+  ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
+  computeGas' g i ga $ return $ toTListV tTyString def $ stringToCharList s
 strToList _ i as = argsError i as
 
 strToInt :: RNativeFun e

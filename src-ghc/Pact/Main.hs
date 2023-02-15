@@ -47,7 +47,7 @@ import Text.Trifecta as TF hiding (err)
 import Pact.Coverage
 import Pact.Repl
 import Pact.Parse
-import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Runtime
 import Pact.Server.Server
 import Pact.ReplTools
 import Pact.Repl.Types
@@ -191,7 +191,7 @@ main = O.execParser argParser >>= \as -> case as of
     runScript dolog fp coverage = do
       (ref,coverF) <- handleCov coverage
       r <- execScriptF dolog fp coverF
-      withCurrentDirectory (takeDirectory fp) $ mapM_ writeCovReport ref
+      mapM_ (writeCovReportInDir (takeDirectory fp)) ref
       exitLoad r
         where
           handleCov False = return (Nothing,id)

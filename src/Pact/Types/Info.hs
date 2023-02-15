@@ -101,7 +101,7 @@ instance Default Info where def = Info Nothing
 
 -- | Charge zero for Info to avoid quadratic blowup (i.e. for modules)
 instance SizeOf Info where
-  sizeOf _ = 0
+  sizeOf _ _ = 0
 
 -- make an Info that refers to the indicated text
 mkInfo :: Text -> Info

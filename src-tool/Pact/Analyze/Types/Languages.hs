@@ -1374,11 +1374,12 @@ data Term (a :: Ty) where
   ChainData :: SingTy ('TyObject m) -> Term ('TyObject m)
 
   -- Guards
-  MkKsRefGuard  :: Term 'TyStr                  -> Term 'TyGuard
-  MkPactGuard   :: Term 'TyStr                  -> Term 'TyGuard
-  MkUserGuard   :: Guard       -> ETerm         -> Term 'TyGuard
-  MkModuleGuard :: Term 'TyStr                  -> Term 'TyGuard
-  GuardPasses   :: TagId       -> Term 'TyGuard -> Term 'TyBool
+  MkKsRefGuard  :: Term 'TyStr -> Term 'TyGuard
+  MkPactGuard   :: Term 'TyStr -> Term 'TyGuard
+  MkUserGuard   :: Guard -> ETerm -> Term 'TyGuard
+  MkModuleGuard :: Term 'TyStr -> Term 'TyGuard
+  MkCapabilityGuard :: Capability -> [(Text, VarId)] -> Bool -> Term 'TyGuard
+  GuardPasses   :: TagId -> Term 'TyGuard -> Term 'TyBool
 
   -- Table access
   Read
@@ -1489,6 +1490,11 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   MkModuleGuard a ->
       showString "MkModuleGuard "
     . showsPrec 11 a
+  MkCapabilityGuard a b c ->
+      showString "MkCapabilityGuard"
+    . showsPrec 11 a . showChar ' '
+    . showsPrec 11 b . showChar ' '
+    . showsPrec 11 c
   GuardPasses a b ->
       showString "GuardPasses "
     . showsPrec 11 a
@@ -1614,31 +1620,34 @@ prettyTerm ty = \case
   GuardPasses _ _
     -> error "GuardPasses should only appear inside of an Enforce"
 
-  WithCapability a x    -> parensSep ["with-capability", pretty a, prettyTerm ty x]
-  Granting _ _ x        -> prettyTerm ty x
-  HasGrant _ _ _        -> error "HasGrant should only appear inside of an Enforce"
+  WithCapability a x -> parensSep ["with-capability", pretty a, prettyTerm ty x]
+  Granting _ _ x -> prettyTerm ty x
+  HasGrant _ _ _ -> error "HasGrant should only appear inside of an Enforce"
   Read _ _ Nothing    _ tab x -> parensSep ["read", pretty tab, pretty x]
   Read _ _ (Just def) _ tab x -> parensSep ["with-default-read", singPrettyTm ty def, pretty tab, pretty x]
   Write ty' _ _ tab x y -> parensSep ["write", pretty tab, pretty x, singPrettyTm ty' y]
-  PactVersion           -> parensSep ["pact-version"]
-  Format x y            -> parensSep ["format", pretty x, prettyList y]
-  FormatTime x y        -> parensSep ["format", pretty x, pretty y]
-  ParseTime Nothing y   -> parensSep ["parse-time", pretty y]
-  ParseTime (Just x) y  -> parensSep ["parse-time", pretty x, pretty y]
-  Hash x                -> parensSep ["hash", pretty x]
-  ReadKeySet name       -> parensSep ["read-keyset", pretty name]
-  ReadDecimal name      -> parensSep ["read-decimal", pretty name]
-  ReadInteger name      -> parensSep ["read-integer", pretty name]
-  ReadString name       -> parensSep ["read-string", pretty name]
-  PactId                -> parensSep ["pact-id"]
-  ChainData _           -> parensSep ["chain-data"]
-  MkKsRefGuard name     -> parensSep ["keyset-ref-guard", pretty name]
-  MkPactGuard name      -> parensSep ["create-pact-guard", pretty name]
-  MkUserGuard g t       -> parensSep ["create-user-guard", pretty g, pretty t]
-  MkModuleGuard name    -> parensSep ["create-module-guard", pretty name]
-  Pact steps            -> vsep (pretty <$> steps)
-  Yield _tid tm         -> parensSep [ "yield", singPrettyTm ty tm ]
-  Resume _tid           -> "resume"
+  PactVersion -> parensSep ["pact-version"]
+  Format x y -> parensSep ["format", pretty x, prettyList y]
+  FormatTime x y -> parensSep ["format", pretty x, pretty y]
+  ParseTime Nothing y -> parensSep ["parse-time", pretty y]
+  ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]
+  Hash x -> parensSep ["hash", pretty x]
+  ReadKeySet name -> parensSep ["read-keyset", pretty name]
+  ReadDecimal name -> parensSep ["read-decimal", pretty name]
+  ReadInteger name -> parensSep ["read-integer", pretty name]
+  ReadString name -> parensSep ["read-string", pretty name]
+  PactId -> parensSep ["pact-id"]
+  ChainData _ -> parensSep ["chain-data"]
+  MkKsRefGuard name -> parensSep ["keyset-ref-guard", pretty name]
+  MkPactGuard name -> parensSep ["create-pact-guard", pretty name]
+  MkUserGuard g t -> parensSep ["create-user-guard", pretty g, pretty t]
+  MkModuleGuard name -> parensSep ["create-module-guard", pretty name]
+  MkCapabilityGuard (Capability _ n) as isPact -> parensSep
+    [ if isPact then "create-capability-pact-guard" else "create-capability-guard"
+    , parensSep (pretty n:map (pretty.fst) as)]
+  Pact steps -> vsep (pretty <$> steps)
+  Yield _tid tm -> parensSep [ "yield", singPrettyTm ty tm ]
+  Resume _tid -> "resume"
 
 instance Pretty PactStep where
   pretty (Step (exec , execTy) _ mEntity _ mRollback) = parensSep $

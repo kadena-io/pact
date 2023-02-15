@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -16,30 +17,152 @@ module Pact.Native.Guards
 ( guardDefs
 ) where
 
-import Data.Aeson (encode)
 import Data.Attoparsec.Text
-import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
-import Data.Foldable
 import Data.Functor (void)
 import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types.Hash
+import Pact.Runtime.Utils
+import Pact.Types.Capability
+import Pact.Types.KeySet
+import Pact.Types.Pretty
 import Pact.Types.Principal
 import Pact.Types.Runtime
 
 
 guardDefs :: NativeModule
 guardDefs =
-  ( "Guards"
-  , [ createPrincipalDef
+  ( "Guards",
+    [ createUserGuard
+    , createPactGuard
+    , createModuleGuard
+    , createCapabilityGuard
+    , createCapabilityPactGuard
+    , keysetRefGuard
+    , createPrincipalDef
     , validatePrincipalDef
     , isPrincipleDef
     , typeOfPrincipalDef
     ]
   )
+
+
+
+createPactGuard :: NativeDef
+createPactGuard =
+  defRNative "create-pact-guard" createPactGuard'
+  (funType (tTyGuard (Just GTyPact)) [("name",tTyString)])
+  []
+  "Defines a guard predicate by NAME that captures the results of 'pact-id'. \
+  \At enforcement time, the success condition is that at that time 'pact-id' must \
+  \return the same value. In effect this ensures that the guard will only succeed \
+  \within the multi-transaction identified by the pact id."
+  where
+    createPactGuard' :: RNativeFun e
+    createPactGuard' i [TLitString name] = do
+      emitPactWarning $ DeprecatedNative "create-pact-guard"
+                        "Pact guards have been deprecate and will be removed in a future release, please switch to capability guards"
+      pid <- getPactId i
+      return $ (`TGuard` (_faInfo i)) $ GPact $ PactGuard pid name
+    createPactGuard' i as = argsError i as
+
+
+createModuleGuard :: NativeDef
+createModuleGuard =
+  defRNative "create-module-guard" createModuleGuard'
+  (funType (tTyGuard (Just GTyModule)) [("name",tTyString)])
+  []
+  "Defines a guard by NAME that enforces the current module admin predicate."
+  where
+    createModuleGuard' :: RNativeFun e
+    createModuleGuard' i [TLitString name] = do
+      emitPactWarning $ DeprecatedNative "create-module-guard"
+                        "Module guards have been deprecate and will be removed in a future release, please switch to capability guards"
+      findCallingModule >>= \case
+        Just mn ->
+          return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
+        Nothing -> evalError' i "create-module-guard: must call within module"
+    createModuleGuard' i as = argsError i as
+
+keysetRefGuard :: NativeDef
+keysetRefGuard =
+  defRNative "keyset-ref-guard" keysetRefGuard'
+  (funType (tTyGuard (Just GTyKeySetName)) [("keyset-ref",tTyString)])
+  []
+  "Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. \
+  \Concrete keysets are themselves guard types; this function is specifically to \
+  \store references alongside other guards in the database, etc."
+  where
+    keysetRefGuard' :: RNativeFun e
+    keysetRefGuard' fa [TLitString kref] = do
+      n <- ifExecutionFlagSet FlagDisablePact44
+        (pure $ KeySetName kref Nothing)
+        (case parseAnyKeysetName kref of
+           Left {} -> evalError' fa "incorrect keyset name format"
+           Right k -> pure k)
+
+      let i = _faInfo fa
+
+      readRow i KeySets n >>= \case
+        Nothing -> evalError i $ "Keyset reference cannot be found: " <> pretty kref
+        Just _ -> return $ (`TGuard` i) $ GKeySetRef n
+    keysetRefGuard' i as = argsError i as
+
+
+createUserGuard :: NativeDef
+createUserGuard =
+  defNative "create-user-guard" createUserGuard'
+  (funType (tTyGuard (Just GTyUser)) [("closure",TyFun $ funType' tTyBool [])])
+  []
+  "Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, \
+  \to be supplied to indicated function at enforcement time."
+  where
+    createUserGuard' :: NativeFun e
+    createUserGuard' i [TApp App {..} _] = gasUnreduced i [] $ do
+      args <- mapM reduce _appArgs
+      appFun' <- lookupFullyQualifiedTerm _appInfo _appFun
+      fun <- case appFun' of
+        (TVar (Ref (TDef Def{..} _)) _) -> case _dDefType of
+          Defun -> return (QName $ QualifiedName _dModule (asString _dDefName) _dInfo)
+          _ -> evalError _appInfo $ "User guard closure must be defun, found: " <> pretty _dDefType
+        t -> evalError (_tInfo t) $ "User guard closure function must be def: " <> pretty _appFun
+      return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard fun args)
+    createUserGuard' i as = argsError' i as
+
+createCapabilityGuard :: NativeDef
+createCapabilityGuard =
+  defNative "create-capability-guard" createCapabilityGuard'
+  (funType (tTyGuard (Just GTyCapability)) [("capability",TyFun $ funType' tTyBool [])])
+  [LitExample "(create-capability-guard (BANK_DEBIT 10.0))"]
+  "Creates a guard that will enforce that CAPABILITY is acquired."
+
+  where
+    createCapabilityGuard' :: NativeFun e
+    createCapabilityGuard' i [TApp app _] = gasUnreduced i [] $ do
+      (cap,_,(args,_)) <- appToCap app
+      return $ (`TGuard` (_faInfo i)) $
+          GCapability $ CapabilityGuard (_scName cap) args Nothing
+    createCapabilityGuard' i as = argsError' i as
+
+
+createCapabilityPactGuard :: NativeDef
+createCapabilityPactGuard =
+  defNative "create-capability-pact-guard" createCapabilityPactGuard'
+  (funType (tTyGuard (Just GTyCapability)) [("capability",TyFun $ funType' tTyBool [])])
+  [LitExample "(create-capability-pact-guard (ESCROW owner))"]
+  ("Creates a guard that will enforce that CAPABILITY is acquired and " <>
+   "that the currently-executing defpact is operational.")
+
+  where
+    createCapabilityPactGuard' :: NativeFun e
+    createCapabilityPactGuard' i [TApp app _] = gasUnreduced i [] $ do
+      (cap,_,(args,_)) <- appToCap app
+      pid <- getPactId i
+      return $ (`TGuard` (_faInfo i)) $
+          GCapability $ CapabilityGuard (_scName cap) args (Just pid)
+    createCapabilityPactGuard' i as = argsError' i as
+
 
 createPrincipalDef :: NativeDef
 createPrincipalDef =
@@ -55,34 +178,13 @@ createPrincipalDef =
     createPrincipal' i as = argsError i as
 
 createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
-createPrincipal i = \case
-  GPact (PactGuard pid n) -> do
-    chargeGas 1
-    pure $ "p:" <> asString pid <> ":" <> n
-  GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
-    ([k],"keys-all") -> do
-      chargeGas 1
-      pure $ "k:" <> asString k
-    (l,fun) -> do
-      a <- mkHash $ map _pubKey l
-      pure $ "w:" <> asString a <> ":" <> fun
-  GKeySetRef kref -> do
-    chargeGas 1
-    pure $ "r:" <> asString kref
-  GModule (ModuleGuard mn n) -> do
-    chargeGas 1
-    pure $ "m:" <> asString mn <> ":" <> n
-  GUser (UserGuard uf args) -> do
-    args' <- enforcePactValue' args
-    a <- mkHash $ map toJSONPactValue args'
-    pure $ "u:" <> asString uf <> ":" <> asString a
+createPrincipal i g = do
+  g' <- traverse enforcePactValue g
+  mkPrincipalIdent <$> guardToPrincipal chargeGas g'
   where
-    chargeGas amt = void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
-    mkHash bss = do
-      let bs = mconcat bss
-      chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
-      return $ pactHash bs
-    toJSONPactValue = toStrict . encode
+    chargeGas amt =
+      void $ computeGasCommit i "createPrincipal" (GPrincipal amt)
+
 
 validatePrincipalDef :: NativeDef
 validatePrincipalDef =
