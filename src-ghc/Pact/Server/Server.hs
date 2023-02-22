@@ -29,12 +29,13 @@ import Data.Aeson
 import Data.Maybe
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
-
+import Data.Foldable (for_)
 import qualified Data.HashMap.Strict as HashMap
 
 import Data.Word
 import GHC.Generics
 import System.Log.FastLogger
+import System.Directory (doesDirectoryExist)
 import Data.Default
 
 import Pact.Types.Command
@@ -88,11 +89,7 @@ serveLocal = serve_ True
 
 serve_ :: Bool -> FilePath -> SPVSupport -> IO ()
 serve_ isLocal configFile spv = do
-  Config {..} <- Y.decodeFileEither configFile >>= \case
-    Left e -> do
-      putStrLn usage
-      throwIO (userError ("Error loading config file: " ++ show e))
-    Right v -> return v
+  Config {..} <- validateConfigFile configFile
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())
@@ -115,13 +112,30 @@ serve_ isLocal configFile spv = do
   link asyncHist
   runServer histC inC debugFn (fromIntegral _port) _logDir
 
+validateConfigFile :: FilePath -> IO Config
+validateConfigFile fp = Y.decodeFileEither fp >>= \case
+  Left pe -> do
+    putStrLn usage
+    throwIO $ userError $ "Error loading config file: " ++ show pe
+  Right v -> do
+    for_ (_persistDir v) $
+      errOn "Persistence directory does not exist"
+
+    errOn "Log directory does not exist" $ _logDir v
+
+    pure v
+  where
+    errOn errMsg d = doesDirectoryExist d >>= \case
+      True -> pure ()
+      False -> do
+        putStrLn usage
+        throwIO $ userError $ errMsg ++ ": " ++ show d
+
+
+
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
 withTestServe configFile spv app = do
-  Config {..} <- Y.decodeFileEither configFile >>= \case
-    Left e -> do
-      putStrLn usage
-      throwIO (userError ("Error loading config file: " ++ show e))
-    Right v -> return v
+  Config {..} <- validateConfigFile configFile
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())
