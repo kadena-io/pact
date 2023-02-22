@@ -29,13 +29,12 @@ import Data.Aeson
 import Data.Maybe
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
-import Data.Foldable (for_)
 import qualified Data.HashMap.Strict as HashMap
-
+import Data.Foldable (traverse_)
 import Data.Word
 import GHC.Generics
 import System.Log.FastLogger
-import System.Directory (doesDirectoryExist)
+import System.Directory (createDirectoryIfMissing)
 import Data.Default
 
 import Pact.Types.Command
@@ -118,19 +117,9 @@ validateConfigFile fp = Y.decodeFileEither fp >>= \case
     putStrLn usage
     throwIO $ userError $ "Error loading config file: " ++ show pe
   Right v -> do
-    for_ (_persistDir v) $
-      errOn "Persistence directory does not exist"
-
-    errOn "Log directory does not exist" $ _logDir v
-
+    traverse_ (createDirectoryIfMissing True) $ _persistDir v
+    createDirectoryIfMissing True $ _logDir v
     pure v
-  where
-    errOn errMsg d = doesDirectoryExist d >>= \case
-      True -> pure ()
-      False -> do
-        putStrLn usage
-        throwIO $ userError $ errMsg ++ ": " ++ show d
-
 
 
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
