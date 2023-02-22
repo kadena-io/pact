@@ -108,7 +108,7 @@ echo "Downloading artifact from $dlurl ..."
 
 curl -s -L -H "Authorization: token $ghtoken" -o pact-$version-linux-20.04.zip $dlurl
 
-# Get linux 18.04 artifact ===========================
+# Get linux 22.04 artifact ===========================
 
 echo "Looking up linux 22.04 artifact ..."
 
