@@ -1,6 +1,6 @@
 4.6.0
 ---
-* Add `DisablePact46` execution flag (#TODO)
+* Add `DisablePact46` execution flag (#1138)
 * Add Zero Knowledge native operations (#1052)
 * Add deprecation warning system (#1127)
 * Build support for Nix flakes (#1083)
