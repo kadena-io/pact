@@ -1256,6 +1256,18 @@ pact> (ceiling 100.15234 2)
 ```
 
 
+### dec {#dec}
+
+*x*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
+
+
+Cast an integer to a decimal value of integer X as decimal.
+```lisp
+pact> (dec 3)
+3.0
+```
+
+
 ### exp {#exp}
 
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
@@ -1953,7 +1965,7 @@ Set environment gas limit to LIMIT.
 Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect.
 ```lisp
 pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)
-["TOTAL: 7" "map:GUnreduced: 4" "+:GUnreduced: 1" "+:GUnreduced: 1" "+:GUnreduced: 1"]
+["TOTAL: 7" "map:GUnreduced:currTotalGas=4: 4" "+:GUnreduced:currTotalGas=5: 1" ":GIntegerOpCost:(1, ):(1, ):currTotalGas=5: 0" "+:GUnreduced:currTotalGas=6: 1" ":GIntegerOpCost:(1, ):(2, ):currTotalGas=6: 0" "+:GUnreduced:currTotalGas=7: 1" ":GIntegerOpCost:(1, ):(3, ):currTotalGas=7: 0"]
 ```
 
 
