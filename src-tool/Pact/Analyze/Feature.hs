@@ -505,8 +505,8 @@ doc FDecCast = Doc
       Map.empty
       $ Fun
         Nothing
-        [ ("x", TyCon dec)]
-        (TyCon int)
+        [ ("x", TyCon int)]
+        (TyCon dec)
   ]
 doc FModulus = Doc
   "mod"
