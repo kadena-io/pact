@@ -68,6 +68,7 @@ evalNumerical (DecUnaryArithOp op x)   = evalUnaryArithOp op x
 evalNumerical (ModOp x y)              = evalModOp x y
 evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
 evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
+evalNumerical (CastingLikeOp op x)     = evalCastingLikeOp op x
 evalNumerical (BitwiseOp op args)      = evalBitwiseOp op args
 
 -- In principle this could share an implementation with evalDecArithOp. In
@@ -188,9 +189,22 @@ evalRoundingLikeOp2 op xT precisionT = do
   rShiftD' precision . fromInteger' <$>
     evalRoundingLikeOp1 op (inject' (lShiftD' precision x))
 
+evalCastingLikeOp
+  :: Analyzer m
+  => CastingLikeOp
+  -> TermOf m 'TyInteger
+  -> m (S Decimal)
+evalCastingLikeOp op xT = do
+  x <- eval @_ @'TyInteger xT
+  pure $ case op of
+    Dec -> upCastS x
+
 -- Round a real exactly between two integers (_.5) to the nearest even
 banker'sMethodS :: S Decimal -> S Integer
 banker'sMethodS (S prov x) = S prov $ banker'sMethod x
+
+upCastS :: S Integer -> S Decimal
+upCastS (S prov x) = S prov $ upCast x
 
 evalBitwiseOp
   :: Analyzer m

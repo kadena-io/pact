@@ -80,6 +80,7 @@ data Feature
   | FBankersRound
   | FCeilingRound
   | FFloorRound
+  | FDecCast
   | FModulus
   -- Bitwise operators
   | FBitwiseAnd
@@ -492,6 +493,19 @@ doc FFloorRound = Doc
         [ ("x",    TyCon dec)
         , ("prec", TyCon int)
         ]
+        (TyCon int)
+  ]
+doc FDecCast = Doc
+  "dec"
+  CNumerical
+  InvAndProp
+  "Casts the integer `x` to its decimal equivalent."
+  [ Usage
+      "(dec x)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon dec)]
         (TyCon int)
   ]
 doc FModulus = Doc
@@ -1698,6 +1712,7 @@ PAT(SAbsoluteValue, FAbsoluteValue)
 PAT(SBankersRound, FBankersRound)
 PAT(SCeilingRound, FCeilingRound)
 PAT(SFloorRound, FFloorRound)
+PAT(SDecCast, FDecCast)
 PAT(SModulus, FModulus)
 PAT(SBitwiseAnd, FBitwiseAnd)
 PAT(SBitwiseOr, FBitwiseOr)

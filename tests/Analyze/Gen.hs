@@ -92,6 +92,9 @@ genUnaryArithOp = Gen.element [Negate, Abs] -- Sqrt, Ln, Exp, Signum
 genRoundingLikeOp :: MonadGen m => m RoundingLikeOp
 genRoundingLikeOp = Gen.element [Round, Ceiling, Floor]
 
+genCastingLikeOp :: MonadGen m => m CastingLikeOp
+genCastingLikeOp = Gen.element [Dec]
+
 genComparisonOp :: MonadGen m => m ComparisonOp
 genComparisonOp = Gen.element [Gt, Lt, Gte, Lte, Eq, Neq]
 
@@ -197,6 +200,9 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
   , do x <- genCore (BoundedDecimal size)
        op <- genRoundingLikeOp
        mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
+  , do x <- genCore (BoundedInt size)
+       op <- genCastingLikeOp
+       mkDec $ CastingLikeOp op (extract x)
   , genCore strSize >>= mkInt . StrLength . extract
   , do op <- Gen.element [BitwiseAnd, BitwiseOr, Xor]
        Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt size)) $
