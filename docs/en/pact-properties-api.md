@@ -233,8 +233,8 @@ Supported in either invariants or properties.
 (dec x)
 ```
 
-* takes `x`: `decimal`
-* produces `integer`
+* takes `x`: `integer`
+* produces `decimal`
 
 Casts the integer `x` to its decimal equivalent.
 
