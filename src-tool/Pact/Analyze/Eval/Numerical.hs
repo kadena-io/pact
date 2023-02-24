@@ -197,14 +197,14 @@ evalCastingLikeOp
 evalCastingLikeOp op xT = do
   x <- eval @_ @'TyInteger xT
   pure $ case op of
-    Dec -> upCastS x
+    Dec -> decCastS x
 
 -- Round a real exactly between two integers (_.5) to the nearest even
 banker'sMethodS :: S Decimal -> S Integer
 banker'sMethodS (S prov x) = S prov $ banker'sMethod x
 
-upCastS :: S Integer -> S Decimal
-upCastS (S prov x) = S prov $ upCast x
+decCastS :: S Integer -> S Decimal
+decCastS (S prov x) = S prov $ decCast x
 
 evalBitwiseOp
   :: Analyzer m

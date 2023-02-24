@@ -141,8 +141,8 @@ banker'sMethod :: SBV Decimal -> SBV Integer
 banker'sMethod d
   = roundingDiv (coerceSBV @Decimal @Integer d) (coerceSBV @Decimal @Integer 1)
 
-upCast :: SBV Integer -> SBV Decimal
-upCast d
+decCast :: SBV Integer -> SBV Decimal
+decCast d
   = coerceSBV @Integer @Decimal d
 
 -- (Banker's method) rounding division for integers.
