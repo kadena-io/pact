@@ -260,7 +260,7 @@ absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInte
   abs' i as = argsError i as
 
 decDef :: NativeDef
-decDef = defDecCast "dec" "Cast an integer to a decimal" fromIntegral
+decDef = defCast "dec" "Cast an integer to a decimal" fromInteger
 
 roundDef :: NativeDef
 roundDef = defTrunc "round" "Performs Banker's rounding" round
@@ -374,8 +374,8 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
               | otherwise = evalError' i "Negative precision not allowed"
           fun i as = argsError i as
 
-defDecCast :: NativeDefName -> Text -> (Integer -> Rational) -> NativeDef
-defDecCast n desc op = defRNative n fun (unaryTy tTyDecimal tTyInteger)
+defCast :: NativeDefName -> Text -> (Integer -> Rational) -> NativeDef
+defCast n desc op = defRNative n fun (unaryTy tTyDecimal tTyInteger)
                      [ ExecExample $ "(" <> asString n <> " 3)"
                      ]
                      (desc <> " value of integer X as decimal.")
