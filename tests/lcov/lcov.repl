@@ -1,0 +1,22 @@
+(load "lcov.pact")
+(typecheck 'covtest)
+(env-data { 'k: ["key"] })
+
+(create 'a (read-keyset 'k) CONST)
+
+(expect-failure
+  "update guard"
+  "Keyset failure"
+  (update-val 'a 2.0)
+  )
+
+(env-keys ['key])
+
+(update-val 'a 2.0)
+
+(expect-failure
+  "must increase"
+  "must increase"
+  (increase 'a 1.0))
+
+;; skip success test

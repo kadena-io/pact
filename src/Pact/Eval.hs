@@ -1129,6 +1129,9 @@ reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   case _dDefType of
     Defun ->
+#ifdef ADVICE
+      eAdvise ai (AdviceUser d) $ dup $
+#endif
       functionApp _dDefName _dFunType (Just _dModule) as _dDefBody (_mDocs _dMeta) ai
     Defpact -> do
       g <- computeUserAppGas d ai
@@ -1228,7 +1231,7 @@ evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
 evalUserAppBody _d@Def{..} (as',ft') ai g run = guardRecursion fname (Just _dModule) $
 #ifdef ADVICE
-  eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
+  eAdvise ai (AdviceUser _d) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
 #else
   appCall fa ai as' $ fmap (g,) $ run bod'
 #endif
