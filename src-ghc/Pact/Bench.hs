@@ -329,7 +329,8 @@ main = do
   let cleanupSqlite = do
         c <- readMVar $ pdPactDbVar sqliteDb
         void $ closeSQLite $ _db c
-        removeFile sqliteFile
+        removeDirectoryRecursive "log"
+
       closeSqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
 
   defaultMain
