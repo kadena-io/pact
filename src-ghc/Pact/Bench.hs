@@ -309,7 +309,7 @@ main = do
   void $ loadBenchModule mockPersistDb
   void $ runPactExec def "initMockPersistDb" signer Null Nothing mockPersistDb benchCmd
   !cmds <- force <$> traverse (mkBenchCmd [(keyPair,[])]) exps
-  let sqliteFile = "log/bench.sqlite"
+  sqliteFile <- "log/bench.sqlite" <$ createDirectoryIfMissing True "log"
   sqliteDb <- perfEnv dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
