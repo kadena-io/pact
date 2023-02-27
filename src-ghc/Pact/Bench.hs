@@ -309,7 +309,7 @@ main = do
   void $ loadBenchModule mockPersistDb
   void $ runPactExec def "initMockPersistDb" signer Null Nothing mockPersistDb benchCmd
   !cmds <- force <$> traverse (mkBenchCmd [(keyPair,[])]) exps
-  sqliteFile <- "log/bench.sqlite" <$ createDirectoryIfMissing True "log"
+  let sqliteFile = "log/bench.sqlite"
   sqliteDb <- perfEnv dbPerf <$> mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig sqliteFile fastNoJournalPragmas) neverLog
   initSchema sqliteDb
   void $ loadBenchModule sqliteDb
@@ -329,7 +329,7 @@ main = do
   let cleanupSqlite = do
         c <- readMVar $ pdPactDbVar sqliteDb
         void $ closeSQLite $ _db c
-        removeDirectoryRecursive "log"
+        removeFile sqliteFile
 
       closeSqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
 
