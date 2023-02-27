@@ -33,3 +33,4 @@ coverage
 hie.yaml
 commands.sqlite
 cabal.project.local*
+/golden/lcov/actual

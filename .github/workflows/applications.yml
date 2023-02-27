@@ -20,7 +20,7 @@ jobs:
           ghc: '8.10.7'
           cabal: '3.8'
           cabalcache: 'true'
-          flags: '-build-tool'
+          flags: '-build-tool +no-advice'
         - os: 'ubuntu-22.04'
           ghc: '9.0.2'
           cabal: '3.8'
@@ -289,4 +289,3 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
-
