@@ -330,7 +330,6 @@ main = do
         c <- readMVar $ pdPactDbVar sqliteDb
         void $ closeSQLite $ _db c
         removeFile sqliteFile
-
       closeSqlEnv b = envWithCleanup (return ()) (const cleanupSqlite) (const b)
 
   defaultMain
