@@ -18,6 +18,7 @@ docs/kr/_build
 /web/pact.min.js
 /web/npm-debug.log
 /deleteme.sqllite
+log/
 /.pact-history
 /result
 public
