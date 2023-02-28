@@ -22,3 +22,34 @@
 ;; by the session key should fail.
 (expect-failure "session key is not in bad-keyset"
   (enforce-session 'bad-keyset))
+
+(module dbtest dbtest-admin
+
+  (defcap dbtest-admin () true)
+
+  (defschema accounts-schema
+    keyset:guard
+  )
+
+  (deftable accounts:{accounts-schema})
+
+  (defcap SESSION (account-id:string)
+    (with-read accounts account-id
+      { 'keyset:=keyset }
+      (enforce-session keyset))
+  )
+
+  (defun test-session (account-id:string msg:string)
+    (with-capability (SESSION account-id)
+    (format "{} has a session, and {}" [account-id, msg]))
+  )
+
+)
+
+(create-table accounts)
+(define-keyset 'new-keyset (read-keyset "keyset"))
+(insert accounts "test-user" { 'keyset: (read-keyset "keyset") })
+(expect "test"
+  (dbtest.test-session "test-user" "hello")
+  "test-user has a session, and hello"
+)

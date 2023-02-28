@@ -112,6 +112,7 @@ defaultGasTable =
   ,("enforce-guard", 8)
   ,("enforce-keyset", 8)
   ,("enforce-one", 6)
+  ,("enforce-session", 8)
   ,("enforce-pact-version", 1)
   ,("enumerate", 1)
   ,("exp", 5)
