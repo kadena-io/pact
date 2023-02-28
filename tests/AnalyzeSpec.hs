@@ -3859,6 +3859,16 @@ spec = describe "analyze" $ do
             (min a (min b c)))
           |]
 
+  describe "list distinct" $ do
+    let code9 model = [text|
+          (defun test:[integer] (a:integer b:integer)
+            @model $model
+            (enforce (not (= a b)) "")
+            (distinct [a b a]))
+          |]
+    expectVerified  $ code9 "[(property (= result [a b]))]"
+    expectFalsified $ code9 "[(property (= result [a b a]))]"
+
   describe "identity" $ do
     expectVerified [text|
           (defun test:integer ()

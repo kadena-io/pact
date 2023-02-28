@@ -242,6 +242,11 @@ evalCore (LiteralList ty xs) = withSymVal ty $ withSing ty $ do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv $ SBVL.implode vals
 
+evalCore (ListDistinct ty list) = withSymVal ty $ withSing ty $ withEq ty $ do
+  S _ list' <- eval list
+  pure $ sansProv (SBVL.reverse (bfoldr listBound (\a b -> ite (SBVL.elem a b) b (a SBVL..: b)) SBVL.nil list'))
+
+ 
 evalCore (ListDrop ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list
@@ -296,7 +301,7 @@ evalCore (ListFilter tya (Open vid _ f) as)
         (\sbva svblst -> do
           S _ x' <- withVar vid (mkAVal' sbva) (eval f)
           pure $ ite x' (sbva .: svblst) svblst)
-        (literal [])
+        SBVL.nil
   sansProv <$> bfilterM as'
 
 evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
