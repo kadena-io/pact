@@ -402,6 +402,14 @@ inferPreProp preProp = case preProp of
         -> pure $ Some SInteger $ CoreProp $ ListLength ty lst
       _ -> throwErrorIn preProp "expected string or list argument to length"
 
+  PreApp s [a]
+    | s == SDistinct -> do
+        arg <- inferPreProp a
+        case arg of
+          Some (SList ty) ls -> pure $ Some (SList ty) $ CoreProp $ ListDistinct ty ls
+          _otherwise -> throwErrorIn preProp "expected list argument"
+
+
   PreApp s [a, b] | s == SModulus -> do
     it <- PNumerical ... ModOp <$> checkPreProp SInteger a <*> checkPreProp SInteger b
     pure $ Some SInteger it

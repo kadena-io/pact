@@ -3869,6 +3869,14 @@ spec = describe "analyze" $ do
     expectVerified  $ code9 "[(property (= result [a b]))]"
     expectFalsified $ code9 "[(property (= result [a b a]))]"
 
+  describe "list distinct property" $ do
+    let code model = [text|
+          (defun test:[integer] (a:integer b:integer)
+            @model $model
+            (distinct [a b a]))
+          |]
+    expectVerified  $ code "[(property (= result (distinct [a b a])))]"
+
   describe "identity" $ do
     expectVerified [text|
           (defun test:integer ()
