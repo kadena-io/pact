@@ -1713,8 +1713,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
       shimNative' node fn [] "original list" xs'
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"enumerate" args ->
-    shimNative' node fn args "[0]" (Some (SList SInteger) (Lit' [0]))
+  AST_NFun _node _fn@"enumerate" args -> do
+    args' <- for args $ \arg -> translateNode arg >>= \case
+      Some SInteger i' -> pure i'
+      _otherwise -> unexpectedNode astNode
+    case args' of
+      [start, stop]       -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate start stop (Lit' 1)
+      [start, stop, step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate start stop step
+      _otherwise -> unexpectedNode astNode
 
   AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
     -- uncaught case is dynamic list, sub format string

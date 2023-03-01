@@ -163,6 +163,34 @@ evalCore (Compose tya tyb _ a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
   b' <- withVar vida (mkAVal a') $ withSing tyb $ eval tmb
   withVar vidb (mkAVal b') $ eval tmc
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
+
+evalCore (Enumerate from to step)          =  do
+  S _ from' <- eval from
+  S _ to'   <- eval to
+  S _ step' <- eval step
+  -- case unliteral step' of
+  --   Just s
+  --     | s > 0 -> undefined
+  --   Just s -> undefined
+  let
+    goPos :: SBV Integer -> SBV Integer -> SBV Integer -> SBV [Integer]
+    goPos b e s = ite (b .<= e) (b SBVL..: goPos (b + s) e s) SBVL.nil
+
+    goNeg :: SBV Integer -> SBV Integer -> SBV Integer -> SBV [Integer]
+    goNeg b e s = ite (b .>= e) (b SBVL..: goNeg (b + s) e s) SBVL.nil
+    
+  let algPos = ite (from' .== to') (SBVL.singleton from')
+              (ite (step' .== 0) (SBVL.singleton from' )
+               (ite (from' + step' .> to') (SBVL.singleton from') (goPos from' to' step')))
+               
+      algNeg =  ite (step' .== 0) (SBVL.singleton from' )
+                (ite (from' + step' .< to') (SBVL.singleton from') (goNeg from' to' step'))
+
+
+  markFailure $ (from' .< to' .&& step' .< 0) .|| (from' .> to' .&& step' .> 0)
+
+  pure $ sansProv (ite (from' .<= to') algPos algNeg)
+
 evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
 evalCore (StrToInt s)                      = evalStrToInt s
