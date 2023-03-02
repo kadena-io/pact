@@ -621,6 +621,11 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid (Inj Success)
 
+  describe "describe-namespace" $ do
+    let code = [text|(defun test () (describe-namespace 'test))|]
+    expectVerificationFailure code
+                      
+
   --
   -- TODO: test use of read-keyset from property once possible
   --
