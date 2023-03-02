@@ -82,7 +82,7 @@ addDef = defGasRNative "+" plus plusTy
            def
            def)
     plus g i as =
-      (g,) <$> binop' (+) (+) i as
+      (g,) <$> binop' "+" (+) (+) i as
     {-# INLINE plus #-}
 
     gasConcat g fi aLength bLength = computeGas' g fi (GConcatenation aLength bLength)
@@ -99,7 +99,7 @@ subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
     minus :: RNativeFun e
     minus _ [TLiteral (LInteger n) _] = return (toTerm (negate n))
     minus _ [TLiteral (LDecimal n) _] = return (toTerm (negate n))
-    minus i as = binop' (-) (-) i as
+    minus i as = binop' "-" (-) (-) i as
     {-# INLINE minus #-}
 
     unaryNumTys :: FunTypes n
@@ -110,7 +110,7 @@ mulDef = defRNative "*" mul' coerceBinNum
   ["(* 0.5 10.0)", "(* 3 5)"] "Multiply X by Y."
   where
   mul' :: RNativeFun e
-  mul' = binop' (*) (*)
+  mul' = binop' "*" (*) (*)
 
 
 divDef :: NativeDef
@@ -119,7 +119,7 @@ divDef = defRNative "/" divide' coerceBinNum
   where
     divide' :: RNativeFun e
     divide' fi as@[TLiteral a _,TLiteral b _] =
-      binop divDec divInt fi as
+      binop "/" divDec divInt fi as
       where
       nonZeroDiv b' = when (b' == 0) $ evalError' fi $ "Division by 0" <> ": " <> pretty (a,b)
       divDec a' b' = nonZeroDiv b' *> liftDecimalOp (/) a' b'
@@ -132,12 +132,15 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   pow :: RNativeFun e
   pow i as@[TLiteral a _,TLiteral b _] = do
 #if defined(ghcjs_HOST_OS)
-    binop (\a' b' -> liftDecF i (**) a' b') intPow i as
+    binop "^" (\a' b' -> liftDecF i (**) a' b') intPow i as
 #else
-    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecF i (**)) (liftDecF i trans_pow)
-    binop decimalPow intPow i as
+    decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecPowF i (**)) (liftDecPowF i trans_pow)
+    binop "^" decimalPow intPow i as
 #endif
     where
+    liftDecPowF fi f lop rop = do
+      _ <- computeGasCommit def "" (GDecimalOpCost lop rop)
+      liftDecF fi f lop rop
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
       liftIntegerOp (^) b' e
@@ -161,7 +164,14 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 
 twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
 twoArgIntOpGas loperand roperand =
-  computeGasCommit def "" (GIntegerOpCost loperand roperand)
+  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing))
+
+twoArgDecOpGas :: Decimal -> Decimal -> Eval e Gas
+twoArgDecOpGas loperand roperand =
+  computeGasCommit def ""
+  (GIntegerOpCost
+    (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
+    (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand))))
 
 legalLogArg :: Literal -> Bool
 legalLogArg = \case
@@ -178,21 +188,25 @@ litGt0 = \case
 logDef :: NativeDef
 logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
+  liftLogDec fi f a b = do
+    _ <- computeGasCommit def "" (GDecimalOpCost a b)
+    liftDecF fi f a b
   log' :: RNativeFun e
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
 #if defined(ghcjs_HOST_OS)
-    binop (\a b -> liftDecF fi logBase a b)
+    binop "log"
+          (\a b -> liftDecF fi logBase a b)
           (\a b -> liftIntF fi logBase a b)
           fi
           as
 #else
     decimalLogBase <-
-      ifExecutionFlagSet' FlagDisableNewTrans (liftDecF fi logBase) (liftDecF fi trans_log)
+      ifExecutionFlagSet' FlagDisableNewTrans (liftLogDec fi logBase) (liftLogDec fi trans_log)
     integerLogBase <-
       ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntF fi trans_log)
-    binop decimalLogBase integerLogBase fi as
+    binop "log" decimalLogBase integerLogBase fi as
 #endif
   log' fi as = argsError fi as
 
@@ -457,24 +471,36 @@ liftIntegerOp f a b = do
 
 liftDecimalOp :: (Decimal -> Decimal -> Decimal) -> Decimal -> Decimal -> Eval e Decimal
 liftDecimalOp f a b = do
-  unlessExecutionFlagSet FlagDisablePact43 $ twoArgIntOpGas (decimalMantissa a) (decimalMantissa b)
+  unlessExecutionFlagSet FlagDisablePact43 $ twoArgDecOpGas a b
   pure (f a b)
 
 
-binop' :: (Decimal -> Decimal -> Decimal) -> (Integer -> Integer -> Integer) -> RNativeFun e
-binop' dop iop i as = binop (liftDecimalOp dop) (liftIntegerOp iop) i as
+binop'
+  :: NativeDefName
+  -> (Decimal -> Decimal -> Decimal)
+  -> (Integer -> Integer -> Integer)
+  -> RNativeFun e
+binop' ndef dop iop i as = binop ndef (liftDecimalOp dop) (liftIntegerOp iop) i as
 
 -- | Perform binary math operator with coercion to Decimal as necessary.
-binop :: (Decimal -> Decimal -> Eval e Decimal) ->
-       (Integer -> Integer -> Eval e Integer) -> RNativeFun e
-binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
+binop
+  :: NativeDefName
+  -> (Decimal -> Decimal -> Eval e Decimal)
+  -> (Integer -> Integer -> Eval e Integer)
+  -> RNativeFun e
+binop ndef dop iop fi as@[TLiteral a _,TLiteral b _] = do
   case (a,b) of
     (LInteger i,LInteger j) -> toTerm <$> (i `iop` j)
-    (LDecimal i,LDecimal j) -> toTerm <$> (i `dop` j)
-    (LInteger i,LDecimal j) -> toTerm <$> (fromIntegral i `dop` j)
-    (LDecimal i,LInteger j) -> toTerm <$> (i `dop` fromIntegral j)
+    (LDecimal i,LDecimal j) ->
+      toTerm <$> (i `dop` j)
+    (LInteger i,LDecimal j) -> do
+      emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
+      toTerm <$> (fromIntegral i `dop` j)
+    (LDecimal i,LInteger j) -> do
+      emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
+      toTerm <$> (i `dop` fromIntegral j)
     _ -> argsError fi as
-binop _ _ fi as = argsError fi as
+binop _ _ _ fi as = argsError fi as
 {-# INLINE binop #-}
 
 dec2F :: Decimal -> Double

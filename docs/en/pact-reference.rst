@@ -6,8 +6,9 @@ Pact Smart Contract Language Reference
 This document is a reference for the Pact smart-contract language,
 designed for correct, transactional execution on a `high-performance
 blockchain <http://kadena.io>`__. For more background, please see the
-`white paper <http://kadena.io/docs/Kadena-PactWhitepaper.pdf>`__ or the
-`pact home page <http://kadena.io/#pactModal>`__.
+`white
+paper <https://docs.kadena.io/basics/whitepapers/pact-smart-contract-language>`__
+or the `pact home page <http://kadena.io/#pactModal>`__.
 
 Copyright (c) 2016 - 2018, Stuart Popejoy. All Rights Reserved.
 
@@ -2779,7 +2780,7 @@ expressions in a module include:
 
    (interface coin-sig
      "'coin-sig' represents the Kadena Coin Contract interface. This contract     \
-     \provides both the the general interface for a Kadena's token, supplying a   \
+     \provides both the general interface for a Kadena's token, supplying a   \
      \transfer function, coinbase, account creation and balance query."
      (defun create-account:string (account:string guard:guard)
        @doc "Create an account for ACCOUNT, with GUARD controlling access to the  \

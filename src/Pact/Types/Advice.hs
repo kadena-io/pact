@@ -49,7 +49,7 @@ data DbContext =
 -- the bracketed operation.
 data AdviceContext r where
     -- | Advise on user function, return result
-    AdviceUser :: !(Def Ref,[Term Name]) -> AdviceContext (Term Name)
+    AdviceUser :: !(Def Ref) -> AdviceContext (Term Name)
     -- | Advise on native, return result
     AdviceNative :: !NativeDefName -> AdviceContext (Term Name)
     -- | Transaction execution wrapper

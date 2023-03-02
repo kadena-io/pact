@@ -266,6 +266,10 @@ pattern ShortTableName tn <- Table _node (Lang.TableName tn)
 pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
 pattern NativeFuncSpecial f bdy <- FNative _ f _ (Just (_,SBinding bdy))
 
+pattern AST_Select :: Node -> Text -> [AST Node] -> AST Node -> AST Node
+pattern AST_Select node tn columns filters
+  <- App node (NativeFunc "select") [ShortTableName tn, List _ columns, filters]
+
 pattern AST_Read :: Node -> Text -> AST Node -> AST Node
 pattern AST_Read node tn key <- App node (NativeFunc "read") [ShortTableName tn, key]
 
