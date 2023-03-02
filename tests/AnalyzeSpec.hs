@@ -2687,6 +2687,14 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "hash property" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash "hello")))]
+              (hash "hello"))|]
+    expectVerified code
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|

@@ -649,6 +649,11 @@ inferPreProp preProp = case preProp of
     str' <- checkPreProp SStr str
     pure $ Some SInteger $ CoreProp $ StrToInt str'
 
+  PreApp s [str] | s == SStringHash -> do
+    str' <- checkPreProp SStr str
+    pure $ Some SStr $ CoreProp $ StrHash str'
+
+
   PreApp s [str, base] | s == SStringToInteger -> do
     str'  <- checkPreProp SStr str
     base' <- checkPreProp SInteger base

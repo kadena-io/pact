@@ -206,6 +206,9 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   StrToIntBase :: t 'TyInteger -> t 'TyStr -> Core t 'TyInteger
   StrContains  :: t 'TyStr     -> t 'TyStr -> Core t 'TyBool
 
+  -- | Hash (Blake2b 256bit) of strings
+  StrHash      :: t 'TyStr -> Core t 'TyStr
+
   -- numeric ops
   Numerical    :: Numerical t a -> Core t a
 
@@ -719,6 +722,7 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
   StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showChar ' ' . showsTm 11 b
   StrContains  a b -> showString "StrContains "  . showsTm 11 a . showChar ' ' . showsTm 11 b
+  StrHash a        -> showString "StrHash "      . showsTm 11 a
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
   DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
@@ -957,6 +961,7 @@ prettyCore ty = \case
   StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
   StrContains needle haystack
     -> parensSep [pretty SContains, prettyTm needle, prettyTm haystack]
+  StrHash x                -> parensSep [pretty SStringHash, prettyTm x]
   Numerical tm             -> prettyNumerical ty tm
   IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
   DecAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
@@ -1822,6 +1827,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     StrToIntBase <$> f tm1 <*> f tm2
   StrContains tm1 tm2 ->
     StrContains <$> f tm1 <*> f tm2
+  StrHash tm1 ->
+    StrHash <$> f tm1
   Numerical num ->
     Numerical <$> numF num
   IntAddTime tm1 tm2 ->

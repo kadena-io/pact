@@ -122,6 +122,7 @@ data Feature
   | FStringLength
   | FConcatenation
   | FStringToInteger
+  | FStringHash
   | FStringTake
   | FStringDrop
   -- Temporal operators
@@ -1188,6 +1189,21 @@ doc FStringToInteger = Doc
         (TyCon int)
   ]
 
+doc FStringHash = Doc
+  "hash"
+  CString
+  PropOnly
+  "BLAKE2b 256-bit hash of string"
+  [ Usage
+      "(hash s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)
+        ]
+        (TyCon str)
+  ]
+
 -- Temporal features
 
 doc FTemporalAddition = Doc
@@ -1736,6 +1752,7 @@ PAT(SStringTake, FStringTake)
 PAT(SStringDrop, FStringDrop)
 PAT(SConcatenation, FConcatenation)
 PAT(SStringToInteger, FStringToInteger)
+PAT(SStringHash, FStringHash)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)

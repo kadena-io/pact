@@ -39,6 +39,9 @@ import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
 import           Pact.Types.Pretty           (renderCompactString)
+import Pact.Types.Hash (pactHash)
+import Pact.Types.Util (AsString(asString))
+import Data.Text.Encoding (encodeUtf8)
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -210,6 +213,17 @@ evalCore (StrContains needle haystack) = do
     _sSbv (coerceS @Str @String needle')
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
+
+evalCore (StrHash sT) = do
+  s' <- eval sT
+  let s = coerceS @Str @String s'
+      sHash = literalS . Str . T.unpack . asString . pactHash
+
+  case unliteralS s of
+    Just str' -> pure (sHash (encodeUtf8 (T.pack str')))
+    Nothing -> throwErrorNoLoc $
+          FailureMessage "Hash of strings requires statically known content"
+
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
   S _ haystack' <- withSing ty $ eval haystack
