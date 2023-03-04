@@ -739,7 +739,7 @@ guardCodec = Codec enc dec
     enc (GModule g) = toJSON g
     enc (GUser g) = toJSON g
     enc (GCapability g) = toJSON g
-    {-# INLINE enc #-}
+
     dec v =
       (GKeySet <$> parseJSON v) <|>
       (withObject "KeySetRef" $ \o -> GKeySetRef <$> o .: keyNamef) v <|>
@@ -747,7 +747,7 @@ guardCodec = Codec enc dec
       (GModule <$> parseJSON v) <|>
       (GUser <$> parseJSON v) <|>
       (GCapability <$> parseJSON v)
-    {-# INLINE dec #-}
+
     keyNamef = "keysetref"
 
 
@@ -1414,7 +1414,7 @@ tStr = toTerm
 
 tLit :: Literal -> Term n
 tLit = (`TLiteral` def)
-{-# INLINE tLit #-}
+
 
 -- Support 'termEq' in Ref'
 refEq :: Eq1 Guard => Eq n => Ref' (Term n) -> Ref' (Term n) -> Bool
@@ -1469,7 +1469,7 @@ typeof t = case t of
       TTable {..} -> Right $ TySchema TyTable _tTableType def
       TDynamic {} -> Left "dynamic"
       TModRef m _ -> Right $ modRefTy m
-{-# INLINE typeof #-}
+
 
 -- | Populate 'TyModule' using a 'ModRef'
 modRefTy :: ModRef -> Type (Term a)

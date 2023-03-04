@@ -107,7 +107,7 @@ instance (FromJSON a) => FromJSON (Command a) where
                 Command <$> (o .: "cmd")
                         <*> (o .: "sigs" >>= parseJSON)
                         <*> (o .: "hash")
-    {-# INLINE parseJSON #-}
+
 
 instance NFData a => NFData (Command a)
 
@@ -195,7 +195,7 @@ verifyCommand orig@Command{..} =
                     =<< A.eitherDecodeStrict' _cmdPayload
 
     verifiedHash = verifyHash _cmdHash _cmdPayload
-{-# INLINE verifyCommand #-}
+
 
 hasInvalidSigs :: PactHash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers

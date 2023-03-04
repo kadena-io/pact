@@ -42,14 +42,14 @@ instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
 instance (Serialize i) => Serialize (DecimalRaw i) where
     put (Decimal p i) = put p >> put i
     get = Decimal <$> get <*> get
-    {-# INLINE put #-}
-    {-# INLINE get #-}
+
+
 
 instance Serialize A.Value where
     put v = put (A.encode v)
     get = get >>= \g -> either fail return $ A.eitherDecode g
-    {-# INLINE put #-}
-    {-# INLINE get #-}
+
+
 
 instance NFData Delta
 

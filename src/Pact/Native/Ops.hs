@@ -83,7 +83,7 @@ addDef = defGasRNative "+" plus plusTy
            def)
     plus g i as =
       (g,) <$> binop' "+" (+) (+) i as
-    {-# INLINE plus #-}
+
 
     gasConcat g fi aLength bLength = computeGas' g fi (GConcatenation aLength bLength)
 
@@ -100,7 +100,7 @@ subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
     minus _ [TLiteral (LInteger n) _] = return (toTerm (negate n))
     minus _ [TLiteral (LDecimal n) _] = return (toTerm (negate n))
     minus i as = binop' "-" (-) (-) i as
-    {-# INLINE minus #-}
+
 
     unaryNumTys :: FunTypes n
     unaryNumTys = unaryTy numA numA
@@ -426,7 +426,7 @@ eq f i as = case as of
          $ "cannot compare incompatible types: "
          <> pretty (typeof' a) <> ", " <> pretty (typeof' b)
   _ -> argsError i as
-{-# INLINE eq #-}
+
 
 -- | Convenience for singleton unary 'FunTys'. Argument is named X.
 unaryTy :: Type n -> Type n -> FunTypes n
@@ -462,7 +462,7 @@ cmp cmpFun fi as = do
       _ -> argsError fi as
     _ -> argsError fi as
   return $ toTerm (cmpFun c)
-{-# INLINE cmp #-}
+
 
 liftIntegerOp :: (Integer -> Integer -> Integer) -> Integer -> Integer -> Eval e Integer
 liftIntegerOp f a b = do
@@ -501,7 +501,7 @@ binop ndef dop iop fi as@[TLiteral a _,TLiteral b _] = do
       toTerm <$> (i `dop` fromIntegral j)
     _ -> argsError fi as
 binop _ _ _ fi as = argsError fi as
-{-# INLINE binop #-}
+
 
 dec2F :: Decimal -> Double
 dec2F = fromRational . toRational

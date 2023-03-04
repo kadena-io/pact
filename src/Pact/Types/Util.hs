@@ -77,7 +77,7 @@ class ParseText a where
 
 fromText :: ParseText a => Text -> Result a
 fromText = parse parseText
-{-# INLINE fromText #-}
+
 
 resultToEither :: Result a -> Either String a
 resultToEither (Success s) = Right s
@@ -128,7 +128,7 @@ parseB64UrlUnpaddedText :: Text -> Parser ByteString
 parseB64UrlUnpaddedText t = case decodeBase64UrlUnpadded (encodeUtf8 t) of
   Right s -> return s
   Left e -> fail $ "Base64URL decode failed: " ++ e
-{-# INLINE parseB64UrlUnpaddedText #-}
+
 
 parseB64UrlUnpaddedText' :: Text -> Either String ByteString
 parseB64UrlUnpaddedText' = resultToEither . parse parseB64UrlUnpaddedText
@@ -145,13 +145,13 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
 
 parseB16JSON :: Value -> Parser ByteString
 parseB16JSON = withText "Base16" parseB16Text
-{-# INLINE parseB16JSON #-}
+
 
 parseB16Text :: Text -> Parser ByteString
 parseB16Text t = case B16.decode (encodeUtf8 t) of
                  (s,leftovers) | leftovers == B.empty -> return s
                                | otherwise -> fail $ "Base16 decode failed: " ++ show t
-{-# INLINE parseB16Text #-}
+
 
 parseB16TextOnly :: Text -> Either String ByteString
 parseB16TextOnly t = resultToEither $ parse parseB16Text t
@@ -197,12 +197,12 @@ modifyMVar' mv f = modifyMVar_ mv (pure . f)
 -- | Modify the target of a lens.
 modifyingMVar :: MVar s -> Lens' s a -> (a -> IO a) -> IO ()
 modifyingMVar mv l f = modifyMVar_ mv $ \ps -> (\b -> set l b ps) <$> f (view l ps)
-{-# INLINE modifyingMVar #-}
+
 
 -- | Lens view into mvar.
 useMVar :: MVar s -> Getting a s a -> IO a
 useMVar e l = view l <$> readMVar e
-{-# INLINE useMVar #-}
+
 
 -- | Text-y show
 tShow :: Show a => a -> Text

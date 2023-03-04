@@ -87,15 +87,15 @@ instance ToJSON UserTableInfo
 
 userTable :: TableName -> TableId
 userTable tn = TableId $ "USER_" <> asString tn
-{-# INLINE userTable #-}
+
 
 userDataTable :: TableName -> DataTable
 userDataTable = DataTable . userTable
-{-# INLINE userDataTable #-}
+
 
 userTxRecord :: TableName -> TxTable
 userTxRecord = TxTable . userTable
-{-# INLINE userTxRecord #-}
+
 
 keysetsTable :: TableId
 keysetsTable = "SYS_keysets"
@@ -111,7 +111,7 @@ userTableInfo = "SYS_usertables"
 type MVState p a = StateT (DbEnv p) IO a
 instance Logging (StateT (DbEnv p) IO) where
   log c s = use logger >>= \l -> liftIO $ logLog l c s
-  {-# INLINE log #-}
+
 
 infix 4 .=!
 
@@ -124,7 +124,7 @@ runMVState :: MVar (DbEnv p) -> MVState p a -> IO a
 runMVState v a = modifyMVar v $! \s -> do
     (!r, !m') <- runStateT a s
     return (m',r)
-{-# INLINE runMVState #-}
+
 
 
 doPersist :: (Persister p -> Persist p a) -> MVState p a
@@ -132,7 +132,7 @@ doPersist f = get >>= \m -> do
     (!db', !r) <- liftIO $ f (_persist m) (_db m)
     db .=! db'
     return r
-{-# INLINE doPersist #-}
+
 
 toTableId :: Domain k v -> TableId
 toTableId KeySets = keysetsTable
@@ -196,7 +196,7 @@ doBegin m = do
   case m of
     Transactional -> Just <$> use txId
     Local -> pure Nothing
-{-# INLINE doBegin #-}
+
 
 doCommit :: MVState p [TxLog Value]
 doCommit = use mode >>= \mm -> case mm of
@@ -213,7 +213,7 @@ doCommit = use mode >>= \mm -> case mm of
         resetTemp
       else rollback
       return (concatMap snd txrs)
-{-# INLINE doCommit #-}
+
 
 
 rollback :: MVState p ()
@@ -237,7 +237,7 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     convLog tl = case fromJSON (_txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl
-{-# INLINE getLogs #-}
+
 
 
 
@@ -247,7 +247,7 @@ debug s a = logDebug $ s ++ ": " ++ show a
 
 readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe RowData)
 readUserTable e t k = runMVState e $ readUserTable' t k
-{-# INLINE readUserTable #-}
+
 
 readUserTable' :: TableName -> RowKey -> MVState p (Maybe RowData)
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
@@ -255,11 +255,11 @@ readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ 
 
 readSysTable :: PactDbValue v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
 readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
-{-# INLINE readSysTable #-}
+
 
 resetTemp :: MVState p ()
 resetTemp = txRecord .=! M.empty >> mode .=! Nothing
-{-# INLINE resetTemp #-}
+
 
 writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
 writeSys s wt tbl k v = runMVState s $ do
@@ -267,7 +267,7 @@ writeSys s wt tbl k v = runMVState s $ do
   doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) v
   record (TxTable tbl) k v
 
-{-# INLINE writeSys #-}
+
 
 writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> RowData -> IO ()
 writeUser s wt tn rk row = runMVState s $ do
@@ -292,7 +292,7 @@ writeUser s wt tn rk row = runMVState s $ do
     (Just old,Write) -> upd old
     (Just old,Update) -> upd old
     (Nothing,Update) -> throwDbError $ "Update: no row found for key " <> pretty rk
-{-# INLINE writeUser #-}
+
 
 record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
 record tt k v = modify'
@@ -302,7 +302,7 @@ record tt k v = modify'
     -- strict append (it would be better to use a datastructure with efficient append)
     append [] b = b
     append (h:t) b = let !x = append t b in h : x
-{-# INLINE record #-}
+
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName
 getUserTableInfo' e tn = runMVState e $ do

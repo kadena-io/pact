@@ -80,7 +80,7 @@ expr = do
     , separator ":" Colon
     , separator "," Comma
     ]
-{-# INLINE expr #-}
+
 
 number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
 number = do
@@ -102,7 +102,7 @@ number = do
          else return $ LDecimal $ Decimal
            (fromIntegral precision)
            (neg (strToNum (strToNum 0 num) d))
-{-# INLINE number #-}
+
 
 
 qualifiedAtom :: (Monad p, TokenParsing p) => p (Text,[Text])
@@ -122,7 +122,7 @@ bool = msum
   [ LBool True  <$ symbol "true"
   , LBool False <$ symbol "false"
   ]
-{-# INLINE bool #-}
+
 
 
 -- | Parse one or more Pact expressions.

@@ -429,7 +429,7 @@ unifiesWith _ (TyPrim (TyGuard a)) (TyPrim (TyGuard b)) = case (a,b) of
 unifiesWith f (TyModule a) (TyModule b) =
   liftEq (\x y -> all (\xe -> elem' f xe y) x) a b
 unifiesWith _ _ _ = False
-{-# INLINE unifiesWith #-}
+
 
 -- | @a `isSubPartial` b@ means that @a <= b@ in the lattice given by
 -- @SchemaPartial@, ie, that @a@ is smaller than @b@.

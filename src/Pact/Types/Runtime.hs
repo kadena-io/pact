@@ -317,7 +317,7 @@ newtype Eval e a =
 -- which is useful for reporting stack traces in the REPL.
 runEval :: EvalState -> EvalEnv e -> Eval e a -> IO (a,EvalState)
 runEval s env act = runStateT (runReaderT (unEval act) env) s
-{-# INLINE runEval #-}
+
 
 -- | "Dev" runEval' is the old version that always returns the state
 -- along with the Either.
@@ -360,7 +360,7 @@ call s act = do
   (_gas,r) <- act
   evalCallStack %= drop 1
   return r
-{-# INLINE call #-}
+
 
 -- | Invoke a backend method, catching all exceptions as 'DbError'
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
@@ -416,16 +416,16 @@ getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxL
 getTxLog i d t = method i $ \db -> _getTxLog db d t
 
 
-{-# INLINE readRow #-}
-{-# INLINE writeRow #-}
-{-# INLINE createUserTable #-}
-{-# INLINE getUserTableInfo #-}
-{-# INLINE commitTx #-}
-{-# INLINE beginTx #-}
-{-# INLINE rollbackTx #-}
-{-# INLINE getTxLog #-}
-{-# INLINE keys #-}
-{-# INLINE txids #-}
+
+
+
+
+
+
+
+
+
+
 
 
 

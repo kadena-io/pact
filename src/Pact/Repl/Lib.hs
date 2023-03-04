@@ -282,7 +282,7 @@ replDefsMap =
 
 invokeEnv :: (LibDb -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! (_rlsDb ls)
-{-# INLINE invokeEnv #-}
+
 
 repldb :: PactDb LibState
 repldb = PactDb {

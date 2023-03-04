@@ -68,7 +68,7 @@ initPureDb = def
 
 overM :: s -> Lens' s a -> (a -> IO a) -> IO s
 overM s l f = f (view l s) >>= \a -> return (set l a s)
-{-# INLINE overM #-}
+
 
 persister :: Persister PureDb
 persister = Persister {
@@ -115,20 +115,20 @@ compileQuery (Just kq) = compile kq
     compile (KQConj l o r) = conj o <$> compile l <*> compile r
     conj AND = (&&)
     conj OR = (||)
-{-# INLINE compileQuery #-}
+
 
 qry :: PactDbKey k => Table k -> Maybe (KeyQuery k) -> PureDb -> IO [(k,PValue)]
 qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
   Nothing -> throwDbError $ "query: no such table: " <> pretty t
   Just m -> return $ filter (compileQuery kq . fst) $ M.toList m
-{-# INLINE qry #-}
+
 
 
 conv :: (PactDbValue v) => PValue -> IO v
 conv (PValue v) = case cast v of
   Nothing -> throwDbError $ "Failed to reify DB value: " <> prettyPactDbValue v
   Just s -> return s
-{-# INLINE conv #-}
+
 
 
 

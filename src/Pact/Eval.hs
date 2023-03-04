@@ -94,18 +94,18 @@ import Pact.Types.Advice
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
-{-# INLINE evalBeginTx #-}
+
 
 evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
-{-# INLINE evalRollbackTx #-}
+
 
 evalCommitTx :: Info -> Eval e [TxLog Value]
 evalCommitTx i = do
   revokeAllCapabilities
   -- backend now handles local exec
   commitTx i
-{-# INLINE evalCommitTx #-}
+
 
 enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi ksn = do
@@ -114,7 +114,7 @@ enforceKeySetName mi ksn = do
       Just ks -> pure ks
   _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet ksn ks))
   runSysOnly $ enforceKeySet mi (Just ksn) ks
-{-# INLINE enforceKeySetName #-}
+
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
@@ -144,7 +144,7 @@ enforceKeySet i ksn KeySet{..} = do
       where
         runBuiltIn p | p count matched = return ()
                      | otherwise = failed
-{-# INLINE enforceKeySet #-}
+
 
 enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of
@@ -1106,7 +1106,7 @@ reduceLam = \case
   t@TLam{} -> pure (Left t)
   x -> Right <$> reduce x
 
-{-# INLINE resolveArg #-}
+
 resolveArg :: Info -> [Term n] -> Int -> Term n
 resolveArg ai as i = case as ^? ix i of
   Nothing -> appError ai $ "Missing argument value at index " <> pretty i
@@ -1379,7 +1379,7 @@ applyNestedPact _ _ t _ = evalError' t "applyNestedPact: invalid defpact body, e
 nestedPactsNotAdvanced :: PactExec -> PactStep -> Bool
 nestedPactsNotAdvanced resultState ps =
   any (\npe -> _npeStep npe /= _psStep ps) (_peNested resultState)
-{-# INLINE nestedPactsNotAdvanced #-}
+
 
 -- | Apply or resume a pactdef step.
 applyPact :: Info -> PactContinuation -> Term Ref -> PactStep -> M.Map PactId NestedPactExec ->  Eval e (Term Name)

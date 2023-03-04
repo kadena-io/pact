@@ -83,11 +83,11 @@ instance ToJSONKey Hash
 
 instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
-  {-# INLINE parseJSON #-}
+
 
 instance ParseText Hash where
   parseText s = Hash . toShort <$> parseB64UrlUnpaddedText s
-  {-# INLINE parseText #-}
+
 
 
 hashToText :: Hash -> Text
@@ -137,11 +137,11 @@ instance ToJSON (TypedHash h) where
 
 instance FromJSON (TypedHash h) where
   parseJSON = withText "Hash" parseText
-  {-# INLINE parseJSON #-}
+
 
 instance ParseText (TypedHash h) where
   parseText s = TypedHash . toShort <$> parseB64UrlUnpaddedText s
-  {-# INLINE parseText #-}
+
 
 typedHashToText :: TypedHash h -> Text
 typedHashToText (TypedHash h) = toB64UrlUnpaddedText $ fromShort h
@@ -173,7 +173,7 @@ hash = TypedHash . toShort . go
     go = case algo of
       Blake2b_256 -> ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
       SHA3_256 -> ByteArray.convert . Crypto.hashWith Crypto.SHA3_256
-{-# INLINE hash #-}
+
 
 #else
 
@@ -194,7 +194,7 @@ verifyHash h b = if hashed == h
   else Left $ "Hash Mismatch, received " ++ renderCompactString h ++
               " but our hashing resulted in " ++ renderCompactString hashed
   where hashed = hash b
-{-# INLINE verifyHash #-}
+
 
 
 initialHash :: Reifies h HashAlgo => TypedHash h

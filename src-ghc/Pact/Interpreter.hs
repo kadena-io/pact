@@ -263,4 +263,4 @@ evalTerms interp input = withRollback (start (interpreter interp runInput) >>= e
       Left pe -> (:[]) <$> resumePact def pe
 
 
-{-# INLINE evalTerms #-}
+

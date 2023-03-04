@@ -101,11 +101,11 @@ logMaybe rule lf cat msg =
     included (Just s) = cat `HS.member` s
     excluded Nothing = False
     excluded (Just s) = cat `HS.member` s
-{-# INLINE logMaybe #-}
+
 
 doLog :: LoggerLogFun
 doLog lf (LogName n) cat msg = lf $ "[" ++ n ++ "] " ++ cat ++ " " ++ msg
-{-# INLINE doLog #-}
+
 
 newtype LogIO a = Foo { logIO :: (ReaderT Logger IO) a } deriving (MonadReader Logger,MonadIO,Functor,Applicative,Monad)
 

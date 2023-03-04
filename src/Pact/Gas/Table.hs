@@ -222,7 +222,7 @@ defaultGasTable =
 
 expLengthPenalty :: Integral i => i -> Gas
 expLengthPenalty v = let lv = logBase (100::Float) (fromIntegral v) in 1 + floor (lv^(10::Int))
-{-# INLINE expLengthPenalty #-}
+
 
 tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
@@ -295,7 +295,7 @@ tableGasModel gasConfig =
       , gasModelDesc = "table-based cost model"
       , runGasModel = run
       }
-{-# INLINE tableGasModel #-}
+
 
 pointAddGas :: ZKGroup -> Gas
 pointAddGas = \case
@@ -324,7 +324,7 @@ memoryCost szVer val (Gas cost) = Gas totalCost
   where costFrac = realToFrac cost
         sizeFrac = realToFrac (sizeOf szVer val)
         totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
-{-# INLINE memoryCost #-}
+
 
 -- Slope to costing function,
 -- sets a 10mb practical limit on module sizes.
@@ -334,7 +334,7 @@ moduleMemFeePerByte = 0.006
 -- 0.01x+50000 linear costing funciton
 moduleMemoryCost :: Bytes -> Gas
 moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
-{-# INLINE moduleMemoryCost #-}
+
 
 -- | Gas model that charges varible (positive) rate per tracked operation
 defaultGasModel :: GasModel

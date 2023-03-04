@@ -34,13 +34,13 @@ instance ToJSON PPKScheme where
   toJSON ETH = "ETH"
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" parseText
-  {-# INLINE parseJSON #-}
+
 instance ParseText PPKScheme where
   parseText s = case s of
     "ED25519" -> return ED25519
     "ETH" -> return ETH
     _ -> fail $ "Unsupported PPKScheme: " ++ show s
-  {-# INLINE parseText #-}
+
 
 
 defPPKScheme :: PPKScheme

@@ -107,7 +107,7 @@ decodeBlob v = throwDbError $ "Expected text blob, got: " <> viaShow v
 
 encodeBlob :: ToJSON a => a -> SType
 encodeBlob a = SText $ Utf8 $ BSL.toStrict $ encode a
-{-# INLINE encodeBlob #-}
+
 
 expectSing :: Show a => String -> [a] -> IO a
 expectSing _ [s] = return s

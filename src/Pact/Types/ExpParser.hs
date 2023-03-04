@@ -114,16 +114,16 @@ instance Default ParseEnv where def = ParseEnv True
 
 type MkInfo = Parsed -> Info
 
-{-# INLINE mkEmptyInfo #-}
+
 mkEmptyInfo :: MkInfo
 mkEmptyInfo e = Info (Just (mempty,e))
 
-{-# INLINE mkStringInfo #-}
+
 mkStringInfo :: String -> MkInfo
 mkStringInfo s d = Info (Just (fromString $ take (_pLength d) $
                                drop (fromIntegral $ TF.bytes d) s,d))
 
-{-# INLINE mkTextInfo #-}
+
 mkTextInfo :: T.Text -> MkInfo
 mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $
                              T.drop (fromIntegral $ TF.bytes d) s,d))
@@ -136,7 +136,7 @@ narrowTry legacy narrowed = reader _peNarrowTry >>= \case
   False -> legacy
 
 -- | Run a compile. TODO squint harder at MP errors for better output.
-{-# INLINE runCompile #-}
+
 runCompile :: ParseEnv -> ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
 runCompile pe act cs a =
   case runParser (runStateT (runReaderT act pe) cs) "" (Cursor Nothing [a]) of
@@ -161,11 +161,11 @@ runCompile pe act cs a =
           (FancyError _ errs) -> (i,show errs:ms)
 
 
-{-# INLINE strErr #-}
+
 strErr :: String -> ErrorItem t
 strErr = Label . fromList
 
-{-# INLINE tokenErr #-}
+
 tokenErr :: String -> Exp Info -> ExpParse s a
 tokenErr s = tokenErr' s . Just
 
@@ -174,23 +174,23 @@ tokenErr' :: String -> Maybe (Exp Info) -> ExpParse s a
 tokenErr' ty i = failure (Just $ strErr ty) $
   maybe S.empty (\e -> S.singleton (Tokens (e:|[]))) i
 
-{-# INLINE context #-}
+
 context :: ExpParse s (Maybe (Exp Info))
 context = fmap snd . _cContext <$> getInput
 
-{-# INLINE contextInfo #-}
+
 contextInfo :: ExpParse s Info
 contextInfo = maybe def getInfo <$> context
 
-{-# INLINE current #-}
+
 current :: ExpParse s (Exp Info)
 current = use psCurrent
 
-{-# INLINE syntaxError #-}
+
 syntaxError :: String -> ExpParse s a
 syntaxError s = current >>= tokenErr s
 
-{-# INLINE expected #-}
+
 expected :: String -> ExpParse s a
 expected s = syntaxError $ "Expected: " ++ s
 
@@ -198,7 +198,7 @@ expected s = syntaxError $ "Expected: " ++ s
 unexpected' :: String -> ExpParse s a
 unexpected' s = syntaxError $ "Unexpected: " ++ s
 
-{-# INLINE nes #-}
+
 nes :: a -> NonEmpty a
 nes x = x :| []
 
@@ -223,7 +223,7 @@ pTokenEpsilon test ps = ParsecT $ \s@(State input o pst _) _ _ eok eerr ->
                   (State input o pst [])
         Just x ->
           eok x (State cs (o + 1) pst []) mempty -- this is only change from 'pToken'
--- {-# INLINE pToken #-}
+--
 
 -- | Call commit continuation with current state.
 pCommit :: forall e s m. Ord (Token s) => ParsecT e s m ()
@@ -234,7 +234,7 @@ commit :: ExpParse s ()
 commit = lift (lift pCommit)
 
 -- | Recognize a specific Exp sub-type, non-committing.
-{-# INLINE exp #-}
+
 exp :: String -> Prism' (Exp Info) a -> ExpParse s (a,Exp Info)
 exp ty prism = do
   t <- current
@@ -250,12 +250,12 @@ exp ty prism = do
   return r
 
 -- | Recognize any Exp, committing.
-{-# INLINE anyExp #-}
+
 anyExp :: ExpParse s (Exp Info)
 anyExp = token Just mempty
 
 -- | Enter a list context, setting the token stream to its contents
-{-# INLINE enter #-}
+
 enter :: (ListExp Info,Exp Info) -> ExpParse s (ListExp Info)
 enter (l@ListExp{..},e) = do
   par <- getInput
@@ -263,7 +263,7 @@ enter (l@ListExp{..},e) = do
   return l
 
 -- | Exit a list context, resuming a previous parent context.
-{-# INLINE exit #-}
+
 exit :: ExpParse s ()
 exit = do
   child <- getInput
@@ -272,22 +272,22 @@ exit = do
     Nothing -> failure (Just EndOfInput) def
 
 -- | Recognize an atom, non-committing.
-{-# INLINE atom #-}
+
 atom :: ExpParse s (AtomExp Info)
 atom = fst <$> exp "atom" _EAtom
 
 -- | Recognized a literal, non-committing.
-{-# INLINE lit #-}
+
 lit :: ExpParse s (LiteralExp Info)
 lit = fst <$> exp "literal" _ELiteral
 
 -- | Recognize a list, non-committing.
-{-# INLINE list #-}
+
 list :: ExpParse s (ListExp Info,Exp Info)
 list = exp "list" _EList
 
 -- | Recognize a separator, committing.
-{-# INLINE sep #-}
+
 sep :: Separator -> ExpParse s ()
 sep s = exp "sep" _ESeparator >>= \(SeparatorExp{..},_) ->
   if _sepSeparator == s then commit else expected (show s)
@@ -300,7 +300,7 @@ lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
   Nothing -> expected ty
 
 -- | Recognize a String literal, non-committing.
-{-# INLINE str #-}
+
 str :: ExpParse s Text
 str = lit' "string" _LString
 
@@ -319,7 +319,7 @@ list' d = list >>= \l@(ListExp{..},_) ->
   else expected $ enlist d (\(s,e)->unpack(s<>"list"<>e))
 
 -- | Recongize a list with specified delimiter and act on contents, committing.
-{-# INLINE withList #-}
+
 withList :: ListDelimiter -> (ListExp Info -> ExpParse s a) -> ExpParse s a
 withList d act = noTryMay $ list' d >>= enter >>= act >>= \a -> exit >> return a
   where
@@ -331,14 +331,14 @@ withList' :: ListDelimiter -> ExpParse s a -> ExpParse s a
 withList' d = withList d . const
 
 -- | Recognize an unqualified "bare" atom, non-committing.
-{-# INLINE bareAtom #-}
+
 bareAtom :: ExpParse s (AtomExp Info)
 bareAtom = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
   (_:_) -> expected "unqualified atom"
   [] -> return a
 
 -- | Recognize a bare atom with expected text, committing.
-{-# INLINE symbol #-}
+
 symbol :: Text -> ExpParse s ()
 symbol s = bareAtom >>= \AtomExp{..} ->
   if _atomAtom == s then commit else expected $ unpack s

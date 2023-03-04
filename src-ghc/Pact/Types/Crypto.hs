@@ -293,10 +293,10 @@ instance Show PublicKeyBS where
   show (PubBS b) = T.unpack $ toB16Text b
 instance ToJSONKey PublicKeyBS where
     toJSONKey = toJSONKeyText (toB16Text . _pktPublic)
-    {-# INLINE toJSONKey #-}
+
 instance FromJSONKey PublicKeyBS where
     fromJSONKey = FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
-    {-# INLINE fromJSONKey #-}
+
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }

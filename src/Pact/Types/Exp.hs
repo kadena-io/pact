@@ -129,7 +129,7 @@ simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
 
 formatLTime :: UTCTime -> Text
 formatLTime = pack . formatTime simpleISO8601
-{-# INLINE formatLTime #-}
+
 
 -- | Pretty is supposed to match 1-1 with Pact representation
 -- for true literals, while time emits a 'simpleISO8601' string.
@@ -149,7 +149,7 @@ instance ToJSON Literal where
     toJSON (LDecimal r) = encoder decimalCodec r
     toJSON (LBool b)    = toJSON b
     toJSON (LTime t)    = encoder timeCodec t
-    {-# INLINE toJSON #-}
+
 
 instance FromJSON Literal where
   parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n

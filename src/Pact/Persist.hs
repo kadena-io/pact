@@ -53,7 +53,7 @@ data Table k where
 tableId :: Table k -> TableId
 tableId (DataTable t) = t
 tableId (TxTable t) = t
-{-# INLINE tableId #-}
+
 
 deriving instance Show (Table k)
 deriving instance Eq (Table k)
@@ -82,14 +82,14 @@ cmpToOp kc = fromString $ case kc of
   KNEQ -> "!="
   KLT -> "<"
   KLTE -> "<="
-{-# INLINE cmpToOp #-}
+
 
 -- | SQL equivalents for 'KeyConj'
 conjToOp :: IsString s => KeyConj -> s
 conjToOp c = fromString $ case c of
   AND -> "AND"
   OR -> "OR"
-{-# INLINE conjToOp #-}
+
 
 data KeyQuery k =
   KQKey { kqCmp :: KeyCmp, kqKey :: k } |
@@ -114,7 +114,7 @@ compileQuery keyfield (Just kq) = ("WHERE " <> qs,pms)
                         | otherwise = ("(",")")
                 (lq,lps) = compile False l
                 (rq,rps) = compile False r
-{-# INLINE compileQuery #-}
+
 
 
 class (Ord k,Show k,Eq k,Hashable k,Pretty k) => PactDbKey k

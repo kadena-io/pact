@@ -99,7 +99,7 @@ advise i (Advice f) ctx act = f i ctx act
 
 defAdvice :: MonadIO m => Info -> AdviceContext r -> m (r,a) -> m a
 defAdvice _ _ a = snd <$> a
-{-# INLINE defAdvice #-}
+
 
 -- | Instrument some 'PactDb' with advice.
 advisePactDb :: Advice -> PactDb a -> PactDb a

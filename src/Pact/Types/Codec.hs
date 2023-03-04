@@ -68,7 +68,7 @@ integerCodec = Codec encodeInteger decodeInteger
     encodeInteger i
       | isSafeInteger i = object [ field .= i ]
       | otherwise = object [ field .= show i ]
-    {-# INLINE encodeInteger #-}
+
     decodeInteger = withObject "Integer" $ \o -> do
       s <- o .: field
       case s of
@@ -77,7 +77,7 @@ integerCodec = Codec encodeInteger decodeInteger
           Just i -> return i
           Nothing -> fail $ "Invalid integer value: " ++ show s
         _ -> fail $ "Invalid integer value: " ++ show s
-    {-# INLINE decodeInteger #-}
+
     field = "int"
 
 -- | Decimals encode to a Scientific, which is encoded as an object + String
@@ -89,13 +89,13 @@ decimalCodec = Codec enc dec
     enc d@(Decimal _places mantissa)
       | isSafeInteger mantissa = Number $ fromRational $ toRational d
       | otherwise = object [ field .= show d ]
-    {-# INLINE enc #-}
+
     dec (Number n) = return $ fromRational $ toRational n
     dec (A.Object o) = o .: field >>= \s -> case readMaybe (unpack s) of
       Just d -> return d
       Nothing -> fail $ "Invalid decimal value: " ++ show s
     dec v = fail $ "Invalid decimal value: " ++ show v
-    {-# INLINE dec #-}
+
     field = "decimal"
 
 -- | default Pact ISO8601 format
@@ -116,7 +116,7 @@ timeCodec = Codec enc dec
       where
             denom :: UTCTime -> Integer
             denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
-    {-# INLINE enc #-}
+
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>
       (o .: highprec >>= mkTime highPrecFormat)
@@ -125,7 +125,7 @@ timeCodec = Codec enc dec
         mkTime fmt v = case parseTime fmt v of
               Just t -> return t
               Nothing -> fail $ "Invalid time value, expected " ++ fmt
-    {-# INLINE dec #-}
+
     field = "time"
     highprec = "timep"
 
@@ -133,9 +133,9 @@ valueCodec :: Codec Value
 valueCodec = Codec enc dec
   where
     enc v = object [field .= v]
-    {-# INLINE enc #-}
+
     dec = withObject "Value" $ \o -> o .: field
-    {-# INLINE dec #-}
+
     field = "_P_val"
 
 
