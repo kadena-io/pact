@@ -80,6 +80,7 @@ data TranslateFailureNoLoc
   = BranchesDifferentTypes EType EType
   | NonStringLitInBinding (AST Node)
   | EmptyBody
+  | InvalidNativeInModule Text
   | MalformedArithOp Text [AST Node]
   | MalformedLogicalOp Text [AST Node]
   | MalformedComparison Text [AST Node]
@@ -116,6 +117,7 @@ describeTranslateFailureNoLoc = \case
     renderFatal $ "We only support analysis of binding forms (bind / with-read) binding string literals. Instead we found " <> tShow ast
   EmptyBody ->
     renderFatal $ "can't translate an empty body"
+  InvalidNativeInModule native -> renderFatal ("Invalid native '" <> native <> "' in module code")
   MalformedArithOp op args ->
     renderFatal $ "Unsupported arithmetic op " <> op <> " with args " <> tShow args
   MalformedLogicalOp op args ->
@@ -1743,10 +1745,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr _ -> shimNative' node fn [] "principal" a'
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"describe-namespace" [a] -> translateNode a >>= \case
-    -- assuming we have a namespace name as input, yield an empty object
-    Some SStr _ -> shimNative astNode node fn []
-    _ -> unexpectedNode astNode
+  AST_NFun _ fn@"describe-namespace" _ ->
+    throwError' (InvalidNativeInModule fn)
 
   AST_NFun node fn as -> shimNative astNode node fn as
 
