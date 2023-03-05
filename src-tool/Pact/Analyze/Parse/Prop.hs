@@ -401,8 +401,8 @@ inferPreProp preProp = case preProp of
           _otherwise -> throwErrorIn preProp "expected integer arguments"
 
         case args' of
-          [start, end] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate start end (Lit' 1)
-          [start, end, step] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate start end step
+          [from, to] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to (Lit' 1)
+          [from, to, step] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to step
           _otherwise -> throwErrorIn preProp "expected 2 or 3 integer arguments"
 
   PreApp s [arg] | s == SStringLength -> do
