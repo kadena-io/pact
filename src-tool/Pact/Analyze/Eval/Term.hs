@@ -745,7 +745,10 @@ evalTerm = \case
       -- hard enough.
       Some SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
-      Some (SList _) _   -> throwErrorNoLoc "We can't yet analyze calls to `hash` on lists"
+      Some (SList ty) l   -> eval l <&> unliteralS >>= \case
+        Nothing        -> throwError notStaticErr
+        Just xs -> undefined
+        
       Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
       Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
 
