@@ -117,6 +117,7 @@ data Feature
   | FMakeList
   | FMap
   | FFilter
+  | FDistinct
   | FFold
   -- String operators
   | FStringLength
@@ -1069,6 +1070,22 @@ doc FFilter = Doc
         ]
       (TyList' a)
   ]
+
+doc FDistinct = Doc
+  "distinct"
+  CList
+  InvAndProp
+  "returns a list of distinct values"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(distinct xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
 doc FFold = Doc
   "fold"
   CList
@@ -1722,6 +1739,7 @@ PAT(SContains, FContains)
 PAT(SReverse, FReverse)
 PAT(SSort, FSort)
 PAT(SListDrop, FListDrop)
+PAT(SDistinct, FDistinct)
 PAT(SListTake, FListTake)
 PAT(SMakeList, FMakeList)
 PAT(SMap, FMap)

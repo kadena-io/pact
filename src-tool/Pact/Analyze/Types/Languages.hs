@@ -261,6 +261,8 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   ListEqNeq    :: SingTy a -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
   ListAt       :: SingTy a -> t 'TyInteger -> t ('TyList a) -> Core t a
   ListContains :: SingTy a -> t a      -> t ('TyList a) -> Core t 'TyBool
+  
+  ListDistinct :: SingTy a -> t ('TyList a) -> Core t ('TyList a)
 
   ListLength   :: SingTy a -> t ('TyList a) -> Core t 'TyInteger
 
@@ -843,6 +845,11 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showsPrec 11 ty'
     . showChar ' '
     . singShowsTmList ty' 11 a
+  ListDistinct ty' a ->
+      showString "ListDistinct "
+      . showsPrec 11 ty'
+      . showChar ' '
+      . singShowsTmList ty' 11 a
   ListDrop ty' i l ->
       showString "ListDrop "
     . showsPrec 11 ty'
@@ -980,6 +987,7 @@ prettyCore ty = \case
   ListLength ty' x         -> parensSep [pretty SListLength, singPrettyTmList ty' x]
   ListReverse ty' lst      -> parensSep [pretty SReverse, singPrettyTmList ty' lst]
   ListSort ty' lst         -> parensSep [pretty SSort, singPrettyTmList ty' lst]
+  ListDistinct ty' lst     -> parensSep [pretty SDistinct, singPrettyTmList ty' lst]
   ListDrop ty' n lst       -> parensSep [pretty SListDrop, prettyTm n, singPrettyTmList ty' lst]
   ListTake ty' n lst       -> parensSep [pretty SListTake, prettyTm n, singPrettyTmList ty' lst]
   ListConcat ty' x y       -> parensSep [pretty SConcatenation, singPrettyTmList ty' x, singPrettyTmList ty' y]
@@ -1862,6 +1870,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     ListReverse ty <$> f tm
   ListSort ty tm ->
     ListSort ty <$> f tm
+  ListDistinct ty tm ->
+    ListDistinct ty <$> f tm
   ListConcat ty tm1 tm2 ->
     ListConcat ty <$> f tm1 <*> f tm2
   ListDrop ty tm1 tm2 ->

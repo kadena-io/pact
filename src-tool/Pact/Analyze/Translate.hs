@@ -1710,9 +1710,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     -- elide translation of event capability
     shimNative astNode node fn []
 
-  AST_NFun node fn@"distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
-    Some (SList _) _ ->
-      shimNative' node fn [] "original list" xs'
+  AST_NFun _ "distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
+    Some ty@(SList elemTy) l -> pure $ Some ty $ CoreTerm $ ListDistinct elemTy l
     _ -> unexpectedNode astNode
 
   AST_NFun node fn@"enumerate" args ->
