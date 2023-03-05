@@ -1718,8 +1718,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Some SInteger i' -> pure i'
       _otherwise -> unexpectedNode astNode
     case args' of
-      [from, to]       -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to (Lit' 1)
-      [from, to, step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to step
+      [from, to']       -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' (Lit' 1)
+      [from, to', step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' step
       _otherwise -> unexpectedNode astNode
 
   AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
