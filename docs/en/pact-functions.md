@@ -1575,7 +1575,7 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
 
 
-Specifies, and provisions install of, a _managed_ CAPABILITY, defined in a 'defcap' in which a '@managed' tag designates a single parameter to be managed by a specified function. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:<p> requested:<p> -> <p>', where '<p>' indicates the type of the managed parameter, such that for '(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. Any capability matching the 'static' (non-managed) parameters will cause this function to be invoked with the current managed value and that of the requested capability. The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the 'balance' of the request. NOTE that signatures scoped to a managed capability cause the capability to be automatically provisioned for install similarly to one installed with this function.
+Specifies, and provisions install of, a _managed_ CAPABILITY, defined in a 'defcap' in which a '@managed' tag designates a single parameter to be managed by a specified function. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:`p`requested:`p` -> `p`', where '`p`' indicates the type of the managed parameter, such that for '(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. Any capability matching the 'static' (non-managed) parameters will cause this function to be invoked with the current managed value and that of the requested capability. The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the 'balance' of the request. NOTE that signatures scoped to a managed capability cause the capability to be automatically provisioned for install similarly to one installed with this function.
 ```lisp
 (install-capability (PAY "alice" "bob" 10.0))
 ```
@@ -1953,7 +1953,7 @@ Set environment gas limit to LIMIT.
 Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect.
 ```lisp
 pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)
-["TOTAL: 7" "map:GUnreduced: 4" "+:GUnreduced: 1" "+:GUnreduced: 1" "+:GUnreduced: 1"]
+["TOTAL: 7" "map:GUnreduced:currTotalGas=4: 4" "+:GUnreduced:currTotalGas=5: 1" ":GIntegerOpCost:(1, ):(1, ):currTotalGas=5: 0" "+:GUnreduced:currTotalGas=6: 1" ":GIntegerOpCost:(1, ):(2, ):currTotalGas=6: 0" "+:GUnreduced:currTotalGas=7: 1" ":GIntegerOpCost:(1, ):(3, ):currTotalGas=7: 0"]
 ```
 
 
