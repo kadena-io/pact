@@ -206,6 +206,8 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   StrToIntBase :: t 'TyInteger -> t 'TyStr -> Core t 'TyInteger
   StrContains  :: t 'TyStr     -> t 'TyStr -> Core t 'TyBool
 
+  Enumerate :: t 'TyInteger -> t 'TyInteger -> t 'TyInteger -> Core t ('TyList 'TyInteger)
+
   -- numeric ops
   Numerical    :: Numerical t a -> Core t a
 
@@ -721,6 +723,7 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
   StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showChar ' ' . showsTm 11 b
   StrContains  a b -> showString "StrContains "  . showsTm 11 a . showChar ' ' . showsTm 11 b
+  Enumerate a b c  -> showString "Enumerate "    . showsTm 11 a . showChar ' ' . showsTm 11 b . showChar ' ' . showsTm 11 c
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
   DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
@@ -964,6 +967,7 @@ prettyCore ty = \case
   StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
   StrContains needle haystack
     -> parensSep [pretty SContains, prettyTm needle, prettyTm haystack]
+  Enumerate x y z          -> parensSep [pretty SEnumerate, prettyTm x, prettyTm y, prettyTm z]
   Numerical tm             -> prettyNumerical ty tm
   IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
   DecAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
@@ -1830,6 +1834,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     StrToIntBase <$> f tm1 <*> f tm2
   StrContains tm1 tm2 ->
     StrContains <$> f tm1 <*> f tm2
+  Enumerate tm1 tm2 tm3 ->
+    Enumerate <$> f tm1 <*> f tm2 <*> f tm3
   Numerical num ->
     Numerical <$> numF num
   IntAddTime tm1 tm2 ->

@@ -393,6 +393,18 @@ inferPreProp preProp = case preProp of
   -- applications:
   --
   -- Function types are inferred; arguments are checked.
+
+  PreApp s args
+    | s == SEnumerate -> do
+        args' <- for args $ \arg -> inferPreProp arg >>= \case
+          Some SInteger i -> pure i
+          _otherwise -> throwErrorIn preProp "expected integer arguments"
+
+        case args' of
+          [from, to] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to (Lit' 1)
+          [from, to, step] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to step
+          _otherwise -> throwErrorIn preProp "expected 2 or 3 integer arguments"
+
   PreApp s [arg] | s == SStringLength -> do
     arg' <- inferPreProp arg
     case arg' of

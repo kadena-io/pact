@@ -110,6 +110,7 @@ data Feature
   | FListProjection
   | FListLength
   | FContains
+  | FEnumerate
   | FReverse
   | FSort
   | FListDrop
@@ -952,6 +953,22 @@ doc FContains = Doc
         ]
       (TyCon bool)
   ]
+doc FEnumerate = Doc
+  "enumerate"
+  CList
+  InvAndProp
+  "Returns a sequence of numbers as a list"
+  [ Usage
+      "(drop n xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("from", TyCon int)
+        , ("to"  , TyCon int)
+        , ("step", TyCon int)
+        ]
+      (TyList' (TyCon int))
+  ]
 
 doc FReverse = Doc
   "reverse"
@@ -1736,6 +1753,7 @@ PAT(SOrQ, FOrQ)
 PAT(SObjectProjection, FObjectProjection)
 PAT(SListLength, FListLength)
 PAT(SContains, FContains)
+PAT(SEnumerate, FEnumerate)
 PAT(SReverse, FReverse)
 PAT(SSort, FSort)
 PAT(SListDrop, FListDrop)
