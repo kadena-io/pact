@@ -489,6 +489,19 @@ Supported in either invariants or properties.
 
 Supported in either invariants or properties.
 
+### hash {#FBoolHash}
+
+```lisp
+(hash s)
+```
+
+* takes `s`: `bool`
+* produces `string`
+
+BLAKE2b 256-bit hash of bool values
+
+Supported in properties only.
+
 ## Object operators {#Object}
 
 ### at {#FObjectProjection}
@@ -831,6 +844,33 @@ Supported in either invariants or properties.
 drop the first `n` values from `xs` (dropped from the end if `n` is negative)
 
 Supported in either invariants or properties.
+
+### hash {#FStringHash}
+
+```lisp
+(hash s)
+```
+
+* takes `s`: `string`
+* produces `string`
+
+BLAKE2b 256-bit hash of string values
+
+Supported in properties only.
+
+### hash {#FNumericalHash}
+
+```lisp
+(hash s)
+```
+
+* takes `s`: _a_
+* produces `string`
+* where _a_ is of type `integer` or `decimal`
+
+BLAKE2b 256-bit hash of numerical values
+
+Supported in properties only.
 
 ## Temporal operators {#Temporal}
 

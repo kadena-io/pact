@@ -995,8 +995,27 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
   AST_Hash val -> do
-    val' <- translateNode val
-    pure $ Some SStr $ Hash val'
+    Some ty val' <- translateNode val
+    let
+      wrap :: Core Term 'TyStr -> TranslateM ETerm
+      wrap = pure . Some SStr . CoreTerm
+
+      notStaticShim = do
+        addWarning' (UnsupportedNonFatal "Call to `hash` is only implemented for string, bool, and integer, substituting hash of `hello pact`")
+        wrap (StrHash (Lit' (Str "hello pact")))
+    
+    case ty of
+      SStr       -> wrap (StrHash val')
+      SBool      -> wrap (BoolHash val')
+      SInteger   -> wrap (IntHash val')
+      SDecimal   -> wrap (DecHash val')
+      SList ty'  -> case ty' of
+        SInteger -> wrap (ListHash SInteger val')
+        SDecimal -> wrap (ListHash SDecimal val')
+        SStr     -> wrap (ListHash SStr val')
+        SBool    -> wrap (ListHash SBool val')
+        _otherwise ->  notStaticShim
+      _otherwise -> notStaticShim
 
   AST_ReadKeyset nameA -> translateNode nameA >>= \case
     Some SStr nameT -> return $ Some SGuard $ ReadKeySet nameT

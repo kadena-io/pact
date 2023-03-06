@@ -206,8 +206,12 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   StrToIntBase :: t 'TyInteger -> t 'TyStr -> Core t 'TyInteger
   StrContains  :: t 'TyStr     -> t 'TyStr -> Core t 'TyBool
 
-  -- | Hash (Blake2b 256bit) of strings
-  StrHash      :: t 'TyStr -> Core t 'TyStr
+  -- | Hash (Blake2b 256bit)
+  StrHash      :: t 'TyStr     -> Core t 'TyStr
+  BoolHash     :: t 'TyBool    -> Core t 'TyStr
+  IntHash      :: t 'TyInteger -> Core t 'TyStr
+  DecHash      :: t 'TyDecimal -> Core t 'TyStr
+  ListHash     :: SingTy a -> t ('TyList a) -> Core t 'TyStr
 
   -- numeric ops
   Numerical    :: Numerical t a -> Core t a
@@ -722,7 +726,12 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
   StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showChar ' ' . showsTm 11 b
   StrContains  a b -> showString "StrContains "  . showsTm 11 a . showChar ' ' . showsTm 11 b
+  
   StrHash a        -> showString "StrHash "      . showsTm 11 a
+  IntHash a        -> showString "IntHash "      . showsTm 11 a
+  BoolHash a       -> showString "BoolHash "     . showsTm 11 a
+  DecHash a        -> showString "DecimalHash "  . showsTm 11 a
+  ListHash ty' a   -> showString "ListHash "     . showsPrec 11 ty' . showChar ' ' . singShowsTmList ty' 11 a
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
   DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
@@ -961,7 +970,13 @@ prettyCore ty = \case
   StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
   StrContains needle haystack
     -> parensSep [pretty SContains, prettyTm needle, prettyTm haystack]
+    
   StrHash x                -> parensSep [pretty SStringHash, prettyTm x]
+  IntHash x                -> parensSep [pretty SNumericalHash, prettyTm x]
+  BoolHash x               -> parensSep [pretty SBoolHash, prettyTm x]
+  DecHash x                -> parensSep [pretty SNumericalHash, prettyTm x]
+  ListHash ty' x           -> parensSep [pretty SListHash, singPrettyTmList ty' x]
+
   Numerical tm             -> prettyNumerical ty tm
   IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
   DecAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
@@ -1403,7 +1418,6 @@ data Term (a :: Ty) where
   Format          :: Term 'TyStr         -> [ETerm]      -> Term 'TyStr
   FormatTime      :: Term 'TyStr         -> Term 'TyTime -> Term 'TyStr
   ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr  -> Term 'TyTime
-  Hash            :: ETerm                               -> Term 'TyStr
 
   -- Pacts
   Pact   :: [PactStep]      -> Term 'TyStr
@@ -1551,7 +1565,6 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
-  Hash a           -> showString "Hash " . showsPrec 11 a
   ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
@@ -1636,7 +1649,6 @@ prettyTerm ty = \case
   FormatTime x y -> parensSep ["format", pretty x, pretty y]
   ParseTime Nothing y -> parensSep ["parse-time", pretty y]
   ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]
-  Hash x -> parensSep ["hash", pretty x]
   ReadKeySet name -> parensSep ["read-keyset", pretty name]
   ReadDecimal name -> parensSep ["read-decimal", pretty name]
   ReadInteger name -> parensSep ["read-integer", pretty name]
@@ -1698,7 +1710,6 @@ eqTerm _ty PactVersion PactVersion = True
 eqTerm _ty (Format a1 b1) (Format a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (FormatTime a1 b1) (FormatTime a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (ParseTime a1 b1) (ParseTime a2 b2) = a1 == a2 && b1 == b2
-eqTerm _ty (Hash a1) (Hash a2) = a1 == a2
 eqTerm _ _ _ = False
 
 instance S :*<: Term where
@@ -1829,6 +1840,14 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     StrContains <$> f tm1 <*> f tm2
   StrHash tm1 ->
     StrHash <$> f tm1
+  IntHash tm1 ->
+    IntHash <$> f tm1
+  DecHash tm1 ->
+    DecHash <$> f tm1
+  BoolHash tm1 ->
+    BoolHash <$> f tm1
+  ListHash ty tm1 ->
+    ListHash ty <$> f tm1
   Numerical num ->
     Numerical <$> numF num
   IntAddTime tm1 tm2 ->

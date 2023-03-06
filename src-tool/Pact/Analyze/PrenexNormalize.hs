@@ -101,7 +101,12 @@ singFloat ty p = case p of
   CoreProp (StrDrop s1 s2) -> PStrDrop <$> float s1 <*> float s2
   CoreProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
   CoreProp (Typeof tya a) -> CoreProp . Typeof tya <$> singFloat tya a
-  CoreProp (StrHash s) -> CoreProp . StrHash <$> float s
+ -- hash
+  CoreProp (StrHash s)  -> CoreProp . StrHash  <$> float s
+  CoreProp (IntHash s)  -> CoreProp . IntHash  <$> float s
+  CoreProp (BoolHash s) -> CoreProp . BoolHash <$> float s
+  CoreProp (DecHash s)  -> CoreProp . DecHash  <$> float s
+  CoreProp (ListHash ty' s) -> CoreProp . ListHash ty' <$> singFloat (SList ty') s
   -- time
   CoreProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
   CoreProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec

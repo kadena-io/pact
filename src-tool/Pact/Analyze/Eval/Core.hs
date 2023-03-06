@@ -8,6 +8,8 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# options_ghc -fno-warn-redundant-constraints #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant <&>" #-}
 
 -- | Symbolic evaluation for the functionally pure subset of expressions that
 -- are shared by all three languages: 'Term', 'Prop', and 'Invariant'.
@@ -42,6 +44,11 @@ import           Pact.Types.Pretty           (renderCompactString)
 import Pact.Types.Hash (pactHash)
 import Pact.Types.Util (AsString(asString))
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Aeson as Aeson
+import qualified Pact.Types.Lang as Pact
+import qualified Pact.Types.PactValue as Pact
+import Data.ByteString.Lazy.Char8 (toStrict)
+import Data.Functor ((<&>))
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -214,15 +221,29 @@ evalCore (StrContains needle haystack) = do
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
 
-evalCore (StrHash sT) = do
-  s' <- eval sT
-  let s = coerceS @Str @String s'
-      sHash = literalS . Str . T.unpack . asString . pactHash
+-- hash values
+-- TODO (RS): we should add warnings to the stack, allowing
+--            to return shims in case, the content is not statically known
+evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc (FailureMessage "Hash of strings requires statically known content")
+  Just (Str b)  -> pure $ literalS . Str . T.unpack . asString $ pactHash (encodeUtf8 (T.pack b))
 
-  case unliteralS s of
-    Just str' -> pure (sHash (encodeUtf8 (T.pack str')))
-    Nothing -> throwErrorNoLoc $
-          FailureMessage "Hash of strings requires statically known content"
+evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc (FailureMessage "Hash of strings requires statically known content")
+  Just i  -> pure $ literalS . Str . T.unpack . asString . pactHash
+    $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger i
+    
+evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc (FailureMessage "Hash of strings requires statically known content")
+  Just b  -> pure $ literalS . Str . T.unpack . asString . pactHash
+    $ toStrict $ Aeson.encode b
+    
+evalCore (DecHash d) = eval d <&> unliteralS >>= \case
+  Nothing -> undefined
+  Just d' -> pure $ literalS . Str . T.unpack . asString . pactHash
+    $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LDecimal (toPact decimalIso d')
+
+evalCore (ListHash _ _) = undefined
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle

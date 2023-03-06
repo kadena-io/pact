@@ -475,12 +475,12 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
          Some STime t2 -> pure $
            Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
          _ -> error "impossible (we only generated `STime`s)"
-  , let genHashableTerm = Gen.choice
-          [ genTerm intSize
-          , genTerm strSize
-          , genTerm BoundedBool
-          ]
-    in Some SStr . Hash <$> genHashableTerm
+  -- , let genHashableTerm = Gen.choice
+  --         [ Some SStr . IntHash <$> genTerm intSize
+  --         , Some SStr . StrHash <$> genTerm strSize
+  --         , Some SStr . BoolHash <$>genTerm BoundedBool
+  --         ]
+  --   in Some SStr . Hash <$> genHashableTerm
   , genTermSpecific' size
   , Some SStr . ReadString . StrLit <$> genStringName len
   ]

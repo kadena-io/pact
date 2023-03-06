@@ -150,6 +150,10 @@ toPactTm = \case
 
     MakeList _ i a -> case ty of
       SList ty' -> mkApp makeListDef [ Some SInteger i, Some ty' a ]
+      
+    StrHash x -> mkApp hashDef [Some SStr x]
+    IntHash x -> mkApp hashDef [Some SInteger x]
+    BoolHash x -> mkApp hashDef [Some SBool x]
 
     _ -> withSing ty $ error $ "TODO: handle core term: " ++ show (CoreTerm tm)
 
@@ -171,7 +175,6 @@ toPactTm = \case
     -> mkApp' formatDef (Some SStr template) vals
   Some SStr (FormatTime x y)
     -> mkApp defFormatTime [Some SStr x, Some STime y]
-  Some SStr (Hash x) -> mkApp hashDef [x]
 
   Some SGuard (ReadKeySet x) -> mkApp readKeysetDef [Some SStr x]
 
