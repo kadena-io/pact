@@ -2703,7 +2703,7 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
-  describe "hash property" $ do
+  describe "hash property (str)" $ do
     let code =
           [text|
             (defun test:string ()
@@ -2711,6 +2711,30 @@ spec = describe "analyze" $ do
               (hash "hello"))|]
     expectVerified code
 
+  describe "hash property (int)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash 1)))]
+              (hash 1))|]
+    expectVerified code
+
+  describe "hash property (dec)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash 1.1)))]
+              (hash 1.1))|]
+    expectVerified code
+    
+  describe "hash property (bool)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash false)))]
+              (hash false))|]
+    expectVerified code
+    
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|
