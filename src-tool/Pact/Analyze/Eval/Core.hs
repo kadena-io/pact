@@ -49,6 +49,7 @@ import qualified Pact.Types.Lang as Pact
 import qualified Pact.Types.PactValue as Pact
 import Data.ByteString.Lazy.Char8 (toStrict)
 import Data.Functor ((<&>))
+import qualified Data.Vector as V
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -246,7 +247,45 @@ evalCore (DecHash d) = eval d <&> unliteralS >>= \case
   Just d' -> pure $ literalS . Str . T.unpack . asString . pactHash
     $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LDecimal (toPact decimalIso d')
 
-evalCore (ListHash _ _) = undefined
+evalCore (ListHash ty' xs) = case ty' of
+  SStr -> do
+    S _ xs' <- eval xs
+    l <- case unliteral xs' of
+      Nothing -> throwErrorNoLoc notStaticErr
+      Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
+    pure $ literalS . Str . T.unpack . asString . pactHash
+        $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
+  SInteger -> do
+    S _ xs' <- eval xs
+    l <- case unliteral xs' of
+      Nothing -> throwErrorNoLoc notStaticErr
+      Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
+    pure $ literalS . Str . T.unpack . asString . pactHash
+      $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
+  SDecimal -> do
+    S _ xs' <- eval xs
+    l <- case unliteral xs' of
+      Nothing -> throwErrorNoLoc notStaticErr
+      Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
+    pure $ literalS . Str . T.unpack . asString . pactHash
+      $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
+  SBool -> do
+    S _ xs' <- eval xs
+    l <- case unliteral xs' of
+      Nothing -> throwErrorNoLoc notStaticErr
+      Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
+    pure $ literalS . Str . T.unpack . asString . pactHash
+      $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)  
+    
+  _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+
+    -- do
+    -- let
+    --   f = undefined 
+    --   x = withEq ty' $ f <$> xs' 
+
+    -- pure $ literalS . Str . T.unpack . asString . pactHash
+    --     $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger 1
   -- withSing ty' $ withSymVal ty' $ eval xs <&> unliteralS >>= \case
   -- Nothing -> throwErrorNoLoc notStaticErr
   -- Just xs' -> let

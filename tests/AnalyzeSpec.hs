@@ -2678,6 +2678,18 @@ spec = describe "analyze" $ do
                 (hash 3.14)
                 "qxTS1KYJOd3G3jQq4zuKjaJVZHh1Rsvf1s8pFkhj7Uo") "")
 
+              (enforce (=
+                (hash ["abc" "def"])
+                "EgIw7XzbJBT78TmEGM8H1PfI8eXPSkPBw5b3wYcjr7c") "")
+                
+               (enforce (=
+                (hash [1.0 1.1])
+                "JwuRBUXWO1VXhJI3rWtNk--kTNY04F0iaOo0lWgdbK8") "")
+                
+               (enforce (=
+                (hash [true])
+                "UivfZ5XhRYuL_2Hmir6OEqTBfK2HQIZnyzBehImK9ac") "")
+
               ; TODO:
               ; (enforce (=
               ;   (hash { 'foo: 1 })
