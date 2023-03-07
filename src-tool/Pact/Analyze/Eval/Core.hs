@@ -276,24 +276,7 @@ evalCore (ListHash ty' xs) = case ty' of
       Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
     pure $ literalS . Str . T.unpack . asString . pactHash
       $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)  
-    
   _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
-
-    -- do
-    -- let
-    --   f = undefined 
-    --   x = withEq ty' $ f <$> xs' 
-
-    -- pure $ literalS . Str . T.unpack . asString . pactHash
-    --     $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger 1
-  -- withSing ty' $ withSymVal ty' $ eval xs <&> unliteralS >>= \case
-  -- Nothing -> throwErrorNoLoc notStaticErr
-  -- Just xs' -> let
-  --   f :: SingTy a -> Concrete a -> Either () Pact.PactValue
-  --   f = undefined
-  --             in case sequence (f ty' <$> xs') of
-  --                  Left _ -> throwErrorNoLoc notStaticErr
-  --                  Right xs'' ->   pure $ literalS . Str . T.unpack . asString . pactHash $ toStrict $ Aeson.encode $ Pact.PList (V.fromList xs'')
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
