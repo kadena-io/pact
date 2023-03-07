@@ -157,7 +157,7 @@ truncate63 i = ite (i .< lowerBound)
     lowerBound = literal (- bound)
 
 notStaticErr :: AnalyzeFailureNoLoc
-notStaticErr = FailureMessage "Hash of strings requires statically known content"
+notStaticErr = FailureMessage "Hash requires statically known content"
 
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
