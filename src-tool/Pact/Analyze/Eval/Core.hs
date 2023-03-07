@@ -155,6 +155,9 @@ truncate63 i = ite (i .< lowerBound)
     upperBound = literal bound
     lowerBound = literal (- bound)
 
+notStaticErr :: AnalyzeFailureNoLoc
+notStaticErr = FailureMessage "Hash of strings requires statically known content"
+
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
@@ -225,25 +228,33 @@ evalCore (StrContains needle haystack) = do
 -- TODO (RS): we should add warnings to the stack, allowing
 --            to return shims in case, the content is not statically known
 evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc (FailureMessage "Hash of strings requires statically known content")
+  Nothing -> throwErrorNoLoc notStaticErr
   Just (Str b)  -> pure $ literalS . Str . T.unpack . asString $ pactHash (encodeUtf8 (T.pack b))
 
 evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc (FailureMessage "Hash of strings requires statically known content")
+  Nothing -> throwErrorNoLoc notStaticErr
   Just i  -> pure $ literalS . Str . T.unpack . asString . pactHash
     $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger i
     
 evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc (FailureMessage "Hash of strings requires statically known content")
+  Nothing -> throwErrorNoLoc notStaticErr
   Just b  -> pure $ literalS . Str . T.unpack . asString . pactHash
     $ toStrict $ Aeson.encode b
     
 evalCore (DecHash d) = eval d <&> unliteralS >>= \case
-  Nothing -> undefined
+  Nothing -> throwErrorNoLoc notStaticErr
   Just d' -> pure $ literalS . Str . T.unpack . asString . pactHash
     $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LDecimal (toPact decimalIso d')
 
 evalCore (ListHash _ _) = undefined
+  -- withSing ty' $ withSymVal ty' $ eval xs <&> unliteralS >>= \case
+  -- Nothing -> throwErrorNoLoc notStaticErr
+  -- Just xs' -> let
+  --   f :: SingTy a -> Concrete a -> Either () Pact.PactValue
+  --   f = undefined
+  --             in case sequence (f ty' <$> xs') of
+  --                  Left _ -> throwErrorNoLoc notStaticErr
+  --                  Right xs'' ->   pure $ literalS . Str . T.unpack . asString . pactHash $ toStrict $ Aeson.encode $ Pact.PList (V.fromList xs'')
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle

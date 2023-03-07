@@ -2674,10 +2674,9 @@ spec = describe "analyze" $ do
                 "W916vIYivbAEzKIDWpFi3aPZvPoSBhloENpwZ8tcaQA") "")
 
 
-              ; TODO:
-              ; (enforce (=
-              ;   (hash 3.14)
-              ;   "gMjZ6T4J6fexaH7KaSIQxgyat9drIvbBkLx4qVJtztE") "")
+              (enforce (=
+                (hash 3.14)
+                "qxTS1KYJOd3G3jQq4zuKjaJVZHh1Rsvf1s8pFkhj7Uo") "")
 
               ; TODO:
               ; (enforce (=
