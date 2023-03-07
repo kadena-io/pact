@@ -587,6 +587,18 @@ eqCoreTm _ (StrToIntBase b1 s1)          (StrToIntBase b2 s2)
   = eqTm b1 b2 && eqTm s1 s2
 eqCoreTm _ (StrContains a1 b1)           (StrContains a2 b2)
   = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (IntHash a) (IntHash b)
+  = eqTm a b
+eqCoreTm _ (StrHash a) (StrHash b)
+  = eqTm a b
+eqCoreTm _ (DecHash a) (DecHash b)
+  = eqTm a b
+eqCoreTm _ (BoolHash a) (BoolHash b)
+  = eqTm a b
+eqCoreTm t (ListHash ta a) (ListHash tb b)
+  = case (singEq t ta, singEq t tb) of
+  (Just Refl, Just Refl) -> eqTm a b
+  _otherwise  -> False
 eqCoreTm _ (StrTake i1 l1)          (StrTake i2 l2)
   = eqTm i1 i2 && eqTm l1 l2
 eqCoreTm _ (StrDrop i1 l1)          (StrDrop i2 l2)

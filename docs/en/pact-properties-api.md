@@ -648,6 +648,21 @@ List / string / object contains
 
 Supported in either invariants or properties.
 
+### enumerate {#FEnumerate}
+
+```lisp
+(drop n xs)
+```
+
+* takes `from`: `integer`
+* takes `to`: `integer`
+* takes `step`: `integer`
+* produces [`integer`]
+
+Returns a sequence of numbers as a list
+
+Supported in either invariants or properties.
+
 ### reverse {#FReverse}
 
 ```lisp
@@ -771,6 +786,20 @@ Supported in either invariants or properties.
 reduce a list by applying `f` to each element and the previous result
 
 Supported in either invariants or properties.
+
+### hash {#FListHash}
+
+```lisp
+(hash xs)
+```
+
+* takes `xs`: [_a_]
+* produces `string`
+* where _a_ is of type `integer`, `decimal`, `bool`,  or `string`
+
+BLAKE2b 256-bit hash of lists
+
+Supported in properties only.
 
 ## String operators {#String}
 

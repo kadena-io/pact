@@ -143,6 +143,9 @@ mkDec = pure . Some SDecimal . Inj . Numerical
 mkBool :: MonadGen m => Core Analyze.Term 'TyBool -> m ETerm
 mkBool = pure . Some SBool . Inj
 
+mkStr :: MonadGen m => Core Analyze.Term 'TyStr -> m ETerm
+mkStr = pure . Some SStr . Inj
+
 -- | When we know what type we'll be receiving from an existential we can
 -- unsafely extract it.
 class Extract a where
@@ -197,7 +200,7 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
   , do x <- genCore (BoundedDecimal size)
        op <- genRoundingLikeOp
        mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
-  , genCore strSize >>= mkInt . StrLength . extract
+  --, genCore intSize >>= mkStr . IntHash . extract
   , do op <- Gen.element [BitwiseAnd, BitwiseOr, Xor]
        Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt size)) $
          \x y -> mkInt $ Numerical $ BitwiseOp op [extract x, extract y]
@@ -205,6 +208,7 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
       \x y -> mkInt $ Numerical $ BitwiseOp Shift [extract x, extract y]
   , Gen.subtermM (genCore (BoundedInt size)) $
     mkInt . Numerical . BitwiseOp Complement . (:[]) . extract
+  , genCore strSize >>= mkInt . StrLength . extract
   ]
 genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
     Some SDecimal . Lit' <$> genDecimal size
@@ -233,6 +237,7 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
       y <- genCore (BoundedInt (0 +/- 255))
       op <- genRoundingLikeOp
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
+
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
     Some SStr . StrLit
@@ -242,7 +247,15 @@ genCore (BoundedString len) = Gen.recursive Gen.choice [
     scale 4 $ Gen.subtermM2
       (genCore (BoundedString (len `div` 2)))
       (genCore (BoundedString (len `div` 2))) $ \x y ->
-        pure $ Some SStr $ Inj $ StrConcat (extract x) (extract y)
+       mkStr $ StrConcat (extract x) (extract y)
+    , Gen.subtermM (genCore (BoundedString (len `div` 2)))
+                    $  mkStr . StrHash . extract
+    , Gen.subtermM (genCore intSize)
+      $ mkStr . IntHash . extract
+    , Gen.subtermM (genCore decSize)
+      $ mkStr . DecHash . extract
+    , Gen.subtermM (genCore BoundedBool)
+      $ mkStr . BoolHash . extract
   ]
 genCore BoundedBool = Gen.recursive Gen.choice [
     Some SBool . Lit' <$> Gen.bool
@@ -291,6 +304,7 @@ genCore BoundedBool = Gen.recursive Gen.choice [
          _ -> error "impossible (we only generated `EType`s)"
   , Gen.subtermM (genCore BoundedBool) $ \x ->
       mkBool $ Logical NotOp [extract x]
+  -- , Gen.bool >>= mkStr . BoolHash . Lit'
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
     Some STime . Lit' <$> Gen.enumBounded -- Gen.int64
@@ -475,12 +489,10 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
          Some STime t2 -> pure $
            Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
          _ -> error "impossible (we only generated `STime`s)"
-  -- , let genHashableTerm = Gen.choice
-  --         [ Some SStr . IntHash <$> genTerm intSize
-  --         , Some SStr . StrHash <$> genTerm strSize
-  --         , Some SStr . BoolHash <$>genTerm BoundedBool
-  --         ]
-  --   in Some SStr . Hash <$> genHashableTerm
+  , genTerm intSize >>= mkStr . IntHash . extract
+  --, genTerm decSize >>= mkStr . DecHash . extract
+  , genTerm strSize >>= mkStr . StrHash . extract
+  
   , genTermSpecific' size
   , Some SStr . ReadString . StrLit <$> genStringName len
   ]
