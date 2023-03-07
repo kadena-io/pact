@@ -621,6 +621,11 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid (Inj Success)
 
+  describe "describe-namespace" $ do
+    let code = [text|(defun test () (describe-namespace 'test))|]
+    expectVerificationFailure code
+                      
+
   --
   -- TODO: test use of read-keyset from property once possible
   --
@@ -3686,6 +3691,82 @@ spec = describe "analyze" $ do
     -- we expect this to give an error
     expectVerified code
 
+  describe "enumeration positive" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 0 10 1))
+            |]
+      expectVerified $ code "[(property (= result (enumerate 0 10)))]"
+      expectVerified $ code "[(property (= result (enumerate 0 10 1)))]"
+
+  describe "enumeration positive (FROM = TO)" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 10))
+            |]
+      expectVerified $ code "[(property (= result [10]))]"
+
+  describe "enumeration positive (INC = 0)" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 10 0))
+            |]
+      expectVerified $ code "[(property (= result [10]))]"
+
+  describe "enumeration positive (FROM + INC > TO)" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 15 10))
+            |]
+      expectVerified $ code "[(property (= result [10]))]"
+
+ 
+  describe "enumeration negative" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 1 -1))
+            |]
+      expectVerified $ code "[(property (= result (enumerate 10 1 -1)))]"
+      expectVerified $ code "[(property (= result [10 9 8 7 6 5 4 3 2 1]))]"
+
+  describe "enumeration negative should fail" $ do
+      let code =
+            [text|
+                 (defun test:[integer] ()
+                 @model [(property (= result (enumerate 10 1 1))]
+                   (enumerate 10 1 1))
+            |]
+      expectFalsified code 
+  describe "enumeration positive should fail" $ do
+      let code =
+            [text|
+                 (defun test:[integer] ()
+                 @model [(property (= result (enumerate 1 10 -1))]
+                   (enumerate 1 10 -1))
+            |]
+      expectFalsified code 
+
+  describe "enumeration positiv with step" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 0 10 2))
+            |]
+      expectVerified  $ code "[(property (= result [0 2 4 6 8 10]))]"
+      expectFalsified $ code "[(property (= result []))]"
+
+
   describe "string drop" $ do
     let code1 model = [text|
           (defun test:string ()
@@ -3877,6 +3958,24 @@ spec = describe "analyze" $ do
             @model [(property (= result (at 0 (sort [a b c]))))]
             (min a (min b c)))
           |]
+
+  describe "list distinct" $ do
+    let code9 model = [text|
+          (defun test:[integer] (a:integer b:integer)
+            @model $model
+            (enforce (not (= a b)) "")
+            (distinct [a b a]))
+          |]
+    expectVerified  $ code9 "[(property (= result [a b]))]"
+    expectFalsified $ code9 "[(property (= result [a b a]))]"
+
+  describe "list distinct property" $ do
+    let code model = [text|
+          (defun test:[integer] (a:integer b:integer)
+            @model $model
+            (distinct [a b a]))
+          |]
+    expectVerified  $ code "[(property (= result (distinct [a b a])))]"
 
   describe "identity" $ do
     expectVerified [text|

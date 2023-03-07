@@ -177,6 +177,27 @@ evalCore (Compose tya tyb _ a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
   b' <- withVar vida (mkAVal a') $ withSing tyb $ eval tmb
   withVar vidb (mkAVal b') $ eval tmc
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
+
+evalCore (Enumerate from to step)          =  do
+  S _ from' <- eval from
+  S _ to'   <- eval to
+  S _ step' <- eval step
+  let
+    go :: (forall v. OrdSymbolic v => v -> v -> SBV Bool) -> SBV Integer -> SBV Integer -> SBV Integer -> SBV [Integer]
+    go cmp b e s = ite (b `cmp` e) (b SBVL..: go cmp (b + s) e s) SBVL.nil
+    
+  let algPos = ite (from' .== to') (SBVL.singleton from')
+              (ite (step' .== 0) (SBVL.singleton from' )
+               (ite (from' + step' .> to') (SBVL.singleton from') (go (.<=) from' to' step')))
+               
+      algNeg =  ite (step' .== 0) (SBVL.singleton from' )
+                (ite (from' + step' .< to') (SBVL.singleton from') (go (.>=) from' to' step'))
+
+
+  markFailure $ (from' .< to' .&& step' .< 0) .|| (from' .> to' .&& step' .> 0)
+
+  pure $ sansProv (ite (from' .<= to') algPos algNeg)
+
 evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
 evalCore (StrToInt s)                      = evalStrToInt s
@@ -310,6 +331,11 @@ evalCore (LiteralList ty xs) = withSymVal ty $ withSing ty $ do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv $ SBVL.implode vals
 
+evalCore (ListDistinct ty list) = withSymVal ty $ withSing ty $ withEq ty $ do
+  S _ list' <- eval list
+  pure $ sansProv (SBVL.reverse (bfoldr listBound (\a b -> ite (SBVL.elem a b) b (a SBVL..: b)) SBVL.nil list'))
+
+ 
 evalCore (ListDrop ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list
@@ -364,7 +390,7 @@ evalCore (ListFilter tya (Open vid _ f) as)
         (\sbva svblst -> do
           S _ x' <- withVar vid (mkAVal' sbva) (eval f)
           pure $ ite x' (sbva .: svblst) svblst)
-        (literal [])
+        SBVL.nil
   sansProv <$> bfilterM as'
 
 evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)

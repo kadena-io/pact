@@ -80,6 +80,7 @@ data TranslateFailureNoLoc
   = BranchesDifferentTypes EType EType
   | NonStringLitInBinding (AST Node)
   | EmptyBody
+  | InvalidNativeInModule Text
   | MalformedArithOp Text [AST Node]
   | MalformedLogicalOp Text [AST Node]
   | MalformedComparison Text [AST Node]
@@ -116,6 +117,7 @@ describeTranslateFailureNoLoc = \case
     renderFatal $ "We only support analysis of binding forms (bind / with-read) binding string literals. Instead we found " <> tShow ast
   EmptyBody ->
     renderFatal $ "can't translate an empty body"
+  InvalidNativeInModule native -> renderFatal ("Invalid native '" <> native <> "' in module code")
   MalformedArithOp op args ->
     renderFatal $ "Unsupported arithmetic op " <> op <> " with args " <> tShow args
   MalformedLogicalOp op args ->
@@ -1727,13 +1729,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
     -- elide translation of event capability
     shimNative astNode node fn []
 
-  AST_NFun node fn@"distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
-    Some (SList _) _ ->
-      shimNative' node fn [] "original list" xs'
+  AST_NFun _ "distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
+    Some ty@(SList elemTy) l -> pure $ Some ty $ CoreTerm $ ListDistinct elemTy l
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"enumerate" args ->
-    shimNative' node fn args "[0]" (Some (SList SInteger) (Lit' [0]))
+  AST_NFun _node _fn@"enumerate" args -> do
+    args' <- for args $ \arg -> translateNode arg >>= \case
+      Some SInteger i' -> pure i'
+      _otherwise -> unexpectedNode astNode
+    case args' of
+      [from, to']       -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' (Lit' 1)
+      [from, to', step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' step
+      _otherwise -> unexpectedNode astNode
 
   AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
     -- uncaught case is dynamic list, sub format string
@@ -1762,10 +1769,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr _ -> shimNative' node fn [] "principal" a'
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"describe-namespace" [a] -> translateNode a >>= \case
-    -- assuming we have a namespace name as input, yield an empty object
-    Some SStr _ -> shimNative astNode node fn []
-    _ -> unexpectedNode astNode
+  AST_NFun _ fn@"describe-namespace" _ ->
+    throwError' (InvalidNativeInModule fn)
 
   AST_NFun node fn as -> shimNative astNode node fn as
 

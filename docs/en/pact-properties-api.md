@@ -744,6 +744,19 @@ filter a list by keeping the values for which `f` returns `true`
 
 Supported in either invariants or properties.
 
+### distinct {#FDistinct}
+
+```lisp
+(distinct xs)
+```
+
+* takes `xs`: [_a_]
+* produces [_a_]
+
+returns a list of distinct values
+
+Supported in either invariants or properties.
+
 ### fold {#FFold}
 
 ```lisp

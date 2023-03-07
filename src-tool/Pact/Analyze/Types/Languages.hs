@@ -213,6 +213,8 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   DecHash      :: t 'TyDecimal -> Core t 'TyStr
   ListHash     :: SingTy a -> t ('TyList a) -> Core t 'TyStr
 
+  Enumerate :: t 'TyInteger -> t 'TyInteger -> t 'TyInteger -> Core t ('TyList 'TyInteger)
+
   -- numeric ops
   Numerical    :: Numerical t a -> Core t a
 
@@ -268,6 +270,8 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   ListEqNeq    :: SingTy a -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
   ListAt       :: SingTy a -> t 'TyInteger -> t ('TyList a) -> Core t a
   ListContains :: SingTy a -> t a      -> t ('TyList a) -> Core t 'TyBool
+  
+  ListDistinct :: SingTy a -> t ('TyList a) -> Core t ('TyList a)
 
   ListLength   :: SingTy a -> t ('TyList a) -> Core t 'TyInteger
 
@@ -726,12 +730,12 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
   StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showChar ' ' . showsTm 11 b
   StrContains  a b -> showString "StrContains "  . showsTm 11 a . showChar ' ' . showsTm 11 b
-  
   StrHash a        -> showString "StrHash "      . showsTm 11 a
   IntHash a        -> showString "IntHash "      . showsTm 11 a
   BoolHash a       -> showString "BoolHash "     . showsTm 11 a
   DecHash a        -> showString "DecimalHash "  . showsTm 11 a
   ListHash ty' a   -> showString "ListHash "     . showsPrec 11 ty' . showChar ' ' . singShowsTmList ty' 11 a
+  Enumerate a b c  -> showString "Enumerate "    . showsTm 11 a . showChar ' ' . showsTm 11 b . showChar ' ' . showsTm 11 c
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
   DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
@@ -856,6 +860,11 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showsPrec 11 ty'
     . showChar ' '
     . singShowsTmList ty' 11 a
+  ListDistinct ty' a ->
+      showString "ListDistinct "
+      . showsPrec 11 ty'
+      . showChar ' '
+      . singShowsTmList ty' 11 a
   ListDrop ty' i l ->
       showString "ListDrop "
     . showsPrec 11 ty'
@@ -977,6 +986,7 @@ prettyCore ty = \case
   DecHash x                -> parensSep [pretty SNumericalHash, prettyTm x]
   ListHash ty' x           -> parensSep [pretty SListHash, singPrettyTmList ty' x]
 
+  Enumerate x y z          -> parensSep [pretty SEnumerate, prettyTm x, prettyTm y, prettyTm z]
   Numerical tm             -> prettyNumerical ty tm
   IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
   DecAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
@@ -1000,6 +1010,7 @@ prettyCore ty = \case
   ListLength ty' x         -> parensSep [pretty SListLength, singPrettyTmList ty' x]
   ListReverse ty' lst      -> parensSep [pretty SReverse, singPrettyTmList ty' lst]
   ListSort ty' lst         -> parensSep [pretty SSort, singPrettyTmList ty' lst]
+  ListDistinct ty' lst     -> parensSep [pretty SDistinct, singPrettyTmList ty' lst]
   ListDrop ty' n lst       -> parensSep [pretty SListDrop, prettyTm n, singPrettyTmList ty' lst]
   ListTake ty' n lst       -> parensSep [pretty SListTake, prettyTm n, singPrettyTmList ty' lst]
   ListConcat ty' x y       -> parensSep [pretty SConcatenation, singPrettyTmList ty' x, singPrettyTmList ty' y]
@@ -1848,6 +1859,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     BoolHash <$> f tm1
   ListHash ty tm1 ->
     ListHash ty <$> f tm1
+  Enumerate tm1 tm2 tm3 ->
+    Enumerate <$> f tm1 <*> f tm2 <*> f tm3
   Numerical num ->
     Numerical <$> numF num
   IntAddTime tm1 tm2 ->
@@ -1888,6 +1901,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     ListReverse ty <$> f tm
   ListSort ty tm ->
     ListSort ty <$> f tm
+  ListDistinct ty tm ->
+    ListDistinct ty <$> f tm
   ListConcat ty tm1 tm2 ->
     ListConcat ty <$> f tm1 <*> f tm2
   ListDrop ty tm1 tm2 ->

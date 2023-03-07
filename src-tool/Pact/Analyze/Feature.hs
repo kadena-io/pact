@@ -111,6 +111,7 @@ data Feature
   | FListProjection
   | FListLength
   | FContains
+  | FEnumerate
   | FReverse
   | FSort
   | FListDrop
@@ -118,6 +119,7 @@ data Feature
   | FMakeList
   | FMap
   | FFilter
+  | FDistinct
   | FFold
   -- String operators
   | FStringLength
@@ -957,6 +959,22 @@ doc FContains = Doc
         ]
       (TyCon bool)
   ]
+doc FEnumerate = Doc
+  "enumerate"
+  CList
+  InvAndProp
+  "Returns a sequence of numbers as a list"
+  [ Usage
+      "(drop n xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("from", TyCon int)
+        , ("to"  , TyCon int)
+        , ("step", TyCon int)
+        ]
+      (TyList' (TyCon int))
+  ]
 
 doc FReverse = Doc
   "reverse"
@@ -1072,6 +1090,22 @@ doc FFilter = Doc
         Nothing
         [ ("f", TyFun [a] (TyCon bool))
         , ("as", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FDistinct = Doc
+  "distinct"
+  CList
+  InvAndProp
+  "returns a list of distinct values"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(distinct xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
         ]
       (TyList' a)
   ]
@@ -1782,9 +1816,11 @@ PAT(SOrQ, FOrQ)
 PAT(SObjectProjection, FObjectProjection)
 PAT(SListLength, FListLength)
 PAT(SContains, FContains)
+PAT(SEnumerate, FEnumerate)
 PAT(SReverse, FReverse)
 PAT(SSort, FSort)
 PAT(SListDrop, FListDrop)
+PAT(SDistinct, FDistinct)
 PAT(SListTake, FListTake)
 PAT(SMakeList, FMakeList)
 PAT(SMap, FMap)

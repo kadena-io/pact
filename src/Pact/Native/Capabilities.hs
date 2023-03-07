@@ -94,8 +94,8 @@ installCapability =
   \After install, CAPABILITY must still be brought into scope using 'with-capability', at which time \
   \the 'manager function' is invoked to validate the request. \
   \The manager function is of type \
-  \'managed:<p> requested:<p> -> <p>', \
-  \where '<p>' indicates the type of the managed parameter, such that for \
+  \'managed:`p`requested:`p` -> `p`', \
+  \where '`p`' indicates the type of the managed parameter, such that for \
   \'(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', \
   \the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. \
   \Any capability matching the 'static' (non-managed) parameters will cause this function to \
