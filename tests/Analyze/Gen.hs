@@ -200,7 +200,6 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
   , do x <- genCore (BoundedDecimal size)
        op <- genRoundingLikeOp
        mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
-  --, genCore intSize >>= mkStr . IntHash . extract
   , do op <- Gen.element [BitwiseAnd, BitwiseOr, Xor]
        Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt size)) $
          \x y -> mkInt $ Numerical $ BitwiseOp op [extract x, extract y]
@@ -304,7 +303,6 @@ genCore BoundedBool = Gen.recursive Gen.choice [
          _ -> error "impossible (we only generated `EType`s)"
   , Gen.subtermM (genCore BoundedBool) $ \x ->
       mkBool $ Logical NotOp [extract x]
-  -- , Gen.bool >>= mkStr . BoolHash . Lit'
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
     Some STime . Lit' <$> Gen.enumBounded -- Gen.int64
@@ -490,7 +488,6 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
            Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
          _ -> error "impossible (we only generated `STime`s)"
   , genTerm intSize >>= mkStr . IntHash . extract
-  --, genTerm decSize >>= mkStr . DecHash . extract
   , genTerm strSize >>= mkStr . StrHash . extract
   
   , genTermSpecific' size

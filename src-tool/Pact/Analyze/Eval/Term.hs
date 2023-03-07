@@ -715,37 +715,6 @@ evalTerm = \case
           Just time -> pure $ literalS $ fromPact timeIso time
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 
-  -- Hash value -> do
-  --   let sHash = literalS . Str . T.unpack . Pact.asString . Pact.pactHash
-  --       notStaticErr :: AnalyzeFailure
-  --       notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
-  --   case value of
-  --     -- Note that strings are hashed in a different way from the other types
-  --     Some SStr tm -> eval tm <&> unliteralS >>= \case
-  --       Nothing        -> throwError notStaticErr
-  --       Just (Str str) -> pure $ sHash $ encodeUtf8 $ T.pack str
-
-  --     -- Everything else is hashed by first converting it to JSON:
-  --     Some SInteger tm -> eval tm <&> unliteralS >>= \case
-  --       Nothing  -> throwError notStaticErr
-  --       Just int -> pure $ sHash $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger int
-  --     Some SBool tm -> eval tm <&> unliteralS >>= \case
-  --       Nothing   -> throwError notStaticErr
-  --       Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
-
-  --     -- In theory we should be able to analyze decimals -- we just need to be
-  --     -- able to convert them back into Decimal.Decimal decimals (from SBV's
-  --     -- Real representation). This is probably possible if we think about it
-  --     -- hard enough.
-  --     Some SDecimal _    -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
-
-  --     -- Some (SList ty) l   -> eval l <&> unliteralS >>= \case
-  --     --   Nothing        -> throwError notStaticErr
-  --     --   Just xs -> undefined
-        
-  --     Some (SObject _) _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on objects"
-  --     Some _ _           -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
-
   Pact steps -> local (inPact .~ sTrue) $ do
     -- We execute through all the steps once (via a left fold), then we execute
     -- all the rollbacks (via for), in reverse order.
