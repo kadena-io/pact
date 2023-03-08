@@ -405,6 +405,13 @@ inferPreProp preProp = case preProp of
           [from, to, step] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to step
           _otherwise -> throwErrorIn preProp "expected 2 or 3 integer arguments"
 
+  PreApp s [arg]
+    | s == SIsPrincipal -> do
+        arg' <- inferPreProp arg
+        case arg' of
+          Some SStr str -> pure $ Some SBool $ CoreProp $ IsPrincipal str
+          _otherwise -> throwErrorIn preProp "expected integer arguments"
+
   PreApp s [arg] | s == SStringLength -> do
     arg' <- inferPreProp arg
     case arg' of

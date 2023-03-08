@@ -160,6 +160,7 @@ data Feature
   -- Other
   | FWhere
   | FTypeof
+  | FIsPrincipal
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -1685,6 +1686,20 @@ doc FTypeof = Doc
         (TyCon str)
   ]
 
+doc FIsPrincipal = Doc
+  "is-principal"
+  CAuthorization
+  InvAndProp
+  "Whether `s` conforms to the principal format without proving validity"
+  [ Usage "(is-principal s)"
+    Map.empty
+    $ Fun
+    Nothing
+    [ ("s", TyCon str)
+    ]
+    (TyCon bool)
+  ]
+
 allFeatures :: Set Feature
 allFeatures = Set.fromList $ enumFrom minBound
 
@@ -1799,7 +1814,7 @@ PAT(SConstantly, FConstantly)
 PAT(SCompose, FCompose)
 PAT(SWhere, FWhere)
 PAT(STypeof, FTypeof)
-
+PAT(SIsPrincipal, FIsPrincipal)
 -- 'Text'/op prisms
 
 mkOpNamePrism :: Ord op => [(Text, op)] -> Prism' Text op

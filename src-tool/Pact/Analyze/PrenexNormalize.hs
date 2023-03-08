@@ -191,7 +191,8 @@ singFloat ty p = case p of
   CoreProp ObjMerge{}      -> ([], p)
   CoreProp (Where objty tya a b c) -> CoreProp <$>
     (Where objty tya <$> float a <*> floatOpen b <*> singFloat objty c)
-
+  CoreProp (IsPrincipal a) -> CoreProp <$>
+    (IsPrincipal <$> float a)
   where
 
     floatOpen :: SingI b => Open a Prop b -> ([Quantifier], Open a Prop b)

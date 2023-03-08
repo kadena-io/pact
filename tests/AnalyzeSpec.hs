@@ -2692,6 +2692,18 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "is-principal" $ do
+    let code =
+         [text|
+          (defun test: bool ()
+            @model[ (property (= result (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
+            (enforce
+              (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")
+              ""))
+        |]
+    expectPass code$ Valid Success'
+    expectVerified code
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|

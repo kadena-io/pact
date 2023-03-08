@@ -1740,10 +1740,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"is-principal" [a] -> translateNode a >>= \case
-    -- assuming we have a principal string as input, yield true
-    Some SStr _ -> shimNative astNode node fn []
-    _ -> unexpectedNode astNode
+  AST_NFun _ "is-principal" [a] -> translateNode a >>= \xs' -> case xs' of
+    Some SStr l -> pure $ Some SBool $ CoreTerm $ IsPrincipal l
+    _otherwise -> unexpectedNode astNode
 
   AST_NFun node fn@"typeof-principal" [a] -> translateNode a >>= \a' -> case a' of
     -- assuming we have a principal string as input, yield empty string
