@@ -8,6 +8,8 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# options_ghc -fno-warn-redundant-constraints #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant <&>" #-}
 
 -- | Symbolic evaluation for the functionally pure subset of expressions that
 -- are shared by all three languages: 'Term', 'Prop', and 'Invariant'.
@@ -40,7 +42,7 @@ import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
 import           Pact.Types.Pretty           (renderCompactString)
 import Data.Attoparsec.Text (parseOnly)
-import Pact.Types.Principal (principalParser)
+import Pact.Types.Principal (principalParser, showPrincipalType)
 import Pact.Types.Info (Info(..))
 
 import Data.Functor ((<&>))
@@ -417,6 +419,12 @@ evalCore (IsPrincipal p) = eval p <&> unliteralS >>= \case
   Just (Str str) ->case parseOnly (principalParser (Info Nothing)) (T.pack str) of
     Left _ -> pure (literalS sFalse)
     Right _ -> pure (literalS sTrue)
+
+evalCore (TypeOfPrincipal p) =eval p <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc (FailureMessage "`is-principal` requires statically known content")
+  Just (Str str) ->case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+    Left _ -> pure (literalS "")
+    Right pt -> pure (literalS (Str (T.unpack (showPrincipalType pt))))
 
 -- | Implementation for both drop and take. The "sub" schema must be a sub-list
 -- of the "sup(er)" schema. See 'subObjectS' for a variant that works over 'S'.

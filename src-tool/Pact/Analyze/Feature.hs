@@ -160,7 +160,9 @@ data Feature
   -- Other
   | FWhere
   | FTypeof
+  -- Principals
   | FIsPrincipal
+  | FTypeOfPrincipal
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -1686,6 +1688,7 @@ doc FTypeof = Doc
         (TyCon str)
   ]
 
+-- Principals
 doc FIsPrincipal = Doc
   "is-principal"
   CAuthorization
@@ -1699,7 +1702,19 @@ doc FIsPrincipal = Doc
     ]
     (TyCon bool)
   ]
-
+doc FTypeOfPrincipal = Doc
+  "typeof-principal"
+  CAuthorization
+  InvAndProp
+  "Return the protocol type of the given `s` value. If input value is not a principal type, then the empty string is returned."
+  [ Usage "(typeof-principal s)"
+    Map.empty
+    $ Fun
+    Nothing
+    [ ("s", TyCon str)
+    ]
+    (TyCon str)
+  ]
 allFeatures :: Set Feature
 allFeatures = Set.fromList $ enumFrom minBound
 
@@ -1815,6 +1830,8 @@ PAT(SCompose, FCompose)
 PAT(SWhere, FWhere)
 PAT(STypeof, FTypeof)
 PAT(SIsPrincipal, FIsPrincipal)
+PAT(STypeOfPrincipal, FTypeOfPrincipal)
+
 -- 'Text'/op prisms
 
 mkOpNamePrism :: Ord op => [(Text, op)] -> Prism' Text op

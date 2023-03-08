@@ -193,6 +193,8 @@ singFloat ty p = case p of
     (Where objty tya <$> float a <*> floatOpen b <*> singFloat objty c)
   CoreProp (IsPrincipal a) -> CoreProp <$>
     (IsPrincipal <$> float a)
+  CoreProp (TypeOfPrincipal a) -> CoreProp <$>
+    (TypeOfPrincipal <$> float a)
   where
 
     floatOpen :: SingI b => Open a Prop b -> ([Quantifier], Open a Prop b)

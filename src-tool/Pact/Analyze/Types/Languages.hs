@@ -307,7 +307,8 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
 
   Typeof :: SingTy a -> t a -> Core t 'TyStr
 
-  IsPrincipal :: t 'TyStr -> Core t 'TyBool
+  IsPrincipal     :: t 'TyStr -> Core t 'TyBool
+  TypeOfPrincipal :: t 'TyStr -> Core t 'TyStr
 
 mkLiteralObject
   :: (IsTerm tm, Monad m)
@@ -693,6 +694,8 @@ eqCoreTm _ (Typeof ty1 a1) (Typeof ty2 a2)
 
 eqCoreTm _ (IsPrincipal a) (IsPrincipal b)
   = eqTm a b
+eqCoreTm _ (TypeOfPrincipal a) (TypeOfPrincipal b)
+  = eqTm a b
 
 eqCoreTm _ _ _                          = False
 
@@ -959,6 +962,10 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
       showString "is-principal"
     . showChar ' '
     . showsTm 11 a
+  TypeOfPrincipal a ->
+      showString "typeof-principal"
+      . showChar ' '
+      . showsTm 11 a
 
 prettyCore :: IsTerm tm => SingTy ty -> Core tm ty -> Doc
 prettyCore ty = \case
@@ -1042,7 +1049,8 @@ prettyCore ty = \case
     ]
   Typeof ty' a -> parensSep [pretty STypeof, singPrettyTm ty' a]
 
-  IsPrincipal a -> parensSep [pretty SIsPrincipal, prettyTm a]
+  IsPrincipal a     -> parensSep [pretty SIsPrincipal, prettyTm a]
+  TypeOfPrincipal a -> parensSep [pretty STypeOfPrincipal, prettyTm a]
 
 
 data BeforeOrAfter = Before | After
@@ -1915,6 +1923,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     Typeof ty <$> f tm
   IsPrincipal tm ->
     IsPrincipal <$> f tm
+  TypeOfPrincipal tm ->
+    TypeOfPrincipal <$> f tm
   where
     f = propToInvariant
     openF = openPropToInv

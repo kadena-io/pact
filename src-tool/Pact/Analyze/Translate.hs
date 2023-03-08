@@ -1744,10 +1744,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr l -> pure $ Some SBool $ CoreTerm $ IsPrincipal l
     _otherwise -> unexpectedNode astNode
 
-  AST_NFun node fn@"typeof-principal" [a] -> translateNode a >>= \a' -> case a' of
-    -- assuming we have a principal string as input, yield empty string
-    Some SStr _ -> shimNative' node fn [] "principal" a'
-    _ -> unexpectedNode astNode
+  AST_NFun _ "typeof-principal" [a] -> translateNode a >>= \xs' -> case xs' of
+    Some SStr l -> pure $ Some SStr $ CoreTerm $ TypeOfPrincipal l
+    _otherwise -> unexpectedNode astNode
 
   AST_NFun _ fn@"describe-namespace" _ ->
     throwError' (InvalidNativeInModule fn)
