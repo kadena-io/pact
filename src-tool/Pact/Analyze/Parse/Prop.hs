@@ -676,7 +676,7 @@ inferPreProp preProp = case preProp of
       SInteger  -> pure $ Some SStr $ CoreProp $ IntHash str'
       SStr      -> pure $ Some SStr $ CoreProp $ StrHash str'
       SBool     -> pure $ Some SStr $ CoreProp $ BoolHash str'
-      SList ty' -> pure $ Some SStr $ CoreProp $ ListHash ty' str';
+      SList ty' -> pure $ Some SStr $ CoreProp $ ListHash ty' str'
       _ -> throwErrorIn preProp "`hash` works only with integer, decimals, strings, bools, and list of those"
 
   PreApp s [str, base] | s == SStringToInteger -> do
