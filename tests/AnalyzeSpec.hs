@@ -2695,11 +2695,10 @@ spec = describe "analyze" $ do
   describe "is-principal" $ do
     let code =
          [text|
-          (defun test: bool ()
+          (defun test:bool ()
             @model[ (property (= result (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
-            (enforce
-              (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")
-              ""))
+            (enforce (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69") "")
+            )
         |]
     expectPass code$ Valid Success'
     expectVerified code

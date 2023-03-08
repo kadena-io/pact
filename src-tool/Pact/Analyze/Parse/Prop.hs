@@ -410,7 +410,7 @@ inferPreProp preProp = case preProp of
         arg' <- inferPreProp arg
         case arg' of
           Some SStr str -> pure $ Some SBool $ CoreProp $ IsPrincipal str
-          _otherwise -> throwErrorIn preProp "expected integer arguments"
+          _otherwise -> throwErrorIn preProp "expected string argument"
 
   PreApp s [arg] | s == SStringLength -> do
     arg' <- inferPreProp arg

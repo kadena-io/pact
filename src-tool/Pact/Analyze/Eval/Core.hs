@@ -39,7 +39,11 @@ import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
 import           Pact.Types.Pretty           (renderCompactString)
-import qualified Data.SBV.Char as SBVC
+import Data.Attoparsec.Text (parseOnly)
+import Pact.Types.Principal (principalParser)
+import Pact.Types.Info (Info(..))
+
+import Data.Functor ((<&>))
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -408,30 +412,11 @@ evalCore (ObjTake argTy _keys obj) = withSing argTy $ do
 evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $ literalS $
   hListLength hlist
 
-evalCore (IsPrincipal p) = do
-  S _ p' <- eval p
-  let
-    sp = coerceSBV @Str @String p'
-    typ' = SBVS.take 2 sp
-    rest = SBVS.drop 2 sp
-    b64alphabet = literal ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" :: String)
-    strIs f s = ite (SBVS.null s)
-      sTrue
-      (let (c,r) = SBVS.uncons s
-       in ite (f c)
-        (strIs f r)
-        sFalse)
-    isB64 s = SBVS.length s .== 43 .&& strIs (`SBVC.elem` b64alphabet) s
-    isHex s = SBVS.length s .== 64 .&& strIs SBVC.isHexDigit s
-
-  pure $ sansProv
-    $ ite (SBVS.length sp .>= 3)
-    (ite (typ' .== "k:")
-     (isHex rest)
-     (ite (typ' .== "c:")
-      (isB64 rest)
-      sFalse))
-    sFalse
+evalCore (IsPrincipal p) = eval p <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc (FailureMessage "`is-principal` requires statically known content")
+  Just (Str str) ->case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+    Left _ -> pure (literalS sFalse)
+    Right _ -> pure (literalS sTrue)
 
 -- | Implementation for both drop and take. The "sub" schema must be a sub-list
 -- of the "sup(er)" schema. See 'subObjectS' for a variant that works over 'S'.
