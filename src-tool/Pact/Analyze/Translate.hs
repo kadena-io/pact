@@ -1016,6 +1016,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
         SDecimal -> wrap (ListHash SDecimal val')
         SStr     -> wrap (ListHash SStr val')
         SBool    -> wrap (ListHash SBool val')
+        SList lt' -> wrap (ListHash (SList lt') val')
         _otherwise ->  notStaticShim
       _otherwise -> notStaticShim
 

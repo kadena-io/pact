@@ -50,6 +50,7 @@ import qualified Pact.Types.PactValue as Pact
 import Data.ByteString.Lazy.Char8 (toStrict)
 import Data.Functor ((<&>))
 import qualified Data.Vector as V
+import Debug.Trace (trace)
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -267,37 +268,70 @@ evalCore (DecHash d) = eval d <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
   Just d' -> pure $ literalS . Str . T.unpack . asString . pactHash
     $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LDecimal (toPact decimalIso d')
+    
+evalCore (ListHash ty' xs) = do
+  let
+    go ::  forall a'. SingI a' => SingTy a' -> TermOf m ('TyList a') -> m [Pact.PactValue]
+    go t v = case t of
+        SStr -> do
+          S _ xs' <- eval v
+          case unliteral xs' of
+            Nothing -> throwErrorNoLoc notStaticErr
+            Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
+        SInteger -> do
+          S _ xs' <- eval v
+          case unliteral xs' of
+            Nothing -> throwErrorNoLoc notStaticErr
+            Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
+        SDecimal -> do
+          S _ xs' <- eval v
+          case unliteral xs' of
+            Nothing -> throwErrorNoLoc notStaticErr
+            Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
+        SBool -> do
+          S _ xs' <- eval v
+          case unliteral xs' of
+            Nothing -> throwErrorNoLoc notStaticErr
+            Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
+        SList ty'' -> do
+          S _ xs' <- eval v
+          case unliteral xs' of
+            Nothing -> throwErrorNoLoc notStaticErr
+            Just xs'' -> pure [(Pact.PLiteral . Pact.LBool $ True)]
 
-evalCore (ListHash ty' xs) = case ty' of
-  SStr -> do
-    S _ xs' <- eval xs
-    l <- case unliteral xs' of
-      Nothing -> throwErrorNoLoc notStaticErr
-      Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
-    pure $ literalS . Str . T.unpack . asString . pactHash
-        $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
-  SInteger -> do
-    S _ xs' <- eval xs
-    l <- case unliteral xs' of
-      Nothing -> throwErrorNoLoc notStaticErr
-      Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
-    pure $ literalS . Str . T.unpack . asString . pactHash
-      $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
-  SDecimal -> do
-    S _ xs' <- eval xs
-    l <- case unliteral xs' of
-      Nothing -> throwErrorNoLoc notStaticErr
-      Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
-    pure $ literalS . Str . T.unpack . asString . pactHash
-      $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
-  SBool -> do
-    S _ xs' <- eval xs
-    l <- case unliteral xs' of
-      Nothing -> throwErrorNoLoc notStaticErr
-      Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
-    pure $ literalS . Str . T.unpack . asString . pactHash
-      $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)  
-  _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+        _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+  undefined
+
+-- evalCore (ListHash ty' xs) = case ty' of
+--   SStr -> do
+--     S _ xs' <- eval xs
+--     l <- case unliteral xs' of
+--       Nothing -> throwErrorNoLoc notStaticErr
+--       Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
+--     pure $ literalS . Str . T.unpack . asString . pactHash
+--         $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
+--   SInteger -> do
+--     S _ xs' <- eval xs
+--     l <- case unliteral xs' of
+--       Nothing -> throwErrorNoLoc notStaticErr
+--       Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
+--     pure $ literalS . Str . T.unpack . asString . pactHash
+--       $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
+--   SDecimal -> do
+--     S _ xs' <- eval xs
+--     l <- case unliteral xs' of
+--       Nothing -> throwErrorNoLoc notStaticErr
+--       Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
+--     pure $ literalS . Str . T.unpack . asString . pactHash
+--       $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
+--   SBool -> do
+--     S _ xs' <- eval xs
+--     l <- case unliteral xs' of
+--       Nothing -> throwErrorNoLoc notStaticErr
+--       Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
+--     pure $ literalS . Str . T.unpack . asString . pactHash
+--       $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
+--   _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle

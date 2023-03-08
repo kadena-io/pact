@@ -2695,6 +2695,13 @@ spec = describe "analyze" $ do
                 (hash [true])
                 "UivfZ5XhRYuL_2Hmir6OEqTBfK2HQIZnyzBehImK9ac") "")
 
+             ;  (enforce (=
+             ;   (hash [[true]])
+             ;   "VYfNbE5tyE9Oj-1gSGzZo2bQUtcVmdLA3uSpS59CP1w") "")
+
+               (enforce (=
+                (hash [[[[true]]]])
+                "VYfNbE5tyE9Oj-1gSGzZo2bQUtcVmdLA3uSpS59CP1w") "")
               ; TODO:
               ; (enforce (=
               ;   (hash { 'foo: 1 })
