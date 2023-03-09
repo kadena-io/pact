@@ -2692,6 +2692,13 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "create-principal" $ do
+    let code =
+         [text| (defun test:bool ()
+              (enforce (is-principal (create-principal "$p")) ""))
+              |]
+    expectPass (code "") (Valid Success')
+
   describe "is-principal" $ do
     let code =
          [text|

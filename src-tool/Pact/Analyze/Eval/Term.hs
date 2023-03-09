@@ -838,6 +838,11 @@ evalTerm = \case
         markFailure $ SBV.isNothing mVal
         tagResume tid $ mkAVal' $ SBV.fromJust mVal
         pure $ S prov $ SBV.fromJust mVal
+  CreatePrincipal g -> do
+    g' <- eval g
+    undefined
+  ValidatePrincipal g s -> undefined
+
 
 -- | Private pacts must be evaluated by the right entity. Fail if the current
 -- entity doesn't match the provided.

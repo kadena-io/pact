@@ -1436,6 +1436,10 @@ data Term (a :: Ty) where
   Yield  :: TagId -> Term a -> Term a
   Resume :: TagId ->           Term a
 
+  -- Principals
+  CreatePrincipal   :: Term 'TyGuard -> Term 'TyStr
+  ValidatePrincipal :: Term 'TyGuard -> Term 'TyStr -> Term 'TyBool
+
 data PactStep where
   Step
     :: (Term a, SingTy a)  -- exec
@@ -1588,6 +1592,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   Yield tid a      ->
     showString "Yield " . showsPrec 11 tid . showChar ' ' . singShowsTm ty 11 a
   Resume tid       -> showString "Resume " . showsPrec 11 tid
+  CreatePrincipal g -> showString "CreatePrincipal " . showsPrec 11 g
+  ValidatePrincipal g s ->  showString "ValidatePrincipal " . showsPrec 11 g . showChar ' ' . showsPrec 11 s
+  
 
 instance Show PactStep where
   showsPrec _ (Step (exec , execTy) path mEntity mCancelVid mRollback) =
@@ -1679,6 +1686,8 @@ prettyTerm ty = \case
   Pact steps -> vsep (pretty <$> steps)
   Yield _tid tm -> parensSep [ "yield", singPrettyTm ty tm ]
   Resume _tid -> "resume"
+  CreatePrincipal g -> parensSep ["create-principal", pretty g]
+  ValidatePrincipal g s -> parensSep ["validate-principal", pretty g, pretty s]
 
 instance Pretty PactStep where
   pretty (Step (exec , execTy) _ mEntity _ mRollback) = parensSep $
@@ -1725,6 +1734,8 @@ eqTerm _ty (Format a1 b1) (Format a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (FormatTime a1 b1) (FormatTime a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (ParseTime a1 b1) (ParseTime a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (Hash a1) (Hash a2) = a1 == a2
+eqTerm _ty (CreatePrincipal a) (CreatePrincipal b) = a == b
+eqTerm _ty (ValidatePrincipal a a') (ValidatePrincipal b b') = a == b && a' == b'
 eqTerm _ _ _ = False
 
 instance S :*<: Term where
