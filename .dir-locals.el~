@@ -1,5 +1,0 @@
-((nil
-  . ((eglot-workspace-configuration
-      . (:haskell (:plugin
-		   (:stan
-		    (:globalOn json-false))))))))
