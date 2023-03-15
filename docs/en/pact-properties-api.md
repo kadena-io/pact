@@ -635,6 +635,21 @@ List / string / object contains
 
 Supported in either invariants or properties.
 
+### enumerate {#FEnumerate}
+
+```lisp
+(drop n xs)
+```
+
+* takes `from`: `integer`
+* takes `to`: `integer`
+* takes `step`: `integer`
+* produces [`integer`]
+
+Returns a sequence of numbers as a list
+
+Supported in either invariants or properties.
+
 ### reverse {#FReverse}
 
 ```lisp
@@ -1180,6 +1195,32 @@ Supported in properties only.
 Whether the keyset in the row is enforced by the function under analysis
 
 Supported in properties only.
+
+### is-principal {#FIsPrincipal}
+
+```lisp
+(is-principal s)
+```
+
+* takes `s`: `string`
+* produces `bool`
+
+Whether `s` conforms to the principal format without proving validity
+
+Supported in either invariants or properties.
+
+### typeof-principal {#FTypeOfPrincipal}
+
+```lisp
+(typeof-principal s)
+```
+
+* takes `s`: `string`
+* produces `string`
+
+Return the protocol type of the given `s` value. If input value is not a principal type, then the empty string is returned.
+
+Supported in either invariants or properties.
 
 ## Function operators {#Function}
 

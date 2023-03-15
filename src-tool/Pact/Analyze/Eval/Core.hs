@@ -414,14 +414,17 @@ evalCore (ObjTake argTy _keys obj) = withSing argTy $ do
 evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $ literalS $
   hListLength hlist
 
-evalCore (IsPrincipal p) = eval p <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc (FailureMessage "`is-principal` requires statically known content")
-  Just (Str str) ->case parseOnly (principalParser (Info Nothing)) (T.pack str) of
-    Left _ -> pure (literalS sFalse)
-    Right _ -> pure (literalS sTrue)
+evalCore (IsPrincipal p) = do
+  p' <- eval p
+  case unliteralS p' of
+    Nothing -> let (S _ str) = coerceS @Str @String p'
+               in pure $ sansProv (literal "internal-principal-" `SBVS.isPrefixOf` str)
+    Just (Str str) ->case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+      Left _ -> pure (literalS sFalse)
+      Right _ -> pure (literalS sTrue)
 
 evalCore (TypeOfPrincipal p) =eval p <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc (FailureMessage "`is-principal` requires statically known content")
+  Nothing -> throwErrorNoLoc (FailureMessage "`typeof-principal` requires statically known content")
   Just (Str str) ->case parseOnly (principalParser (Info Nothing)) (T.pack str) of
     Left _ -> pure (literalS "")
     Right pt -> pure (literalS (Str (T.unpack (showPrincipalType pt))))

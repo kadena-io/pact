@@ -2692,12 +2692,14 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
-  describe "create-principal" $ do
+  describe "validate-principal" $ do
     let code =
-         [text| (defun test:bool ()
-              (enforce (is-principal (create-principal "$p")) ""))
+         [text| (defun test:bool (ks: keyset)
+              (enforce (validate-principal (read-keyset "keyset") (create-principal (read-keyset "keyset"))) "")
+              (enforce (not (validate-principal (read-keyset "keyset") "a")) "")
+              true)
               |]
-    expectPass (code "") (Valid Success')
+    expectPass code $ Valid Success'
 
   describe "is-principal" $ do
     let code =
@@ -2705,6 +2707,8 @@ spec = describe "analyze" $ do
           (defun test:bool ()
             @model[ (property (= result (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
             (enforce (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69") "")
+            (enforce (is-principal (create-principal (read-keyset "keyset"))) "")
+            true
             )
         |]
     expectPass code$ Valid Success'

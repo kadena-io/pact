@@ -1728,13 +1728,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Some SStr _ -> shimNative' node fn [b] "format string" a'
     _ -> unexpectedNode astNode
 
-  AST_NFun _ "create-principal" [a] -> translateNode a >>= \case
-    Some SGuard g -> pure $ Some SStr (CreatePrincipal g)
+  AST_CreatePrincipal guard -> translateNode guard >>= \case
+    Some SGuard g -> pure (Some SStr (CreatePrincipal g))
     _ -> unexpectedNode astNode
 
-  AST_NFun _ "validate-principal" [a, b] -> translateNode a >>= \case
-    -- term check inputs and produce an empty string
-    Some SGuard g -> translateNode b >>= \case
+  AST_ValidatePrincipal guard name -> translateNode guard >>= \case
+    Some SGuard g -> translateNode name >>= \case
       Some SStr s -> pure $ Some SBool (ValidatePrincipal g s)
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode

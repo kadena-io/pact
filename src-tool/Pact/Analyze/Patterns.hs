@@ -102,6 +102,14 @@ pattern AST_CreateCapabilityPactGuard :: AST Node -> AST Node
 pattern AST_CreateCapabilityPactGuard app <-
   App _node (NativeFunc "create-capability-pact-guard") [app]
 
+pattern AST_CreatePrincipal :: forall a. AST a -> AST a
+pattern AST_CreatePrincipal guard <-
+  App _node (NativeFunc "create-principal") [guard]
+
+pattern AST_ValidatePrincipal :: forall a. AST a -> AST a -> AST a
+pattern AST_ValidatePrincipal guard name <-
+  App _node (NativeFunc "validate-principal") [guard, name]
+
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
   App node (NativeFunc "enforce") (cond:_rest)
