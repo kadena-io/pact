@@ -27,7 +27,7 @@ cryptoDefs =
     verifySignature _ [TLitString msg,TLitString sig,TLitString pubkeyjwk] = do
         let keyMaterial = maybe (error "invalid JWK") (view jwkMaterial) $ decode' (LBS.fromStrict $ encodeUtf8 pubkeyjwk)
         let decodeBase64UrlUnpaddedFatal = either error id . decodeBase64UrlUnpadded
-        isValidOrErr :: Either Error Bool <- runExceptT $ verify ES512 keyMaterial (decodeBase64UrlUnpaddedFatal $ encodeUtf8 msg) (decodeBase64UrlUnpaddedFatal $ encodeUtf8 sig)
+        isValidOrErr :: Either Error Bool <- runExceptT $ verify ES256 keyMaterial (decodeBase64UrlUnpaddedFatal $ encodeUtf8 msg) (decodeBase64UrlUnpaddedFatal $ encodeUtf8 sig)
         case isValidOrErr of
             Left err -> error ("verify-signature-jwk: " <> show err)
             Right isValid -> return $ toTerm isValid
