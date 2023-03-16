@@ -60,6 +60,7 @@ untestedNativesCheck = do
      [ "CHARSET_ASCII"
      , "CHARSET_LATIN1"
      , "verify-spv"
+     , "verify-signature-jwk"
      , "public-chain-data"
      , "list"
      , "continue"
@@ -114,7 +115,7 @@ allNativesInGasTable = do
         absentNatives = foldl' absent [] justNatives
     (S.fromList absentNatives)
     `shouldBe`
-    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
+    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list", "verify-signature-jwk"])
 
 -- | Use this to run a single named test.
 _runNative :: NativeDefName -> IO (Maybe [(T.Text,Gas)])
