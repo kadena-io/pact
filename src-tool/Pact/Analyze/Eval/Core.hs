@@ -48,9 +48,9 @@ import qualified Data.Aeson as Aeson
 import qualified Pact.Types.Lang as Pact
 import qualified Pact.Types.PactValue as Pact
 import Data.ByteString.Lazy.Char8 (toStrict)
+import qualified Data.ByteString as BS
 import Data.Functor ((<&>))
 import qualified Data.Vector as V
-import Debug.Trace (trace)
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -160,6 +160,9 @@ truncate63 i = ite (i .< lowerBound)
 notStaticErr :: AnalyzeFailureNoLoc
 notStaticErr = FailureMessage "Hash requires statically known content"
 
+symHash :: BS.ByteString -> S Str
+symHash =  literalS . Str . T.unpack . asString . pactHash
+
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
@@ -252,86 +255,45 @@ evalCore (StrContains needle haystack) = do
 --            to return shims in case, the content is not statically known
 evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
-  Just (Str b)  -> pure $ literalS . Str . T.unpack . asString $ pactHash (encodeUtf8 (T.pack b))
+  Just (Str b)  -> pure (symHash (encodeUtf8 (T.pack b)))
 
 evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
-  Just i  -> pure $ literalS . Str . T.unpack . asString . pactHash
-    $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger i
+  Just i  -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral ( Pact.LInteger i)))))
     
 evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
-  Just b  -> pure $ literalS . Str . T.unpack . asString . pactHash
-    $ toStrict $ Aeson.encode b
+  Just b  -> pure (symHash (toStrict ( Aeson.encode b)))
     
 evalCore (DecHash d) = eval d <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
-  Just d' -> pure $ literalS . Str . T.unpack . asString . pactHash
-    $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LDecimal (toPact decimalIso d')
+  Just d' -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d'))))))
     
 evalCore (ListHash ty' xs) = do
-  let
-    go ::  forall a'. SingI a' => SingTy a' -> TermOf m ('TyList a') -> m [Pact.PactValue]
-    go t v = case t of
-        SStr -> do
-          S _ xs' <- eval v
-          case unliteral xs' of
-            Nothing -> throwErrorNoLoc notStaticErr
-            Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
-        SInteger -> do
-          S _ xs' <- eval v
-          case unliteral xs' of
-            Nothing -> throwErrorNoLoc notStaticErr
-            Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
-        SDecimal -> do
-          S _ xs' <- eval v
-          case unliteral xs' of
-            Nothing -> throwErrorNoLoc notStaticErr
-            Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
-        SBool -> do
-          S _ xs' <- eval v
-          case unliteral xs' of
-            Nothing -> throwErrorNoLoc notStaticErr
-            Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
-        SList ty'' -> do
-          S _ xs' <- eval v
-          case unliteral xs' of
-            Nothing -> throwErrorNoLoc notStaticErr
-            Just xs'' -> pure [(Pact.PLiteral . Pact.LBool $ True)]
+  result <- go ty' xs
+  pure (symHash (toStrict (Aeson.encode (Pact.PList (V.fromList result)))))
+  where
+    go :: forall b. Sing b -> TermOf m ('TyList b) -> m [Pact.PactValue]
+    go t l = case t of
+      SStr -> eval l <&> unliteralS >>= \case
+        Nothing -> throwErrorNoLoc notStaticErr
+        Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
 
-        _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
-  undefined
+      SInteger -> eval l <&> unliteralS >>= \case
+        Nothing -> throwErrorNoLoc notStaticErr
+        Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
 
--- evalCore (ListHash ty' xs) = case ty' of
---   SStr -> do
---     S _ xs' <- eval xs
---     l <- case unliteral xs' of
---       Nothing -> throwErrorNoLoc notStaticErr
---       Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
---     pure $ literalS . Str . T.unpack . asString . pactHash
---         $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
---   SInteger -> do
---     S _ xs' <- eval xs
---     l <- case unliteral xs' of
---       Nothing -> throwErrorNoLoc notStaticErr
---       Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
---     pure $ literalS . Str . T.unpack . asString . pactHash
---       $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
---   SDecimal -> do
---     S _ xs' <- eval xs
---     l <- case unliteral xs' of
---       Nothing -> throwErrorNoLoc notStaticErr
---       Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
---     pure $ literalS . Str . T.unpack . asString . pactHash
---       $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
---   SBool -> do
---     S _ xs' <- eval xs
---     l <- case unliteral xs' of
---       Nothing -> throwErrorNoLoc notStaticErr
---       Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
---     pure $ literalS . Str . T.unpack . asString . pactHash
---       $ toStrict $ Aeson.encode $ Pact.PList (V.fromList l)
---   _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+      SDecimal -> eval l <&> unliteralS >>= \case
+        Nothing -> throwErrorNoLoc notStaticErr
+        Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
+
+      SBool -> eval l <&> unliteralS >>= \case
+        Nothing -> throwErrorNoLoc notStaticErr
+        Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
+  
+      SList _ -> undefined
+
+      _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
