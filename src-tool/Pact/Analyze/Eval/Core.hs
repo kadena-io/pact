@@ -279,9 +279,7 @@ evalCore (ListHash ty' xs) = do
       SInteger -> pure $ Pact.PLiteral . Pact.LInteger $ c
       SDecimal -> pure $ Pact.PLiteral . Pact.LDecimal . toPact decimalIso $ c
       SBool -> pure $ Pact.PLiteral . Pact.LBool $ c
-      SList t' -> do
-        c' <- traverse (reify t') c
-        pure $ Pact.PList . V.fromList $ c'
+      SList t' -> Pact.PList . V.fromList <$> traverse (reify t') c
       _ -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
 
     go :: forall b. Sing b -> TermOf m ('TyList b) -> m [Pact.PactValue]
