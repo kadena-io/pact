@@ -273,27 +273,21 @@ evalCore (ListHash ty' xs) = do
   result <- go ty' xs
   pure (symHash (toStrict (Aeson.encode (Pact.PList (V.fromList result)))))
   where
+    reify :: forall b. Sing b -> Concrete b -> m Pact.PactValue
+    reify t c = case t of
+      SStr -> pure $ Pact.PLiteral . Pact.LString . T.pack . unStr $ c
+      SInteger -> pure $ Pact.PLiteral . Pact.LInteger $ c
+      SDecimal -> pure $ Pact.PLiteral . Pact.LDecimal . toPact decimalIso $ c
+      SBool -> pure $ Pact.PLiteral . Pact.LBool $ c
+      SList t' -> do
+        c' <- traverse (reify t') c
+        pure $ Pact.PList . V.fromList $ c'
+      _ -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+
     go :: forall b. Sing b -> TermOf m ('TyList b) -> m [Pact.PactValue]
-    go t l = case t of
-      SStr -> eval l <&> unliteralS >>= \case
-        Nothing -> throwErrorNoLoc notStaticErr
-        Just xs'' -> pure (Pact.PLiteral . Pact.LString .T.pack . unStr <$> xs'')
-
-      SInteger -> eval l <&> unliteralS >>= \case
-        Nothing -> throwErrorNoLoc notStaticErr
-        Just xs'' -> pure (Pact.PLiteral . Pact.LInteger <$> xs'')
-
-      SDecimal -> eval l <&> unliteralS >>= \case
-        Nothing -> throwErrorNoLoc notStaticErr
-        Just xs'' -> pure (Pact.PLiteral . Pact.LDecimal . toPact decimalIso <$> xs'')
-
-      SBool -> eval l <&> unliteralS >>= \case
-        Nothing -> throwErrorNoLoc notStaticErr
-        Just xs'' -> pure (Pact.PLiteral . Pact.LBool <$> xs'')
-  
-      SList _ -> undefined
-
-      _otherwise -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+    go t l = withSymVal t $ withSing t $ eval l <&> unliteralS >>= \case
+      Nothing -> throwErrorNoLoc notStaticErr
+      Just xs'' -> traverse (reify t) xs''
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
