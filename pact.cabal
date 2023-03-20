@@ -74,6 +74,7 @@ library
       cbits/musl/sqrt_data.c
     exposed-modules:
       Pact.Native.Trans.TOps
+    build-depends: hashes
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -152,7 +153,6 @@ library
     if !impl(ghcjs)
       build-depends:
         , integer-gmp
-        , hashes
   build-depends:
     , Decimal >= 0.4.2 && < 0.6
     , QuickCheck >= 2.12.6.1
