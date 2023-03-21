@@ -124,7 +124,7 @@ handleMultilineInput input prevLines lastResult =
            -> haskelineLoop multilineInput lastResult
 
        Failure (ErrInfo e _) -> do
-         liftIO (print e)
+         liftIO $ print e
          haskelineLoop [] Nothing
 
        parsed -> do
