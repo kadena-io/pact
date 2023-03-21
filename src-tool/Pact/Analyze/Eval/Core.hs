@@ -189,11 +189,10 @@ evalCore (Enumerate from to step)          =  do
   let
     go :: (forall v. OrdSymbolic v => v -> v -> SBV Bool) -> SBV Integer -> SBV Integer -> SBV Integer -> SBV [Integer]
     go cmp b e s = ite (b `cmp` e) (b SBVL..: go cmp (b + s) e s) SBVL.nil
-    
+
   let algPos = ite (from' .== to') (SBVL.singleton from')
               (ite (step' .== 0) (SBVL.singleton from' )
                (ite (from' + step' .> to') (SBVL.singleton from') (go (.<=) from' to' step')))
-               
       algNeg =  ite (step' .== 0) (SBVL.singleton from' )
                 (ite (from' + step' .< to') (SBVL.singleton from') (go (.>=) from' to' step'))
 
@@ -260,17 +259,19 @@ evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
 evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
   Just i  -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral ( Pact.LInteger i)))))
-    
+
 evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
   Just b  -> pure (symHash (toStrict ( Aeson.encode b)))
-    
+
 evalCore (DecHash d) = eval d <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc notStaticErr
   Just d' -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d'))))))
-    
+
 evalCore (ListHash ty' xs) = do
-  result <- go ty' xs
+  result <-  withSymVal ty' $ withSing ty' $ eval xs <&> unliteralS >>= \case
+      Nothing -> throwErrorNoLoc notStaticErr
+      Just xs'' -> traverse (reify ty') xs''
   pure (symHash (toStrict (Aeson.encode (Pact.PList (V.fromList result)))))
   where
     reify :: forall b. Sing b -> Concrete b -> m Pact.PactValue
@@ -281,11 +282,6 @@ evalCore (ListHash ty' xs) = do
       SBool -> pure $ Pact.PLiteral . Pact.LBool $ c
       SList t' -> Pact.PList . V.fromList <$> traverse (reify t') c
       _ -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
-
-    go :: forall b. Sing b -> TermOf m ('TyList b) -> m [Pact.PactValue]
-    go t l = withSymVal t $ withSing t $ eval l <&> unliteralS >>= \case
-      Nothing -> throwErrorNoLoc notStaticErr
-      Just xs'' -> traverse (reify t) xs''
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
@@ -323,7 +319,7 @@ evalCore (ListDistinct ty list) = withSymVal ty $ withSing ty $ withEq ty $ do
   S _ list' <- eval list
   pure $ sansProv (SBVL.reverse (bfoldr listBound (\a b -> ite (SBVL.elem a b) b (a SBVL..: b)) SBVL.nil list'))
 
- 
+
 evalCore (ListDrop ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list

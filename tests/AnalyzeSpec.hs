@@ -624,7 +624,7 @@ spec = describe "analyze" $ do
   describe "describe-namespace" $ do
     let code = [text|(defun test () (describe-namespace 'test))|]
     expectVerificationFailure code
-                      
+
 
   --
   -- TODO: test use of read-keyset from property once possible
@@ -2686,22 +2686,23 @@ spec = describe "analyze" $ do
               (enforce (=
                 (hash ["abc" "def"])
                 "EgIw7XzbJBT78TmEGM8H1PfI8eXPSkPBw5b3wYcjr7c") "")
-                
-               (enforce (=
+
+              (enforce (=
                 (hash [1.0 1.1])
                 "JwuRBUXWO1VXhJI3rWtNk--kTNY04F0iaOo0lWgdbK8") "")
-                
-               (enforce (=
+
+              (enforce (=
                 (hash [true])
                 "UivfZ5XhRYuL_2Hmir6OEqTBfK2HQIZnyzBehImK9ac") "")
 
-             ;  (enforce (=
-             ;   (hash [[true]])
-             ;   "VYfNbE5tyE9Oj-1gSGzZo2bQUtcVmdLA3uSpS59CP1w") "")
+              (enforce (=
+                (hash [[true]])
+                "VYfNbE5tyE9Oj-1gSGzZo2bQUtcVmdLA3uSpS59CP1w") "")
 
                (enforce (=
-                (hash [[[[true]]]])
-                "VYfNbE5tyE9Oj-1gSGzZo2bQUtcVmdLA3uSpS59CP1w") "")
+                (hash [[[true]]])
+                "H12nAiXe-42Wj0FgUFcGgLZiuO6jIFjm0xjJ7FM1qNw") "")
+
               ; TODO:
               ; (enforce (=
               ;   (hash { 'foo: 1 })
@@ -2733,7 +2734,7 @@ spec = describe "analyze" $ do
               @model [(property (= result (hash 1.1)))]
               (hash 1.1))|]
     expectVerified code
-    
+
   describe "hash property (bool)" $ do
     let code =
           [text|
@@ -2741,7 +2742,7 @@ spec = describe "analyze" $ do
               @model [(property (= result (hash false)))]
               (hash false))|]
     expectVerified code
-    
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|
@@ -3759,7 +3760,7 @@ spec = describe "analyze" $ do
             |]
       expectVerified $ code "[(property (= result [10]))]"
 
- 
+
   describe "enumeration negative" $ do
       let code model =
             [text|
@@ -3777,7 +3778,7 @@ spec = describe "analyze" $ do
                  @model [(property (= result (enumerate 10 1 1))]
                    (enumerate 10 1 1))
             |]
-      expectFalsified code 
+      expectFalsified code
   describe "enumeration positive should fail" $ do
       let code =
             [text|
@@ -3785,7 +3786,7 @@ spec = describe "analyze" $ do
                  @model [(property (= result (enumerate 1 10 -1))]
                    (enumerate 1 10 -1))
             |]
-      expectFalsified code 
+      expectFalsified code
 
   describe "enumeration positiv with step" $ do
       let code model =
