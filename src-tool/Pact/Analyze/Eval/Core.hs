@@ -8,8 +8,6 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# options_ghc -fno-warn-redundant-constraints #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Redundant <&>" #-}
 
 -- | Symbolic evaluation for the functionally pure subset of expressions that
 -- are shared by all three languages: 'Term', 'Prop', and 'Invariant'.
