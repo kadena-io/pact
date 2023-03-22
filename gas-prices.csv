@@ -25,6 +25,7 @@ add-time,3
 and,1
 and?,1
 at,2
+base64-concat,5
 base64-decode,1
 base64-encode,1
 bind,4
@@ -102,6 +103,7 @@ resume,2
 reverse,2
 round,1
 select,24
+sha-256,5
 shift,1
 sort,2
 sqrt,6
@@ -116,6 +118,7 @@ typeof,2
 update,25
 use,3
 validate-keypair,29
+verify-signature-jwk,30
 where,2
 with-capability,2
 with-default-read,14
