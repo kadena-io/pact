@@ -107,6 +107,7 @@ data TranslateFailureNoLoc
   | UnexpectedDefaultReadType EType EType
   | UnsupportedNonFatal Text
   | UnscopedCapability CapName
+  | CapabilityNotManagedOrEvent CapName
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> RenderedOutput
@@ -171,6 +172,8 @@ describeTranslateFailureNoLoc = \case
     renderWarn $ "Unsupported operation: " <> msg
   UnscopedCapability (CapName cap) ->
     renderWarn $ "Direct execution restricted by capability " <> T.pack cap
+  CapabilityNotManagedOrEvent (CapName cap) ->
+    renderFatal $ "Capability " <> T.pack cap <> " " <> "not managed or event"
 
 
 data TranslateEnv
@@ -200,7 +203,7 @@ mkTranslateEnv info caps args
       Map.empty
       args
 
-    caps' = Map.fromList $ caps <&> \c@(Capability _ capName) -> (capName, c)
+    caps' = Map.fromList $ caps <&> \c@(Capability _ capName _) -> (capName, c)
 
     coerceUnmungedToMunged :: Unmunged -> Munged
     coerceUnmungedToMunged (Unmunged nm) = Munged nm
@@ -1383,7 +1386,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_RequireCapability node (AST_InlinedApp modName funName _ bindings _) ->
     withTranslatedBindings bindings $ \bindingTs -> do
-      (cap@(Capability _ capName), vars) <- translateCapRef modName funName bindingTs
+      (cap@(Capability _ capName _), vars) <- translateCapRef modName funName bindingTs
       recov <- view teRecoverability
       tid <- genTagId
       inScope <- Set.member capName <$> use tsStaticCapsInScope
@@ -1706,9 +1709,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     -- not translating argument
     shimNative astNode node fn []
 
-  AST_NFun node fn@"emit-event" [_] ->
-    -- elide translation of event capability
-    shimNative astNode node fn []
+  AST_EmitEvent _node (AST_InlinedApp modName funName _ bindings _) ->
+    withTranslatedBindings bindings $ \bindingTs -> do
+      (Capability _ capName evOrMgt, _) <- translateCapRef modName funName bindingTs
+      case evOrMgt of
+        Nothing -> throwError' (CapabilityNotManagedOrEvent capName)
+        Just _ -> pure (Some SBool $ Lit' True)
 
   AST_NFun _ "distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
     Some ty@(SList elemTy) l -> pure $ Some ty $ CoreTerm $ ListDistinct elemTy l

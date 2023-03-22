@@ -263,7 +263,7 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   ListEqNeq    :: SingTy a -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
   ListAt       :: SingTy a -> t 'TyInteger -> t ('TyList a) -> Core t a
   ListContains :: SingTy a -> t a      -> t ('TyList a) -> Core t 'TyBool
-  
+
   ListDistinct :: SingTy a -> t ('TyList a) -> Core t ('TyList a)
 
   ListLength   :: SingTy a -> t ('TyList a) -> Core t 'TyInteger
@@ -1654,7 +1654,7 @@ prettyTerm ty = \case
   MkPactGuard name -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard g t -> parensSep ["create-user-guard", pretty g, pretty t]
   MkModuleGuard name -> parensSep ["create-module-guard", pretty name]
-  MkCapabilityGuard (Capability _ n) as isPact -> parensSep
+  MkCapabilityGuard (Capability _ n _) as isPact -> parensSep
     [ if isPact then "create-capability-pact-guard" else "create-capability-guard"
     , parensSep (pretty n:map (pretty.fst) as)]
   Pact steps -> vsep (pretty <$> steps)

@@ -404,7 +404,7 @@ accumulatingPendingGrants act = do
       pure prev
 
 capabilityAppToken :: Capability -> [VarId] -> Analyze Token
-capabilityAppToken (Capability schema capName) vids = do
+capabilityAppToken (Capability schema capName _) vids = do
     mAVals <- sequence <$> traverse getVar vids
     case mAVals of
       Nothing    ->

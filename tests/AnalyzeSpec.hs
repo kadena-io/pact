@@ -987,6 +987,27 @@ spec = describe "analyze" $ do
               (enforce-guard (keyset-ref-guard "foo")))
           |]
     expectVerified code
+  describe "emit-event" $ do
+    let code =
+          [text|
+             (defcap CAP ()
+               @event
+               true)
+
+             (defun test ()
+               (emit-event (CAP)))
+               |]
+    expectVerified code
+
+  describe "emit-event (fail as not @event or @managed)" $ do
+    let code =
+          [text|
+             (defcap CAP () true)
+
+             (defun test ()
+               (emit-event (CAP)))
+               |]
+    expectFail code $ Valid Abort'
 
   describe "create-pact-guard" $ do
     let code =
