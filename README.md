@@ -137,7 +137,7 @@ This will install a runnable version of Pact, which you can run via:
 cabal v2-exec pact
 ```
 
-Alternatively, `cabal v2-install` will install the binary to `~/.cabal/bin/`, which
+Alternatively, running `cabal v2-install ./` inside this repository's root will install the binary to `~/.cabal/bin/`, which
 you may need to add to your path. Then, you can call `pact` as-is.
 
 #### Building with Stack
