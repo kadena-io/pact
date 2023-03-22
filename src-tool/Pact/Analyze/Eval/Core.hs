@@ -8,8 +8,6 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# options_ghc -fno-warn-redundant-constraints #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Redundant <&>" #-}
 
 -- | Symbolic evaluation for the functionally pure subset of expressions that
 -- are shared by all three languages: 'Term', 'Prop', and 'Invariant'.
@@ -423,9 +421,9 @@ evalCore (IsPrincipal p) = do
       Left _ -> pure (literalS sFalse)
       Right _ -> pure (literalS sTrue)
 
-evalCore (TypeOfPrincipal p) =eval p <&> unliteralS >>= \case
+evalCore (TypeOfPrincipal p) = eval p <&> unliteralS >>= \case
   Nothing -> throwErrorNoLoc (FailureMessage "`typeof-principal` requires statically known content")
-  Just (Str str) ->case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+  Just (Str str) -> case parseOnly (principalParser (Info Nothing)) (T.pack str) of
     Left _ -> pure (literalS "")
     Right pt -> pure (literalS (Str (T.unpack (showPrincipalType pt))))
 
