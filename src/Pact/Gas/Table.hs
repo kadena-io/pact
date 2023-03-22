@@ -87,6 +87,7 @@ defaultGasTable =
   ,("and", 1)
   ,("and?", 1)
   ,("at", 2)
+  ,("base64-concat", 5)
   ,("base64-decode", 1)
   ,("base64-encode", 1)
   ,("bind", 4)
@@ -159,6 +160,7 @@ defaultGasTable =
   ,("resume", 2)
   ,("reverse", 2)
   ,("round", 1)
+  ,("sha-256", 5)
   ,("shift", 1)
   ,("sort", 2)
   ,("sqrt", 6)
@@ -173,6 +175,7 @@ defaultGasTable =
   ,("distinct", 2)
   ,("validate-keypair", 29)
   ,("validate-principal", 1)
+  ,("verify-signature-jwk", 30)
   ,("verify-spv", 100) -- deprecated
   ,("where", 2)
   ,("with-capability", 2)
