@@ -1714,6 +1714,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       (Capability _ capName evOrMgt, _) <- translateCapRef modName funName bindingTs
       case evOrMgt of
         Nothing -> throwError' (CapabilityNotManagedOrEvent capName)
+        -- RS: If a cap is managed or an event, we always succeed (by emitting `true`).
         Just _ -> pure (Some SBool $ Lit' True)
 
   AST_NFun _ "distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
