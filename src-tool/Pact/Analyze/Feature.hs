@@ -962,7 +962,7 @@ doc FEnumerate = Doc
   InvAndProp
   "Returns a sequence of numbers as a list"
   [ Usage
-      "(drop n xs)"
+      "(enumerate from to step)"
       Map.empty
       $ Fun
         Nothing
@@ -1693,7 +1693,7 @@ doc FIsPrincipal = Doc
   "is-principal"
   CAuthorization
   InvAndProp
-  "Whether `s` conforms to the principal format without proving validity"
+  "Whether `s` conforms to the principal format without proving validity."
   [ Usage "(is-principal s)"
     Map.empty
     $ Fun
