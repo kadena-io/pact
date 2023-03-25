@@ -295,8 +295,8 @@ renderErr a
       let i = case m of
                 Script _ f -> Info (Just (mempty,Parsed (Directed (encodeUtf8 $ pack f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
-      return $ renderInfo i ++ ": " ++ renderCompactString' (peDoc a)
-  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ renderCompactString' (peDoc a)
+      return $ renderInfo i ++ ":Error: " ++ renderCompactString' (peDoc a)
+  | otherwise = return $ renderInfo (peInfo a) ++ ":Error: " ++ renderCompactString' (peDoc a)
 
 updateForOp :: Info -> Term Name -> Repl (Either String (Term Name))
 updateForOp i a = do
@@ -389,7 +389,7 @@ execScriptF dolog f stateMod = do
         fmap sequence $ forM _rlsTests $ \TestResult{..} -> case trFailure of
           Nothing -> return (Just ())
           Just (i,e) -> do
-            hPutStrLn stderr $ renderInfo (_faInfo i) ++ ": " ++ unpack e
+            hPutStrLn stderr $ renderInfo (_faInfo i) ++ ":ExecError: " ++ unpack e
             return Nothing
   case r of
     Left _ -> outFailures >> return (Left ())

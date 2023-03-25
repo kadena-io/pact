@@ -126,6 +126,8 @@ singFloat ty p = case p of
     CoreProp <$> (ListEqNeq ty' op <$> singFloat (SList ty') a <*> singFloat (SList ty') b)
   CoreProp (StrContains needle haystack) -> CoreProp <$>
     (StrContains <$> float needle <*> float haystack)
+  CoreProp (Enumerate from to step) -> CoreProp <$>
+    (Enumerate <$> float from <*> float to <*> float step) 
   CoreProp (ListContains ty' needle haystack) ->
     CoreProp <$> (ListContains ty' <$> singFloat ty' needle <*> singFloat (SList ty') haystack)
 
@@ -153,6 +155,8 @@ singFloat ty p = case p of
     -> CoreProp . ListReverse ty' <$> singFloat (SList ty') lst
   CoreProp (ListSort ty' lst)
     -> CoreProp . ListSort ty' <$> singFloat (SList ty') lst
+  CoreProp (ListDistinct ty' lst)
+    -> CoreProp . ListDistinct ty' <$> singFloat (SList ty') lst
   CoreProp (ListDrop ty' a b)
     -> CoreProp <$> (ListDrop ty' <$> float a <*> singFloat (SList ty') b)
   CoreProp (ListTake ty' a b)

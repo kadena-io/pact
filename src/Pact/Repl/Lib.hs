@@ -535,7 +535,7 @@ testCatch :: FunApp -> Text -> Eval LibState a -> Doc ->
              (a -> Eval LibState (Term Name)) -> Eval LibState (Term Name)
 testCatch i doc expr errMsg cont = catchesPactError expr >>= \r -> case r of
   Right v -> cont v
-  Left e -> testFailure i doc $ errMsg <> ": " <> prettyErr e
+  Left e -> testFailure i doc $ errMsg <> ":" <> prettyErr e
   where
     prettyErr e = prettyInfo (peInfo e) <> peDoc e
     prettyInfo a
