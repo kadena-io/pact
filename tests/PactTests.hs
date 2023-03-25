@@ -8,6 +8,7 @@ import qualified RoundTripSpec
 import qualified PrincipalSpec
 import qualified Test.Pact.Utils.LegacyValue
 import qualified SizeOfSpec
+import qualified Test.Pact.Native.Pairing
 
 #ifndef ghcjs_HOST_OS
 import qualified PactTestsSpec
@@ -41,6 +42,7 @@ main = hspec $ parallel $ do
   describe "PrincipalSpec" PrincipalSpec.spec
   describe "Test.Pact.Utils.LegacyValue" Test.Pact.Utils.LegacyValue.spec
   describe "SizeOfSpec" SizeOfSpec.spec
+  describe "Test.Pact.Native.Pairing" Test.Pact.Native.Pairing.spec
 
 #ifndef ghcjs_HOST_OS
 

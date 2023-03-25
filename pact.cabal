@@ -95,6 +95,7 @@ library
     Pact.Native.Keysets
     Pact.Native.Decrypt
     Pact.Native.Pairing
+    Pact.Native.Pairing.GaloisField
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
@@ -403,6 +404,7 @@ test-suite hspec
     RoundTripSpec
     PrincipalSpec
     SizeOfSpec
+    Test.Pact.Native.Pairing
 
   if !impl(ghcjs)
     other-modules:
@@ -423,6 +425,7 @@ test-suite hspec
       , pact-json >= 0.1
       , lens
       , mtl
+      , mod
       , text
       , transformers
       , vector
