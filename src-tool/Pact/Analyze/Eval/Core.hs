@@ -417,6 +417,8 @@ evalCore (IsPrincipal p) = do
   case unliteralS p' of
     Nothing -> let (S _ str) = coerceS @Str @String p'
                in pure $ sansProv (literal "internal-principal-" `SBVS.isPrefixOf` str)
+                  -- RS: Note, `create-principle` returns a string prefixed by `internal-principal-`
+                  -- which we check, if `p` is not statically known.
     Just (Str str) -> case parseOnly (principalParser (Info Nothing)) (T.pack str) of
       Left _ -> pure (literalS sFalse)
       Right _ -> pure (literalS sTrue)
