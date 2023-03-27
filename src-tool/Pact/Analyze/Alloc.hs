@@ -11,7 +11,7 @@
 -- allocation of quantified symbolic variables.
 module Pact.Analyze.Alloc
   ( MonadAlloc (singForAll, singExists, singFree)
-  , forAll, exists, free
+  , free
   , Alloc
   , runAlloc
   ) where
@@ -29,7 +29,6 @@ import qualified Data.SBV                    as SBV
 
 import           Pact.Analyze.Types          (Concrete, S, SingI (sing), SingTy,
                                               sansProv, withSymVal)
-import           Pact.Analyze.Util           (sbvForall, sbvExists)
 
 -- | A restricted symbolic context in which only quantified variable allocation
 -- is permitted.
@@ -54,12 +53,6 @@ class Monad m => MonadAlloc m where
     => String -> SingTy a -> m (S (Concrete a))
   singFree name  = lift . singFree name
 
-forAll :: forall a m. (MonadAlloc m, SingI a) => String -> m (S (Concrete a))
-forAll name = singForAll name (sing @a)
-
-exists :: forall a m. (MonadAlloc m, SingI a) => String -> m (S (Concrete a))
-exists name = singExists name (sing @a)
-
 free :: forall a m. (MonadAlloc m, SingI a) => String -> m (S (Concrete a))
 free name = singFree name (sing @a)
 
@@ -80,6 +73,8 @@ newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)
 
 instance MonadAlloc Alloc where
-  singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> sbvForall name
-  singExists name ty = Alloc $ withSymVal ty $ sansProv <$> sbvExists name
-  singFree   name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free   name
+  singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvForall name
+  singExists name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvExists name
+  singFree   name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free name
+  -- singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> error "sbvForall removed in 10.0" name
+  -- singExists name ty = Alloc $ withSymVal ty $ sansProv <$> error "sbvExists removed in 10.0" name

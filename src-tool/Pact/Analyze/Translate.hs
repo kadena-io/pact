@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
@@ -45,10 +44,8 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-#if !MIN_VERSION_base(4,16,0)
 import           Numeric.Natural            (Natural)
-#endif
-import           GHC.TypeLits
+import           GHC.TypeLits               (SomeSymbol(..), someSymbolVal, symbolVal)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang

@@ -23,16 +23,6 @@ module Pact.Analyze.Util
 , snocList
 , snocConsList
 , Boolean(..)
-
--- * SBV reexports
-, SBV.sbvForall
-, SBV.sbvForall_
-, SBV.sbvExists
-, SBV.sbvExists_
-, SBV.universal
-, SBV.universal_
-, SBV.existential
-, SBV.existential_
 ) where
 
 import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,

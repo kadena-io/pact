@@ -56,7 +56,7 @@ import           Data.SBV.Internals           (CV (..), CVal (..), Kind (..),
                                                SVal (SVal), genMkSymVar)
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
-import           Data.SBV.Trans               (MProvable (..), mkSymVal)
+import           Data.SBV.Trans               (mkSymVal)
 import           Data.SBV.Tuple               (_1, _2)
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
@@ -64,7 +64,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import Pact.Time                              (UTCTime, toMicroseconds, fromMicroseconds, mjdEpoch)
 import           Data.Type.Equality           ((:~:) (Refl))
-import           GHC.TypeLits
+import           GHC.TypeLits                 (KnownSymbol, SomeSymbol(..), Symbol, symbolVal, someSymbolVal)
 import           Prelude                      hiding (Float)
 
 import           Pact.Types.Pretty            hiding (list)
@@ -427,12 +427,6 @@ instance SDivisible (S Integer) where
   S _ a `sDivMod`  S _ b = a `sDivMod`  b & both %~ sansProv
 
 type PredicateS = Symbolic (S Bool)
-
-instance MProvable IO PredicateS where
-  universal_   = fmap _sSbv
-  universal _  = fmap _sSbv
-  existential_  = fmap _sSbv
-  existential _ = fmap _sSbv
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S Str -> S Str -> S Str
