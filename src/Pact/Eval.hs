@@ -41,6 +41,7 @@ module Pact.Eval
     ,acquireModuleAdmin
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
+    ,enforceKeySetSession
     ,resumePact
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
