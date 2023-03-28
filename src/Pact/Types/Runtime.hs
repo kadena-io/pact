@@ -28,7 +28,7 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeSessionSig,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice, eeWarnings,
    toPactId,
@@ -219,6 +219,8 @@ data EvalEnv e = EvalEnv {
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
     , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
+      -- | Verified session key from message.
+    , _eeSessionSig :: !(Maybe (PublicKeyText, S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Execution mode

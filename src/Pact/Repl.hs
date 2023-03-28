@@ -148,6 +148,7 @@ initEvalEnv ls = do
     , _eeGas = gasRef
     , _eeNamespacePolicy = permissiveNamespacePolicy
     , _eeSPVSupport = spvs mv
+    , _eeSessionSig = Nothing
     , _eePublicData = def
     , _eeExecutionConfig = def
     , _eeAdvice = def
