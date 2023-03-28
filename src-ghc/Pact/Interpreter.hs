@@ -171,10 +171,10 @@ setupEvalEnv
   -> IO (EvalEnv e)
 setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   gasRef <- newIORef 0
-  warnRef <- newIORef mempty
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
+  , _eeSessionSig = toPair <$> mdSessionSigner msgData
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent
@@ -191,15 +191,12 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   , _eeExecutionConfig = ec
   , _eeAdvice = def
   , _eeInRepl = False
-  , _eeWarnings = warnRef
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss
+    toPair Signer{..} = (pk,S.fromList _siCapList)
       where
-        toPair Signer{..} = (pk,S.fromList _siCapList)
-          where
-            pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
-
+        pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
