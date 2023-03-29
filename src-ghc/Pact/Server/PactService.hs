@@ -141,17 +141,17 @@ fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p (CommandResult Hash)
 runPayload c@Command{..} = case (_pPayload _cmdPayload) of
-  Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) pm
-  Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) ym
+  Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) (_pSessionSigner _cmdPayload) pm
+  Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) (_pSessionSigner _cmdPayload) ym
 
 
-applyExec :: RequestKey -> PactHash -> [Signer] -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
-applyExec rk hsh signers (ExecMsg parsedCode edata) = do
+applyExec :: RequestKey -> PactHash -> [Signer] -> Maybe Signer -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
+applyExec rk hsh signers sessionSigner (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   evalEnv
     <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-        (MsgData edata Nothing (toUntypedHash hsh) signers)
+        (MsgData edata Nothing (toUntypedHash hsh) signers sessionSigner)
         initRefStore _ceGasEnv permissiveNamespacePolicy
         _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
@@ -159,12 +159,12 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
 
 
-applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
-applyContinuation rk hsh signers cm = do
+applyContinuation :: RequestKey -> PactHash -> [Signer] -> Maybe Signer -> ContMsg -> CommandM p (CommandResult Hash)
+applyContinuation rk hsh signers sessionSigner cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
   evalEnv <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) initRefStore
+                (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers sessionSigner) initRefStore
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

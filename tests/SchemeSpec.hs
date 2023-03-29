@@ -82,7 +82,7 @@ toSigners kps = return $ map makeSigner kps
 toExecPayload :: [Signer] -> Text -> ByteString
 toExecPayload signers t = BSL.toStrict $ A.encode payload
   where
-    payload = Payload (Exec (ExecMsg t Null)) "nonce" () signers Nothing
+    payload = Payload (Exec (ExecMsg t Null)) "nonce" () signers Nothing Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Expectation

@@ -156,6 +156,7 @@ loadBenchModule db = do
            Nothing
            pactInitialHash
            [Signer Nothing pk Nothing []]
+           Nothing
   let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- setupEvalEnv db entity Transactional md initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -183,7 +184,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData cdata Nothing pactInitialHash ss
+  let md = MsgData cdata Nothing pactInitialHash ss Nothing
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Transactional md
           initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -195,7 +196,7 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
-  let md = MsgData Null Nothing pactInitialHash []
+  let md = MsgData Null Nothing pactInitialHash [] Nothing
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   env <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Local md
             initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -236,7 +237,7 @@ mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteStr
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
     $ toStrict . encode
-    $ Payload payload "nonce" () ss Nothing
+    $ Payload payload "nonce" () ss Nothing Nothing
   return (str, cmd)
   where
     payload = Exec $ ExecMsg t Null

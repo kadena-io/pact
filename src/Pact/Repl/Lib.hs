@@ -126,6 +126,9 @@ replDefs = ("Repl",
         "{'key: \"admin-key\", 'caps: []}"]
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
        "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
+     ,defZNative "env-session" setsession (funType tTyString [("public-key", tTyString), ("caps", TyList tTyString)])
+      []
+      ""
 
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
@@ -401,6 +404,15 @@ setmsg i as = case as of
   [a] -> go (toJSON a)
   _ -> argsError i as
   where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
+
+setsession :: ZNativeFun LibState
+setsession _ [TLitString publicKey, TList caps _ _] = do
+  caps' <- forM caps $ \cap -> case cap of
+    TApp a _ -> view _1 <$> appToCap a
+    o -> evalError' o "Expected capability invocation"
+  setenv eeSessionSig $ Just (PublicKeyText publicKey, S.fromList (V.toList caps'))
+  return $ tStr "Setting transaction session public-key/caps"
+setsession i as = argsError' i as
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of
