@@ -140,6 +140,10 @@ instance Arbitrary KeySet where
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
 instance FromJSON KeySet where
+
+    -- Aeson failures:
+    -- aeson-1: "read-keyset: parse failed: parsing [] failed, expected Array, but encountered Object: {\"pred\": \"\" ,\"keys\":\n[\"48acfef8d60e90a7c3675cbe7cb4162c15b80d196a5586962cb8a789f1c79fe2\"]}"
+    -- aeson-2: "read-keyset: parse failed: parsing [] failed, expected Array, but encountered Object: {\"keys\": [\"48acfef8d60e90a7c3675cbe7cb4162c15b80d196a5586962cb8a789f1c79fe2\"]\n,\"pred\": \"\"}"
     parseJSON v = withObject "KeySet" keyListPred v <|> keyListOnly
       where
         defPred = Name (BareName "keys-all" def)
