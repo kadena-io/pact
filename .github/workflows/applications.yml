@@ -10,20 +10,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.10.7', '9.2.6', '9.4.4']
-        cabal: ['3.8']
+        ghc: ['8.10.7', '9.2', '9.6']
+        cabal: ['3.10']
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
         - os: 'ubuntu-22.04'
-          ghc: '9.4.4'
-          cabal: '3.8'
+          ghc: '9.6'
+          cabal: '3.10'
           cabalcache: 'true'
           flags: '-build-tool +no-advice'
         - os: 'ubuntu-22.04'
           ghc: '9.0.2'
-          cabal: '3.8'
+          cabal: '3.10'
           cabalcache: 'true'
           flags: '+build-tool'
         # include:
