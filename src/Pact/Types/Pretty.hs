@@ -62,8 +62,6 @@ import           GHC.Generics         (Generic(..))
 import           Bound.Var
 import           Data.Aeson           (Value(..))
 import           Data.Foldable        (toList)
-import qualified Data.Aeson.KeyMap  as HM
-import           Data.Aeson.Key       (toText)
 import           Data.Int
 import           Data.Text            (Text, pack, unpack)
 import qualified Data.Text            as Text
@@ -82,6 +80,9 @@ import           Data.Text.Prettyprint.Doc.Render.Terminal
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal as Term
 import           Data.Text.Prettyprint.Doc.Render.Text as RText
 import           Text.Trifecta.Delta hiding (prettyDelta)
+
+import qualified Pact.JSON.Legacy.HashMap as LH
+import qualified Pact.JSON.Legacy.Value as LV
 
 data RenderColor = RColor | RPlain
 
@@ -206,8 +207,8 @@ renderPrettyString' = renderString' $ layoutPretty defaultLayoutOptions
 instance Pretty Value where
   pretty = \case
     Object hm -> commaBraces
-      $ (\(k, v) -> dquotes (pretty $ toText k) <> ": " <> pretty v)
-      <$> HM.toList hm
+      $ (\(k, v) -> dquotes (pretty k) <> ": " <> pretty v)
+      <$> LH.toList (LV.legacyKeyMap hm)
     Array values -> bracketsSep $ pretty <$> toList values
     String str -> dquotes $ pretty str
     Number scientific -> viaShow scientific
