@@ -914,6 +914,8 @@
     (diff-time (time "2016-07-22T12:00:00Z")
     (time "2018-07-22T12:00:00Z"))
   - 12
+- - (enforce-session 'some-loaded-keyset)
+  - 8
 - - (make-list longNumber true)
   - 1026
 - - (make-list medNumber true)

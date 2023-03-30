@@ -16,7 +16,7 @@ import Data.Aeson (toJSON, ToJSON(..))
 import Data.Bool (bool)
 import Data.Default (def)
 import Data.List (foldl')
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import NeatInterpolation (text)
 
 
@@ -171,6 +171,7 @@ allTests = HM.fromList
       -- Keyset native functions
     , ("define-keyset", defineKeysetTests)
     , ("enforce-keyset", enforceKeysetTests)
+    , ("enforce-session", enforceSessionTests)
     , ("keys-2", keys2Tests)
     , ("keys-all", keysAllTests)
     , ("keys-any", keysAnyTests)
@@ -546,6 +547,17 @@ enforceKeysetTests = tests
       updateEnvMsgSig
       [enforceKeysetExpr]
 
+enforceSessionTests :: NativeDefName -> GasUnitTests
+enforceSessionTests = tests
+  where
+    enforceSessionExpr = defPactExpression [text| (enforce-session '$sampleLoadedKeysetName) |]
+    updateEnvMsgSession = setEnv (set eeSessionSig (listToMaybe $ F.toList samplePubKeysWithCaps))
+
+    tests =
+      createGasUnitTests
+      updateEnvMsgSession
+      updateEnvMsgSession
+      [enforceSessionExpr]
 
 readKeysetTests :: NativeDefName -> GasUnitTests
 readKeysetTests = tests
