@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -108,7 +109,7 @@ instance SizeOf Info where
 
 -- make an Info that refers to the indicated text
 mkInfo :: Text -> Info
-mkInfo t = Info $ Just (Code t,Parsed delt len)
+mkInfo !t = Info $ Just (Code t,Parsed delt len)
   where len = T.length t
         delt = Directed (encodeUtf8 t) 0 0 (fromIntegral len) (fromIntegral len)
 
