@@ -426,6 +426,7 @@ test-suite hspec
       , lens
       , mtl
       , mod
+      , semirings
       , text
       , transformers
       , vector
@@ -470,7 +471,6 @@ test-suite hspec
         , intervals
         , mmorph
         , neat-interpolation
-        , semirings
         , prettyprinter
         , sbv
         , servant-client >= 0.16
