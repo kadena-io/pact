@@ -164,14 +164,14 @@ instance ToJSON r => ToJSON (ModuleData r) where
   toJSON o = enableToJSON "Pact.Types.Persistence.ModuleData r" $ A.Object $ mconcat
     [ "dependencies" .?= if HM.null (_mdDependencies o)
       then Nothing
-      else Just (LHM.toList $ legacyHashMap $ _mdDependencies o)
+      else Just (LHM.toList $ legacyHashMap_ $ _mdDependencies o)
     , "module" .= _mdModule o
     , "refMap" .= _mdRefMap o
     ]
   toEncoding o = pairs $ mconcat
     [ "dependencies" .?= if HM.null (_mdDependencies o)
       then Nothing
-      else Just (LHM.toList $ legacyHashMap $ _mdDependencies o)
+      else Just (LHM.toList $ legacyHashMap_ $ _mdDependencies o)
     , "module" .= _mdModule o
     , "refMap" .= legacyHashMap (_mdRefMap o)
     ]
@@ -180,7 +180,7 @@ instance ToJSON r => ToJSON (ModuleData r) where
 
 instance (J.Encode r, Eq r) => J.Encode (ModuleData r) where
   build o = J.object
-    [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap (_mdDependencies o)))
+    [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap_ (_mdDependencies o)))
     , "module" J..= _mdModule o
     , "refMap" J..= legacyHashMap (_mdRefMap o)
     ]
