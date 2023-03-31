@@ -180,7 +180,7 @@ instance ToJSON r => ToJSON (ModuleData r) where
 
 instance (J.Encode r, Eq r) => J.Encode (ModuleData r) where
   build o = J.object
-    [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap_ (_mdDependencies o)))
+    [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap (_mdDependencies o)))
     , "module" J..= _mdModule o
     , "refMap" J..= legacyHashMap (_mdRefMap o)
     ]
