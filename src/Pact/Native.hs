@@ -538,17 +538,24 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
 namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
   (funType tTyString [("namespace", tTyString)])
-  [LitExample "(namespace 'my-namespace)"]
+  [LitExample "(namespace 'my-namespace)"
+  ,LitExample "(namespace \"\")"]
   "Set the current namespace to NAMESPACE. All expressions that occur in a current \
   \transaction will be contained in NAMESPACE, and once committed, may be accessed \
   \via their fully qualified name, which will include the namespace. Subsequent \
   \namespace calls in the same tx will set a new namespace for all declarations \
-  \until either the next namespace declaration, or the end of the tx."
+  \until either the next namespace declaration, or the end of the tx. If NAMESPACE \
+  \is the empty string, env namespace will be reset to the root space."
   where
     namespace :: GasRNativeFun e
     namespace g i as = case as of
       [TLitString nsn] -> go g i nsn
       _ -> argsError i as
+
+    go g0 fa "" = computeGas' g0 fa (GUnreduced [])
+      -- TODO: how to gas this (if at all)?
+      $ success "Namespace reset to root"
+      $ evalRefs . rsNamespace .= Nothing
 
     go g0 fa ns = do
       let name = NamespaceName ns
