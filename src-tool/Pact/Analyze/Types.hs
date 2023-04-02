@@ -140,4 +140,4 @@ data VerificationWarning
 describeVerificationWarnings :: VerificationWarning -> Text
 describeVerificationWarnings (FWDuplicatedPropertyDef dups)
   = "Duplicated property definitions for " <> T.intercalate ", " dups
-describeVerificationWarnings (FWShimmedStaticContent t) = "Shimmed " <> t -- TODO warning message
+describeVerificationWarnings (FWShimmedStaticContent t) = "Shimmed native '" <> t <> "'"
