@@ -83,6 +83,7 @@ instance Analyzer Analyze where
   getVar vid                 = view (scope . at vid)
   withVar vid val m          = local (scope . at vid ?~ val) m
   markFailure b              = succeeds %= (.&& sansProv (sNot b))
+  emitWarning w              = analyzeWarnings %= ( ++ [w])
   withMergeableAnalyzer ty f = withSymVal ty f
 
 addConstraint :: S Bool -> Analyze ()
@@ -99,11 +100,11 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     let run act = runRWST (runAnalyze act) r
     in do
-      (lRes, AnalyzeState lls lgs, ()) <- run left s
-      (rRes, AnalyzeState rls rgs, ()) <- run right $ s & globalState .~ lgs
+      (lRes, AnalyzeState lls lgs lw, ()) <- run left s
+      (rRes, AnalyzeState rls rgs rw, ()) <- run right $ s & globalState .~ lgs
 
       return ( symbolicMerge force test lRes rRes
-             , AnalyzeState (symbolicMerge force test lls rls) rgs
+             , AnalyzeState (symbolicMerge force test lls rls) rgs (lw ++ rw)
              , ()
              )
 
@@ -728,12 +729,16 @@ evalTerm = \case
     case value of
       -- Note that strings are hashed in a different way from the other types
       Some SStr tm -> eval tm <&> unliteralS >>= \case
-        Nothing        -> throwError notStaticErr
+        Nothing        -> do
+          emitWarning (FWShimmedStaticContent "hash with symbolic string argument")
+          pure (literalS "aaa")
         Just (Str str) -> pure $ sHash $ encodeUtf8 $ T.pack str
 
       -- Everything else is hashed by first converting it to JSON:
       Some SInteger tm -> eval tm <&> unliteralS >>= \case
-        Nothing  -> throwError notStaticErr
+        Nothing  -> do
+          emitWarning (FWShimmedStaticContent "hash with symbolic integer argument")
+          pure (literalS "aaa")
         Just int -> pure $ sHash $ toStrict $ Aeson.encode $ Pact.PLiteral $ Pact.LInteger int
       Some SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr

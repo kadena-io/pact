@@ -6,6 +6,7 @@
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 -- | Toplevel module for types related to symbolic analysis of Pact programs.
 module Pact.Analyze.Types
@@ -34,6 +35,8 @@ module Pact.Analyze.Types
   , tableInvariants
   , tableName
   , tableType
+  , VerificationWarning(..)
+  , describeVerificationWarnings
 
   , pattern ColumnNameLit
   , pattern TableNameLit
@@ -55,6 +58,7 @@ import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
+import qualified Data.Text                    as T
 
 data Quantifier
   = Forall' VarId Text QType
@@ -127,3 +131,13 @@ data ModuleRefs = ModuleRefs
   } deriving Show
 
 makeLenses ''ModuleRefs
+
+data VerificationWarning
+  = FWDuplicatedPropertyDef [Text]
+  | FWShimmedStaticContent Text
+  deriving (Eq, Show)
+
+describeVerificationWarnings :: VerificationWarning -> Text
+describeVerificationWarnings (FWDuplicatedPropertyDef dups)
+  = "Duplicated property definitions for " <> T.intercalate ", " dups
+describeVerificationWarnings (FWShimmedStaticContent t) = "Shimmed " <> t -- TODO warning message
