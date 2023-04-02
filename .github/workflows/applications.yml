@@ -51,13 +51,15 @@ jobs:
         sudo apt-get install -y z3
     - name: Install z3 (ubuntu-22.04)
       if: contains(matrix.os, 'ubuntu-22.04')
-      uses: pavpanchekha/setup-z3@v0.3.0
+      # uses: pavpanchekha/setup-z3@v0.3.0
+      uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
       with:
         version: "4.11.2"
         architecture: "x64"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
-      uses: pavpanchekha/setup-z3@v0.3.0
+      # uses: pavpanchekha/setup-z3@v0.3.0
+      uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
       with:
         version: "4.8.10"
         architecture: "x64"
@@ -248,7 +250,7 @@ jobs:
         EOF
     - name: Docker meta
       id: meta
-      uses: docker/metadata-action@v3
+      uses: docker/metadata-action@v4
       with:
         images: ghcr.io/kadena-io/pact
         tags: |
@@ -273,7 +275,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     - name: Build and push
       id: docker_build
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v4
       with:
         push: true
         context: .
