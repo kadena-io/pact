@@ -55,13 +55,6 @@ jobs:
       with:
         version: "4.11.2"
         architecture: "x64"
-    - name: Install z3 (ubuntu-18.04)
-      if: contains(matrix.os, 'ubuntu-18.04')
-      uses: pavpanchekha/setup-z3@v0.3.0
-      with:
-        version: "4.8.10"
-        architecture: "x64"
-        distribution: "ubuntu-18.04"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
       uses: pavpanchekha/setup-z3@v0.3.0
@@ -154,7 +147,7 @@ jobs:
         cabal freeze
     - name: Sync from cabal cache
       if: matrix.cabalcache == 'true'
-      uses: larskuhtz/cabal-cache-action@ecc751af6d31b3ed5a3b4aefdefd0ed6ef4cb414
+      uses: larskuhtz/cabal-cache-action@018b7ae0c480ba3dc4fa0cfa3a0bc1f05b7724b3
       with:
         bucket: "kadena-cabal-cache"
         region: "us-east-1"
