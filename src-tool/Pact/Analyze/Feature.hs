@@ -959,7 +959,7 @@ doc FEnumerate = Doc
   InvAndProp
   "Returns a sequence of numbers as a list"
   [ Usage
-      "(drop n xs)"
+      "(enumerate from to step)"
       Map.empty
       $ Fun
         Nothing
