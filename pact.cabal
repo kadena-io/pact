@@ -59,7 +59,6 @@ library musl-trans
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   build-depends: base
   c-sources:
-    musl-trans/cbits/musl/kadena-merror.c
     musl-trans/cbits/musl/exp.c
     musl-trans/cbits/musl/log.c
     musl-trans/cbits/musl/pow.c

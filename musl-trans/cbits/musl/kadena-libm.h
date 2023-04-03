@@ -11,7 +11,7 @@
 /* Support signaling NaNs.  */
 #define KADENA_WANT_SNAN 0
 
-#if WANT_SNAN
+#if KADENA_WANT_SNAN
 #error SNaN is unsupported
 #else
 #define issignalingf_inline(x) 0
@@ -92,13 +92,44 @@ static inline void kadena_fp_force_eval(double x)
 #define kadena_asuint64(f) ((union{double _f; uint64_t _i;}){f})._i
 #define kadena_asdouble(i) ((union{uint64_t _i; double _f;}){i})._f
 
-/* error handling functions */
-float __kadena_math_uflowf(uint32_t);
-float __kadena_math_oflowf(uint32_t);
-float __kadena_math_divzerof(uint32_t);
-double __kadena_math_uflow(uint32_t);
-double __kadena_math_oflow(uint32_t);
-double __kadena_math_divzero(uint32_t);
-double __kadena_math_invalid(double);
+/* ************************************************************************** */
+/* __math_xflow.c */
+
+static inline double __kadena_math_xflow(uint32_t sign, double y)
+{
+	return kadena_eval_as_double(kadena_fp_barrier(sign ? -y : y) * y);
+}
+
+/* ************************************************************************** */
+/* __math_oflow.c */
+
+static inline double __kadena_math_oflow(uint32_t sign)
+{
+	return __kadena_math_xflow(sign, 0x1p769);
+}
+
+/* ************************************************************************** */
+/* __math_uflow.c */
+
+static inline double __kadena_math_uflow(uint32_t sign)
+{
+	return __kadena_math_xflow(sign, 0x1p-767);
+}
+
+/* ************************************************************************** */
+/* __math_invalid.c */
+
+static inline double __kadena_math_invalid(double x)
+{
+	return (x - x) / (x - x);
+}
+
+/* ************************************************************************** */
+/* __math_divzero.c */
+
+static inline double __kadena_math_divzero(uint32_t sign)
+{
+	return kadena_fp_barrier(sign ? -1.0 : 1.0) / 0.0;
+}
 
 #endif
