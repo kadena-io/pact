@@ -79,6 +79,7 @@ test-suite musl-trans-tests
     , base
     , musl-trans
     , hspec
+    , QuickCheck
 
 -- -------------------------------------------------------------------------- --
 -- Pact library
