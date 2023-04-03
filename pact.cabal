@@ -429,6 +429,7 @@ test-suite hspec
         TypecheckSpec
         PactCLISpec
         ZkSpec
+        ReplSpec
         PairingSpec
         Utils
 
@@ -454,3 +455,4 @@ test-suite hspec
         , servant-client
         , temporary >= 1.3
         , yaml
+        , process
