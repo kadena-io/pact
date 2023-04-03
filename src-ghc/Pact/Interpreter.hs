@@ -78,13 +78,12 @@ data MsgData = MsgData {
   mdData :: !Value,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
-  mdSigners :: [Signer],
-  mdSessionSigner :: Maybe Signer
+  mdSigners :: [Signer]
   }
 
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData Null def h def def
+initMsgData h = MsgData Null def h def
 
 -- | Describes either a ContMsg or ExecMsg.
 -- ContMsg is represented as a 'Maybe PactExec'
@@ -163,6 +162,7 @@ setupEvalEnv
   -> Maybe EntityName
   -> ExecutionMode
   -> MsgData
+  -> Maybe Signer
   -> RefStore
   -> GasEnv
   -> NamespacePolicy
@@ -170,13 +170,13 @@ setupEvalEnv
   -> PublicData
   -> ExecutionConfig
   -> IO (EvalEnv e)
-setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
+setupEvalEnv dbEnv ent mode msgData sessionSigner refStore gasEnv np spv pd ec = do
   gasRef <- newIORef 0
   warnRef <- newIORef mempty
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
-  , _eeSessionSig = toPair <$> mdSessionSigner msgData
+  , _eeSessionSig = toPair <$> sessionSigner
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent

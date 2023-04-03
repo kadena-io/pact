@@ -156,9 +156,8 @@ loadBenchModule db = do
            Nothing
            pactInitialHash
            [Signer Nothing pk Nothing []]
-           Nothing
   let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  e <- setupEvalEnv db entity Transactional md initRefStore
+  e <- setupEvalEnv db entity Transactional md Nothing initRefStore
           freeGasEnv permissiveNamespacePolicy noSPVSupport def ec
   (r :: Either SomeException EvalResult) <- try $ evalExec  defaultInterpreter e pc
   void $ eitherDie "loadBenchModule (load)" $ fmapL show r
@@ -184,10 +183,10 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData cdata Nothing pactInitialHash ss Nothing
+  let md = MsgData cdata Nothing pactInitialHash ss
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  e <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Transactional md
-          initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
+  e <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Transactional md Nothing
+       initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   let s = perfInterpreter pt $ defaultInterpreterState $
           maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
@@ -196,9 +195,9 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
-  let md = MsgData Null Nothing pactInitialHash [] Nothing
+  let md = MsgData Null Nothing pactInitialHash []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  env <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Local md
+  env <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Local md Nothing
             initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   o <- try $ runEval def env $ mapM eval ts
   case o of
