@@ -74,6 +74,7 @@ library
       cbits/musl/sqrt_data.c
     exposed-modules:
       Pact.Native.Trans.TOps
+    build-depends: hashes
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -228,12 +229,14 @@ library
       Pact.PersistPactDb.Regression
       Pact.Server.PactService
       Pact.Types.Crypto
+      Pact.Native.Crypto
       Pact.Types.ECDSA
       Pact.Types.Server
       Pact.Types.SQLite
     build-depends:
       , criterion >= 1.1.4 && < 1.6
       , cryptonite
+      , jose
       , direct-sqlite == 2.3.27
       , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2

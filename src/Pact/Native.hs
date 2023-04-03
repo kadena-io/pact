@@ -86,6 +86,7 @@ import Numeric
 
 import Pact.Eval
 import Pact.Native.Capabilities
+import Pact.Native.Crypto
 import Pact.Native.Db
 import Pact.Native.Decrypt
 import Pact.Native.Guards
@@ -119,6 +120,7 @@ natives =
   , decryptDefs
   , guardDefs
   , zkDefs
+  , cryptoDefs
   ]
 
 
