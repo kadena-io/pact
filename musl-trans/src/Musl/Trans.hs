@@ -1,5 +1,5 @@
 -- |
--- Module      :  Pact.Native.Trans.TOps
+-- Module      :  Musl.Trans
 -- Copyright   :  (C) 2022 John Wiegley
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  John Wiegley <john@kadena.io>
@@ -7,7 +7,7 @@
 -- Operators and math built-ins.
 --
 
-module Pact.Native.Trans.TOps
+module Musl.Trans
   ( trans_pow
   , trans_exp
   , trans_log

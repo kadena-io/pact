@@ -39,14 +39,14 @@ import qualified Data.Map.Strict as M
 import Data.Text (Text)
 import qualified Data.Text as T
 
+#if !defined(ghcjs_HOST_OS)
+import Musl.Trans
+#endif
+
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-#if !defined(ghcjs_HOST_OS)
-import Pact.Native.Trans.TOps
-#endif
-
 
 modDef :: NativeDef
 modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
