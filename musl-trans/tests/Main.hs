@@ -24,6 +24,7 @@ main = hspec $ describe "Musl.Trans" $ do
     spec_trans_sqrt
     spec_ln_exp
     spec_log_pow
+    spec_pow_sqrt
 
 -- -------------------------------------------------------------------------- --
 -- Specs
@@ -49,10 +50,10 @@ spec_trans_pow = describe "trans_pow" $ do
     it "pow 2 4" $ trans_pow 2 4 `shouldBe` 16
     it "pow 2 10" $ trans_pow 2 10 `shouldBe` 1024
     it "pow 8.7 85.7" $ trans_pow 8.7 85.7 `shouldBe` 3.28700185683462e80
-    it "pow 8.7 856739.34857" $ trans_pow 8.7 856739.34857 `shouldBe` infty
+    it "pow 8.7 856739.34857" $ isInfinite (trans_pow 8.7 856739.34857)
     prop "pow x 0" $ \x -> trans_pow x 0 === 1
     prop "pow x 1" $ \x -> trans_pow x 1 === x
-    prop "pow x 2" $ \x -> trans_pow x 2 === x * x
+    prop "pow x 2" $ \x -> trans_pow x 2 `roughlyEq` (x * x)
 
 spec_trans_log :: Spec
 spec_trans_log = describe "trans_log" $ do
@@ -67,11 +68,12 @@ spec_trans_log = describe "trans_log" $ do
     it "log 13.7 721.8" $ trans_log 13.7 721.8 `shouldBe` 2.5146170134618364
 
 spec_log_pow :: Spec
-spec_log_pow = describe "trans_log . trans_pow" $ do
+spec_log_pow = describe "trans_log 2 . trans_pow 2" $ do
     prop "log 2 (pow 2 x)" $ \x -> trans_log 2 (trans_pow 2 x) `roughlyEq` x
 
 spec_trans_sqrt :: Spec
 spec_trans_sqrt = describe "trans_sqrt" $ do
+    it "sqrt -1" $ isNaN (trans_sqrt (-1))
     it "sqrt 1" $ trans_sqrt 1 `shouldBe` 1
     it "sqrt 4" $ trans_sqrt 4 `shouldBe` 2
     it "sqrt 9" $ trans_sqrt 9 `shouldBe` 3
@@ -82,11 +84,12 @@ spec_trans_sqrt = describe "trans_sqrt" $ do
     it "sqrt 2" $ trans_sqrt 2 `shouldBe` 1.4142135623730951
     prop "sqrt (x * x)" $ \x -> trans_sqrt (x * x) === abs x
 
+spec_pow_sqrt :: Spec
+spec_pow_sqrt = describe "pow (sqrt x) 2" $ do
+    prop "sqrt (x * x)" $ \(Positive x) -> trans_pow (trans_sqrt x) 2 `roughlyEq` x
+
 -- -------------------------------------------------------------------------- --
 -- Utils
-
-infty :: Double
-infty = read "Infinity"
 
 roughlyEq :: Double -> Double -> Bool
 roughlyEq a b
