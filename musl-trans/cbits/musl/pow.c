@@ -542,7 +542,7 @@ static inline double specialcase(double_t tmp, uint64_t sbits, uint64_t ki)
 		sbits -= 1009ull << 52;
 		scale = kadena_asdouble(sbits);
 		y = 0x1p1009 * (scale + scale * tmp);
-		return kadena_eval_as_double(y);
+		return eval_as_double(y);
 	}
 	/* k < 0, need special care in the subnormal range.  */
 	sbits += 1022ull << 52;
@@ -560,15 +560,15 @@ static inline double specialcase(double_t tmp, uint64_t sbits, uint64_t ki)
 		lo = scale - y + scale * tmp;
 		hi = one + y;
 		lo = one - hi + y + lo;
-		y = kadena_eval_as_double(hi + lo) - one;
+		y = eval_as_double(hi + lo) - one;
 		/* Fix the sign of 0.  */
 		if (y == 0.0)
 			y = kadena_asdouble(sbits & 0x8000000000000000);
 		/* The underflow exception needs to be signaled explicitly.  */
-		kadena_fp_force_eval(kadena_fp_barrier(0x1p-1022) * 0x1p-1022);
+		fp_force_eval(fp_barrier(0x1p-1022) * 0x1p-1022);
 	}
 	y = 0x1p-1022 * y;
-	return kadena_eval_as_double(y);
+	return eval_as_double(y);
 }
 
 #define SIGN_BIAS (0x800 << EXP_TABLE_BITS)
@@ -594,9 +594,9 @@ static inline double exp_inline(double_t x, double_t xtail, uint32_t sign_bias)
 		if (abstop >= top12(1024.0)) {
 			/* Note: inf and nan are already handled.  */
 			if (kadena_asuint64(x) >> 63)
-				return __kadena_math_uflow(sign_bias);
+				return __math_uflow(sign_bias);
 			else
-				return __kadena_math_oflow(sign_bias);
+				return __math_oflow(sign_bias);
 		}
 		/* Large x is special cased below.  */
 		abstop = 0;
@@ -610,12 +610,12 @@ static inline double exp_inline(double_t x, double_t xtail, uint32_t sign_bias)
 	ki = converttoint(z);
 #elif EXP_USE_TOINT_NARROW
 	/* z - kd is in [-0.5-2^-16, 0.5] in all rounding modes.  */
-	kd = kadena_eval_as_double(z + Shift);
+	kd = eval_as_double(z + Shift);
 	ki = kadena_asuint64(kd) >> 16;
 	kd = (double_t)(int32_t)ki;
 #else
 	/* z - kd is in [-1, 1] in non-nearest rounding modes.  */
-	kd = kadena_eval_as_double(z + Shift);
+	kd = eval_as_double(z + Shift);
 	ki = kadena_asuint64(kd);
 	kd -= Shift;
 #endif
@@ -639,7 +639,7 @@ static inline double exp_inline(double_t x, double_t xtail, uint32_t sign_bias)
 	scale = kadena_asdouble(sbits);
 	/* Note: tmp == 0 or |tmp| > 2^-200 and scale > 2^-739, so there
 	   is no spurious underflow here even without fma.  */
-	return kadena_eval_as_double(scale + scale * tmp);
+	return eval_as_double(scale + scale * tmp);
 }
 
 /* Returns 0 if not int, 1 if odd int, 2 if even int.  The argument is
@@ -700,14 +700,14 @@ double musl_pow(double x, double y)
 				x2 = -x2;
 			/* Without the barrier some versions of clang hoist the 1/x2 and
 			   thus division by zero exception can be signaled spuriously.  */
-			return iy >> 63 ? kadena_fp_barrier(1 / x2) : x2;
+			return iy >> 63 ? fp_barrier(1 / x2) : x2;
 		}
 		/* Here x and y are non-zero finite.  */
 		if (ix >> 63) {
 			/* Finite x < 0.  */
 			int yint = checkint(iy);
 			if (yint == 0)
-				return __kadena_math_invalid(x);
+				return __math_invalid(x);
 			if (yint == 1)
 				sign_bias = SIGN_BIAS;
 			ix &= 0x7fffffffffffffff;
@@ -726,8 +726,8 @@ double musl_pow(double x, double y)
 					return 1.0;
 			}
 			return (ix > kadena_asuint64(1.0)) == (topy < 0x800) ?
-				       __kadena_math_oflow(0) :
-				       __kadena_math_uflow(0);
+				       __math_oflow(0) :
+				       __math_uflow(0);
 		}
 		if (topx == 0) {
 			/* Normalize subnormal x so exponent becomes negative.  */

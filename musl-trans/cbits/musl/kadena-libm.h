@@ -48,40 +48,40 @@ static int32_t kadena_converttoint(double_t);
    -ffloat-store an assignment is required, in old compilers argument
    passing and return statement may not drop excess precision).  */
 
-static inline float kadena_eval_as_float(float x)
+static inline float eval_as_float(float x)
 {
 	float y = x;
 	return y;
 }
 
-static inline double kadena_eval_as_double(double x)
+static inline double eval_as_double(double x)
 {
 	double y = x;
 	return y;
 }
 
-/* kadena_fp_barrier returns its input, but limits code transformations
+/* fp_barrier returns its input, but limits code transformations
    as if it had a side-effect (e.g. observable io) and returned
    an arbitrary value.  */
 
-#ifndef kadena_fp_barrier
-#define kadena_fp_barrier kadena_fp_barrier
-static inline double kadena_fp_barrier(double x)
+#ifndef fp_barrier
+#define fp_barrier fp_barrier
+static inline double fp_barrier(double x)
 {
 	volatile double y = x;
 	return y;
 }
 #endif
 
-/* kadena_fp_force_eval ensures that the input value is computed when that's
+/* fp_force_eval ensures that the input value is computed when that's
    otherwise unused.  To prevent the constant folding of the input
-   expression, an additional kadena_fp_barrier may be needed or a compilation
+   expression, an additional fp_barrier may be needed or a compilation
    mode that does so (e.g. -frounding-math in gcc). Then it can be
    used to evaluate an expression for its fenv side-effects only.   */
 
-#ifndef kadena_fp_force_eval
-#define kadena_fp_force_eval kadena_fp_force_eval
-static inline void kadena_fp_force_eval(double x)
+#ifndef fp_force_eval
+#define fp_force_eval fp_force_eval
+static inline void fp_force_eval(double x)
 {
 	volatile double y;
 	y = x;
@@ -95,31 +95,31 @@ static inline void kadena_fp_force_eval(double x)
 /* ************************************************************************** */
 /* __math_xflow.c */
 
-static inline double __kadena_math_xflow(uint32_t sign, double y)
+static inline double __math_xflow(uint32_t sign, double y)
 {
-	return kadena_eval_as_double(kadena_fp_barrier(sign ? -y : y) * y);
+	return eval_as_double(fp_barrier(sign ? -y : y) * y);
 }
 
 /* ************************************************************************** */
 /* __math_oflow.c */
 
-static inline double __kadena_math_oflow(uint32_t sign)
+static inline double __math_oflow(uint32_t sign)
 {
-	return __kadena_math_xflow(sign, 0x1p769);
+	return __math_xflow(sign, 0x1p769);
 }
 
 /* ************************************************************************** */
 /* __math_uflow.c */
 
-static inline double __kadena_math_uflow(uint32_t sign)
+static inline double __math_uflow(uint32_t sign)
 {
-	return __kadena_math_xflow(sign, 0x1p-767);
+	return __math_xflow(sign, 0x1p-767);
 }
 
 /* ************************************************************************** */
 /* __math_invalid.c */
 
-static inline double __kadena_math_invalid(double x)
+static inline double __math_invalid(double x)
 {
 	return (x - x) / (x - x);
 }
@@ -127,9 +127,9 @@ static inline double __kadena_math_invalid(double x)
 /* ************************************************************************** */
 /* __math_divzero.c */
 
-static inline double __kadena_math_divzero(uint32_t sign)
+static inline double __math_divzero(uint32_t sign)
 {
-	return kadena_fp_barrier(sign ? -1.0 : 1.0) / 0.0;
+	return fp_barrier(sign ? -1.0 : 1.0) / 0.0;
 }
 
 #endif

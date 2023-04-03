@@ -247,7 +247,7 @@ static inline double kadena_specialcase(double_t tmp, uint64_t sbits, uint64_t k
 		sbits -= 1009ull << 52;
 		scale = kadena_asdouble(sbits);
 		y = 0x1p1009 * (scale + scale * tmp);
-		return kadena_eval_as_double(y);
+		return eval_as_double(y);
 	}
 	/* k < 0, need special care in the subnormal range.  */
 	sbits += 1022ull << 52;
@@ -262,15 +262,15 @@ static inline double kadena_specialcase(double_t tmp, uint64_t sbits, uint64_t k
 		lo = scale - y + scale * tmp;
 		hi = 1.0 + y;
 		lo = 1.0 - hi + y + lo;
-		y = kadena_eval_as_double(hi + lo) - 1.0;
+		y = eval_as_double(hi + lo) - 1.0;
 		/* Avoid -0.0 with downward rounding.  */
 		if (KADENA_WANT_ROUNDING && y == 0.0)
 			y = 0.0;
 		/* The underflow exception needs to be signaled explicitly.  */
-		kadena_fp_force_eval(kadena_fp_barrier(0x1p-1022) * 0x1p-1022);
+		fp_force_eval(fp_barrier(0x1p-1022) * 0x1p-1022);
 	}
 	y = 0x1p-1022 * y;
-	return kadena_eval_as_double(y);
+	return eval_as_double(y);
 }
 
 /* Top 12 bits of a double (sign and exponent bits).  */
@@ -297,9 +297,9 @@ double musl_exp(double x)
 			if (abstop >= top12(INFINITY))
 				return 1.0 + x;
 			if (kadena_asuint64(x) >> 63)
-				return __kadena_math_uflow(0);
+				return __math_uflow(0);
 			else
-				return __kadena_math_oflow(0);
+				return __math_oflow(0);
 		}
 		/* Large x is special cased below.  */
 		abstop = 0;
@@ -318,7 +318,7 @@ double musl_exp(double x)
 	kd = (double_t)(int32_t)ki;
 #else
 	/* z - kd is in [-1, 1] in non-nearest rounding modes.  */
-	kd = kadena_eval_as_double(z + Shift);
+	kd = eval_as_double(z + Shift);
 	ki = kadena_asuint64(kd);
 	kd -= Shift;
 #endif
@@ -340,5 +340,5 @@ double musl_exp(double x)
 	scale = kadena_asdouble(sbits);
 	/* Note: tmp == 0 or |tmp| > 2^-200 and scale > 2^-739, so there
 	   is no spurious underflow here even without fma.  */
-	return kadena_eval_as_double(scale + scale * tmp);
+	return eval_as_double(scale + scale * tmp);
 }

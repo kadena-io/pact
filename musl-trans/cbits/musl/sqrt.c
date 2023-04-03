@@ -59,7 +59,7 @@ double musl_sqrt(double x)
 		if (ix == 0x7ff0000000000000)
 			return x;
 		if (ix > 0x7ff0000000000000)
-			return __kadena_math_invalid(x);
+			return __math_invalid(x);
 		/* x is subnormal, normalize it.  */
 		ix = kadena_asuint64(x * 0x1p52);
 		top = ix >> 52;
@@ -176,7 +176,7 @@ double musl_sqrt(double x)
 		uint64_t tiny = kadena_predict_false(d2==0) ? 0 : 0x0010000000000000;
 		tiny |= (d1^d2) & 0x8000000000000000;
 		t = kadena_asdouble(tiny);
-		y = kadena_eval_as_double(y + t);
+		y = eval_as_double(y + t);
 	}
 	return y;
 }
