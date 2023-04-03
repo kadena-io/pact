@@ -264,7 +264,7 @@ static inline double kadena_specialcase(double_t tmp, uint64_t sbits, uint64_t k
 		lo = 1.0 - hi + y + lo;
 		y = eval_as_double(hi + lo) - 1.0;
 		/* Avoid -0.0 with downward rounding.  */
-		if (KADENA_WANT_ROUNDING && y == 0.0)
+		if (WANT_ROUNDING && y == 0.0)
 			y = 0.0;
 		/* The underflow exception needs to be signaled explicitly.  */
 		fp_force_eval(fp_barrier(0x1p-1022) * 0x1p-1022);
@@ -290,7 +290,7 @@ double musl_exp(double x)
 		if (abstop - top12(0x1p-54) >= 0x80000000)
 			/* Avoid spurious underflow for tiny x.  */
 			/* Note: 0 is common input.  */
-			return KADENA_WANT_ROUNDING ? 1.0 + x : 1.0;
+			return WANT_ROUNDING ? 1.0 + x : 1.0;
 		if (abstop >= top12(1024.0)) {
 			if (kadena_asuint64(x) == kadena_asuint64(-INFINITY))
 				return 0.0;

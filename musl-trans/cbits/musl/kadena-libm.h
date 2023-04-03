@@ -7,32 +7,10 @@
 #include "endian.h"
 
 /* Support non-nearest rounding mode.  */
-#define KADENA_WANT_ROUNDING 1
-/* Support signaling NaNs.  */
-#define KADENA_WANT_SNAN 0
+#define WANT_ROUNDING 1
 
-#if KADENA_WANT_SNAN
-#error SNaN is unsupported
-#else
 #define issignalingf_inline(x) 0
 #define issignaling_inline(x) 0
-#endif
-
-#ifndef KADENA_TOINT_INTRINSICS
-#define KADENA_TOINT_INTRINSICS 0
-#endif
-
-#if KADENA_TOINT_INTRINSICS
-/* Round x to nearest int in all rounding modes, ties have to be rounded
-   consistently with converttoint so the results match.  If the result
-   would be outside of [-2^31, 2^31-1] then the semantics is unspecified.  */
-static double_t kadena_roundtoint(double_t);
-
-/* Convert x to nearest int in all rounding modes, ties have to be rounded
-   consistently with roundtoint.  If the result is not representible in an
-   int32_t then the semantics is unspecified.  */
-static int32_t kadena_converttoint(double_t);
-#endif
 
 /* Helps static branch prediction so hot path can be better optimized.  */
 #ifdef __GNUC__

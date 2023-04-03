@@ -397,7 +397,7 @@ double musl_log(double x)
 	if (kadena_predict_false(ix - LO < HI - LO)) {
 		/* Handle close to 1.0 inputs separately.  */
 		/* Fix sign of zero with downward rounding when x==1.  */
-		if (KADENA_WANT_ROUNDING && kadena_predict_false(ix == kadena_asuint64(1.0)))
+		if (WANT_ROUNDING && kadena_predict_false(ix == kadena_asuint64(1.0)))
 			return 0;
 		r = x - 1.0;
 		r2 = r * r;
