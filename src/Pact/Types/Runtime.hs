@@ -77,6 +77,7 @@ import Data.Text (Text,pack)
 import Data.Set(Set)
 import GHC.Generics (Generic)
 
+import Pact.Types.Term
 import Pact.Types.Capability
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
@@ -180,8 +181,10 @@ data ExecutionFlag
   | FlagDisableNewTrans
   -- | Disable Pact 4.5 Features
   | FlagDisablePact45
-    -- | Disable Pact 4.6 Features
+  -- | Disable Pact 4.6 Features
   | FlagDisablePact46
+  -- | Disable Pact 4.7 Features
+  | FlagDisablePact47
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -434,6 +437,14 @@ throwArgsError FunApp {..} args s = throwErr ArgsError _faInfo $
   pretty s <> ", received " <> bracketsSep (map pretty args) <> " for " <>
             prettyFunTypes _faTypes
 
+throwOnChainArgsError :: Pretty n => FunApp -> [Term n] -> Eval e a
+throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
+  "Invalid arguments in call to"
+    <+> pretty _faName
+    <> ", received arguments of type "
+    <> bracketsSep (map (pretty . typeof') args) <> ", expected "
+    <> prettyFunTypes _faTypes
+
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) err)
 
@@ -461,10 +472,21 @@ throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) r
 
 
 argsError :: FunApp -> [Term Name] -> Eval e a
-argsError i as = throwArgsError i as "Invalid arguments"
+argsError i as =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> throwArgsError i as "Invalid arguments"
+    False -> do
+      view eeInRepl >>= \case
+        True -> throwArgsError i as "Invalid arguments"
+        False -> throwOnChainArgsError i as
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
-argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
+argsError' i as =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
+    False -> view eeInRepl >>= \case
+        True -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
+        False -> throwOnChainArgsError i as
 
 eAdvise :: Info -> AdviceContext r -> Eval e (r,a) -> Eval e a
 eAdvise i m a = view eeAdvice >>= \adv -> advise i adv m a
