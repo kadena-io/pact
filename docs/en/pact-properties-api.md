@@ -635,6 +635,21 @@ List / string / object contains
 
 Supported in either invariants or properties.
 
+### enumerate {#FEnumerate}
+
+```lisp
+(drop n xs)
+```
+
+* takes `from`: `integer`
+* takes `to`: `integer`
+* takes `step`: `integer`
+* produces [`integer`]
+
+Returns a sequence of numbers as a list
+
+Supported in either invariants or properties.
+
 ### reverse {#FReverse}
 
 ```lisp

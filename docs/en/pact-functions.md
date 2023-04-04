@@ -1292,7 +1292,7 @@ pact> (floor 100.15234 2)
 Natural log of X.
 ```lisp
 pact> (round (ln 60) 6)
--21619006632740594631647248037276739996930578538495179860305499179169030298241877657764157238427647441953338135754818406206742228907756939113805754913204847904691618394263162113036830176956011640422137856.000000
+4.094345
 ```
 
 
@@ -1306,3 +1306,896 @@ pact> (round (ln 60) 6)
 Log of Y base X.
 ```lisp
 pact> (log 2 256)
+8
+```
+
+
+### mod {#mod}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+X modulo Y.
+```lisp
+pact> (mod 13 8)
+5
+```
+
+
+### not {#not}
+
+*x*&nbsp;`bool` *&rarr;*&nbsp;`bool`
+
+
+Boolean not.
+```lisp
+pact> (not (> 1 2))
+true
+```
+
+
+### not? {#not?}
+
+*app*&nbsp;`x:<r> -> bool` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+
+
+Apply logical 'not' to the results of applying VALUE to APP.
+```lisp
+pact> (not? (> 20) 15)
+false
+```
+
+
+### or {#or}
+
+*x*&nbsp;`bool` *y*&nbsp;`bool` *&rarr;*&nbsp;`bool`
+
+
+Boolean logic with short-circuit.
+```lisp
+pact> (or true false)
+true
+```
+
+
+### or? {#or?}
+
+*a*&nbsp;`x:<r> -> bool` *b*&nbsp;`x:<r> -> bool` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+
+
+Apply logical 'or' to the results of applying VALUE to A and B, with short-circuit.
+```lisp
+pact> (or? (> 20) (> 10) 15)
+true
+```
+
+
+### round {#round}
+
+*x*&nbsp;`decimal` *prec*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
+
+*x*&nbsp;`decimal` *&rarr;*&nbsp;`integer`
+
+
+Performs Banker's rounding value of decimal X as integer, or to PREC precision as decimal.
+```lisp
+pact> (round 3.5)
+4
+pact> (round 100.15234 2)
+100.15
+```
+
+
+### shift {#shift}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Shift X Y bits left if Y is positive, or right by -Y bits otherwise. Right shifts perform sign extension on signed number types; i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise.
+```lisp
+pact> (shift 255 8)
+65280
+pact> (shift 255 -1)
+127
+pact> (shift -255 8)
+-65280
+pact> (shift -255 -1)
+-128
+```
+
+
+### sqrt {#sqrt}
+
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
+
+
+Square root of X.
+```lisp
+pact> (sqrt 25)
+5.0
+```
+
+
+### xor {#xor}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X xor Y.
+```lisp
+pact> (xor 127 64)
+63
+pact> (xor 5 -7)
+-4
+```
+
+
+### | {#|}
+
+*x*&nbsp;`integer` *y*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Compute bitwise X or Y.
+```lisp
+pact> (| 2 3)
+3
+pact> (| 5 -7)
+-3
+```
+
+
+### ~ {#~}
+
+*x*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Reverse all bits in X.
+```lisp
+pact> (~ 15)
+-16
+```
+
+## Keysets {#Keysets}
+
+### define-keyset {#define-keyset}
+
+*name*&nbsp;`string` *keyset*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, similarly to 'read-keyset'. If keyset NAME already exists, keyset will be enforced before updating to new value.
+```lisp
+(define-keyset 'admin-keyset (read-keyset "keyset"))
+```
+
+Top level only: this function will fail if used in module code.
+
+
+### enforce-keyset {#enforce-keyset}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
+```lisp
+(enforce-keyset 'admin-keyset)
+(enforce-keyset row-guard)
+```
+
+
+### keys-2 {#keys-2}
+
+*count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
+
+
+Keyset predicate function to match at least 2 keys in keyset.
+```lisp
+pact> (keys-2 3 1)
+false
+```
+
+
+### keys-all {#keys-all}
+
+*count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
+
+
+Keyset predicate function to match all keys in keyset.
+```lisp
+pact> (keys-all 3 3)
+true
+```
+
+
+### keys-any {#keys-any}
+
+*count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
+
+
+Keyset predicate function to match any (at least 1) key in keyset.
+```lisp
+pact> (keys-any 10 1)
+true
+```
+
+
+### read-keyset {#read-keyset}
+
+*key*&nbsp;`string` *&rarr;*&nbsp;`keyset`
+
+
+Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN }). PREDFUN should resolve to a keys predicate.
+```lisp
+(read-keyset "admin-keyset")
+```
+
+## Capabilities {#Capabilities}
+
+### compose-capability {#compose-capability}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
+
+
+Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production, only valid within a (distinct) 'defcap' body, as a way to compose CAPABILITY with the outer capability such that the scope of the containing 'with-capability' call will "import" this capability. Thus, a call to '(with-capability (OUTER-CAP) OUTER-BODY)', where the OUTER-CAP defcap calls '(compose-capability (INNER-CAP))', will result in INNER-CAP being granted in the scope of OUTER-BODY.
+```lisp
+(compose-capability (TRANSFER src dest))
+```
+
+
+### emit-event {#emit-event}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
+
+
+Emit CAPABILITY as event without evaluating body of capability. Fails if CAPABILITY is not @managed or @event.
+```lisp
+(emit-event (TRANSFER "Bob" "Alice" 12.0))
+```
+
+
+### enforce-guard {#enforce-guard}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
+```lisp
+(enforce-guard 'admin-keyset)
+(enforce-guard row-guard)
+```
+
+
+### install-capability {#install-capability}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
+
+
+Specifies, and provisions install of, a _managed_ CAPABILITY, defined in a 'defcap' in which a '@managed' tag designates a single parameter to be managed by a specified function. After install, CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request. The manager function is of type 'managed:<p> requested:<p> -> <p>', where '<p>' indicates the type of the managed parameter, such that for '(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. Any capability matching the 'static' (non-managed) parameters will cause this function to be invoked with the current managed value and that of the requested capability. The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the 'balance' of the request. NOTE that signatures scoped to a managed capability cause the capability to be automatically provisioned for install similarly to one installed with this function.
+```lisp
+(install-capability (PAY "alice" "bob" 10.0))
+```
+
+
+### require-capability {#require-capability}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`bool`
+
+
+Specifies and tests for existing grant of CAPABILITY, failing if not found in environment.
+```lisp
+(require-capability (TRANSFER src dest))
+```
+
+
+### with-capability {#with-capability}
+
+*capability*&nbsp;` -> bool` *body*&nbsp;`[*]` *&rarr;*&nbsp;`<a>`
+
+
+Specifies and requests grant of _acquired_ CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is evaluated, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 'with-capability' cannot be called from within an evaluating defcap. Acquire of a managed capability results in emission of the equivalent event.
+```lisp
+(with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
+```
+
+## SPV {#SPV}
+
+### verify-spv {#verify-spv}
+
+*type*&nbsp;`string` *payload*&nbsp;`object:<in>` *&rarr;*&nbsp;`object:<out>`
+
+
+Performs a platform-specific spv proof of type TYPE on PAYLOAD. The format of the PAYLOAD object depends on TYPE, as does the format of the return object. Platforms such as Chainweb will document the specific payload types and return values.
+```lisp
+(verify-spv "TXOUT" (read-msg "proof"))
+```
+
+## Commitments {#Commitments}
+
+### decrypt-cc20p1305 {#decrypt-cc20p1305}
+
+*ciphertext*&nbsp;`string` *nonce*&nbsp;`string` *aad*&nbsp;`string` *mac*&nbsp;`string` *public-key*&nbsp;`string` *secret-key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Perform decryption of CIPHERTEXT using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539. CIPHERTEXT is an unpadded base64url string. NONCE is a 12-byte base64 string. AAD is base64 additional authentication data of any length. MAC is the "detached" base64 tag value for validating POLY1305 authentication. PUBLIC-KEY and SECRET-KEY are base-16 Curve25519 values to form the DH symmetric key.Result is unpadded base64URL.
+```lisp
+(decrypt-cc20p1305 ciphertext nonce aad mac pubkey privkey)
+```
+
+
+### validate-keypair {#validate-keypair}
+
+*public*&nbsp;`string` *secret*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that the Curve25519 keypair of (PUBLIC,SECRET) match. Key values are base-16 strings of length 32.
+```lisp
+(validate-keypair pubkey privkey)
+```
+
+## Guards {#Guards}
+
+### create-capability-guard {#create-capability-guard}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard that will enforce that CAPABILITY is acquired.
+```lisp
+(create-capability-guard (BANK_DEBIT 10.0))
+```
+
+
+### create-capability-pact-guard {#create-capability-pact-guard}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard that will enforce that CAPABILITY is acquired and that the currently-executing defpact is operational.
+```lisp
+(create-capability-pact-guard (ESCROW owner))
+```
+
+
+### create-module-guard {#create-module-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard by NAME that enforces the current module admin predicate.
+
+
+### create-pact-guard {#create-pact-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
+
+
+### create-principal {#create-principal}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`string`
+
+
+Create a principal which unambiguously identifies GUARD.
+```lisp
+(create-principal (read-keyset 'keyset))
+(create-principal (keyset-ref-guard 'keyset))
+(create-principal (create-module-guard 'module-guard))
+(create-principal (create-user-guard 'user-guard))
+(create-principal (create-pact-guard 'pact-guard))
+```
+
+
+### create-user-guard {#create-user-guard}
+
+*closure*&nbsp;` -> bool` *&rarr;*&nbsp;`guard`
+
+
+Defines a custom guard CLOSURE whose arguments are strictly evaluated at definition time, to be supplied to indicated function at enforcement time.
+
+
+### is-principal {#is-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Tell whether PRINCIPAL string conforms to the principal format without proving validity.
+```lisp
+(enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+```
+
+
+### keyset-ref-guard {#keyset-ref-guard}
+
+*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
+
+
+### typeof-principal {#typeof-principal}
+
+*principal*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Return the protocol type of a given PRINCIPAL value. If input value is not a principal type, then the empty string is returned.
+```lisp
+(typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
+```
+
+
+### validate-principal {#validate-principal}
+
+*guard*&nbsp;`guard` *principal*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Validate that PRINCIPAL unambiguously identifies GUARD.
+```lisp
+(enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
+```
+
+## Zk {#Zk}
+
+### pairing-check {#pairing-check}
+
+*points-g1*&nbsp;`[<a>]` *points-g2*&nbsp;`[<b>]` *&rarr;*&nbsp;`bool`
+
+
+Perform pairing and final exponentiation points in G1 and G2 in BN254, check if the result is 1
+
+
+### point-add {#point-add}
+
+*type*&nbsp;`string` *point1*&nbsp;`<a>` *point2*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Add two points together that lie on the curve BN254. Point addition either in Fq or in Fq2
+```lisp
+pact> (point-add 'g1 {'x: 1, 'y: 2}  {'x: 1, 'y: 2})
+{"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
+```
+
+
+### scalar-mult {#scalar-mult}
+
+*type*&nbsp;`string` *point1*&nbsp;`<a>` *scalar*&nbsp;`integer` *&rarr;*&nbsp;`<a>`
+
+
+Multiply a point that lies on the curve BN254 by an integer value
+```lisp
+pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
+{"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
+```
+
+## REPL-only functions {#repl-lib}
+
+The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
+
+
+### begin-tx {#begin-tx}
+
+ *&rarr;*&nbsp;`string`
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Begin transaction with optional NAME.
+```lisp
+pact> (begin-tx "load module")
+"Begin Tx 0: load module"
+```
+
+
+### bench {#bench}
+
+*exprs*&nbsp;`*` *&rarr;*&nbsp;`string`
+
+
+Benchmark execution of EXPRS.
+```lisp
+(bench (+ 1 2))
+```
+
+
+### commit-tx {#commit-tx}
+
+ *&rarr;*&nbsp;`string`
+
+
+Commit transaction.
+```lisp
+pact> (begin-tx) (commit-tx)
+"Commit Tx 0"
+```
+
+
+### continue-pact {#continue-pact}
+
+*step*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+*step*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+*step*&nbsp;`integer` *rollback*&nbsp;`bool` *pact-id*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+*step*&nbsp;`integer` *rollback*&nbsp;`bool` *pact-id*&nbsp;`string` *yielded*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
+
+
+Continue previously-initiated pact identified STEP, optionally specifying ROLLBACK (default is false), PACT-ID of the pact to be continued (defaults to the pact initiated in the current transaction, if one is present), and YIELDED value to be read with 'resume' (if not specified, uses yield in most recent pact exec, if any).
+```lisp
+(continue-pact 1)
+(continue-pact 1 true)
+(continue-pact 1 false "[pact-id-hash]"))
+(continue-pact 2 1 false "[pact-id-hash]" { "rate": 0.9 })
+```
+
+
+### env-chain-data {#env-chain-data}
+
+*new-data*&nbsp;`object:~{public-chain-data}` *&rarr;*&nbsp;`string`
+
+
+Update existing entries of 'chain-data' with NEW-DATA, replacing those items only.
+```lisp
+pact> (env-chain-data { "chain-id": "TestNet00/2", "block-height": 20 })
+"Updated public metadata"
+```
+
+
+### env-data {#env-data}
+
+*json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`string`
+
+
+Set transaction JSON data, either as encoded string, or as pact types coerced to JSON.
+```lisp
+pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any" } })
+"Setting transaction data"
+```
+
+
+### env-dynref {#env-dynref}
+
+*iface*&nbsp;`module` *impl*&nbsp;`module{}` *&rarr;*&nbsp;`string`
+
+ *&rarr;*&nbsp;`string`
+
+
+Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. With no arguments, remove all substitutions.
+```lisp
+(env-dynref fungible-v2 coin)
+```
+
+
+### env-enable-repl-natives {#env-enable-repl-natives}
+
+*enable*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Control whether REPL native functions are allowed in module code. When enabled, fixture functions like 'env-sigs' are allowed in module code.
+```lisp
+pact> (env-enable-repl-natives true)
+"Repl natives enabled"
+```
+
+
+### env-entity {#env-entity}
+
+ *&rarr;*&nbsp;`string`
+
+*entity*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Set environment confidential ENTITY id, or unset with no argument.
+```lisp
+(env-entity "my-org")
+(env-entity)
+```
+
+
+### env-events {#env-events}
+
+*clear*&nbsp;`bool` *&rarr;*&nbsp;`[object:*]`
+
+
+Retreive any accumulated events and optionally clear event state. Object returned has fields 'name' (fully-qualified event name), 'params' (event parameters), 'module-hash' (hash of emitting module).
+```lisp
+(env-events true)
+```
+
+
+### env-exec-config {#env-exec-config}
+
+*flags*&nbsp;`[string]` *&rarr;*&nbsp;`[string]`
+
+ *&rarr;*&nbsp;`[string]`
+
+
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+```lisp
+pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
+["DisableHistoryInTransactionalMode"]
+```
+
+
+### env-gas {#env-gas}
+
+ *&rarr;*&nbsp;`integer`
+
+*gas*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Query gas state, or set it to GAS. Note that certain plaforms may charge additional gas that is not captured by the interpreter gas model, such as an overall transaction-size cost.
+```lisp
+pact> (env-gasmodel "table") (env-gaslimit 10) (env-gas 0) (map (+ 1) [1 2 3]) (env-gas)
+7
+```
+
+
+### env-gaslimit {#env-gaslimit}
+
+*limit*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Set environment gas limit to LIMIT.
+
+
+### env-gaslog {#env-gaslog}
+
+ *&rarr;*&nbsp;`string`
+
+
+Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect.
+```lisp
+pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)
+["TOTAL: 7" "map:GUnreduced:currTotalGas=4: 4" "+:GUnreduced:currTotalGas=5: 1" ":GIntegerOpCost:(1, ):(1, ):currTotalGas=5: 0" "+:GUnreduced:currTotalGas=6: 1" ":GIntegerOpCost:(1, ):(2, ):currTotalGas=6: 0" "+:GUnreduced:currTotalGas=7: 1" ":GIntegerOpCost:(1, ):(3, ):currTotalGas=7: 0"]
+```
+
+
+### env-gasmodel {#env-gasmodel}
+
+*model*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+ *&rarr;*&nbsp;`string`
+
+*model*&nbsp;`string` *rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Update or query current gas model. With just MODEL, "table" is supported; with MODEL and RATE, 'fixed' is supported. With no args, output current model.
+```lisp
+pact> (env-gasmodel)
+"Current gas model is 'fixed 0': constant rate gas model with fixed rate 0"
+pact> (env-gasmodel 'table)
+"Set gas model to table-based cost model"
+pact> (env-gasmodel 'fixed 1)
+"Set gas model to constant rate gas model with fixed rate 1"
+```
+
+
+### env-gasprice {#env-gasprice}
+
+*price*&nbsp;`decimal` *&rarr;*&nbsp;`string`
+
+
+Set environment gas price to PRICE.
+
+
+### env-gasrate {#env-gasrate}
+
+*rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Update gas model to charge constant RATE.
+
+
+### env-hash {#env-hash}
+
+*hash*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Set current transaction hash. HASH must be an unpadded base64-url encoded BLAKE2b 256-bit hash.
+```lisp
+pact> (env-hash (hash "hello"))
+"Set tx hash to Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
+```
+
+
+### env-keys {#env-keys}
+
+*keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
+
+
+DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
+```lisp
+pact> (env-keys ["my-key" "admin-key"])
+"Setting transaction keys"
+```
+
+
+### env-namespace-policy {#env-namespace-policy}
+
+*allow-root*&nbsp;`bool` *ns-policy-fun*&nbsp;`ns:string ns-admin:guard -> bool` *&rarr;*&nbsp;`string`
+
+
+Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
+```lisp
+(env-namespace-policy (my-ns-policy-fun))
+```
+
+
+### env-sigs {#env-sigs}
+
+*sigs*&nbsp;`[object:*]` *&rarr;*&nbsp;`string`
+
+
+Set transaction signature keys and capabilities. SIGS is a list of objects with "key" specifying the signer key, and "caps" specifying a list of associated capabilities.
+```lisp
+(env-sigs [{'key: "my-key", 'caps: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'caps: []}
+```
+
+
+### expect {#expect}
+
+*doc*&nbsp;`string` *expected*&nbsp;`<a>` *actual*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Evaluate ACTUAL and verify that it equals EXPECTED.
+```lisp
+pact> (expect "Sanity prevails." 4 (+ 2 2))
+"Expect: success: Sanity prevails."
+```
+
+
+### expect-failure {#expect-failure}
+
+*doc*&nbsp;`string` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+*doc*&nbsp;`string` *err*&nbsp;`string` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Evaluate EXP and succeed only if it throws an error.
+```lisp
+pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
+"Expect failure: success: Enforce fails on false"
+pact> (expect-failure "Enforce fails with message" "Expected error" (enforce false "Expected error"))
+"Expect failure: success: Enforce fails with message"
+```
+
+
+### expect-that {#expect-that}
+
+*doc*&nbsp;`string` *pred*&nbsp;`value:<a> -> bool` *exp*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Evaluate EXP and succeed if value passes predicate PRED.
+```lisp
+pact> (expect-that "addition" (< 2) (+ 1 2))
+"Expect-that: success: addition"
+pact> (expect-that "addition" (> 2) (+ 1 2))
+"FAILURE: addition: did not satisfy (> 2) : 3:integer"
+```
+
+
+### format-address {#format-address}
+
+*scheme*&nbsp;`string` *public-key*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME.
+
+
+### load {#load}
+
+*file*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+*file*&nbsp;`string` *reset*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Load and evaluate FILE, resetting repl state beforehand if optional RESET is true.
+```lisp
+(load "accounts.repl")
+```
+
+
+### mock-spv {#mock-spv}
+
+*type*&nbsp;`string` *payload*&nbsp;`object:*` *output*&nbsp;`object:*` *&rarr;*&nbsp;`string`
+
+
+Mock a successful call to 'spv-verify' with TYPE and PAYLOAD to return OUTPUT.
+```lisp
+(mock-spv "TXOUT" { 'proof: "a54f54de54c54d89e7f" } { 'amount: 10.0, 'account: "Dave", 'chainId: "1" })
+```
+
+
+### pact-state {#pact-state}
+
+ *&rarr;*&nbsp;`object:*`
+
+*clear*&nbsp;`bool` *&rarr;*&nbsp;`object:*`
+
+
+Inspect state from most recent pact execution. Returns object with fields 'pactId': pact ID; 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match. With CLEAR argument, erases pact from repl state.
+```lisp
+(pact-state)
+(pact-state true)
+```
+
+
+### print {#print}
+
+*value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Output VALUE to terminal as unquoted, unescaped text.
+
+
+### rollback-tx {#rollback-tx}
+
+ *&rarr;*&nbsp;`string`
+
+
+Rollback transaction.
+```lisp
+pact> (begin-tx "Third Act") (rollback-tx)
+"Rollback Tx 0: Third Act"
+```
+
+
+### sig-keyset {#sig-keyset}
+
+ *&rarr;*&nbsp;`keyset`
+
+
+Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
+
+
+### test-capability {#test-capability}
+
+*capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
+
+
+Acquire (if unmanaged) or install (if managed) CAPABILITY. CAPABILITY and any composed capabilities are in scope for the rest of the transaction.
+```lisp
+(test-capability (MY-CAP))
+```
+
+
+### typecheck {#typecheck}
+
+*module*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+*module*&nbsp;`string` *debug*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Typecheck MODULE, optionally enabling DEBUG output.
+
+
+### verify {#verify}
+
+*module*&nbsp;`string` *debug*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Verify MODULE, checking that all properties hold. Optionally, if DEBUG is set to true, write debug output to "pact-verify-MODULE" directory.
+```lisp
+(verify "module")
+(verify "module" true)
+```
+
+
+### with-applied-env {#with-applied-env}
+
+*exec*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Evaluate EXEC with any pending environment changes applied. Normally, environment changes must execute at top-level for the change to take effect. This allows scoped application of non-toplevel environment changes.
+```lisp
+pact> (let ((a 1)) (env-data { 'b: 1 }) (with-applied-env (+ a (read-integer 'b))))
+2
+```
+
