@@ -1,14 +1,6 @@
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -115,7 +107,7 @@ timeCodec = Codec enc dec
       | otherwise = object [ highprec .= formatTime highPrecFormat t ]
       where
             denom :: UTCTime -> Integer
-            denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
+            denom = denominator . (% 1000000) . fromIntegral . toPosixTimestampMicros
     {-# INLINE enc #-}
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>

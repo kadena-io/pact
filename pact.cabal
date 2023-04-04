@@ -381,6 +381,7 @@ test-suite hspec
     , hspec
     , hspec-core
     , pact
+    , pact-time
     , unordered-containers
 
   other-modules:
@@ -389,6 +390,7 @@ test-suite hspec
     RoundTripSpec
     PrincipalSpec
     SizeOfSpec
+    Test.Pact.Types.Codec
 
   if !impl(ghcjs)
     other-modules:
