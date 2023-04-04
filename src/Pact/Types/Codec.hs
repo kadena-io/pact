@@ -147,8 +147,11 @@ timeCodec = Codec enc dec encValue aesonEnc
     field = "time"
     highprec = "timep"
 
+    -- TODO this should be 1000000. Fixing this would break mainnet replay
+    -- on chain 0 at block height 1720161 (txid 2475483). So, we would have
+    -- to do this in a fork.
     denom :: UTCTime -> Integer
-    denom = denominator . (% 1000000) . fromIntegral . toPosixTimestampMicros
+    denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
 
 {-
 valueCodec :: Codec Value
