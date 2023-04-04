@@ -49,7 +49,7 @@ compileDot m = Alga.export style graph
       (,path) <$> edges
 
     style :: Alga.Style Vertex Text
-    style = (Alga.defaultStyle (tShow . fromEnum))
+    style = (Alga.defaultStyle (tShow . (fromEnum :: Vertex -> Int)))
       { defaultVertexAttributes =
           [ "shape" := "circle"
           , "style" := "filled"
