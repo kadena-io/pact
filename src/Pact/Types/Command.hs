@@ -39,7 +39,7 @@ module Pact.Types.Command
   , PPKScheme(..)
 #endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
-  , Payload(..),pMeta,pNonce,pPayload,pSigners,pSessionSigner,pNetworkId
+  , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..),usSig
@@ -136,7 +136,7 @@ mkCommand
   -> IO (Command ByteString)
 mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta (keyPairsToSigners creds) Nothing nid
+        payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
 keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
@@ -171,7 +171,7 @@ mkUnsignedCommand
   -> IO (Command ByteString)
 mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta signers Nothing nid
+        payload = Payload rpc nonce meta signers nid
 
 signHash :: TypedHash h -> SomeKeyPair -> IO UserSig
 signHash hsh cred = UserSig . toB16Text <$> sign cred (toUntypedHash hsh)
@@ -275,7 +275,6 @@ data Payload m c = Payload
   , _pNonce :: !Text
   , _pMeta :: !m
   , _pSigners :: ![Signer]
-  , _pSessionSigner :: Maybe Signer
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
@@ -364,8 +363,8 @@ cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
 
-type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
-type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
+type ApplyCmd l = ExecutionMode -> Maybe Signer -> Command ByteString -> IO (CommandResult l)
+type ApplyPPCmd m a l = ExecutionMode -> Maybe Signer -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
 data CommandExecInterface m a l = CommandExecInterface
   { _ceiApplyCmd :: ApplyCmd l

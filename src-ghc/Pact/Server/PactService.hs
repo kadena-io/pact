@@ -58,15 +58,15 @@ initPactService CommandConfig {..} loggers spv = do
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
-          { _ceiApplyCmd = \eMode cmd ->
+          { _ceiApplyCmd = \eMode sessionSigner cmd ->
               applyCmd logger _ccEntity p gasModel
                 blockHeight blockTime prevBlockHash
                 spv _ccExecutionConfig
-                eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd =
+                eMode sessionSigner cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = \eMode sessionSigner cmd ->
             applyCmd logger _ccEntity p gasModel
             blockHeight blockTime prevBlockHash
-            spv _ccExecutionConfig
+            spv _ccExecutionConfig eMode sessionSigner cmd
           }
   case _ccSqlite of
     Nothing -> do
@@ -87,15 +87,16 @@ applyCmd :: Logger ->
             SPVSupport ->
             ExecutionConfig ->
             ExecutionMode ->
+            Maybe Signer ->
             Command a ->
             ProcessedCommand PublicMeta ParsedCode ->
             IO (CommandResult Hash)
-applyCmd _ _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
+applyCmd _ _ _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
   return $ resultFailure
            Nothing
            (cmdToRequestKey cmd)
            (PactError TxFailure def def . viaShow $ s)
-applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode _ (ProcSucc cmd) = do
+applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode sessionSigner _ (ProcSucc cmd) = do
   blocktime <-  (((*) 1000000) <$> systemSeconds <$> getSystemTime)
 
   let payload = _cmdPayload cmd
@@ -105,7 +106,7 @@ applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode _ (ProcSucc cmd) 
       nid = _pNetworkId payload
 
   res <- catchesPactError $ runCommand
-                            (CommandEnv conf exMode dbv logger gasEnv pd spv nid exConfig)
+                            (CommandEnv conf exMode dbv logger gasEnv pd spv nid exConfig sessionSigner)
                             (runPayload cmd)
   case res of
     Right cr -> do
@@ -140,9 +141,11 @@ fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
 
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p (CommandResult Hash)
-runPayload c@Command{..} = case (_pPayload _cmdPayload) of
-  Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) (_pSessionSigner _cmdPayload) pm
-  Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) (_pSessionSigner _cmdPayload) ym
+runPayload c@Command{..} = do
+  sessionSigner <- asks _ceSessionSigner
+  case (_pPayload _cmdPayload) of
+    Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) sessionSigner pm
+    Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) sessionSigner ym
 
 
 applyExec :: RequestKey -> PactHash -> [Signer] -> Maybe Signer -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)

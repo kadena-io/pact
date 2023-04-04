@@ -27,7 +27,7 @@ module Pact.Types.Server
   , ccExecutionConfig
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceLogger
   , cePublicData, ceGasEnv, ceSPVSupport, ceNetworkId
-  , ceExecutionConfig
+  , ceExecutionConfig, ceSessionSigner
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -93,6 +93,7 @@ data CommandEnv p = CommandEnv {
     , _ceSPVSupport :: SPVSupport
     , _ceNetworkId :: Maybe NetworkId
     , _ceExecutionConfig :: ExecutionConfig
+    , _ceSessionSigner :: Maybe Signer
     }
 $(makeLenses ''CommandEnv)
 

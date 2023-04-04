@@ -236,7 +236,7 @@ mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteStr
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
     $ toStrict . encode
-    $ Payload payload "nonce" () ss Nothing Nothing
+    $ Payload payload "nonce" () ss Nothing
   return (str, cmd)
   where
     payload = Exec $ ExecMsg t Null
