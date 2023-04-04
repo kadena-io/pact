@@ -87,6 +87,8 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
 
+import qualified Pact.JSON.Legacy.HashMap as LHM
+
 #ifdef ADVICE
 import Pact.Types.Advice
 #endif
@@ -639,7 +641,7 @@ evaluateDefs info mdef defs = do
       pure (_hfAllDefs hf)
   where
   -- | traverse to find deps and form graph
-  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
     defTerm' <- forM defTerm $ \(f :: Name) -> do
       dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
       case (dm, f) of
@@ -743,7 +745,7 @@ fullyQualifyDefs info mdef defs = do
       Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
       _ -> pure ()
     -- | traverse to find deps and form graph
-    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
       let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
       defTerm' <- forM defTerm $ \(f :: Name) -> do
         dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
