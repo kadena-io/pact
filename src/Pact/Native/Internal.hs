@@ -62,6 +62,7 @@ import Pact.Types.Runtime
 import Pact.Runtime.Utils
 import Pact.Types.KeySet (parseAnyKeysetName)
 import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -231,8 +232,9 @@ enforceYield fa y = case _yProvenance y of
               evalError' fa $ "enforceYield: yield provenance " <> pretty p' <> " does not match " <> pretty p)
       (do
           let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
-          unless (p `elem` p') $
-              evalError' fa $ "enforceYield: yield provenance " <> pretty p <> " does not match " <> pretty p')
+          unless (p `elem` p') $ do
+              let legacyP' = Provenance cid (_mHash m) : map (Provenance cid) (LHM.sort $ toList $ _mBlessed m)
+              evalError' fa $ "enforceYield: yield provenance " <> pretty p <> " does not match " <> pretty legacyP')
 
     return y
 
