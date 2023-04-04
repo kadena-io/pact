@@ -168,6 +168,8 @@ jobs:
     - name: Build
       shell: bash
       run: cabal build
+    - name: Install
+      run: cabal install --overwrite-policy=always
     - name: Test
       shell: bash
       run: cabal test +RTS -N
