@@ -66,7 +66,7 @@ instance ToJSON c => ToJSON (PactRPC c) where
     {-# INLINE toEncoding #-}
 
 instance J.Encode c => J.Encode (PactRPC c) where
-  build (Exec p) = J.object ["cont" J..= p]
+  build (Exec p) = J.object ["exec" J..= p]
   build (Continuation p) = J.object ["cont" J..= p]
   {-# INLINE build #-}
 
