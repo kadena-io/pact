@@ -63,10 +63,10 @@ initPactService CommandConfig {..} loggers spv = do
                 blockHeight blockTime prevBlockHash
                 spv _ccExecutionConfig
                 eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = \eMode cmd ->
+          , _ceiApplyPPCmd =
             applyCmd logger _ccEntity p gasModel
             blockHeight blockTime prevBlockHash
-            spv _ccExecutionConfig eMode cmd
+            spv _ccExecutionConfig
           }
   case _ccSqlite of
     Nothing -> do
@@ -140,10 +140,9 @@ fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
 
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p (CommandResult Hash)
-runPayload c@Command{..} = do
-  case (_pPayload _cmdPayload) of
-    Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) pm
-    Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) ym
+runPayload c@Command{..} = case (_pPayload _cmdPayload) of
+  Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) pm
+  Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) ym
 
 
 applyExec :: RequestKey -> PactHash -> [Signer] -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)

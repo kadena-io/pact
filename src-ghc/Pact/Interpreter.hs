@@ -163,6 +163,9 @@ setupEvalEnv
   -> ExecutionMode
   -> MsgData
   -> Maybe PublicKeyText
+     -- ^ A session pubkey, indicating that the public key's owner
+     -- has been authenticated in a session for the scope of this `EvalEnv`.
+     -- The pubkey is checked during calls to the `enforce-session` builtin.
   -> RefStore
   -> GasEnv
   -> NamespacePolicy
@@ -197,9 +200,10 @@ setupEvalEnv dbEnv ent mode msgData sessionPubkey refStore gasEnv np spv pd ec =
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss
-    toPair Signer{..} = (pk,S.fromList _siCapList)
       where
-        pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
+        toPair Signer{..} = (pk,S.fromList _siCapList)
+          where
+            pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs

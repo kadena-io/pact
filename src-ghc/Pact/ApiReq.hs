@@ -72,8 +72,6 @@ import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
 
--- import Debug.Trace (trace)
-
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {
   _akpSecret :: PrivateKeyBS,
