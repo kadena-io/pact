@@ -33,7 +33,7 @@ dbg :: String -> IO ()
 dbg = const $ return ()
 
 cmd :: Command ByteString
-cmd = Command "" [] initialHash
+cmd = Command "" [] Nothing initialHash
 
 rq :: RequestKey
 rq = RequestKey pactInitialHash

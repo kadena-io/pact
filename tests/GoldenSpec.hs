@@ -152,8 +152,8 @@ doCRTest' ec tn code = beforeAllWith initRes $
  where
   initRes s = do
     let dbEnv = PactDbEnv (view (rEnv . eePactDb) s) (view (rEnv . eePactDbVar) s)
-        cmd = Command payload [] initialHash
-        payload = Payload exec "" pubMeta [] Nothing Nothing
+        cmd = Command payload [] Nothing initialHash
+        payload = Payload exec "" pubMeta [] Nothing
         pubMeta = def
         parsedCode = either error id $ parsePact code
         exec = Exec $ ExecMsg parsedCode Null
