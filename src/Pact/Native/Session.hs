@@ -12,9 +12,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 
+module Pact.Native.Session
+    ( sessionDefs
+    , enforceSessionDef
+    ) where
+
 import Pact.Eval (enforceKeySetSession)
 import Pact.Native.Internal(NativeDef, NativeModule, defRNative, funType, tTyBool, tTyGuard, tTyString)
-module Pact.Native.Session (sessionDefs, enforceSessionDef) where
 import Pact.Types.KeySet (KeySetName(..), parseAnyKeysetName)
 import Pact.Types.Native (RNativeFun)
 import Pact.Types.Pretty (pretty)
