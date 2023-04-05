@@ -8,8 +8,8 @@ import Test.Hspec
 import Data.ByteString (ByteString)
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
-import Control.Concurrent (threadDelay)
-import System.Posix.Pty
+import System.Posix.Pty (spawnWithPty, writePty, readPty, closePty)
+import System.Process (terminateProcess)
 import Control.Monad (void)
 
 spec :: Spec
@@ -26,24 +26,31 @@ spec = describe "ReplSpec" $ do
     out <- liftIO (runInteractive src)
     out `shouldSatisfy`containsNoErrInfo
 
-
+-- | Execute 'src' inside a pseudo-terminal running the pact repl and returns the repl output.
 runInteractive :: ByteString -> IO ByteString
 runInteractive src = do
-  (pty, _) <- spawnWithPty Nothing True "pact" [] (100,100)
-  threadDelay 2000
+  (pty, ph) <- spawnWithPty Nothing True "pact" [] (100,100)
+  -- Read until we reach the first pact prompt to ensure
+  -- the repl is ready.
+  void $ seekPactPrompt pty mempty
   writePty pty (src <> "\n")
-  threadDelay 2000
-  void $ go pty mempty -- the first pact prompt
-  go pty mempty
+  out <- seekPactPrompt pty mempty
+  terminateProcess ph
+  closePty pty
+  pure out
   where
-    go pty o = do
+    -- We recursively collect output using 'readPty' (line-based reading),
+    -- until we encounter the pact prompt.
+    seekPactPrompt pty o = do
       content <- readPty pty
       if "pact>" `BS.isInfixOf` content
       then pure o
-      else go pty (o <> content)
+      else seekPactPrompt pty (o <> content)
 
+-- | Check if 's' did not use the show instance of 'ErrInfo'
 containsNoErrInfo :: ByteString -> Bool
 containsNoErrInfo s = not ("_errDeltas" `BS.isInfixOf` s)
 
+-- | Check if 's' did not use the show instance of 'TLiteral'
 containsNoTermInfo :: ByteString -> Bool
 containsNoTermInfo s = not ("_tLiteral" `BS.isInfixOf` s)
