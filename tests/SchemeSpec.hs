@@ -70,7 +70,7 @@ toApiKeyPairs kps = map makeAKP kps
 
 
 mkCommandTest :: [SomeKeyPairCaps] -> [Signer] -> Text -> IO (Command ByteString)
-mkCommandTest kps signers code = mkCommand' kps Nothing $ toExecPayload signers code
+mkCommandTest kps signers code = mkCommand' kps $ toExecPayload signers code
 
 
 toSigners :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> IO [Signer]

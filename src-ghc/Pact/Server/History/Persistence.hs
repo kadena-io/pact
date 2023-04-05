@@ -160,7 +160,6 @@ selectAllCommands e = do
   let rowToCmd [SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
               Command { _cmdPayload = cmd'
                       , _cmdSigs = userSigsFromField userSigs'
-                      , _cmdSessionPubKey = Nothing
                       , _cmdHash = fromUntypedHash $ hashFromField hash'}
       rowToCmd err = error $ "selectAllCommands: unexpected result schema: " ++ show err
   fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RText,RText,RText]

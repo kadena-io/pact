@@ -451,7 +451,6 @@ mkExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         Nothing
          (Exec (ExecMsg code mdata))
   return $ decodeUtf8 <$> cmd
 
@@ -478,7 +477,6 @@ mkUnsignedExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         Nothing
          (Exec (ExecMsg code mdata))
   return $ decodeUtf8 <$> cmd
 
@@ -542,7 +540,6 @@ mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
          pubMeta
          rid
          nid
-         Nothing
          (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
@@ -576,7 +573,6 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          pubMeta
          (pack $ show rid)
          nid
-         Nothing
          (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 

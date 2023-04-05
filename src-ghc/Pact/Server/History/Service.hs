@@ -245,7 +245,7 @@ _testHistoryDB = do
 
 _go :: HistoryService ()
 _go = do
-  addNewKeys [Command "" [] Nothing initialHash]
+  addNewKeys [Command "" [] initialHash]
   let rq = RequestKey pactInitialHash
       res = PactResult $ Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)
   updateExistingKeys (HashMap.fromList [(rq, CommandResult rq Nothing res (Gas 0) Nothing Nothing Nothing [])])
