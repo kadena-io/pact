@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -28,12 +29,13 @@ module Pact.Types.Info
    ) where
 
 
+import qualified Data.ByteString as B
 import Control.Monad
 import Text.Trifecta.Delta
 import Data.List
 import Prelude
-import Data.Text (Text,unpack)
-import Data.Text.Encoding
+import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Text as T
 import Data.Aeson
 import qualified Data.Aeson.Types as A
@@ -81,7 +83,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,SizeOf,J.Encode)
-instance Show Code where show = unpack . _unCode
+instance Show Code where show = T.unpack . _unCode
 instance Pretty Code where
   pretty (Code c)
     | T.compareLength c maxLen == GT
@@ -107,10 +109,15 @@ instance Default Info where def = Info Nothing
 instance SizeOf Info where
   sizeOf _ _ = 0
 
--- make an Info that refers to the indicated text
+-- make an Info that refers to the indicated text.
+--
+-- Note that the pact parser returns column offsets in bytes.
+--
+-- This method is currently only used in testing and benchmarking in chainweb.
+--
 mkInfo :: Text -> Info
 mkInfo !t = Info $ Just (Code t,Parsed delt len)
-  where len = T.length t
+  where len = B.length $ encodeUtf8 t
         delt = Directed (encodeUtf8 t) 0 0 (fromIntegral len) (fromIntegral len)
 
 #if !defined(ghcjs_HOST_OS) && defined(BUILD_TOOL)
@@ -135,7 +142,7 @@ renderParsed (Parsed d _) = case d of
 
 -- | Lame parsing of 'renderInfo' parsing for UX only.
 parseRenderedInfo :: AP.Parser Info
-parseRenderedInfo = peekChar >>= \c -> case c of
+parseRenderedInfo = peekChar >>= \case
   Nothing -> return (Info Nothing)
   Just _ -> do
     fOrI <- takeTill isColon
@@ -150,7 +157,7 @@ parseRenderedInfo = peekChar >>= \c -> case c of
             -- otherwise Lines, which reverses the 'succ' above
             | otherwise -> Lines (pred ln) cn 0 0
           f -> Directed (encodeUtf8 f) (pred ln) cn 0 0
-    return (Info (Just ("",(Parsed delt 0))))
+    return (Info (Just ("",Parsed delt 0)))
   where
     colon' = void $ char ':'
     isColon = (== ':')
