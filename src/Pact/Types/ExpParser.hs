@@ -52,6 +52,7 @@ import qualified Text.Trifecta.Delta as TF
 import Control.Applicative hiding (some,many)
 import Text.Megaparsec as MP
 import Text.Megaparsec.Internal (ParsecT(..))
+import qualified Data.ByteString as B
 import Data.Proxy
 import Data.Void
 import Data.List.NonEmpty (NonEmpty(..),fromList,toList)
@@ -61,11 +62,11 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Arrow (second)
 import Prelude hiding (exp)
-import Data.String
 import Control.Lens hiding (prism)
 import Data.Default
 import Data.Text (Text,unpack)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Set as S
 
 import Pact.Types.Exp
@@ -120,13 +121,21 @@ mkEmptyInfo e = Info (Just (mempty,e))
 
 {-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
-mkStringInfo s d = Info (Just (fromString $ take (_pLength d) $
-                               drop (fromIntegral $ TF.bytes d) s,d))
+mkStringInfo s d = Info $ Just (Code code, d)
+  where
+    -- the parser reports column offsets in bytes
+    code = T.decodeUtf8 $ B.take len $ B.drop offset $ T.encodeUtf8 $ T.pack s
+    offset = fromIntegral $ TF.bytes d
+    len = _pLength d
 
 {-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
-mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $
-                             T.drop (fromIntegral $ TF.bytes d) s,d))
+mkTextInfo s d = Info $ Just (Code code, d)
+  where
+    -- the parser reports column offsets in bytes
+    code = T.decodeUtf8 $ B.take len $ B.drop offset $ T.encodeUtf8 s
+    offset = fromIntegral $ TF.bytes d
+    len = _pLength d
 
 type ExpParse s a = ReaderT ParseEnv (StateT (ParseState s) (Parsec Void Cursor)) a
 

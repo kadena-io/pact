@@ -107,7 +107,7 @@ instance Arbitrary a => Arbitrary (SigData a) where
 
 commandToSigData :: Command Text -> Either String (SigData Text)
 commandToSigData c = do
-  let ep = traverse parsePact =<< (eitherDecodeStrict' $ encodeUtf8 $ _cmdPayload c)
+  let ep = traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 $ _cmdPayload c)
   case ep :: Either String (Payload Value ParsedCode) of
     Left e -> Left $ "Error decoding payload: " <> e
     Right p -> do
@@ -120,7 +120,9 @@ sigDataToCommand (SigData h sigList (Just c)) = do
   payload :: Payload Value ParsedCode <- traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 c)
   let sigMap = M.fromList sigList
   -- It is ok to use a map here because we're iterating over the signers list and only using the map for lookup.
-  let sigs = catMaybes $ map (\signer -> join $ M.lookup (PublicKeyHex $ _siPubKey signer) sigMap) $ _pSigners payload
+  let sigs = catMaybes
+        $ map (\signer -> join $ M.lookup (PublicKeyHex $ _siPubKey signer) sigMap)
+        $ _pSigners payload
   pure $ Command c sigs h
 
 sampleSigData :: SigData Text
