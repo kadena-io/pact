@@ -784,7 +784,7 @@ evaluateConstraints info m evalMap = do
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
         Just (ModuleData (MDInterface Interface{..}) irefs _) -> do
-          em' <- HM.foldrWithKey (solveConstraint ifn info) (pure refMap) irefs
+          em' <- LHM.foldrWithKey (solveConstraint ifn info) (pure refMap) $ LHM.fromList $ HM.toList irefs
           let um = over mMeta (<> _interfaceMeta) m'
           newIf <- ifExecutionFlagSet' FlagPreserveModuleIfacesBug ifn _interfaceName
           pure (um, em', newIf:newIfs)
