@@ -72,6 +72,8 @@ import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
 
+-- import Debug.Trace (trace)
+
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {
   _akpSecret :: PrivateKeyBS,
@@ -141,7 +143,8 @@ data ApiReq = ApiReq {
   _ylSigners :: Maybe [ApiSigner],
   _ylNonce :: Maybe Text,
   _ylPublicMeta :: Maybe ApiPublicMeta,
-  _ylNetworkId :: Maybe NetworkId
+  _ylNetworkId :: Maybe NetworkId,
+  _ylSessionPubkey :: Maybe PublicKeyText
   } deriving (Eq,Show,Generic)
 instance ToJSON ApiReq where toJSON = lensyToJSON 3
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
@@ -400,8 +403,8 @@ mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
     return (code,cdata)
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
-    (\ks -> mkExec code cdata pubMeta ks _ylNetworkId _ylNonce)
-    (\ss -> mkUnsignedExec code cdata pubMeta ss _ylNetworkId _ylNonce)
+    (\ks -> mkExec code cdata pubMeta ks _ylNetworkId _ylNonce _ylSessionPubkey)
+    (\ss -> mkUnsignedExec code cdata pubMeta ss _ylNetworkId _ylNonce _ylSessionPubkey)
   return ((ar,code,cdata,pubMeta), cmd)
 
 mkPubMeta :: Maybe ApiPublicMeta -> IO PublicMeta
@@ -441,14 +444,17 @@ mkExec
     -- ^ optional 'NetworkId'
   -> Maybe Text
     -- ^ optional nonce
+  -> Maybe PublicKeyText
+    -- ^ optional session pubkey
   -> IO (Command Text)
-mkExec code mdata pubMeta kps nid ridm = do
+mkExec code mdata pubMeta kps nid ridm mSessionPubkey = do
   rid <- mkNonce ridm
   cmd <- mkCommand
          kps
          pubMeta
          rid
          nid
+         (fmap convertKey mSessionPubkey)
          (Exec (ExecMsg code mdata))
   return $ decodeUtf8 <$> cmd
 
@@ -467,14 +473,17 @@ mkUnsignedExec
     -- ^ optional 'NetworkId'
   -> Maybe Text
     -- ^ optional nonce
+  -> Maybe PublicKeyText
+    -- ^ optional session pubkey
   -> IO (Command Text)
-mkUnsignedExec code mdata pubMeta kps nid ridm = do
+mkUnsignedExec code mdata pubMeta kps nid ridm sessionPubkey = do
   rid <- mkNonce ridm
   cmd <- mkUnsignedCommand
          kps
          pubMeta
          rid
          nid
+         (fmap convertKey sessionPubkey)
          (Exec (ExecMsg code mdata))
   return $ decodeUtf8 <$> cmd
 
@@ -505,8 +514,8 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
   let pactId = toPactId apiPactId
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
-    (\ks -> mkCont pactId step rollback cdata pubMeta ks _ylNonce _ylProof _ylNetworkId)
-    (\ss -> mkUnsignedCont pactId step rollback cdata pubMeta ss _ylNonce _ylProof _ylNetworkId)
+    (\ks -> mkCont pactId step rollback cdata pubMeta ks _ylNonce _ylProof _ylNetworkId _ylSessionPubkey)
+    (\ss -> mkUnsignedCont pactId step rollback cdata pubMeta ss _ylNonce _ylProof _ylNetworkId _ylSessionPubkey)
   return ((ar,"",cdata,pubMeta), cmd)
 
 -- | Construct a Cont request message
@@ -530,14 +539,16 @@ mkCont
     -- ^ optional continuation proof (required for cross-chain)
   -> Maybe NetworkId
     -- ^ optional network id
+  -> Maybe PublicKeyText
   -> IO (Command Text)
-mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
+mkCont txid step rollback mdata pubMeta kps ridm proof nid sessionPubkey = do
   rid <- mkNonce ridm
   cmd <- mkCommand
          kps
          pubMeta
          rid
          nid
+         (fmap convertKey sessionPubkey)
          (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
@@ -563,14 +574,17 @@ mkUnsignedCont
     -- ^ optional continuation proof (required for cross-chain)
   -> Maybe NetworkId
     -- ^ optional network id
+  -> Maybe PublicKeyText
+    -- ^ optional session public key
   -> IO (Command Text)
-mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
+mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid sessionPubkey = do
   rid <- mkNonce ridm
   cmd <- mkUnsignedCommand
          kps
          pubMeta
          (pack $ show rid)
          nid
+         (convertKey <$> sessionPubkey)
          (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
@@ -627,5 +641,12 @@ dieAR errMsg = throwM . userError $ intercalate "\n" $
   ,"  step: step index to continue"
   ,"  rollback: rollback/cancel flag"
   ,"  proof: platform-specific continuation proof data"
+  ,"  sessionKey: the public key representing a user with an active session"
   ,"Error message: " ++ errMsg
   ]
+
+-- convertKey :: PublicKeyBS -> PublicKeyText
+-- convertKey (PubBS pkey) = trace (show pkey) $ PublicKeyText (decodeUtf8 pkey)
+
+convertKey :: a -> a
+convertKey = id

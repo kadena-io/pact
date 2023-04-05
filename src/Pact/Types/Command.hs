@@ -10,6 +10,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -24,7 +25,7 @@
 --
 
 module Pact.Types.Command
-  ( Command(..),cmdPayload,cmdSigs,cmdHash
+  ( Command(..),cmdPayload,cmdSigs,cmdSessionPubKey,cmdHash
 #if !defined(ghcjs_HOST_OS)
   , mkCommand
   , mkCommand'
@@ -62,7 +63,7 @@ import Data.Serialize as SZ
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
-import Data.Maybe  (fromMaybe)
+import Data.Maybe  (fromMaybe, maybeToList)
 
 import GHC.Generics
 
@@ -93,20 +94,23 @@ import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
+  , _cmdSessionPubKey :: Maybe PublicKeyText
   , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
-    toJSON (Command payload uSigs hsh) =
-        object [ "cmd" .= payload
-               , "sigs" .= toJSON uSigs
-               , "hash" .= hsh
-               ]
+    toJSON (Command payload uSigs sessionPubkey hsh) =
+        object $ [ "cmd" .= payload
+                 , "sigs" .= toJSON uSigs
+                 , "hash" .= hsh
+                 ] ++ maybeToList (("session_pubkey" .=) <$> sessionPubkey)
 instance (FromJSON a) => FromJSON (Command a) where
-    parseJSON = withObject "Command" $ \o ->
-                Command <$> (o .: "cmd")
-                        <*> (o .: "sigs" >>= parseJSON)
-                        <*> (o .: "hash")
+    parseJSON = withObject "Command" $ \o -> do
+      _cmdPayload <- o .: "cmd"
+      _cmdSigs <- o .: "sigs" >>= parseJSON
+      _cmdSessionPubKey <- (fmap . fmap) PublicKeyText $ o .:? "session_pubkey"
+      _cmdHash <- o .: "hash"
+      return $ Command { _cmdPayload, _cmdSigs, _cmdSessionPubKey, _cmdHash }
     {-# INLINE parseJSON #-}
 
 instance NFData a => NFData (Command a)
@@ -132,9 +136,10 @@ mkCommand
   -> m
   -> Text
   -> Maybe NetworkId
+  -> Maybe PublicKeyText
   -> PactRPC c
   -> IO (Command ByteString)
-mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
+mkCommand creds meta nonce nid sessionPubkey rpc = mkCommand' creds sessionPubkey encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
         payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
@@ -153,12 +158,12 @@ keyPairsToSigners :: [SomeKeyPairCaps] -> [Signer]
 keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 
 
-mkCommand' :: [(SomeKeyPair,a)] -> ByteString -> IO (Command ByteString)
-mkCommand' creds env = do
+mkCommand' :: [(SomeKeyPair,a)] -> Maybe PublicKeyText -> ByteString -> IO (Command ByteString)
+mkCommand' creds sessionPubkey env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
       toUserSig (cred,_) = signHash hsh cred
   sigs <- traverse toUserSig creds
-  return $ Command env sigs hsh
+  return $ Command env sigs sessionPubkey hsh
 
 mkUnsignedCommand
   :: ToJSON m
@@ -167,9 +172,10 @@ mkUnsignedCommand
   -> m
   -> Text
   -> Maybe NetworkId
+  -> Maybe PublicKeyText
   -> PactRPC c
   -> IO (Command ByteString)
-mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
+mkUnsignedCommand signers meta nonce nid sessionPubkey rpc = mkCommand' [] sessionPubkey encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
         payload = Payload rpc nonce meta signers nid
 
@@ -363,8 +369,8 @@ cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
 
 
 
-type ApplyCmd l = ExecutionMode -> Maybe Signer -> Command ByteString -> IO (CommandResult l)
-type ApplyPPCmd m a l = ExecutionMode -> Maybe Signer -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
+type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
+type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
 data CommandExecInterface m a l = CommandExecInterface
   { _ceiApplyCmd :: ApplyCmd l

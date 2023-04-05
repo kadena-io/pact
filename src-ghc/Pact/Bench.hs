@@ -234,7 +234,7 @@ benchReadValue _ (TxTable _t) _k = rcp Nothing
 
 mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
-  cmd <- mkCommand' kps
+  cmd <- mkCommand' kps Nothing
     $ toStrict . encode
     $ Payload payload "nonce" () ss Nothing
   return (str, cmd)

@@ -58,15 +58,15 @@ initPactService CommandConfig {..} loggers spv = do
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
-          { _ceiApplyCmd = \eMode sessionSigner cmd ->
+          { _ceiApplyCmd = \eMode cmd ->
               applyCmd logger _ccEntity p gasModel
                 blockHeight blockTime prevBlockHash
                 spv _ccExecutionConfig
-                eMode sessionSigner cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = \eMode sessionSigner cmd ->
+                eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = \eMode cmd ->
             applyCmd logger _ccEntity p gasModel
             blockHeight blockTime prevBlockHash
-            spv _ccExecutionConfig eMode sessionSigner cmd
+            spv _ccExecutionConfig eMode cmd
           }
   case _ccSqlite of
     Nothing -> do
@@ -87,16 +87,15 @@ applyCmd :: Logger ->
             SPVSupport ->
             ExecutionConfig ->
             ExecutionMode ->
-            Maybe Signer ->
             Command a ->
             ProcessedCommand PublicMeta ParsedCode ->
             IO (CommandResult Hash)
-applyCmd _ _ _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
+applyCmd _ _ _ _ _ _ _ _ _ _ cmd (ProcFail s) =
   return $ resultFailure
            Nothing
            (cmdToRequestKey cmd)
            (PactError TxFailure def def . viaShow $ s)
-applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode sessionSigner _ (ProcSucc cmd) = do
+applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode _ (ProcSucc cmd) = do
   blocktime <-  (((*) 1000000) <$> systemSeconds <$> getSystemTime)
 
   let payload = _cmdPayload cmd
@@ -106,7 +105,7 @@ applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode sessionSigner _ (
       nid = _pNetworkId payload
 
   res <- catchesPactError $ runCommand
-                            (CommandEnv conf exMode dbv logger gasEnv pd spv nid exConfig sessionSigner)
+                            (CommandEnv conf exMode dbv logger gasEnv pd spv nid exConfig)
                             (runPayload cmd)
   case res of
     Right cr -> do
@@ -142,27 +141,26 @@ fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p (CommandResult Hash)
 runPayload c@Command{..} = do
-  sessionSigner <- asks _ceSessionSigner
   case (_pPayload _cmdPayload) of
-    Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) sessionSigner pm
-    Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) sessionSigner ym
+    Exec pm -> applyExec (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) _cmdSessionPubKey pm
+    Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) _cmdSessionPubKey ym
 
 
-applyExec :: RequestKey -> PactHash -> [Signer] -> Maybe Signer -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
-applyExec rk hsh signers sessionSigner (ExecMsg parsedCode edata) = do
+applyExec :: RequestKey -> PactHash -> [Signer] -> Maybe PublicKeyText -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
+applyExec rk hsh signers sessionPubkey (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   evalEnv
     <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
         (MsgData edata Nothing (toUntypedHash hsh) signers)
-        sessionSigner initRefStore _ceGasEnv permissiveNamespacePolicy
+        sessionPubkey initRefStore _ceGasEnv permissiveNamespacePolicy
         _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) _erExec
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
 
 
-applyContinuation :: RequestKey -> PactHash -> [Signer] -> Maybe Signer -> ContMsg -> CommandM p (CommandResult Hash)
+applyContinuation :: RequestKey -> PactHash -> [Signer] -> Maybe PublicKeyText -> ContMsg -> CommandM p (CommandResult Hash)
 applyContinuation rk hsh signers sessionSigner cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result

@@ -105,7 +105,8 @@ sigDataToCommand (SigData h sigList (Just c)) = do
   let sigMap = M.fromList sigList
   -- It is ok to use a map here because we're iterating over the signers list and only using the map for lookup.
   let sigs = catMaybes $ map (\signer -> join $ M.lookup (PublicKeyHex $ _siPubKey signer) sigMap) $ _pSigners payload
-  pure $ Command c sigs h
+  let sessionPubkey = Nothing
+  pure $ Command c sigs sessionPubkey h
 
 sampleSigData :: SigData Text
 sampleSigData = SigData (either error id $ fromText' "b57_gSRIwDEo6SAYseppem57tykcEJkmbTFlCHDs0xc")

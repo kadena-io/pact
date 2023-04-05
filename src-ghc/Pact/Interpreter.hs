@@ -162,7 +162,7 @@ setupEvalEnv
   -> Maybe EntityName
   -> ExecutionMode
   -> MsgData
-  -> Maybe Signer
+  -> Maybe PublicKeyText
   -> RefStore
   -> GasEnv
   -> NamespacePolicy
@@ -170,13 +170,13 @@ setupEvalEnv
   -> PublicData
   -> ExecutionConfig
   -> IO (EvalEnv e)
-setupEvalEnv dbEnv ent mode msgData sessionSigner refStore gasEnv np spv pd ec = do
+setupEvalEnv dbEnv ent mode msgData sessionPubkey refStore gasEnv np spv pd ec = do
   gasRef <- newIORef 0
   warnRef <- newIORef mempty
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
-  , _eeSessionSig = toPair <$> sessionSigner
+  , _eeSessionSig = fmap (, S.empty) sessionPubkey
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent

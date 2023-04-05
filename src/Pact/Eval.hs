@@ -150,14 +150,13 @@ enforceKeySet i ksn KeySet{..} = do
 -- | Enforce keyset against session key from the environment.
 enforceKeySetSession :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySetSession i ksn KeySet{..} = do
-  sigs <- maybeToMap <$> (view eeSessionSig)
-  sigs' <- checkSigCaps sigs
-  runPred (M.size sigs')
+  sessionPubKey <- view eeSessionSig
+  case sessionPubKey of
+    Nothing -> evalError i "enforce-session called while there is no session pubkey in the environment"
+    Just (publicKeyText, caps) -> do
+      sigs' <- checkSigCaps (M.singleton publicKeyText caps)
+      runPred (M.size sigs')
   where
-    maybeToMap mayKV =
-      maybe M.empty (\(k,v) -> if k `elem` _ksKeys
-                      then M.singleton k v
-                      else M.empty) mayKV
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
     atLeast t m = m >= t
