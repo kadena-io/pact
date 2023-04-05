@@ -152,11 +152,13 @@ enforceKeySetSession :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> E
 enforceKeySetSession i ksn KeySet{..} = do
   sessionPubKey <- view eeSessionSig
   case sessionPubKey of
-    Nothing -> evalError i "enforce-session called while there is no session pubkey in the environment"
+    Nothing -> error "enforce-session called while there is no session pubkey in the environment"
     Just (publicKeyText, caps) -> do
-      sigs' <- checkSigCaps (M.singleton publicKeyText caps)
+      let matchingKeys = M.filterWithKey matchKey $ M.singleton publicKeyText caps
+      sigs' <- checkSigCaps matchingKeys
       runPred (M.size sigs')
   where
+    matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
     atLeast t m = m >= t
