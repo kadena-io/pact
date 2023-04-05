@@ -10,7 +10,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -99,10 +98,10 @@ data Command a = Command
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
     toJSON (Command payload uSigs hsh) =
-        object $ [ "cmd" .= payload
-                 , "sigs" .= toJSON uSigs
-                 , "hash" .= hsh
-                 ]
+        object [ "cmd" .= payload
+               , "sigs" .= toJSON uSigs
+               , "hash" .= hsh
+               ]
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
                 Command <$> (o .: "cmd")

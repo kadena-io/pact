@@ -12,11 +12,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module Pact.Native.Session (sessionDefs, enforceSessionDef) where
-
-
 import Pact.Eval (enforceKeySetSession)
 import Pact.Native.Internal(NativeDef, NativeModule, defRNative, funType, tTyBool, tTyGuard, tTyString)
+module Pact.Native.Session (sessionDefs, enforceSessionDef) where
 import Pact.Types.KeySet (KeySetName(..), parseAnyKeysetName)
 import Pact.Types.Native (RNativeFun)
 import Pact.Types.Pretty (pretty)
@@ -36,9 +34,9 @@ enforceSessionDef =
    <> funType tTyBool [("keysetname",tTyString)]
   )
   [LitExample "(enforce-session keyset)"]
-  "Enforce that the current environment contains a session signer with a key \
+  "Enforce that the current environment contains a session pubkey \
   \that satisfies the keyset parameter. The execution environment is \
-  \responsible for setting the session signer, usually in response to an \
+  \responsible for setting the session pubkey, usually in response to an \
   \authorization flow."
   where
 

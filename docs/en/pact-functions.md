@@ -1782,7 +1782,7 @@ pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 *keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Enforce that the current environment contains a session signer with a key that satisfies the keyset parameter. The execution environment is responsible for setting the session signer, usually in response to an authorization flow.
+Enforce that the current environment contains a session pubkey that satisfies the keyset parameter. The execution environment is responsible for setting the session pubkey, usually in response to an authorization flow.
 ```lisp
 (enforce-session keyset)
 ```
@@ -2047,7 +2047,10 @@ Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
 *public-key*&nbsp;`string` *caps*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-
+Set PUBLIC-KEY as the session public key.
+```lisp
+(env-session "my-key" [])
+```
 
 
 ### env-sigs {#env-sigs}

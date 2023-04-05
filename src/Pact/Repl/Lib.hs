@@ -127,9 +127,8 @@ replDefs = ("Repl",
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
        "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
      ,defZNative "env-session" setsession (funType tTyString [("public-key", tTyString), ("caps", TyList tTyString)])
-      []
-      ""
-
+      [LitExample $ "(env-session \"my-key\" [])"]
+      "Set PUBLIC-KEY as the session public key."
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
