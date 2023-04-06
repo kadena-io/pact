@@ -10,12 +10,12 @@
 #include "libm.h"
 #include "log_data.h"
 
-#define T __log_data.tab
-#define T2 __log_data.tab2
-#define B __log_data.poly1
-#define A __log_data.poly
-#define Ln2hi __log_data.ln2hi
-#define Ln2lo __log_data.ln2lo
+#define T __kadena_log_data.tab
+#define T2 __kadena_log_data.tab2
+#define B __kadena_log_data.poly1
+#define A __kadena_log_data.poly
+#define Ln2hi __kadena_log_data.ln2hi
+#define Ln2lo __kadena_log_data.ln2lo
 #define N (1 << LOG_TABLE_BITS)
 #define OFF 0x3fe6000000000000
 
