@@ -87,9 +87,9 @@ double musl_exp(double x)
 			if (abstop >= top12(INFINITY))
 				return 1.0 + x;
 			if (asuint64(x) >> 63)
-				return __math_uflow(0);
+				return __kadena_math_uflow(0);
 			else
-				return __math_oflow(0);
+				return __kadena_math_oflow(0);
 		}
 		/* Large x is special cased below.  */
 		abstop = 0;

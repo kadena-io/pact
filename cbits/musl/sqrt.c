@@ -35,7 +35,7 @@ double musl_sqrt(double x)
 		if (ix == 0x7ff0000000000000)
 			return x;
 		if (ix > 0x7ff0000000000000)
-			return __math_invalid(x);
+			return __kadena_math_invalid(x);
 		/* x is subnormal, normalize it.  */
 		ix = asuint64(x * 0x1p52);
 		top = ix >> 52;

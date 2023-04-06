@@ -183,9 +183,9 @@ static inline double exp_inline(double_t x, double_t xtail, uint32_t sign_bias)
 		if (abstop >= top12(1024.0)) {
 			/* Note: inf and nan are already handled.  */
 			if (asuint64(x) >> 63)
-				return __math_uflow(sign_bias);
+				return __kadena_math_uflow(sign_bias);
 			else
-				return __math_oflow(sign_bias);
+				return __kadena_math_oflow(sign_bias);
 		}
 		/* Large x is special cased below.  */
 		abstop = 0;
@@ -296,7 +296,7 @@ double musl_pow(double x, double y)
 			/* Finite x < 0.  */
 			int yint = checkint(iy);
 			if (yint == 0)
-				return __math_invalid(x);
+				return __kadena_math_invalid(x);
 			if (yint == 1)
 				sign_bias = SIGN_BIAS;
 			ix &= 0x7fffffffffffffff;
@@ -315,8 +315,8 @@ double musl_pow(double x, double y)
 					return 1.0;
 			}
 			return (ix > asuint64(1.0)) == (topy < 0x800) ?
-				       __math_oflow(0) :
-				       __math_uflow(0);
+				       __kadena_math_oflow(0) :
+				       __kadena_math_uflow(0);
 		}
 		if (topx == 0) {
 			/* Normalize subnormal x so exponent becomes negative.  */
