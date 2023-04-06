@@ -37,7 +37,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
-import Data.Text (Text, unpack)
+import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding
 import Pact.Time
 import qualified Data.Vector as V
@@ -270,6 +270,10 @@ replDefs = ("Repl",
       [LitExample "(env-dynref fungible-v2 coin)"]
       ("Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. " <>
        "With no arguments, remove all substitutions.")
+     ,defZRNative "env-in-repl" envSimulateNotRepl
+       (funType tTyString [("in-repl", tTyBool)])
+       [LitExample "(env-in-repl true)"]
+       "Set the in-repl flag, to potentially observe behaviors outside of the repl"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -867,3 +871,9 @@ withEnv _ [exec] = do
     _ -> (ls,Endo id)
   local (appEndo updates) $ reduce exec
 withEnv i as = argsError' i as
+
+envSimulateNotRepl :: RNativeFun LibState
+envSimulateNotRepl _i [TLiteral (LBool inRepl) _] = do
+  setenv eeInRepl inRepl
+  return $ tStr $ "Set as inRepl: " <> pack (show inRepl)
+envSimulateNotRepl i as = argsError i as

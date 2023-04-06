@@ -1250,7 +1250,8 @@ concat' g i [TList ls _ _] = computeGas' g i (GMakeList $ fromIntegral $ V.lengt
   concatTextList = flip TLiteral def . LString . T.concat
   in fmap concatTextList $ forM ls' $ \case
     TLitString s -> return s
-    t -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+    t ->
+      evalError' i $ "concat: expecting list of strings: " <> pretty t
 concat' _ i as = argsError i as
 
 -- | Converts a string to a vector of single character strings

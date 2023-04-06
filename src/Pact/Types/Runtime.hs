@@ -447,7 +447,10 @@ throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
     <> prettyFunTypes _faTypes
 
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
-throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) err)
+throwErr ctor i err = do
+  s <- use evalCallStack
+  inReplOrPreFork <- isInReplForkedError
+  throwM (PactError ctor i (if inReplOrPreFork then s else []) err)
 
 evalError :: Info -> Doc -> Eval e a
 evalError = throwErr EvalError
