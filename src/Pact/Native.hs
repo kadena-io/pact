@@ -902,9 +902,12 @@ b = mkTyVar "b" []
 c = mkTyVar "c" []
 
 map' :: NativeFun e
-map' i as@[tLamToApp -> TApp app _,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
+map' i as@[tLamToApp -> TApp app _,l] = gasUnreduced i as $ reduce l >>= \case
            TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply app . pure)
-           t -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
+           t ->
+            isInReplForkedError >>= \case
+              True -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
+              False -> evalError' i $ "map: expecting list, received argument of type: " <> pretty (typeof' t)
 map' i as = argsError' i as
 
 list :: RNativeFun e
@@ -964,7 +967,10 @@ fold' :: NativeFun e
 fold' i as@[tLamToApp -> app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \case
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
-           t -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
+           t ->
+            isInReplForkedError >>= \case
+              True -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
+              False -> evalError' i $ "fold: expecting list, received argument of type: " <> pretty (typeof' t)
 fold' i as = argsError' i as
 
 
@@ -977,7 +983,9 @@ filter' i as@[tLamToApp -> app@TApp {},l] = gasUnreduced i as $ reduce l >>= \ca
       _ -> ifExecutionFlagSet FlagDisablePact420
              (return False)
              (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
-  t -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+  t -> isInReplForkedError >>= \case
+      True -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+      False -> evalError' i $ "filter: expecting list, received argument of type: " <> pretty (typeof' t)
 filter' i as = argsError' i as
 
 

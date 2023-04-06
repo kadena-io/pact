@@ -55,7 +55,8 @@ module Pact.Types.Runtime
    module Pact.Types.ChainMeta,
    module Pact.Types.PactError,
    liftIO,
-   eAdvise
+   eAdvise,
+   isInReplForkedError
    ) where
 
 
@@ -449,13 +450,20 @@ throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) err)
 
 evalError :: Info -> Doc -> Eval e a
-evalError i = throwErr EvalError i
+evalError = throwErr EvalError
 
 evalError' :: HasInfo i => i -> Doc -> Eval e a
 evalError' = evalError . getInfo
 
+-- | Function to
+isInReplForkedError :: Eval e Bool
+isInReplForkedError =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> pure True
+    False -> view eeInRepl
+
 failTx :: Info -> Doc -> Eval e a
-failTx i = throwErr TxFailure i
+failTx = throwErr TxFailure
 
 failTx' :: HasInfo i => i -> Doc -> Eval e a
 failTx' = failTx . getInfo
@@ -473,20 +481,15 @@ throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) r
 
 argsError :: FunApp -> [Term Name] -> Eval e a
 argsError i as =
-  isExecutionFlagSet FlagDisablePact47 >>= \case
+  isInReplForkedError >>= \case
     True -> throwArgsError i as "Invalid arguments"
-    False -> do
-      view eeInRepl >>= \case
-        True -> throwArgsError i as "Invalid arguments"
-        False -> throwOnChainArgsError i as
+    False -> throwOnChainArgsError i as
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as =
-  isExecutionFlagSet FlagDisablePact47 >>= \case
+  isInReplForkedError >>= \case
     True -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
-    False -> view eeInRepl >>= \case
-        True -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
-        False -> throwOnChainArgsError i as
+    False -> throwOnChainArgsError i as
 
 eAdvise :: Info -> AdviceContext r -> Eval e (r,a) -> Eval e a
 eAdvise i m a = view eeAdvice >>= \adv -> advise i adv m a
