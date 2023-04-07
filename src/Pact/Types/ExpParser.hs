@@ -64,7 +64,7 @@ import Control.Arrow (second)
 import Prelude hiding (exp)
 import Control.Lens hiding (prism)
 import Data.Default
-import Data.Text (Text,unpack)
+import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Set as S
@@ -109,7 +109,7 @@ data ParseState a = ParseState
 makeLenses ''ParseState
 
 -- | Current env has flag for try-narrow fix.
-data ParseEnv = ParseEnv
+newtype ParseEnv = ParseEnv
     { _peNarrowTry :: Bool }
 instance Default ParseEnv where def = ParseEnv True
 
@@ -246,15 +246,15 @@ commit = lift (lift pCommit)
 {-# INLINE exp #-}
 exp :: String -> Prism' (Exp Info) a -> ExpParse s (a,Exp Info)
 exp ty prism = do
-  t <- current
+  !t <- current
   let test i = case firstOf prism i of
-        Just a -> Just (a,i)
+        Just !a -> Just (a,i)
         Nothing -> Nothing
-      errs = S.fromList [
+      !errs = S.fromList [
         strErr $ "Expected: " ++ ty,
-        Tokens (fromList [t])
+        Tokens $! fromList [t]
         ]
-  r <- lift $! lift $! pTokenEpsilon test errs
+  !r <- lift $! lift $! pTokenEpsilon test errs
   psCurrent .= snd r
   return r
 
@@ -325,7 +325,7 @@ keysetNameStr = parseKsn =<< lit' "keyset-name" _LString
 list' :: ListDelimiter -> ExpParse s (ListExp Info,Exp Info)
 list' d = list >>= \l@(ListExp{..},_) ->
   if _listDelimiter == d then commit >> return l
-  else expected $ enlist d (\(s,e)->unpack(s<>"list"<>e))
+  else expected $ enlist d $ \(s,e)-> T.unpack (s<>"list"<>e)
 
 -- | Recongize a list with specified delimiter and act on contents, committing.
 {-# INLINE withList #-}
@@ -350,4 +350,4 @@ bareAtom = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
 {-# INLINE symbol #-}
 symbol :: Text -> ExpParse s ()
 symbol s = bareAtom >>= \AtomExp{..} ->
-  if _atomAtom == s then commit else expected $ unpack s
+  if _atomAtom == s then commit else expected $ T.unpack s
