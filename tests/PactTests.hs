@@ -7,6 +7,7 @@ import qualified KeysetSpec
 import qualified RoundTripSpec
 import qualified PrincipalSpec
 import qualified SizeOfSpec
+import qualified Test.Pact.Parse
 
 #ifndef ghcjs_HOST_OS
 import qualified PactTestsSpec
@@ -39,6 +40,7 @@ main = hspec $ parallel $ do
   describe "RoundTripSpec" RoundTripSpec.spec
   describe "PrincipalSpec" PrincipalSpec.spec
   describe "SizeOfSpec" SizeOfSpec.spec
+  describe "Test.Pact.Parse" Test.Pact.Parse.spec
 
 #ifndef ghcjs_HOST_OS
 

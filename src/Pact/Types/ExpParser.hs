@@ -61,7 +61,6 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Arrow (second)
 import Prelude hiding (exp)
-import Data.String
 import Control.Lens hiding (prism)
 import Data.Default
 import Data.Text (Text,unpack)
@@ -108,7 +107,7 @@ data ParseState a = ParseState
 makeLenses ''ParseState
 
 -- | Current env has flag for try-narrow fix.
-data ParseEnv = ParseEnv
+newtype ParseEnv = ParseEnv
     { _peNarrowTry :: Bool }
 instance Default ParseEnv where def = ParseEnv True
 
@@ -120,13 +119,19 @@ mkEmptyInfo e = Info (Just (mempty,e))
 
 {-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
-mkStringInfo s d = Info (Just (fromString $ take (_pLength d) $
-                               drop (fromIntegral $ TF.bytes d) s,d))
+mkStringInfo s d = Info $ Just (Code code, d)
+  where
+    code = T.take len $ T.drop offset $ T.pack s
+    offset = fromIntegral $ TF.column (_pDelta d)
+    len = _pLength d
 
 {-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
-mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $
-                             T.drop (fromIntegral $ TF.bytes d) s,d))
+mkTextInfo s d = Info $ Just (Code code, d)
+  where
+    code = T.take len $ T.drop offset s
+    offset = fromIntegral $ TF.column (_pDelta d)
+    len = _pLength d
 
 type ExpParse s a = ReaderT ParseEnv (StateT (ParseState s) (Parsec Void Cursor)) a
 

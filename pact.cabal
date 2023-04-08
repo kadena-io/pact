@@ -389,6 +389,7 @@ test-suite hspec
     RoundTripSpec
     PrincipalSpec
     SizeOfSpec
+    Test.Pact.Parse
 
   if !impl(ghcjs)
     other-modules:
@@ -453,4 +454,5 @@ test-suite hspec
         , sbv
         , servant-client
         , temporary >= 1.3
+        , trifecta
         , yaml
