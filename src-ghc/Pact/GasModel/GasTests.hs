@@ -555,7 +555,7 @@ enforceSessionTests = tests
 
     tests =
       createGasUnitTests
-      updateEnvMsgSession
+        updateEnvMsgSession
       updateEnvMsgSession
       [enforceSessionExpr]
 
