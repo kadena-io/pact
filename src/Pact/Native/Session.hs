@@ -53,7 +53,8 @@ enforceSessionDef =
     enforceSession' i [TGuard{_tGuard}] = case _tGuard of
       GKeySetRef (ksr) -> do
         ks <- lookupEnvironmentKeyset i ksr
-        enforceKeySetSession (getInfo i) Nothing ks >> return (toTerm True)
+        enforceKeySetSession (getInfo i) Nothing ks
+        return (toTerm True)
       GKeySet ks -> enforceKeySetSession (getInfo i) Nothing ks >> return (toTerm True)
       _ -> evalError' i "incorrect guard type, must be keyset ref or keyset"
     enforceSession' i [TLitString k] = do
