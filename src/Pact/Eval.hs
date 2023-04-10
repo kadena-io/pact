@@ -148,17 +148,23 @@ enforceKeySet i ksn KeySet{..} = do
 {-# INLINE enforceKeySet #-}
 
 -- | Enforce keyset against session key from the environment.
+-- This is very similar to `enforceKeyset` (and both could be implemented
+-- in terms of a common function), but since `enforceKeyset` is such a central
+-- piece of code, we define `enforceKeySetSession` separately for now, and
+-- don't modify `enforceKeyset`.
 enforceKeySetSession :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySetSession i ksn KeySet{..} = do
   sessionPubKey <- view eeSessionSig
   case sessionPubKey of
     Nothing -> error "enforce-session called while there is no session pubkey in the environment"
     Just (publicKeyText, caps) -> do
-      let matchingKeys = M.filterWithKey matchKey $ M.singleton publicKeyText caps
+      let matchingKeys =
+            if publicKeyText `elem` _ksKeys
+            then M.singleton publicKeyText caps
+            else mempty
       sigs' <- checkSigCaps matchingKeys
       runPred (M.size sigs')
   where
-    matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
       maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
     atLeast t m = m >= t
