@@ -557,7 +557,7 @@ enforceSessionTests = tests
       createGasUnitTests
         updateEnvMsgSession
       updateEnvMsgSession
-      [enforceSessionExpr]
+        [enforceSessionExpr]
 
 readKeysetTests :: NativeDefName -> GasUnitTests
 readKeysetTests = tests
