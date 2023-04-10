@@ -66,6 +66,7 @@ enforceSessionDef =
       ks <- readRow (getInfo i) KeySets keySetName >>= \case
         Nothing -> evalError (getInfo i) $ "No such keyset: " <> pretty keySetName
         Just ks -> pure ks
-      enforceKeySetSession (getInfo i) (Just keySetName) ks >> return (toTerm True)
+      enforceKeySetSession (getInfo i) (Just keySetName) ks
+      return (toTerm True)
 
     enforceSession' i as = argsError i as
