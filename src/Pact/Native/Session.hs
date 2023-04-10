@@ -55,7 +55,9 @@ enforceSessionDef =
         ks <- lookupEnvironmentKeyset i ksr
         enforceKeySetSession (getInfo i) Nothing ks
         return (toTerm True)
-      GKeySet ks -> enforceKeySetSession (getInfo i) Nothing ks >> return (toTerm True)
+      GKeySet ks -> do
+        enforceKeySetSession (getInfo i) Nothing ks
+        return (toTerm True)
       _ -> evalError' i "incorrect guard type, must be keyset ref or keyset"
     enforceSession' i [TLitString k] = do
       keySetName <- ifExecutionFlagSet FlagDisablePact44
