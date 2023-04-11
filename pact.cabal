@@ -37,11 +37,6 @@ flag build-tool
   default:     True
   manual:      True
 
-flag no-advice
-  description: Disable advice in interpreter
-  default:     False
-  manual:      True
-
 flag with-integer-gmp
   description: Include integer-gmp package (removed after GHC 9)
   manual:      False
@@ -315,8 +310,6 @@ library
         , ed25519-donna
     if !os(windows)
       build-depends: unix
-    if !flag(no-advice)
-      cpp-options: -DADVICE
     if flag(tests-in-lib)
       hs-source-dirs: tests
       build-depends:
