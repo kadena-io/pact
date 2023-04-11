@@ -458,7 +458,8 @@ evalError = throwErr EvalError
 evalError' :: HasInfo i => i -> Doc -> Eval e a
 evalError' = evalError . getInfo
 
--- | Function to
+-- | Function to determine whether we are either pre-errors fork
+-- or in a repl environment.
 isInReplForkedError :: Eval e Bool
 isInReplForkedError =
   isExecutionFlagSet FlagDisablePact47 >>= \case
