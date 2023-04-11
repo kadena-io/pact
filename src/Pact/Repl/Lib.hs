@@ -37,7 +37,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
-import Data.Text (Text, unpack, pack)
+import Data.Text (Text, unpack)
 import Data.Text.Encoding
 import Pact.Time
 import qualified Data.Vector as V
@@ -875,5 +875,6 @@ withEnv i as = argsError' i as
 envSimulateNotRepl :: RNativeFun LibState
 envSimulateNotRepl _i [TLiteral (LBool inRepl) _] = do
   setenv eeInRepl inRepl
-  return $ tStr $ "Set as inRepl: " <> pack (show inRepl)
+  let ppInRepl = if inRepl then "true" else "false"
+  return $ tStr $ "Set in-repl execution mode to: " <> ppInRepl
 envSimulateNotRepl i as = argsError i as

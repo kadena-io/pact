@@ -1,0 +1,77 @@
+;; Test whether function details and native docs are output
+;; in repl at toplevel.
+
+(begin-tx)
+
+(module tester g
+   (defcap g () true)
+   (defun f (a) a))
+
+(commit-tx)
+
+;; Test for undesired behavior in Pact <4.7
+(begin-tx)
+
+; disable in-repl restrictions
+(env-exec-config ['DisablePact47])
+
+(expect
+  "Calling tester.f applied to a function results in function details"
+  "(defun tester.f:<b> (a:<c>))"
+  (tester.f tester.f))
+
+(expect
+  "Calling tester.f at toplevel results in function details"
+  "(defun tester.f:<b> (a:<c>))"
+  tester.f)
+
+(expect-failure
+  "Natives in tester.f result in typecheck error"
+  "Invalid type in value location"
+  (tester.f +))
+
+(commit-tx)
+
+;; Test for failure in the above tests for Pact 4.7
+(begin-tx)
+
+(env-exec-config [])
+(env-in-repl true)
+
+(expect-failure
+  "Calling tester.f applied to a function results in function details"
+  "Cannot display function details in non-repl context"
+  (tester.f tester.f))
+
+;; expect and expect-failure bypass env-in-repl here,
+;; reducing their arguments explicitly
+; (expect
+;   "Calling tester.f at toplevel results in function details"
+;   "(defun tester.f:<b> (a:<c>))"
+;   tester.f)
+
+(expect-failure
+  "Natives in tester.f result in typecheck error"
+  "Invalid type in value location"
+  (tester.f +))
+
+(commit-tx)
+
+;; Test in non-repl context
+(begin-tx)
+(env-in-repl false)
+
+(expect-failure
+  "Calling tester.f applied to a function results in function details"
+  "Cannot display function details in non-repl context"
+  (tester.f tester.f))
+
+(expect-failure
+  "Calling tester.f at toplevel results in function details"
+  "Cannot display function details in non-repl context"
+  tester.f)
+
+(expect-failure
+  "Natives in tester.f result in typecheck error"
+  "Invalid type in value location"
+  (tester.f +))
