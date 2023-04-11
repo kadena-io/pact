@@ -2658,6 +2658,26 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "format in property" $ do
+    let code' model = [text|
+          (defun test:string ()
+            @model $model
+            (format "Hello {}" ["Pact"]))
+          |]
+    expectVerified $ code' "[(property (= result \"Hello Pact\"))]"
+    expectFalsified $ code' "[(property (= result \"\"))]"
+
+  describe "format in property (dynamic)" $ do
+    let code' model = [text|
+          (defun test:string (s:string)
+            @model $model
+
+            (enforce (= s "Pact") "")
+            (format "Hello {}" [s]))
+          |]
+    expectVerified $ code' "[(property (= result \"Hello Pact\"))]"
+    expectFalsified $ code' "[(property (= result \"\"))]"
+
   describe "hash" $ do
     let code =
           [text|

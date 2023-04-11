@@ -1743,11 +1743,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       [from, to', step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' step
       _otherwise -> unexpectedNode astNode
 
-  AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
-    -- uncaught case is dynamic list, sub format string
-    Some SStr _ -> shimNative' node fn [b] "format string" a'
-    _ -> unexpectedNode astNode
-
   AST_NFun node fn@"create-principal" [a] -> translateNode a >>= \case
     -- assuming we have a guard as input, yield an empty string
     Some SGuard _ -> shimNative astNode node fn []
