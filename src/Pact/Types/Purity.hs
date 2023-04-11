@@ -73,6 +73,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
   return $ EvalEnv
     _eeRefStore
     _eeMsgSigs
+    _eeSessionSig
     _eeMsgBody
     _eeMode
     _eeEntity

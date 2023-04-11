@@ -86,6 +86,7 @@ library
     Pact.Native.Guards
     Pact.Native.Db
     Pact.Native.Internal
+    Pact.Native.Session
     Pact.Native.SPV
     Pact.Native.Time
     Pact.Native.Ops

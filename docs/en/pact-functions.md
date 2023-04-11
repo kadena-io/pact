@@ -1773,6 +1773,20 @@ pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 {"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
 ```
 
+## Session {#Session}
+
+### enforce-session {#enforce-session}
+
+*keyset*&nbsp;`keyset` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that the current environment contains a session pubkey that satisfies the keyset parameter. The execution environment is responsible for setting the session pubkey, usually in response to an authorization flow.
+```lisp
+(enforce-session keyset)
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -2025,6 +2039,17 @@ pact> (env-keys ["my-key" "admin-key"])
 Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
 ```lisp
 (env-namespace-policy (my-ns-policy-fun))
+```
+
+
+### env-session {#env-session}
+
+*public-key*&nbsp;`string` *caps*&nbsp;`[string]` *&rarr;*&nbsp;`string`
+
+
+Set PUBLIC-KEY as the session public key.
+```lisp
+(env-session "my-key" [])
 ```
 
 

@@ -93,6 +93,7 @@ import Pact.Native.Internal
 import Pact.Native.Keysets
 import Pact.Native.Ops
 import Pact.Native.SPV
+import Pact.Native.Session (sessionDefs)
 import Pact.Native.Time
 import Pact.Native.Pairing(zkDefs)
 import Pact.Parse
@@ -119,6 +120,7 @@ natives =
   , decryptDefs
   , guardDefs
   , zkDefs
+  , sessionDefs
   ]
 
 

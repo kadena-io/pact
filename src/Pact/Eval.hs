@@ -41,6 +41,7 @@ module Pact.Eval
     ,acquireModuleAdmin
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
+    ,enforceKeySetSession
     ,resumePact
     ,enforcePactValue,enforcePactValue'
     ,toPersistDirect
@@ -145,6 +146,46 @@ enforceKeySet i ksn KeySet{..} = do
         runBuiltIn p | p count matched = return ()
                      | otherwise = failed
 {-# INLINE enforceKeySet #-}
+
+-- | Enforce keyset against session key from the environment.
+-- This is very similar to `enforceKeyset` (and both could be implemented
+-- in terms of a common function), but since `enforceKeyset` is such a central
+-- piece of code, we define `enforceKeySetSession` separately for now, and
+-- don't modify `enforceKeyset`.
+enforceKeySetSession :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
+enforceKeySetSession i ksn KeySet{..} = do
+  sessionPubKey <- view eeSessionSig
+  case sessionPubKey of
+    Nothing -> error "enforce-session called while there is no session pubkey in the environment"
+    Just (publicKeyText, caps) -> do
+      let matchingKeys =
+            if publicKeyText `elem` _ksKeys
+            then M.singleton publicKeyText caps
+            else mempty
+      sigs' <- checkSigCaps matchingKeys
+      runPred (M.size sigs')
+  where
+    failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
+      maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
+    atLeast t m = m >= t
+    elide pk | T.length pk < 8 = pk
+             | otherwise = T.take 8 pk <> "..."
+    count = length _ksKeys
+    runPred matched =
+      case M.lookup _ksPredFun keyPredBuiltins of
+        Just KeysAll -> runBuiltIn (\c m -> atLeast c m)
+        Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
+        Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
+        Nothing -> do
+          r <- evalByName _ksPredFun [toTerm count,toTerm matched] i
+          case r of
+            (TLiteral (LBool b) _) | b -> return ()
+                                   | otherwise -> failed
+            _ -> evalError i $ "Invalid response from keyset predicate: " <> pretty r
+      where
+        runBuiltIn p | p count matched = return ()
+                     | otherwise = failed
+{-# INLINE enforceKeySetSession #-}
 
 enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of
