@@ -1,4 +1,4 @@
-cabal-version:       3.0
+cabal-version:       2.2
 name:                pact
 version:             4.6.0
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
@@ -20,8 +20,12 @@ build-type:          Simple
 extra-source-files:
     README.md
     CHANGELOG.md
-    musl-trans/cbits/musl/kadena-libm.h
-    musl-trans/cbits/musl/endian.h
+    cbits/musl/libm.h
+    cbits/musl/endian.h
+    cbits/musl/exp_data.h
+    cbits/musl/log_data.h
+    cbits/musl/pow_data.h
+    cbits/musl/sqrt_data.h
 
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
@@ -48,39 +52,6 @@ flag tests-in-lib
   manual:      True
 
 -- -------------------------------------------------------------------------- --
--- Internal library for double arithmetic
-
-library musl-trans
-  if impl(ghcjs)
-    buildable: False
-  hs-source-dirs: musl-trans/src
-  default-language: Haskell2010
-  ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-  ghc-prof-options: -fprof-auto -fprof-auto-calls
-  build-depends: base
-  c-sources:
-    musl-trans/cbits/musl/kadena-merror.c
-    musl-trans/cbits/musl/exp.c
-    musl-trans/cbits/musl/log.c
-    musl-trans/cbits/musl/pow.c
-    musl-trans/cbits/musl/sqrt.c
-  include-dirs:
-    musl-trans/cbits/musl
-  exposed-modules:
-    Musl.Trans
-
-test-suite musl-trans-tests
-  main-is: Main.hs
-  type: exitcode-stdio-1.0
-  hs-source-dirs: musl-trans/tests
-  default-language: Haskell2010
-  ghc-options: -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-  build-depends:
-    , base
-    , musl-trans
-    , hspec
-
--- -------------------------------------------------------------------------- --
 -- Pact library
 
 library
@@ -89,6 +60,23 @@ library
   hs-source-dirs: src
   default-language: Haskell2010
   ghc-prof-options: -fprof-auto -fprof-auto-calls
+  if !impl(ghcjs)
+    c-sources:
+      cbits/musl/__math_invalid.c
+      cbits/musl/__math_divzero.c
+      cbits/musl/__math_oflow.c
+      cbits/musl/__math_uflow.c
+      cbits/musl/__math_xflow.c
+      cbits/musl/exp.c
+      cbits/musl/exp_data.c
+      cbits/musl/log.c
+      cbits/musl/log_data.c
+      cbits/musl/pow.c
+      cbits/musl/pow_data.c
+      cbits/musl/sqrt.c
+      cbits/musl/sqrt_data.c
+    exposed-modules:
+      Pact.Native.Trans.TOps
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -252,7 +240,6 @@ library
       Pact.Types.Server
       Pact.Types.SQLite
     build-depends:
-      , musl-trans
       , criterion >= 1.1.4 && < 1.7
       , cryptonite
       , direct-sqlite == 2.3.27
