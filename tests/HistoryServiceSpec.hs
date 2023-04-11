@@ -10,7 +10,6 @@ import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import Test.Hspec
-import Test.Hspec.Core.Spec
 import Data.Default
 import System.IO.Temp (withSystemTempDirectory)
 
