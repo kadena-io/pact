@@ -45,8 +45,6 @@ import Pact.Native
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Legacy.HashMap as LHM
 
-import Test.Hspec.Core.Spec
-
 spec :: Spec
 spec = describe "gas model tests" $ do
   describe "untestedNativesCheck" untestedNativesCheck

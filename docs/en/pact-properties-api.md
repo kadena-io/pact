@@ -638,7 +638,7 @@ Supported in either invariants or properties.
 ### enumerate {#FEnumerate}
 
 ```lisp
-(drop n xs)
+(enumerate from to step)
 ```
 
 * takes `from`: `integer`

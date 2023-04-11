@@ -27,7 +27,6 @@ import System.Timeout
 import qualified Data.Vector as V
 
 import Test.Hspec
-import Test.Hspec.Core.Spec
 
 import Pact.ApiReq
 import Pact.Server.API

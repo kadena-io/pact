@@ -167,8 +167,12 @@ spec_case props =
       Case (n, p) -> it n $ property p
       Pending (n, p) -> xit n $ property p
       CaseOldHashable (n, _p) ->
+#ifdef MIN_VERSION_hashable
 #if ! MIN_VERSION_hashable(1,3,1) && !MIN_VERSION_unordered_containers(0,2,16)
         xit n $ property _p
+#else
+        xit n $ pendingWith "test only succeeds for hashable <1.3.1 and unordered-containers <0.2.16.0"
+#endif
 #else
         xit n $ pendingWith "test only succeeds for hashable <1.3.1 and unordered-containers <0.2.16.0"
 #endif

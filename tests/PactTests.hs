@@ -30,6 +30,7 @@ import qualified RemoteVerifySpec
 import qualified TypecheckSpec
 import qualified PactCLISpec
 import qualified ZkSpec
+import qualified ReplSpec
 # endif
 #endif
 
@@ -66,6 +67,7 @@ main = hspec $ parallel $ do
   describe "TypecheckSpec" TypecheckSpec.spec
   describe "PactCLISpec" PactCLISpec.spec
   describe "ZkSpec" ZkSpec.spec
+  describe "ReplSpec" ReplSpec.spec
 
 
 # endif
