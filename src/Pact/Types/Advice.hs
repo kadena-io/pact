@@ -95,7 +95,7 @@ instance Semigroup Advice where
 instance Monoid Advice where
   mempty = def
 
-advise :: MonadIO m => Info -> Advice -> AdviceContext r -> m (r -> m())
+advise :: MonadIO m => Info -> Advice -> AdviceContext r -> m (r -> m ())
 advise i (Advice f) ctx = f i ctx
 
 defAdvice :: MonadIO m => Info -> AdviceContext r -> m (r -> m ())
