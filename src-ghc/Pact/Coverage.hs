@@ -42,7 +42,7 @@ import Pact.Types.Runtime (ModuleData(..))
 mkCoverageAdvice :: IO (IORef LcovReport,Advice)
 mkCoverageAdvice = newIORef mempty >>= \r -> return (r,Advice $ cover r)
 
-cover :: MonadIO m => IORef LcovReport -> Info -> AdviceContext r -> m (r -> m())
+cover :: MonadIO m => IORef LcovReport -> Info -> AdviceContext r -> m (r -> m ())
 cover ref i ctx = case _iInfo i of
     Just {} -> report (parseInf i)
     _ -> pure $ const $ pure ()
