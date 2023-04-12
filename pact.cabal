@@ -410,6 +410,8 @@ test-suite hspec
       SignatureSpec
 
     build-depends:
+      , Decimal >=0.4.2
+      , QuickCheck >=2.12.6.1
       , base16-bytestring
       , directory
       , errors
