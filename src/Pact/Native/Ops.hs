@@ -127,11 +127,11 @@ powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
   where
   pow :: RNativeFun e
   pow i as@[TLiteral a _,TLiteral b _] = do
-    binop "^" (trans_pow i) intPow i as
+    binop "^" (liftDecPowF i trans_pow) intPow i as
     where
     liftDecPowF fi f lop rop = do
       _ <- computeGasCommit def "" (GDecimalOpCost lop rop)
-      liftDecF fi f lop rop
+      f fi lop rop
     oldIntPow  b' e = do
       when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
       liftIntegerOp (^) b' e
@@ -181,13 +181,13 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
   liftLogDec fi f a b = do
     _ <- computeGasCommit def "" (GDecimalOpCost a b)
-    liftDecF fi f a b
+    f fi a b
   log' :: RNativeFun e
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
     binop "log"
-          (trans_logBase fi)
+          (liftLogDec fi trans_logBase)
           (trans_logBaseInt fi)
           fi
           as
