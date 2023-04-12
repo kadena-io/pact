@@ -120,8 +120,7 @@ mkEmptyInfo e = Info (Just (mempty,e))
 
 {-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
-mkStringInfo s d = Info (Just (fromString $ take (_pLength d) $
-                               drop (fromIntegral $ TF.bytes d) s,d))
+mkStringInfo = mkTextInfo . T.pack
 
 {-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
