@@ -46,7 +46,7 @@ spec = do
   verifiedAccountsTest
   prodParserTests tests
   legacyProdParserTests tests
-  floatingPointTests tests
+  floatingPointTests
 
 
 pactTests :: [FilePath] -> Spec
