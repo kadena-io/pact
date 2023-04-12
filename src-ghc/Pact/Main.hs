@@ -244,6 +244,6 @@ echoBuiltins = do
 
 genKeys :: IO ()
 genKeys = do
-  kp <- genKeyPair defaultScheme
+  kp <- genKeyPair
   putStrLn $ "public: " ++ unpack (toB16Text $ getPublic kp)
   putStrLn $ "secret: " ++ unpack (toB16Text $ getPrivate kp)

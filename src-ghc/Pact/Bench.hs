@@ -233,7 +233,7 @@ benchReadValue benchMod (DataTable t) _k
 benchReadValue _ (TxTable _t) _k = rcp Nothing
 
 
-mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
+mkBenchCmd :: [Ed25519KeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
     $ J.encodeStrict
@@ -290,7 +290,7 @@ main = do
   !priv <- eitherDie "priv" $
     parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
   !keyPair <- eitherDie "keyPair" $
-    importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS priv)
+    importKeyPair (Just $ PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie "parseExps" . parseExprs)) exps
   !pureDb <- perfEnv dbPerf <$> mkPureEnv neverLog
   initSchema pureDb

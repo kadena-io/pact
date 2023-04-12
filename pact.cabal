@@ -224,7 +224,6 @@ library
       Pact.PersistPactDb.Regression
       Pact.Server.PactService
       Pact.Types.Crypto
-      Pact.Types.ECDSA
       Pact.Types.Server
       Pact.Types.SQLite
     build-depends:

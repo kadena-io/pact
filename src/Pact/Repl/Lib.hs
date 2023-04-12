@@ -57,7 +57,6 @@ import Statistics.Types (Estimate(..))
 import qualified Pact.Analyze.Check as Check
 import System.Directory
 # endif
-import qualified Pact.Types.Crypto as Crypto
 #endif
 
 import Pact.Typechecker
@@ -115,9 +114,6 @@ replDefs = ("Repl",
                               funType tTyString [("file",tTyString),("reset",tTyBool)])
       [LitExample "(load \"accounts.repl\")"]
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
-     ,defZRNative "format-address" formatAddr (funType tTyString [("scheme", tTyString), ("public-key", tTyString)])
-      []
-      "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
       ("DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. "<>
@@ -342,29 +338,6 @@ mockSPV i as = case as of
     setLibState $ over rlsMockSPV (M.insert (SPVMockKey (spvType,payload)) out)
     return $ tStr $ "Added mock SPV for " <> spvType
   _ -> argsError i as
-
-formatAddr :: RNativeFun LibState
-#if !defined(ghcjs_HOST_OS)
-formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
-  let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
-      eitherEvalErr res effectStr transformFunc =
-        case res of
-          Left e  -> evalError' i $ prettyString effectStr <> ": " <> prettyString e
-          Right v -> return (transformFunc v)
-  sppk  <- eitherEvalErr (fromText' scheme)
-           "Invalid PPKScheme"
-           Crypto.toScheme
-  pubBS <- eitherEvalErr (parseB16TextOnly cryptoPubKey)
-           "Invalid Public Key format"
-           Crypto.PubBS
-  addr  <- eitherEvalErr (Crypto.formatPublicKeyBS sppk pubBS)
-           "Unable to convert Public Key to Address"
-           toB16Text
-  return (tStr addr)
-formatAddr i as = argsError i as
-#else
-formatAddr i _ = evalError' i "Address formatting not supported in GHCJS"
-#endif
 
 
 setsigs :: RNativeFun LibState
