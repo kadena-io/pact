@@ -222,7 +222,7 @@ floatingPointTestsArity1 lbl f_double f_musl f_mpfr =
         unless (isNaN musl || isInfinite musl) $ do
           let mpfr = f_mpfr x
           unless (T.TransNumber (f2Dec musl) == mpfr) $ liftIO $ do
-            putStrLn $ "x = " ++ show x
+            putStrLn $ "x    = " ++ show x
             putStrLn $ "dble = " ++ show (f2Dec dble)
             putStrLn $ "musl = " ++ show (f2Dec musl)
             putStrLn $ "mpfr = " ++ show mpfr
@@ -251,8 +251,8 @@ floatingPointTestsArity2 lbl f_double f_musl f_mpfr =
         unless (isNaN musl || isInfinite musl) $ do
           let mpfr = f_mpfr x y
           unless (T.TransNumber (f2Dec musl) == mpfr) $ liftIO $ do
-            putStrLn $ "x = " ++ show x
-            putStrLn $ "y = " ++ show y
+            putStrLn $ "x    = " ++ show x
+            putStrLn $ "y    = " ++ show y
             putStrLn $ "dble = " ++ show (f2Dec dble)
             putStrLn $ "musl = " ++ show (f2Dec musl)
             putStrLn $ "mpfr = " ++ show mpfr
