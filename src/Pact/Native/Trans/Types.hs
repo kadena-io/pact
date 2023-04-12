@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -113,6 +114,19 @@ type Mpz_t = Ptr MPZ
 type Mpq_t = Ptr MPQ
 type Mpfr_t = Ptr MPFR
 
+#if !darwin_HOST_OS
+foreign import ccall "__gmpz_init"
+  c'mpz_init :: Mpz_t -> IO ()
+
+foreign import ccall "__gmpz_clear"
+  c'mpz_clear :: Mpz_t -> IO ()
+
+foreign import ccall "__gmpz_set_str"
+  c'mpz_set_str :: Mpz_t -> Ptr CChar -> CInt -> IO ()
+
+foreign import ccall "__gmpz_get_str"
+  c'mpz_get_str :: Ptr CChar -> CInt -> Mpz_t -> IO (Ptr CChar)
+#else
 foreign import ccall "mpz_init"
   c'mpz_init :: Mpz_t -> IO ()
 
@@ -124,6 +138,7 @@ foreign import ccall "mpz_set_str"
 
 foreign import ccall "mpz_get_str"
   c'mpz_get_str :: Ptr CChar -> CInt -> Mpz_t -> IO (Ptr CChar)
+#endif
 
 foreign import ccall "__gmpq_init"
   c'mpq_init :: Mpq_t -> IO ()
