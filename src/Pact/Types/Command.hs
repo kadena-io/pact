@@ -1,14 +1,17 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -34,7 +37,8 @@ module Pact.Types.Command
   , keyPairsToSigners
   , verifyUserSig
   , verifyCommand
-  , SomeKeyPairCaps
+  , PPKScheme(..)
+  , Ed25519KeyPairCaps
   , ProcessedCommand(..),_ProcSucc,_ProcFail
   , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
@@ -48,8 +52,8 @@ module Pact.Types.Command
   , RequestKey(..)
   , cmdToRequestKey
   , requestKeyToB16Text
+  -- , verifyWebAuthnSig
   ) where
-
 
 import Control.Applicative
 import Control.Lens hiding ((.=), elements)
@@ -60,6 +64,7 @@ import Data.Serialize as SZ
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
 
 import GHC.Generics
@@ -120,14 +125,15 @@ data ProcessedCommand m a =
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
-type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
+
+type Ed25519KeyPairCaps = (Ed25519KeyPair ,[SigCapability])
 
 -- CREATING AND SIGNING TRANSACTIONS
 
 mkCommand
   :: J.Encode c
   => J.Encode m
-  => [SomeKeyPairCaps]
+  => [(Ed25519KeyPair, [SigCapability])]
   -> m
   -> Text
   -> Maybe NetworkId
@@ -138,22 +144,19 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
-keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
+keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
-      where scheme = case kpToPPKScheme cred of
-              ED25519 -> Nothing
-              s -> Just s
-            pub = toB16Text $ getPublic cred
-            addr = case scheme of
-              Nothing -> Nothing
-              Just {} -> Just $ toB16Text $ formatPublicKey cred
+      where
+        scheme = Just ED25519
+        pub = toB16Text $ toBS $ fst cred
+        addr = Just pub
 
 
-keyPairsToSigners :: [SomeKeyPairCaps] -> [Signer]
+keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer]
 keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 
 
-mkCommand' :: [(SomeKeyPair,a)] -> ByteString -> IO (Command ByteString)
+mkCommand' :: [(Ed25519KeyPair ,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
       toUserSig (cred,_) = signHash hsh cred
@@ -173,8 +176,8 @@ mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = J.encodeStrict payload
         payload = Payload rpc nonce meta signers nid
 
-signHash :: TypedHash h -> SomeKeyPair -> IO UserSig
-signHash hsh cred = UserSig . toB16Text <$> sign cred (toUntypedHash hsh)
+signHash :: TypedHash h -> Ed25519KeyPair -> IO UserSig
+signHash hsh (pub,priv) = UserSig . toB16Text <$> sign pub priv (toUntypedHash hsh)
 
 -- VALIDATING TRANSACTIONS
 
@@ -203,6 +206,7 @@ hasInvalidSigs hsh sigs signers
   | otherwise                            = if (length failedSigs == 0)
                                            then Nothing else formatIssues
   where verifyFailed (sig, signer) = not $ verifyUserSig hsh sig signer
+
         -- assumes nth Signer is responsible for the nth UserSig
         failedSigs = filter verifyFailed (zip sigs signers)
         formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
@@ -211,22 +215,28 @@ hasInvalidSigs hsh sigs signers
 verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
 verifyUserSig msg UserSig{..} Signer{..} =
   case (pubT, sigT, addrT) of
-    (Right p, Right sig, addr) ->
+    (Right p, sig, addr) ->
       (isValidAddr addr p) &&
       verify (toScheme $ fromMaybe defPPKScheme _siScheme)
-             (toUntypedHash msg) (PubBS p) (SigBS sig)
+             (toUntypedHash msg) (PubBS p) sig
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
-        sigT = parseB16TextOnly _usSig
+        sigT = case parseB16TextOnly _usSig of
+          Left _ -> SigBS (Text.encodeUtf8 _usSig)
+          Right bs -> SigBS bs
         addrT = parseB16TextOnly <$> _siAddress
-        toScheme' = toScheme . fromMaybe ED25519
         isValidAddr addrM pubBS = case addrM of
           Nothing -> True
           Just (Left _) -> False
-          Just (Right givenAddr) ->
-            case formatPublicKeyBS (toScheme' _siScheme) (PubBS pubBS) of
-              Right expectAddr -> givenAddr == expectAddr
-              Left _           -> False
+          -- All current cases of `_siScheme` require the same relationship
+          -- between `pubBS` and `givenAddr`. But we enumerate them anyway,
+          -- so that if another scheme is added in the future, this use site
+          -- will warn us that we need to consider the `pubBS`/`givenAddr`
+          -- relationship for that scheme, since it may be different.
+          Just (Right givenAddr) -> case _siScheme of
+            Nothing -> pubBS == givenAddr
+            Just ED25519 -> pubBS == givenAddr
+            Just WebAuthn -> pubBS == givenAddr
 
 -- | Signer combines PPKScheme, PublicKey, and the Address (aka the
 --   formatted PublicKey).

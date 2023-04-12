@@ -296,7 +296,7 @@ loadSigData fp = do
     Left e -> Left $ "Error loading SigData file " <> fp <> ": " <> show e
     Right sd -> Right sd
 
-addSigToSigData :: SomeKeyPair -> SigData a -> IO (SigData a)
+addSigToSigData :: Ed25519KeyPair -> SigData a -> IO (SigData a)
 addSigToSigData kp sd = do
   sig <- signHash (_sigDataHash sd) kp
   let k = PublicKeyHex $ toB16Text $ getPublic kp
@@ -384,7 +384,7 @@ addSigReq sd keyFile = do
   kp <- importKeyFile keyFile
   addSigToSigData kp sd
 
-importKeyFile :: FilePath -> IO SomeKeyPair
+importKeyFile :: FilePath -> IO Ed25519KeyPair
 importKeyFile keyFile = do
   v :: Value <- decodeYaml keyFile
   let ekp = do
@@ -393,7 +393,7 @@ importKeyFile keyFile = do
         pub <- getKey "public" v
         sec <- getKey "secret" v
 
-        importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
+        importKeyPair (Just $ PubBS pub) (PrivBS sec)
   case ekp of
     Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
     Right kp -> return kp
@@ -480,7 +480,7 @@ signCmd keyFiles bs = do
 withKeypairsOrSigner
   :: Bool
   -> ApiReq
-  -> ([SomeKeyPairCaps] -> IO a)
+  -> ([Ed25519KeyPairCaps] -> IO a)
   -> ([Signer] -> IO a)
   -> IO a
 withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
@@ -548,7 +548,7 @@ mkExec
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
-  -> [SomeKeyPairCaps]
+  -> [Ed25519KeyPairCaps]
     -- ^ signing keypairs + caplists
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
@@ -635,7 +635,7 @@ mkCont
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
-  -> [SomeKeyPairCaps]
+  -> [Ed25519KeyPairCaps]
     -- ^ signing keypairs
   -> Maybe Text
     -- ^ optional nonce
@@ -687,12 +687,11 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
-mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPairCaps]
+-- Parse `APIKeyPair`s into Ed25519 keypairs.
+mkKeyPairs :: [ApiKeyPair] -> IO [Ed25519KeyPairCaps]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where importValidKeyPair ApiKeyPair{..} = fmap (,maybe [] id _akpCaps) $
-          case _akpScheme of
-            Nothing -> importKeyPair defaultScheme _akpPublic _akpSecret
-            Just ppk -> importKeyPair (toScheme ppk) _akpPublic _akpSecret
+          importKeyPair _akpPublic _akpSecret
 
         mkPair akp = case _akpAddress akp of
           Nothing -> either dieAR return (importValidKeyPair akp)
@@ -703,14 +702,12 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
             -- Enforces that user provided address matches the address derived from the Public Key
             -- for transparency and a better user experience. User provided address not used except
             -- for this purpose.
-
-            case (addrBS, formatPublicKey (fst kp)) of
-              (expectAddr, actualAddr)
-                | expectAddr == actualAddr  -> return kp
-                | otherwise                 -> dieAR $ "Address provided "
-                                               ++ show (toB16Text expectAddr)
-                                               ++ " does not match actual Address "
-                                               ++ show (toB16Text actualAddr)
+            if addrBS == getPublic (fst kp)
+              then return kp
+              else dieAR $ "Address provided "
+                          ++ show (toB16Text addrBS)
+                          ++ " does not match actual Address "
+                          ++ show (toB16Text $ getPublic $ fst kp)
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ intercalate "\n" $

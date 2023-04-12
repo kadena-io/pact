@@ -2104,14 +2104,6 @@ pact> (expect-that "addition" (> 2) (+ 1 2))
 ```
 
 
-### format-address {#format-address}
-
-*scheme*&nbsp;`string` *public-key*&nbsp;`string` *&rarr;*&nbsp;`string`
-
-
-Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME.
-
-
 ### load {#load}
 
 *file*&nbsp;`string` *&rarr;*&nbsp;`string`

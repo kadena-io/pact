@@ -145,7 +145,6 @@ library
     Pact.Types.Command
     Pact.Types.Continuation
     Pact.Types.Crypto
-    Pact.Types.ECDSA
     Pact.Types.Exp
     Pact.Types.ExpParser
     Pact.Types.Gas
@@ -229,6 +228,7 @@ library
     , scientific >= 0.3
     , semigroupoids >=5.0
     , semirings
+    , serialise
     , servant
     , servant-client >=0.16
     , servant-client-core >=0.16
@@ -242,6 +242,7 @@ library
     , vector-algorithms >=0.7
     , vector-space >=0.10.4
     , yaml
+    , webauthn >= 0.7
 
   if flag(build-tool)
     cpp-options: -DBUILD_TOOL

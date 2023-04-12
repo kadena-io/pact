@@ -16,18 +16,19 @@ import Pact.Server.API
 import Servant.Client
 import Pact.Types.Runtime
 import Pact.Types.PactValue
+import Pact.Types.Crypto (genKeyPair)
 
 import Utils
 
 simpleServerCmd :: IO (Command Text)
 simpleServerCmd = do
-  simpleKeys <- genKeys
+  simpleKeys <- genKeyPair
   mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] Nothing (Just "test1")
 
 
 simpleServerCmdWithPactErr :: IO (Command Text)
 simpleServerCmdWithPactErr = do
-  simpleKeys <- genKeys
+  simpleKeys <- genKeyPair
   mkExec  "(+ 1 2 3)" Null def [(simpleKeys,[])] Nothing (Just "test1")
 
 spec :: Spec

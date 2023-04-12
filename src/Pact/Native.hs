@@ -1403,11 +1403,14 @@ base64decode = defRNative "base64-decode" go
   where
     go :: RNativeFun e
     go i as = case as of
-      [TLitString s] ->
+      [TLitString s] -> do
+        simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
         case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
-          Left e -> evalError' i
-            $ "Could not decode string: "
-            <> pretty e
+          Left e -> evalError' i $
+            if simplifiedErrorMessage
+            then "Could not base64-decode string"
+            else "Could not decode string: "
+              <> pretty (base64DowngradeErrorMessage e)
           Right t -> return $ tStr t
       _ -> argsError i as
 

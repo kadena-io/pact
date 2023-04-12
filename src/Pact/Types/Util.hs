@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -34,6 +35,7 @@ module Pact.Types.Util
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
   , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText'
   , toB64UrlUnpaddedText, fromB64UrlUnpaddedText
+  , base64DowngradeErrorMessage
   , B64JsonBytes(..)
   -- | AsString
   , AsString(..), asString'
@@ -61,6 +63,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.ByteString.Short as SB
 import qualified Text.Trifecta as Trifecta
 import Data.Char
+import qualified Data.List as L
 import Data.Either (isRight)
 import Data.Hashable (Hashable)
 import Data.Word
@@ -156,8 +159,8 @@ parseB16JSON = withText "Base16" parseB16Text
 
 parseB16Text :: Text -> Parser ByteString
 parseB16Text t = case B16.decode (encodeUtf8 t) of
-                 (s,leftovers) | leftovers == B.empty -> return s
-                               | otherwise -> fail $ "Base16 decode failed: " ++ show t
+  Right bs -> return bs
+  Left _ -> fail $ "Base16 decode failed: " ++ show t
 {-# INLINE parseB16Text #-}
 
 parseB16TextOnly :: Text -> Either String ByteString
@@ -332,3 +335,15 @@ arbitraryIdent = cons
   letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZñûüùúūÛÜÙÚŪß"
   digits = "0123456789"
 
+
+-- TODO: Check if we can remove this, by deleting it then running replay.
+-- | Converts the error message format of base64-bytestring-1.2
+--   into that of base64-bytestring-0.1, for the error messages
+--   that have made it onto the chain.
+--   This allows us to upgrade to base64-bytestring-1.2 without
+--   breaking compatibility.
+base64DowngradeErrorMessage :: String -> String
+base64DowngradeErrorMessage
+  (L.stripPrefix "invalid character at offset: " -> Just suffix) =
+      "invalid base64 encoding near offset " <> suffix
+base64DowngradeErrorMessage x = x
