@@ -71,7 +71,6 @@ instance Arbitrary Parsed where
         , Directed <$> genFilename <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 ]
 instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
-instance HasBytes Parsed where bytes = bytes . _pDelta
 instance Pretty Parsed where pretty = pretty . _pDelta
 
 
