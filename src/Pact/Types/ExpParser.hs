@@ -119,11 +119,7 @@ mkEmptyInfo e = Info (Just (mempty,e))
 
 {-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
-mkStringInfo s d = Info $ Just (Code code, d)
-  where
-    code = T.take len $ T.drop offset $ T.pack s
-    offset = fromIntegral $ TF.column (_pDelta d)
-    len = _pLength d
+mkStringInfo = mkTextInfo . T.pack
 
 {-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
