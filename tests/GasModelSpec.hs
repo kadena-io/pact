@@ -8,6 +8,7 @@ module GasModelSpec (spec) where
 
 import Test.Hspec
 import Test.Hspec.Golden as G
+import Test.Hspec.Core.Spec
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as BL
