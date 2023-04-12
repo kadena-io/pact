@@ -42,8 +42,6 @@ import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
 
-import Test.Hspec.Core.Spec
-
 spec :: Spec
 spec = describe "gas model tests" $ do
   describe "untestedNativesCheck" untestedNativesCheck

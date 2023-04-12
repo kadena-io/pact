@@ -1,6 +1,6 @@
 #include "libm.h"
 
-double __math_uflow(uint32_t sign)
+double __kadena_math_uflow(uint32_t sign)
 {
-	return __math_xflow(sign, 0x1p-767);
+	return __kadena_math_xflow(sign, 0x1p-767);
 }

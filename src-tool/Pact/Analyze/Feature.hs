@@ -81,6 +81,7 @@ data Feature
   | FCeilingRound
   | FFloorRound
   | FModulus
+ 
   -- Bitwise operators
   | FBitwiseAnd
   | FBitwiseOr
@@ -110,6 +111,7 @@ data Feature
   | FListProjection
   | FListLength
   | FContains
+  | FEnumerate
   | FReverse
   | FSort
   | FListDrop
@@ -117,6 +119,7 @@ data Feature
   | FMakeList
   | FMap
   | FFilter
+  | FDistinct
   | FFold
   -- String operators
   | FStringLength
@@ -124,6 +127,11 @@ data Feature
   | FStringToInteger
   | FStringTake
   | FStringDrop
+  -- Hash operators
+  | FStringHash
+  | FNumericalHash
+  | FBoolHash
+  | FListHash
   -- Temporal operators
   | FTemporalAddition
   -- Quantification forms
@@ -951,6 +959,22 @@ doc FContains = Doc
         ]
       (TyCon bool)
   ]
+doc FEnumerate = Doc
+  "enumerate"
+  CList
+  InvAndProp
+  "Returns a sequence of numbers as a list"
+  [ Usage
+      "(enumerate from to step)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("from", TyCon int)
+        , ("to"  , TyCon int)
+        , ("step", TyCon int)
+        ]
+      (TyList' (TyCon int))
+  ]
 
 doc FReverse = Doc
   "reverse"
@@ -1066,6 +1090,22 @@ doc FFilter = Doc
         Nothing
         [ ("f", TyFun [a] (TyCon bool))
         , ("as", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FDistinct = Doc
+  "distinct"
+  CList
+  InvAndProp
+  "returns a list of distinct values"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(distinct xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
         ]
       (TyList' a)
   ]
@@ -1188,6 +1228,63 @@ doc FStringToInteger = Doc
         (TyCon int)
   ]
 
+-- Hash features
+
+doc FStringHash = Doc
+  "hash"
+  CString
+  PropOnly
+  "BLAKE2b 256-bit hash of string values"
+  [ Usage
+      "(hash s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)]
+        (TyCon str)
+  ]
+doc FNumericalHash = Doc
+  "hash"
+  CString
+  PropOnly
+  "BLAKE2b 256-bit hash of numerical values"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(hash s)"
+      (Map.fromList [("a", OneOf [int, dec])])
+      $ Fun
+        Nothing
+        [ ("s", a)]
+        (TyCon str)
+  ]
+doc FBoolHash = Doc
+  "hash"
+  CLogical
+  PropOnly
+  "BLAKE2b 256-bit hash of bool values"
+  [ Usage
+      "(hash s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon bool)]
+        (TyCon str)
+  ]
+doc FListHash = Doc
+  "hash"
+  CList
+  PropOnly
+  "BLAKE2b 256-bit hash of lists"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(hash xs)"
+      (Map.fromList [("a", OneOf [int, dec, bool, str])])
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
+        ]
+      (TyCon str)
+  ]
 -- Temporal features
 
 doc FTemporalAddition = Doc
@@ -1719,9 +1816,11 @@ PAT(SOrQ, FOrQ)
 PAT(SObjectProjection, FObjectProjection)
 PAT(SListLength, FListLength)
 PAT(SContains, FContains)
+PAT(SEnumerate, FEnumerate)
 PAT(SReverse, FReverse)
 PAT(SSort, FSort)
 PAT(SListDrop, FListDrop)
+PAT(SDistinct, FDistinct)
 PAT(SListTake, FListTake)
 PAT(SMakeList, FMakeList)
 PAT(SMap, FMap)
@@ -1736,6 +1835,10 @@ PAT(SStringTake, FStringTake)
 PAT(SStringDrop, FStringDrop)
 PAT(SConcatenation, FConcatenation)
 PAT(SStringToInteger, FStringToInteger)
+PAT(SStringHash, FStringHash)
+PAT(SNumericalHash, FNumericalHash)
+PAT(SBoolHash, FBoolHash)
+PAT(SListHash, FListHash)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)

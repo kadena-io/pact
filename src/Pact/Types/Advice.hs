@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
@@ -45,11 +46,11 @@ data DbContext =
   | DbGetTxLog
   deriving (Eq,Show,Enum,Bounded)
 
--- | Type of advised operation. GADT indicates the "intermediate return value" type of
--- the bracketed operation.
+-- | For an advised operation, provide pre-execution "context" and
+-- specify post-execution return type.
 data AdviceContext r where
     -- | Advise on user function, return result
-    AdviceUser :: !(Def Ref,[Term Name]) -> AdviceContext (Term Name)
+    AdviceUser :: !(Def Ref) -> AdviceContext (Term Name)
     -- | Advise on native, return result
     AdviceNative :: !NativeDefName -> AdviceContext (Term Name)
     -- | Transaction execution wrapper
@@ -72,33 +73,33 @@ instance Show (AdviceContext r) where
 
 -- | Bracket some Pact operation.
 newtype Advice = Advice {
-  -- | Callback for advising a pact operation. '_advise i ctx op'
-  -- gives source info in 'i', advice context in 'ctx', and 'op'
-  -- as the bracketed action. The implementation is expected to
-  -- execute 'op' whose return value '(r,a)' contains the ultimate
-  -- return value in 'a', with 'r' available for inspection.
-  _advise :: forall m r a . MonadIO m
+  -- | Callback for advising some pact operation. '_advise i ctx'
+  -- is invoked before the operation with location info in 'i' and
+  -- advice context in 'ctx', and returns a continuation for
+  -- processing the operation return type post-execution.
+  _advise :: forall m r . MonadIO m
     => Info
     -> AdviceContext r
-    -> m (r, a)
-    -> m a
+    -> m (r -> m ())
   }
 
 instance Default Advice where def = Advice defAdvice
 instance Show Advice where show _ = "Advice"
 instance Semigroup Advice where
   Advice f <> Advice g =
-    Advice $ \i ctx act -> f i ctx $! g i ctx $ do
-      (r,a) <- act
-      return (r,(r,a))
+    Advice $ \i ctx -> do
+      c <- f i ctx
+      d <- g i ctx
+      pure $ \r -> c r >> d r
+
 instance Monoid Advice where
   mempty = def
 
-advise :: MonadIO m => Info -> Advice -> AdviceContext r -> m (r,a) -> m a
-advise i (Advice f) ctx act = f i ctx act
+advise :: MonadIO m => Info -> Advice -> AdviceContext r -> m (r -> m())
+advise i (Advice f) ctx = f i ctx
 
-defAdvice :: MonadIO m => Info -> AdviceContext r -> m (r,a) -> m a
-defAdvice _ _ a = snd <$> a
+defAdvice :: MonadIO m => Info -> AdviceContext r -> m (r -> m ())
+defAdvice _ _ = pure $ const $ return ()
 {-# INLINE defAdvice #-}
 
 -- | Instrument some 'PactDb' with advice.
@@ -117,4 +118,8 @@ advisePactDb pt PactDb{..} = PactDb
   }
   where
     perf' :: DbContext -> IO a -> IO a
-    perf' t act = advise def pt (AdviceDb t) $ ((),) <$> act
+    perf' t act = do
+      c <- advise def pt (AdviceDb t)
+      !r <- act
+      c ()
+      pure r

@@ -29,12 +29,12 @@ import Data.Aeson
 import Data.Maybe
 import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
-
 import qualified Data.HashMap.Strict as HashMap
-
+import Data.Foldable (traverse_)
 import Data.Word
 import GHC.Generics
 import System.Log.FastLogger
+import System.Directory (createDirectoryIfMissing)
 import Data.Default
 
 import Pact.Types.Command
@@ -88,11 +88,7 @@ serveLocal = serve_ True
 
 serve_ :: Bool -> FilePath -> SPVSupport -> IO ()
 serve_ isLocal configFile spv = do
-  Config {..} <- Y.decodeFileEither configFile >>= \case
-    Left e -> do
-      putStrLn usage
-      throwIO (userError ("Error loading config file: " ++ show e))
-    Right v -> return v
+  Config {..} <- validateConfigFile configFile
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())
@@ -115,13 +111,20 @@ serve_ isLocal configFile spv = do
   link asyncHist
   runServer histC inC debugFn (fromIntegral _port) _logDir
 
+validateConfigFile :: FilePath -> IO Config
+validateConfigFile fp = Y.decodeFileEither fp >>= \case
+  Left pe -> do
+    putStrLn usage
+    throwIO $ userError $ "Error loading config file: " ++ show pe
+  Right v -> do
+    traverse_ (createDirectoryIfMissing True) $ _persistDir v
+    createDirectoryIfMissing True $ _logDir v
+    pure v
+
+
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
 withTestServe configFile spv app = do
-  Config {..} <- Y.decodeFileEither configFile >>= \case
-    Left e -> do
-      putStrLn usage
-      throwIO (userError ("Error loading config file: " ++ show e))
-    Right v -> return v
+  Config {..} <- validateConfigFile configFile
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())

@@ -17,6 +17,6 @@ extern const struct pow_log_data {
 	struct {
 		double invc, pad, logc, logctail;
 	} tab[1 << POW_LOG_TABLE_BITS];
-} __pow_log_data;
+} __kadena_pow_log_data;
 
 #endif
