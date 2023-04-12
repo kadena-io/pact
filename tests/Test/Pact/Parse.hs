@@ -42,6 +42,7 @@ spec :: Spec
 spec = do
     spec_position
     spec_parsePact
+    spec_parseModule
 
 -- -------------------------------------------------------------------------- --
 -- Tests
@@ -93,6 +94,20 @@ spec_parsePact = describe "parsePact string literal" $ do
                 }
             ]
         }
+
+spec_parseModule :: Spec
+spec_parseModule = do
+    it "parses a module" $ do
+        pm `shouldBe` m
+        i `shouldBe` Parsed (D.Columns 0 0) (T.length m)
+  where
+    Right (ParsedCode pm [EList ListExp { _listInfo = i } ]) = parsePact m
+    m = T.unlines
+        [ "(module m G"
+        , "  (defcap G () true)"
+        , "  (defun f () true)"
+        , ")"
+        ]
 
 -- -------------------------------------------------------------------------- --
 -- Utils
