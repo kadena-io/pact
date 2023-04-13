@@ -42,8 +42,16 @@ import           Pact.Types.Pretty           (renderCompactString)
 import Data.Attoparsec.Text (parseOnly)
 import Pact.Types.Principal (principalParser, showPrincipalType)
 import Pact.Types.Info (Info(..))
-
+import Pact.Types.Hash (pactHash)
+import Pact.Types.Util (AsString(asString))
+import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Aeson as Aeson
+import qualified Pact.Types.Lang as Pact
+import qualified Pact.Types.PactValue as Pact
+import Data.ByteString.Lazy.Char8 (toStrict)
+import qualified Data.ByteString as BS
 import Data.Functor ((<&>))
+import qualified Data.Vector as V
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -150,6 +158,12 @@ truncate63 i = ite (i .< lowerBound)
     upperBound = literal bound
     lowerBound = literal (- bound)
 
+notStaticErr :: AnalyzeFailureNoLoc
+notStaticErr = FailureMessage "Hash requires statically known content"
+
+symHash :: BS.ByteString -> S Str
+symHash =  literalS . Str . T.unpack . asString . pactHash
+
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
@@ -176,11 +190,10 @@ evalCore (Enumerate from to step)          =  do
   let
     go :: (forall v. OrdSymbolic v => v -> v -> SBV Bool) -> SBV Integer -> SBV Integer -> SBV Integer -> SBV [Integer]
     go cmp b e s = ite (b `cmp` e) (b SBVL..: go cmp (b + s) e s) SBVL.nil
-    
+
   let algPos = ite (from' .== to') (SBVL.singleton from')
               (ite (step' .== 0) (SBVL.singleton from' )
                (ite (from' + step' .> to') (SBVL.singleton from') (go (.<=) from' to' step')))
-               
       algNeg =  ite (step' .== 0) (SBVL.singleton from' )
                 (ite (from' + step' .< to') (SBVL.singleton from') (go (.>=) from' to' step'))
 
@@ -236,6 +249,41 @@ evalCore (StrContains needle haystack) = do
     _sSbv (coerceS @Str @String needle')
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
+
+-- hash values
+-- TODO (RS): we should add warnings to the stack, allowing
+--            to return shims in case, the content is not statically known
+evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc notStaticErr
+  Just (Str b)  -> pure (symHash (encodeUtf8 (T.pack b)))
+
+evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc notStaticErr
+  Just i  -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral ( Pact.LInteger i)))))
+
+evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc notStaticErr
+  Just b  -> pure (symHash (toStrict ( Aeson.encode b)))
+
+evalCore (DecHash d) = eval d <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc notStaticErr
+  Just d' -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d'))))))
+
+evalCore (ListHash ty' xs) = do
+  result <-  withSymVal ty' $ withSing ty' $ eval xs <&> unliteralS >>= \case
+      Nothing -> throwErrorNoLoc notStaticErr
+      Just xs'' -> traverse (reify ty') xs''
+  pure (symHash (toStrict (Aeson.encode (Pact.PList (V.fromList result)))))
+  where
+    reify :: forall b. Sing b -> Concrete b -> m Pact.PactValue
+    reify t c = case t of
+      SStr -> pure $ Pact.PLiteral . Pact.LString . T.pack . unStr $ c
+      SInteger -> pure $ Pact.PLiteral . Pact.LInteger $ c
+      SDecimal -> pure $ Pact.PLiteral . Pact.LDecimal . toPact decimalIso $ c
+      SBool -> pure $ Pact.PLiteral . Pact.LBool $ c
+      SList t' -> Pact.PList . V.fromList <$> traverse (reify t') c
+      _ -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
   S _ haystack' <- withSing ty $ eval haystack
@@ -272,7 +320,7 @@ evalCore (ListDistinct ty list) = withSymVal ty $ withSing ty $ withEq ty $ do
   S _ list' <- eval list
   pure $ sansProv (SBVL.reverse (bfoldr listBound (\a b -> ite (SBVL.elem a b) b (a SBVL..: b)) SBVL.nil list'))
 
- 
+
 evalCore (ListDrop ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
   S _ list' <- eval list

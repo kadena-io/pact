@@ -262,6 +262,10 @@ pattern AST_ComposeCapability :: AST Node -> AST Node
 pattern AST_ComposeCapability app <-
   App _node (NativeFunc "compose-capability") [app]
 
+pattern AST_EmitEvent :: Node -> AST Node -> AST Node
+pattern AST_EmitEvent node cap <-
+  App node (NativeFunc "emit-event") [cap]
+
 pattern AST_Continue :: Node -> AST Node -> AST Node
 pattern AST_Continue node body <- App node (NativeFunc "continue") [body]
 

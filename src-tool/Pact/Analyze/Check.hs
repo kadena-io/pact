@@ -82,7 +82,7 @@ import           Pact.Types.Runtime         (ModuleData (..), ModuleName,
 import qualified Pact.Types.Runtime         as Pact
 import           Pact.Types.Term            (DefName (..),
                                              dDefType, moduleDefMeta,
-                                             moduleDefName, _Ref, _gGovernance)
+                                             moduleDefName, _Ref, _gGovernance, dDefMeta)
 import           Pact.Types.Type            (ftArgs, _ftArgs)
 import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
                                              Named, Node,
@@ -627,20 +627,24 @@ moduleCapabilities
   :: DynEnv -> [ModuleData Ref] -> ExceptT VerificationFailure IO [Capability]
 moduleCapabilities de mds = fmap concat $ forM mds $ \md -> do
     toplevels <- withExceptT ModuleCheckFailure $
-                   traverse (ExceptT . typecheck de) (defcapRefs md)
+                   traverse (ExceptT . typecheck') (defcapRefs md)
     hoist generalize $ traverse mkCap toplevels
 
   where
+    typecheck' tl = do
+          tc <- typecheck de tl
+          pure $ (join $ tl ^? _Ref.tDef.dDefMeta, ) <$> tc
+
     defcapRefs md = toListOf
       (mdRefMap.traverse.filtered
         (\ref -> ref ^? _Ref.tDef.dDefType == Just Defcap))
       md
 
-    mkCap :: TopLevel Node -> Except VerificationFailure Capability
-    mkCap toplevel = do
+    mkCap :: forall a. (Maybe (Pact.DefMeta a), TopLevel Node) -> Except VerificationFailure Capability
+    mkCap (c, toplevel) = do
         eSchema <- mkESchema <$> traverse (translateArgTy "argument") pactArgs
         pure $ case eSchema of
-          ESchema schema -> Capability schema capName
+          ESchema schema -> Capability schema capName (evOrMgt <$> c)
 
       where
         (capName, pactArgs) = case toplevel of
@@ -648,8 +652,9 @@ moduleCapabilities de mds = fmap concat $ forM mds $ \md -> do
             (mkCapName _fModule _fName, _ftArgs _fType)
           _ ->
             error "invariant violation: defcap toplevel must be a defun"
-
-
+        evOrMgt = \case
+          Pact.DMDefcap Pact.DefcapEvent -> CapEvent
+          _ -> CapManaged
 translateArgTy
   :: Text
   -> Pact.Arg UserType

@@ -9,7 +9,7 @@
 
 #define N (1 << EXP_TABLE_BITS)
 
-const struct exp_data __exp_data = {
+const struct exp_data __kadena_exp_data = {
 // N/ln2
 .invln2N = 0x1.71547652b82fep0 * N,
 // -ln2/N

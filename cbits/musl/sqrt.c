@@ -35,7 +35,7 @@ double musl_sqrt(double x)
 		if (ix == 0x7ff0000000000000)
 			return x;
 		if (ix > 0x7ff0000000000000)
-			return __math_invalid(x);
+			return __kadena_math_invalid(x);
 		/* x is subnormal, normalize it.  */
 		ix = asuint64(x * 0x1p52);
 		top = ix >> 52;
@@ -109,7 +109,7 @@ double musl_sqrt(double x)
 	uint64_t r, s, d, u, i;
 
 	i = (ix >> 46) % 128;
-	r = (uint32_t)__rsqrt_tab[i] << 16;
+	r = (uint32_t)__kadena_rsqrt_tab[i] << 16;
 	/* |r sqrt(m) - 1| < 0x1.fdp-9 */
 	s = mul32(m>>32, r);
 	/* |s/sqrt(m) - 1| < 0x1.fdp-9 */
