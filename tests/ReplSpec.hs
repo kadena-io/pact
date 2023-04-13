@@ -11,6 +11,8 @@ import qualified Data.ByteString as BS
 import System.Posix.Pty (spawnWithPty, writePty, readPty, closePty)
 import System.Process (terminateProcess)
 import Control.Monad (void)
+import System.FilePath ((</>))
+import Paths_pact (getBinDir)
 
 spec :: Spec
 spec = describe "ReplSpec" $ do
@@ -29,7 +31,9 @@ spec = describe "ReplSpec" $ do
 -- | Execute 'src' inside a pseudo-terminal running the pact repl and returns the repl output.
 runInteractive :: ByteString -> IO ByteString
 runInteractive src = do
-  (pty, ph) <- spawnWithPty Nothing True "pact" [] (100,100)
+  binPath <- getBinDir
+  let pactPath = binPath </> "pact"
+  (pty, ph) <- spawnWithPty Nothing True pactPath [] (100,100)
   -- Read until we reach the first pact prompt to ensure
   -- the repl is ready.
   void $ seekPactPrompt pty mempty
