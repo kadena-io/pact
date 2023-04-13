@@ -114,7 +114,6 @@ type Mpz_t = Ptr MPZ
 type Mpq_t = Ptr MPQ
 type Mpfr_t = Ptr MPFR
 
-#if !darwin_HOST_OS
 foreign import ccall "__gmpz_init"
   c'mpz_init :: Mpz_t -> IO ()
 
@@ -126,7 +125,10 @@ foreign import ccall "__gmpz_set_str"
 
 foreign import ccall "__gmpz_get_str"
   c'mpz_get_str :: Ptr CChar -> CInt -> Mpz_t -> IO (Ptr CChar)
-#else
+
+{-
+jww (2023-04-13): At the moment, only my macOS Nix build needs these
+
 foreign import ccall "mpz_init"
   c'mpz_init :: Mpz_t -> IO ()
 
@@ -138,7 +140,7 @@ foreign import ccall "mpz_set_str"
 
 foreign import ccall "mpz_get_str"
   c'mpz_get_str :: Ptr CChar -> CInt -> Mpz_t -> IO (Ptr CChar)
-#endif
+-}
 
 foreign import ccall "__gmpq_init"
   c'mpq_init :: Mpq_t -> IO ()
