@@ -1,5 +1,5 @@
 ---
-name: Enhancement request
+name: Pact Enhancement request
 about: I have an idea for how to make Pact better
 title: ''
 labels: 'status: needs triage, type: enhancement'
