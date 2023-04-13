@@ -425,8 +425,6 @@ test-suite hspec
         ReplSpec
         PairingSpec
         Utils
-        --
-        Paths_pact
 
       build-depends:
         , Decimal
