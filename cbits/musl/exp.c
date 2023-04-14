@@ -11,15 +11,15 @@
 #include "exp_data.h"
 
 #define N (1 << EXP_TABLE_BITS)
-#define InvLn2N __exp_data.invln2N
-#define NegLn2hiN __exp_data.negln2hiN
-#define NegLn2loN __exp_data.negln2loN
-#define Shift __exp_data.shift
-#define T __exp_data.tab
-#define C2 __exp_data.poly[5 - EXP_POLY_ORDER]
-#define C3 __exp_data.poly[6 - EXP_POLY_ORDER]
-#define C4 __exp_data.poly[7 - EXP_POLY_ORDER]
-#define C5 __exp_data.poly[8 - EXP_POLY_ORDER]
+#define InvLn2N __kadena_exp_data.invln2N
+#define NegLn2hiN __kadena_exp_data.negln2hiN
+#define NegLn2loN __kadena_exp_data.negln2loN
+#define Shift __kadena_exp_data.shift
+#define T __kadena_exp_data.tab
+#define C2 __kadena_exp_data.poly[5 - EXP_POLY_ORDER]
+#define C3 __kadena_exp_data.poly[6 - EXP_POLY_ORDER]
+#define C4 __kadena_exp_data.poly[7 - EXP_POLY_ORDER]
+#define C5 __kadena_exp_data.poly[8 - EXP_POLY_ORDER]
 
 /* Handle cases that may overflow or underflow when computing the result that
    is scale*(1+TMP) without intermediate rounding.  The bit representation of
@@ -87,9 +87,9 @@ double musl_exp(double x)
 			if (abstop >= top12(INFINITY))
 				return 1.0 + x;
 			if (asuint64(x) >> 63)
-				return __math_uflow(0);
+				return __kadena_math_uflow(0);
 			else
-				return __math_oflow(0);
+				return __kadena_math_oflow(0);
 		}
 		/* Large x is special cased below.  */
 		abstop = 0;

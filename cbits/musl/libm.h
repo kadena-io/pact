@@ -253,11 +253,11 @@ float __math_uflowf(uint32_t);
 float __math_oflowf(uint32_t);
 float __math_divzerof(uint32_t);
 float __math_invalidf(float);
-double __math_xflow(uint32_t, double);
-double __math_uflow(uint32_t);
-double __math_oflow(uint32_t);
-double __math_divzero(uint32_t);
-double __math_invalid(double);
+double __kadena_math_xflow(uint32_t, double);
+double __kadena_math_uflow(uint32_t);
+double __kadena_math_oflow(uint32_t);
+double __kadena_math_divzero(uint32_t);
+double __kadena_math_invalid(double);
 #if LDBL_MANT_DIG != DBL_MANT_DIG
 long double __math_invalidl(long double);
 #endif
