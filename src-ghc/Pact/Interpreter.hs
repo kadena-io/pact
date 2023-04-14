@@ -25,6 +25,7 @@ module Pact.Interpreter
   , evalExec
   , evalContinuation
   , setupEvalEnv
+  , setupPactNativesEvalEnv
   , initRefStore
   , mkSQLiteEnv
   , mkPureEnv
@@ -46,7 +47,10 @@ import Control.Lens
 import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
+import Data.Monoid(Endo(..))
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Foldable(foldl')
 import Data.IORef
 import Data.Maybe
 import qualified Data.Set as S
@@ -173,7 +177,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   gasRef <- newIORef 0
   warnRef <- newIORef mempty
   pure EvalEnv {
-    _eeRefStore = refStore
+    _eeRefStore = versionNatives refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
@@ -194,12 +198,54 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   , _eeWarnings = warnRef
   }
   where
+    versionNatives = appEndo $ mconcat
+      [ disablePact40Natives ec
+      , disablePact420Natives ec
+      , disablePact43Natives ec
+      , disablePact431Natives ec
+      , disablePact46Natives ec ]
     mkMsgSigs ss = M.fromList $ map toPair ss
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
+
+setupPactNativesEvalEnv
+  :: PactDbEnv e
+  -> Maybe EntityName
+  -> ExecutionMode
+  -> MsgData
+  -> GasEnv
+  -> NamespacePolicy
+  -> SPVSupport
+  -> PublicData
+  -> ExecutionConfig
+  -> IO (EvalEnv e)
+setupPactNativesEvalEnv dbEnv ent mode msgData =
+  setupEvalEnv dbEnv ent mode msgData initRefStore
+
+disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
+disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
+  case S.lookupGE flag ec of
+    Just _ -> over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
+    Nothing -> id
+
+disablePact40Natives :: ExecutionConfig -> Endo RefStore
+disablePact40Natives =
+  disablePactNatives ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"] FlagDisablePact40
+
+disablePact420Natives :: ExecutionConfig -> Endo RefStore
+disablePact420Natives = disablePactNatives ["zip", "fold-db"] FlagDisablePact420
+
+disablePact43Natives :: ExecutionConfig -> Endo RefStore
+disablePact43Natives = disablePactNatives ["create-principal", "validate-principal", "continue"] FlagDisablePact43
+
+disablePact431Natives :: ExecutionConfig -> Endo RefStore
+disablePact431Natives = disablePactNatives ["is-principal", "typeof-principal"] FlagDisablePact431
+
+disablePact46Natives :: ExecutionConfig -> Endo RefStore
+disablePact46Natives = disablePactNatives ["point-add", "scalar-mult", "pairing-check"] FlagDisablePact46
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
