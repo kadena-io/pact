@@ -249,8 +249,11 @@ perfEnv :: Advice -> PactDbEnv p -> PactDbEnv p
 perfEnv pt (PactDbEnv db mv) = PactDbEnv (advisePactDb pt db) mv
 
 perfInterpreter :: Advice -> Interpreter e -> Interpreter e
-perfInterpreter pt (Interpreter i) = Interpreter $ \runInput ->
-  advise def pt (AdviceTx initialHash) $! (((),) <$> i runInput)
+perfInterpreter pt (Interpreter i) = Interpreter $ \runInput -> do
+  c <- advise def pt (AdviceTx initialHash)
+  !r <- i runInput
+  c ()
+  pure r
 
 
 mkFilePerf :: FilePath -> IO Advice
@@ -262,16 +265,15 @@ mkFilePerf fp = do
     (`mapM_` m) $ \s -> do
       hPutStrLn h s
       hFlush h
-  return $ Advice $ \_ msg a -> do
+  return $ Advice $ \_ msg -> do
     s <- liftIO $ time
-    (_,r) <- a
-    liftIO $ do
+    return $ const $ liftIO $ do
       e <- time
       writeChan c $! unpack $ (tShow msg) <> ": " <> pack (show (e .-. s))
       -- uncomment below to time the chan write itself
       -- f <- time
       -- writeChan c $! "chan: " <> (show (f .-. e))
-      return r
+
 
   where
     time = getCurrentTime

@@ -495,5 +495,5 @@ argsError' i as =
     True -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
     False -> throwOnChainArgsError i as
 
-eAdvise :: Info -> AdviceContext r -> Eval e (r,a) -> Eval e a
-eAdvise i m a = view eeAdvice >>= \adv -> advise i adv m a
+eAdvise :: Info -> AdviceContext r -> Eval e (r -> Eval e ())
+eAdvise i m = view eeAdvice >>= \adv -> advise i adv m
