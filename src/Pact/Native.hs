@@ -164,7 +164,9 @@ enforceDef = defNative "enforce" enforce
             return (TLiteral (LBool True) def)
           else reduce msg >>= \case
             TLitString msg' -> failTx (_faInfo i) $ pretty msg'
-            e -> evalError' i $ "Invalid message argument, expected string " <> pretty e
+            e -> isInReplForkedError >>= \case
+              True -> evalError' i $ "Invalid message argument, expected string " <> pretty e
+              False -> evalError' i $ "Invalid message argument, expected string, received argument of type: " <> pretty (typeof' e)
         cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
     enforceLazy i as = mapM reduce as >>= argsError i
 
@@ -344,8 +346,11 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
 
     if' :: NativeFun e
     if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
-               TLiteral (LBool c') _ -> reduce (if c' then then' else else')
-               t -> evalError' i $ "if: conditional not boolean: " <> pretty t
+      TLiteral (LBool c') _ -> reduce (if c' then then' else else')
+      t -> isInReplForkedError >>= \case
+        True -> evalError' i $ "if: conditional not boolean: " <> pretty t
+        False -> evalError' i $ "if: conditional not boolean, received value of type: " <> pretty (typeof' t)
+
     if' i as = argsError' i as
 
 
@@ -529,8 +534,9 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
       asBool =<< apply (App def' [] i) mkArgs
       where
         asBool (TLiteral (LBool allow) _) = return allow
-        asBool t = evalError' fi $
-          "Unexpected return value from namespace policy: " <> pretty t
+        asBool t = isInReplForkedError >>= \case
+          True -> evalError' fi $ "Unexpected return value from namespace policy: " <> pretty t
+          False -> evalError' fi $ "Unexpected return value from namespace policy, received value of type: " <> pretty (typeof' t)
 
         mkArgs = [toTerm (asString nn),TGuard (_nsAdmin ns) def]
 
@@ -1092,8 +1098,9 @@ bind i as = argsError' i as
 bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
 bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
   return $ \s -> M.lookup (FieldKey s) o
-bindObjectLookup t = evalError (_tInfo t) $
-  "bind: expected object: " <> pretty t
+bindObjectLookup t = isInReplForkedError >>= \case
+  True -> evalError (_tInfo t) $ "bind: expected object: " <> pretty t
+  False -> evalError (_tInfo t) $ "bind: expected object, received value of type: " <> pretty (typeof' t)
 
 typeof'' :: RNativeFun e
 typeof'' _ [t] = return $ tStr $ typeof' t
@@ -1250,8 +1257,9 @@ concat' g i [TList ls _ _] = computeGas' g i (GMakeList $ fromIntegral $ V.lengt
   concatTextList = flip TLiteral def . LString . T.concat
   in fmap concatTextList $ forM ls' $ \case
     TLitString s -> return s
-    t ->
-      evalError' i $ "concat: expecting list of strings: " <> pretty t
+    t -> isInReplForkedError >>= \case
+      True -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+      False -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
 concat' _ i as = argsError i as
 
 -- | Converts a string to a vector of single character strings
@@ -1384,6 +1392,7 @@ continueNested i as = gasUnreduced i as $ case as of
     TDynamic tref tmem ti -> reduceDynamic tref tmem ti >>= \case
       Right d -> pure d
       Left _ -> evalError' i $ "continue: dynamic reference did not point to Defpact"
+    -- Note, pretty on `t` is not dangerous here, as it is not a reduced term.
     _ -> evalError' i $ "continue: argument must be a defpact " <> pretty t
   unTVar = \case
     TVar (Ref d) _ -> unTVar d

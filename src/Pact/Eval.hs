@@ -33,6 +33,7 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
+    ,reduceEnscoped
     ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
     ,enforceGuard
@@ -359,15 +360,18 @@ eval' (TModule _tm@(MDInterface m) bod i) =
 #else
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
 #endif
-eval' t = enscope t >>= \case
-  TVar (Direct t'@TNative{}) _ -> do
+eval' t = enscope t >>= reduceEnscoped
+
+reduceEnscoped :: Term Ref -> Eval e (Term Name)
+reduceEnscoped = \case
+  TVar (Direct t'@TNative{}) i -> do
     inRepl <- view eeInRepl
     if inRepl then pure t'
-    else evalError' (_tInfo t) "Cannot display native function details in non-repl context"
-  TVar (Ref t'@TDef{}) _ -> do
+    else evalError' i "Cannot display native function details in non-repl context"
+  TVar (Ref t'@TDef{}) i -> do
     inRepl <- view eeInRepl
     if inRepl then toTerm <$> compatPretty t'
-    else evalError' (_tInfo t) "Cannot display function details in non-repl context"
+    else evalError' i "Cannot display function details in non-repl context"
   t' -> reduce t'
 
 -- | Enforce namespace/root access on install.

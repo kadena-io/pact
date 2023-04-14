@@ -45,10 +45,10 @@
 
 ;; expect and expect-failure bypass env-in-repl here,
 ;; reducing their arguments explicitly
-; (expect
-;   "Calling tester.f at toplevel results in function details"
-;   "(defun tester.f:<b> (a:<c>))"
-;   tester.f)
+(expect
+ "Calling tester.f at toplevel results in function details"
+ "(defun tester.f:<b> (a:<c>))"
+ tester.f)
 
 (expect-failure
   "Natives in tester.f result in typecheck error"
