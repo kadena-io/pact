@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns #-}
 -- |
 -- Module      :  Pact.Native.Internal
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -48,6 +49,7 @@ import Data.Default
 import Data.Foldable
 import qualified Data.Vector as V
 import Data.Text (Text)
+import qualified Data.Text as T
 import Unsafe.Coerce
 import Data.Functor (($>))
 
@@ -219,6 +221,7 @@ enforceYield
   -> Eval e Yield
 enforceYield fa y = case _yProvenance y of
   Nothing -> return y
+  Just (T.stripPrefix "crossnet:" . _chainId . _pTargetChainId -> Just _) -> return y
   Just p -> do
     m <- getCallingModule fa
     cid <- view $ eePublicData . pdPublicMeta . pmChainId
