@@ -227,9 +227,8 @@ setupPactNativesEvalEnv dbEnv ent mode msgData =
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
 disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
-  case S.lookupGE flag ec of
-    Just _ -> over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
-    Nothing -> id
+  if S.member flag ec then over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
+  else id
 
 disablePact40Natives :: ExecutionConfig -> Endo RefStore
 disablePact40Natives =
