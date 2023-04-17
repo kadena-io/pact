@@ -2784,6 +2784,31 @@ spec = describe "analyze" $ do
               (hash false))|]
     expectVerified code
 
+  describe "hash symbolic (integer, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: integer)
+                 ;; shim value (hash 1)
+                 @model[(property (= result "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (bool, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: bool)
+                 ;; shim value (hash "true")
+                 @model[(property (= result "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (string, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: string)
+                 ;; shim value (hash "hello pact")
+                 @model[(property (= result "HsVo-gcG-pk1BciGr2xovMyR7sVH0Kt9gTgqicXDXMM"))]
+                 (hash x))|]
+    expectVerified code
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|
