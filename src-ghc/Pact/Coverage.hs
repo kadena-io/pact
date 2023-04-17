@@ -30,6 +30,7 @@ import System.Directory
 import System.FilePath
 
 import Pact.Coverage.Report
+import Pact.Runtime.Utils
 import Pact.Typechecker
 import Pact.Types.Advice
 import Pact.Types.Info
@@ -37,19 +38,14 @@ import Pact.Types.Pretty
 import Pact.Types.Term hiding (App(..),Object(..),Step(..))
 import Pact.Types.Typecheck
 import Pact.Types.Runtime (ModuleData(..))
-import Pact.Runtime.Utils
 
 mkCoverageAdvice :: IO (IORef LcovReport,Advice)
 mkCoverageAdvice = newIORef mempty >>= \r -> return (r,Advice $ cover r)
 
-cover :: MonadIO m => IORef LcovReport -> Info -> AdviceContext r -> m (r,a) -> m a
-cover ref i ctx f = case _iInfo i of
-    Just {} -> do
-      post <- report (parseInf i)
-      (r,a) <- f
-      post r
-      return a
-    _ -> fmap snd f
+cover :: MonadIO m => IORef LcovReport -> Info -> AdviceContext r -> m (r -> m ())
+cover ref i ctx = case _iInfo i of
+    Just {} -> report (parseInf i)
+    _ -> pure $ const $ pure ()
   where
 
     report (fn,l) = liftIO $ modifyIORef ref (<> newRep) >> return post

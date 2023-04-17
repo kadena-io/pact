@@ -133,11 +133,11 @@ data ModuleRefs = ModuleRefs
 makeLenses ''ModuleRefs
 
 data VerificationWarning
-  = FWDuplicatedPropertyDef [Text]
-  | FWShimmedStaticContent Text
+  = FVDuplicatedPropertyDef [Text]
+  | FVShimmedStaticContent Text
   deriving (Eq, Show)
 
 describeVerificationWarnings :: VerificationWarning -> Text
-describeVerificationWarnings (FWDuplicatedPropertyDef dups)
+describeVerificationWarnings (FVDuplicatedPropertyDef dups)
   = "Duplicated property definitions for " <> T.intercalate ", " dups
-describeVerificationWarnings (FWShimmedStaticContent t) = "Shimmed native '" <> t <> "'"
+describeVerificationWarnings (FVShimmedStaticContent t) = "Shimmed native '" <> t <> "'"
