@@ -116,16 +116,6 @@ smtConfig = SBV.z3
 timeout :: Integer
 timeout = 20000
 
--- data VerificationWarning
---   = FWDuplicatedPropertyDef [Text]
---   | FWShimmedStaticContent Text
---   deriving (Eq, Show)
-
--- describeVerificationWarnings :: VerificationWarning -> Text
--- describeVerificationWarnings (FWDuplicatedPropertyDef dups)
---   = "Duplicated property definitions for " <> T.intercalate ", " dups
--- describeVerificationWarnings (FWShimmedStaticContent t) = "Shimmed " <> t -- TODO warning message
-
 data CheckSuccess
   = SatisfiedProperty (Model 'Concrete)
   | ProvedTheorem
@@ -427,8 +417,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
         -- Iterate through each invariant in a single query so we can reuse our
         -- assertion stack.
         res <- ExceptT $ fmap Right $
-          SBV.query $ do
-            res <- for2 resultsTable $ \(Located info
+          SBV.query $ for2 resultsTable $ \(Located info
               (AnalysisResult querySucceeds _ prop ksProvs warnings)) -> do
               let model = Model modelArgs' tags ksProvs graph
 
@@ -446,8 +435,6 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
                  Left smtFailure -> Left $
                    CheckFailure info (SmtFailure smtFailure)
                  Right pass      -> Right (pass, warnings)
-            pure res
-
         let
           warnings = res ^.. folded . folded . folded . folded .folded
           result = (fmap.fmap.fmap) fst res
@@ -1062,13 +1049,13 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de _) defpactRefs = do
     Left errs         -> throwError $ ModuleParseFailure errs
     Right stepChecks' -> pure stepChecks'
 
-  x <- lift $ ifor stepChecks' $
+  results <- lift $ ifor stepChecks' $
     \(name, _stepNum) ((node, args, info), checks) -> for checks $
      verifyFunctionProperty env (FunData info args [node]) name CheckPactStep
 
   let
-    warnings = x ^.. folded . folded . folded . folded . folded . folded
-    res =  fmap (nub . concat) $ (fmap.fmap.fmap.fmap) fst x
+    warnings = results ^.. folded . folded . folded . folded . folded . folded
+    res =  fmap (nub . concat) $ (fmap.fmap.fmap.fmap) fst results
   pure (res, warnings)
 
 -- | Get the set of property and invariant check results for functions (defun
@@ -1137,12 +1124,10 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de _) refs =
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
   let
-    -- HashMap Text (TableMap (Either YY (XX, [Warnings])))
-
     funWarnings = funChecks'' ^.. folded . folded . folded . folded . folded . folded
-    funRes      =  fmap (nub . concat) $ (fmap.fmap.fmap.fmap) fst funChecks''
-    invWarnings = invariantChecks ^.. folded . folded . folded
-    invRes      =  fmap fst invariantChecks
+    funRes      = fmap (nub . concat) $ (fmap.fmap.fmap.fmap) fst funChecks''
+    invWarnings = nub (invariantChecks ^.. folded . folded . folded)
+    invRes      = fmap fst invariantChecks
   pure (funRes, invRes, funWarnings ++ invWarnings)
 
 -- | Check that every property variable is in scope.
