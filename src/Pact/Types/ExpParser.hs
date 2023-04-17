@@ -126,7 +126,8 @@ mkTextInfo :: T.Text -> MkInfo
 mkTextInfo s d = Info $ Just (Code code, d)
   where
     code = T.take len $ T.drop offset s
-    offset = fromIntegral $ TF.column (_pDelta d)
+    -- offset = fromIntegral $ TF.column (_pDelta d)
+    offset = fromIntegral $ TF.bytes (_pDelta d)
     len = _pLength d
 
 type ExpParse s a = ReaderT ParseEnv (StateT (ParseState s) (Parsec Void Cursor)) a

@@ -64,7 +64,8 @@ expr = do
   delt <- position
   let inf = do
         end <- position
-        let len = column end - column delt
+        -- let len = column end - column delt
+        let len = bytes end - bytes delt
         return $! Parsed delt (fromIntegral len)
       separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
   msum

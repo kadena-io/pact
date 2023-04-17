@@ -78,6 +78,7 @@ newtype PactAttoparsec a = PactAttoparsec
 pactAttoParseOnly :: PactAttoparsec a -> T.Text -> Either String a
 pactAttoParseOnly = AP.parseOnly . flip evalStateT 0 . runPactAttoparsec
 
+#define LEGACY_PARSER 1
 
 -- | Atto DeltaParsing instance provides 'position' only (with no support for
 -- hidden chars like Trifecta).
@@ -115,10 +116,14 @@ instance DeltaParsing PactAttoparsec where
     position = do
 #if MIN_VERSION_text(2,0,0)
         APT.Pos !bytePos <- parserPos
+        !charPos <- gets fromIntegral
+#elif LEGACY_PARSER == 1
+        APT.Pos !bytePos <- parserPos
+        let !charPos = fromIntegral bytePos
 #else
         APT.Pos !bytePos <- (* 2) <$> parserPos
-#endif
         !charPos <- gets fromIntegral
+#endif
         return $ TF.Columns charPos (fromIntegral bytePos)
     {-# INLINE position #-}
 
