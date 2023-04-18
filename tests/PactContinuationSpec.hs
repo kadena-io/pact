@@ -72,7 +72,6 @@ testElideModRefEvents = do
   it "doesn't elide on backcompat" $ do
     cmd <- mkExec codePreFork Null def [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport backCompatFlags
-    print results
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
@@ -96,14 +95,14 @@ testElideModRefEvents = do
 
              (defun f:bool () true)
 
-             (defun usecap ()
-               (with-capability (BURN evmodule)
+             (defun usecap (a:module{iface})
+               (with-capability (BURN a)
                  1
                )
              )
             )
 
-           (usecap)
+           (usecap evmodule)
            |]
     code =
       [text|
