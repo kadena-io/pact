@@ -1212,9 +1212,8 @@ verifyModule mDebug de modules moduleData@(ModuleData modDef allRefs _) = runExc
         $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
         $ concatMap HM.keys allModulePropDefs
 
-      warnings = if null allModulePropNameDuplicates
-                 then []
-                 else [FVDuplicatedPropertyDef allModulePropNameDuplicates]
+      warnings = [FVDuplicatedPropertyDef allModulePropNameDuplicates
+                 | not (null allModulePropNameDuplicates)]
 
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
