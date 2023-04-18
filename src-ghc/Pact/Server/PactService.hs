@@ -163,8 +163,8 @@ applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p
 applyContinuation rk hsh signers cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
-  evalEnv <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) initRefStore
+  evalEnv <- liftIO $ setupNativesEvalEnv _ceDbEnv _ceEntity _ceMode
+                (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers)
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

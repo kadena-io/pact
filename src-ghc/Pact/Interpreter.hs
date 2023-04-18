@@ -25,7 +25,7 @@ module Pact.Interpreter
   , evalExec
   , evalContinuation
   , setupEvalEnv
-  , setupPactNativesEvalEnv
+  , setupNativesEvalEnv
   , initRefStore
   , mkSQLiteEnv
   , mkPureEnv
@@ -211,7 +211,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 
-setupPactNativesEvalEnv
+setupNativesEvalEnv
   :: PactDbEnv e
   -> Maybe EntityName
   -> ExecutionMode
@@ -222,7 +222,7 @@ setupPactNativesEvalEnv
   -> PublicData
   -> ExecutionConfig
   -> IO (EvalEnv e)
-setupPactNativesEvalEnv dbEnv ent mode msgData =
+setupNativesEvalEnv dbEnv ent mode msgData =
   setupEvalEnv dbEnv ent mode msgData initRefStore
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
