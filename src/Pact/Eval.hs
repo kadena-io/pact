@@ -105,7 +105,7 @@ evalCommitTx i = do
   commitTx i
 {-# INLINE evalCommitTx #-}
 
-enforceKeySetName :: Info -> KeySetName -> Epact
+enforceKeySetName :: Info -> KeySetName -> Eval e ()
 enforceKeySetName mi ksn = do
   ks <- readRow mi KeySets ksn >>= \case
       Nothing -> evalError mi $ "No such keyset: " <> pretty ksn
