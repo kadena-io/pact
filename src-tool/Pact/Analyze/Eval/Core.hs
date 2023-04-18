@@ -247,21 +247,20 @@ evalCore (StrContains needle haystack) = do
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
 
--- hash values
--- TODO (RS): we should add warnings to the stack, allowing
---            to return shims in case, the content is not statically known
 evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
   Nothing -> do
+     -- (hash "hello pact")
     let h = "HsVo-gcG-pk1BciGr2xovMyR7sVH0Kt9gTgqicXDXMM"
     emitWarning (notStaticErrHash ("of type 'string', substitute '" <> h <> "')"))
-    pure (literalS (Str h)) -- (hash "hello pact")
+    pure (literalS (Str h))
   Just (Str b)  -> pure (symHash (encodeUtf8 (T.pack b)))
 
 evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
   Nothing -> do
+     -- (hash 1)
     let h = "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"
     emitWarning (notStaticErrHash ("of type 'integer', substitute '" <> h <> "')"))
-    pure (literalS (Str h)) -- (hash 1)
+    pure (literalS (Str h))
   Just i  -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral ( Pact.LInteger i)))))
 
 evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
@@ -273,15 +272,17 @@ evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
 
 evalCore (DecHash d) = eval d <&> unliteralS >>= \case
   Nothing -> do
+    -- (hash 1.0)
     let h = "ks31eMRwhaWZIlbw3Pl9Cxnx8cneTV_jDDrOYZG25ds"
     emitWarning (notStaticErrHash ("of type 'decimal', subsitute '" <> h <> "'"))
-    pure (literalS (Str h)) -- (hash 1.0)
+    pure (literalS (Str h))
   Just d' ->
     pure (symHash (toStrict (Aeson.encode (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d'))))))
 
 evalCore (ListHash ty' xs) = do
   result <-  withSymVal ty' $ withSing ty' $ eval xs <&> unliteralS >>= \case
       Nothing -> do
+        -- (hash [])
         let h = "wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8"
         emitWarning (notStaticErrHash ("of type 'list', substitute '" <> h <> "'"))
         pure ([Pact.PLiteral (Pact.LString (T.pack h))])
