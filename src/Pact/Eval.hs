@@ -172,7 +172,23 @@ enforceGuard i g = case g of
         if doFail then failTx' i "Invalid Pact ID" else
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
-getSizeOfVersion :: Eval e SizeOfVersionpact
+getSizeOfVersion :: Eval e SizeOfVersion
+getSizeOfVersion = ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+{-# INLINABLE getSizeOfVersion #-}
+
+-- | Hoist Name back to ref
+liftTerm :: Term Name -> Term Ref
+liftTerm a = TVar (Direct a) def
+
+-- | Eval a function by name with supplied args, and guard against recursive execution.
+evalByName :: Name -> [Term Name] -> Info -> Eval e (Term Name)
+evalByName n as i = do
+
+  -- Build and resolve TApp
+
+  app <- enscope (TApp (App (TVar n def) as i) i)
+
+  -- lens into user function if any to test for loop
   case preview (tApp . appFun . tVar . _Ref . tDef) app of
     Nothing -> return ()
     Just Def{..} -> do
