@@ -2,6 +2,9 @@ packages: .
 
 allow-older: libBF:hashable
 
+-- temporary upper bounds
+constraints: sbv <10
+
 -- these upper bounds are required in order to not break payload validation in chainweb
 constraints: aeson <2
 constraints: base16-bytestring <1
