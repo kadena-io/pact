@@ -106,6 +106,8 @@ evalCommitTx i = do
 {-# INLINE evalCommitTx #-}
 
 enforceKeySetName :: Info -> KeySetName -> Epact
+enforceKeySetName mi ksn = do
+  ks <- readRow mi KeySets ksn >>= \case
       Nothing -> evalError mi $ "No such keyset: " <> pretty ksn
       Just ks -> pure ks
   _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet ksn ks))
