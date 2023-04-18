@@ -56,7 +56,8 @@ module Pact.Types.Runtime
    module Pact.Types.PactError,
    liftIO,
    eAdvise,
-   isInReplForkedError
+   isInReplForkedError,
+   OnChainErrorState(..)
    ) where
 
 
@@ -449,7 +450,7 @@ throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = do
   s <- use evalCallStack
-  inReplOrPreFork <- isInReplForkedError
+  inReplOrPreFork <- isInReplForkedError'
   throwM (PactError ctor i (if inReplOrPreFork then s else []) err)
 
 evalError :: Info -> Doc -> Eval e a
@@ -458,10 +459,18 @@ evalError = throwErr EvalError
 evalError' :: HasInfo i => i -> Doc -> Eval e a
 evalError' = evalError . getInfo
 
+data OnChainErrorState
+  = OnChainError
+  | OffChainError
+  deriving (Eq, Show)
+
 -- | Function to determine whether we are either pre-errors fork
 -- or in a repl environment.
-isInReplForkedError :: Eval e Bool
-isInReplForkedError =
+isInReplForkedError :: Eval e OnChainErrorState
+isInReplForkedError = isInReplForkedError' <&> \p -> if p then OffChainError else OnChainError
+
+isInReplForkedError' :: Eval e Bool
+isInReplForkedError' =
   isExecutionFlagSet FlagDisablePact47 >>= \case
     True -> pure True
     False -> view eeInRepl
@@ -486,14 +495,14 @@ throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) r
 argsError :: FunApp -> [Term Name] -> Eval e a
 argsError i as =
   isInReplForkedError >>= \case
-    True -> throwArgsError i as "Invalid arguments"
-    False -> throwOnChainArgsError i as
+    OffChainError -> throwArgsError i as "Invalid arguments"
+    OnChainError -> throwOnChainArgsError i as
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as =
   isInReplForkedError >>= \case
-    True -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
-    False -> throwOnChainArgsError i as
+    OffChainError -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
+    OnChainError -> throwOnChainArgsError i as
 
 eAdvise :: Info -> AdviceContext r -> Eval e (r -> Eval e ())
 eAdvise i m = view eeAdvice >>= \adv -> advise i adv m

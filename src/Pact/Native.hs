@@ -165,8 +165,8 @@ enforceDef = defNative "enforce" enforce
           else reduce msg >>= \case
             TLitString msg' -> failTx (_faInfo i) $ pretty msg'
             e -> isInReplForkedError >>= \case
-              True -> evalError' i $ "Invalid message argument, expected string " <> pretty e
-              False -> evalError' i $ "Invalid message argument, expected string, received argument of type: " <> pretty (typeof' e)
+              OffChainError -> evalError' i $ "Invalid message argument, expected string " <> pretty e
+              OnChainError -> evalError' i $ "Invalid message argument, expected string, received argument of type: " <> pretty (typeof' e)
         cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
     enforceLazy i as = mapM reduce as >>= argsError i
 
@@ -348,8 +348,8 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
     if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
       TLiteral (LBool c') _ -> reduce (if c' then then' else else')
       t -> isInReplForkedError >>= \case
-        True -> evalError' i $ "if: conditional not boolean: " <> pretty t
-        False -> evalError' i $ "if: conditional not boolean, received value of type: " <> pretty (typeof' t)
+        OffChainError -> evalError' i $ "if: conditional not boolean: " <> pretty t
+        OnChainError -> evalError' i $ "if: conditional not boolean, received value of type: " <> pretty (typeof' t)
 
     if' i as = argsError' i as
 
@@ -535,8 +535,8 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
       where
         asBool (TLiteral (LBool allow) _) = return allow
         asBool t = isInReplForkedError >>= \case
-          True -> evalError' fi $ "Unexpected return value from namespace policy: " <> pretty t
-          False -> evalError' fi $ "Unexpected return value from namespace policy, received value of type: " <> pretty (typeof' t)
+          OffChainError -> evalError' fi $ "Unexpected return value from namespace policy: " <> pretty t
+          OnChainError -> evalError' fi $ "Unexpected return value from namespace policy, received value of type: " <> pretty (typeof' t)
 
         mkArgs = [toTerm (asString nn),TGuard (_nsAdmin ns) def]
 
@@ -912,8 +912,8 @@ map' i as@[tLamToApp -> TApp app _,l] = gasUnreduced i as $ reduce l >>= \case
            TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply app . pure)
            t ->
             isInReplForkedError >>= \case
-              True -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
-              False -> evalError' i $ "map: expecting list, received argument of type: " <> pretty (typeof' t)
+              OffChainError -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
+              OnChainError -> evalError' i $ "map: expecting list, received argument of type: " <> pretty (typeof' t)
 map' i as = argsError' i as
 
 list :: RNativeFun e
@@ -975,8 +975,8 @@ fold' i as@[tLamToApp -> app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>=
                          foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
            t ->
             isInReplForkedError >>= \case
-              True -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
-              False -> evalError' i $ "fold: expecting list, received argument of type: " <> pretty (typeof' t)
+              OffChainError -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
+              OnChainError -> evalError' i $ "fold: expecting list, received argument of type: " <> pretty (typeof' t)
 fold' i as = argsError' i as
 
 
@@ -990,8 +990,8 @@ filter' i as@[tLamToApp -> app@TApp {},l] = gasUnreduced i as $ reduce l >>= \ca
              (return False)
              (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
   t -> isInReplForkedError >>= \case
-      True -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
-      False -> evalError' i $ "filter: expecting list, received argument of type: " <> pretty (typeof' t)
+      OffChainError -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
+      OnChainError -> evalError' i $ "filter: expecting list, received argument of type: " <> pretty (typeof' t)
 filter' i as = argsError' i as
 
 
@@ -1099,8 +1099,8 @@ bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
 bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
   return $ \s -> M.lookup (FieldKey s) o
 bindObjectLookup t = isInReplForkedError >>= \case
-  True -> evalError (_tInfo t) $ "bind: expected object: " <> pretty t
-  False -> evalError (_tInfo t) $ "bind: expected object, received value of type: " <> pretty (typeof' t)
+  OffChainError -> evalError (_tInfo t) $ "bind: expected object: " <> pretty t
+  OnChainError -> evalError (_tInfo t) $ "bind: expected object, received value of type: " <> pretty (typeof' t)
 
 typeof'' :: RNativeFun e
 typeof'' _ [t] = return $ tStr $ typeof' t
@@ -1258,8 +1258,8 @@ concat' g i [TList ls _ _] = computeGas' g i (GMakeList $ fromIntegral $ V.lengt
   in fmap concatTextList $ forM ls' $ \case
     TLitString s -> return s
     t -> isInReplForkedError >>= \case
-      True -> evalError' i $ "concat: expecting list of strings: " <> pretty t
-      False -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
+      OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+      OnChainError -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
 concat' _ i as = argsError i as
 
 -- | Converts a string to a vector of single character strings
