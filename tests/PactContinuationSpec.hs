@@ -70,13 +70,41 @@ testElideModRefEvents = do
           (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
 
   it "doesn't elide on backcompat" $ do
-    cmd <- mkExec code Null def [] Nothing Nothing
+    cmd <- mkExec codePreFork Null def [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport backCompatFlags
+    print results
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
           (("refInfo" `isInfixOf`) . BSL8.unpack)
   where
+    codePreFork =
+      [text|
+
+           (interface iface
+             (defun f:bool ()))
+
+           (module evmodule G
+
+             (defcap G () true)
+
+             (defcap BURN (a:module{iface})
+               @event
+               1)
+
+             (implements iface)
+
+             (defun f:bool () true)
+
+             (defun usecap ()
+               (with-capability (BURN evmodule)
+                 1
+               )
+             )
+            )
+
+           (usecap)
+           |]
     code =
       [text|
 
