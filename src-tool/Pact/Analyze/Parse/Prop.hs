@@ -669,6 +669,16 @@ inferPreProp preProp = case preProp of
     str' <- checkPreProp SStr str
     pure $ Some SInteger $ CoreProp $ StrToInt str'
 
+  PreApp s [str] | s == SStringHash -> do
+    Some ty str' <- inferPreProp str
+    case ty of
+      SDecimal  -> pure $ Some SStr $ CoreProp $ DecHash str'
+      SInteger  -> pure $ Some SStr $ CoreProp $ IntHash str'
+      SStr      -> pure $ Some SStr $ CoreProp $ StrHash str'
+      SBool     -> pure $ Some SStr $ CoreProp $ BoolHash str'
+      SList ty' -> pure $ Some SStr $ CoreProp $ ListHash ty' str'
+      _ -> throwErrorIn preProp "`hash` works only with integer, decimals, strings, bools, and list of those"
+
   PreApp s [str, base] | s == SStringToInteger -> do
     str'  <- checkPreProp SStr str
     base' <- checkPreProp SInteger base

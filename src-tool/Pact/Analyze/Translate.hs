@@ -107,6 +107,7 @@ data TranslateFailureNoLoc
   | UnexpectedDefaultReadType EType EType
   | UnsupportedNonFatal Text
   | UnscopedCapability CapName
+  | CapabilityNotManagedOrEvent CapName
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> RenderedOutput
@@ -171,6 +172,8 @@ describeTranslateFailureNoLoc = \case
     renderWarn $ "Unsupported operation: " <> msg
   UnscopedCapability (CapName cap) ->
     renderWarn $ "Direct execution restricted by capability " <> T.pack cap
+  CapabilityNotManagedOrEvent (CapName cap) ->
+    renderFatal $ "Capability " <> T.pack cap <> " " <> "not managed or event"
 
 
 data TranslateEnv
@@ -200,7 +203,7 @@ mkTranslateEnv info caps args
       Map.empty
       args
 
-    caps' = Map.fromList $ caps <&> \c@(Capability _ capName) -> (capName, c)
+    caps' = Map.fromList $ caps <&> \c@(Capability _ capName _) -> (capName, c)
 
     coerceUnmungedToMunged :: Unmunged -> Munged
     coerceUnmungedToMunged (Unmunged nm) = Munged nm
@@ -997,8 +1000,28 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
   AST_Hash val -> do
-    val' <- translateNode val
-    pure $ Some SStr $ Hash val'
+    Some ty val' <- translateNode val
+    let
+      wrap :: Core Term 'TyStr -> TranslateM ETerm
+      wrap = pure . Some SStr . CoreTerm
+
+      notStaticShim = do
+        addWarning' (UnsupportedNonFatal "Call to `hash` is only implemented for string, bool, and integer, substituting hash of `hello pact`")
+        wrap (StrHash (Lit' (Str "hello pact")))
+    
+    case ty of
+      SStr       -> wrap (StrHash val')
+      SBool      -> wrap (BoolHash val')
+      SInteger   -> wrap (IntHash val')
+      SDecimal   -> wrap (DecHash val')
+      SList ty'  -> case ty' of
+        SInteger -> wrap (ListHash SInteger val')
+        SDecimal -> wrap (ListHash SDecimal val')
+        SStr     -> wrap (ListHash SStr val')
+        SBool    -> wrap (ListHash SBool val')
+        SList lt' -> wrap (ListHash (SList lt') val')
+        _otherwise ->  notStaticShim
+      _otherwise -> notStaticShim
 
   AST_ReadKeyset nameA -> translateNode nameA >>= \case
     Some SStr nameT -> return $ Some SGuard $ ReadKeySet nameT
@@ -1383,7 +1406,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_RequireCapability node (AST_InlinedApp modName funName _ bindings _) ->
     withTranslatedBindings bindings $ \bindingTs -> do
-      (cap@(Capability _ capName), vars) <- translateCapRef modName funName bindingTs
+      (cap@(Capability _ capName _), vars) <- translateCapRef modName funName bindingTs
       recov <- view teRecoverability
       tid <- genTagId
       inScope <- Set.member capName <$> use tsStaticCapsInScope
@@ -1706,9 +1729,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
     -- not translating argument
     shimNative astNode node fn []
 
-  AST_NFun node fn@"emit-event" [_] ->
-    -- elide translation of event capability
-    shimNative astNode node fn []
+  AST_EmitEvent _node (AST_InlinedApp modName funName _ bindings _) ->
+    withTranslatedBindings bindings $ \bindingTs -> do
+      (Capability _ capName evOrMgt, _) <- translateCapRef modName funName bindingTs
+      case evOrMgt of
+        Nothing -> throwError' (CapabilityNotManagedOrEvent capName)
+        -- RS: If a cap is managed or an event, we always succeed (by emitting `true`).
+        Just _ -> pure (Some SBool $ Lit' True)
 
   AST_NFun _ "distinct" [xs] -> translateNode xs >>= \xs' -> case xs' of
     Some ty@(SList elemTy) l -> pure $ Some ty $ CoreTerm $ ListDistinct elemTy l
@@ -1722,11 +1749,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       [from, to']       -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' (Lit' 1)
       [from, to', step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' step
       _otherwise -> unexpectedNode astNode
-
-  AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
-    -- uncaught case is dynamic list, sub format string
-    Some SStr _ -> shimNative' node fn [b] "format string" a'
-    _ -> unexpectedNode astNode
 
   AST_NFun node fn@"create-principal" [a] -> translateNode a >>= \case
     -- assuming we have a guard as input, yield an empty string
