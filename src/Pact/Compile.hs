@@ -156,7 +156,7 @@ compile pe mi e = runCompile pe topLevel (initParseState ei) ei
   ei = mi <$> e
 
 compileExps :: Traversable t => ParseEnv -> MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
-compileExps pe mi exps = mapM (compile pe mi) exps
+compileExps pe mi exps = traverse (compile pe mi) exps
 
 moduleState :: Compile ModuleState
 moduleState = use (psUser . csModule) >>= \case
