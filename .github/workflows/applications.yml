@@ -247,7 +247,7 @@ jobs:
         FROM ubuntu:${OS#ubuntu-}
         LABEL com.chainweb.docker.image.compiler="ghc-${{ matrix.ghc }}"
         LABEL com.chainweb.docker.image.os="${{ matrix.os }}"
-        RUN apt-get update && apt-get install -y ca-certificates libgmp10 libssl1.1 zlib1g locales && rm -rf /var/lib/apt/lists/* && locale-gen en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+        RUN apt-get update && apt-get install -y ca-certificates libmpfr6 libgmp10 libssl1.1 zlib1g locales && rm -rf /var/lib/apt/lists/* && locale-gen en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
         ENV LANG=en_US.UTF-8
         WORKDIR /pact
         COPY pact/pact .
