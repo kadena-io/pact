@@ -270,10 +270,10 @@ replDefs = ("Repl",
       [LitExample "(env-dynref fungible-v2 coin)"]
       ("Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. " <>
        "With no arguments, remove all substitutions.")
-     ,defZRNative "env-in-repl" envSimulateNotRepl
-       (funType tTyString [("in-repl", tTyBool)])
-       [LitExample "(env-in-repl true)"]
-       "Set the in-repl flag, to potentially observe behaviors outside of the repl"
+     ,defZRNative "env-simulate-onchain" envSimulateNotRepl
+       (funType tTyString [("on-chain", tTyBool)])
+       [LitExample "(env-simulate-onchain true)"]
+       "Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -873,8 +873,9 @@ withEnv _ [exec] = do
 withEnv i as = argsError' i as
 
 envSimulateNotRepl :: RNativeFun LibState
-envSimulateNotRepl _i [TLiteral (LBool inRepl) _] = do
-  setenv eeInRepl inRepl
-  let ppInRepl = if inRepl then "true" else "false"
-  return $ tStr $ "Set in-repl execution mode to: " <> ppInRepl
+envSimulateNotRepl _i [TLiteral (LBool simulateOnChain) _] = do
+  -- Note: Simulating on-chain means we are _not_ `inRepl`
+  setenv eeInRepl (not simulateOnChain)
+  let ppInRepl = if simulateOnChain then "true" else "false"
+  return $ tStr $ "Set on-chain simulation execution mode to: " <> ppInRepl
 envSimulateNotRepl i as = argsError i as

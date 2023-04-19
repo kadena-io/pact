@@ -2005,17 +2005,6 @@ pact> (env-hash (hash "hello"))
 ```
 
 
-### env-in-repl {#env-in-repl}
-
-*in-repl*&nbsp;`bool` *&rarr;*&nbsp;`string`
-
-
-Set the in-repl flag, to potentially observe behaviors outside of the repl
-```lisp
-(env-in-repl true)
-```
-
-
 ### env-keys {#env-keys}
 
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
@@ -2047,6 +2036,17 @@ Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
 Set transaction signature keys and capabilities. SIGS is a list of objects with "key" specifying the signer key, and "caps" specifying a list of associated capabilities.
 ```lisp
 (env-sigs [{'key: "my-key", 'caps: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'caps: []}
+```
+
+
+### env-simulate-onchain {#env-simulate-onchain}
+
+*on-chain*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces.
+```lisp
+(env-simulate-onchain true)
 ```
 
 

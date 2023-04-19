@@ -82,7 +82,7 @@
 ; Tests for outside of a repl environment
 (begin-tx)
 (env-exec-config [])
-(env-in-repl false)
+(env-simulate-onchain true)
 (use m)
 
 ; if
