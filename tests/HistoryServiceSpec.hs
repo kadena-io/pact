@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module HistoryServiceSpec (spec) where
@@ -10,6 +11,9 @@ import Data.ByteString (ByteString)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import Test.Hspec
+#if !MIN_VERSION_hspec(2,10,10)
+import Test.Hspec.Core.Spec
+#endif
 import Data.Default
 import System.IO.Temp (withSystemTempDirectory)
 
