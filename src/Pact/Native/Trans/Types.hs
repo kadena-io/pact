@@ -15,35 +15,35 @@
 --
 
 module Pact.Native.Trans.Types
-    ( TransResult(..)
-    , mpfr_arity1
-    , mpfr_arity2
-    , c'mpz_init
-    , c'mpz_clear
-    , c'mpz_set_str
-    , c'mpz_get_str
-    , c'mpq_init
-    , c'mpq_clear
-    , c'mpq_set_str
-    , c'mpq_get_str
-    , c'mpfr_init
-    , c'mpfr_set_default_prec
-    , c'mpfr_clear
-    , c'mpfr_set_str
-    , c'mpfr_set_q
-    , c'mpfr_get_q
-    , c'mpfr_div
-    , c'mpfr_pow
-    , c'mpfr_log
-    , c'mpfr_log2
-    , c'mpfr_log10
-    , c'mpfr_exp
-    , c'mpfr_exp2
-    , c'mpfr_exp10
-    , c'mpfr_sqrt
-    , c'mpfr_snprintf
-    , withTemp
-    ) where
+  ( TransResult(..)
+  , mpfr_arity1
+  , mpfr_arity2
+  , c'mpz_init
+  , c'mpz_clear
+  , c'mpz_set_str
+  , c'mpz_get_str
+  , c'mpq_init
+  , c'mpq_clear
+  , c'mpq_set_str
+  , c'mpq_get_str
+  , c'mpfr_init
+  , c'mpfr_set_default_prec
+  , c'mpfr_clear
+  , c'mpfr_set_str
+  , c'mpfr_set_q
+  , c'mpfr_get_q
+  , c'mpfr_div
+  , c'mpfr_pow
+  , c'mpfr_log
+  , c'mpfr_log2
+  , c'mpfr_log10
+  , c'mpfr_exp
+  , c'mpfr_exp2
+  , c'mpfr_exp10
+  , c'mpfr_sqrt
+  , c'mpfr_snprintf
+  , withTemp
+  ) where
 
 import Control.Exception
 import Data.Decimal (Decimal)
@@ -71,13 +71,13 @@ data MPZ = MPZ {
 }
 
 instance Storable MPZ where
-    sizeOf _ = (16)
-    alignment _ = alignment (undefined :: Int32)
-    peek = error "MPZ.peek: Not needed and not applicable"
-    poke p (MPZ alloc size fp) = do
-      (\hsc_ptr -> pokeByteOff hsc_ptr 0) p alloc
-      (\hsc_ptr -> pokeByteOff hsc_ptr 4) p size
-      (\hsc_ptr -> pokeByteOff hsc_ptr 8) p fp
+  sizeOf _ = (16)
+  alignment _ = alignment (undefined :: Int32)
+  peek = error "MPZ.peek: Not needed and not applicable"
+  poke p (MPZ alloc size fp) = do
+    (\hsc_ptr -> pokeByteOff hsc_ptr 0) p alloc
+    (\hsc_ptr -> pokeByteOff hsc_ptr 4) p size
+    (\hsc_ptr -> pokeByteOff hsc_ptr 8) p fp
 
 data MPQ = MPQ {
   _mpqNum :: {-# UNPACK #-} !MPZ,
@@ -85,12 +85,12 @@ data MPQ = MPQ {
 }
 
 instance Storable MPQ where
-    sizeOf _ = (32)
-    alignment _ = alignment (undefined :: Int32)
-    peek = error "MPQ.peek: Not needed and not applicable"
-    poke p (MPQ n d) = do
-      (\hsc_ptr -> pokeByteOff hsc_ptr 0) p n
-      (\hsc_ptr -> pokeByteOff hsc_ptr 16) p d
+  sizeOf _ = (32)
+  alignment _ = alignment (undefined :: Int32)
+  peek = error "MPQ.peek: Not needed and not applicable"
+  poke p (MPQ n d) = do
+    (\hsc_ptr -> pokeByteOff hsc_ptr 0) p n
+    (\hsc_ptr -> pokeByteOff hsc_ptr 16) p d
 
 type CPrecision = Int64
 type Sign = Int32
@@ -105,14 +105,14 @@ data MPFR = MP {
 }
 
 instance Storable MPFR where
-    sizeOf _ = (32)
-    alignment _ = alignment (undefined :: Int64)
-    peek = error "MPFR.peek: Not needed and not applicable"
-    poke p (MP prec s e fp) = do
-      (\hsc_ptr -> pokeByteOff hsc_ptr 0) p prec
-      (\hsc_ptr -> pokeByteOff hsc_ptr 8) p s
-      (\hsc_ptr -> pokeByteOff hsc_ptr 16) p e
-      (\hsc_ptr -> pokeByteOff hsc_ptr 24) p fp
+  sizeOf _ = (32)
+  alignment _ = alignment (undefined :: Int64)
+  peek = error "MPFR.peek: Not needed and not applicable"
+  poke p (MP prec s e fp) = do
+    (\hsc_ptr -> pokeByteOff hsc_ptr 0) p prec
+    (\hsc_ptr -> pokeByteOff hsc_ptr 8) p s
+    (\hsc_ptr -> pokeByteOff hsc_ptr 16) p e
+    (\hsc_ptr -> pokeByteOff hsc_ptr 24) p fp
 
 c'MPFR_RNDN :: CInt
 c'MPFR_RNDN = 0    -- round to nearest, with ties to even
@@ -252,8 +252,8 @@ mpfr2Dec m =
     buf <- peekCString out
     free out
     let val = case break (== '/') buf of
-            (before, []) -> read before % 1
-            (before, _:after) -> read before % read after
+                (before, []) -> read before % 1
+                (before, _:after) -> read before % read after
     pure $ TransNumber $ fromRational val
 
 mpfr_arity1
