@@ -71,6 +71,9 @@ library
       Pact.Native.Trans.Types
       Pact.Native.Trans.Musl
       Pact.Native.Trans.TOps
+    extra-libraries:
+      mpfr
+      gmp
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -149,10 +152,6 @@ library
     if !impl(ghcjs)
       build-depends:
         , integer-gmp
-  if !impl(ghcjs)
-    extra-libraries:
-      mpfr
-      gmp
   build-depends:
     , Decimal >=0.4.2
     , QuickCheck >=2.12.6.1
