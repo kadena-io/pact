@@ -14,7 +14,36 @@
 -- Operators and math built-ins.
 --
 
-module Pact.Native.Trans.Types where
+module Pact.Native.Trans.Types
+    ( TransResult(..)
+    , mpfr_arity1
+    , mpfr_arity2
+    , c'mpz_init
+    , c'mpz_clear
+    , c'mpz_set_str
+    , c'mpz_get_str
+    , c'mpq_init
+    , c'mpq_clear
+    , c'mpq_set_str
+    , c'mpq_get_str
+    , c'mpfr_init
+    , c'mpfr_set_default_prec
+    , c'mpfr_clear
+    , c'mpfr_set_str
+    , c'mpfr_set_q
+    , c'mpfr_get_q
+    , c'mpfr_div
+    , c'mpfr_pow
+    , c'mpfr_log
+    , c'mpfr_log2
+    , c'mpfr_log10
+    , c'mpfr_exp
+    , c'mpfr_exp2
+    , c'mpfr_exp10
+    , c'mpfr_sqrt
+    , c'mpfr_snprintf
+    , withTemp
+    ) where
 
 import Control.Exception
 import Data.Decimal (Decimal)
@@ -87,6 +116,7 @@ instance Storable MPFR where
 
 c'MPFR_RNDN :: CInt
 c'MPFR_RNDN = 0    -- round to nearest, with ties to even
+{-
 c'MPFR_RNDZ :: CInt
 c'MPFR_RNDZ = 1    -- round toward zero
 c'MPFR_RNDU :: CInt
@@ -99,16 +129,19 @@ c'MPFR_RNDF :: CInt
 c'MPFR_RNDF = 5    -- faithful rounding
 c'MPFR_RNDNA :: CInt
 c'MPFR_RNDNA = -1  -- round to nearest, with ties away from zero (mpfr_round)
+-}
 
 rounding :: CInt
 rounding = c'MPFR_RNDN
 
+{-
 readResultNumber :: String -> TransResult Decimal
 readResultNumber (' ':s) = readResultNumber s
 readResultNumber "nan" = TransNaN
 readResultNumber "inf" = TransInf
 readResultNumber "-inf" = TransNegInf
 readResultNumber n = TransNumber (read (trimZeroes n))
+-}
 
 type Mpz_t = Ptr MPZ
 type Mpq_t = Ptr MPQ
@@ -186,9 +219,11 @@ foreign import ccall "mpfr_sqrt"
 foreign import ccall "mpfr_snprintf"
   c'mpfr_snprintf :: Ptr CChar -> CInt -> Ptr CChar -> CInt -> Mpfr_t -> IO ()
 
+{-
 withTempz :: (Mpz_t -> IO a) -> IO a
 withTempz k = alloca $ \x ->
   bracket_ (c'mpz_init x) (c'mpz_clear x) (k x)
+-}
 
 withTempq :: (Mpq_t -> IO a) -> IO a
 withTempq k = alloca $ \x ->
@@ -239,9 +274,11 @@ mpfr_arity2 f x y = unsafePerformIO $
     f z' x' y' rounding
     mpfr2Dec z'
 
+{-
 trimZeroes :: String -> String
 trimZeroes = reverse . go . reverse
   where
   go ('0':s) = go s
   go ('.':s) = "0." ++ s
   go s = s
+-}
