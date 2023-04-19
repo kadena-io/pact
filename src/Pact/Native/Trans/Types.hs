@@ -66,8 +66,8 @@ data TransResult a
 
 data MPZ = MPZ {
   _mpzAlloc :: {-# UNPACK #-} !Int32,
-  _mpzSize  :: {-# UNPACK #-} !Int32,
-  _mpzD     :: {-# UNPACK #-} !(Ptr Limb)
+  _mpzSize :: {-# UNPACK #-} !Int32,
+  _mpzD :: {-# UNPACK #-} !(Ptr Limb)
 }
 
 instance Storable MPZ where
@@ -99,9 +99,9 @@ type Limb = Word64
 
 data MPFR = MP {
   _precision :: {-# UNPACK #-} !CPrecision,
-  _sign      :: {-# UNPACK #-} !Sign,
-  _exponent  :: {-# UNPACK #-} !Exp,
-  _limbs     :: {-# UNPACK #-} !(Ptr Limb)
+  _sign :: {-# UNPACK #-} !Sign,
+  _exponent :: {-# UNPACK #-} !Exp,
+  _limbs :: {-# UNPACK #-} !(Ptr Limb)
 }
 
 instance Storable MPFR where
