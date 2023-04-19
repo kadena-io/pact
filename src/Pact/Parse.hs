@@ -1,12 +1,13 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Compile
@@ -64,8 +65,11 @@ expr = do
   delt <- position
   let inf = do
         end <- position
-        -- let len = column end - column delt
+#if LEGACY_PARSER == 1
         let len = bytes end - bytes delt
+#else
+        let len = column end - column delt
+#endif
         return $! Parsed delt (fromIntegral len)
       separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
   msum

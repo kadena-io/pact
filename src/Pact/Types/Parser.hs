@@ -78,8 +78,6 @@ newtype PactAttoparsec a = PactAttoparsec
 pactAttoParseOnly :: PactAttoparsec a -> T.Text -> Either String a
 pactAttoParseOnly = AP.parseOnly . flip evalStateT 0 . runPactAttoparsec
 
-#define LEGACY_PARSER 1
-
 -- | Atto DeltaParsing instance provides 'position' only (with no support for
 -- hidden chars like Trifecta).
 --

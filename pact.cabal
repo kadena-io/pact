@@ -47,7 +47,7 @@ flag tests-in-lib
   manual:      True
 
 library
-
+  cpp-options: -DLEGACY_PARSER=1
   -- common to all configurations:
   hs-source-dirs: src
   default-language: Haskell2010
