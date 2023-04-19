@@ -25,7 +25,6 @@ module Pact.Interpreter
   , evalExec
   , evalContinuation
   , setupEvalEnv
-  , setupNativesEvalEnv
   , initRefStore
   , mkSQLiteEnv
   , mkPureEnv
@@ -35,6 +34,7 @@ module Pact.Interpreter
   , Interpreter (..)
   , defaultInterpreter
   , defaultInterpreterState
+  , versionedNativesRefStore
   , ExecutionConfig (..)
   ) where
 
@@ -177,7 +177,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   gasRef <- newIORef 0
   warnRef <- newIORef mempty
   pure EvalEnv {
-    _eeRefStore = versionNatives refStore
+    _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
@@ -198,32 +198,12 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   , _eeWarnings = warnRef
   }
   where
-    versionNatives = appEndo $ mconcat
-      [ disablePact40Natives ec
-      , disablePact420Natives ec
-      , disablePact43Natives ec
-      , disablePact431Natives ec
-      , disablePact46Natives ec ]
     mkMsgSigs ss = M.fromList $ map toPair ss
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
-
-setupNativesEvalEnv
-  :: PactDbEnv e
-  -> Maybe EntityName
-  -> ExecutionMode
-  -> MsgData
-  -> GasEnv
-  -> NamespacePolicy
-  -> SPVSupport
-  -> PublicData
-  -> ExecutionConfig
-  -> IO (EvalEnv e)
-setupNativesEvalEnv dbEnv ent mode msgData =
-  setupEvalEnv dbEnv ent mode msgData initRefStore
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
 disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
@@ -248,6 +228,16 @@ disablePact46Natives = disablePactNatives ["point-add", "scalar-mult", "pairing-
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
+
+versionedNativesRefStore :: ExecutionConfig -> RefStore
+versionedNativesRefStore ec = versionNatives initRefStore
+  where
+  versionNatives = appEndo $ mconcat
+    [ disablePact40Natives ec
+    , disablePact420Natives ec
+    , disablePact43Natives ec
+    , disablePact431Natives ec
+    , disablePact46Natives ec ]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do

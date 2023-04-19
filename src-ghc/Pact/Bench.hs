@@ -157,7 +157,7 @@ loadBenchModule db = do
            pactInitialHash
            [Signer Nothing pk Nothing []]
   let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  e <- setupNativesEvalEnv db entity Transactional md
+  e <- setupEvalEnv db entity Transactional md (versionedNativesRefStore ec)
           freeGasEnv permissiveNamespacePolicy noSPVSupport def ec
   (r :: Either SomeException EvalResult) <- try $ evalExec  defaultInterpreter e pc
   void $ eitherDie "loadBenchModule (load)" $ fmapL show r
@@ -185,7 +185,7 @@ runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) -
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
   let md = MsgData cdata Nothing pactInitialHash ss
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  e <- set eeAdvice pt <$> setupNativesEvalEnv dbEnv entity Transactional md
+  e <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Transactional md (versionedNativesRefStore ec)
           prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   let s = perfInterpreter pt $ defaultInterpreterState $
           maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
@@ -197,7 +197,7 @@ execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
   let md = MsgData Null Nothing pactInitialHash []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  env <- set eeAdvice pt <$> setupNativesEvalEnv dbEnv entity Local md
+  env <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Local md (versionedNativesRefStore ec)
             prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   o <- try $ runEval def env $ mapM eval ts
   case o of
