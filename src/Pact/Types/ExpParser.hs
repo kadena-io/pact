@@ -1,16 +1,17 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- megaparsec <9.3 backard compatiblity
@@ -52,7 +53,6 @@ import qualified Text.Trifecta.Delta as TF
 import Control.Applicative hiding (some,many)
 import Text.Megaparsec as MP
 import Text.Megaparsec.Internal (ParsecT(..))
-import qualified Data.ByteString as B
 import Data.Proxy
 import Data.Void
 import Data.List.NonEmpty (NonEmpty(..),fromList,toList)
@@ -66,7 +66,6 @@ import Control.Lens hiding (prism)
 import Data.Default
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Set as S
 
 import Pact.Types.Exp
@@ -128,8 +127,12 @@ mkTextInfo :: T.Text -> MkInfo
 mkTextInfo s d = Info $ Just (Code code, d)
   where
     code = T.take len $ T.drop offset s
-    offset = fromIntegral $ TF.bytes d
     len = _pLength d
+#if LEGACY_PARSER == 1
+    offset = fromIntegral $ TF.bytes (_pDelta d)
+#else
+    offset = fromIntegral $ TF.column (_pDelta d)
+#endif
 
 type ExpParse s a = ReaderT ParseEnv (StateT (ParseState s) (Parsec Void Cursor)) a
 

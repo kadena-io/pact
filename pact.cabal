@@ -50,7 +50,7 @@ flag tests-in-lib
 -- Pact library
 
 library
-
+  cpp-options: -DLEGACY_PARSER=1
   -- common to all configurations:
   hs-source-dirs: src
   default-language: Haskell2010
@@ -405,6 +405,7 @@ test-suite hspec
       ParserSpec
       SchemeSpec
       SignatureSpec
+      Test.Pact.Parse
       Test.Pact.Utils.LegacyValue
 
     build-depends:
@@ -465,6 +466,7 @@ test-suite hspec
         , sbv
         , servant-client >=0.16
         , temporary >=1.3
+        , trifecta
         , yaml
         , process
         , posix-pty

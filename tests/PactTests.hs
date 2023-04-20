@@ -15,6 +15,7 @@ import qualified PactTestsSpec
 import qualified ParserSpec
 import qualified SchemeSpec
 import qualified SignatureSpec
+import qualified Test.Pact.Parse
 
 # ifdef BUILD_TOOL
 import qualified AnalyzePropertiesSpec
@@ -51,6 +52,7 @@ main = hspec $ parallel $ do
   describe "ParserSpec" ParserSpec.spec
   describe "SignatureSpec" SignatureSpec.spec
   describe "SchemeSpec" SchemeSpec.spec
+  describe "Test.Pact.Parse" Test.Pact.Parse.spec
 
 # ifdef BUILD_TOOL
 
