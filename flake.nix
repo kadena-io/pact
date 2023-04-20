@@ -2,7 +2,7 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?rev=7a94fcdda304d143f9a40006c033d7e190311b54";
+    nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
     # nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     haskellNix.url = "github:input-output-hk/haskell.nix";
     flake-utils.url = "github:numtide/flake-utils";
