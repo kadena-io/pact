@@ -13,6 +13,7 @@
 
 module Pact.Trans.Types
   ( TransResult(..)
+  , doubleToTransResult
   ) where
 
 data TransResult a
@@ -21,3 +22,11 @@ data TransResult a
   | TransInf !a
   | TransNegInf !a
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+doubleToTransResult :: Double -> TransResult Double
+doubleToTransResult r
+  | isNaN r = TransNaN r
+  | isInfinite r && r < 0 = TransNegInf r
+  | isInfinite r = TransInf r
+  | otherwise = TransNumber r
+

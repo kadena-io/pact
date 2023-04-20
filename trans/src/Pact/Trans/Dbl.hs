@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
-
 -- |
 -- Module      :  Pact.Trans.Dbl
 -- Copyright   :  (C) 2023 John Wiegley
@@ -19,23 +17,17 @@ module Pact.Trans.Dbl
 
 import Pact.Trans.Types
 
-decode :: Double -> TransResult Double
-decode !r | isNaN r = TransNaN r
-          | isInfinite r && r < 0 = TransNegInf r
-          | isInfinite r = TransInf r
-          | otherwise = TransNumber r
-
 dbl_exp :: Double -> TransResult Double
-dbl_exp = decode . exp
+dbl_exp = doubleToTransResult . exp
 
 dbl_ln :: Double -> TransResult Double
-dbl_ln = decode . log
+dbl_ln = doubleToTransResult . log
 
 dbl_log :: Double -> Double -> TransResult Double
-dbl_log = (decode .) . logBase
+dbl_log = (doubleToTransResult .) . logBase
 
 dbl_pow :: Double -> Double -> TransResult Double
-dbl_pow = (decode .) . (**)
+dbl_pow = (doubleToTransResult .) . (**)
 
 dbl_sqrt :: Double -> TransResult Double
-dbl_sqrt = decode . sqrt
+dbl_sqrt = doubleToTransResult . sqrt

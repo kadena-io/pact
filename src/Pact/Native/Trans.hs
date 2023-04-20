@@ -92,7 +92,7 @@ trans_log i x y = go
 trans_logInt :: HasInfo i => i -> Integer -> Integer -> Eval e Integer
 trans_logInt i x y = go
   where
-  f = (TransNumber .) . logBase
+  f = (doubleToTransResult .) . logBase
   logBase_double = liftBinIntF i f
 #if defined(ghcjs_HOST_OS)
   go = logBase_double x y

@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -43,9 +42,6 @@ import Pact.GasModel.Utils
 import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
-#if !MIN_VERSION_hspec(2,10,10)
-import Test.Hspec.Core.Spec
-#endif
 
 spec :: Spec
 spec = describe "gas model tests" $ do
