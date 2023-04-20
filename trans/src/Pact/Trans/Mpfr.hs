@@ -199,17 +199,21 @@ mpfr2Dec m =
     free out
     pure $ case break (== '/') buf of
       (before, []) -> readResultNumber before
-      (before, _:after) -> TransNumber (fromRational (read before % read after))
+      (before, _:after) ->
+        TransNumber (fromRational (read before % read after))
   where
   readResultNumber :: String -> TransResult Decimal
   readResultNumber (' ':s) = readResultNumber s
   readResultNumber "nan" = TransNaN 0
   readResultNumber "inf" = TransInf 0
   readResultNumber "-inf" = TransNegInf 0
-  readResultNumber n = TransNumber (fromRational (read (trimZeroes n) % 1))
+  readResultNumber "0" = TransNumber 0
+  readResultNumber n =
+    TransNumber (fromRational (read (trimZeroes n) % 1))
 
   trimZeroes :: String -> String
-  trimZeroes = reverse . go . reverse
+  trimZeroes str | '.' `notElem` str = str
+                 | otherwise = reverse (go (reverse str))
     where
     go ('0':s) = go s
     go ('.':s) = "0." ++ s
