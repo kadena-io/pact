@@ -23,9 +23,10 @@ module Pact.Native.Trans
 import Data.Decimal
 #if !defined(ghcjs_HOST_OS)
 import Pact.Trans.Types
-import qualified Pact.Trans.Mpfr as Mpfr
+-- import qualified Pact.Trans.Mpfr as Mpfr
 import qualified Pact.Trans.Musl as Musl
 #endif
+import qualified Pact.Trans.Dec as Dec
 import qualified Pact.Trans.Dbl as Dbl
 import Pact.Types.Runtime
 
@@ -58,7 +59,7 @@ trans_exp i x = go
   go = exp_double i x
 #else
   exp_musl = liftUnDecF i Musl.musl_exp
-  exp_mpfr = liftUnDec i f Mpfr.mpfr_exp
+  exp_mpfr = liftUnDec i f Dec.dec_exp
   go = chooseFunction1 exp_double exp_musl exp_mpfr >>= ($ x)
 #endif
 
@@ -71,7 +72,7 @@ trans_ln i x = go
   go = ln_double i x
 #else
   ln_musl = liftUnDecF i Musl.musl_ln
-  ln_mpfr = liftUnDec i f Mpfr.mpfr_ln
+  ln_mpfr = liftUnDec i f Dec.dec_ln
   go = chooseFunction1 ln_double ln_musl ln_mpfr >>= ($ x)
 #endif
 
@@ -84,7 +85,7 @@ trans_log i x y = go
   go = logBase_double i x y
 #else
   logBase_musl = liftBinDecF i Musl.musl_log
-  logBase_mpfr = liftBinDec i f Mpfr.mpfr_log
+  logBase_mpfr = liftBinDec i f Dec.dec_log
   go = chooseFunction2 logBase_double logBase_musl logBase_mpfr
     >>= (\k -> k x y)
 #endif
@@ -98,7 +99,7 @@ trans_logInt i x y = go
   go = logBase_double x y
 #else
   logBase_musl = liftBinIntF i Musl.musl_log
-  logBase_mpfr = liftBinInt i f Mpfr.mpfr_log
+  logBase_mpfr = liftBinInt i f Dec.dec_log
   go = chooseFunction2 logBase_double logBase_musl logBase_mpfr
     >>= (\k -> k x y)
 #endif
@@ -112,7 +113,7 @@ trans_pow i x y = go
   go = pow_double i x y
 #else
   pow_musl = liftBinDecF i Musl.musl_pow
-  pow_mpfr = liftBinDec i f Mpfr.mpfr_pow
+  pow_mpfr = liftBinDec i f Dec.dec_pow
   go = chooseFunction2 pow_double pow_musl pow_mpfr >>= (\k -> k x y)
 #endif
 
@@ -125,7 +126,7 @@ trans_sqrt i x = go
   go = sqrt_double i x
 #else
   sqrt_musl = liftUnDecF i Musl.musl_sqrt
-  sqrt_mpfr = liftUnDec i f Mpfr.mpfr_sqrt
+  sqrt_mpfr = liftUnDec i f Dec.dec_sqrt
   go = chooseFunction1 sqrt_double sqrt_musl sqrt_mpfr >>= ($ x)
 #endif
 

@@ -6,6 +6,7 @@ module Main where
 import Data.Decimal
 import qualified Pact.Trans.Mpfr as Mpfr
 import qualified Pact.Trans.Musl as Musl
+import qualified Pact.Trans.Dec as Dec
 import qualified Pact.Trans.Dbl as Dbl
 import Pact.Trans.Types
 
@@ -25,6 +26,9 @@ main = do
     _ -> error "oops"
   case Mpfr.mpfr_pow x y of
     TransNumber z -> putStrLn $ "(mpfr) x ^ y = " ++ show z
+    _ -> error "oops"
+  case Dec.dec_pow x y of
+    TransNumber z -> putStrLn $ "(dec)  x ^ y = " ++ show z
     _ -> error "oops"
 
 dec2F :: Decimal -> Double

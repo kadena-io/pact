@@ -459,6 +459,7 @@ library pact-trans
         , integer-gmp
   build-depends:
     , Decimal >=0.4.2
+    , decimal-arithmetic >=0.5.1.0
   if !impl(ghcjs)
     c-sources:
       trans/cbits/musl/__math_invalid.c
@@ -482,6 +483,7 @@ library pact-trans
       gmp
   exposed-modules:
     Pact.Trans.Types
+    Pact.Trans.Dec
     Pact.Trans.Dbl
 
 test-suite trans-spec

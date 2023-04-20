@@ -16,3 +16,8 @@ constraints: unordered-containers <0.2.16
 -- test upper bounds
 constraints: hspec-golden <0.2,
 
+source-repository-package
+    type: git
+    location: https://github.com/kadena-io/decimal-arithmetic.git
+    tag: 164dd17b7eb643fd90ee75610ddffe1c741658ff
+    --sha256: sha256-Sg7l+J9fAIgGDy6ekkEUUrnkk2ZuQYQ15az/PI7dbfQ=
