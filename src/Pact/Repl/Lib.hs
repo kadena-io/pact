@@ -78,6 +78,7 @@ import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
+import Pact.Interpreter
 import Pact.Runtime.Utils
 
 
@@ -742,13 +743,13 @@ setGasPrice i as = argsError i as
 envExecConfig :: RNativeFun LibState
 envExecConfig i as = case as of
   [TList reps _ _] -> do
-    fs <- forM reps $ \s -> case s of
+    fs <- forM reps $ \case
       TLitString r -> case M.lookup r flagReps of
         Nothing -> evalError' i $ "Invalid flag, allowed: " <> viaShow (M.keys flagReps)
         Just f -> return f
       _ -> argsError i as
     let ec = ExecutionConfig $ S.fromList $ V.toList fs
-    setenv eeExecutionConfig ec
+    setop $ UpdateEnv $ Endo $ set eeExecutionConfig ec . set eeRefStore (versionedNativesRefStore ec)
     report ec
   [] -> view eeExecutionConfig >>= report
   _ -> argsError i as

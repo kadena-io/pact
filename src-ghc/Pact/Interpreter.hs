@@ -34,6 +34,7 @@ module Pact.Interpreter
   , Interpreter (..)
   , defaultInterpreter
   , defaultInterpreterState
+  , versionedNativesRefStore
   , ExecutionConfig (..)
   ) where
 
@@ -46,7 +47,10 @@ import Control.Lens
 import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
+import Data.Monoid(Endo(..))
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Foldable(foldl')
 import Data.IORef
 import Data.Maybe
 import qualified Data.Set as S
@@ -201,8 +205,39 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 
+disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
+disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
+  if S.member flag ec then over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
+  else id
+
+disablePact40Natives :: ExecutionConfig -> Endo RefStore
+disablePact40Natives =
+  disablePactNatives ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"] FlagDisablePact40
+
+disablePact420Natives :: ExecutionConfig -> Endo RefStore
+disablePact420Natives = disablePactNatives ["zip", "fold-db"] FlagDisablePact420
+
+disablePact43Natives :: ExecutionConfig -> Endo RefStore
+disablePact43Natives = disablePactNatives ["create-principal", "validate-principal", "continue"] FlagDisablePact43
+
+disablePact431Natives :: ExecutionConfig -> Endo RefStore
+disablePact431Natives = disablePactNatives ["is-principal", "typeof-principal"] FlagDisablePact431
+
+disablePact46Natives :: ExecutionConfig -> Endo RefStore
+disablePact46Natives = disablePactNatives ["point-add", "scalar-mult", "pairing-check"] FlagDisablePact46
+
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
+
+versionedNativesRefStore :: ExecutionConfig -> RefStore
+versionedNativesRefStore ec = versionNatives initRefStore
+  where
+  versionNatives = appEndo $ mconcat
+    [ disablePact40Natives ec
+    , disablePact420Natives ec
+    , disablePact43Natives ec
+    , disablePact431Natives ec
+    , disablePact46Natives ec ]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
