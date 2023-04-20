@@ -270,7 +270,7 @@ replDefs = ("Repl",
       [LitExample "(env-dynref fungible-v2 coin)"]
       ("Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. " <>
        "With no arguments, remove all substitutions.")
-     ,defZRNative "env-simulate-onchain" envSimulateNotRepl
+     ,defZRNative "env-simulate-onchain" envSimulateOnChain
        (funType tTyString [("on-chain", tTyBool)])
        [LitExample "(env-simulate-onchain true)"]
        "Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces."
@@ -872,10 +872,10 @@ withEnv _ [exec] = do
   local (appEndo updates) $ reduce exec
 withEnv i as = argsError' i as
 
-envSimulateNotRepl :: RNativeFun LibState
-envSimulateNotRepl _i [TLiteral (LBool simulateOnChain) _] = do
+envSimulateOnChain :: RNativeFun LibState
+envSimulateOnChain _i [TLiteral (LBool simulateOnChain) _] = do
   -- Note: Simulating on-chain means we are _not_ `inRepl`
   setenv eeInRepl (not simulateOnChain)
   let ppInRepl = if simulateOnChain then "true" else "false"
   return $ tStr $ "Set on-chain simulation execution mode to: " <> ppInRepl
-envSimulateNotRepl i as = argsError i as
+envSimulateOnChain i as = argsError i as
