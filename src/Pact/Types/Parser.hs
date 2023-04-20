@@ -112,10 +112,31 @@ instance DeltaParsing PactAttoparsec where
     -- (1 code unit plus 3 code unit plus 4 code units).
     --
     position = do
-#if MIN_VERSION_text(2,0,0)
+#if MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1
+        -- This will almost surely cause trouble because for utf-8 neither the
+        -- number of bytes nor the number of characters correspond with the
+        -- number of 16bit code units which the legacy parser returns.
+        APT.Pos !tmp <- parserPos
+        let !bytePos = tmp `div` 2
+        let !charPos = fromIntegral bytePos
+
+#elif MIN_VERSION_text(2,0,0)
+        -- This is probably our best bet, because for most text the number
+        -- of bytes matches the number of characters. However, this correspondence
+        -- is much more flaky than for utf-16 and 16bit code units.
+        --
+        -- We would need special cases for on chain data that includes unicode
+        -- code points that require more than a single byte and affect on-chain
+        -- representation.
+        --
+        -- Some code logic may require both values for bytes and characters
+        -- to be equal as was the case with the legacy parser. We should try to
+        -- fix that logic, if possible.
         APT.Pos !bytePos <- parserPos
         !charPos <- gets fromIntegral
+
 #elif LEGACY_PARSER == 1
+        -- This is our legacy parser
         APT.Pos !bytePos <- parserPos
         let !charPos = fromIntegral bytePos
 #else
@@ -131,8 +152,12 @@ instance DeltaParsing PactAttoparsec where
 
 -- | retrieve pos from Attoparsec.
 --
--- The first parameter to the parser is the remaining available input, which
--- isn't of any help here.
+-- For text <2 this is the offset in utf-16 code units, which are
+-- of size 16 bits.
+--
+-- For text >=2 this is the offset in bytes.
+--
+-- The first parameter to the parser is the remaining available input.
 --
 parserPos :: PactAttoparsec APT.Pos
 parserPos = PactAttoparsec $ StateT $ \x ->
