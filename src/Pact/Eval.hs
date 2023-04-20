@@ -351,14 +351,14 @@ eval' t = enscope t >>= reduceEnscoped
 
 reduceEnscoped :: Term Ref -> Eval e (Term Name)
 reduceEnscoped = \case
-  TVar (Direct t'@TNative{}) i -> do
-    inRepl <- view eeInRepl
-    if inRepl then pure t'
-    else evalError' i "Cannot display native function details in non-repl context"
-  TVar (Ref t'@TDef{}) i -> do
-    inRepl <- view eeInRepl
-    if inRepl then toTerm <$> compatPretty t'
-    else evalError' i "Cannot display function details in non-repl context"
+  TVar (Direct t'@TNative{}) i ->
+    isInReplForkedError >>= \case
+      OnChainError -> evalError' i "Cannot display native function details in non-repl context"
+      OffChainError -> pure t'
+  TVar (Ref t'@TDef{}) i ->
+    isInReplForkedError >>= \case
+      OnChainError -> evalError' i "Cannot display function details in non-repl context"
+      OffChainError -> toTerm <$> compatPretty t'
   t' -> reduce t'
 
 -- | Enforce namespace/root access on install.
