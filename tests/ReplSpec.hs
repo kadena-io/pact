@@ -29,7 +29,7 @@ spec = describe "ReplSpec" $ do
 -- | Execute 'src' inside a pseudo-terminal running the pact repl and returns the repl output.
 runInteractive :: ByteString -> IO ByteString
 runInteractive src = do
-  (pty, ph) <- spawnWithPty Nothing True "pact" [] (100,100)
+  (pty, ph) <- spawnWithPty Nothing True "cabal" ["run", "pact"] (100,100)
   -- Read until we reach the first pact prompt to ensure
   -- the repl is ready.
   void $ seekPactPrompt pty mempty

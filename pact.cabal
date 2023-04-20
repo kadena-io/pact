@@ -37,11 +37,6 @@ flag build-tool
   default:     True
   manual:      True
 
-flag no-advice
-  description: Disable advice in interpreter
-  default:     False
-  manual:      True
-
 flag with-integer-gmp
   description: Include integer-gmp package (removed after GHC 9)
   manual:      False
@@ -325,8 +320,6 @@ library
       build-depends:
         , crypto-api
         , ed25519-donna
-    if !flag(no-advice)
-      cpp-options: -DADVICE
     if flag(tests-in-lib)
       hs-source-dirs: tests
       build-depends:
@@ -385,7 +378,7 @@ test-suite hspec
   hs-source-dirs:   tests
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-
+  build-tool-depends: pact:pact
   build-depends:
     , aeson
     , attoparsec

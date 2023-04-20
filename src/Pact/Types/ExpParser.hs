@@ -121,19 +121,13 @@ mkEmptyInfo e = Info (Just (mempty,e))
 
 {-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
-mkStringInfo s d = Info $ Just (Code code, d)
-  where
-    -- the parser reports column offsets in bytes
-    code = T.decodeUtf8 $ B.take len $ B.drop offset $ T.encodeUtf8 $ T.pack s
-    offset = fromIntegral $ TF.bytes d
-    len = _pLength d
+mkStringInfo = mkTextInfo . T.pack
 
 {-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
 mkTextInfo s d = Info $ Just (Code code, d)
   where
-    -- the parser reports column offsets in bytes
-    code = T.decodeUtf8 $ B.take len $ B.drop offset $ T.encodeUtf8 s
+    code = T.take len $ T.drop offset s
     offset = fromIntegral $ TF.bytes d
     len = _pLength d
 

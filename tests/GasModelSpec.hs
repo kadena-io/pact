@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -41,6 +42,9 @@ import Pact.GasModel.Utils
 import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
+#if !MIN_VERSION_hspec(2,10,10)
+import Test.Hspec.Core.Spec
+#endif
 
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Legacy.HashMap as LHM
