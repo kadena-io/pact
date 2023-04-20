@@ -69,6 +69,11 @@ spec_position = describe "parsing deltas" $ do
        getCols (quoted x) === Right (cols (quoted x))
   where
 
+    -- Check that `pactAttoParseOnly` parses a `Text` as a string literal
+    -- and produces the Delta that we would expect (it has the number of
+    -- characters and the number of bytes that `text` and `bytestring`
+    -- report).
+    check :: T.Text -> Spec
     check s = it (show s) $ getCols s `shouldBe` Right (cols s)
 
     getCols :: T.Text -> Either String D.Delta
@@ -127,6 +132,8 @@ instance Arbitrary Lit where
 quoted :: T.Text -> T.Text
 quoted s = "\"" <> s <> "\""
 
+-- | Produce a trifecta Delta from a given `Text` string.
+--   `Columns` arguments are the number of characters and the number of bytes.
 cols :: T.Text -> D.Delta
 #if MIN_VERSION_text(2,0,0)
 cols s = D.Columns (fromIntegral $ T.length s) (fromIntegral $ B.length (T.encodeUtf8 s))
