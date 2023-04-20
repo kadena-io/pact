@@ -55,7 +55,9 @@ module Pact.Types.Runtime
    module Pact.Types.ChainMeta,
    module Pact.Types.PactError,
    liftIO,
-   eAdvise
+   eAdvise,
+   isInReplForkedError,
+   OnChainErrorState(..)
    ) where
 
 
@@ -77,6 +79,7 @@ import Data.Text (Text,pack)
 import Data.Set(Set)
 import GHC.Generics (Generic)
 
+import Pact.Types.Term
 import Pact.Types.Capability
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
@@ -180,8 +183,10 @@ data ExecutionFlag
   | FlagDisableNewTrans
   -- | Disable Pact 4.5 Features
   | FlagDisablePact45
-    -- | Disable Pact 4.6 Features
+  -- | Disable Pact 4.6 Features
   | FlagDisablePact46
+  -- | Disable Pact 4.7 Features
+  | FlagDisablePact47
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -434,17 +439,44 @@ throwArgsError FunApp {..} args s = throwErr ArgsError _faInfo $
   pretty s <> ", received " <> bracketsSep (map pretty args) <> " for " <>
             prettyFunTypes _faTypes
 
+throwOnChainArgsError :: Pretty n => FunApp -> [Term n] -> Eval e a
+throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
+  "Invalid arguments in call to"
+    <+> pretty _faName
+    <> ", received arguments of type "
+    <> bracketsSep (map (pretty . typeof') args) <> ", expected "
+    <> prettyFunTypes _faTypes
+
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
-throwErr ctor i err = get >>= \s -> throwM (PactError ctor i (_evalCallStack s) err)
+throwErr ctor i err = do
+  s <- use evalCallStack
+  inReplOrPreFork <- isInReplForkedError'
+  throwM (PactError ctor i (if inReplOrPreFork then s else []) err)
 
 evalError :: Info -> Doc -> Eval e a
-evalError i = throwErr EvalError i
+evalError = throwErr EvalError
 
 evalError' :: HasInfo i => i -> Doc -> Eval e a
 evalError' = evalError . getInfo
 
+data OnChainErrorState
+  = OnChainError
+  | OffChainError
+  deriving (Eq, Show)
+
+-- | Function to determine whether we are either pre-errors fork
+-- or in a repl environment.
+isInReplForkedError :: Eval e OnChainErrorState
+isInReplForkedError = isInReplForkedError' <&> \p -> if p then OffChainError else OnChainError
+
+isInReplForkedError' :: Eval e Bool
+isInReplForkedError' =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> pure True
+    False -> view eeInRepl
+
 failTx :: Info -> Doc -> Eval e a
-failTx i = throwErr TxFailure i
+failTx = throwErr TxFailure
 
 failTx' :: HasInfo i => i -> Doc -> Eval e a
 failTx' = failTx . getInfo
@@ -461,10 +493,16 @@ throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) r
 
 
 argsError :: FunApp -> [Term Name] -> Eval e a
-argsError i as = throwArgsError i as "Invalid arguments"
+argsError i as =
+  isInReplForkedError >>= \case
+    OffChainError -> throwArgsError i as "Invalid arguments"
+    OnChainError -> throwOnChainArgsError i as
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
-argsError' i as = throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
+argsError' i as =
+  isInReplForkedError >>= \case
+    OffChainError -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
+    OnChainError -> throwOnChainArgsError i as
 
 eAdvise :: Info -> AdviceContext r -> Eval e (r -> Eval e ())
 eAdvise i m = view eeAdvice >>= \adv -> advise i adv m
