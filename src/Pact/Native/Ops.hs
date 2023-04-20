@@ -41,7 +41,7 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Pact.Native.Trans.TOps
+import Pact.Native.Trans
 
 
 modDef :: NativeDef
@@ -187,8 +187,8 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
     binop "log"
-          (liftLogDec fi trans_logBase)
-          (trans_logBaseInt fi)
+          (liftLogDec fi trans_log)
+          (trans_logInt fi)
           fi
           as
   log' fi as = argsError fi as

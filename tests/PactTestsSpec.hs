@@ -9,7 +9,6 @@ import Test.Hspec
 import Control.Concurrent
 import Control.Monad.State.Strict
 
-import Data.Decimal
 import Data.Either (isLeft, isRight)
 import Data.List
 import qualified Data.HashMap.Strict as HM
@@ -17,8 +16,6 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Text (unpack)
 import qualified Data.Text.IO as T
-import Test.QuickCheck
-import Test.QuickCheck.Monadic
 
 
 import Pact.Repl
@@ -29,9 +26,6 @@ import Pact.Types.Runtime
 import Pact.Persist.SQLite as SQLite
 import Pact.Interpreter
 import Pact.Parse (parsePact, legacyParsePact)
-import qualified Pact.Native.Trans.Musl as M
-import qualified Pact.Native.Trans.Types as T
-import qualified Pact.Native.Trans.TOps as T
 
 import System.Directory
 import System.FilePath
@@ -46,7 +40,6 @@ spec = do
   verifiedAccountsTest
   prodParserTests tests
   legacyProdParserTests tests
-  floatingPointTests
 
 
 pactTests :: [FilePath] -> Spec
@@ -200,70 +193,3 @@ checkLegacyProdParser expectSuccess fp = describe fp $ do
       pc `shouldSatisfy` isLeft
  where
   parse = legacyParsePact <$> T.readFile fp
-
-dec2F :: Decimal -> Double
-dec2F = fromRational . toRational
-
-f2Dec :: Double -> Decimal
-f2Dec = fromRational . toRational
-
-floatingPointTestsArity1
-  :: String
-  -> (Double -> Double)
-  -> (Double -> Double)
-  -> (Decimal -> T.TransResult Decimal)
-  -> Spec
-floatingPointTestsArity1 lbl f_double f_musl f_mpfr =
-  describe ("floating point tests: " ++ lbl) $ runIO $ do
-    quickCheck $ withMaxSuccess 1_000_000 $ \x -> monadicIO $ do
-      let dble = f_double (dec2F x)
-      unless (isNaN dble || isInfinite dble) $ do
-        let musl = f_musl (dec2F x)
-        unless (isNaN musl || isInfinite musl) $ do
-          let T.TransNumber mpfr = f_mpfr x
-          unless (f2Dec musl == mpfr) $ liftIO $ do
-            putStrLn $ "op   = " ++ lbl
-            putStrLn $ "x    = " ++ show x
-            putStrLn $ "dble = " ++ show (f2Dec dble)
-            putStrLn $ "musl = " ++ show (f2Dec musl)
-            putStrLn $ "mpfr = " ++ show mpfr
-            -- error "Results fail to match"
-
-floatingPointTestsArity2
-  :: String
-  -> (Double -> Double -> Double)
-  -> (Double -> Double -> Double)
-  -> (Decimal -> Decimal -> T.TransResult Decimal)
-  -> Spec
-floatingPointTestsArity2 lbl f_double f_musl f_mpfr =
-  describe ("floating point tests: " ++ lbl) $ runIO $ do
-    -- From the MPFR 4.1.0 documentation: ...with a precision of 53 bits and
-    -- in any of the four standard rounding modes, MPFR is able to exactly
-    -- reproduce all computations with double-precision machine floating-point
-    -- numbers (e.g., double type in C, with a C implementation that
-    -- rigorously follows Annex F of the ISO C99 standard and FP_CONTRACT
-    -- pragma set to OFF) on the four arithmetic operations and the square
-    -- root, except the default exponent range is much wider and subnormal
-    -- numbers are not implemented (but can be emulated).
-    quickCheck $ withMaxSuccess 1_000_000 $ \x y -> monadicIO $ do
-      let dble = f_double (dec2F x) (dec2F y)
-      unless (isNaN dble || isInfinite dble) $ do
-        let musl = f_musl (dec2F x) (dec2F y)
-        unless (isNaN musl || isInfinite musl) $ do
-          let T.TransNumber mpfr = f_mpfr x y
-          unless (f2Dec musl == mpfr) $ liftIO $ do
-            putStrLn $ "op   = " ++ lbl
-            putStrLn $ "x    = " ++ show x
-            putStrLn $ "y    = " ++ show y
-            putStrLn $ "dble = " ++ show (f2Dec dble)
-            putStrLn $ "musl = " ++ show (f2Dec musl)
-            putStrLn $ "mpfr = " ++ show mpfr
-            -- error "Results fail to match"
-
-floatingPointTests :: Spec
-floatingPointTests = do
-  floatingPointTestsArity1 "exp" exp M.trans_exp T.mpfr_exp
-  floatingPointTestsArity1 "ln" Prelude.log M.trans_ln T.mpfr_ln
-  floatingPointTestsArity2 "logBase" logBase M.trans_log T.mpfr_log
-  floatingPointTestsArity2 "pow" (**) M.trans_pow T.mpfr_pow
-  floatingPointTestsArity1 "sqrt" sqrt M.trans_sqrt T.mpfr_sqrt

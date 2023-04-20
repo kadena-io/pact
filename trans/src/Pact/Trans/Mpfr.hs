@@ -6,43 +6,20 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
 -- |
--- Module      :  Pact.Native.Trans.Types
--- Copyright   :  (C) 2022 John Wiegley
+-- Module      :  Pact.Trans.Mpfr
+-- Copyright   :  (C) 2023 John Wiegley
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  John Wiegley <john@kadena.io>
 --
--- Operators and math built-ins.
+-- Operators and math built-ins based on the MPFR library.
 --
 
-module Pact.Native.Trans.Types
-  ( TransResult(..)
-  , mpfr_arity1
-  , mpfr_arity2
-  , c'mpz_init
-  , c'mpz_clear
-  , c'mpz_set_str
-  , c'mpz_get_str
-  , c'mpq_init
-  , c'mpq_clear
-  , c'mpq_set_str
-  , c'mpq_get_str
-  , c'mpfr_init
-  , c'mpfr_set_default_prec
-  , c'mpfr_clear
-  , c'mpfr_set_str
-  , c'mpfr_set_q
-  , c'mpfr_get_q
-  , c'mpfr_div
-  , c'mpfr_pow
-  , c'mpfr_log
-  , c'mpfr_log2
-  , c'mpfr_log10
-  , c'mpfr_exp
-  , c'mpfr_exp2
-  , c'mpfr_exp10
-  , c'mpfr_sqrt
-  , c'mpfr_snprintf
-  , withTemp
+module Pact.Trans.Mpfr
+  ( mpfr_exp
+  , mpfr_ln
+  , mpfr_log
+  , mpfr_pow
+  , mpfr_sqrt
   ) where
 
 import Control.Exception
@@ -56,13 +33,7 @@ import Foreign.Marshal.Alloc (alloca, free)
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe (unsafePerformIO)
-
-data TransResult a
-  = TransNumber !a
-  | TransNaN
-  | TransInf
-  | TransNegInf
-  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+import Pact.Trans.Types
 
 data MPZ = MPZ {
   _mpzAlloc :: {-# UNPACK #-} !Int32,
@@ -134,30 +105,8 @@ c'MPFR_RNDNA = -1  -- round to nearest, with ties away from zero (mpfr_round)
 rounding :: CInt
 rounding = c'MPFR_RNDN
 
-{-
-readResultNumber :: String -> TransResult Decimal
-readResultNumber (' ':s) = readResultNumber s
-readResultNumber "nan" = TransNaN
-readResultNumber "inf" = TransInf
-readResultNumber "-inf" = TransNegInf
-readResultNumber n = TransNumber (read (trimZeroes n))
--}
-
-type Mpz_t = Ptr MPZ
 type Mpq_t = Ptr MPQ
 type Mpfr_t = Ptr MPFR
-
-foreign import ccall "__gmpz_init"
-  c'mpz_init :: Mpz_t -> IO ()
-
-foreign import ccall "__gmpz_clear"
-  c'mpz_clear :: Mpz_t -> IO ()
-
-foreign import ccall "__gmpz_set_str"
-  c'mpz_set_str :: Mpz_t -> Ptr CChar -> CInt -> IO ()
-
-foreign import ccall "__gmpz_get_str"
-  c'mpz_get_str :: Ptr CChar -> CInt -> Mpz_t -> IO (Ptr CChar)
 
 foreign import ccall "__gmpq_init"
   c'mpq_init :: Mpq_t -> IO ()
@@ -174,14 +123,8 @@ foreign import ccall "__gmpq_get_str"
 foreign import ccall "mpfr_init"
   c'mpfr_init :: Mpfr_t -> IO ()
 
-foreign import ccall "mpfr_set_default_prec"
-  c'mpfr_set_default_prec :: CInt -> IO ()
-
 foreign import ccall "mpfr_clear"
   c'mpfr_clear :: Mpfr_t -> IO ()
-
-foreign import ccall "mpfr_set_str"
-  c'mpfr_set_str :: Mpfr_t -> Ptr CChar -> CInt -> CInt -> IO ()
 
 foreign import ccall "mpfr_set_q"
   c'mpfr_set_q :: Mpfr_t -> Mpq_t -> CInt -> IO ()
@@ -198,32 +141,35 @@ foreign import ccall "mpfr_pow"
 foreign import ccall "mpfr_log"
   c'mpfr_log :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
 
-foreign import ccall "mpfr_log2"
-  c'mpfr_log2 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
-
-foreign import ccall "mpfr_log10"
-  c'mpfr_log10 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
-
 foreign import ccall "mpfr_exp"
   c'mpfr_exp :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
-
-foreign import ccall "mpfr_exp2"
-  c'mpfr_exp2 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
-
-foreign import ccall "mpfr_exp10"
-  c'mpfr_exp10 :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
 
 foreign import ccall "mpfr_sqrt"
   c'mpfr_sqrt :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
 
-foreign import ccall "mpfr_snprintf"
-  c'mpfr_snprintf :: Ptr CChar -> CInt -> Ptr CChar -> CInt -> Mpfr_t -> IO ()
+{-------------------------------------------------------------------------
+ -- OPERATIONS
+ -------------------------------------------------------------------------}
 
-{-
-withTempz :: (Mpz_t -> IO a) -> IO a
-withTempz k = alloca $ \x ->
-  bracket_ (c'mpz_init x) (c'mpz_clear x) (k x)
--}
+mpfr_exp :: Decimal -> TransResult Decimal
+mpfr_exp = mpfr_arity1 c'mpfr_exp
+
+mpfr_ln :: Decimal -> TransResult Decimal
+mpfr_ln = mpfr_arity1 c'mpfr_log
+
+mpfr_log :: Decimal -> Decimal -> TransResult Decimal
+mpfr_log = mpfr_arity2 $ \z' x' y' rnd ->
+  withTemp $ \x'' ->
+  withTemp $ \y'' -> do
+    c'mpfr_log x'' x' rnd
+    c'mpfr_log y'' y' rnd
+    c'mpfr_div z' y'' x'' rnd
+
+mpfr_pow :: Decimal -> Decimal -> TransResult Decimal
+mpfr_pow = mpfr_arity2 c'mpfr_pow
+
+mpfr_sqrt :: Decimal -> TransResult Decimal
+mpfr_sqrt = mpfr_arity1 c'mpfr_sqrt
 
 withTempq :: (Mpq_t -> IO a) -> IO a
 withTempq k = alloca $ \x ->
@@ -251,10 +197,23 @@ mpfr2Dec m =
     out <- c'mpq_get_str nullPtr 10 q
     buf <- peekCString out
     free out
-    let val = case break (== '/') buf of
-                (before, []) -> read before % 1
-                (before, _:after) -> read before % read after
-    pure $ TransNumber $ fromRational val
+    pure $ case break (== '/') buf of
+      (before, []) -> readResultNumber before
+      (before, _:after) -> TransNumber (fromRational (read before % read after))
+  where
+  readResultNumber :: String -> TransResult Decimal
+  readResultNumber (' ':s) = readResultNumber s
+  readResultNumber "nan" = TransNaN 0
+  readResultNumber "inf" = TransInf 0
+  readResultNumber "-inf" = TransNegInf 0
+  readResultNumber n = TransNumber (fromRational (read (trimZeroes n) % 1))
+
+  trimZeroes :: String -> String
+  trimZeroes = reverse . go . reverse
+    where
+    go ('0':s) = go s
+    go ('.':s) = "0." ++ s
+    go s = s
 
 mpfr_arity1
   :: (Mpfr_t -> Mpfr_t -> CInt -> IO ()) -> Decimal -> TransResult Decimal
@@ -273,12 +232,3 @@ mpfr_arity2 f x y = unsafePerformIO $
   withTemp $ \z' -> do
     f z' x' y' rounding
     mpfr2Dec z'
-
-{-
-trimZeroes :: String -> String
-trimZeroes = reverse . go . reverse
-  where
-  go ('0':s) = go s
-  go ('.':s) = "0." ++ s
-  go s = s
--}
