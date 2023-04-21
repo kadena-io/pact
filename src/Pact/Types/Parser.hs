@@ -26,10 +26,13 @@ module Pact.Types.Parser
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.State
+import Control.Monad.State.Strict
 
+#if ! (MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1)
 import qualified Data.Attoparsec.Internal.Types as APT
+#endif
 import qualified Data.Attoparsec.Text as AP
+import Data.Char
 import qualified Data.HashSet as HS
 import qualified Data.Text as T
 
@@ -73,7 +76,9 @@ style = IdentifierStyle "atom"
 newtype PactAttoparsec a = PactAttoparsec
     { runPactAttoparsec :: StateT Int AP.Parser a }
     deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadState Int)
-    deriving (Parsing, TokenParsing)
+    deriving (Parsing)
+
+-- The TokenParsing instance of StateT is buggy, so we can't derive from it
 
 pactAttoParseOnly :: PactAttoparsec a -> T.Text -> Either String a
 pactAttoParseOnly = AP.parseOnly . flip evalStateT 0 . runPactAttoparsec
@@ -113,33 +118,40 @@ instance DeltaParsing PactAttoparsec where
     --
     position = do
 #if MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1
-        -- This will almost surely cause trouble because for utf-8 neither the
-        -- number of bytes nor the number of characters correspond with the
-        -- number of 16bit code units which the legacy parser returns.
-        APT.Pos !tmp <- parserPos
-        let !bytePos = tmp `div` 2
-        let !charPos = fromIntegral bytePos
+        -- For the Utf-8 legacy parser we do the following: count numbers of
+        -- chars and leave the rest of the code unchanged. Most of the time
+        -- (including characters that require more than 8 bits in Utf-8) the
+        -- result is the same as for the utf-16 legacy parser. We have to apply
+        -- fixes for those cases when unicode characters are parsed that require
+        -- more than 16bit in UTF-16. We detect the later by comparing the
+        -- character count and the byte count.
+
+        -- This returns a number that is considerably smaller than the number
+        -- of bytes even for inputs that contain only ascii!
+        --
+        !charPos <- gets fromIntegral
+        let !bytePos = charPos
+
+        -- This works for almost all blocks:
+        -- APT.Pos !bytePos <- parserPos
+        -- let !charPos = fromIntegral bytePos
 
 #elif MIN_VERSION_text(2,0,0)
-        -- This is probably our best bet, because for most text the number
-        -- of bytes matches the number of characters. However, this correspondence
-        -- is much more flaky than for utf-16 and 16bit code units.
-        --
-        -- We would need special cases for on chain data that includes unicode
-        -- code points that require more than a single byte and affect on-chain
-        -- representation.
-        --
-        -- Some code logic may require both values for bytes and characters
-        -- to be equal as was the case with the legacy parser. We should try to
-        -- fix that logic, if possible.
+        -- This parser produces semantically correct deltas, but is not
+        -- backward compatible.
         APT.Pos !bytePos <- parserPos
         !charPos <- gets fromIntegral
 
 #elif LEGACY_PARSER == 1
-        -- This is our legacy parser
+        -- The Utf-16 legacy parser counts 16bit code units, which is almost the
+        -- number of chars. The code then assumes that it is the number of
+        -- chars. The parser does not distiguish between bytes and character
+        -- counts.
         APT.Pos !bytePos <- parserPos
         let !charPos = fromIntegral bytePos
 #else
+        -- This parser produces semantically correct deltas, but is not
+        -- backward compatible.
         APT.Pos !bytePos <- (* 2) <$> parserPos
         !charPos <- gets fromIntegral
 #endif
@@ -150,6 +162,7 @@ instance DeltaParsing PactAttoparsec where
     rend = return mempty
     restOfLine = return mempty
 
+#if ! (MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1)
 -- | retrieve pos from Attoparsec.
 --
 -- For text <2 this is the offset in utf-16 code units, which are
@@ -162,14 +175,49 @@ instance DeltaParsing PactAttoparsec where
 parserPos :: PactAttoparsec APT.Pos
 parserPos = PactAttoparsec $ StateT $ \x ->
     APT.Parser $ \t !pos more _lose win -> win t pos more (pos, x)
+#endif
 
 instance CharParsing PactAttoparsec where
     satisfy p = PactAttoparsec (satisfy p) <* modify' (+ 1)
+        -- if fromEnum p > 0xffff then
     {-# INLINE satisfy #-}
 
-    string s = PactAttoparsec (string s) <* modify' (+ length s)
-    {-# INLINE string #-}
+    -- char p = PactAttoparsec (char p) <* modify' (+ 1)
+    -- {-# INLINE notChar #-}
 
-    text s = PactAttoparsec (text s) <* modify' (+ T.length s)
-    {-# INLINE text #-}
+    -- notChar p = PactAttoparsec (notChar p) <* modify' (+ 1)
+    -- {-# INLINE char #-}
+
+    -- It seems like these are both implemented in terms of satisfy
+    --
+    -- string s = PactAttoparsec (string s) <* modify' (+ length s)
+    -- {-# INLINE string #-}
+
+    -- text s = PactAttoparsec (text s) <* modify' (+ T.length s)
+    -- {-# INLINE text #-}
+
+-- Work around buggy TokenParsing instance of StateT
+--
+instance TokenParsing PactAttoparsec where
+    someSpace = skipSome (satisfy isSpace)
+    {-# INLINE someSpace #-}
+    semi = token (satisfy (';'==) <?> ";")
+    {-# INLINE semi #-}
+
+-- instance (TokenParsing m, MonadPlus m) => TokenParsing (Strict.StateT s m) where
+--   nesting (Strict.StateT m) = Strict.StateT $ nesting . m
+--   {-# INLINE nesting #-}
+--   someSpace = lift someSpace -- FIXME this is problematic. We should have used the default method instead
+--   {-# INLINE someSpace #-}
+--   semi      = lift semi -- FIXME this is problematic. We shoudl have used the default method instead
+--   {-# INLINE semi #-}
+--   highlight h (Strict.StateT m) = Strict.StateT $ highlight h . m
+--   {-# INLINE highlight #-}
+
+-- instance Parsing PactAttoparsec where
+--     try (PactAttoparsec (StateT p)) = PactAttoparsec $ StateT $ \s -> try (p s)
+--     PactAttoparsec p <?> l = PactAttoparsec $ p <?> l
+--     notFollowedBy (PactAttoparsec p) = PactAttoparsec $ notFollowedBy p
+--     unexpected c = PactAttoparsec $ unexpected c
+--     eof = PactAttoparsec eof
 

@@ -69,7 +69,7 @@ expr = do
   delt <- position
   let inf = do
         end <- position
-#if LEGACY_PARSER == 1
+#if DELTA_BYTES == 1
         let len = bytes end - bytes delt
 #else
         let len = column end - column delt
