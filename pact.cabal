@@ -423,6 +423,7 @@ test-suite hspec
       , semirings
       , text
       , transformers
+        , trifecta
       , vector
 
     if flag(build-tool)
@@ -467,7 +468,6 @@ test-suite hspec
         , sbv
         , servant-client >=0.16
         , temporary >=1.3
-        , trifecta
         , yaml
         , process
         , posix-pty
