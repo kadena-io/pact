@@ -93,42 +93,42 @@ instance DeltaParsing PactAttoparsec where
     --
     -- Notes about legacy behavior:
     --
-    -- For text <2 it used to return for both values the number of 16-bit code
-    -- units words. With the UTF-16 encoding used by text <2 this is the total
-    -- number of characters plus number of characters that are encoded using two
-    -- 16-bit code units. For instance the Ugaritic letter U+1038D would result
-    -- in a positional length of two (two 16-bit code units). The string
-    -- "a\0x263A\0x1038D" ("a☺𐎍") would have positional length 4 (3 characters
-    -- plus one 2 16-bit character).
+    -- For text <2 the parser used to return for both delta values the number of
+    -- 16-bit code unit words. With the UTF-16 encoding used by text <2 this is
+    -- the total number of characters plus number of characters that are encoded
+    -- using two 16-bit code units. For instance the Ugaritic letter U+1038D
+    -- would result in a positional length of two (two 16-bit code units). The
+    -- string "a\0x263A\0x1038D" ("a☺𐎍") would have positional length 4 (3
+    -- characters plus one 2 16-bit character).
     --
     -- In practice the old behavior was close enough to the number of characters
-    -- that it went mostly unnoticed and didn't cause harm on chain. The code
-    -- just assumed that it represented the number text characters. Those
-    -- numbers appear on chain (up to some block height) within info objects and
-    -- later still in failure messages. It is also relevant for extracting the
-    -- module text from the pact transaction before storing it in the pact db.
-    -- The presence of unicode characters can result in modules containing
-    -- dangling data because there are less characters in the module than what
-    -- is assumed based on the position information.
+    -- that it went unnoticed and didn't cause harm on chain. The code just
+    -- assumed that it represented the number text characters. Those numbers
+    -- appear on chain (up to some block height) within info objects and later
+    -- still in failure messages. It is also relevant for extracting the module
+    -- text from a pact transaction before storing it in the pact db. The
+    -- presence of unicode characters can result in modules containing dangling
+    -- data because there are less characters in the module than what is assumed
+    -- based on the position information. It could also result in corrupted
+    -- module if unicode characters for code points > U+FFFF would appear in
+    -- in a transaction in a pact expression before the code of a module.
     --
     -- For text >=2 the attoparsic position tracks just bytes and the internal
-    -- representation of UTF-8. For instance the Ugaritic letter U+1038D results
+    -- representation is UTF-8. For instance the Ugaritic letter U+1038D results
     -- in a byte length of 4. The string "a\0x263A\0x1038D" ("a☺𐎍") has 8 bytes
     -- (1 code unit plus 3 code unit plus 4 code units).
     --
     position = do
 #if MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1
+
         -- For the Utf-8 legacy parser we do the following: count numbers of
         -- chars and leave the rest of the code unchanged. Most of the time
         -- (including characters that require more than 8 bits in Utf-8) the
         -- result is the same as for the utf-16 legacy parser. We have to apply
         -- fixes for those cases when unicode characters are parsed that require
-        -- more than 16bit in UTF-16. We detect the later by comparing the
-        -- character count and the byte count.
+        -- more than 16bit in UTF-16, which is done below in the 'CharParsing'
+        -- instance for 'PactAttoParsec'.
 
-        -- This returns a number that is considerably smaller than the number
-        -- of bytes even for inputs that contain only ascii!
-        --
         !charPos <- gets fromIntegral
         let !bytePos = charPos
 
@@ -178,46 +178,35 @@ parserPos = PactAttoparsec $ StateT $ \x ->
 #endif
 
 instance CharParsing PactAttoparsec where
-    satisfy p = PactAttoparsec (satisfy p) <* modify' (+ 1)
-        -- if fromEnum p > 0xffff then
+#if MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1
+    satisfy p = do
+        c <- PactAttoparsec (satisfy p)
+        -- This fixes the case when the legacy parser counts two
+        -- utf-16 code units for a single character.
+        modify' (+ if fromEnum c > 0xffff then 2 else 1)
+        return c
+#else
+    satisfy p = PactAttoparsec (satisfy p) <* do
+        modify' (+ 1)
+#endif
     {-# INLINE satisfy #-}
 
-    -- char p = PactAttoparsec (char p) <* modify' (+ 1)
-    -- {-# INLINE notChar #-}
-
-    -- notChar p = PactAttoparsec (notChar p) <* modify' (+ 1)
-    -- {-# INLINE char #-}
-
-    -- It seems like these are both implemented in terms of satisfy
-    --
-    -- string s = PactAttoparsec (string s) <* modify' (+ length s)
-    -- {-# INLINE string #-}
-
-    -- text s = PactAttoparsec (text s) <* modify' (+ T.length s)
-    -- {-# INLINE text #-}
-
--- Work around buggy TokenParsing instance of StateT
+-- | Work around buggy TokenParsing instance of StateT.
+--
+-- The 'TokenParsing' instance for 'StateT' overwrites the default implementations
+-- fo 'someSpace' and 'semi' as follows:
+--
+-- @
+--   someSpace = lift someSpace
+--   semi      = lift semi
+-- @
+--
+-- This is problematic since it bypasses the 'Parsing' and 'CharParsing'
+-- instances for 'PactAttoParsec'.
 --
 instance TokenParsing PactAttoparsec where
     someSpace = skipSome (satisfy isSpace)
     {-# INLINE someSpace #-}
     semi = token (satisfy (';'==) <?> ";")
     {-# INLINE semi #-}
-
--- instance (TokenParsing m, MonadPlus m) => TokenParsing (Strict.StateT s m) where
---   nesting (Strict.StateT m) = Strict.StateT $ nesting . m
---   {-# INLINE nesting #-}
---   someSpace = lift someSpace -- FIXME this is problematic. We should have used the default method instead
---   {-# INLINE someSpace #-}
---   semi      = lift semi -- FIXME this is problematic. We shoudl have used the default method instead
---   {-# INLINE semi #-}
---   highlight h (Strict.StateT m) = Strict.StateT $ highlight h . m
---   {-# INLINE highlight #-}
-
--- instance Parsing PactAttoparsec where
---     try (PactAttoparsec (StateT p)) = PactAttoparsec $ StateT $ \s -> try (p s)
---     PactAttoparsec p <?> l = PactAttoparsec $ p <?> l
---     notFollowedBy (PactAttoparsec p) = PactAttoparsec $ notFollowedBy p
---     unexpected c = PactAttoparsec $ unexpected c
---     eof = PactAttoparsec eof
 

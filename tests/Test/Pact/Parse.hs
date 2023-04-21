@@ -64,6 +64,7 @@ spec_position = describe "parsing deltas" $ do
     describe "4-byte utf-8" $ do
         check "\"\x1038D\""
         check "\"\x1038D\x10385\""
+        check "\"🕷💜🐈\"" --chain 1, height 2843158
 
     prop "parse delta" $ \x ->
         let s = T.pack (show @T.Text x)
