@@ -36,6 +36,7 @@ import Data.Default
 import qualified Data.Map.Strict as M
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Pact.Trans.Dec as Dec
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -331,7 +332,7 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
     where fun :: RNativeFun e
           fun _ [TLiteral (LDecimal d) _] = return $ tLit $ LInteger $ truncate $ roundTo' op 0 d
           fun i [TLiteral (LDecimal d) _,TLitInteger p]
-              | p >= 0 = return $ toTerm $ roundTo' op (fromIntegral p) d
+              | p >= 0 = return $ toTerm $ Dec.dec_reduce $ roundTo' op (fromIntegral p) d
               | otherwise = evalError' i "Negative precision not allowed"
           fun i as = argsError i as
 
@@ -436,7 +437,7 @@ liftIntegerOp f a b = do
 liftDecimalOp :: (Decimal -> Decimal -> Decimal) -> Decimal -> Decimal -> Eval e Decimal
 liftDecimalOp f a b = do
   unlessExecutionFlagSet FlagDisablePact43 $ twoArgDecOpGas a b
-  pure (f a b)
+  pure (Dec.dec_reduce $ f a b)
 
 
 binop'
@@ -456,20 +457,20 @@ binop ndef dop iop fi as@[TLiteral a _,TLiteral b _] = do
   case (a,b) of
     (LInteger i,LInteger j) -> toTerm <$> (i `iop` j)
     (LDecimal i,LDecimal j) ->
-      toTerm <$> (i `dop` j)
+      toTerm <$> (Dec.dec_reduce <$> i `dop` j)
     (LInteger i,LDecimal j) -> do
       emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
-      toTerm <$> (fromIntegral i `dop` j)
+      toTerm <$> (Dec.dec_reduce <$> fromIntegral i `dop` j)
     (LDecimal i,LInteger j) -> do
       emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
-      toTerm <$> (i `dop` fromIntegral j)
+      toTerm <$> (Dec.dec_reduce <$> i `dop` fromIntegral j)
     _ -> argsError fi as
 binop _ _ _ fi as = argsError fi as
 {-# INLINE binop #-}
 
 unopd :: (forall i. HasInfo i => i -> Decimal -> Eval e Decimal) -> RNativeFun e
 unopd op fi [TLitInteger i] = toTerm <$> op fi (fromIntegral i)
-unopd op fi [TLiteral (LDecimal n) _] = toTerm <$> op fi n
+unopd op fi [TLiteral (LDecimal n) _] = toTerm <$> Dec.dec_reduce <$> op fi n
 unopd _ i as = argsError i as
 
 

@@ -19,33 +19,67 @@ module Pact.Trans.Dec
   , dec_log
   , dec_pow
   , dec_sqrt
+  , dec_reduce
   ) where
 
-import qualified Data.Decimal as Decimal
-import Numeric.Decimal hiding (Precision)
+import qualified Data.Decimal as D
+import Numeric.Decimal
+import qualified Numeric.Decimal.Number as N
 import Numeric.Decimal.Arithmetic
 import qualified Numeric.Decimal.Operation as Op
 import Pact.Trans.Types
 
-type Precision = P43
+type Prec = P43
 
-dec_exp :: Decimal.Decimal -> TransResult Decimal.Decimal
-dec_exp x = TransNumber $ fromRational $ toRational $
-  case evalArith (Op.reduce =<< Op.exp (fromRational (toRational x) :: ExtendedDecimal Precision)
-                  :: Arith Precision RoundHalfEven (ExtendedDecimal Precision))
+toDecimal :: Decimal p r -> TransResult D.Decimal
+toDecimal N.Num { N.sign = s, N.coefficient = c, N.exponent = e } =
+  TransNumber $
+    D.Decimal { D.decimalPlaces = negate (fromIntegral e)
+              , D.decimalMantissa =
+                (case s of
+                   Op.Neg -> negate
+                   Op.Pos -> id) (fromIntegral c)
+              }
+toDecimal (N.Inf Op.Neg) = TransNegInf 0
+toDecimal (N.Inf Op.Pos) = TransInf 0
+toDecimal N.NaN {} = TransNaN 0
+
+fromDecimal :: D.Decimal -> Decimal p r
+fromDecimal D.Decimal { D.decimalPlaces = e, D.decimalMantissa = c } =
+  N.Num { N.sign = if c < 0
+                   then Op.Neg
+                   else Op.Pos
+        , N.coefficient = fromIntegral c
+        , N.exponent = negate (toInteger e)
+        }
+
+dec_reduce :: D.Decimal -> D.Decimal
+dec_reduce x =
+  case evalArith (Op.reduce (fromDecimal x :: ExtendedDecimal Prec)
+                  :: Arith Prec RoundHalfEven (ExtendedDecimal Prec))
+       extendedDefaultContext of
+    Left err -> error $ "reduce error: " ++ show err
+    Right n -> case toDecimal $ n of
+      TransNumber n' -> n'
+      e -> error $ "reduce error: " ++ show e
+
+dec_exp :: D.Decimal -> TransResult D.Decimal
+dec_exp x = toDecimal $
+  case evalArith (Op.reduce =<< Op.exp (fromDecimal x :: ExtendedDecimal Prec)
+                  :: Arith Prec RoundHalfEven (ExtendedDecimal Prec))
        extendedDefaultContext of
     Left err -> error $ "exp error: " ++ show err
     Right n -> n
 
-dec_ln :: Decimal.Decimal -> TransResult Decimal.Decimal
-dec_ln x = TransNumber $ fromRational $ toRational $
-  case evalArith (Op.reduce =<< Op.ln (fromRational (toRational x) :: ExtendedDecimal Precision)
-                  :: Arith Precision RoundHalfEven (ExtendedDecimal Precision))
+dec_ln :: D.Decimal -> TransResult D.Decimal
+dec_ln x = toDecimal $
+  case evalArith (Op.reduce =<< Op.ln (fromDecimal x :: ExtendedDecimal Prec)
+                  :: Arith Prec RoundHalfEven (ExtendedDecimal Prec))
        extendedDefaultContext of
     Left err -> error $ "ln error: " ++ show err
     Right n -> n
 
-dec_log :: Decimal.Decimal -> Decimal.Decimal -> TransResult Decimal.Decimal
+dec_log :: D.Decimal -> D.Decimal -> TransResult D.Decimal
 dec_log b x =
   case dec_ln x of
     TransNumber x' ->
@@ -54,19 +88,19 @@ dec_log b x =
         b' -> b'
     x' -> x'
 
-dec_pow :: Decimal.Decimal -> Decimal.Decimal -> TransResult Decimal.Decimal
-dec_pow x y = TransNumber $ fromRational $ toRational $
-  case evalArith (Op.reduce =<< Op.power (fromRational (toRational x) :: ExtendedDecimal Precision)
-                   (fromRational (toRational y) :: ExtendedDecimal Precision)
-                  :: Arith Precision RoundHalfEven (ExtendedDecimal Precision))
+dec_pow :: D.Decimal -> D.Decimal -> TransResult D.Decimal
+dec_pow x y = toDecimal $
+  case evalArith (Op.reduce =<< Op.power (fromDecimal x :: ExtendedDecimal Prec)
+                   (fromDecimal y :: ExtendedDecimal Prec)
+                  :: Arith Prec RoundHalfEven (ExtendedDecimal Prec))
        extendedDefaultContext of
     Left err -> error $ "pow error: " ++ show err
     Right n -> n
 
-dec_sqrt :: Decimal.Decimal -> TransResult Decimal.Decimal
-dec_sqrt x = TransNumber $ fromRational $ toRational $
-  case evalArith (Op.reduce =<< Op.squareRoot (fromRational (toRational x) :: ExtendedDecimal Precision)
-                  :: Arith Precision RoundHalfEven (ExtendedDecimal Precision))
+dec_sqrt :: D.Decimal -> TransResult D.Decimal
+dec_sqrt x = toDecimal $
+  case evalArith (Op.reduce =<< Op.squareRoot (fromDecimal x :: ExtendedDecimal Prec)
+                  :: Arith Prec RoundHalfEven (ExtendedDecimal Prec))
        extendedDefaultContext of
     Left err -> error $ "sqrt error: " ++ show err
     Right n -> n

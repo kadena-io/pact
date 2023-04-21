@@ -459,7 +459,7 @@ library pact-trans
         , integer-gmp
   build-depends:
     , Decimal >=0.4.2
-    , decimal-arithmetic >=0.5.1.0
+    , decimal-arithmetic >=0.5.1.1
   if !impl(ghcjs)
     c-sources:
       trans/cbits/musl/__math_invalid.c
