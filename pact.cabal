@@ -20,12 +20,12 @@ build-type:          Simple
 extra-source-files:
     README.md
     CHANGELOG.md
-    cbits/musl/libm.h
-    cbits/musl/endian.h
-    cbits/musl/exp_data.h
-    cbits/musl/log_data.h
-    cbits/musl/pow_data.h
-    cbits/musl/sqrt_data.h
+    trans/cbits/musl/libm.h
+    trans/cbits/musl/endian.h
+    trans/cbits/musl/exp_data.h
+    trans/cbits/musl/log_data.h
+    trans/cbits/musl/pow_data.h
+    trans/cbits/musl/sqrt_data.h
 
 flag cryptonite-ed25519
   description: use cryptonite instead of ed25519-donna
@@ -52,23 +52,6 @@ library
   hs-source-dirs: src
   default-language: Haskell2010
   ghc-prof-options: -fprof-auto -fprof-auto-calls
-  if !impl(ghcjs)
-    c-sources:
-      cbits/musl/__math_invalid.c
-      cbits/musl/__math_divzero.c
-      cbits/musl/__math_oflow.c
-      cbits/musl/__math_uflow.c
-      cbits/musl/__math_xflow.c
-      cbits/musl/exp.c
-      cbits/musl/exp_data.c
-      cbits/musl/log.c
-      cbits/musl/log_data.c
-      cbits/musl/pow.c
-      cbits/musl/pow_data.c
-      cbits/musl/sqrt.c
-      cbits/musl/sqrt_data.c
-    exposed-modules:
-      Pact.Native.Trans.TOps
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
@@ -83,6 +66,7 @@ library
     Pact.Native.Internal
     Pact.Native.SPV
     Pact.Native.Time
+    Pact.Native.Trans
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
@@ -148,6 +132,7 @@ library
       build-depends:
         , integer-gmp
   build-depends:
+    , pact-trans
     , Decimal >=0.4.2
     , QuickCheck >=2.12.6.1
     , aeson >=0.11.3.0
@@ -175,6 +160,7 @@ library
     , megaparsec >=9
     , mtl >=2.2.1
     , pact-time >=0.2
+    , pact-trans
     , parsers >=0.12.4
     , prettyprinter >=1.2
     , prettyprinter-ansi-terminal >=1.1
@@ -391,6 +377,8 @@ test-suite hspec
       SignatureSpec
 
     build-depends:
+      , Decimal >=0.4.2
+      , QuickCheck >=2.12.6.1
       , base16-bytestring
       , directory
       , errors
@@ -450,3 +438,87 @@ test-suite hspec
         , yaml
         , process
         , posix-pty
+
+-- Support for transcendental functions on decimal values
+
+library pact-trans
+  if impl(ghcjs)
+    buildable: False
+  hs-source-dirs: trans/src
+  default-language: Haskell2010
+  ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  if flag(with-integer-gmp)
+    build-depends:
+        , base >=4.15.0.0
+  else
+    build-depends:
+      , base >=4.9.0.0 && < 4.15.0.0
+    if !impl(ghcjs)
+      build-depends:
+        , integer-gmp
+  build-depends:
+    , Decimal >=0.4.2
+    , decimal-arithmetic >=0.5.1.1
+  if !impl(ghcjs)
+    c-sources:
+      trans/cbits/musl/__math_invalid.c
+      trans/cbits/musl/__math_divzero.c
+      trans/cbits/musl/__math_oflow.c
+      trans/cbits/musl/__math_uflow.c
+      trans/cbits/musl/__math_xflow.c
+      trans/cbits/musl/exp.c
+      trans/cbits/musl/exp_data.c
+      trans/cbits/musl/log.c
+      trans/cbits/musl/log_data.c
+      trans/cbits/musl/pow.c
+      trans/cbits/musl/pow_data.c
+      trans/cbits/musl/sqrt.c
+      trans/cbits/musl/sqrt_data.c
+    exposed-modules:
+      Pact.Trans.Musl
+    extra-libraries:
+      gmp
+  exposed-modules:
+    Pact.Trans.Types
+    Pact.Trans.Dec
+    Pact.Trans.Dbl
+
+test-suite trans-spec
+  main-is:          TransSpec.hs
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   trans/tests
+  default-language: Haskell2010
+  ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  if flag(with-integer-gmp)
+    build-depends:
+        , base >=4.15.0.0
+  else
+    build-depends:
+      , base >=4.9.0.0 && < 4.15.0.0
+    if !impl(ghcjs)
+      build-depends:
+        , integer-gmp
+  build-depends:
+    , base
+    , Decimal >=0.4.2
+    , QuickCheck >=2.12.6.1
+    , hspec
+    , hspec-core
+    , pact-trans
+
+-- This executable allows us to easily check for consistency of results on
+-- different platforms.
+
+executable powtest
+  if impl(ghcjs) || !flag(build-tool)
+    buildable: False
+  main-is:             PowTest.hs
+  build-depends:       base
+                     , pact-trans
+  hs-source-dirs:      trans/bin
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+  build-depends:
+    , Decimal >= 0.4.2 && < 0.6

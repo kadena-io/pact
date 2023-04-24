@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,6 +8,7 @@ module GasModelSpec (spec) where
 
 import Test.Hspec
 import Test.Hspec.Golden as G
+import Test.Hspec.Core.Spec
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as BL
@@ -42,9 +42,6 @@ import Pact.GasModel.Utils
 import Pact.GasModel.GasTests
 import Pact.Gas.Table
 import Pact.Native
-#if !MIN_VERSION_hspec(2,10,10)
-import Test.Hspec.Core.Spec
-#endif
 
 spec :: Spec
 spec = describe "gas model tests" $ do
@@ -138,7 +135,8 @@ runTest t = runGasUnitTests t run run
       let
         flags = mkExecutionConfig
                [ FlagDisableInlineMemCheck, FlagDisablePactEvents
-               , FlagDisablePact43, FlagDisablePact44, FlagDisablePact45]
+               , FlagDisablePact43, FlagDisablePact44, FlagDisablePact45,
+                 FlagDisableNewTrans, FlagDisableNewTransDec ]
         r' = set eeExecutionConfig flags r
       pure (r', s)
 

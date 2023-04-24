@@ -178,6 +178,8 @@ data ExecutionFlag
   | FlagDisablePact44
   -- | Disable new transcendental impls
   | FlagDisableNewTrans
+  -- | Disable new transcendental impls via decimal-arithmetic
+  | FlagDisableNewTransDec
   -- | Disable Pact 4.5 Features
   | FlagDisablePact45
     -- | Disable Pact 4.6 Features

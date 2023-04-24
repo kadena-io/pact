@@ -1,4 +1,6 @@
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 module PactTestsSpec (spec) where
 
@@ -14,6 +16,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Text (unpack)
 import qualified Data.Text.IO as T
+
 
 import Pact.Repl
 import Pact.Repl.Lib
