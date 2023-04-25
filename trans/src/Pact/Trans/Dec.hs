@@ -29,7 +29,7 @@ import Numeric.Decimal.Arithmetic
 import qualified Numeric.Decimal.Operation as Op
 import Pact.Trans.Types
 
-type Prec = P43
+type Prec = P100
 
 toDecimal :: Decimal p r -> TransResult D.Decimal
 toDecimal N.Num { N.sign = s, N.coefficient = c, N.exponent = e } =

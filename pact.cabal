@@ -477,8 +477,6 @@ library pact-trans
       trans/cbits/musl/sqrt_data.c
     exposed-modules:
       Pact.Trans.Musl
-    extra-libraries:
-      gmp
   exposed-modules:
     Pact.Trans.Types
     Pact.Trans.Dec

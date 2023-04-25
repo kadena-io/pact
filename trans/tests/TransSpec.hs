@@ -28,11 +28,11 @@ instance Arbitrary i => Arbitrary (DecimalRaw i) where
 main :: IO ()
 main = hspec $ do
   describe "TransSpec" $ do
-    floatingPointTestsArity1 "exp"  Dbl.dbl_exp  Musl.musl_exp  Mpfr.dec_exp
-    floatingPointTestsArity1 "ln"   Dbl.dbl_ln   Musl.musl_ln   Mpfr.dec_ln
-    floatingPointTestsArity2 "log"  Dbl.dbl_log  Musl.musl_log  Mpfr.dec_log
-    floatingPointTestsArity2 "pow"  Dbl.dbl_pow  Musl.musl_pow  Mpfr.dec_pow
-    floatingPointTestsArity1 "sqrt" Dbl.dbl_sqrt Musl.musl_sqrt Mpfr.dec_sqrt
+    floatingPointTestsArity1 "exp"  Dbl.dbl_exp  Musl.musl_exp  Dec.dec_exp
+    floatingPointTestsArity1 "ln"   Dbl.dbl_ln   Musl.musl_ln   Dec.dec_ln
+    floatingPointTestsArity2 "log"  Dbl.dbl_log  Musl.musl_log  Dec.dec_log
+    floatingPointTestsArity2 "pow"  Dbl.dbl_pow  Musl.musl_pow  Dec.dec_pow
+    floatingPointTestsArity1 "sqrt" Dbl.dbl_sqrt Musl.musl_sqrt Dec.dec_sqrt
 
 dec2F :: Decimal -> Double
 dec2F = fromRational . toRational

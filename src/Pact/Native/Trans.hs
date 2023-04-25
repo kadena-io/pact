@@ -53,10 +53,11 @@ trans_exp i x = go
   f = Dbl.dbl_exp
   exp_double = liftUnDecF i f
 #if defined(ghcjs_HOST_OS)
+  exp_musl = exp_double
 #else
   exp_musl = liftUnDecF i Musl.musl_exp
 #endif
-  exp_dec = liftUnDec i f Dec.dec_exp
+  exp_dec = liftUnDec i Dec.dec_exp
   go = chooseFunction1 exp_double exp_musl exp_dec >>= ($ x)
 
 trans_ln :: HasInfo i => i -> Decimal -> Eval e Decimal
@@ -65,10 +66,11 @@ trans_ln i x = go
   f = Dbl.dbl_ln
   ln_double = liftUnDecF i f
 #if defined(ghcjs_HOST_OS)
+  ln_musl = ln_double
 #else
   ln_musl = liftUnDecF i Musl.musl_ln
 #endif
-  ln_dec = liftUnDec i f Dec.dec_ln
+  ln_dec = liftUnDec i Dec.dec_ln
   go = chooseFunction1 ln_double ln_musl ln_dec >>= ($ x)
 
 trans_log :: HasInfo i => i -> Decimal -> Decimal -> Eval e Decimal
@@ -77,10 +79,11 @@ trans_log i x y = go
   f = Dbl.dbl_log
   logBase_double = liftBinDecF i f
 #if defined(ghcjs_HOST_OS)
+  logBase_musl = logBase_double
 #else
   logBase_musl = liftBinDecF i Musl.musl_log
 #endif
-  logBase_dec = liftBinDec i f Dec.dec_log
+  logBase_dec = liftBinDec i Dec.dec_log
   go = chooseFunction2 logBase_double logBase_musl logBase_dec
     >>= (\k -> k x y)
 
@@ -90,10 +93,11 @@ trans_logInt i x y = go
   f = (doubleToTransResult .) . logBase
   logBase_double = liftBinIntF i f
 #if defined(ghcjs_HOST_OS)
+  logBase_musl = logBase_double
 #else
   logBase_musl = liftBinIntF i Musl.musl_log
 #endif
-  logBase_dec = liftBinInt i f Dec.dec_log
+  logBase_dec = liftBinInt i Dec.dec_log
   go = chooseFunction2 logBase_double logBase_musl logBase_dec
     >>= (\k -> k x y)
 
@@ -103,10 +107,11 @@ trans_pow i x y = go
   f = Dbl.dbl_pow
   pow_double = liftBinDecF i f
 #if defined(ghcjs_HOST_OS)
+  pow_musl = pow_double
 #else
   pow_musl = liftBinDecF i Musl.musl_pow
 #endif
-  pow_dec = liftBinDec i f Dec.dec_pow
+  pow_dec = liftBinDec i Dec.dec_pow
   go = chooseFunction2 pow_double pow_musl pow_dec >>= (\k -> k x y)
 
 trans_sqrt :: HasInfo i => i -> Decimal -> Eval e Decimal
@@ -115,10 +120,11 @@ trans_sqrt i x = go
   f = Dbl.dbl_sqrt
   sqrt_double = liftUnDecF i f
 #if defined(ghcjs_HOST_OS)
+  sqrt_musl = sqrt_double
 #else
   sqrt_musl = liftUnDecF i Musl.musl_sqrt
 #endif
-  sqrt_dec = liftUnDec i f Dec.dec_sqrt
+  sqrt_dec = liftUnDec i Dec.dec_sqrt
   go = chooseFunction1 sqrt_double sqrt_musl sqrt_dec >>= ($ x)
 
 {-------------------------------------------------------------------------
@@ -139,23 +145,42 @@ liftBinDec i f a b = checkTransResult i (f a b)
 
 liftBinInt
   :: HasInfo i => i
-  -> (Double -> Double -> TransResult Double)
   -> (Decimal -> Decimal -> TransResult Decimal)
   -> Integer -> Integer -> Eval e Integer
-liftBinInt i fp f a b = do
-  -- Ensure it would yield a value under Double first, since the full
-  -- computation could be exceedingly large.
-  case fp (int2F a) (int2F b) of
-    TransNumber _ -> pure ()
-    _ -> evalError' i "Operation resulted in +- infinity or NaN"
-  case int2D a `f` int2D b of
-    TransNumber num -> pure $ d2Int num
-    _ -> evalError' i "Operation resulted in +- infinity or NaN"
+liftBinInt i f a b = d2Int <$> checkTransResult i (int2D a `f` int2D b)
 
 int2D :: Integer -> Decimal
 int2D = fromIntegral
 d2Int :: Decimal -> Integer
 d2Int = round
+
+liftUnDecF
+  :: HasInfo i => i
+  -> (Double -> TransResult Double)
+  -> Decimal -> Eval e Decimal
+liftUnDecF i f a = f2Dec <$> checkTransResult i (f (dec2F a))
+
+liftBinDecF
+  :: HasInfo i => i
+  -> (Double -> Double -> TransResult Double)
+  -> Decimal -> Decimal -> Eval e Decimal
+liftBinDecF i f a b = f2Dec <$> checkTransResult i (dec2F a `f` dec2F b)
+
+liftBinIntF
+  :: HasInfo i => i
+  -> (Double -> Double -> TransResult Double)
+  -> Integer -> Integer -> Eval e Integer
+liftBinIntF i f a b = f2Int <$> checkTransResult i (int2F a `f` int2F b)
+
+dec2F :: Decimal -> Double
+dec2F = fromRational . toRational
+f2Dec :: Double -> Decimal
+f2Dec = fromRational . toRational
+
+int2F :: Integer -> Double
+int2F = fromIntegral
+f2Int :: Double -> Integer
+f2Int = round
 
 checkTransResult :: HasInfo i => i -> TransResult a -> Eval e a
 checkTransResult i r = case r of
@@ -168,37 +193,3 @@ checkTransResult i r = case r of
     unlessExecutionFlagSet FlagDisablePact43 $
       evalError' i "Operation resulted in +- infinity or NaN"
     pure n
-
-liftUnDecF
-  :: HasInfo i => i
-  -> (Double -> TransResult Double)
-  -> Decimal -> Eval e Decimal
-liftUnDecF i f a = do
-  out <- checkTransResult i (f (dec2F a))
-  pure $ f2Dec out
-
-liftBinDecF
-  :: HasInfo i => i
-  -> (Double -> Double -> TransResult Double)
-  -> Decimal -> Decimal -> Eval e Decimal
-liftBinDecF i f a b = do
-  out <- checkTransResult i (dec2F a `f` dec2F b)
-  pure $ f2Dec out
-
-liftBinIntF
-  :: HasInfo i => i
-  -> (Double -> Double -> TransResult Double)
-  -> Integer -> Integer -> Eval e Integer
-liftBinIntF i f a b = do
-  out <- checkTransResult i (int2F a `f` int2F b)
-  pure $ f2Int out
-
-dec2F :: Decimal -> Double
-dec2F = fromRational . toRational
-f2Dec :: Double -> Decimal
-f2Dec = fromRational . toRational
-
-int2F :: Integer -> Double
-int2F = fromIntegral
-f2Int :: Double -> Integer
-f2Int = round
