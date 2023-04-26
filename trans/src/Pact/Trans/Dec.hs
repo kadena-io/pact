@@ -40,7 +40,9 @@ import Numeric.Decimal.Arithmetic
 import qualified Numeric.Decimal.Operation as Op
 import Pact.Trans.Types
 
-type Prec = N.PPlus1 (N.PPlus1 (N.PPlus1 (N.PPlus1 (N.PPlus1 N.P250))))
+-- This level of precision would be isomorphic with Data.Decimal
+-- type Prec = N.PPlus1 (N.PPlus1 (N.PPlus1 (N.PPlus1 (N.PPlus1 N.P250))))
+type Prec = N.P25
 type Decimal = N.ExtendedDecimal Prec
 
 decShow :: D.Decimal -> String

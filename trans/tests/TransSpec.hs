@@ -267,11 +267,11 @@ spec_musl_pow_sqrt = describe "musl_pow (musl_sqrt x) 2" $ do
 spec_dec_trans_ln :: Spec
 spec_dec_trans_ln = describe "dec_ln" $ do
     it "ln 60" $ Dec.dec_ln 60 `shouldBeNum`
-      4.094344562222100684830468813065066480324092180811777681888702244098460524865656162715476286899749075
+      4.09434456222210041431708305026404559612274169921875
 
 spec_dec_trans_exp :: Spec
 spec_dec_trans_exp = describe "dec_exp" $ do
-    it "e" $ Dec.dec_exp 1 `shouldBeNum` 2.718281828459045235360287471352662497757247093699959574966967627724076630353547594571382178525166427
+    it "e" $ Dec.dec_exp 1 `shouldBeNum` 2.718281828459045
 
 spec_dec_ln_exp :: Spec
 spec_dec_ln_exp = describe "dec_ln . dec_exp" $ do
@@ -287,7 +287,10 @@ spec_dec_trans_pow = describe "dec_pow" $ do
     it "pow 2 3" $ Dec.dec_pow 2 3 `shouldBeNum` 8
     it "pow 2 4" $ Dec.dec_pow 2 4 `shouldBeNum` 16
     it "pow 2 10" $ Dec.dec_pow 2 10 `shouldBeNum` 1024
-    it "pow 8.7 85.7" $ Dec.dec_pow 8.7 85.7 `shouldBeNum` 328700185683462282496121061003702794725025790628487093452976752081804732596239074.4042181146260598068
+    it "pow 8.7 85.7" $ Dec.dec_pow 8.7 85.7 `shouldBeNum` 328700185683462282496121e57
+    -- jww (2023-04-26): With Dec there is no longer infinite! But it's an
+    -- 800k digit number that causes GHC to use >100G of heap just to attempt
+    -- to build the constant.
     -- it "pow 8.7 856739.34857" $ Dec.dec_pow 8.7 856739.34857 `shouldBeNum` 0
     prop "pow x 0" $ \x -> Dec.dec_pow x 0 === TransNumber 1
     prop "pow x 1" $ \x -> Dec.dec_pow x 1 === TransNumber x
@@ -302,8 +305,8 @@ spec_dec_trans_log = describe "dec_log" $ do
     it "log 2 16" $ Dec.dec_log 2 16 `shouldBeNum` 4
     it "log 2 256" $ Dec.dec_log 2 256 `shouldBeNum` 8
     it "log 2 1024" $ Dec.dec_log 2 1024 `shouldBeNum` 10
-    it "log 2 5" $ Dec.dec_log 2 5 `shouldBeNum` 2.321928094887362347870319429489390175864831393024580612054756395815934776608625215850139743359370155528942989732167860752188688264342320140360274935241064413062140827829345802323553906123213597576914981212951182468227233371420773795725734395411795217554322
-    it "log 13.7 721.8" $ Dec.dec_log 13.7 721.8 `shouldBeNum` 2.514617013461836355688559174079293172040567566958969840820930353749335907664768819078631238244335781230456186034314492591442213446825228452561173322615235394456218104504606171251988132536653657281211882157574432719250182021880297605068014254481048277717726
+    it "log 2 5" $ Dec.dec_log 2 5 `shouldBeNum` 2.321928094887362
+    it "log 13.7 721.8" $ Dec.dec_log 13.7 721.8 `shouldBeNum` 2.5146170134618364
 
 spec_dec_log_pow :: Spec
 spec_dec_log_pow = describe "dec_log 2 . dec_pow 2" $ do
@@ -321,7 +324,7 @@ spec_dec_trans_sqrt = describe "dec_sqrt" $ do
     it "sqrt 25" $ Dec.dec_sqrt 25 `shouldBeNum` 5
     it "sqrt 36" $ Dec.dec_sqrt 36 `shouldBeNum` 6
     it "sqrt 49" $ Dec.dec_sqrt 49 `shouldBeNum` 7
-    it "sqrt 2" $ Dec.dec_sqrt 2 `shouldBeNum` 1.414213562373095048801688724209698078569671875376948073176679737990732478462107038850387534327641573
+    it "sqrt 2" $ Dec.dec_sqrt 2 `shouldBeNum` 1.4142135623730951
     prop "sqrt (x * x)" $ \x ->
       Dec.dec_sqrt (x * x) `roughlyEq` abs x
 
@@ -335,13 +338,13 @@ spec_dec_pow_sqrt = describe "dec_pow (dec_sqrt x) 2" $ do
 -- Utils
 
 roughlyEq :: (Ord a, Fractional a) => TransResult a -> a -> Bool
-roughlyEq (TransNumber a) b = abs (a-b) < 0.00000001
+roughlyEq (TransNumber a) b = abs (a-b) < 0.00000000001
 roughlyEq _ _ = False
 
-shouldBeNum :: (Ord a, Fractional a) => TransResult a -> a -> Expectation
+shouldBeNum :: (Show a, Ord a, Fractional a) => TransResult a -> a -> Expectation
 shouldBeNum stmt res =
   unless (stmt `roughlyEq` res) $
-    expectationFailure "shouldBeNum failed"
+    expectationFailure $ "shouldBeNum failed: " ++ show stmt ++ " " ++ show res
 
 isNaN :: Show a => TransResult a -> Expectation
 isNaN stmt = stmt `shouldSatisfy` (\case
