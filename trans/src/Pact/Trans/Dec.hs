@@ -25,6 +25,8 @@ module Pact.Trans.Dec
   , dec_reduce
   , decIsNaN
   , decIsInfinite
+  , transResultIsNaN
+  , transResultIsInfinite
   , decShow
   , numShow
   , toDecimal
@@ -105,6 +107,16 @@ decIsNaN n = case n of
 decIsInfinite :: Decimal -> Bool
 decIsInfinite n = case n of
   N.Inf{} -> True
+  _num    -> False
+
+transResultIsNaN :: TransResult a -> Bool
+transResultIsNaN n = case n of
+  TransNaN{} -> True
+  _num    -> False
+
+transResultIsInfinite :: TransResult a -> Bool
+transResultIsInfinite n = case n of
+  TransInf{} -> True
   _num    -> False
 
 reduce_ :: (N.Precision p, N.Rounding r) => N.Decimal p r -> N.Decimal p r
