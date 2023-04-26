@@ -39,6 +39,9 @@ import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
 import           Pact.Types.Pretty           (renderCompactString)
+import Data.Attoparsec.Text (parseOnly)
+import Pact.Types.Principal (principalParser, showPrincipalType)
+import Pact.Types.Info (Info(..))
 import Pact.Types.Hash (pactHash)
 import Pact.Types.Util (AsString(asString))
 import Data.Text.Encoding (encodeUtf8)
@@ -456,6 +459,23 @@ evalCore (ObjTake argTy _keys obj) = withSing argTy $ do
 
 evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $ literalS $
   hListLength hlist
+
+evalCore (IsPrincipal p) = do
+  p' <- eval p
+  case unliteralS p' of
+    Nothing -> let (S _ str) = coerceS @Str @String p'
+               in pure $ sansProv (literal "internal-principal-" `SBVS.isPrefixOf` str)
+                  -- RS: Note, `create-principle` returns a string prefixed by `internal-principal-`
+                  -- which we check, if `p` is not statically known.
+    Just (Str str) -> case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+      Left _ -> pure (literalS sFalse)
+      Right _ -> pure (literalS sTrue)
+
+evalCore (TypeOfPrincipal p) = eval p <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc (FailureMessage "`typeof-principal` requires statically known content")
+  Just (Str str) -> case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+    Left _ -> pure (literalS "")
+    Right pt -> pure (literalS (Str (T.unpack (showPrincipalType pt))))
 
 -- | Implementation for both drop and take. The "sub" schema must be a sub-list
 -- of the "sup(er)" schema. See 'subObjectS' for a variant that works over 'S'.

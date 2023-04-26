@@ -805,6 +805,25 @@ evalTerm = \case
         tagResume tid $ mkAVal' $ SBV.fromJust mVal
         pure $ S prov $ SBV.fromJust mVal
 
+  CreatePrincipal g -> do
+    guard <- evalTerm g
+    let
+      (S _ iGuard) = coerceS @Guard @Integer guard
+      sGuard = SBV.natToStr iGuard
+      prefix = literal "internal-principal-"
+      guardStr = SBV.concat prefix sGuard
+    pure $ coerceS @String @Str (sansProv guardStr)
+
+  ValidatePrincipal g s -> do
+    guard <- evalTerm g
+    S _ guardStr <- evalTerm s
+    let
+      (S _ iGuard) = coerceS @Guard @Integer guard
+      sGuard = SBV.natToStr iGuard
+      prefix = literal "internal-principal-"
+      S _ guardStr' = coerceS @String @Str (sansProv (SBV.concat prefix sGuard))
+    pure $ sansProv (guardStr .== guardStr')
+
 -- | Private pacts must be evaluated by the right entity. Fail if the current
 -- entity doesn't match the provided.
 evalTermWithEntity
