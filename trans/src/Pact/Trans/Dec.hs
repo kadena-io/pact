@@ -27,6 +27,8 @@ module Pact.Trans.Dec
   , decIsInfinite
   , decShow
   , numShow
+  , toDecimal
+  , fromDecimal
   ) where
 
 import qualified Data.Decimal as D
