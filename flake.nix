@@ -27,6 +27,8 @@
               compiler-nix-name = "ghc8107";
               shell.tools = {
                 cabal = {};
+                haskell-language-server = {};
+                # hlint = {};
               };
               shell.buildInputs = with pkgs; [
                 zlib
@@ -44,7 +46,7 @@
         buildInputs = with pkgs.haskellPackages; [
           cabal-install
           haskell-language-server
-          hlint
+          # hlint
         ];
 
         withHoogle = true;
