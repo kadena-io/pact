@@ -1946,7 +1946,7 @@ executed in strict sequential order.
     (credit payee amount)))
 ```
 
-Defpacts may be nested (though the recursion restrictions apply, so it must be a different defpact). They may be kicked off
+Defpacts may be nested (though the recursion restrictions apply, so it must be a different defpact). They may be executed
 like a regular function call within a defpact, but are continued after the first step by calling `continue` with the same arguments.
 
 As such, they have the following restrictions:
