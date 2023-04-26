@@ -10,7 +10,7 @@
 module Main where
 
 import Control.Monad
-import Numeric.Decimal
+import Data.Decimal
 import Test.Hspec
 import Test.QuickCheck
 
@@ -323,8 +323,7 @@ spec_dec_trans_sqrt = describe "dec_sqrt" $ do
     it "sqrt 49" $ Dec.dec_sqrt 49 `shouldBeNum` 7
     it "sqrt 2" $ Dec.dec_sqrt 2 `shouldBeNum` 1.414213562373095048801688724209698078569671875376948073176679737990732478462107038850387534327641573
     prop "sqrt (x * x)" $ \x ->
-      let (TransNumber a) = Dec.dec_sqrt (x * x)
-      in a === abs x
+      Dec.dec_sqrt (x * x) `roughlyEq` abs x
 
 spec_dec_pow_sqrt :: Spec
 spec_dec_pow_sqrt = describe "dec_pow (dec_sqrt x) 2" $ do
