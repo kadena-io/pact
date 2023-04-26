@@ -16,14 +16,10 @@ module Test.Pact.Parse
 ( spec
 ) where
 
-#if ! (MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1)
 import qualified Data.ByteString as B
-#endif
 import Data.Char
 import qualified Data.Text as T
-#if ! (MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1)
 import qualified Data.Text.Encoding as T
-#endif
 
 import Test.Hspec
 import Test.Hspec.QuickCheck
@@ -142,7 +138,7 @@ quoted s = "\"" <> s <> "\""
 --
 cols :: T.Text -> D.Delta
 #if MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1
-cols s = D.Columns (fromIntegral $ T.length s) (fromIntegral $ T.length s)
+cols s = D.Columns (fromIntegral $ B.length (T.encodeUtf16LE s) `div` 2) (fromIntegral $ B.length (T.encodeUtf16LE s) `div` 2)
 #elif MIN_VERSION_text(2,0,0)
 cols s = D.Columns (fromIntegral $ T.length s) (fromIntegral $ B.length (T.encodeUtf8 s))
 #elif LEGACY_PARSER == 1
