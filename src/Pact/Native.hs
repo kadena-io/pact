@@ -164,7 +164,7 @@ enforceDef = defNative "enforce" enforce
             return (TLiteral (LBool True) def)
           else reduce msg >>= \case
             TLitString msg' -> failTx (_faInfo i) $ pretty msg'
-            e -> isInReplForkedError >>= \case
+            e -> isOffChainForkedError >>= \case
               OffChainError -> evalError' i $ "Invalid message argument, expected string " <> pretty e
               OnChainError -> evalError' i $ "Invalid message argument, expected string, received argument of type: " <> pretty (typeof' e)
         cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
@@ -347,7 +347,7 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
     if' :: NativeFun e
     if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
       TLiteral (LBool c') _ -> reduce (if c' then then' else else')
-      t -> isInReplForkedError >>= \case
+      t -> isOffChainForkedError >>= \case
         OffChainError -> evalError' i $ "if: conditional not boolean: " <> pretty t
         OnChainError -> evalError' i $ "if: conditional not boolean, received value of type: " <> pretty (typeof' t)
 
@@ -534,7 +534,7 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
       asBool =<< apply (App def' [] i) mkArgs
       where
         asBool (TLiteral (LBool allow) _) = return allow
-        asBool t = isInReplForkedError >>= \case
+        asBool t = isOffChainForkedError >>= \case
           OffChainError -> evalError' fi $ "Unexpected return value from namespace policy: " <> pretty t
           OnChainError -> evalError' fi $ "Unexpected return value from namespace policy, received value of type: " <> pretty (typeof' t)
 
@@ -911,7 +911,7 @@ map' :: NativeFun e
 map' i as@[tLamToApp -> TApp app _,l] = gasUnreduced i as $ reduce l >>= \case
            TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply app . pure)
            t ->
-            isInReplForkedError >>= \case
+            isOffChainForkedError >>= \case
               OffChainError -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
               OnChainError -> evalError' i $ "map: expecting list, received argument of type: " <> pretty (typeof' t)
 map' i as = argsError' i as
@@ -974,7 +974,7 @@ fold' i as@[tLamToApp -> app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>=
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
            t ->
-            isInReplForkedError >>= \case
+            isOffChainForkedError >>= \case
               OffChainError -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
               OnChainError -> evalError' i $ "fold: expecting list, received argument of type: " <> pretty (typeof' t)
 fold' i as = argsError' i as
@@ -989,7 +989,7 @@ filter' i as@[tLamToApp -> app@TApp {},l] = gasUnreduced i as $ reduce l >>= \ca
       _ -> ifExecutionFlagSet FlagDisablePact420
              (return False)
              (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
-  t -> isInReplForkedError >>= \case
+  t -> isOffChainForkedError >>= \case
       OffChainError -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
       OnChainError -> evalError' i $ "filter: expecting list, received argument of type: " <> pretty (typeof' t)
 filter' i as = argsError' i as
@@ -1098,7 +1098,7 @@ bind i as = argsError' i as
 bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
 bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
   return $ \s -> M.lookup (FieldKey s) o
-bindObjectLookup t = isInReplForkedError >>= \case
+bindObjectLookup t = isOffChainForkedError >>= \case
   OffChainError -> evalError (_tInfo t) $ "bind: expected object: " <> pretty t
   OnChainError -> evalError (_tInfo t) $ "bind: expected object, received value of type: " <> pretty (typeof' t)
 
@@ -1257,7 +1257,7 @@ concat' g i [TList ls _ _] = computeGas' g i (GMakeList $ fromIntegral $ V.lengt
   concatTextList = flip TLiteral def . LString . T.concat
   in fmap concatTextList $ forM ls' $ \case
     TLitString s -> return s
-    t -> isInReplForkedError >>= \case
+    t -> isOffChainForkedError >>= \case
       OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
       OnChainError -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
 concat' _ i as = argsError i as

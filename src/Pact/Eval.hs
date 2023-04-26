@@ -352,11 +352,11 @@ eval' t = enscope t >>= reduceEnscoped
 reduceEnscoped :: Term Ref -> Eval e (Term Name)
 reduceEnscoped = \case
   TVar (Direct t'@TNative{}) i ->
-    isInReplForkedError >>= \case
+    isOffChainForkedError >>= \case
       OnChainError -> evalError' i "Cannot display native function details in non-repl context"
       OffChainError -> pure t'
   TVar (Ref t'@TDef{}) i ->
-    isInReplForkedError >>= \case
+    isOffChainForkedError >>= \case
       OnChainError -> evalError' i "Cannot display function details in non-repl context"
       OffChainError -> toTerm <$> compatPretty t'
   t' -> reduce t'

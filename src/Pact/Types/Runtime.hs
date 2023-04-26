@@ -56,7 +56,7 @@ module Pact.Types.Runtime
    module Pact.Types.PactError,
    liftIO,
    eAdvise,
-   isInReplForkedError,
+   isOffChainForkedError,
    OnChainErrorState(..)
    ) where
 
@@ -450,8 +450,8 @@ throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = do
   s <- use evalCallStack
-  inReplOrPreFork <- isInReplForkedError'
-  throwM (PactError ctor i (if inReplOrPreFork then s else []) err)
+  offChainOrPreFork <- isOffChainForkedError'
+  throwM (PactError ctor i (if offChainOrPreFork then s else []) err)
 
 evalError :: Info -> Doc -> Eval e a
 evalError = throwErr EvalError
@@ -466,11 +466,11 @@ data OnChainErrorState
 
 -- | Function to determine whether we are either pre-errors fork
 -- or in a repl environment.
-isInReplForkedError :: Eval e OnChainErrorState
-isInReplForkedError = isInReplForkedError' <&> \p -> if p then OffChainError else OnChainError
+isOffChainForkedError :: Eval e OnChainErrorState
+isOffChainForkedError = isOffChainForkedError' <&> \p -> if p then OffChainError else OnChainError
 
-isInReplForkedError' :: Eval e Bool
-isInReplForkedError' =
+isOffChainForkedError' :: Eval e Bool
+isOffChainForkedError' =
   isExecutionFlagSet FlagDisablePact47 >>= \case
     True -> pure True
     False -> view eeInRepl
@@ -494,13 +494,13 @@ throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) r
 
 argsError :: FunApp -> [Term Name] -> Eval e a
 argsError i as =
-  isInReplForkedError >>= \case
+  isOffChainForkedError >>= \case
     OffChainError -> throwArgsError i as "Invalid arguments"
     OnChainError -> throwOnChainArgsError i as
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as =
-  isInReplForkedError >>= \case
+  isOffChainForkedError >>= \case
     OffChainError -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
     OnChainError -> throwOnChainArgsError i as
 
