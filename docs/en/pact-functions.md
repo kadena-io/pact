@@ -2039,6 +2039,17 @@ Set transaction signature keys and capabilities. SIGS is a list of objects with 
 ```
 
 
+### env-simulate-onchain {#env-simulate-onchain}
+
+*on-chain*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces.
+```lisp
+(env-simulate-onchain true)
+```
+
+
 ### expect {#expect}
 
 *doc*&nbsp;`string` *expected*&nbsp;`<a>` *actual*&nbsp;`<a>` *&rarr;*&nbsp;`string`
