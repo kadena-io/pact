@@ -500,7 +500,9 @@ test-suite trans-spec
   build-depends:
     , base
     , Decimal >=0.4.2
+    , decimal-arithmetic >=0.5.1.1
     , QuickCheck >=2.12.6.1
+    , quickcheck-instances
     , hspec
     , hspec-core
     , pact-trans
