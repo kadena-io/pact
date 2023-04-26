@@ -249,7 +249,9 @@ foldDB' :: NativeFun e
 foldDB' i [tbl, tLamToApp -> TApp qry _, tLamToApp -> TApp consumer _] = do
   table <- reduce tbl >>= \case
     t@TTable{} -> return t
-    t -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
+    t -> isOffChainForkedError >>= \case
+      OffChainError -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
+      OnChainError -> evalError' i $ "Expected table as first argument to foldDB, got argument of type: " <> pretty (typeof' t)
   !g0 <- computeGas (Right i) (GUnreduced [])
   !g1 <- computeGas (Right i) GFoldDB
   ks <- getKeys table
@@ -257,7 +259,9 @@ foldDB' i [tbl, tLamToApp -> TApp qry _, tLamToApp -> TApp consumer _] = do
   pure (g2, TList (V.fromList (reverse xs)) TyAny def)
   where
   asBool (TLiteral (LBool satisfies) _) = return satisfies
-  asBool t = evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
+  asBool t = isOffChainForkedError >>= \case
+    OffChainError -> evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
+    OnChainError -> evalError' i $ "Unexpected return value from fold-db query condition, received value of type: " <> pretty (typeof' t)
   getKeys table = do
     guardTable i table GtKeys
     keys (_faInfo i) (userTable table)
@@ -336,8 +340,9 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
                   Nothing -> return (obj:rs)
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
               | otherwise -> return rs
-            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: "
-                 <> pretty t
+            t -> isOffChainForkedError >>= \case
+              OffChainError -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " <> pretty t
+              OnChainError -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " <> pretty (typeof' t)
 select' i as _ _ _ = argsError' i as
 
 
@@ -473,7 +478,9 @@ guardTable i TTable {..} dbop =
             _ | localBypassEnabled -> return ()
               | otherwise -> notBypassed
 
-guardTable i t _ = evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
+guardTable i t _ = isOffChainForkedError >>= \case
+  OffChainError -> evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
+  OnChainError -> evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty (typeof' t)
 
 enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()
 enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of

@@ -1750,27 +1750,28 @@ translateNode astNode = withAstContext astNode $ case astNode of
       [from, to', step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' step
       _otherwise -> unexpectedNode astNode
 
-  AST_NFun node fn@"create-principal" [a] -> translateNode a >>= \case
-    -- assuming we have a guard as input, yield an empty string
-    Some SGuard _ -> shimNative astNode node fn []
+  AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
+    -- uncaught case is dynamic list, sub format string
+    Some SStr _ -> shimNative' node fn [b] "format string" a'
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"validate-principal" [a, b] -> translateNode a >>= \case
-    -- term check inputs and produce an empty string
-    Some SGuard _ -> translateNode b >>= \case
-      Some SStr _ -> shimNative astNode node fn []
+  AST_CreatePrincipal guard -> translateNode guard >>= \case
+    Some SGuard g -> pure (Some SStr (CreatePrincipal g))
+    _ -> unexpectedNode astNode
+
+  AST_ValidatePrincipal guard name -> translateNode guard >>= \case
+    Some SGuard g -> translateNode name >>= \case
+      Some SStr s -> pure $ Some SBool (ValidatePrincipal g s)
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"is-principal" [a] -> translateNode a >>= \case
-    -- assuming we have a principal string as input, yield true
-    Some SStr _ -> shimNative astNode node fn []
-    _ -> unexpectedNode astNode
+  AST_NFun _ "is-principal" [a] -> translateNode a >>= \xs' -> case xs' of
+    Some SStr l -> pure $ Some SBool $ CoreTerm $ IsPrincipal l
+    _otherwise -> unexpectedNode astNode
 
-  AST_NFun node fn@"typeof-principal" [a] -> translateNode a >>= \a' -> case a' of
-    -- assuming we have a principal string as input, yield empty string
-    Some SStr _ -> shimNative' node fn [] "principal" a'
-    _ -> unexpectedNode astNode
+  AST_NFun _ "typeof-principal" [a] -> translateNode a >>= \xs' -> case xs' of
+    Some SStr l -> pure $ Some SStr $ CoreTerm $ TypeOfPrincipal l
+    _otherwise -> unexpectedNode astNode
 
   AST_NFun _ fn@"describe-namespace" _ ->
     throwError' (InvalidNativeInModule fn)
