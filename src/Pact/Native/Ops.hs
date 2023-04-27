@@ -570,8 +570,10 @@ shiftDef =  defRNative "shift" go
   )
   where
     go i [TLiteral (LInteger x) xi,TLiteral (LInteger y) yi]
-      | y > 0 = do
-          z <- powImpl i [TLiteral (LInteger 2) yi, TLiteral (LInteger y) yi]
-          mulImpl i [TLiteral (LInteger x) xi, z]
+      | y > 0 = isExecutionFlagSet FlagDisablePact47 >>= \case
+          True -> return $ toTerm $ shift x (fromIntegral y)
+          False -> do
+            z <- powImpl i [TLiteral (LInteger 2) yi, TLiteral (LInteger y) yi]
+            mulImpl i [TLiteral (LInteger x) xi, z]
       | otherwise = return $ toTerm $ shift x (fromIntegral y)
     go i as = argsError i as
