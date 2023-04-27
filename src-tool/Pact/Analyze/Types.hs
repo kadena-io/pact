@@ -133,7 +133,12 @@ data ModuleRefs = ModuleRefs
 makeLenses ''ModuleRefs
 
 data VerificationWarning
+  -- | Warning to indicate duplicated properties.
+  -- Parameter is the list of overloaded names.
   = FVDuplicatedPropertyDef [Text]
+  -- | Warning to indicate a shimmed content.
+  -- First parameter reflects the content to be shimmed,
+  -- second parameter the actual shimmed value.
   | FVShimmedStaticContent Text Text
   deriving (Eq, Show)
 

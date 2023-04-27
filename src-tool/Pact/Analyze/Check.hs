@@ -401,7 +401,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
     -- Check to see if there are any invariants in this module. If there aren't
     -- we can skip these checks.
     case invsMap ^.. traverse . traverse of
-      [] -> pure $ (invsMap & traverse .~ [], [])
+      [] -> pure (invsMap & traverse .~ [], [])
 
       _ -> ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         lift $ SBV.setTimeOut timeout
@@ -416,8 +416,8 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
 
         -- Iterate through each invariant in a single query so we can reuse our
         -- assertion stack.
-        res <- ExceptT $ fmap Right $
-          SBV.query $ for2 resultsTable $ \(Located info
+        res :: TableMap [Either CheckFailure (CheckSuccess, [VerificationWarning])]
+          <- lift $ SBV.query $ for2 resultsTable $ \(Located info
               (AnalysisResult querySucceeds _ prop ksProvs warnings)) -> do
               let model = Model modelArgs' tags ksProvs graph
 
@@ -511,8 +511,8 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     case check of
       PropertyHolds _ ->
         void $ ExceptT $ catchingExceptions $ runSymbolicSat (toDebugFile "satisfaction") $ runExceptT $ do
-          (AnalysisResult _ txSuccess _ _ _, model) <- setupSmtProblem
-          void $ lift $ SBV.output txSuccess
+          (AnalysisResult{_arTxSuccess}, model) <- setupSmtProblem
+          void $ lift $ SBV.output _arTxSuccess
           hoist SBV.query $ do
             withExceptT (smtToVacuousProperty propInfo) $
               resultQuery Satisfaction model
@@ -1327,7 +1327,7 @@ verifyCheck de moduleData funName check checkType = do
   tables <- moduleTables modules modRefs consts
   gov    <- moduleGovernance moduleData
 
-  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov de Nothing -- rs check
+  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov de Nothing
 
   case moduleFun moduleData funName of
     Just funRef -> do
@@ -1335,6 +1335,9 @@ verifyCheck de moduleData funName check checkType = do
       case toplevel of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
         Right (TopFun fun _) -> ExceptT $ fmap Right $
+        -- `verifyFunctionalProperty` returns `IO [Either CheckFailure (CheckSuccess, [VerificationWarning])]`
+        -- and we have return  `ExceptT VerificationFailure IO [Either CheckFailure CheckSuccess]`
+        -- as a result, we have to _strip away_ the verification warnings via `fst` projection.
           (fmap.fmap.fmap.fmap) fst (verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType) $
             Located info check
         Right _
