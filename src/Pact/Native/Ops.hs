@@ -103,11 +103,11 @@ subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
     unaryNumTys = unaryTy numA numA
 
 mulDef :: NativeDef
-mulDef = defRNative "*" mul' coerceBinNum
+mulDef = defRNative "*" mulImpl coerceBinNum
   ["(* 0.5 10.0)", "(* 3 5)"] "Multiply X by Y."
-  where
-  mul' :: RNativeFun e
-  mul' = binop' "*" (*) (*)
+
+mulImpl :: RNativeFun e
+mulImpl = binop' "*" (*) (*)
 
 
 divDef :: NativeDef
@@ -124,35 +124,35 @@ divDef = defRNative "/" divide' coerceBinNum
     divide' fi as = argsError fi as
 
 powDef :: NativeDef
-powDef = defRNative "^" pow coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
+powDef = defRNative "^" powImpl coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
+
+powImpl :: RNativeFun e
+powImpl i as@[TLiteral a _,TLiteral b _] = do
+  binop "^" (liftDecPowF i trans_pow) intPow i as
   where
-  pow :: RNativeFun e
-  pow i as@[TLiteral a _,TLiteral b _] = do
-    binop "^" (liftDecPowF i trans_pow) intPow i as
-    where
-    liftDecPowF fi f lop rop = do
-      _ <- computeGasCommit def "" (GDecimalOpCost lop rop)
-      f fi lop rop
-    oldIntPow  b' e = do
-      when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
-      liftIntegerOp (^) b' e
-    -- See: https://hackage.haskell.org/package/base-4.16.1.0/docs/src/GHC-Real.html
-    intPow :: Integer -> Integer -> Eval e Integer
-    intPow b' e =
-      ifExecutionFlagSet FlagDisablePact43 (oldIntPow b' e) (intPow' b' e)
-    intPow' x0 y0
-      | y0 < 0 = evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
-      | y0 == 0 = pure 1
-      | otherwise = evens x0 y0
-    evens x y
-      | even y = twoArgIntOpGas x x *> evens (x * x) (y `quot` 2)
-      | y == 1 = pure x
-      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) x
-    odds x y z
-      | even y = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) z
-      | y == 1 = twoArgIntOpGas x z *> pure (x * z)
-      | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
-  pow i as = argsError i as
+  liftDecPowF fi f lop rop = do
+    _ <- computeGasCommit def "" (GDecimalOpCost lop rop)
+    f fi lop rop
+  oldIntPow  b' e = do
+    when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
+    liftIntegerOp (^) b' e
+  -- See: https://hackage.haskell.org/package/base-4.16.1.0/docs/src/GHC-Real.html
+  intPow :: Integer -> Integer -> Eval e Integer
+  intPow b' e =
+    ifExecutionFlagSet FlagDisablePact43 (oldIntPow b' e) (intPow' b' e)
+  intPow' x0 y0
+    | y0 < 0 = evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
+    | y0 == 0 = pure 1
+    | otherwise = evens x0 y0
+  evens x y
+    | even y = twoArgIntOpGas x x *> evens (x * x) (y `quot` 2)
+    | y == 1 = pure x
+    | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) x
+  odds x y z
+    | even y = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) z
+    | y == 1 = twoArgIntOpGas x z *> pure (x * z)
+    | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
+powImpl i as = argsError i as
 
 twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
 twoArgIntOpGas loperand roperand =
@@ -510,5 +510,11 @@ shiftDef =  defRNative "shift" go
   <> "i.e. they fill the top bits with 1 if the x is negative and with 0 otherwise."
   )
   where
-    go _ [TLitInteger x,TLitInteger y] = return $ toTerm $ shift x (fromIntegral y)
+    go i [TLiteral (LInteger x) xi,TLiteral (LInteger y) yi]
+      | y > 0 = isExecutionFlagSet FlagDisablePact47 >>= \case
+          True -> return $ toTerm $ shift x (fromIntegral y)
+          False -> do
+            z <- powImpl i [TLiteral (LInteger 2) yi, TLiteral (LInteger y) yi]
+            mulImpl i [TLiteral (LInteger x) xi, z]
+      | otherwise = return $ toTerm $ shift x (fromIntegral y)
     go i as = argsError i as
