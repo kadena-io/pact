@@ -136,7 +136,7 @@ data GasArgs
   -- ^ Cost of using a native function
   | GPostRead !ReadValue
   -- ^ Cost for reading from database
-  | GPreWrite !WriteValue SizeOfVersion
+  | GPreWrite !WriteValue !SizeOfVersion
   -- ^ Cost of writing to the database
   | GModuleMember !(ModuleDef (Term Name))
   -- ^ TODO documentation
@@ -152,7 +152,7 @@ data GasArgs
   -- ^ Cost of make-list
   | GFoldDB
   -- ^ Cost of the fold-db call
-  | GModuleMemory Bytes
+  | GModuleMemory !Bytes
   -- ^ The cost of the in-memory representation of the module
   | GPrincipal !Int
   -- ^ the cost of principal creation and validation
@@ -162,7 +162,7 @@ data GasArgs
   -- ^ Decimal costs
   | GMakeList2 !Integer !(Maybe Integer)
   -- ^ List versioning 2
-  | GZKArgs ZKArg
+  | GZKArgs !ZKArg
 
 -- | The elliptic curve pairing group we are
 -- handling
@@ -174,11 +174,11 @@ data ZKGroup
   deriving Show
 
 data ZKArg
-  = PointAdd ZKGroup
+  = PointAdd !ZKGroup
   -- ^ Point addition Gas arguments, where the gas is dependent on the group.
-  | ScalarMult ZKGroup
+  | ScalarMult !ZKGroup
   -- ^ Scalar multiplication gas, group dependent
-  | Pairing Int
+  | Pairing !Int
   -- ^ Pairing function gas, dependent on number of pairs
   deriving Show
 

@@ -15,6 +15,7 @@ module Pact.Gas
  , putGas)
  where
 
+import Control.Monad
 import Data.Text
 import Data.IORef
 import Pact.Types.Runtime
@@ -29,10 +30,10 @@ computeGas i args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- getGas
   let
-    (info,name) = either id (_faInfo &&& _faName) i
+    (!info,!name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
-  let gUsed = g0 + g1
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),g1):)
+  let !gUsed = g0 + g1
+  evalLogGas %= (<$!>) ((renderCompactText' $! pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed,g1):)
   putGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
@@ -55,7 +56,7 @@ computeGasNoLog commit info name args = do
 
 putGas :: Gas -> Eval e ()
 putGas !g = do
-  gasRef <- view eeGas
+  !gasRef <- view eeGas
   liftIO (writeIORef gasRef g)
 
 getGas :: Eval e Gas
@@ -72,7 +73,7 @@ computeGasCommit info name args = do
   g0 <- getGas
   let !g1 = runGasModel _geGasModel name args
       !gUsed = g0 + g1
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),g1):)
+  evalLogGas %= (<$!>) ((renderCompactText' $! pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed,g1):)
   putGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
