@@ -369,6 +369,26 @@ executable gasmodel
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+benchmark bench-json
+  if impl(ghcjs) || !flag(build-tool)
+    buildable: False
+  type: exitcode-stdio-1.0
+  main-is: PactJson.hs
+  build-depends:
+    , QuickCheck
+    , aeson
+    , base
+    , bound
+    , bytestring
+    , criterion
+    , pact
+    , pact-json
+    , text
+  hs-source-dirs: bench
+  ghc-options: -Wall -threaded -rtsopts "-with-rtsopts=-N" -O
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  default-language: Haskell2010
+
 -- -------------------------------------------------------------------------- --
 -- Test Suite
 
