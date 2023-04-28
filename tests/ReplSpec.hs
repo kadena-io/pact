@@ -6,6 +6,7 @@ module ReplSpec where
 import Test.Hspec
 
 import Data.ByteString (ByteString)
+import Data.Foldable(traverse_)
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
@@ -28,10 +29,13 @@ spec = describe "ReplSpec" $ do
               \ (create-capability-guard (OFFERED pact-id)))))))"
     out <- liftIO (runInteractive src)
     out `shouldSatisfy`containsNoErrInfo
-    traverse (uncurry disabledNativeTest) $
-      [ ("enumerate", FlagDisablePact40)
-        ()
-      ]
+  traverse_ (uncurry disabledNativeTest)
+    [ ("enumerate", FlagDisablePact40)
+    , ("zip", FlagDisablePact420)
+    , ("create-principal", FlagDisablePact43)
+    , ("is-principal", FlagDisablePact431)
+    , ("point-add", FlagDisablePact46)
+    ]
 
 
 disabledNativeTest :: ByteString -> ExecutionFlag -> Spec
