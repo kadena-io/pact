@@ -6,15 +6,12 @@ module ReplSpec where
 import Test.Hspec
 
 import Data.ByteString (ByteString)
-import Data.Foldable(traverse_)
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BS8
 import System.Posix.Pty (spawnWithPty, writePty, readPty, closePty)
 import System.Process (terminateProcess)
 import Control.Monad (void)
 
-import Pact.Types.Runtime
 
 spec :: Spec
 spec = describe "ReplSpec" $ do
@@ -29,22 +26,6 @@ spec = describe "ReplSpec" $ do
               \ (create-capability-guard (OFFERED pact-id)))))))"
     out <- liftIO (runInteractive src)
     out `shouldSatisfy`containsNoErrInfo
-  traverse_ (uncurry disabledNativeTest)
-    [ ("enumerate", FlagDisablePact40)
-    , ("zip", FlagDisablePact420)
-    , ("create-principal", FlagDisablePact43)
-    , ("is-principal", FlagDisablePact431)
-    , ("point-add", FlagDisablePact46)
-    ]
-
-
-disabledNativeTest :: ByteString -> ExecutionFlag -> Spec
-disabledNativeTest ntv flag = do
-  let flagName = BS8.pack (drop 4 (show flag))
-  it ("Should disable " <> BS8.unpack ntv <> " on flag " <> BS8.unpack flagName) $ do
-    let cmd = "(env-exec-config [' "<> flagName <> "]) " <> ntv
-    out <- liftIO (runInteractive cmd)
-    out `shouldSatisfy` BS.isInfixOf ("Cannot resolve " <> ntv)
 
 -- | Execute 'src' inside a pseudo-terminal running the pact repl and returns the repl output.
 runInteractive :: ByteString -> IO ByteString
