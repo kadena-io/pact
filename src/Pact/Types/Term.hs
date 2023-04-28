@@ -436,7 +436,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TDef {
-      _tDef :: Def n
+      _tDef :: !(Def n)
     , _tInfo :: !Info
     } |
     TNative {
@@ -470,7 +470,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TLam {
-      _tLam :: Lam n
+      _tLam :: !(Lam n)
     , _tInfo :: !Info
     } |
     TObject {
@@ -723,7 +723,7 @@ data TermProperties
   | TermObjectObj
   | TermPairs
   | TermType
-  | TermUnknown String
+  | TermUnknown !String
   | TermUseImports
   | TermVar
 

@@ -1022,7 +1022,7 @@ data GuardProperty
   | GuardNs
   | GuardPactId
   | GuardPred
-  | GuardUnknown String
+  | GuardUnknown !String
   deriving (Show, Eq, Ord)
 
 _gprop :: IsString a => Semigroup a => GuardProperty -> a
