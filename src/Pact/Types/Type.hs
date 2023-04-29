@@ -116,9 +116,9 @@ instance Arbitrary TypeName where
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
-  _aName :: Text,
-  _aType :: Type o,
-  _aInfo :: Info
+  _aName :: !Text,
+  _aType :: !(Type o),
+  _aInfo :: !Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (Arg o)
@@ -162,8 +162,8 @@ instance Arbitrary o => Arbitrary (Arg o) where
 
 -- | Function type
 data FunType o = FunType {
-  _ftArgs :: [Arg o],
-  _ftReturn :: Type o
+  _ftArgs :: ![Arg o],
+  _ftReturn :: !(Type o)
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (FunType o)
@@ -274,7 +274,7 @@ data PrimType =
   TyTime |
   TyBool |
   TyString |
-  TyGuard (Maybe GuardType)
+  TyGuard !(Maybe GuardType)
   deriving (Eq,Ord,Generic,Show)
 
 instance NFData PrimType
@@ -413,8 +413,8 @@ instance SizeOf TypeVarName where
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
-  TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
-  SchemaVar { _tvName :: TypeVarName }
+  TypeVar { _tvName :: !TypeVarName, _tvConstraint :: ![Type v] } |
+  SchemaVar { _tvName :: !TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic,Show)
 
 typeVarProperties :: ToJSON v => JsonProperties (TypeVar v)
@@ -533,17 +533,17 @@ showPartial AnySubschema = "~"
 -- | Pact types.
 data Type v =
   TyAny |
-  TyVar { _tyVar :: TypeVar v } |
+  TyVar { _tyVar :: !(TypeVar v) } |
   TyPrim PrimType |
-  TyList { _tyListType :: Type v } |
+  TyList { _tyListType :: !(Type v) } |
   TySchema
-  { _tySchema :: SchemaType
-  , _tySchemaType :: Type v
-  , _tySchemaPartial :: SchemaPartial } |
-  TyFun { _tyFunType :: FunType v } |
-  TyUser { _tyUser :: v } |
+  { _tySchema :: !SchemaType
+  , _tySchemaType :: !(Type v)
+  , _tySchemaPartial :: !SchemaPartial } |
+  TyFun { _tyFunType :: !(FunType v) } |
+  TyUser { _tyUser :: !v } |
   TyModule
-  { _tyModuleSpec :: Maybe [v]
+  { _tyModuleSpec :: !(Maybe [v])
     -- ^ Nothing for interfaces, implemented ifaces for modules
   }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)

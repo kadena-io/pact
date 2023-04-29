@@ -49,8 +49,8 @@ import qualified Pact.JSON.Encode as J
 
 
 data Capability
-  = CapModuleAdmin ModuleName
-  | CapUser UserCapability
+  = CapModuleAdmin !ModuleName
+  | CapUser !UserCapability
   deriving (Eq,Show,Ord,Generic)
 instance NFData Capability
 
@@ -103,7 +103,7 @@ instance Arbitrary SigCapability where
 data CapEvalResult
   = NewlyAcquired
   | AlreadyAcquired
-  | NewlyInstalled (ManagedCapability UserCapability)
+  | NewlyInstalled !(ManagedCapability UserCapability)
   deriving (Eq,Show)
 
 data CapScope
@@ -120,16 +120,16 @@ instance Pretty CapScope where pretty = viaShow
 
 -- | Runtime storage of acquired or managed capability.
 data CapSlot c = CapSlot
-  { _csScope :: CapScope
-  , _csCap :: c
-  , _csComposed :: [c]
+  { _csScope :: !CapScope
+  , _csCap :: !c
+  , _csComposed :: ![c]
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
 instance NFData c => NFData (CapSlot c)
 
 -- | Model a managed capability where a user-provided function
 -- maintains a selected parameter value.
 data UserManagedCap = UserManagedCap
-  { _umcManagedValue :: PactValue
+  { _umcManagedValue :: !PactValue
     -- ^ mutating value
   , _umcManageParamIndex :: Int
     -- ^ index of managed param value in defcap
@@ -150,11 +150,11 @@ instance Pretty AutoManagedCap where
   pretty = viaShow
 
 data ManagedCapability c = ManagedCapability
-  { _mcInstalled :: CapSlot c
+  { _mcInstalled :: !(CapSlot c)
     -- ^ original installed capability
-  , _mcStatic :: UserCapability
+  , _mcStatic :: !UserCapability
     -- ^ Cap without any mutating components (for auto, same as cap in installed)
-  , _mcManaged :: Either AutoManagedCap UserManagedCap
+  , _mcManaged :: !(Either AutoManagedCap UserManagedCap)
     -- ^ either auto-managed or user-managed
   } deriving (Show,Generic,Foldable)
 
@@ -192,14 +192,14 @@ instance NFData a => NFData (ManagedCapability a)
 
 -- | Runtime datastructure.
 data Capabilities = Capabilities
-  { _capStack :: [CapSlot UserCapability]
+  { _capStack :: ![CapSlot UserCapability]
     -- ^ Stack of "acquired" capabilities.
-  , _capManaged :: Set (ManagedCapability UserCapability)
+  , _capManaged :: !(Set (ManagedCapability UserCapability))
     -- ^ Set of installed managed capabilities. Maybe indicates whether it has been
     -- initialized from signature set.
-  , _capModuleAdmin :: (Set ModuleName)
+  , _capModuleAdmin :: !(Set ModuleName)
     -- ^ Set of module admin capabilities.
-  , _capAutonomous :: Set UserCapability
+  , _capAutonomous :: !(Set UserCapability)
   }
   deriving (Eq,Show,Generic)
 

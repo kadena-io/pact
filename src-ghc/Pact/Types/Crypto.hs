@@ -256,9 +256,9 @@ instance ConvertBS (ECDSA.Signature) where
 
 -- | Specialized KeyPair datatype for schemes
 data KeyPair a = KeyPair
-  { _kpScheme :: a
-  , _kpPublicKey :: PublicKey a
-  , _kpPrivateKey :: PrivateKey a
+  { _kpScheme :: !a
+  , _kpPublicKey :: !(PublicKey a)
+  , _kpPrivateKey :: !(PrivateKey a)
   }
 
 instance Scheme a => Show (KeyPair a) where

@@ -44,8 +44,8 @@ import qualified Pact.JSON.Encode as J
 
 
 data PactRPC c =
-    Exec (ExecMsg c) |
-    Continuation ContMsg
+    Exec !(ExecMsg c) |
+    Continuation !ContMsg
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (PactRPC c)
@@ -74,8 +74,8 @@ instance Arbitrary c => Arbitrary (PactRPC c) where
   arbitrary = oneof [Exec <$> arbitrary, Continuation <$> arbitrary]
 
 data ExecMsg c = ExecMsg
-  { _pmCode :: c
-  , _pmData :: LegacyValue
+  { _pmCode :: !c
+  , _pmData :: !LegacyValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)

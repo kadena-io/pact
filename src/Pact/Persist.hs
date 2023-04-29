@@ -90,8 +90,8 @@ conjToOp c = fromString $ case c of
 {-# INLINE conjToOp #-}
 
 data KeyQuery k =
-  KQKey { kqCmp :: KeyCmp, kqKey :: k } |
-  KQConj { kqL :: KeyQuery k, kqConj :: KeyConj, kqR :: KeyQuery k }
+  KQKey { kqCmp :: !KeyCmp, kqKey :: !k } |
+  KQConj { kqL :: !(KeyQuery k), kqConj :: !KeyConj, kqR :: !(KeyQuery k) }
   deriving (Eq,Show)
 
 -- | Convenience for infix usage.
@@ -120,23 +120,23 @@ instance PactDbKey TxKey
 instance PactDbKey DataKey
 
 data Persister s = Persister {
-  createTable :: forall k . PactDbKey k => Table k -> Persist s ()
+  createTable :: !(forall k . PactDbKey k => Table k -> Persist s ())
   ,
-  beginTx :: ExecutionMode -> Persist s ()
+  beginTx :: !(ExecutionMode -> Persist s ())
   ,
-  commitTx :: Persist s ()
+  commitTx :: !(Persist s ())
   ,
-  rollbackTx :: Persist s ()
+  rollbackTx :: !(Persist s ())
   ,
-  queryKeys :: forall k . PactDbKey k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
+  queryKeys :: !(forall k . PactDbKey k => Table k -> Maybe (KeyQuery k) -> Persist s [k])
   ,
-  query :: forall k v . (PactDbKey k, FromJSON v, Typeable v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
+  query :: !(forall k v . (PactDbKey k, FromJSON v, Typeable v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)])
   ,
-  readValue :: forall k v . (PactDbKey k, FromJSON v, Typeable v) => Table k -> k -> Persist s (Maybe v)
+  readValue :: !(forall k v . (PactDbKey k, FromJSON v, Typeable v) => Table k -> k -> Persist s (Maybe v))
   ,
-  writeValue :: forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ()
+  writeValue :: !(forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ())
   ,
-  refreshConn :: Persist s ()
+  refreshConn :: !(Persist s ())
   }
 
 _compileQry1 :: (String,[Int])

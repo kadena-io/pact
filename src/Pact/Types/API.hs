@@ -126,7 +126,7 @@ instance FromJSON ListenerRequest where
 
 data ListenResponse
   = ListenTimeout Int
-  | ListenResponse (CommandResult Hash)
+  | ListenResponse !(CommandResult Hash)
   deriving (Eq,Show,Generic)
 
 listenResponseTimeoutProperties :: JsonProperties Int

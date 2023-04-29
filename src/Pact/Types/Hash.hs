@@ -127,7 +127,7 @@ hashLength SHA3_256 = 32
 
 -- | Typed hash, to indicate algorithm
 data TypedHash (h :: HashAlgo) where
-  TypedHash :: ShortByteString -> TypedHash h
+  TypedHash :: !ShortByteString -> TypedHash h
   deriving (Eq, Ord, Generic)
 
 instance Hashable (TypedHash h) where

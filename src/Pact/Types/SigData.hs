@@ -70,10 +70,10 @@ instance Arbitrary PublicKeyHex where
 -- payload to facilitate easier transmission via QR codes and other low
 -- bandwidth channels.
 data SigData a = SigData
-  { _sigDataHash :: PactHash
-  , _sigDataSigs :: [(PublicKeyHex, Maybe UserSig)]
+  { _sigDataHash :: !PactHash
+  , _sigDataSigs :: ![(PublicKeyHex, Maybe UserSig)]
   -- ^ This is not a map because the order must be the same as the signers inside the command.
-  , _sigDataCmd :: Maybe a
+  , _sigDataCmd :: !(Maybe a)
   } deriving (Eq,Show,Generic)
 
 sigDataProperties :: ToJSON a => ToJSON x => ([(Text, Maybe Text)] -> x) -> JsonMProperties (SigData a)

@@ -57,7 +57,7 @@ import qualified Pact.JSON.Encode as J
 data StackFrame = StackFrame {
       _sfName :: !Text
     , _sfLoc :: !Info
-    , _sfApp :: Maybe (FunApp,[Text])
+    , _sfApp :: !(Maybe (FunApp,[Text]))
     } deriving (Eq,Generic)
 instance NFData StackFrame
 instance ToJSON StackFrame where
@@ -135,10 +135,10 @@ instance Arbitrary PactErrorType where
   arbitrary = elements [ EvalError, ArgsError, DbError, TxFailure, SyntaxError, GasError ]
 
 data PactError = PactError
-  { peType :: PactErrorType
-  , peInfo :: Info
-  , peCallStack :: [StackFrame]
-  , peDoc :: Doc }
+  { peType :: !PactErrorType
+  , peInfo :: !Info
+  , peCallStack :: ![StackFrame]
+  , peDoc :: !Doc }
   deriving (Eq,Generic)
 
 instance NFData PactError
@@ -219,9 +219,9 @@ instance Arbitrary OutputType where
 
 -- | Tool warning/error output.
 data RenderedOutput = RenderedOutput
-  { _roText :: Text
-  , _roInfo :: Info
-  , _roType :: OutputType }
+  { _roText :: !Text
+  , _roInfo :: !Info
+  , _roType :: !OutputType }
   deriving (Eq,Show)
 
 instance Pretty RenderedOutput where

@@ -65,11 +65,11 @@ instance Arbitrary ContProof where
 
 -- | Backend for SPV support
 data SPVSupport = SPVSupport
-  { _spvSupport :: Text -> Object Name -> IO (Either Text (Object Name))
+  { _spvSupport :: !(Text -> (Object Name) -> IO (Either Text (Object Name)))
     -- ^ Attempt to verify an SPV proof of a given type,
     -- given a payload object. On success, returns the
     -- specific data represented by the proof.
-  , _spvVerifyContinuation :: ContProof -> IO (Either Text PactExec)
+  , _spvVerifyContinuation :: !(ContProof -> IO (Either Text PactExec))
     -- ^ Attempt to verify an SPV proof of a continuation given
     -- a continuation payload object bytestring. On success, returns
     -- the 'PactExec' associated with the proof.

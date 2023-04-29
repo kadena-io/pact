@@ -53,10 +53,10 @@ isSafeInteger i = i >= l && i <= h
 
 -- | JSON codec pair.
 data Codec a = Codec {
-  encoder :: a -> J.Builder,
-  decoder :: Value -> Parser a,
-  valueEncoder :: a -> Value,
-  aesonEncoder :: a -> Encoding
+  encoder :: !(a -> J.Builder),
+  decoder :: !(Value -> Parser a),
+  valueEncoder :: !(a -> Value),
+  aesonEncoder :: !(a -> Encoding)
   }
 
 -- | Integers encode to an object that uses Number if in reasonable JS bounds or String otherwise.

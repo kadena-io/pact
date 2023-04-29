@@ -80,9 +80,9 @@ import qualified Pact.JSON.Encode as J
 -- PersistDirect
 
 data PersistDirect =
-    PDValue PactValue
-  | PDNative NativeDefName
-  | PDFreeVar FullyQualifiedName
+    PDValue !PactValue
+  | PDNative !NativeDefName
+  | PDFreeVar !FullyQualifiedName
   deriving (Eq,Show,Generic)
 
 instance NFData PersistDirect
@@ -130,7 +130,7 @@ toPersistDirect t = case toPactValue t of
   Left e -> Left e
 
 fromPersistDirect :: (NativeDefName -> Maybe (Term Name)) -> PersistDirect -> Either Text (Term Name)
-fromPersistDirect _ (PDValue v) = return $ fromPactValue v
+fromPersistDirect _ (PDValue v) = return $! fromPactValue v
 fromPersistDirect _ (PDFreeVar f) = return $ TVar (FQName f) def
 fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
   Just t -> return t
@@ -148,9 +148,9 @@ allModuleExports md = case _mdModule md of
 
 -- | Module ref store
 data ModuleData r = ModuleData
-  { _mdModule :: ModuleDef (Def r)
-  , _mdRefMap :: HM.HashMap Text r
-  , _mdDependencies :: HM.HashMap FullyQualifiedName r
+  { _mdModule :: !(ModuleDef (Def r))
+  , _mdRefMap :: !(HM.HashMap Text r)
+  , _mdDependencies :: !(HM.HashMap FullyQualifiedName r)
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
 
@@ -428,33 +428,33 @@ type Method e a = MVar e -> IO a
 -- | Fun-record type for Pact back-ends.
 data PactDb e = PactDb {
     -- | Read a domain value at key, throwing an exception if not found.
-    _readRow :: forall k v . (IsString k,FromJSON v) =>
-      Domain k v -> k -> Method e (Maybe v)
+    _readRow :: !(forall k v . (IsString k,FromJSON v) =>
+      Domain k v -> k -> Method e (Maybe v))
     -- | Write a domain value at key. WriteType argument governs key behavior.
-  , _writeRow :: forall k v . (AsString k,J.Encode v) =>
-      WriteType -> Domain k v -> k -> v -> Method e ()
+  , _writeRow :: !(forall k v . (AsString k,J.Encode v) =>
+      WriteType -> Domain k v -> k -> v -> Method e ())
     -- | Retrieve all keys for a domain, Key output guaranteed sorted.
-  , _keys :: forall k v . (IsString k,AsString k) => Domain k v -> Method e [k]
+  , _keys :: !(forall k v . (IsString k,AsString k) => Domain k v -> Method e [k])
     -- | Retrieve all transaction ids greater than supplied txid for table.
-  , _txids ::  TableName -> TxId -> Method e [TxId]
+  , _txids ::  !(TableName -> TxId -> Method e [TxId])
     -- | Create a user table.
-  , _createUserTable :: TableName -> ModuleName -> Method e ()
+  , _createUserTable :: !(TableName -> ModuleName -> Method e ())
     -- | Get module, keyset for user table.
-  , _getUserTableInfo :: TableName -> Method e ModuleName
+  , _getUserTableInfo :: !(TableName -> Method e ModuleName)
     -- | Initiate transactional state. Returns txid for 'Transactional' mode
     -- or Nothing for 'Local' mode. If state already initiated, rollback and throw error.
-  , _beginTx :: ExecutionMode -> Method e (Maybe TxId)
+  , _beginTx :: !(ExecutionMode -> Method e (Maybe TxId))
     -- | Conclude transactional state with commit.
     -- In transactional mode, commits backend to TxId.
     -- In Local mode, releases TxId for re-use.
     -- Returns all TxLogs.
-  , _commitTx :: Method e [TxLogJson]
+  , _commitTx :: !(Method e [TxLogJson])
     -- | Conclude transactional state with rollback.
     -- Safe to call at any time.
     -- Rollback all backend changes.
     -- Releases TxId for re-use.
-  , _rollbackTx :: Method e ()
+  , _rollbackTx :: !(Method e ())
     -- | Get transaction log for table. TxLogs are expected to be user-visible format.
-  , _getTxLog :: forall k . IsString k =>
-      Domain k RowData -> TxId -> Method e [TxLog RowData]
+  , _getTxLog :: !(forall k . IsString k =>
+      Domain k RowData -> TxId -> Method e [TxLog RowData])
 }

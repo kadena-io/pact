@@ -92,8 +92,8 @@ getCurrentCreationTime = TxCreationTime
 
 -- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
 data Address = Address
-  { _aFrom :: EntityName
-  , _aTo :: Set EntityName
+  { _aFrom :: !EntityName
+  , _aTo :: !(Set EntityName)
   } deriving (Eq,Show,Ord,Generic)
 
 instance NFData Address

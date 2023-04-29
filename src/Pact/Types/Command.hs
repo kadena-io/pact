@@ -257,7 +257,7 @@ data Signer = Signer
  -- ^ pub key value
  , _siAddress :: !(Maybe Text)
  -- ^ optional "address", for different pub key formats like ETH
- , _siCapList :: [SigCapability]
+ , _siCapList :: ![SigCapability]
  -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 
@@ -425,7 +425,7 @@ data CommandResult l = CommandResult {
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
   -- | Events
-  , _crEvents :: [PactEvent]
+  , _crEvents :: ![PactEvent]
   } deriving (Eq,Show,Generic,Functor)
 
 commandResultProperties
@@ -499,8 +499,8 @@ type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
 type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
 data CommandExecInterface m a l = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd l
-  , _ceiApplyPPCmd :: ApplyPPCmd m a l
+  { _ceiApplyCmd :: !(ApplyCmd l)
+  , _ceiApplyPPCmd :: !(ApplyPPCmd m a l)
   }
 
 

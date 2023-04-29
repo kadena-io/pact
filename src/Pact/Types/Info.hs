@@ -61,7 +61,7 @@ import qualified Pact.JSON.Encode as J
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {
-  _pDelta :: Delta,
+  _pDelta :: !Delta,
   _pLength :: !Int
   } deriving (Eq,Show,Ord,Generic)
 

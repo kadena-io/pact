@@ -112,7 +112,7 @@ keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [minBound .. maxBound]
 
 -- | Storage for natives.
-data RefStore = RefStore {
+newtype RefStore = RefStore {
       _rsNatives :: HM.HashMap Text Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
@@ -132,9 +132,9 @@ instance Default Purity where def = PImpure
 -- All warnings pact emits at runtime
 data PactWarning
   -- | Deprecated native, with help message
-  = DeprecatedNative NativeDefName Text
+  = DeprecatedNative !NativeDefName !Text
   -- | Deprecated overload with help message
-  | DeprecatedOverload NativeDefName Text
+  | DeprecatedOverload !NativeDefName !Text
   deriving (Show, Eq, Ord, Generic)
 
 instance ToJSON PactWarning
@@ -253,37 +253,37 @@ data EvalEnv e = EvalEnv {
       -- | JSON body accompanying message.
     , _eeMsgBody :: !LegacyValue
       -- | Execution mode
-    , _eeMode :: ExecutionMode
+    , _eeMode :: !ExecutionMode
       -- | Entity governing private/encrypted 'pact' executions.
     , _eeEntity :: !(Maybe EntityName)
       -- | Step value for 'pact' executions.
     , _eePactStep :: !(Maybe PactStep)
       -- | Back-end state MVar.
-    , _eePactDbVar :: MVar e
+    , _eePactDbVar :: !(MVar e)
       -- | Back-end function record.
-    , _eePactDb :: PactDb e
+    , _eePactDb :: !(PactDb e)
       -- | Pure indicator
-    , _eePurity :: Purity
+    , _eePurity :: !Purity
       -- | Transaction hash
-    , _eeHash :: Hash
+    , _eeHash :: !Hash
       -- | Gas Environment
-    , _eeGasEnv :: GasEnv
+    , _eeGasEnv :: !GasEnv
       -- | Tallied gas
-    , _eeGas :: IORef Gas
+    , _eeGas :: !(IORef Gas)
       -- | Namespace Policy
-    , _eeNamespacePolicy :: NamespacePolicy
+    , _eeNamespacePolicy :: !NamespacePolicy
       -- | SPV backend
-    , _eeSPVSupport :: SPVSupport
+    , _eeSPVSupport :: !SPVSupport
       -- | Env public data
-    , _eePublicData :: PublicData
+    , _eePublicData :: !PublicData
       -- | Execution configuration flags
-    , _eeExecutionConfig :: ExecutionConfig
+    , _eeExecutionConfig :: !ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
       -- | Are we in the repl? If not, ignore info
-    , _eeInRepl :: Bool
+    , _eeInRepl :: !Bool
       -- | Warnings ref
-    , _eeWarnings :: IORef (Set PactWarning)
+    , _eeWarnings :: !(IORef (Set PactWarning))
     }
 makeLenses ''EvalEnv
 
@@ -294,13 +294,13 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Text (Ref, Maybe ModuleHash)
+      _rsLoaded :: !(HM.HashMap Text (Ref, Maybe ModuleHash))
       -- | Modules that were loaded, and flag if updated.
-    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
+    , _rsLoadedModules :: !(HM.HashMap ModuleName (ModuleData Ref, Bool))
       -- | Current Namespace
-    , _rsNamespace :: Maybe (Namespace (Term Name))
+    , _rsNamespace :: !(Maybe (Namespace (Term Name)))
       -- | Map of all fully qualified names in scope, including transitive dependencies.
-    , _rsQualifiedDeps :: HM.HashMap FullyQualifiedName Ref
+    , _rsQualifiedDeps :: !(HM.HashMap FullyQualifiedName Ref)
     } deriving (Eq,Show,Generic)
 
 makeLenses ''RefState
@@ -359,9 +359,9 @@ data EvalState = EvalState {
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
       -- | Capability list
-    , _evalCapabilities :: Capabilities
+    , _evalCapabilities :: !Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
-    , _evalLogGas :: Maybe [(Text,Gas)]
+    , _evalLogGas :: !(Maybe [(Text,Gas)])
       -- | Accumulate events
     , _evalEvents :: ![PactEvent]
     } deriving (Show, Generic)

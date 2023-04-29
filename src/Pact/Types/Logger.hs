@@ -31,9 +31,9 @@ newtype LogName = LogName String
   deriving (Eq,Show,Ord,Hashable,IsString,AsString,ToJSON,FromJSON)
 
 data Logger = Logger {
-  logName :: LogName,
-  logDesc :: Maybe String,
-  logLog :: String -> String -> IO ()
+  logName :: !LogName,
+  logDesc :: !(Maybe String),
+  logLog :: !(String -> String -> IO ())
   }
 instance Show Logger where show l = T.unpack (asString (logName l)) ++ maybe "" (": " ++) (logDesc l)
 
@@ -52,9 +52,9 @@ logDebug = log "DEBUG"
 newtype Loggers = Loggers { newLogger :: LogName -> Logger }
 
 data LogRule = LogRule {
-  enable :: Maybe Bool,
-  include :: Maybe (HS.HashSet String),
-  exclude :: Maybe (HS.HashSet String)
+  enable :: !(Maybe Bool),
+  include :: !(Maybe (HS.HashSet String)),
+  exclude :: !(Maybe (HS.HashSet String))
   } deriving (Eq,Generic)
 instance ToJSON LogRule
 instance FromJSON LogRule

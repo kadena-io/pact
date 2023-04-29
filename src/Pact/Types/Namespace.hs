@@ -77,9 +77,9 @@ instance (NFData a) => NFData (Namespace a)
 -- 1. Whether a namespace can be created.
 -- 2. Whether the default namespace can be used.
 data NamespacePolicy
-  = SimpleNamespacePolicy (Maybe (Namespace (Term Name)) -> Bool)
+  = SimpleNamespacePolicy !(Maybe (Namespace (Term Name)) -> Bool)
   -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
-  | SmartNamespacePolicy Bool QualifiedName
+  | SmartNamespacePolicy !Bool !QualifiedName
   -- ^ Bool governs root usage, Name governs ns creation.
   -- Def is (defun xxx:bool (ns:string ns-admin:guard))
 

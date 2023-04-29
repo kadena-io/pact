@@ -215,8 +215,8 @@ escapedStringsExpr = map format strings
 
 -- | Helper functions and types for creating pact expressions
 data PactExpression = PactExpression
-  { _pactExpressionFull :: T.Text
-  , _pactExpressionAbridged :: Maybe T.Text
+  { _pactExpressionFull :: !T.Text
+  , _pactExpressionAbridged :: !(Maybe T.Text)
   }
 
 defPactExpression :: T.Text -> PactExpression
@@ -234,13 +234,13 @@ createPactExpr f (PactExpression arg abridged) =
 
 
 data MockPactType =
-    MockObject (HM.HashMap T.Text Integer)
-  | MockBinding (HM.HashMap T.Text Integer)
-  | MockList [MockPactType]
-  | MockBool Bool
-  | MockInt Integer
-  | MockString T.Text
-  | MockExpr T.Text
+    MockObject !(HM.HashMap T.Text Integer)
+  | MockBinding !(HM.HashMap T.Text Integer)
+  | MockList ![MockPactType]
+  | MockBool !Bool
+  | MockInt !Integer
+  | MockString !T.Text
+  | MockExpr !T.Text
   deriving (Show)
 
 toText :: MockPactType -> T.Text

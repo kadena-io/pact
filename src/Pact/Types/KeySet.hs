@@ -180,8 +180,8 @@ instance J.Encode KeySet where
 
 data KeySetName
   = KeySetName
-  { _ksnName :: Text
-  , _ksnNamespace :: Maybe NamespaceName
+  { _ksnName :: !Text
+  , _ksnNamespace :: !(Maybe NamespaceName)
   } deriving (Eq, Ord, Show, Generic)
 
 instance IsString KeySetName where

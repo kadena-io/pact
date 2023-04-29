@@ -43,11 +43,11 @@ import qualified Pact.JSON.Encode as J
 -- RowDataValue
 
 data RowDataValue
-    = RDLiteral Literal
-    | RDList (Vector RowDataValue)
-    | RDObject (ObjectMap RowDataValue)
-    | RDGuard (Guard RowDataValue)
-    | RDModRef ModRef
+    = RDLiteral !Literal
+    | RDList !(Vector RowDataValue)
+    | RDObject !(ObjectMap RowDataValue)
+    | RDGuard !(Guard RowDataValue)
+    | RDModRef !ModRef
     deriving (Eq,Show,Generic,Ord)
 instance NFData RowDataValue
 instance Arbitrary RowDataValue where
@@ -157,8 +157,8 @@ instance J.Encode RowDataVersion where
 -- RowData
 
 data RowData = RowData
-    { _rdVersion :: RowDataVersion
-    , _rdData :: ObjectMap RowDataValue
+    { _rdVersion :: !RowDataVersion
+    , _rdData :: !(ObjectMap RowDataValue)
     }
   deriving (Eq,Show,Generic,Ord)
 instance NFData RowData
@@ -241,11 +241,11 @@ instance FromJSON RowData where
 -- OldPactValue
 
 data OldPactValue
-  = OldPLiteral Literal
-  | OldPList (Vector OldPactValue)
-  | OldPObject (ObjectMap OldPactValue)
-  | OldPGuard (Guard OldPactValue)
-  | OldPModRef ModRef
+  = OldPLiteral !Literal
+  | OldPList !(Vector OldPactValue)
+  | OldPObject !(ObjectMap OldPactValue)
+  | OldPGuard !(Guard OldPactValue)
+  | OldPModRef !ModRef
 
 -- Needed for parsing guard
 instance ToJSON OldPactValue where

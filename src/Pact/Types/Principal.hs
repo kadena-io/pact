@@ -38,24 +38,24 @@ import Data.Char (isHexDigit)
 
 
 data Principal
-  = K PublicKeyText
+  = K !PublicKeyText
     -- ^ format: `k:public key`, where hex public key
     -- is the text public key of the underlying keyset
-  | W Text Text
+  | W !Text !Text
     -- ^ format: `w:b64url-encoded hash:pred` where
     -- the hash is a b64url-encoding of the hash of
     -- the list of public keys of the multisig keyset
-  | R KeySetName
+  | R !KeySetName
     -- ^ format: `r:keyset-name` where keyset name is
     -- any definable keyset name
-  | U Text Text
+  | U !Text !Text
     -- ^ format: `u:fqn of user guard function:b64url-encoded
     -- hash of args
-  | M ModuleName Text
+  | M !ModuleName !Text
     -- ^ format: `m:fq module name:fqn of module guard function
-  | P PactId Text
+  | P !PactId !Text
     -- ^ format: `p:pactid:fqn of pact function
-  | C Text
+  | C !Text
     -- ^ format: `c:hash of cap name + cap params + pactId if any
   deriving Eq
 makePrisms ''Principal

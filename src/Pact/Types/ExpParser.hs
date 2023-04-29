@@ -76,8 +76,8 @@ import Pact.Types.KeySet (KeySetName, parseAnyKeysetName)
 
 -- | Exp stream type.
 data Cursor = Cursor
-  { _cContext :: Maybe (Cursor,Exp Info)
-  , _cStream :: [Exp Info]
+  { _cContext :: !(Maybe (Cursor,Exp Info))
+  , _cStream :: ![Exp Info]
   } deriving (Show)
 instance Default Cursor where def = Cursor def def
 
@@ -102,8 +102,8 @@ instance Stream Cursor where
 
 -- | Capture last-parsed Exp, plus arbitrary state.
 data ParseState a = ParseState
-  { _psCurrent :: Exp Info
-  , _psUser :: a
+  { _psCurrent :: !(Exp Info)
+  , _psUser :: !a
   }
 makeLenses ''ParseState
 
