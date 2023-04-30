@@ -147,24 +147,11 @@ timeCodec = Codec enc dec encValue aesonEnc
     field = "time"
     highprec = "timep"
 
-    -- TODO this should be 1000000. Fixing this would break mainnet replay
+    -- FIXME this should be 1000000. Fixing this would break mainnet replay
     -- on chain 0 at block height 1720161 (txid 2475483). So, we would have
     -- to do this in a fork.
     denom :: UTCTime -> Integer
     denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
-
-{-
-valueCodec :: Codec Value
-valueCodec = Codec enc dec encVal
-  where
-    enc v = J.object ["_P_val" J..= v]
-    {-# INLINE enc #-}
-    encVal v = object [field .= v]
-    {-# INLINE encVal #-}
-    dec = withObject "Value" $ \o -> o .: field
-    {-# INLINE dec #-}
-    field = "_P_val"
--}
 
 roundtripCodec :: Codec t -> t -> Result t
 roundtripCodec c t = parse (decoder c) $ valueEncoder c t

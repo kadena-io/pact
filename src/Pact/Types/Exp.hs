@@ -29,6 +29,7 @@ module Pact.Types.Exp
    genLiteralDecimal,
    genLiteralBool,
    genLiteralTime,
+   genRoundtripableTimeUTCTime,
    simpleISO8601,formatLTime,
    litToPrim,
    LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),
@@ -54,6 +55,7 @@ import Data.Monoid (Any(..))
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
+import Data.Ratio ((%), denominator)
 import Data.Serialize (Serialize)
 import Data.String (IsString, fromString)
 import Test.QuickCheck
@@ -62,7 +64,7 @@ import Test.QuickCheck.Instances ()
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
-import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime)
+import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime, toPosixTimestampMicros)
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText, JsonProperties, JsonMProperties, enableToJSON, (.?=))
@@ -90,8 +92,22 @@ genLiteralBool :: Gen Literal
 genLiteralBool = LBool <$> arbitrary
 
 genLiteralTime :: Gen Literal
-genLiteralTime = LTime <$> genArbitraryUTCTime
+genLiteralTime = LTime <$> genRoundtripableTimeUTCTime
 
+-- | Generate a an arbitrary UTCTime value that can roundtrip via 'Pact.Types.Codec.timeCodec'.
+--
+-- See the documentation of 'Pact.Types.Codec.timeCodec' for details.
+--
+genRoundtripableTimeUTCTime :: Gen UTCTime
+genRoundtripableTimeUTCTime = do
+  t <- genArbitraryUTCTime
+  if denom1000 t == 1 && denom t /= 1
+    then genRoundtripableTimeUTCTime
+    else return t
+ where
+  -- This works around a bug in the time codec
+  denom1000 = denominator @Integer . (% 1000) . fromIntegral . toPosixTimestampMicros
+  denom = denominator @Integer . (% 1000000) . fromIntegral . toPosixTimestampMicros
 
 data Literal =
     LString { _lString :: !Text } |
