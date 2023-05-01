@@ -81,6 +81,7 @@ data Feature
   | FCeilingRound
   | FFloorRound
   | FModulus
+ 
   -- Bitwise operators
   | FBitwiseAnd
   | FBitwiseOr
@@ -126,6 +127,11 @@ data Feature
   | FStringToInteger
   | FStringTake
   | FStringDrop
+  -- Hash operators
+  | FStringHash
+  | FNumericalHash
+  | FBoolHash
+  | FListHash
   -- Temporal operators
   | FTemporalAddition
   -- Quantification forms
@@ -160,6 +166,9 @@ data Feature
   -- Other
   | FWhere
   | FTypeof
+  -- Principals
+  | FIsPrincipal
+  | FTypeOfPrincipal
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -959,7 +968,7 @@ doc FEnumerate = Doc
   InvAndProp
   "Returns a sequence of numbers as a list"
   [ Usage
-      "(drop n xs)"
+      "(enumerate from to step)"
       Map.empty
       $ Fun
         Nothing
@@ -1222,6 +1231,63 @@ doc FStringToInteger = Doc
         (TyCon int)
   ]
 
+-- Hash features
+
+doc FStringHash = Doc
+  "hash"
+  CString
+  PropOnly
+  "BLAKE2b 256-bit hash of string values"
+  [ Usage
+      "(hash s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)]
+        (TyCon str)
+  ]
+doc FNumericalHash = Doc
+  "hash"
+  CString
+  PropOnly
+  "BLAKE2b 256-bit hash of numerical values"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(hash s)"
+      (Map.fromList [("a", OneOf [int, dec])])
+      $ Fun
+        Nothing
+        [ ("s", a)]
+        (TyCon str)
+  ]
+doc FBoolHash = Doc
+  "hash"
+  CLogical
+  PropOnly
+  "BLAKE2b 256-bit hash of bool values"
+  [ Usage
+      "(hash s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon bool)]
+        (TyCon str)
+  ]
+doc FListHash = Doc
+  "hash"
+  CList
+  PropOnly
+  "BLAKE2b 256-bit hash of lists"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(hash xs)"
+      (Map.fromList [("a", OneOf [int, dec, bool, str])])
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
+        ]
+      (TyCon str)
+  ]
 -- Temporal features
 
 doc FTemporalAddition = Doc
@@ -1685,6 +1751,33 @@ doc FTypeof = Doc
         (TyCon str)
   ]
 
+-- Principals
+doc FIsPrincipal = Doc
+  "is-principal"
+  CAuthorization
+  InvAndProp
+  "Whether `s` conforms to the principal format without proving validity."
+  [ Usage "(is-principal s)"
+    Map.empty
+    $ Fun
+    Nothing
+    [ ("s", TyCon str)
+    ]
+    (TyCon bool)
+  ]
+doc FTypeOfPrincipal = Doc
+  "typeof-principal"
+  CAuthorization
+  InvAndProp
+  "Return the protocol type of the given `s` value. If input value is not a principal type, then the empty string is returned."
+  [ Usage "(typeof-principal s)"
+    Map.empty
+    $ Fun
+    Nothing
+    [ ("s", TyCon str)
+    ]
+    (TyCon str)
+  ]
 allFeatures :: Set Feature
 allFeatures = Set.fromList $ enumFrom minBound
 
@@ -1772,6 +1865,10 @@ PAT(SStringTake, FStringTake)
 PAT(SStringDrop, FStringDrop)
 PAT(SConcatenation, FConcatenation)
 PAT(SStringToInteger, FStringToInteger)
+PAT(SStringHash, FStringHash)
+PAT(SNumericalHash, FNumericalHash)
+PAT(SBoolHash, FBoolHash)
+PAT(SListHash, FListHash)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
@@ -1799,6 +1896,8 @@ PAT(SConstantly, FConstantly)
 PAT(SCompose, FCompose)
 PAT(SWhere, FWhere)
 PAT(STypeof, FTypeof)
+PAT(SIsPrincipal, FIsPrincipal)
+PAT(STypeOfPrincipal, FTypeOfPrincipal)
 
 -- 'Text'/op prisms
 

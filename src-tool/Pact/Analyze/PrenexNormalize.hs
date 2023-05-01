@@ -101,7 +101,12 @@ singFloat ty p = case p of
   CoreProp (StrDrop s1 s2) -> PStrDrop <$> float s1 <*> float s2
   CoreProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
   CoreProp (Typeof tya a) -> CoreProp . Typeof tya <$> singFloat tya a
-
+ -- hash
+  CoreProp (StrHash s)  -> CoreProp . StrHash  <$> float s
+  CoreProp (IntHash s)  -> CoreProp . IntHash  <$> float s
+  CoreProp (BoolHash s) -> CoreProp . BoolHash <$> float s
+  CoreProp (DecHash s)  -> CoreProp . DecHash  <$> float s
+  CoreProp (ListHash ty' s) -> CoreProp . ListHash ty' <$> singFloat (SList ty') s
   -- time
   CoreProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
   CoreProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec
@@ -191,7 +196,10 @@ singFloat ty p = case p of
   CoreProp ObjMerge{}      -> ([], p)
   CoreProp (Where objty tya a b c) -> CoreProp <$>
     (Where objty tya <$> float a <*> floatOpen b <*> singFloat objty c)
-
+  CoreProp (IsPrincipal a) -> CoreProp <$>
+    (IsPrincipal <$> float a)
+  CoreProp (TypeOfPrincipal a) -> CoreProp <$>
+    (TypeOfPrincipal <$> float a)
   where
 
     floatOpen :: SingI b => Open a Prop b -> ([Quantifier], Open a Prop b)

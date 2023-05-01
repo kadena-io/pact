@@ -206,6 +206,13 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   StrToIntBase :: t 'TyInteger -> t 'TyStr -> Core t 'TyInteger
   StrContains  :: t 'TyStr     -> t 'TyStr -> Core t 'TyBool
 
+  -- | Hash (Blake2b 256bit)
+  StrHash      :: t 'TyStr     -> Core t 'TyStr
+  BoolHash     :: t 'TyBool    -> Core t 'TyStr
+  IntHash      :: t 'TyInteger -> Core t 'TyStr
+  DecHash      :: t 'TyDecimal -> Core t 'TyStr
+  ListHash     :: SingTy a -> t ('TyList a) -> Core t 'TyStr
+
   Enumerate :: t 'TyInteger -> t 'TyInteger -> t 'TyInteger -> Core t ('TyList 'TyInteger)
 
   -- numeric ops
@@ -263,7 +270,7 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   ListEqNeq    :: SingTy a -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
   ListAt       :: SingTy a -> t 'TyInteger -> t ('TyList a) -> Core t a
   ListContains :: SingTy a -> t a      -> t ('TyList a) -> Core t 'TyBool
-  
+
   ListDistinct :: SingTy a -> t ('TyList a) -> Core t ('TyList a)
 
   ListLength   :: SingTy a -> t ('TyList a) -> Core t 'TyInteger
@@ -306,6 +313,9 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
     -> t 'TyStr -> Open a t 'TyBool -> t ('TyObject m) -> Core t 'TyBool
 
   Typeof :: SingTy a -> t a -> Core t 'TyStr
+
+  IsPrincipal     :: t 'TyStr -> Core t 'TyBool
+  TypeOfPrincipal :: t 'TyStr -> Core t 'TyStr
 
 mkLiteralObject
   :: (IsTerm tm, Monad m)
@@ -580,6 +590,18 @@ eqCoreTm _ (StrToIntBase b1 s1)          (StrToIntBase b2 s2)
   = eqTm b1 b2 && eqTm s1 s2
 eqCoreTm _ (StrContains a1 b1)           (StrContains a2 b2)
   = eqTm a1 a2 && eqTm b1 b2
+eqCoreTm _ (IntHash a) (IntHash b)
+  = eqTm a b
+eqCoreTm _ (StrHash a) (StrHash b)
+  = eqTm a b
+eqCoreTm _ (DecHash a) (DecHash b)
+  = eqTm a b
+eqCoreTm _ (BoolHash a) (BoolHash b)
+  = eqTm a b
+eqCoreTm t (ListHash ta a) (ListHash tb b)
+  = case (singEq t ta, singEq t tb) of
+  (Just Refl, Just Refl) -> eqTm a b
+  _otherwise  -> False
 eqCoreTm _ (StrTake i1 l1)          (StrTake i2 l2)
   = eqTm i1 i2 && eqTm l1 l2
 eqCoreTm _ (StrDrop i1 l1)          (StrDrop i2 l2)
@@ -689,6 +711,11 @@ eqCoreTm _ (Typeof ty1 a1) (Typeof ty2 a2)
     Nothing   -> False
     Just Refl -> singEqTm ty1 a1 a2
 
+eqCoreTm _ (IsPrincipal a) (IsPrincipal b)
+  = eqTm a b
+eqCoreTm _ (TypeOfPrincipal a) (TypeOfPrincipal b)
+  = eqTm a b
+
 eqCoreTm _ _ _                          = False
 
 showsPrecCore :: IsTerm tm => SingTy a -> Int -> Core tm a -> ShowS
@@ -723,6 +750,11 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   StrToInt a       -> showString "StrToInt "     . showsTm 11 a
   StrToIntBase a b -> showString "StrToIntBase " . showsTm 11 a . showChar ' ' . showsTm 11 b
   StrContains  a b -> showString "StrContains "  . showsTm 11 a . showChar ' ' . showsTm 11 b
+  StrHash a        -> showString "StrHash "      . showsTm 11 a
+  IntHash a        -> showString "IntHash "      . showsTm 11 a
+  BoolHash a       -> showString "BoolHash "     . showsTm 11 a
+  DecHash a        -> showString "DecimalHash "  . showsTm 11 a
+  ListHash ty' a   -> showString "ListHash "     . showsPrec 11 ty' . showChar ' ' . singShowsTmList ty' 11 a
   Enumerate a b c  -> showString "Enumerate "    . showsTm 11 a . showChar ' ' . showsTm 11 b . showChar ' ' . showsTm 11 c
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
@@ -950,6 +982,14 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showsPrec 11 tya
     . showChar ' '
     . singShowsTm tya 11 a
+  IsPrincipal a ->
+      showString "is-principal"
+    . showChar ' '
+    . showsTm 11 a
+  TypeOfPrincipal a ->
+      showString "typeof-principal"
+      . showChar ' '
+      . showsTm 11 a
 
 prettyCore :: IsTerm tm => SingTy ty -> Core tm ty -> Doc
 prettyCore ty = \case
@@ -967,6 +1007,13 @@ prettyCore ty = \case
   StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
   StrContains needle haystack
     -> parensSep [pretty SContains, prettyTm needle, prettyTm haystack]
+    
+  StrHash x                -> parensSep [pretty SStringHash, prettyTm x]
+  IntHash x                -> parensSep [pretty SNumericalHash, prettyTm x]
+  BoolHash x               -> parensSep [pretty SBoolHash, prettyTm x]
+  DecHash x                -> parensSep [pretty SNumericalHash, prettyTm x]
+  ListHash ty' x           -> parensSep [pretty SListHash, singPrettyTmList ty' x]
+
   Enumerate x y z          -> parensSep [pretty SEnumerate, prettyTm x, prettyTm y, prettyTm z]
   Numerical tm             -> prettyNumerical ty tm
   IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
@@ -1032,6 +1079,9 @@ prettyCore ty = \case
     , singPrettyTm tyobj obj
     ]
   Typeof ty' a -> parensSep [pretty STypeof, singPrettyTm ty' a]
+
+  IsPrincipal a     -> parensSep [pretty SIsPrincipal, prettyTm a]
+  TypeOfPrincipal a -> parensSep [pretty STypeOfPrincipal, prettyTm a]
 
 
 data BeforeOrAfter = Before | After
@@ -1410,12 +1460,15 @@ data Term (a :: Ty) where
   Format          :: Term 'TyStr         -> [ETerm]      -> Term 'TyStr
   FormatTime      :: Term 'TyStr         -> Term 'TyTime -> Term 'TyStr
   ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr  -> Term 'TyTime
-  Hash            :: ETerm                               -> Term 'TyStr
 
   -- Pacts
   Pact   :: [PactStep]      -> Term 'TyStr
   Yield  :: TagId -> Term a -> Term a
   Resume :: TagId ->           Term a
+
+  -- Principals
+  CreatePrincipal   :: Term 'TyGuard -> Term 'TyStr
+  ValidatePrincipal :: Term 'TyGuard -> Term 'TyStr -> Term 'TyBool
 
 data PactStep where
   Step
@@ -1558,7 +1611,6 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
     . showsPrec 11 a
     . showChar ' '
     . showsPrec 11 b
-  Hash a           -> showString "Hash " . showsPrec 11 a
   ReadKeySet  name -> showString "ReadKeySet " . showsPrec 11 name
   ReadDecimal name -> showString "ReadDecimal " . showsPrec 11 name
   ReadInteger name -> showString "ReadInteger " . showsPrec 11 name
@@ -1569,6 +1621,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   Yield tid a      ->
     showString "Yield " . showsPrec 11 tid . showChar ' ' . singShowsTm ty 11 a
   Resume tid       -> showString "Resume " . showsPrec 11 tid
+  CreatePrincipal g -> showString "CreatePrincipal " . showsPrec 11 g
+  ValidatePrincipal g s ->  showString "ValidatePrincipal " . showsPrec 11 g . showChar ' ' . showsPrec 11 s
+  
 
 instance Show PactStep where
   showsPrec _ (Step (exec , execTy) path mEntity mCancelVid mRollback) =
@@ -1643,7 +1698,6 @@ prettyTerm ty = \case
   FormatTime x y -> parensSep ["format", pretty x, pretty y]
   ParseTime Nothing y -> parensSep ["parse-time", pretty y]
   ParseTime (Just x) y -> parensSep ["parse-time", pretty x, pretty y]
-  Hash x -> parensSep ["hash", pretty x]
   ReadKeySet name -> parensSep ["read-keyset", pretty name]
   ReadDecimal name -> parensSep ["read-decimal", pretty name]
   ReadInteger name -> parensSep ["read-integer", pretty name]
@@ -1654,12 +1708,14 @@ prettyTerm ty = \case
   MkPactGuard name -> parensSep ["create-pact-guard", pretty name]
   MkUserGuard g t -> parensSep ["create-user-guard", pretty g, pretty t]
   MkModuleGuard name -> parensSep ["create-module-guard", pretty name]
-  MkCapabilityGuard (Capability _ n) as isPact -> parensSep
+  MkCapabilityGuard (Capability _ n _) as isPact -> parensSep
     [ if isPact then "create-capability-pact-guard" else "create-capability-guard"
     , parensSep (pretty n:map (pretty.fst) as)]
   Pact steps -> vsep (pretty <$> steps)
   Yield _tid tm -> parensSep [ "yield", singPrettyTm ty tm ]
   Resume _tid -> "resume"
+  CreatePrincipal g -> parensSep ["create-principal", pretty g]
+  ValidatePrincipal g s -> parensSep ["validate-principal", pretty g, pretty s]
 
 instance Pretty PactStep where
   pretty (Step (exec , execTy) _ mEntity _ mRollback) = parensSep $
@@ -1705,7 +1761,6 @@ eqTerm _ty PactVersion PactVersion = True
 eqTerm _ty (Format a1 b1) (Format a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (FormatTime a1 b1) (FormatTime a2 b2) = a1 == a2 && b1 == b2
 eqTerm _ty (ParseTime a1 b1) (ParseTime a2 b2) = a1 == a2 && b1 == b2
-eqTerm _ty (Hash a1) (Hash a2) = a1 == a2
 eqTerm _ _ _ = False
 
 instance S :*<: Term where
@@ -1834,6 +1889,16 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     StrToIntBase <$> f tm1 <*> f tm2
   StrContains tm1 tm2 ->
     StrContains <$> f tm1 <*> f tm2
+  StrHash tm1 ->
+    StrHash <$> f tm1
+  IntHash tm1 ->
+    IntHash <$> f tm1
+  DecHash tm1 ->
+    DecHash <$> f tm1
+  BoolHash tm1 ->
+    BoolHash <$> f tm1
+  ListHash ty tm1 ->
+    ListHash ty <$> f tm1
   Enumerate tm1 tm2 tm3 ->
     Enumerate <$> f tm1 <*> f tm2 <*> f tm3
   Numerical num ->
@@ -1902,7 +1967,10 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     Where ty1 ty2 <$> f tm1 <*> openF o <*> f tm2
   Typeof ty tm ->
     Typeof ty <$> f tm
-
+  IsPrincipal tm ->
+    IsPrincipal <$> f tm
+  TypeOfPrincipal tm ->
+    TypeOfPrincipal <$> f tm
   where
     f = propToInvariant
     openF = openPropToInv

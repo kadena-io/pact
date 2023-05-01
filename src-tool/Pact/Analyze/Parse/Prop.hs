@@ -405,6 +405,20 @@ inferPreProp preProp = case preProp of
           [from, to, step] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to step
           _otherwise -> throwErrorIn preProp "expected 2 or 3 integer arguments"
 
+  PreApp s [arg]
+    | s == SIsPrincipal -> do
+        arg' <- inferPreProp arg
+        case arg' of
+          Some SStr str -> pure $ Some SBool $ CoreProp $ IsPrincipal str
+          _otherwise -> throwErrorIn preProp "expected string argument"
+
+  PreApp s [arg]
+    | s == STypeOfPrincipal -> do
+        arg' <- inferPreProp arg
+        case arg' of
+          Some SStr str -> pure $ Some SStr $ CoreProp $ TypeOfPrincipal str
+          _otherwise -> throwErrorIn preProp "expected string argument"
+
   PreApp s [arg] | s == SStringLength -> do
     arg' <- inferPreProp arg
     case arg' of
@@ -668,6 +682,16 @@ inferPreProp preProp = case preProp of
   PreApp s [str] | s == SStringToInteger -> do
     str' <- checkPreProp SStr str
     pure $ Some SInteger $ CoreProp $ StrToInt str'
+
+  PreApp s [str] | s == SStringHash -> do
+    Some ty str' <- inferPreProp str
+    case ty of
+      SDecimal  -> pure $ Some SStr $ CoreProp $ DecHash str'
+      SInteger  -> pure $ Some SStr $ CoreProp $ IntHash str'
+      SStr      -> pure $ Some SStr $ CoreProp $ StrHash str'
+      SBool     -> pure $ Some SStr $ CoreProp $ BoolHash str'
+      SList ty' -> pure $ Some SStr $ CoreProp $ ListHash ty' str'
+      _ -> throwErrorIn preProp "`hash` works only with integer, decimals, strings, bools, and list of those"
 
   PreApp s [str, base] | s == SStringToInteger -> do
     str'  <- checkPreProp SStr str

@@ -624,7 +624,7 @@ spec = describe "analyze" $ do
   describe "describe-namespace" $ do
     let code = [text|(defun test () (describe-namespace 'test))|]
     expectVerificationFailure code
-                      
+
 
   --
   -- TODO: test use of read-keyset from property once possible
@@ -987,6 +987,27 @@ spec = describe "analyze" $ do
               (enforce-guard (keyset-ref-guard "foo")))
           |]
     expectVerified code
+  describe "emit-event" $ do
+    let code =
+          [text|
+             (defcap CAP ()
+               @event
+               true)
+
+             (defun test ()
+               (emit-event (CAP)))
+               |]
+    expectVerified code
+
+  describe "emit-event (fail as not @event or @managed)" $ do
+    let code =
+          [text|
+             (defcap CAP () true)
+
+             (defun test ()
+               (emit-event (CAP)))
+               |]
+    expectFail code $ Valid Abort'
 
   describe "create-pact-guard" $ do
     let code =
@@ -2658,6 +2679,26 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "format in property" $ do
+    let code' model = [text|
+          (defun test:string ()
+            @model $model
+            (format "Hello {}" ["Pact"]))
+          |]
+    expectVerified $ code' "[(property (= result \"Hello Pact\"))]"
+    expectFalsified $ code' "[(property (= result \"\"))]"
+
+  describe "format in property (dynamic)" $ do
+    let code' model = [text|
+          (defun test:string (s:string)
+            @model $model
+
+            (enforce (= s "Pact") "")
+            (format "Hello {}" [s]))
+          |]
+    expectVerified $ code' "[(property (= result \"Hello Pact\"))]"
+    expectFalsified $ code' "[(property (= result \"\"))]"
+
   describe "hash" $ do
     let code =
           [text|
@@ -2679,10 +2720,29 @@ spec = describe "analyze" $ do
                 "W916vIYivbAEzKIDWpFi3aPZvPoSBhloENpwZ8tcaQA") "")
 
 
-              ; TODO:
-              ; (enforce (=
-              ;   (hash 3.14)
-              ;   "gMjZ6T4J6fexaH7KaSIQxgyat9drIvbBkLx4qVJtztE") "")
+              (enforce (=
+                (hash 3.14)
+                "qxTS1KYJOd3G3jQq4zuKjaJVZHh1Rsvf1s8pFkhj7Uo") "")
+
+              (enforce (=
+                (hash ["abc" "def"])
+                "EgIw7XzbJBT78TmEGM8H1PfI8eXPSkPBw5b3wYcjr7c") "")
+
+              (enforce (=
+                (hash [1.0 1.1])
+                "JwuRBUXWO1VXhJI3rWtNk--kTNY04F0iaOo0lWgdbK8") "")
+
+              (enforce (=
+                (hash [true])
+                "UivfZ5XhRYuL_2Hmir6OEqTBfK2HQIZnyzBehImK9ac") "")
+
+              (enforce (=
+                (hash [[true]])
+                "VYfNbE5tyE9Oj-1gSGzZo2bQUtcVmdLA3uSpS59CP1w") "")
+
+               (enforce (=
+                (hash [[[true]]])
+                "H12nAiXe-42Wj0FgUFcGgLZiuO6jIFjm0xjJ7FM1qNw") "")
 
               ; TODO:
               ; (enforce (=
@@ -2691,6 +2751,95 @@ spec = describe "analyze" $ do
             )
           |]
     expectPass code $ Valid Success'
+
+  describe "validate-principal" $ do
+    let code =
+         [text| (defun test:bool (ks: keyset)
+              (enforce (validate-principal (read-keyset "keyset") (create-principal (read-keyset "keyset"))) "")
+              (enforce (not (validate-principal (read-keyset "keyset") "a")) "")
+              true)
+              |]
+    expectPass code $ Valid Success'
+
+  describe "is-principal" $ do
+    let code =
+         [text|
+          (defun test:bool ()
+            @model[ (property (= result (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
+            (enforce (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69") "")
+            (enforce (is-principal (create-principal (read-keyset "keyset"))) "")
+            true
+            )
+        |]
+    expectPass code$ Valid Success'
+    expectVerified code
+
+  describe "typeof-principal" $ do
+    let code =
+         [text|
+          (defun test:string ()
+            @model[ (property (= result (typeof-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
+            (enforce (= "k:" (typeof-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")) "")
+            "k:")
+        |]
+    expectPass code$ Valid Success'
+
+  describe "hash property (str)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash "hello")))]
+              (hash "hello"))|]
+    expectVerified code
+
+  describe "hash property (int)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash 1)))]
+              (hash 1))|]
+    expectVerified code
+
+  describe "hash property (dec)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash 1.1)))]
+              (hash 1.1))|]
+    expectVerified code
+
+  describe "hash property (bool)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash false)))]
+              (hash false))|]
+    expectVerified code
+
+  describe "hash symbolic (integer, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: integer)
+                 ;; shim value (hash 1)
+                 @model[(property (= result "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (bool, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: bool)
+                 ;; shim value (hash "true")
+                 @model[(property (= result "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (string, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: string)
+                 ;; shim value (hash "hello pact")
+                 @model[(property (= result "HsVo-gcG-pk1BciGr2xovMyR7sVH0Kt9gTgqicXDXMM"))]
+                 (hash x))|]
+    expectVerified code
 
   describe "enforce-keyset.row-level.read" $ do
     let code =
@@ -3709,7 +3858,7 @@ spec = describe "analyze" $ do
             |]
       expectVerified $ code "[(property (= result [10]))]"
 
- 
+
   describe "enumeration negative" $ do
       let code model =
             [text|
@@ -3727,7 +3876,7 @@ spec = describe "analyze" $ do
                  @model [(property (= result (enumerate 10 1 1))]
                    (enumerate 10 1 1))
             |]
-      expectFalsified code 
+      expectFalsified code
   describe "enumeration positive should fail" $ do
       let code =
             [text|
@@ -3735,7 +3884,7 @@ spec = describe "analyze" $ do
                  @model [(property (= result (enumerate 1 10 -1))]
                    (enumerate 1 10 -1))
             |]
-      expectFalsified code 
+      expectFalsified code
 
   describe "enumeration positiv with step" $ do
       let code model =
