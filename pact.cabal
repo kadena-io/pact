@@ -67,6 +67,7 @@ library
     Pact.Native.SPV
     Pact.Native.Time
     Pact.Native.Trans
+    Pact.Native.DecimalOps
     Pact.Native.Ops
     Pact.Native.Keysets
     Pact.Native.Decrypt
@@ -182,6 +183,7 @@ library
     , mod >=0.1.2
     , poly >=0.5.0
     , time
+    , decimal-arithmetic
 
   -- GHCJS
   if impl(ghcjs)
@@ -460,6 +462,7 @@ library pact-trans
   build-depends:
     , Decimal >=0.4.2
     , decimal-arithmetic >=0.5.1.1
+    , mtl
   if !impl(ghcjs)
     c-sources:
       trans/cbits/musl/__math_invalid.c
