@@ -291,3 +291,29 @@
 
 
 (rollback-tx)
+
+(begin-tx)
+
+(env-exec-config ['DisablePact47])
+(namespace 'carl)
+
+(expect-failure
+  "Setting namespace back to root namespace pre-Pact 4.7 fork fails"
+  (namespace ""))
+
+(expect
+  "Carl contract fqn not required for member access - no ns"
+  true
+  (carl-module.f))
+
+(env-exec-config [])
+
+(expect
+  "Setting namespace back to root namespace post-Pact 4.7 fork succeeds"
+  "Namespace reset to root"
+  (namespace ""))
+
+(expect
+  "Carl contract fqn required for member access - with ns"
+  true
+  (carl.carl-module.f))
