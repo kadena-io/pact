@@ -227,6 +227,19 @@ Rounds the decimal `x` down to the previous integer, or to `prec` precision as d
 
 Supported in either invariants or properties.
 
+### dec {#FDecCast}
+
+```lisp
+(dec x)
+```
+
+* takes `x`: `integer`
+* produces `decimal`
+
+Casts the integer `x` to its decimal equivalent.
+
+Supported in either invariants or properties.
+
 ### mod {#FModulus}
 
 ```lisp

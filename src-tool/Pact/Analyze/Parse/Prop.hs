@@ -447,6 +447,8 @@ inferPreProp preProp = case preProp of
   PreApp (toOp roundingLikeOpP -> Just op) [a, b] -> do
     it <- RoundingLikeOp2 op <$> checkPreProp SDecimal a <*> checkPreProp SInteger b
     pure $ Some SDecimal (PNumerical it)
+  PreApp (toOp castingLikeOpP -> Just op) [a] ->
+    Some SDecimal . PNumerical . CastingLikeOp op <$> checkPreProp SInteger a
   PreApp s [a, b] | s == STemporalAddition -> do
     a' <- checkPreProp STime a
     b' <- inferPreProp b

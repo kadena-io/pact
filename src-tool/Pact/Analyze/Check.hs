@@ -116,15 +116,6 @@ smtConfig = SBV.z3
 timeout :: Integer
 timeout = 20000
 
-newtype VerificationWarnings = VerificationWarnings [Text]
-  deriving (Eq, Show)
-
-describeVerificationWarnings :: VerificationWarnings -> [Text]
-describeVerificationWarnings (VerificationWarnings dups) = case dups of
-  [] -> []
-  _  -> ["Duplicated property definitions for " <>
-    T.intercalate ", " dups]
-
 data CheckSuccess
   = SatisfiedProperty (Model 'Concrete)
   | ProvedTheorem
@@ -184,7 +175,7 @@ data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , stepChecks      :: HM.HashMap (Text, Int) [CheckResult]
   , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
-  , moduleWarnings  :: VerificationWarnings
+  , moduleWarnings  :: [VerificationWarning]
   } deriving (Eq, Show)
 
 -- | Does this 'ModuleChecks' have either a property or invariant failure?
@@ -391,7 +382,7 @@ verifyFunctionInvariants
   -> FunData
   -> Text
   -> CheckableType
-  -> IO (Either CheckFailure (TableMap [CheckResult]))
+  -> IO (Either CheckFailure (TableMap [CheckResult], [VerificationWarning]))
 verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de mDebug)
   (FunData funInfo pactArgs body) funName checkType = runExceptT $ do
     let modName = moduleDefName $ _mdModule moduleData
@@ -410,7 +401,7 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
     -- Check to see if there are any invariants in this module. If there aren't
     -- we can skip these checks.
     case invsMap ^.. traverse . traverse of
-      [] -> pure $ invsMap & traverse .~ []
+      [] -> pure (invsMap & traverse .~ [], [])
 
       _ -> ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         lift $ SBV.setTimeOut timeout
@@ -425,10 +416,9 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
 
         -- Iterate through each invariant in a single query so we can reuse our
         -- assertion stack.
-        ExceptT $ fmap Right $
-          SBV.query $
-            for2 resultsTable $ \(Located info
-              (AnalysisResult querySucceeds _ prop ksProvs)) -> do
+        res :: TableMap [Either CheckFailure (CheckSuccess, [VerificationWarning])]
+          <- lift $ SBV.query $ for2 resultsTable $ \(Located info
+              (AnalysisResult querySucceeds _ prop ksProvs warnings)) -> do
               let model = Model modelArgs' tags ksProvs graph
 
               _ <- runExceptT $ inNewAssertionStack $ do
@@ -444,9 +434,12 @@ verifyFunctionInvariants (CheckEnv tables _consts _pDefs moduleData caps gov _de
               pure $ case queryResult of
                  Left smtFailure -> Left $
                    CheckFailure info (SmtFailure smtFailure)
-                 Right pass      -> Right pass
-
-  where
+                 Right pass      -> Right (pass, warnings)
+        let
+          warnings = res ^.. folded . folded . folded . folded .folded
+          result = (fmap.fmap.fmap) fst res
+        pure (result, warnings)
+    where
     -- Discharges impure 'SBVException's from sbv.
     catchingExceptions
       :: IO (Either CheckFailure b)
@@ -465,7 +458,7 @@ verifyFunctionProperty
   -> Text
   -> CheckableType
   -> Located Check
-  -> IO [Either CheckFailure CheckSuccess]
+  -> IO [Either CheckFailure (CheckSuccess, [VerificationWarning])]
 verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _de mDebug)
   (FunData funInfo pactArgs body) funName checkType
   (Located propInfo check) = fmap sequence' $ runExceptT $ do
@@ -482,7 +475,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
           tags         <- lift $ runAlloc $ allocModelTags modelArgs'
             (Located funInfo tm) graph
           let rootPath = _egRootPath graph
-          ar@(AnalysisResult _querySucceeds _txSuccess _prop ksProvs)
+          ar@(AnalysisResult _querySucceeds _txSuccess _prop ksProvs _)
             <- withExceptT analyzeToCheckFailure $
               runPropertyAnalysis modName gov check tables caps
                 (analysisArgs modelArgs') stepChoices' tm rootPath tags funInfo
@@ -494,14 +487,14 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     -- First we check whether the query definitely succeeds. Queries don't
     -- succeed if the (pure) property throws an error (eg division by 0 or
     -- indexing to an invalid array position). If the query fails we bail.
-    _ <- ExceptT $ catchingExceptions $ runSymbolicSat (toDebugFile "validation") $ runExceptT $ do
-      (AnalysisResult querySucceeds _txSucc _ _, model) <- setupSmtProblem
-
+    fvWarning <- ExceptT $ catchingExceptions $
+      runSymbolicSat (toDebugFile "validation") $ runExceptT $ do
+      (AnalysisResult querySucceeds _txSucc _ _ w, model) <- setupSmtProblem
       void $ lift $ SBV.output $ SBV.sNot $ successBool querySucceeds
-      hoist SBV.query $ do
+      _ <- hoist SBV.query $ do
         withExceptT (smtToQueryFailure propInfo) $
           resultQuery Validation model
-
+      pure w
     -- If the-end user is checking for the validity of a proposition while
     -- assuming transaction success, throw an error if it is not possible for
     -- the transaction to succeed.
@@ -518,8 +511,8 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     case check of
       PropertyHolds _ ->
         void $ ExceptT $ catchingExceptions $ runSymbolicSat (toDebugFile "satisfaction") $ runExceptT $ do
-          (AnalysisResult _ txSuccess _ _, model) <- setupSmtProblem
-          void $ lift $ SBV.output txSuccess
+          (AnalysisResult{_arTxSuccess}, model) <- setupSmtProblem
+          void $ lift $ SBV.output _arTxSuccess
           hoist SBV.query $ do
             withExceptT (smtToVacuousProperty propInfo) $
               resultQuery Satisfaction model
@@ -527,7 +520,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
         pure ()
 
     ExceptT $ catchingExceptions $ runSymbolicGoal $ runExceptT $ do
-      (AnalysisResult _ _txSucc prop _, model) <- setupSmtProblem
+      (AnalysisResult _ _txSucc prop _ _, model) <- setupSmtProblem
 
       void $ lift $ SBV.output prop
       r <- hoist SBV.query $ do
@@ -535,8 +528,7 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
           resultQuery goal model
       -- note here that it is important that the main result is first
       -- for 'verifyCheck'/unit tests
-      return (Right r : map (Left . translateToCheckFailure) warnings)
-
+      return (Right (r, fvWarning) : map (Left . translateToCheckFailure) warnings)
   where
     goal :: Goal
     goal = checkGoal check
@@ -1022,7 +1014,7 @@ getConsts de defconstRefs = do
 getStepChecks
   :: CheckEnv
   -> HM.HashMap Text Ref
-  -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult])
+  -> ExceptT VerificationFailure IO (HM.HashMap (Text, Int) [CheckResult], [VerificationWarning])
 getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de _) defpactRefs = do
 
   (steps :: HM.HashMap (Text, Int)
@@ -1057,10 +1049,14 @@ getStepChecks env@(CheckEnv tables consts propDefs _ _ _ de _) defpactRefs = do
     Left errs         -> throwError $ ModuleParseFailure errs
     Right stepChecks' -> pure stepChecks'
 
-  lift $ fmap (fmap (nub . concat)) $ ifor stepChecks' $
+  results <- lift $ ifor stepChecks' $
     \(name, _stepNum) ((node, args, info), checks) -> for checks $
      verifyFunctionProperty env (FunData info args [node]) name CheckPactStep
 
+  let
+    warnings = results ^.. folded . folded . folded . folded . folded . folded
+    res =  fmap (nub . concat) $ (fmap.fmap.fmap.fmap) fst results
+  pure (res, warnings)
 
 -- | Get the set of property and invariant check results for functions (defun
 -- and defpact)
@@ -1070,6 +1066,7 @@ getFunChecks
   -> ExceptT VerificationFailure IO
     ( HM.HashMap Text [CheckResult]
     , HM.HashMap Text (TableMap [CheckResult])
+    , [VerificationWarning]
     )
 getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de _) refs = do
   ModelDecl _ checkExps <-
@@ -1126,8 +1123,12 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de _) refs =
         verifyFunctionProperty env (mkFunInfo fun) name checkType
       _            -> error
         "invariant violation: anything but a TopFun is unexpected in funChecks"
-
-  pure (nub . concat <$> funChecks'', invariantChecks)
+  let
+    funWarnings = funChecks'' ^.. folded . folded . folded . folded . folded . folded
+    funRes      = fmap (nub . concat) $ (fmap.fmap.fmap.fmap) fst funChecks''
+    invWarnings = nub (invariantChecks ^.. folded . folded . folded)
+    invRes      = fmap fst invariantChecks
+  pure (funRes, invRes, funWarnings ++ invWarnings)
 
 -- | Check that every property variable is in scope.
 scopeCheckInterface
@@ -1211,7 +1212,8 @@ verifyModule mDebug de modules moduleData@(ModuleData modDef allRefs _) = runExc
         $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
         $ concatMap HM.keys allModulePropDefs
 
-      warnings = VerificationWarnings allModulePropNameDuplicates
+      warnings = [FVDuplicatedPropertyDef allModulePropNameDuplicates
+                 | not (null allModulePropNameDuplicates)]
 
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
@@ -1262,11 +1264,11 @@ verifyModule mDebug de modules moduleData@(ModuleData modDef allRefs _) = runExc
 
       -- Note that invariants are only checked at the defpact level, not in
       -- individual steps.
-      (funChecks, invariantChecks)
+      (funChecks, invariantChecks, fvWarnings)
         <- getFunChecks checkEnv $ defunRefs <> defpactRefs
-      stepChecks <- getStepChecks checkEnv defpactRefs
+      (stepChecks, scWarnings) <- getStepChecks checkEnv defpactRefs
 
-      pure $ ModuleChecks funChecks stepChecks invariantChecks warnings
+      pure $ ModuleChecks funChecks stepChecks invariantChecks (warnings ++ fvWarnings ++ scWarnings)
 
 -- | Produce errors/warnings from result.
 renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [RenderedOutput]
@@ -1300,7 +1302,8 @@ renderVerifiedModule = \case
         invariantResults' = toListOf (traverse.traverse.each) invariantResults
         allResults         = propResults' <> stepResults' <> invariantResults'
     in (concatMap describeCheckResult allResults) <>
-         (renderWarn <$> describeVerificationWarnings warnings)
+       (renderWarn . describeVerificationWarnings <$> warnings)
+
 
 
 -- | Verifies a one-off 'Check' for a function.
@@ -1324,7 +1327,7 @@ verifyCheck de moduleData funName check checkType = do
   tables <- moduleTables modules modRefs consts
   gov    <- moduleGovernance moduleData
 
-  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov de Nothing -- rs check
+  let checkEnv = CheckEnv tables HM.empty HM.empty moduleData caps gov de Nothing
 
   case moduleFun moduleData funName of
     Just funRef -> do
@@ -1332,7 +1335,10 @@ verifyCheck de moduleData funName check checkType = do
       case toplevel of
         Left checkFailure -> throwError $ ModuleCheckFailure checkFailure
         Right (TopFun fun _) -> ExceptT $ fmap Right $
-          verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType $
+        -- `verifyFunctionalProperty` returns `IO [Either CheckFailure (CheckSuccess, [VerificationWarning])]`
+        -- and we have return  `ExceptT VerificationFailure IO [Either CheckFailure CheckSuccess]`
+        -- as a result, we have to _strip away_ the verification warnings via `fst` projection.
+          (fmap.fmap.fmap.fmap) fst (verifyFunctionProperty checkEnv (mkFunInfo fun) funName checkType) $
             Located info check
         Right _
           -> error "invariant violation: verifyCheck called on non-function"
