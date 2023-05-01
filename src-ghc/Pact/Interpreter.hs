@@ -36,6 +36,12 @@ module Pact.Interpreter
   , defaultInterpreterState
   , versionedNativesRefStore
   , ExecutionConfig (..)
+  , pact40Natives
+  , pact420Natives
+  , pact43Natives
+  , pact431Natives
+  , pact46Natives
+  , pact47Natives
   ) where
 
 import Control.Concurrent
@@ -212,22 +218,40 @@ disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
 
 disablePact40Natives :: ExecutionConfig -> Endo RefStore
 disablePact40Natives =
-  disablePactNatives ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"] FlagDisablePact40
+  disablePactNatives pact40Natives FlagDisablePact40
 
 disablePact420Natives :: ExecutionConfig -> Endo RefStore
-disablePact420Natives = disablePactNatives ["zip", "fold-db"] FlagDisablePact420
+disablePact420Natives = disablePactNatives pact420Natives FlagDisablePact420
 
 disablePact43Natives :: ExecutionConfig -> Endo RefStore
-disablePact43Natives = disablePactNatives ["create-principal", "validate-principal", "continue"] FlagDisablePact43
+disablePact43Natives = disablePactNatives pact43Natives FlagDisablePact43
 
 disablePact431Natives :: ExecutionConfig -> Endo RefStore
-disablePact431Natives = disablePactNatives ["is-principal", "typeof-principal"] FlagDisablePact431
+disablePact431Natives = disablePactNatives pact431Natives FlagDisablePact431
 
 disablePact46Natives :: ExecutionConfig -> Endo RefStore
-disablePact46Natives = disablePactNatives ["point-add", "scalar-mult", "pairing-check"] FlagDisablePact46
+disablePact46Natives = disablePactNatives pact46Natives FlagDisablePact46
 
 disablePact47Natives :: ExecutionConfig -> Endo RefStore
-disablePact47Natives = disablePactNatives ["dec"] FlagDisablePact47
+disablePact47Natives = disablePactNatives pact47Natives FlagDisablePact47
+
+pact40Natives :: [Text]
+pact40Natives = ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
+
+pact420Natives :: [Text]
+pact420Natives = ["zip", "fold-db"]
+
+pact43Natives :: [Text]
+pact43Natives = ["create-principal", "validate-principal", "continue"]
+
+pact431Natives :: [Text]
+pact431Natives = ["is-principal", "typeof-principal"]
+
+pact46Natives :: [Text]
+pact46Natives = ["point-add", "scalar-mult", "pairing-check"]
+
+pact47Natives :: [Text]
+pact47Natives = ["dec"]
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs

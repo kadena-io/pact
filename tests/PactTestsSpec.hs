@@ -208,9 +208,9 @@ versionedNativesTest flag natives = do
 
 versionedNativesTests :: SpecWith ()
 versionedNativesTests = describe "versionedNativesTests" $ do
-  versionedNativesTest FlagDisablePact40 ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
-  versionedNativesTest FlagDisablePact420 ["zip", "fold-db"]
-  versionedNativesTest FlagDisablePact43 ["create-principal", "validate-principal", "continue"]
-  versionedNativesTest FlagDisablePact431 ["is-principal", "typeof-principal"]
-  versionedNativesTest FlagDisablePact46 ["point-add", "scalar-mult", "pairing-check"]
-  versionedNativesTest FlagDisablePact47 ["dec"]
+  versionedNativesTest FlagDisablePact40 pact40Natives
+  versionedNativesTest FlagDisablePact420 pact420Natives
+  versionedNativesTest FlagDisablePact43 pact43Natives
+  versionedNativesTest FlagDisablePact431 pact431Natives
+  versionedNativesTest FlagDisablePact46 pact46Natives
+  versionedNativesTest FlagDisablePact47 pact47Natives

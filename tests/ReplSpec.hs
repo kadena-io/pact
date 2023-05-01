@@ -12,7 +12,6 @@ import System.Posix.Pty (spawnWithPty, writePty, readPty, closePty)
 import System.Process (terminateProcess)
 import Control.Monad (void)
 
-
 spec :: Spec
 spec = describe "ReplSpec" $ do
   it "should not print literal via `Show` (regression #1101)" $ do
