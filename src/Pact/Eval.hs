@@ -33,6 +33,7 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
+    ,reduceEnscoped
     ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
     ,enforceGuard
@@ -79,6 +80,7 @@ import Pact.Gas
 import Pact.Runtime.Capabilities
 import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
+import Pact.Types.Advice
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.KeySet
@@ -88,9 +90,6 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
 
-#ifdef ADVICE
-import Pact.Types.Advice
-#endif
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -293,11 +292,8 @@ eval' ::  Term Name ->  Eval e (Term Name)
 eval' (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval' (TModule _tm@(MDModule m) bod i) =
-#ifdef ADVICE
-  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> eAdvise i (AdviceModule _tm) $ do
-#else
   topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ \g0 -> do
-#endif
+    endAdvice <- eAdvise i (AdviceModule _tm)
     checkAllowModule i
     mNs <- use $ evalRefs . rsNamespace
     -- prepend namespace def to module name
@@ -330,18 +326,13 @@ eval' (TModule _tm@(MDModule m) bod i) =
     szVer <- getSizeOfVersion
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)) szVer)
     writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
-#ifdef ADVICE
-    return (govM,(g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM)))
-#else
+    endAdvice govM
     return (g, msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
-#endif
+
 
 eval' (TModule _tm@(MDInterface m) bod i) =
-#ifdef ADVICE
-  topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> eAdvise i (AdviceModule _tm) $ do
-#else
   topLevelCall i "interface" (GInterfaceDecl (_interfaceName m) (_interfaceCode m)) $ \gas -> do
-#endif
+    endAdvice <- eAdvise i (AdviceModule _tm)
     checkAllowModule i
     mNs <- use $ evalRefs . rsNamespace
     enforceNamespaceInstall i mNs
@@ -354,12 +345,21 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     szVer <- getSizeOfVersion
     _ <- computeGas (Left (i, "interface")) (GPreWrite (WriteInterface (_interfaceName m) (_interfaceCode m)) szVer)
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
-#ifdef ADVICE
-    return (govI,(g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI)))
-#else
+    endAdvice govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
-#endif
-eval' t = enscope t >>= reduce
+eval' t = enscope t >>= reduceEnscoped
+
+reduceEnscoped :: Term Ref -> Eval e (Term Name)
+reduceEnscoped = \case
+  TVar (Direct t'@TNative{}) i ->
+    isOffChainForkedError >>= \case
+      OnChainError -> evalError' i "Cannot display native function details in non-repl context"
+      OffChainError -> pure t'
+  TVar (Ref t'@TDef{}) i ->
+    isOffChainForkedError >>= \case
+      OnChainError -> evalError' i "Cannot display function details in non-repl context"
+      OffChainError -> toTerm <$> compatPretty t'
+  t' -> reduce t'
 
 -- | Enforce namespace/root access on install.
 enforceNamespaceInstall
@@ -374,11 +374,6 @@ enforceNamespaceInstall i (Just ns) =
   unlessExecutionFlagSet FlagDisablePact44 $ do
     enforceGuard i $ _nsUser ns
 
-
-#ifdef ADVICE
-dup :: Monad m => m a -> m (a,a)
-dup a = a >>= \r -> return (r,r)
-#endif
 
 checkAllowModule :: Info -> Eval e ()
 checkAllowModule i = do
@@ -1055,8 +1050,14 @@ reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
 reduce TLam{..} = evalError _tInfo "Cannot reduce bound lambda"
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
-reduce t@TDef {} = toTerm <$> compatPretty t
-reduce t@TNative {} = toTerm <$> compatPretty t
+reduce t@TDef {} =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> toTerm <$> compatPretty t
+    False -> evalError' (_tInfo t) "Cannot display function details in non-repl context"
+reduce t@TNative {} =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> toTerm <$> compatPretty t
+    False -> evalError' (_tInfo t) "Cannot display native function details in non-repl context"
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
@@ -1071,7 +1072,7 @@ reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
 reduce t@TModRef{} = unsafeReduce t
-reduce (TDynamic tref tmem i)  = reduceDynamic tref tmem i >>= \rd -> case rd of
+reduce (TDynamic tref tmem i)  = reduceDynamic tref tmem i >>= \case
   Left v -> return v
   Right d -> reduce (TDef d (getInfo d))
 
@@ -1128,8 +1129,11 @@ reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
 reduceApp (App (TDef d@Def{..} _) as ai) = do
   case _dDefType of
-    Defun ->
-      functionApp _dDefName _dFunType (Just _dModule) as _dDefBody (_mDocs _dMeta) ai
+    Defun -> do
+      c <- eAdvise ai (AdviceUser d)
+      !r <- functionApp _dDefName _dFunType (Just _dModule) as _dDefBody (_mDocs _dMeta) ai
+      c r
+      pure r
     Defpact -> do
       g <- computeUserAppGas d ai
       af <- prepareUserAppArgs d as ai
@@ -1226,12 +1230,11 @@ guardRecursion fname m act  =
 -- | Instantiate args in body and evaluate using supplied action.
 evalUserAppBody :: Def Ref -> ([Term Name], FunType (Term Name)) -> Info -> Gas
                 -> (Term Ref -> Eval e (Term Name)) -> Eval e (Term Name)
-evalUserAppBody _d@Def{..} (as',ft') ai g run = guardRecursion fname (Just _dModule) $
-#ifdef ADVICE
-  eAdvise ai (AdviceUser (_d,as')) $ dup $ appCall fa ai as' $ fmap (g,) $ run bod'
-#else
-  appCall fa ai as' $ fmap (g,) $ run bod'
-#endif
+evalUserAppBody _d@Def{..} (as',ft') ai g run = guardRecursion fname (Just _dModule) $ do
+  c <- eAdvise ai (AdviceUser _d)
+  !r <- appCall fa ai as' $ fmap (g,) $ run bod'
+  c r
+  pure r
   where
   fname = asString _dDefName
   bod' = instantiate (resolveArg ai (map liftTerm as')) _dDefBody
@@ -1283,13 +1286,11 @@ reduceDirect TNative {..} as ai =
             ": " <> pretty _tNativeName
   in do
     when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
-#ifdef ADVICE
-    eAdvise ai (AdviceNative _tNativeName) $ dup
-        $ appCall fa ai as
-        $ _nativeFun _tNativeFun fa as
-#else
-    appCall fa ai as $ _nativeFun _tNativeFun fa as
-#endif
+    c <- eAdvise ai (AdviceNative _tNativeName)
+    !r <- appCall fa ai as $ _nativeFun _tNativeFun fa as
+    c r
+    pure r
+
 reduceDirect (TVar (FQName fq) _) args i = do
   use (evalRefs . rsQualifiedDeps . at fq) >>= \case
     Just r -> reduceApp (App (TVar r def) args i)
