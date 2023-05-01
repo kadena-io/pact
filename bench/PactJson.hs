@@ -31,13 +31,9 @@ import Criterion.Main
 
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Encoding as A
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Text as T
 
 import qualified Pact.JSON.Encode as J
-import qualified Pact.JSON.Legacy.Value as L
-import Pact.Types.Type
 
 import System.IO.Unsafe
 
@@ -45,7 +41,6 @@ import Test.QuickCheck
 
 -- internal modules
 import Pact.Types.Command
-import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.RowData
 import Pact.Types.SPV
