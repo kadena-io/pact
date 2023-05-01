@@ -286,6 +286,22 @@ precision as decimal.
 
 Supported in either invariants or properties.
 
+.. _FDecCast:
+
+dec
+~~~
+
+.. code:: lisp
+
+   (dec x)
+
+-  takes ``x``: ``integer``
+-  produces ``decimal``
+
+Casts the integer ``x`` to its decimal equivalent.
+
+Supported in either invariants or properties.
+
 .. _FModulus:
 
 mod

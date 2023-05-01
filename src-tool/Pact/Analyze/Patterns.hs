@@ -23,7 +23,7 @@ import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
 import           Pact.Analyze.Types   (arithOpP, comparisonOpP, isGuardTy,
-                                       logicalOpP, roundingLikeOpP,
+                                       logicalOpP, roundingLikeOpP, castingLikeOpP,
                                        unaryArithOpP)
 
 ofBasicOp :: Text -> Maybe Text
@@ -36,6 +36,7 @@ ofBasicOp s = if isBasicOp then Just s else Nothing
       || isJust (toOp comparisonOpP s)
       || isJust (toOp logicalOpP s)
       || isJust (toOp roundingLikeOpP s)
+      || isJust (toOp castingLikeOpP s)
 
 -- helper patterns
 pattern NativeFunc :: forall a. Text -> Fun a
