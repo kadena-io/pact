@@ -222,6 +222,16 @@
        { 'name: name
        , 'age: age }))
 
+
+  (defun fails-with-default-read-partial-schema:object{person} ()
+     (with-default-read persons 'dave
+       { 'name:= name
+       , 'age:= age }
+       { 'name: "dave"
+       , 'age: 23 }
+       { 'name: name
+       , 'age: age }))
+
   (defcap CAP () true)
 
   (defun fails-with-capability-bad-object:object{person} ()
