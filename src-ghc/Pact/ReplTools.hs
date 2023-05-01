@@ -123,7 +123,7 @@ handleMultilineInput input prevLines lastResult =
            -- If so, continue accepting input
            -> haskelineLoop multilineInput lastResult
 
-       Failure e -> do
+       Failure (ErrInfo e _) -> do
          liftIO $ print e
          haskelineLoop [] Nothing
 

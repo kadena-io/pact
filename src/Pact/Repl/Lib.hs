@@ -270,6 +270,10 @@ replDefs = ("Repl",
       [LitExample "(env-dynref fungible-v2 coin)"]
       ("Substitute module IMPL in any dynamic usages of IFACE in typechecking and analysis. " <>
        "With no arguments, remove all substitutions.")
+     ,defZRNative "env-simulate-onchain" envSimulateOnChain
+       (funType tTyString [("on-chain", tTyBool)])
+       [LitExample "(env-simulate-onchain true)"]
+       "Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -534,7 +538,7 @@ testCatch :: FunApp -> Text -> Eval LibState a -> Doc ->
              (a -> Eval LibState (Term Name)) -> Eval LibState (Term Name)
 testCatch i doc expr errMsg cont = catchesPactError expr >>= \r -> case r of
   Right v -> cont v
-  Left e -> testFailure i doc $ errMsg <> ": " <> prettyErr e
+  Left e -> testFailure i doc $ errMsg <> ":" <> prettyErr e
   where
     prettyErr e = prettyInfo (peInfo e) <> peDoc e
     prettyInfo a
@@ -545,8 +549,8 @@ testCatch i doc expr errMsg cont = catchesPactError expr >>= \r -> case r of
 expect :: ZNativeFun LibState
 expect i as@[_,b',c'] = do
   doc <- testDoc i as
-  testCatch i doc (reduce c') "evaluation of actual failed" $ \c ->
-    testCatch i doc (reduce b') "evaluation of expected failed" $ \b ->
+  testCatch i doc (reduceEnscoped c') "evaluation of actual failed" $ \c ->
+    testCatch i doc (reduceEnscoped b') "evaluation of expected failed" $ \b ->
       if b `termEq` c
       then testSuccess doc "Expect"
       else testFailure i doc $
@@ -565,7 +569,7 @@ expectFail i as = case as of
     tsuccess msg = testSuccess msg "Expect failure"
     go errM expr = do
       msg' <- testDoc i as
-      r <- catch (Right <$> reduce expr) (\(e :: SomeException) -> return $ Left (show e))
+      r <- catch (Right <$> reduceEnscoped expr) (\(e :: SomeException) -> return $ Left (show e))
       case r of
         Right v -> testFailure i msg' $ "expected failure, got result = " <> pretty v
         Left e -> case errM of
@@ -579,7 +583,7 @@ expectFail i as = case as of
 expectThat :: ZNativeFun LibState
 expectThat i as@[_,tLamToApp -> TApp pred' predi,expr'] = do
   doc <- testDoc i as
-  testCatch i doc (reduce expr') "evaluation of expression failed" $ \v ->
+  testCatch i doc (reduceEnscoped expr') "evaluation of expression failed" $ \v ->
     testCatch i doc (apply pred' [v]) "evaluation of predicate failed" $ \p -> case p of
       TLitBool b
           | b -> testSuccess doc $ "Expect-that"
@@ -867,3 +871,11 @@ withEnv _ [exec] = do
     _ -> (ls,Endo id)
   local (appEndo updates) $ reduce exec
 withEnv i as = argsError' i as
+
+envSimulateOnChain :: RNativeFun LibState
+envSimulateOnChain _i [TLiteral (LBool simulateOnChain) _] = do
+  -- Note: Simulating on-chain means we are _not_ `inRepl`
+  setenv eeInRepl (not simulateOnChain)
+  let ppInRepl = if simulateOnChain then "true" else "false"
+  return $ tStr $ "Set on-chain simulation execution mode to: " <> ppInRepl
+envSimulateOnChain i as = argsError i as

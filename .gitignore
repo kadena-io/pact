@@ -17,8 +17,8 @@ docs/kr/_build
 /web/pact.js
 /web/pact.min.js
 /web/npm-debug.log
-log/
 /deleteme.sqllite
+log/
 /.pact-history
 /result
 public
@@ -33,3 +33,4 @@ coverage
 hie.yaml
 commands.sqlite
 cabal.project.local*
+/golden/lcov/actual

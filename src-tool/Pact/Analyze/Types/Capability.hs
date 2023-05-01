@@ -19,19 +19,27 @@ import           Pact.Analyze.PactSFunArray (eitherArray, mkPactSFunArray)
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
 
+
+data CapabilityAnnot
+  = CapManaged
+  | CapEvent
+  deriving Show
+
 -- | The "signature" for a capability in Pact -- a family of tokens.
 data Capability where
-  Capability :: SingList schema -> CapName -> Capability
+  Capability :: SingList schema -> CapName -> Maybe CapabilityAnnot -> Capability
 
 instance Show Capability where
-  showsPrec p (Capability sch capName) = showParen (p > 10) $
+  showsPrec p (Capability sch capName capAnnot) = showParen (p > 10) $
       showString "Capability "
     . showsPrec 11 sch
     . showChar ' '
     . showsPrec 11 capName
+    . showChar ' '
+    . showsPrec 11 capAnnot
 
 instance Pretty Capability where
-  pretty (Capability _ (CapName cn)) = prettyString cn
+  pretty (Capability _ (CapName cn) _) = prettyString cn
 
 -- | The index into the family that is a 'Capability'. Think of this of the
 -- arguments to a particular call of a capability.
@@ -47,7 +55,7 @@ newtype TokenGrants
 
 mkTokenGrants :: [Capability] -> TokenGrants
 mkTokenGrants caps = TokenGrants $ Map.fromList $
-  caps <&> \(Capability schema name) ->
+  caps <&> \(Capability schema name _) ->
     ( name
     , EKeySFunArray (SObjectUnsafe schema) (mkPactSFunArray $ const sFalse)
     )

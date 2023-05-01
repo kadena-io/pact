@@ -216,7 +216,7 @@ pact> (drop ['name] { 'name: "Vlad", 'active: false})
 Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true.
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-<interactive>:0:0: Chaos reigns
+<interactive>:0:0:Error: Chaos reigns
 ```
 
 
@@ -1928,7 +1928,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
@@ -2048,6 +2048,17 @@ Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
 Set transaction signature keys and capabilities. SIGS is a list of objects with "key" specifying the signer key, and "caps" specifying a list of associated capabilities.
 ```lisp
 (env-sigs [{'key: "my-key", 'caps: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'caps: []}
+```
+
+
+### env-simulate-onchain {#env-simulate-onchain}
+
+*on-chain*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces.
+```lisp
+(env-simulate-onchain true)
 ```
 
 

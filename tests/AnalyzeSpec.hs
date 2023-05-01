@@ -621,6 +621,11 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid (Inj Success)
 
+  describe "describe-namespace" $ do
+    let code = [text|(defun test () (describe-namespace 'test))|]
+    expectVerificationFailure code
+
+
   --
   -- TODO: test use of read-keyset from property once possible
   --
@@ -982,6 +987,27 @@ spec = describe "analyze" $ do
               (enforce-guard (keyset-ref-guard "foo")))
           |]
     expectVerified code
+  describe "emit-event" $ do
+    let code =
+          [text|
+             (defcap CAP ()
+               @event
+               true)
+
+             (defun test ()
+               (emit-event (CAP)))
+               |]
+    expectVerified code
+
+  describe "emit-event (fail as not @event or @managed)" $ do
+    let code =
+          [text|
+             (defcap CAP () true)
+
+             (defun test ()
+               (emit-event (CAP)))
+               |]
+    expectFail code $ Valid Abort'
 
   describe "create-pact-guard" $ do
     let code =
@@ -2653,6 +2679,26 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "format in property" $ do
+    let code' model = [text|
+          (defun test:string ()
+            @model $model
+            (format "Hello {}" ["Pact"]))
+          |]
+    expectVerified $ code' "[(property (= result \"Hello Pact\"))]"
+    expectFalsified $ code' "[(property (= result \"\"))]"
+
+  describe "format in property (dynamic)" $ do
+    let code' model = [text|
+          (defun test:string (s:string)
+            @model $model
+
+            (enforce (= s "Pact") "")
+            (format "Hello {}" [s]))
+          |]
+    expectVerified $ code' "[(property (= result \"Hello Pact\"))]"
+    expectFalsified $ code' "[(property (= result \"\"))]"
+
   describe "hash" $ do
     let code =
           [text|
@@ -2674,10 +2720,29 @@ spec = describe "analyze" $ do
                 "W916vIYivbAEzKIDWpFi3aPZvPoSBhloENpwZ8tcaQA") "")
 
 
-              ; TODO:
-              ; (enforce (=
-              ;   (hash 3.14)
-              ;   "gMjZ6T4J6fexaH7KaSIQxgyat9drIvbBkLx4qVJtztE") "")
+              (enforce (=
+                (hash 3.14)
+                "qxTS1KYJOd3G3jQq4zuKjaJVZHh1Rsvf1s8pFkhj7Uo") "")
+
+              (enforce (=
+                (hash ["abc" "def"])
+                "EgIw7XzbJBT78TmEGM8H1PfI8eXPSkPBw5b3wYcjr7c") "")
+
+              (enforce (=
+                (hash [1.0 1.1])
+                "JwuRBUXWO1VXhJI3rWtNk--kTNY04F0iaOo0lWgdbK8") "")
+
+              (enforce (=
+                (hash [true])
+                "UivfZ5XhRYuL_2Hmir6OEqTBfK2HQIZnyzBehImK9ac") "")
+
+              (enforce (=
+                (hash [[true]])
+                "VYfNbE5tyE9Oj-1gSGzZo2bQUtcVmdLA3uSpS59CP1w") "")
+
+               (enforce (=
+                (hash [[[true]]])
+                "H12nAiXe-42Wj0FgUFcGgLZiuO6jIFjm0xjJ7FM1qNw") "")
 
               ; TODO:
               ; (enforce (=
@@ -2686,6 +2751,70 @@ spec = describe "analyze" $ do
             )
           |]
     expectPass code $ Valid Success'
+
+  describe "validate-principal" $ do
+    let code =
+         [text| (defun test:bool (ks: keyset)
+              (enforce (validate-principal (read-keyset "keyset") (create-principal (read-keyset "keyset"))) "")
+              (enforce (not (validate-principal (read-keyset "keyset") "a")) "")
+              true)
+              |]
+    expectPass code $ Valid Success'
+
+  describe "is-principal" $ do
+    let code =
+         [text|
+          (defun test:bool ()
+            @model[ (property (= result (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
+            (enforce (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69") "")
+            (enforce (is-principal (create-principal (read-keyset "keyset"))) "")
+            true
+            )
+        |]
+    expectPass code$ Valid Success'
+    expectVerified code
+
+  describe "typeof-principal" $ do
+    let code =
+         [text|
+          (defun test:string ()
+            @model[ (property (= result (typeof-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
+            (enforce (= "k:" (typeof-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")) "")
+            "k:")
+        |]
+    expectPass code$ Valid Success'
+
+  describe "hash property (str)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash "hello")))]
+              (hash "hello"))|]
+    expectVerified code
+
+  describe "hash property (int)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash 1)))]
+              (hash 1))|]
+    expectVerified code
+
+  describe "hash property (dec)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash 1.1)))]
+              (hash 1.1))|]
+    expectVerified code
+
+  describe "hash property (bool)" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              @model [(property (= result (hash false)))]
+              (hash false))|]
+    expectVerified code
 
   describe "enforce-keyset.row-level.read" $ do
     let code =
@@ -3667,6 +3796,82 @@ spec = describe "analyze" $ do
     -- we expect this to give an error
     expectVerified code
 
+  describe "enumeration positive" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 0 10 1))
+            |]
+      expectVerified $ code "[(property (= result (enumerate 0 10)))]"
+      expectVerified $ code "[(property (= result (enumerate 0 10 1)))]"
+
+  describe "enumeration positive (FROM = TO)" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 10))
+            |]
+      expectVerified $ code "[(property (= result [10]))]"
+
+  describe "enumeration positive (INC = 0)" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 10 0))
+            |]
+      expectVerified $ code "[(property (= result [10]))]"
+
+  describe "enumeration positive (FROM + INC > TO)" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 15 10))
+            |]
+      expectVerified $ code "[(property (= result [10]))]"
+
+
+  describe "enumeration negative" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 10 1 -1))
+            |]
+      expectVerified $ code "[(property (= result (enumerate 10 1 -1)))]"
+      expectVerified $ code "[(property (= result [10 9 8 7 6 5 4 3 2 1]))]"
+
+  describe "enumeration negative should fail" $ do
+      let code =
+            [text|
+                 (defun test:[integer] ()
+                 @model [(property (= result (enumerate 10 1 1))]
+                   (enumerate 10 1 1))
+            |]
+      expectFalsified code
+  describe "enumeration positive should fail" $ do
+      let code =
+            [text|
+                 (defun test:[integer] ()
+                 @model [(property (= result (enumerate 1 10 -1))]
+                   (enumerate 1 10 -1))
+            |]
+      expectFalsified code
+
+  describe "enumeration positiv with step" $ do
+      let code model =
+            [text|
+                 (defun test:[integer] ()
+                   @model $model
+                   (enumerate 0 10 2))
+            |]
+      expectVerified  $ code "[(property (= result [0 2 4 6 8 10]))]"
+      expectFalsified $ code "[(property (= result []))]"
+
+
   describe "string drop" $ do
     let code1 model = [text|
           (defun test:string ()
@@ -3858,6 +4063,24 @@ spec = describe "analyze" $ do
             @model [(property (= result (at 0 (sort [a b c]))))]
             (min a (min b c)))
           |]
+
+  describe "list distinct" $ do
+    let code9 model = [text|
+          (defun test:[integer] (a:integer b:integer)
+            @model $model
+            (enforce (not (= a b)) "")
+            (distinct [a b a]))
+          |]
+    expectVerified  $ code9 "[(property (= result [a b]))]"
+    expectFalsified $ code9 "[(property (= result [a b a]))]"
+
+  describe "list distinct property" $ do
+    let code model = [text|
+          (defun test:[integer] (a:integer b:integer)
+            @model $model
+            (distinct [a b a]))
+          |]
+    expectVerified  $ code "[(property (= result (distinct [a b a])))]"
 
   describe "identity" $ do
     expectVerified [text|
