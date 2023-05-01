@@ -63,6 +63,7 @@ untestedNativesCheck = do
      , "CHARSET_LATIN1"
      , "verify-spv"
      , "public-chain-data"
+     , "dec"
      , "list"
      , "continue"
      ])

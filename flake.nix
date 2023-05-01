@@ -34,6 +34,8 @@
                 zlib
                 z3
                 pkgconfig
+                python3 python3Packages.sphinx python3Packages.sphinx_rtd_theme
+                pandoc perl
               ];
               # shell.crossPlatforms = p: [ p.ghcjs ];
             };

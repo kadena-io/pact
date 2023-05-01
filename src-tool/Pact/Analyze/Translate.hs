@@ -1229,6 +1229,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
         SDecimal -> pure $ Some SInteger $ inject $ RoundingLikeOp1 op a'
         _        -> throwError' $ MalformedArithOp fn args
 
+  AST_NFun_Basic fn@(toOp castingLikeOpP -> Just op) args@[a] -> do
+      Some ty a' <- translateNode a
+      case ty of
+        SInteger -> pure $ Some SDecimal $ inject $ CastingLikeOp op a'
+        _        -> throwError' $ MalformedArithOp fn args
+
   -- trap sqrt here to shim
   AST_NFun node fn@"sqrt" as@[a] -> translateNode a >>= \a' -> case a' of
     (Some SInteger _) -> shimNative' node fn [] "original value" a'
