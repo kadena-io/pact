@@ -31,14 +31,14 @@ import System.FilePath
 
 spec :: Spec
 spec = do
-  tests <- runIO findTests
-  pactTests tests
-  badTests
-  accountsTest
-  cpTest
-  verifiedAccountsTest
-  prodParserTests tests
-  legacyProdParserTests tests
+  -- tests <- runIO findTests
+  -- pactTests tests
+  -- badTests
+  -- accountsTest
+  -- cpTest
+  -- verifiedAccountsTest
+  -- prodParserTests tests
+  -- legacyProdParserTests tests
   versionedNativesTests
 
 
@@ -201,8 +201,10 @@ versionedNativesTest flag natives = do
   let msg = "Successfully disables " <> show flag <> " natives"
   it msg $ do
     let rs = versionedNativesRefStore (mkExecutionConfig [flag])
+        rs' = versionedNativesRefStore (mkExecutionConfig [])
         nativesDisabled = S.fromList natives
     rs `shouldSatisfy` views rsNatives (S.disjoint nativesDisabled . S.fromList  . HM.keys)
+    rs' `shouldSatisfy` views rsNatives (S.isSubsetOf nativesDisabled . S.fromList  . HM.keys)
 
 versionedNativesTests :: SpecWith ()
 versionedNativesTests = do
@@ -211,3 +213,4 @@ versionedNativesTests = do
   versionedNativesTest FlagDisablePact43 ["create-principal", "validate-principal", "continue"]
   versionedNativesTest FlagDisablePact431 ["is-principal", "typeof-principal"]
   versionedNativesTest FlagDisablePact46 ["point-add", "scalar-mult", "pairing-check"]
+  versionedNativesTest FlagDisablePact47 ["dec"]

@@ -226,6 +226,9 @@ disablePact431Natives = disablePactNatives ["is-principal", "typeof-principal"] 
 disablePact46Natives :: ExecutionConfig -> Endo RefStore
 disablePact46Natives = disablePactNatives ["point-add", "scalar-mult", "pairing-check"] FlagDisablePact46
 
+disablePact47Natives :: ExecutionConfig -> Endo RefStore
+disablePact47Natives = disablePactNatives ["dec"] FlagDisablePact47
+
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
 
@@ -237,7 +240,8 @@ versionedNativesRefStore ec = versionNatives initRefStore
     , disablePact420Natives ec
     , disablePact43Natives ec
     , disablePact431Natives ec
-    , disablePact46Natives ec ]
+    , disablePact46Natives ec
+    , disablePact47Natives ec]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
