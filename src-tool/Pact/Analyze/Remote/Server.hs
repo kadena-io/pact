@@ -103,6 +103,7 @@ moduleNotFoundP :: MP.Parsec Void String ModuleName
 moduleNotFoundP = MP.string "<interactive>:"
                *> digitsP *> MP.char ':'
                *> digitsP *> MP.char ':'
+               *> MP.string "Error" *> MP.char ':'
                *> MP.string " Module "
                *> fmap fromString (MP.some $ MP.anySingleBut ' ')
                <* MP.string " not found"

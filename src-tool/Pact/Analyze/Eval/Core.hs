@@ -39,6 +39,19 @@ import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util           (Boolean (..), vacuousMatch)
 import qualified Pact.Native                 as Pact
 import           Pact.Types.Pretty           (renderCompactString)
+import Data.Attoparsec.Text (parseOnly)
+import Pact.Types.Principal (principalParser, showPrincipalType)
+import Pact.Types.Info (Info(..))
+import Pact.Types.Hash (pactHash)
+import Pact.Types.Util (AsString(asString))
+import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Aeson as Aeson
+import qualified Pact.Types.Lang as Pact
+import qualified Pact.Types.PactValue as Pact
+import Data.ByteString.Lazy.Char8 (toStrict)
+import qualified Data.ByteString as BS
+import Data.Functor ((<&>))
+import qualified Data.Vector as V
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -145,6 +158,12 @@ truncate63 i = ite (i .< lowerBound)
     upperBound = literal bound
     lowerBound = literal (- bound)
 
+notStaticErrHash :: String -> VerificationWarning
+notStaticErrHash s = FVShimmedStaticContent "hash" (T.pack s)
+
+symHash :: BS.ByteString -> S Str
+symHash =  literalS . Str . T.unpack . asString . pactHash
+
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))
 evalCore (Lit a)
@@ -163,6 +182,26 @@ evalCore (Compose tya tyb _ a (Open vida _nma tmb) (Open vidb _nmb tmc)) = do
   b' <- withVar vida (mkAVal a') $ withSing tyb $ eval tmb
   withVar vidb (mkAVal b') $ eval tmc
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
+
+evalCore (Enumerate from to step)          =  do
+  S _ from' <- eval from
+  S _ to'   <- eval to
+  S _ step' <- eval step
+  let
+    go :: (forall v. OrdSymbolic v => v -> v -> SBV Bool) -> SBV Integer -> SBV Integer -> SBV Integer -> SBV [Integer]
+    go cmp b e s = ite (b `cmp` e) (b SBVL..: go cmp (b + s) e s) SBVL.nil
+
+  let algPos = ite (from' .== to') (SBVL.singleton from')
+              (ite (step' .== 0) (SBVL.singleton from' )
+               (ite (from' + step' .> to') (SBVL.singleton from') (go (.<=) from' to' step')))
+      algNeg =  ite (step' .== 0) (SBVL.singleton from' )
+                (ite (from' + step' .< to') (SBVL.singleton from') (go (.>=) from' to' step'))
+
+
+  markFailure $ (from' .< to' .&& step' .< 0) .|| (from' .> to' .&& step' .> 0)
+
+  pure $ sansProv (ite (from' .<= to') algPos algNeg)
+
 evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
 evalCore (StrToInt s)                      = evalStrToInt s
@@ -210,6 +249,58 @@ evalCore (StrContains needle haystack) = do
     _sSbv (coerceS @Str @String needle')
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
+
+evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
+  Nothing -> do
+     -- (hash "hello pact")
+    let h = "HsVo-gcG-pk1BciGr2xovMyR7sVH0Kt9gTgqicXDXMM"
+    emitWarning (notStaticErrHash ("of type 'string', substitute '" <> h <> "')"))
+    pure (literalS (Str h))
+  Just (Str b)  -> pure (symHash (encodeUtf8 (T.pack b)))
+
+evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
+  Nothing -> do
+     -- (hash 1)
+    let h = "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"
+    emitWarning (notStaticErrHash ("of type 'integer', substitute '" <> h <> "')"))
+    pure (literalS (Str h))
+  Just i  -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral ( Pact.LInteger i)))))
+
+evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
+  Nothing -> do
+    let h = "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"
+    emitWarning (notStaticErrHash ("of type 'bool', substitute '" <> h <> "'"))
+    pure (literalS (Str h)) -- (hash true)
+  Just b  -> pure (symHash (toStrict ( Aeson.encode b)))
+
+evalCore (DecHash d) = eval d <&> unliteralS >>= \case
+  Nothing -> do
+    -- (hash 1.0)
+    let h = "ks31eMRwhaWZIlbw3Pl9Cxnx8cneTV_jDDrOYZG25ds"
+    emitWarning (notStaticErrHash ("of type 'decimal', subsitute '" <> h <> "'"))
+    pure (literalS (Str h))
+  Just d' ->
+    pure (symHash (toStrict (Aeson.encode (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d'))))))
+
+evalCore (ListHash ty' xs) = do
+  result <-  withSymVal ty' $ withSing ty' $ eval xs <&> unliteralS >>= \case
+      Nothing -> do
+        -- (hash [])
+        let h = "wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8"
+        emitWarning (notStaticErrHash ("of type 'list', substitute '" <> h <> "'"))
+        pure ([Pact.PLiteral (Pact.LString (T.pack h))])
+      Just xs'' -> traverse (reify ty') xs''
+  pure (symHash (toStrict (Aeson.encode (Pact.PList (V.fromList result)))))
+  where
+    reify :: forall b. Sing b -> Concrete b -> m Pact.PactValue
+    reify t c = case t of
+      SStr -> pure $ Pact.PLiteral . Pact.LString . T.pack . unStr $ c
+      SInteger -> pure $ Pact.PLiteral . Pact.LInteger $ c
+      SDecimal -> pure $ Pact.PLiteral . Pact.LDecimal . toPact decimalIso $ c
+      SBool -> pure $ Pact.PLiteral . Pact.LBool $ c
+      SList t' -> Pact.PList . V.fromList <$> traverse (reify t') c
+      _ -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
   S _ haystack' <- withSing ty $ eval haystack
@@ -241,6 +332,11 @@ evalCore (ListLength ty l) = withSymVal ty $ withSing ty $ do
 evalCore (LiteralList ty xs) = withSymVal ty $ withSing ty $ do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv $ SBVL.implode vals
+
+evalCore (ListDistinct ty list) = withSymVal ty $ withSing ty $ withEq ty $ do
+  S _ list' <- eval list
+  pure $ sansProv (SBVL.reverse (bfoldr listBound (\a b -> ite (SBVL.elem a b) b (a SBVL..: b)) SBVL.nil list'))
+
 
 evalCore (ListDrop ty n list) = withSymVal ty $ withSing ty $ do
   S _ n'    <- eval n
@@ -296,7 +392,7 @@ evalCore (ListFilter tya (Open vid _ f) as)
         (\sbva svblst -> do
           S _ x' <- withVar vid (mkAVal' sbva) (eval f)
           pure $ ite x' (sbva .: svblst) svblst)
-        (literal [])
+        SBVL.nil
   sansProv <$> bfilterM as'
 
 evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
@@ -380,6 +476,23 @@ evalCore (ObjTake argTy _keys obj) = withSing argTy $ do
 
 evalCore (ObjLength (SObjectUnsafe (SingList hlist)) _obj) = pure $ literalS $
   hListLength hlist
+
+evalCore (IsPrincipal p) = do
+  p' <- eval p
+  case unliteralS p' of
+    Nothing -> let (S _ str) = coerceS @Str @String p'
+               in pure $ sansProv (literal "internal-principal-" `SBVS.isPrefixOf` str)
+                  -- RS: Note, `create-principle` returns a string prefixed by `internal-principal-`
+                  -- which we check, if `p` is not statically known.
+    Just (Str str) -> case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+      Left _ -> pure (literalS sFalse)
+      Right _ -> pure (literalS sTrue)
+
+evalCore (TypeOfPrincipal p) = eval p <&> unliteralS >>= \case
+  Nothing -> throwErrorNoLoc (FailureMessage "`typeof-principal` requires statically known content")
+  Just (Str str) -> case parseOnly (principalParser (Info Nothing)) (T.pack str) of
+    Left _ -> pure (literalS "")
+    Right pt -> pure (literalS (Str (T.unpack (showPrincipalType pt))))
 
 -- | Implementation for both drop and take. The "sub" schema must be a sub-list
 -- of the "sup(er)" schema. See 'subObjectS' for a variant that works over 'S'.
@@ -600,7 +713,10 @@ evalStrToIntBase bT sT = do
     -- Concrete base and symbolic string: only support base 10
     (Just conBase, Nothing)
       | conBase == 10 -> evalStrToInt $ inject' $ coerceS @String @Str s
-      | otherwise     -> pure $ literalS conBase -- return base. TODO: warning please
+      | otherwise     -> do
+          emitWarning (FVShimmedStaticContent "strToInt"
+            (T.pack ("unsupported base=" <> show conBase <> ", substitue " <> show conBase)))
+          pure $ literalS conBase
 
     -- Concrete base and string: use pact native impl
     (Just conBase, Just conStr) ->

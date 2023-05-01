@@ -76,6 +76,7 @@ class (MonadError AnalyzeFailure m, S :*<: TermOf m) => Analyzer m where
   getVar          :: VarId                 -> m (Maybe AVal)
   withVar         :: VarId -> AVal -> m a  -> m a
   markFailure     :: SBV Bool              -> m ()
+  emitWarning     :: VerificationWarning   -> m ()
   withMergeableAnalyzer
     :: SingTy a
     -> (( Mergeable (m (S (Concrete a)))
@@ -345,8 +346,9 @@ data GlobalAnalyzeState
 
 data AnalyzeState a
   = AnalyzeState
-    { _latticeState :: LatticeAnalyzeState a
-    , _globalState  :: GlobalAnalyzeState
+    { _latticeState    :: LatticeAnalyzeState a
+    , _globalState     :: GlobalAnalyzeState
+    , _analyzeWarnings :: [Types.VerificationWarning]
     }
   deriving (Show)
 
@@ -365,6 +367,7 @@ data AnalysisResult
     , _arTxSuccess     :: SBV Bool
     , _arProposition   :: SBV Bool
     , _arKsProvenances :: Map TagId Provenance
+    , _arWarnings      :: [Types.VerificationWarning]
     }
   deriving (Show)
 
@@ -420,6 +423,7 @@ mkInitialAnalyzeState trivialGuard tables caps = AnalyzeState
           , _cvRowExists  = mkRowExists
           }
         }
+    , _analyzeWarnings = []
     , _globalState = GlobalAnalyzeState
         { _gasGuardProvenances = mempty
         , _gasRollbacks        = []

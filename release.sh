@@ -108,17 +108,17 @@ echo "Downloading artifact from $dlurl ..."
 
 curl -s -L -H "Authorization: token $ghtoken" -o pact-$version-linux-20.04.zip $dlurl
 
-# Get linux 18.04 artifact ===========================
+# Get linux 22.04 artifact ===========================
 
-echo "Looking up linux 18.04 artifact ..."
+echo "Looking up linux 22.04 artifact ..."
 
-dlurl=`curl -s -H "Authorization: token $ghtoken" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/kadena-io/pact/actions/runs/$runid/artifacts | jq -r '.artifacts[] | select(.name | contains ("8.10.7.ubuntu-18.04")) | .archive_download_url'`
+dlurl=`curl -s -H "Authorization: token $ghtoken" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/kadena-io/pact/actions/runs/$runid/artifacts | jq -r '.artifacts[] | select(.name | contains ("8.10.7.ubuntu-22.04")) | .archive_download_url'`
 
 if [ -z "$dlurl" ]; then echo "Linux artifact lookup failed!"; exit 1; fi
 
 echo "Downloading artifact from $dlurl ..."
 
-curl -s -L -H "Authorization: token $ghtoken" -o pact-$version-linux-18.04.zip $dlurl
+curl -s -L -H "Authorization: token $ghtoken" -o pact-$version-linux-22.04.zip $dlurl
 
 # Get osx artifact ===========================
 

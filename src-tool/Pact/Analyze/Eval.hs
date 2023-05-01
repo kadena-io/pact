@@ -140,6 +140,7 @@ runAnalysis' modName gov query tables caps args stepChoices tm rootPath tags inf
       state1' = state1 &  latticeState . lasExtra .~ ()
       qEnv    = mkQueryEnv aEnv state1' cv0 cv1 funResult
       ksProvs = state1 ^. globalState.gasGuardProvenances
+      warnings = state1 ^. analyzeWarnings
       query'  = do
         txSucc <- txSucceeds
         res <- query
@@ -148,7 +149,7 @@ runAnalysis' modName gov query tables caps args stepChoices tm rootPath tags inf
   ((txSuccess, results), querySucceeds)
     <- hoist runAlloc $ runReaderT (runStateT (queryAction query') sTrue) qEnv
   pure $ results <&> \prop ->
-    AnalysisResult querySucceeds (_sSbv txSuccess) (_sSbv prop) ksProvs
+    AnalysisResult querySucceeds (_sSbv txSuccess) (_sSbv prop) ksProvs warnings
 
 runPropertyAnalysis
   :: ModuleName

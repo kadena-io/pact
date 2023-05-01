@@ -1,8 +1,11 @@
+
 name: Build and publish application binaries
 
 on:
   workflow_dispatch:
   push:
+  pull_request_target:
+    types: [ opened ]
 
 jobs:
   build:
@@ -51,20 +54,15 @@ jobs:
         sudo apt-get install -y z3
     - name: Install z3 (ubuntu-22.04)
       if: contains(matrix.os, 'ubuntu-22.04')
-      uses: pavpanchekha/setup-z3@v0.3.0
+      # uses: pavpanchekha/setup-z3@v0.3.0
+      uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
       with:
         version: "4.11.2"
         architecture: "x64"
-    - name: Install z3 (ubuntu-18.04)
-      if: contains(matrix.os, 'ubuntu-18.04')
-      uses: pavpanchekha/setup-z3@v0.3.0
-      with:
-        version: "4.8.10"
-        architecture: "x64"
-        distribution: "ubuntu-18.04"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
-      uses: pavpanchekha/setup-z3@v0.3.0
+      # uses: pavpanchekha/setup-z3@v0.3.0
+      uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
       with:
         version: "4.8.10"
         architecture: "x64"
@@ -155,7 +153,7 @@ jobs:
         cabal freeze
     - name: Sync from cabal cache
       if: matrix.cabalcache == 'true'
-      uses: larskuhtz/cabal-cache-action@ecc751af6d31b3ed5a3b4aefdefd0ed6ef4cb414
+      uses: larskuhtz/cabal-cache-action@018b7ae0c480ba3dc4fa0cfa3a0bc1f05b7724b3
       with:
         bucket: "kadena-cabal-cache"
         region: "us-east-1"
@@ -255,7 +253,7 @@ jobs:
         EOF
     - name: Docker meta
       id: meta
-      uses: docker/metadata-action@v3
+      uses: docker/metadata-action@v4
       with:
         images: ghcr.io/kadena-io/pact
         tags: |
@@ -280,7 +278,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     - name: Build and push
       id: docker_build
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v4
       with:
         push: true
         context: .
@@ -289,4 +287,3 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
-
