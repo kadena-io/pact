@@ -207,7 +207,7 @@ versionedNativesTest flag natives = do
     rs' `shouldSatisfy` views rsNatives (S.isSubsetOf nativesDisabled . S.fromList  . HM.keys)
 
 versionedNativesTests :: SpecWith ()
-versionedNativesTests = do
+versionedNativesTests = describe "versionedNativesTests" $ do
   versionedNativesTest FlagDisablePact40 ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
   versionedNativesTest FlagDisablePact420 ["zip", "fold-db"]
   versionedNativesTest FlagDisablePact43 ["create-principal", "validate-principal", "continue"]
