@@ -31,14 +31,14 @@ import System.FilePath
 
 spec :: Spec
 spec = do
-  -- tests <- runIO findTests
-  -- pactTests tests
-  -- badTests
-  -- accountsTest
-  -- cpTest
-  -- verifiedAccountsTest
-  -- prodParserTests tests
-  -- legacyProdParserTests tests
+  tests <- runIO findTests
+  pactTests tests
+  badTests
+  accountsTest
+  cpTest
+  verifiedAccountsTest
+  prodParserTests tests
+  legacyProdParserTests tests
   versionedNativesTests
 
 
