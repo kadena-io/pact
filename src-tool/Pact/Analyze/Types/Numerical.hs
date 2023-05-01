@@ -143,7 +143,8 @@ banker'sMethod d
 
 decCast :: SBV Integer -> SBV Decimal
 decCast d
-  = coerceSBV @Integer @Decimal d
+  = coerceSBV @Integer @Decimal (d * 10^(255::Integer))
+  -- Note, our `Decimal` representation is x*10^255 within the FV system
 
 -- (Banker's method) rounding division for integers.
 roundingDiv :: SBV Integer -> SBV Integer -> SBV Integer
