@@ -237,8 +237,8 @@ getLoadedState code = do
 
 defEvalEnv :: PactDbEnv e -> IO (EvalEnv e)
 defEvalEnv db = do
-  setupEvalEnv db entity Transactional (initMsgData pactInitialHash)
-    initRefStore prodGasModel permissiveNamespacePolicy noSPVSupport def noPact44EC
+  setupEvalEnv db entity Transactional (initMsgData pactInitialHash) (versionedNativesRefStore noPact44EC)
+    prodGasModel permissiveNamespacePolicy noSPVSupport def noPact44EC
   where entity = Just $ EntityName "entity"
         prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
         noPact44EC = mkExecutionConfig [FlagDisablePact44]

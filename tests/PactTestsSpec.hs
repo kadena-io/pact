@@ -6,7 +6,8 @@ import Test.Hspec
 
 import Control.Concurrent
 import Control.Monad.State.Strict
-
+import Control.Lens
+import Data.Text(Text)
 import Data.Either (isLeft, isRight)
 import Data.List
 import qualified Data.HashMap.Strict as HM
@@ -14,6 +15,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Text (unpack)
 import qualified Data.Text.IO as T
+import qualified Data.Set as S
 
 import Pact.Repl
 import Pact.Repl.Lib
@@ -37,6 +39,7 @@ spec = do
   verifiedAccountsTest
   prodParserTests tests
   legacyProdParserTests tests
+  versionedNativesTests
 
 
 pactTests :: [FilePath] -> Spec
@@ -190,3 +193,21 @@ checkLegacyProdParser expectSuccess fp = describe fp $ do
       pc `shouldSatisfy` isLeft
  where
   parse = legacyParsePact <$> T.readFile fp
+
+-- Versioned natives tests
+
+versionedNativesTest :: ExecutionFlag -> [Text] -> SpecWith ()
+versionedNativesTest flag natives = do
+  let msg = "Successfully disables " <> show flag <> " natives"
+  it msg $ do
+    let rs = versionedNativesRefStore (mkExecutionConfig [flag])
+        nativesDisabled = S.fromList natives
+    rs `shouldSatisfy` views rsNatives (S.disjoint nativesDisabled . S.fromList  . HM.keys)
+
+versionedNativesTests :: SpecWith ()
+versionedNativesTests = do
+  versionedNativesTest FlagDisablePact40 ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
+  versionedNativesTest FlagDisablePact420 ["zip", "fold-db"]
+  versionedNativesTest FlagDisablePact43 ["create-principal", "validate-principal", "continue"]
+  versionedNativesTest FlagDisablePact431 ["is-principal", "typeof-principal"]
+  versionedNativesTest FlagDisablePact46 ["point-add", "scalar-mult", "pairing-check"]

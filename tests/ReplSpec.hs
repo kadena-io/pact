@@ -13,9 +13,10 @@ import qualified Data.ByteString.Char8 as BS8
 import System.Posix.Pty (spawnWithPty, writePty, tryReadPty, closePty)
 import System.Process (terminateProcess)
 import Control.Monad (void)
-import Data.Char (isControl)
-import Data.List (isPrefixOf, isSuffixOf)
-import Data.ByteString.Char8 (breakSubstring)
+import Pact.Types.Runtime (ExecutionFlag (..))
+import Data.Foldable (traverse_)
+
+
 spec :: Spec
 spec = describe "ReplSpec" $ do
   it "should not print literal via `Show` (regression #1101)" $ do
@@ -36,6 +37,21 @@ spec = describe "ReplSpec" $ do
               \ (verify 'm)"
     out <- liftIO (runInteractive src)
     out `shouldSatisfy` containsShimmedInfo
+  traverse_ (uncurry disabledNativeTest)
+   [ ("enumerate", FlagDisablePact40)
+   , ("zip", FlagDisablePact420)
+   , ("create-principal", FlagDisablePact43)
+   , ("is-principal", FlagDisablePact431)
+   , ("point-add", FlagDisablePact46)
+   ]
+
+disabledNativeTest :: ByteString -> ExecutionFlag -> Spec
+disabledNativeTest ntv flag = do
+  let flagName = BS8.pack (drop 4 (show flag))
+  it ("Should disable " <> BS8.unpack ntv <> " on flag " <> BS8.unpack flagName) $ do
+    let cmd = "(env-exec-config [' "<> flagName <> "]) " <> ntv
+    out <- liftIO (runInteractive cmd)
+    out `shouldSatisfy` BS.isInfixOf ("Cannot resolve " <> ntv)
 
 -- | Execute 'src' inside a pseudo-terminal running the pact repl and returns the repl output.
 runInteractive :: ByteString -> IO ByteString

@@ -190,7 +190,6 @@ evalByName n as i = do
   app <- enscope (TApp (App (TVar n def) as i) i)
 
   -- lens into user function if any to test for loop
-
   case preview (tApp . appFun . tVar . _Ref . tDef) app of
     Nothing -> return ()
     Just Def{..} -> do
