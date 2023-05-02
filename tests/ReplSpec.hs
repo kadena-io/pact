@@ -8,10 +8,14 @@ import Test.Hspec
 import Data.ByteString (ByteString)
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
-import System.Posix.Pty (spawnWithPty, writePty, readPty, closePty)
+import qualified Data.ByteString.Char8 as BS8
+
+import System.Posix.Pty (spawnWithPty, writePty, tryReadPty, closePty)
 import System.Process (terminateProcess)
 import Control.Monad (void)
-
+import Data.Char (isControl)
+import Data.List (isPrefixOf, isSuffixOf)
+import Data.ByteString.Char8 (breakSubstring)
 spec :: Spec
 spec = describe "ReplSpec" $ do
   it "should not print literal via `Show` (regression #1101)" $ do
@@ -49,10 +53,17 @@ runInteractive src = do
     -- We recursively collect output using 'readPty' (line-based reading),
     -- until we encounter the pact prompt.
     seekPactPrompt pty o = do
-      content <- readPty pty
-      if "pact>" `BS.isInfixOf` content
-      then pure o
-      else seekPactPrompt pty (o <> content)
+      mContent <- tryReadPty pty
+      case mContent of
+        Left codes -> do
+          print ("# " <> show codes)
+          seekPactPrompt pty o
+        Right c -> do
+          let content = o <> c
+          print content
+          if "pact>" `BS.isInfixOf` content
+            then pure content
+            else seekPactPrompt pty content
 
 -- | Check if 's' did not use the show instance of 'ErrInfo'
 containsNoErrInfo :: ByteString -> Bool
