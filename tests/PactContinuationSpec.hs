@@ -65,13 +65,40 @@ testElideModRefEvents = do
           (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
 
   it "doesn't elide on backcompat" $ do
-    cmd <- mkExec code Null def [] Nothing Nothing
+    cmd <- mkExec codePreFork Null def [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport backCompatFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
           (("refInfo" `isInfixOf`) . BSL8.unpack)
   where
+    codePreFork =
+      [text|
+
+           (interface iface
+             (defun f:bool ()))
+
+           (module evmodule G
+
+             (defcap G () true)
+
+             (defcap BURN (a:module{iface})
+               @event
+               1)
+
+             (implements iface)
+
+             (defun f:bool () true)
+
+             (defun usecap (a:module{iface})
+               (with-capability (BURN a)
+                 1
+               )
+             )
+            )
+
+           (usecap evmodule)
+           |]
     code =
       [text|
 
@@ -244,17 +271,18 @@ threeStepPactCode moduleName =
 threeStepNestedPactCode :: T.Text -> T.Text
 threeStepNestedPactCode moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
     (interface iface
 
      (defpact ndp:string ())
     )
-    (module $moduleName 'k
+    (module $moduleName g
+     (defcap g () true)
      (defpact tester ()
        (step "step 0")
        (step "step 1")
        (step "step 2")))
-     (module $moduleName-2 'k
+     (module $moduleName-2 g
+     (defcap g () true)
      (implements iface)
      (defpact ndp:string ()
        (step
@@ -277,7 +305,8 @@ threeStepNestedPactCode moduleName =
        ))
        )
 
-     (module $moduleName-nested 'k
+     (module $moduleName-nested g
+       (defcap g () true)
        (defpact nestedTester (m:module{iface})
          (step
          (let
@@ -379,13 +408,14 @@ errorStepPactCode moduleName =
 errorStepNestedPactCode :: T.Text -> T.Text
 errorStepNestedPactCode moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-      (module $moduleName 'k
+      (module $moduleName g
+       (defcap g () true)
        (defpact tester ()
          (step "step 0")
          (step (+ "will throw error in step 1"))
          (step "step 2")))
-       (module $moduleName-nested 'k
+       (module $moduleName-nested g
+         (defcap g () true)
          (defpact nestedTester ()
            (step
            (let
@@ -671,7 +701,7 @@ testNestedPactYield = do
       chain1ContDupe <- makeContCmdWith 1 "chain1ContDupe"
 
       chain1Results <-
-        runAll' [moduleCmd, chain1Cont,chain1ContDupe] spv testFlags
+        runAll' [moduleCmd, chain1Cont,chain1ContDupe] spv nestedDefPactFlags
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
 
@@ -736,8 +766,8 @@ pactWithYield moduleName =
 nestedPactWithYield :: T.Text -> T.Text
 nestedPactWithYield moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-    (module nested-$moduleName 'k
+    (module nested-$moduleName g
+      (defcap g () true)
       (defpact tester (name)
         (step
           (let ((result0 (+ name "->Step0")))
@@ -751,7 +781,8 @@ nestedPactWithYield moduleName =
         (step
           (resume { "step1-result" := res1 }
              (+ res1 "->Step2")))))
-     (module $moduleName 'k
+     (module $moduleName g
+      (defcap g () true)
       (defpact tester (name)
         (step
           (let ((result0 (+ name "->Step0")))
@@ -813,8 +844,8 @@ pactWithYieldErr moduleName =
 nestedPactWithYieldErr :: T.Text -> T.Text
 nestedPactWithYieldErr moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-    (module nested-$moduleName 'k
+    (module nested-$moduleName g
+      (defcap g () true)
       (defpact tester (name)
        (step
          (let ((result0 (+ name "->Step0")))
@@ -824,7 +855,8 @@ nestedPactWithYieldErr moduleName =
        (step
          (resume { "step0-result" := res0 }
             (+ res0 "->Step2")))))
-    (module $moduleName 'k
+    (module $moduleName g
+     (defcap g () true)
      (defpact tester (name)
        (step
          (let ((result0 (+ name "->Step0")))
@@ -891,8 +923,8 @@ pactWithSameNameYield moduleName =
 nestedPactWithSameNameYield :: T.Text -> T.Text
 nestedPactWithSameNameYield moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-    (module nested-$moduleName 'k
+    (module nested-$moduleName g
+      (defcap g () true)
       (defpact tester ()
         (step
           (let ((result0 "step 0"))
@@ -905,7 +937,8 @@ nestedPactWithSameNameYield moduleName =
         (step
           (resume { "result" := res }
             res))))
-     (module $moduleName 'k
+     (module $moduleName g
+      (defcap g () true)
       (defpact tester ()
         (step
           (let ((result0 "step 0"))
