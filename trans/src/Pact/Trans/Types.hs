@@ -16,11 +16,14 @@ module Pact.Trans.Types
   , doubleToTransResult
   ) where
 
+import Data.Word(Word64)
+
 data TransResult a
   = TransNumber !a
   | TransNaN !a
   | TransInf !a
   | TransNegInf !a
+  | TransGasExceeded Word64
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 doubleToTransResult :: Double -> TransResult Double

@@ -3,8 +3,11 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE TupleSections #-}
 
 {-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 
 -- |
 -- Module      :  Pact.Trans.Dec
@@ -33,6 +36,7 @@ module Pact.Trans.Dec
   , fromDecimal
   ) where
 
+import Data.Word(Word64)
 import qualified Data.Decimal as D
 import qualified Numeric.Decimal as N
 import qualified Numeric.Decimal.Number as N
@@ -129,55 +133,72 @@ reduce_ n@N.Num { N.coefficient = c, N.exponent = e }
     (q, r) = c `quotRem` 10
 reduce_ n = n
 
+data TransGasParams
+  = TransGasParams 
+  { _tGas :: !Word64
+  , _tGasLimit :: !Word64
+  }
+
+gasContext :: TransGasParams -> Context p N.RoundHalfEven
+gasContext (TransGasParams gas gasLimit) = extendedDefaultContext {ctxGas = gas, ctxGasLimit = gasLimit}
+
 dec_reduce :: D.Decimal -> D.Decimal
 dec_reduce x =
   case toDecimal (reduce_ (fromDecimal x :: Decimal)) of
     TransNumber n -> n
     e -> error $ "reduce error: " ++ show e
 
-dec_exp :: D.Decimal -> TransResult D.Decimal
-dec_exp x =
-  case evalArith (Op.exp (fromDecimal x :: Decimal)
+dec_exp :: TransGasParams -> D.Decimal -> TransResult (D.Decimal, Word64)
+dec_exp gp x =
+  case runArith (Op.exp (fromDecimal x :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
-       extendedDefaultContext of
-    Left err -> error $ "exp error: " ++ show err
-    Right n -> toDecimal n
+       (gasContext gp) of
+    (Left err, ctx) 
+      | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
+      | otherwise -> error $ "exp error: " ++ show err
+    (Right n, ctx) ->  (,ctxGas ctx) <$> toDecimal n
 
-dec_ln :: D.Decimal -> TransResult D.Decimal
-dec_ln x =
-  case evalArith (Op.ln (fromDecimal x :: Decimal)
+dec_ln :: TransGasParams -> D.Decimal -> TransResult (D.Decimal, Word64)
+dec_ln gp x =
+  case runArith (Op.ln (fromDecimal x :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
-       extendedDefaultContext of
-    Left err -> error $ "ln error: " ++ show err
-    Right n -> toDecimal n
+       (gasContext gp) of
+    (Left err, ctx) 
+      | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
+      | otherwise -> error $ "ln error: " ++ show err
+    (Right n, ctx) -> (,ctxGas ctx) <$> toDecimal n
 
-dec_log :: D.Decimal -> D.Decimal -> TransResult D.Decimal
-dec_log D.Decimal{ D.decimalPlaces = _, D.decimalMantissa = 0 } _ =
-  TransNumber 0.0
-dec_log b x =
-  case dec_ln x of
-    TransNumber x' ->
-      case dec_ln b of
-        TransNumber b' -> TransNumber (x' / b')
+dec_log :: TransGasParams -> D.Decimal -> D.Decimal -> TransResult (D.Decimal, Word64)
+dec_log gp D.Decimal{ D.decimalPlaces = _, D.decimalMantissa = 0 } _ =
+  TransNumber (0.0, _tGas gp)
+dec_log gp b x =
+  case dec_ln gp x of
+    TransNumber (x', g1) ->
+      case dec_ln (gp{_tGas=g1}) b of
+        TransNumber (b',g2) -> TransNumber (x' / b', g2)
         b' -> b'
     x' -> x'
 
-dec_pow :: D.Decimal -> D.Decimal -> TransResult D.Decimal
-dec_pow D.Decimal{ D.decimalPlaces = _, D.decimalMantissa = 0 }
+dec_pow :: TransGasParams -> D.Decimal -> D.Decimal -> TransResult (D.Decimal, Word64)
+dec_pow gp D.Decimal{ D.decimalPlaces = _, D.decimalMantissa = 0 }
         D.Decimal{ D.decimalPlaces = _, D.decimalMantissa = 0 } =
-  TransNumber 1.0
-dec_pow x y =
-  case evalArith (Op.power (fromDecimal x :: Decimal)
+  TransNumber (1.0, _tGas gp)
+dec_pow gp x y =
+  case runArith (Op.power (fromDecimal x :: Decimal)
                    (fromDecimal y :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
-       extendedDefaultContext of
-    Left err -> error $ "pow error: " ++ show err
-    Right n -> toDecimal n
-
-dec_sqrt :: D.Decimal -> TransResult D.Decimal
-dec_sqrt x =
-  case evalArith (Op.squareRoot (fromDecimal x :: Decimal)
+       (gasContext gp) of
+    (Left err, ctx) 
+      | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
+      | otherwise -> error $ "ln error: " ++ show err
+    (Right n, ctx) -> (,ctxGas ctx) <$> toDecimal n
+    
+dec_sqrt :: TransGasParams -> D.Decimal -> TransResult (D.Decimal, Word64)
+dec_sqrt gp x =
+  case runArith (Op.squareRoot (fromDecimal x :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
-       extendedDefaultContext of
-    Left err -> error $ "sqrt error: " ++ show err
-    Right n -> toDecimal n
+       (gasContext gp) of
+    (Left err, ctx) 
+      | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
+      | otherwise -> error $ "ln error: " ++ show err
+    (Right n, ctx) -> (,ctxGas ctx) <$> toDecimal n
