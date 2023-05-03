@@ -21,7 +21,6 @@ import Pact.Types.Gas
 import Pact.Types.RowData
 import Pact.Types.SizeOf
 import Pact.Types.Term
-
 -- NB: If pact ends up not having any variadic primitives (currently, I didn't spot any thus far, but also the types don't rule it out)
 -- then the primTable here could lose the [Term Ref] function parameter, and simply be Map Text Gas.
 -- Attributing gas costs to Term Ref on its own is problematic in general -- typically we want to account for those costs when the terms
@@ -233,8 +232,8 @@ tableGasModel gasConfig =
         GUserApp t -> case t of
           Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
           _ -> _gasCostConfig_functionApplicationCost gasConfig
-        GIntegerOpCost i j ->
-          intCost (fst i) + intCost (fst j)
+        GIntegerOpCost i j ts ->
+          intCost ts (fst i) + intCost ts (fst j)
         GDecimalOpCost _ _ -> 0
         GMakeList v -> expLengthPenalty v
         GSort len -> expLengthPenalty len
@@ -285,7 +284,7 @@ tableGasModel gasConfig =
         GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
         GMakeList2 len msz ->
           let glen = fromIntegral len
-          in glen + maybe 0 ((* glen) . intCost) msz
+          in glen + maybe 0 ((* glen) . intCost ThresholdPrePact47) msz
         GZKArgs arg -> case arg of
           PointAdd g -> pointAddGas g
           ScalarMult g -> scalarMulGas g
@@ -342,15 +341,15 @@ defaultGasModel = tableGasModel defaultGasConfig
 
 #if !defined(ghcjs_HOST_OS)
 -- | Costing function for binary integer ops
-intCost :: Integer -> Gas
-intCost !a
-  | (abs a) < threshold = 0
+intCost :: IntThreshold -> Integer -> Gas
+intCost ts !a
+  | abs a < threshold = 0
   | otherwise =
     let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
     in fromIntegral (nbytes * nbytes `quot` 100)
   where
   threshold :: Integer
-  threshold = (10 :: Integer) ^ (30 :: Integer)
+  threshold = thresholdToInteger ts
 
 
 _intCost :: Integer -> Int
@@ -358,15 +357,15 @@ _intCost !a =
     let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
     in nbytes
 #else
-intCost :: Integer -> Gas
-intCost !a
+intCost :: IntThreshold -> Integer -> Gas
+intCost ts !a
   | (abs a) < threshold = 0
   | otherwise =
     let !nbytes = (ceiling (logBase @Double 2 (fromIntegral (abs a))) + 1) `quot` 8
     in (nbytes * nbytes) `quot` 100
   where
   threshold :: Integer
-  threshold = (10 :: Integer) ^ (30 :: Integer)
+  threshold = thresholdToInteger ts
 #endif
 
 pact421GasModel :: GasModel

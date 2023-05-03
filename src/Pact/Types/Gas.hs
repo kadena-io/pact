@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE InstanceSigs #-}
 
 -- |
 -- Module      :  Pact.Types.Gas
@@ -29,6 +30,8 @@ module Pact.Types.Gas
   , geGasLimit
   , geGasPrice
   , geGasModel
+  , IntThreshold(..)
+  , thresholdToInteger
   ) where
 
 import Control.DeepSeq (NFData)
@@ -114,7 +117,6 @@ instance Pretty WriteValue where
     WriteKeySet {} -> "WriteKeySet"
     WriteYield {} -> "WriteYield"
 
-
 data GasArgs
   = GSelect !(Maybe [(Info,FieldKey)])
   -- ^ Cost of selecting columns from a user table
@@ -150,13 +152,28 @@ data GasArgs
   -- ^ The cost of the in-memory representation of the module
   | GPrincipal !Int
   -- ^ the cost of principal creation and validation
-  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer)
+  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer) IntThreshold
   -- ^ Integer costs
   | GDecimalOpCost !Decimal !Decimal
   -- ^ Decimal costs
   | GMakeList2 !Integer !(Maybe Integer)
   -- ^ List versioning 2
   | GZKArgs ZKArg
+
+data IntThreshold
+  = ThresholdPrePact47
+  | ThresholdPact47
+  deriving (Show, Enum)
+
+thresholdToInteger :: IntThreshold -> Integer
+thresholdToInteger = \case
+  ThresholdPrePact47 -> (10 :: Integer) ^ (30 :: Integer)
+  ThresholdPact47 -> (10 :: Integer) ^ (80 :: Integer)
+
+instance Pretty IntThreshold where
+  pretty = \case
+    ThresholdPrePact47 -> "ThresholdPrePact47"
+    ThresholdPact47 -> "ThresholdPact47"
 
 -- | The elliptic curve pairing group we are
 -- handling
@@ -206,7 +223,7 @@ instance Pretty GasArgs where
     GFoldDB -> "GFoldDB"
     GModuleMemory i -> "GModuleMemory: " <> pretty i
     GPrincipal i -> "GPrincipal: " <> pretty i
-    GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
+    GIntegerOpCost i j ts -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j <> colon <> pretty ts
     GDecimalOpCost i j -> "GDecimalOpCost:" <> pretty (show i) <> colon <> pretty (show j)
     GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
     GZKArgs arg -> "GZKArgs:" <> pretty arg

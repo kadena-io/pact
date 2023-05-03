@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -21,8 +22,11 @@ module Pact.Native.Trans
     ) where
 
 import Control.Lens
+import Control.Monad(when)
 import Data.Decimal
-import Data.IORef(writeIORef)
+import Data.Word(Word64)
+import Data.IORef(writeIORef, readIORef)
+import GHC.Int(Int(..))
 import Numeric.Decimal.Arithmetic 
 import qualified Numeric.Decimal.Number as NDec
 
@@ -32,10 +36,12 @@ import qualified Pact.Trans.Musl as Musl
 #endif
 import qualified Pact.Trans.Dec as Dec
 import qualified Pact.Trans.Dbl as Dbl
+import qualified GHC.Integer.Logarithms as IntLog
 import Pact.Trans.Types
 import Pact.Types.Runtime
-import Pact.Types.Gas
 import Pact.Types.Pretty
+import Pact.Gas
+import Pact.Trans.Dec (TransGasParams)
 
 
 chooseFunction1
@@ -55,6 +61,12 @@ chooseFunction2
 chooseFunction2 fp_double fp_musl fp_dec =
   ifExecutionFlagSet' FlagDisableNewTrans fp_double =<<
     ifExecutionFlagSet' FlagDisableNewTransDec fp_musl fp_dec
+
+getTransGasParams :: Eval e Dec.TransGasParams
+getTransGasParams = do
+  gUsed <- view eeGas >>= liftIO . readIORef
+  gLim <- view (eeGasEnv . geGasLimit)
+  pure (Dec.TransGasParams (fromIntegral gUsed) (fromIntegral gLim) chargePactArith)
 
 trans_exp :: HasInfo i => i -> Decimal -> Eval e Decimal
 trans_exp i x = go
@@ -142,24 +154,45 @@ trans_sqrt i x = go
 
 liftUnDec
   :: HasInfo i => i
-  -> (Decimal -> TransResult Decimal)
+  -> (TransGasParams -> Decimal -> TransResult (Decimal, Word64))
   -> Decimal -> Eval e Decimal
-liftUnDec i f a = checkTransResult i (f a)
+liftUnDec i f a = do
+  gc <- getTransGasParams
+  checkGasTransResult i (f gc a)
 
 liftBinDec
   :: HasInfo i => i
-  -> (Decimal -> Decimal -> TransResult Decimal)
+  -> (TransGasParams -> Decimal -> Decimal -> TransResult (Decimal, Word64))
   -> Decimal -> Decimal -> Eval e Decimal
-liftBinDec i f a b = checkTransResult i (f a b)
+liftBinDec i f a b = do
+  gc <- getTransGasParams
+  checkGasTransResult i (f gc a b)
 
 liftBinInt
   :: HasInfo i => i
-  -> (Decimal -> Decimal -> TransResult Decimal)
+  -> (TransGasParams -> Decimal -> Decimal -> TransResult (Decimal, Word64))
   -> Integer -> Integer -> Eval e Integer
-liftBinInt i f a b = d2Int <$> checkTransResult i (int2D a `f` int2D b)
+liftBinInt i f a b = do
+  gc <- getTransGasParams
+  d2Int <$> checkGasTransResult i (f gc (int2D a) (int2D b))
 
 chargePactArith :: GasArithOp a b c d -> Arith p r ()
-chargePactArith 
+chargePactArith (GasArithOp _ l r) = 
+  chargeArithGas (fromIntegral (decimalCost l + decimalCost r + 1))
+
+decimalCost :: NDec.Decimal a b -> Gas
+decimalCost (NDec.Num _sign coeff _exp) 
+  | intValue < threshold = 0
+  | otherwise = 
+    let !nbytes = (I# (IntLog.integerLog2# intValue) + 1) `quot` 8
+    in fromIntegral (nbytes * nbytes `quot` 100)
+  where
+  threshold :: Integer
+  threshold = (10 :: Integer) ^ (80 :: Integer)
+  intValue :: Integer
+  intValue = fromIntegral coeff
+-- Todo: should there be a penalty on `NaN` or `Inf`?
+decimalCost _ = 0
 
 int2D :: Integer -> Decimal
 int2D = fromIntegral
@@ -201,13 +234,37 @@ checkTransResult i r = case r of
   TransNegInf r' -> go r'
   TransNumber r' -> pure r'
   TransGasExceeded gUsed -> do
-    gasRef <- view eeGas
     gasLimit <- view (eeGasEnv . geGasLimit)
-    liftIO (writeIORef gasRef (fromIntegral gUsed))
+    putGas (fromIntegral gUsed)
     throwErr GasError (getInfo i) $ 
-      "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
+      "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty (fromIntegral gUsed :: Gas)
   where
   go n = do
     unlessExecutionFlagSet FlagDisablePact43 $
       evalError' i "Operation resulted in +- infinity or NaN"
     pure n
+
+chargeGasAmt :: HasInfo a => a -> Gas -> Eval e ()
+chargeGasAmt i gUsed = do
+    gasLimit <- view (eeGasEnv . geGasLimit)
+    putGas gUsed
+    when (gUsed > fromIntegral gasLimit) $
+      throwErr GasError (getInfo i) $ 
+        "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
+
+checkGasTransResult :: HasInfo i => i -> TransResult (a, Word64) -> Eval e a
+checkGasTransResult i r = case r of
+  TransNaN r' -> go r'
+  TransInf r' -> go r'
+  TransNegInf r' -> go r'
+  TransNumber (r', gas)  -> 
+    r' <$ chargeGasAmt i (fromIntegral gas)
+  TransGasExceeded gUsed -> do
+    gasRef <- view eeGas
+    gasLimit <- view (eeGasEnv . geGasLimit)
+    liftIO (writeIORef gasRef (fromIntegral gUsed))
+    throwErr GasError (getInfo i) $ 
+      "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty (fromIntegral gUsed :: Gas)
+  where
+  go (_, _) = evalError' i "Operation resulted in +- infinity or NaN"
+    

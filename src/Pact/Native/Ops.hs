@@ -154,16 +154,22 @@ powImpl i as@[TLiteral a _,TLiteral b _] = do
     | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
 powImpl i as = argsError i as
 
+getThreshold :: Eval e IntThreshold
+getThreshold = 
+  ifExecutionFlagSet' FlagDisablePact47 ThresholdPrePact47 ThresholdPact47
+
 twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
-twoArgIntOpGas loperand roperand =
-  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing))
+twoArgIntOpGas loperand roperand = do
+  ts <- getThreshold
+  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing) ts)
 
 twoArgDecOpGas :: Decimal -> Decimal -> Eval e Gas
-twoArgDecOpGas loperand roperand =
+twoArgDecOpGas loperand roperand = do
+  ts <- getThreshold
   computeGasCommit def ""
-  (GIntegerOpCost
-    (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
-    (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand))))
+    (GIntegerOpCost
+      (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
+      (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand))) ts)
 
 legalLogArg :: Literal -> Bool
 legalLogArg = \case

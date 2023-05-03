@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
 
 {-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
@@ -34,6 +35,7 @@ module Pact.Trans.Dec
   , numShow
   , toDecimal
   , fromDecimal
+  , TransGasParams(..)
   ) where
 
 import Data.Word(Word64)
@@ -137,10 +139,12 @@ data TransGasParams
   = TransGasParams 
   { _tGas :: !Word64
   , _tGasLimit :: !Word64
+  , _tChargeGas :: forall a b c d p r. GasArithOp a b c d -> Arith p r ()
   }
 
 gasContext :: TransGasParams -> Context p N.RoundHalfEven
-gasContext (TransGasParams gas gasLimit) = extendedDefaultContext {ctxGas = gas, ctxGasLimit = gasLimit}
+gasContext (TransGasParams gas gasLimit charge) = 
+  extendedDefaultContext {ctxGas = gas, ctxGasLimit = gasLimit, ctxChargeGas=charge}
 
 dec_reduce :: D.Decimal -> D.Decimal
 dec_reduce x =
