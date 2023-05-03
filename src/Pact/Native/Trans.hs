@@ -20,7 +20,13 @@ module Pact.Native.Trans
     , trans_sqrt
     ) where
 
+import Control.Lens
 import Data.Decimal
+import Data.IORef(writeIORef)
+import Numeric.Decimal.Arithmetic 
+import qualified Numeric.Decimal.Number as NDec
+
+
 #if !defined(ghcjs_HOST_OS)
 import qualified Pact.Trans.Musl as Musl
 #endif
@@ -28,6 +34,9 @@ import qualified Pact.Trans.Dec as Dec
 import qualified Pact.Trans.Dbl as Dbl
 import Pact.Trans.Types
 import Pact.Types.Runtime
+import Pact.Types.Gas
+import Pact.Types.Pretty
+
 
 chooseFunction1
   :: (a -> Eval e b)
@@ -149,6 +158,9 @@ liftBinInt
   -> Integer -> Integer -> Eval e Integer
 liftBinInt i f a b = d2Int <$> checkTransResult i (int2D a `f` int2D b)
 
+chargePactArith :: GasArithOp a b c d -> Arith p r ()
+chargePactArith 
+
 int2D :: Integer -> Decimal
 int2D = fromIntegral
 d2Int :: Decimal -> Integer
@@ -188,6 +200,12 @@ checkTransResult i r = case r of
   TransInf r' -> go r'
   TransNegInf r' -> go r'
   TransNumber r' -> pure r'
+  TransGasExceeded gUsed -> do
+    gasRef <- view eeGas
+    gasLimit <- view (eeGasEnv . geGasLimit)
+    liftIO (writeIORef gasRef (fromIntegral gUsed))
+    throwErr GasError (getInfo i) $ 
+      "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
   where
   go n = do
     unlessExecutionFlagSet FlagDisablePact43 $

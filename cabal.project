@@ -19,5 +19,4 @@ constraints: hspec-golden <0.2,
 source-repository-package
     type: git
     location: https://github.com/kadena-io/decimal-arithmetic.git
-    tag: 497e559eb5eea6495389d53b77cd03e25c5719a3
-    --sha256: sha256-+jyOtjJIJo7ggQsNqBS/re36fXom00M71neLa8dm/dM=
+    tag: 152044ee0fbbd8e0ae28aaef0ae5a6dc180860ed
