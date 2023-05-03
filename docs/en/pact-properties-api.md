@@ -227,6 +227,19 @@ Rounds the decimal `x` down to the previous integer, or to `prec` precision as d
 
 Supported in either invariants or properties.
 
+### dec {#FDecCast}
+
+```lisp
+(dec x)
+```
+
+* takes `x`: `integer`
+* produces `decimal`
+
+Casts the integer `x` to its decimal equivalent.
+
+Supported in either invariants or properties.
+
 ### mod {#FModulus}
 
 ```lisp
@@ -489,6 +502,19 @@ Supported in either invariants or properties.
 
 Supported in either invariants or properties.
 
+### hash {#FBoolHash}
+
+```lisp
+(hash s)
+```
+
+* takes `s`: `bool`
+* produces `string`
+
+BLAKE2b 256-bit hash of bool values
+
+Supported in properties only.
+
 ## Object operators {#Object}
 
 ### at {#FObjectProjection}
@@ -635,6 +661,21 @@ List / string / object contains
 
 Supported in either invariants or properties.
 
+### enumerate {#FEnumerate}
+
+```lisp
+(enumerate from to step)
+```
+
+* takes `from`: `integer`
+* takes `to`: `integer`
+* takes `step`: `integer`
+* produces [`integer`]
+
+Returns a sequence of numbers as a list
+
+Supported in either invariants or properties.
+
 ### reverse {#FReverse}
 
 ```lisp
@@ -731,6 +772,19 @@ filter a list by keeping the values for which `f` returns `true`
 
 Supported in either invariants or properties.
 
+### distinct {#FDistinct}
+
+```lisp
+(distinct xs)
+```
+
+* takes `xs`: [_a_]
+* produces [_a_]
+
+returns a list of distinct values
+
+Supported in either invariants or properties.
+
 ### fold {#FFold}
 
 ```lisp
@@ -745,6 +799,20 @@ Supported in either invariants or properties.
 reduce a list by applying `f` to each element and the previous result
 
 Supported in either invariants or properties.
+
+### hash {#FListHash}
+
+```lisp
+(hash xs)
+```
+
+* takes `xs`: [_a_]
+* produces `string`
+* where _a_ is of type `integer`, `decimal`, `bool`,  or `string`
+
+BLAKE2b 256-bit hash of lists
+
+Supported in properties only.
 
 ## String operators {#String}
 
@@ -831,6 +899,33 @@ Supported in either invariants or properties.
 drop the first `n` values from `xs` (dropped from the end if `n` is negative)
 
 Supported in either invariants or properties.
+
+### hash {#FStringHash}
+
+```lisp
+(hash s)
+```
+
+* takes `s`: `string`
+* produces `string`
+
+BLAKE2b 256-bit hash of string values
+
+Supported in properties only.
+
+### hash {#FNumericalHash}
+
+```lisp
+(hash s)
+```
+
+* takes `s`: _a_
+* produces `string`
+* where _a_ is of type `integer` or `decimal`
+
+BLAKE2b 256-bit hash of numerical values
+
+Supported in properties only.
 
 ## Temporal operators {#Temporal}
 
@@ -1167,6 +1262,32 @@ Supported in properties only.
 Whether the keyset in the row is enforced by the function under analysis
 
 Supported in properties only.
+
+### is-principal {#FIsPrincipal}
+
+```lisp
+(is-principal s)
+```
+
+* takes `s`: `string`
+* produces `bool`
+
+Whether `s` conforms to the principal format without proving validity.
+
+Supported in either invariants or properties.
+
+### typeof-principal {#FTypeOfPrincipal}
+
+```lisp
+(typeof-principal s)
+```
+
+* takes `s`: `string`
+* produces `string`
+
+Return the protocol type of the given `s` value. If input value is not a principal type, then the empty string is returned.
+
+Supported in either invariants or properties.
 
 ## Function operators {#Function}
 

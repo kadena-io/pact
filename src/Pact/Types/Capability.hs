@@ -181,7 +181,7 @@ data Capabilities = Capabilities
     -- initialized from signature set.
   , _capModuleAdmin :: (Set ModuleName)
     -- ^ Set of module admin capabilities.
-  , _capAutonomous :: (Set UserCapability)
+  , _capAutonomous :: Set UserCapability
   }
   deriving (Eq,Show,Generic)
 

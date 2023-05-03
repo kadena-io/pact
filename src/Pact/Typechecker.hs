@@ -584,8 +584,9 @@ assocAstTy (Node ai _) ty = do
 -- The fact that one of these implies storage and the other
 -- is "just a type" is problematic, creating much cruft in here.
 assocTy :: TcId -> TypeVar UserType -> Type UserType -> TC ()
-assocTy ai av ty = do
+assocTy ai av ty' = do
   aty <- resolveTy =<< lookupTypes "assocTy" ai av
+  ty <- resolveTy ty'
   debug $ "assocTy: " ++ showPretty (av,aty) ++ " <=> " ++ showPretty ty
   unifyTypes' ai aty ty $ \r -> case r of
     Left _same -> do
@@ -808,7 +809,7 @@ toFun (TDef td i) = resolveDyn td
 toFun (TDynamic ref mem i) = case (ref, mem) of
   (TVar (Right Var{}) _, TVar (Left (Ref r)) _) -> toFun $ Left <$> r
   _ -> die i "Malformed mod ref"
-toFun t = die (_tInfo t) "Non-var in fun position "
+toFun t = die (_tInfo t) $ "Non-var in fun position " ++ show (_tInfo t, typeof t)
 
 withScopeBodyToFun
   :: Show n

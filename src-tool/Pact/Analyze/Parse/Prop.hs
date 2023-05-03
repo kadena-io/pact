@@ -393,6 +393,32 @@ inferPreProp preProp = case preProp of
   -- applications:
   --
   -- Function types are inferred; arguments are checked.
+
+  PreApp s args
+    | s == SEnumerate -> do
+        args' <- for args $ \arg -> inferPreProp arg >>= \case
+          Some SInteger i -> pure i
+          _otherwise -> throwErrorIn preProp "expected integer arguments"
+
+        case args' of
+          [from, to] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to (Lit' 1)
+          [from, to, step] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to step
+          _otherwise -> throwErrorIn preProp "expected 2 or 3 integer arguments"
+
+  PreApp s [arg]
+    | s == SIsPrincipal -> do
+        arg' <- inferPreProp arg
+        case arg' of
+          Some SStr str -> pure $ Some SBool $ CoreProp $ IsPrincipal str
+          _otherwise -> throwErrorIn preProp "expected string argument"
+
+  PreApp s [arg]
+    | s == STypeOfPrincipal -> do
+        arg' <- inferPreProp arg
+        case arg' of
+          Some SStr str -> pure $ Some SStr $ CoreProp $ TypeOfPrincipal str
+          _otherwise -> throwErrorIn preProp "expected string argument"
+
   PreApp s [arg] | s == SStringLength -> do
     arg' <- inferPreProp arg
     case arg' of
@@ -402,6 +428,14 @@ inferPreProp preProp = case preProp of
         -> pure $ Some SInteger $ CoreProp $ ListLength ty lst
       _ -> throwErrorIn preProp "expected string or list argument to length"
 
+  PreApp s [a]
+    | s == SDistinct -> do
+        arg <- inferPreProp a
+        case arg of
+          Some (SList ty) ls -> pure $ Some (SList ty) $ CoreProp $ ListDistinct ty ls
+          _otherwise -> throwErrorIn preProp "expected list argument"
+
+
   PreApp s [a, b] | s == SModulus -> do
     it <- PNumerical ... ModOp <$> checkPreProp SInteger a <*> checkPreProp SInteger b
     pure $ Some SInteger it
@@ -410,6 +444,8 @@ inferPreProp preProp = case preProp of
   PreApp (toOp roundingLikeOpP -> Just op) [a, b] -> do
     it <- RoundingLikeOp2 op <$> checkPreProp SDecimal a <*> checkPreProp SInteger b
     pure $ Some SDecimal (PNumerical it)
+  PreApp (toOp castingLikeOpP -> Just op) [a] ->
+    Some SDecimal . PNumerical . CastingLikeOp op <$> checkPreProp SInteger a
   PreApp s [a, b] | s == STemporalAddition -> do
     a' <- checkPreProp STime a
     b' <- inferPreProp b
@@ -648,6 +684,16 @@ inferPreProp preProp = case preProp of
   PreApp s [str] | s == SStringToInteger -> do
     str' <- checkPreProp SStr str
     pure $ Some SInteger $ CoreProp $ StrToInt str'
+
+  PreApp s [str] | s == SStringHash -> do
+    Some ty str' <- inferPreProp str
+    case ty of
+      SDecimal  -> pure $ Some SStr $ CoreProp $ DecHash str'
+      SInteger  -> pure $ Some SStr $ CoreProp $ IntHash str'
+      SStr      -> pure $ Some SStr $ CoreProp $ StrHash str'
+      SBool     -> pure $ Some SStr $ CoreProp $ BoolHash str'
+      SList ty' -> pure $ Some SStr $ CoreProp $ ListHash ty' str'
+      _ -> throwErrorIn preProp "`hash` works only with integer, decimals, strings, bools, and list of those"
 
   PreApp s [str, base] | s == SStringToInteger -> do
     str'  <- checkPreProp SStr str

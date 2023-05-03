@@ -23,7 +23,7 @@ import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
 import           Pact.Analyze.Types   (arithOpP, comparisonOpP, isGuardTy,
-                                       logicalOpP, roundingLikeOpP,
+                                       logicalOpP, roundingLikeOpP, castingLikeOpP,
                                        unaryArithOpP)
 
 ofBasicOp :: Text -> Maybe Text
@@ -36,6 +36,7 @@ ofBasicOp s = if isBasicOp then Just s else Nothing
       || isJust (toOp comparisonOpP s)
       || isJust (toOp logicalOpP s)
       || isJust (toOp roundingLikeOpP s)
+      || isJust (toOp castingLikeOpP s)
 
 -- helper patterns
 pattern NativeFunc :: forall a. Text -> Fun a
@@ -101,6 +102,14 @@ pattern AST_CreateCapabilityGuard app <-
 pattern AST_CreateCapabilityPactGuard :: AST Node -> AST Node
 pattern AST_CreateCapabilityPactGuard app <-
   App _node (NativeFunc "create-capability-pact-guard") [app]
+
+pattern AST_CreatePrincipal :: forall a. AST a -> AST a
+pattern AST_CreatePrincipal guard <-
+  App _node (NativeFunc "create-principal") [guard]
+
+pattern AST_ValidatePrincipal :: forall a. AST a -> AST a -> AST a
+pattern AST_ValidatePrincipal guard name <-
+  App _node (NativeFunc "validate-principal") [guard, name]
 
 pattern AST_Enforce :: forall a. a -> AST a -> AST a
 pattern AST_Enforce node cond <-
@@ -253,6 +262,10 @@ pattern AST_RequireCapability node app <-
 pattern AST_ComposeCapability :: AST Node -> AST Node
 pattern AST_ComposeCapability app <-
   App _node (NativeFunc "compose-capability") [app]
+
+pattern AST_EmitEvent :: Node -> AST Node -> AST Node
+pattern AST_EmitEvent node cap <-
+  App node (NativeFunc "emit-event") [cap]
 
 pattern AST_Continue :: Node -> AST Node -> AST Node
 pattern AST_Continue node body <- App node (NativeFunc "continue") [body]

@@ -74,6 +74,9 @@ toPactTm = \case
       RoundingLikeOp2 op x y ->
         mkApp (roundingLikeOpToDef op) [Some SDecimal x, Some SInteger y]
 
+      CastingLikeOp op x ->
+        mkApp (castingLikeOpToDef op) [Some SInteger x]
+
       DecIntArithOp op x y ->
         mkApp (arithOpToDef op) [Some SDecimal x, Some SInteger y]
 
@@ -150,6 +153,12 @@ toPactTm = \case
 
     MakeList _ i a -> case ty of
       SList ty' -> mkApp makeListDef [ Some SInteger i, Some ty' a ]
+      
+    StrHash x -> mkApp hashDef [Some SStr x]
+    IntHash x -> mkApp hashDef [Some SInteger x]
+    DecHash x -> mkApp hashDef [Some SDecimal x]
+    BoolHash x -> mkApp hashDef [Some SBool x]
+    ListHash ty' x -> mkApp hashDef [Some (SList ty') x]
 
     _ -> withSing ty $ error $ "TODO: handle core term: " ++ show (CoreTerm tm)
 
@@ -171,7 +180,6 @@ toPactTm = \case
     -> mkApp' formatDef (Some SStr template) vals
   Some SStr (FormatTime x y)
     -> mkApp defFormatTime [Some SStr x, Some STime y]
-  Some SStr (Hash x) -> mkApp hashDef [x]
 
   Some SGuard (ReadKeySet x) -> mkApp readKeysetDef [Some SStr x]
 
@@ -255,6 +263,10 @@ toPactTm = \case
       Round   -> roundDef
       Ceiling -> ceilDef
       Floor   -> floorDef
+
+    castingLikeOpToDef :: CastingLikeOp -> NativeDef
+    castingLikeOpToDef = \case
+      Dec -> decDef
 
     comparisonOpToDef :: ComparisonOp -> NativeDef
     comparisonOpToDef = \case

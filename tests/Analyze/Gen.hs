@@ -92,6 +92,9 @@ genUnaryArithOp = Gen.element [Negate, Abs] -- Sqrt, Ln, Exp, Signum
 genRoundingLikeOp :: MonadGen m => m RoundingLikeOp
 genRoundingLikeOp = Gen.element [Round, Ceiling, Floor]
 
+genCastingLikeOp :: MonadGen m => m CastingLikeOp
+genCastingLikeOp = Gen.element [Dec]
+
 genComparisonOp :: MonadGen m => m ComparisonOp
 genComparisonOp = Gen.element [Gt, Lt, Gte, Lte, Eq, Neq]
 
@@ -142,6 +145,9 @@ mkDec = pure . Some SDecimal . Inj . Numerical
 
 mkBool :: MonadGen m => Core Analyze.Term 'TyBool -> m ETerm
 mkBool = pure . Some SBool . Inj
+
+mkStr :: MonadGen m => Core Analyze.Term 'TyStr -> m ETerm
+mkStr = pure . Some SStr . Inj
 
 -- | When we know what type we'll be receiving from an existential we can
 -- unsafely extract it.
@@ -233,6 +239,9 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
       y <- genCore (BoundedInt (0 +/- 255))
       op <- genRoundingLikeOp
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
+  , do x <- genCore (BoundedInt size)
+       op <- genCastingLikeOp
+       mkDec $ CastingLikeOp op (extract x)
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
     Some SStr . StrLit
@@ -242,7 +251,15 @@ genCore (BoundedString len) = Gen.recursive Gen.choice [
     scale 4 $ Gen.subtermM2
       (genCore (BoundedString (len `div` 2)))
       (genCore (BoundedString (len `div` 2))) $ \x y ->
-        pure $ Some SStr $ Inj $ StrConcat (extract x) (extract y)
+       mkStr $ StrConcat (extract x) (extract y)
+    , Gen.subtermM (genCore (BoundedString (len `div` 2)))
+                    $  mkStr . StrHash . extract
+    , Gen.subtermM (genCore intSize)
+      $ mkStr . IntHash . extract
+    , Gen.subtermM (genCore decSize)
+      $ mkStr . DecHash . extract
+    , Gen.subtermM (genCore BoundedBool)
+      $ mkStr . BoolHash . extract
   ]
 genCore BoundedBool = Gen.recursive Gen.choice [
     Some SBool . Lit' <$> Gen.bool
@@ -475,12 +492,9 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
          Some STime t2 -> pure $
            Some SStr $ FormatTime (StrLit (showTimeFormat format)) t2
          _ -> error "impossible (we only generated `STime`s)"
-  , let genHashableTerm = Gen.choice
-          [ genTerm intSize
-          , genTerm strSize
-          , genTerm BoundedBool
-          ]
-    in Some SStr . Hash <$> genHashableTerm
+  , genTerm intSize >>= mkStr . IntHash . extract
+  , genTerm strSize >>= mkStr . StrHash . extract
+  
   , genTermSpecific' size
   , Some SStr . ReadString . StrLit <$> genStringName len
   ]

@@ -1,0 +1,154 @@
+
+(begin-tx)
+(env-exec-config ["DisablePact47"])
+
+; if
+(expect-failure
+  "if pre fork"
+  "if: conditional not boolean: 1"
+  (if 1 2 3))
+
+; enforce
+(expect-failure
+  "enforce pre fork"
+  "Invalid message argument, expected string 1"
+  (enforce false 1))
+
+; map
+(expect-failure
+  "map pre fork"
+  "map: expecting list: 1"
+  (map (+ 1) 1))
+
+; fold
+(expect-failure
+  "fold pre fork"
+  "fold: expecting list: 1"
+  (fold (+ 1) 0 1))
+
+; filter
+(expect-failure
+  "filter pre fork"
+  "filter: expecting list: 1"
+  (filter (< 2) 1))
+
+; bind
+(expect-failure
+  "bind pre fork"
+  "bind: expected object: 1"
+  (bind 1 {"a" := a-value } a-value))
+
+; concat
+(expect-failure
+  "concat pre fork"
+  "concat: expecting list of strings: 1"
+  (concat [1]))
+
+; Any function calling argsError
+(expect-failure
+  "Args error pre fork"
+  "Invalid arguments, received [\"asdf\"] for str-list:[string] -> string"
+  (concat "asdf"))
+
+; Any function calling argsError'
+(expect-failure
+  "Args error' pre fork"
+  "Invalid arguments, received [\"1\"] for default:<a> action:<a> -> <a>"
+  (try 1))
+
+; Db forked errors
+(module m g
+  (defcap g () true)
+  (defschema sch a:integer)
+  (deftable tbl:{sch}))
+
+(create-table tbl)
+(insert tbl 'a {'a:1})
+
+; fold-db 1
+(expect-failure
+  "Fold db tbl pre fork"
+  "Expected table as first argument to foldDB, got: 1"
+  (fold-db 1 (lambda (x) x) (lambda (x) x)))
+
+; fold-db 2
+(expect-failure
+  "Fold db cond pre fork"
+  "Unexpected return value from fold-db query condition 1"
+  (fold-db tbl (lambda (x y) 1) (lambda (x) x)))
+(commit-tx)
+
+; Post-fork
+; Tests for outside of a repl environment
+(begin-tx)
+(env-exec-config [])
+(env-simulate-onchain true)
+(use m)
+
+; if
+(expect-failure
+  "if post fork"
+  "if: conditional not boolean, received value of type: integer"
+  (if 1 2 3))
+
+; enforce
+(expect-failure
+  "enforce post fork"
+  "Invalid message argument, expected string, received argument of type: integer"
+  (enforce false 1))
+
+; map
+(expect-failure
+  "map post fork"
+  "map: expecting list, received argument of type: integer"
+  (map (+ 1) 1))
+
+; fold
+(expect-failure
+  "fold post fork"
+  "fold: expecting list, received argument of type: integer"
+  (fold (+ 1) 0 1))
+
+; filter
+(expect-failure
+  "filter post fork"
+  "filter: expecting list, received argument of type: integer"
+  (filter (< 2) 1))
+
+; bind
+(expect-failure
+  "bind post fork"
+  "bind: expected object, received value of type: integer"
+  (bind 1 {"a" := a-value } a-value))
+
+; concat
+(expect-failure
+  "concat post fork"
+  "expected list of strings, received value of type: integer"
+  (concat [1]))
+
+; Any function calling argsError
+(expect-failure
+  "Args error post fork"
+  "Invalid arguments in call to concat, received arguments of type [string], expected str-list:[string] -> string"
+  (concat "asdf"))
+
+; Any function calling argsError'
+(expect-failure
+  "Args error' post fork"
+  "Invalid arguments in call to try, received arguments of type [integer], expected default:<a> action:<a> -> <a>"
+  (try 1))
+
+; fold-db 1
+(expect-failure
+  "Fold db tbl post fork"
+  "Expected table as first argument to foldDB, got argument of type: integer"
+  (fold-db 1 (lambda (x) x) (lambda (x) x)))
+
+; fold-db 2
+(expect-failure
+  "Fold db cond post fork"
+  "Unexpected return value from fold-db query condition, received value of type: integer"
+  (fold-db tbl (lambda (x y) 1) (lambda (x) x)))
+
+(commit-tx)

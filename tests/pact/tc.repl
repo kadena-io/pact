@@ -205,6 +205,39 @@
       (update persons "foo" partial)
       partial))
 
+  (defun fails-bind-bad-object:object{person} ()
+    (let ((o:object{person}
+            { 'name: 's
+            , 'age: 1
+            , 'dob: (parse-time "%F" "1996-12-31")
+            } ))
+      (bind o { 'name:= name, 'age:= age }
+        { 'foo: name
+        , 'bar: age })))
+
+  (defun fails-with-read-partial-schema:object{person} ()
+     (with-read persons 'dave
+       { 'name:= name
+       , 'age:= age }
+       { 'name: name
+       , 'age: age }))
+
+
+  (defun fails-with-default-read-partial-schema:object{person} ()
+     (with-default-read persons 'dave
+       { 'name:= name
+       , 'age:= age }
+       { 'name: "dave"
+       , 'age: 23 }
+       { 'name: name
+       , 'age: age }))
+
+  (defcap CAP () true)
+
+  (defun fails-with-capability-bad-object:object{person} ()
+    (with-capability (CAP)
+      { 'foo: 1 }))
+
   (defschema schema-a a:integer)
   (defschema schema-b b:integer)
 

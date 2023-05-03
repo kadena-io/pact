@@ -67,6 +67,8 @@ singFloat ty p = case p of
     -> PNumerical ... ModOp              <$> float a <*> float b
   CoreProp (Numerical (RoundingLikeOp1 op a))
     -> PNumerical . RoundingLikeOp1 op   <$> float a
+  CoreProp (Numerical (CastingLikeOp op a))
+    -> PNumerical . CastingLikeOp op   <$> float a
   CoreProp (StrLength pStr)
     -> PStrLength <$> float pStr
   CoreProp (StrToInt s)
@@ -101,7 +103,12 @@ singFloat ty p = case p of
   CoreProp (StrDrop s1 s2) -> PStrDrop <$> float s1 <*> float s2
   CoreProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
   CoreProp (Typeof tya a) -> CoreProp . Typeof tya <$> singFloat tya a
-
+ -- hash
+  CoreProp (StrHash s)  -> CoreProp . StrHash  <$> float s
+  CoreProp (IntHash s)  -> CoreProp . IntHash  <$> float s
+  CoreProp (BoolHash s) -> CoreProp . BoolHash <$> float s
+  CoreProp (DecHash s)  -> CoreProp . DecHash  <$> float s
+  CoreProp (ListHash ty' s) -> CoreProp . ListHash ty' <$> singFloat (SList ty') s
   -- time
   CoreProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
   CoreProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec
@@ -126,6 +133,8 @@ singFloat ty p = case p of
     CoreProp <$> (ListEqNeq ty' op <$> singFloat (SList ty') a <*> singFloat (SList ty') b)
   CoreProp (StrContains needle haystack) -> CoreProp <$>
     (StrContains <$> float needle <*> float haystack)
+  CoreProp (Enumerate from to step) -> CoreProp <$>
+    (Enumerate <$> float from <*> float to <*> float step) 
   CoreProp (ListContains ty' needle haystack) ->
     CoreProp <$> (ListContains ty' <$> singFloat ty' needle <*> singFloat (SList ty') haystack)
 
@@ -153,6 +162,8 @@ singFloat ty p = case p of
     -> CoreProp . ListReverse ty' <$> singFloat (SList ty') lst
   CoreProp (ListSort ty' lst)
     -> CoreProp . ListSort ty' <$> singFloat (SList ty') lst
+  CoreProp (ListDistinct ty' lst)
+    -> CoreProp . ListDistinct ty' <$> singFloat (SList ty') lst
   CoreProp (ListDrop ty' a b)
     -> CoreProp <$> (ListDrop ty' <$> float a <*> singFloat (SList ty') b)
   CoreProp (ListTake ty' a b)
@@ -187,7 +198,10 @@ singFloat ty p = case p of
   CoreProp ObjMerge{}      -> ([], p)
   CoreProp (Where objty tya a b c) -> CoreProp <$>
     (Where objty tya <$> float a <*> floatOpen b <*> singFloat objty c)
-
+  CoreProp (IsPrincipal a) -> CoreProp <$>
+    (IsPrincipal <$> float a)
+  CoreProp (TypeOfPrincipal a) -> CoreProp <$>
+    (TypeOfPrincipal <$> float a)
   where
 
     floatOpen :: SingI b => Open a Prop b -> ([Quantifier], Open a Prop b)
