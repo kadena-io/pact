@@ -136,14 +136,14 @@ reduce_ n@N.Num { N.coefficient = c, N.exponent = e }
 reduce_ n = n
 
 data TransGasParams
-  = TransGasParams 
+  = TransGasParams
   { _tGas :: !Word64
   , _tGasLimit :: !Word64
   , _tChargeGas :: forall a b c d p r. GasArithOp a b c d -> Arith p r ()
   }
 
 gasContext :: TransGasParams -> Context p N.RoundHalfEven
-gasContext (TransGasParams gas gasLimit charge) = 
+gasContext (TransGasParams gas gasLimit charge) =
   extendedDefaultContext {ctxGas = gas, ctxGasLimit = gasLimit, ctxChargeGas=charge}
 
 dec_reduce :: D.Decimal -> D.Decimal
@@ -157,7 +157,7 @@ dec_exp gp x =
   case runArith (Op.exp (fromDecimal x :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
        (gasContext gp) of
-    (Left err, ctx) 
+    (Left err, ctx)
       | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
       | otherwise -> error $ "exp error: " ++ show err
     (Right n, ctx) ->  (,ctxGas ctx) <$> toDecimal n
@@ -167,7 +167,7 @@ dec_ln gp x =
   case runArith (Op.ln (fromDecimal x :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
        (gasContext gp) of
-    (Left err, ctx) 
+    (Left err, ctx)
       | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
       | otherwise -> error $ "ln error: " ++ show err
     (Right n, ctx) -> (,ctxGas ctx) <$> toDecimal n
@@ -192,17 +192,17 @@ dec_pow gp x y =
                    (fromDecimal y :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
        (gasContext gp) of
-    (Left err, ctx) 
+    (Left err, ctx)
       | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
-      | otherwise -> error $ "ln error: " ++ show err
+      | otherwise -> error $ "pow error: " ++ show err
     (Right n, ctx) -> (,ctxGas ctx) <$> toDecimal n
-    
+
 dec_sqrt :: TransGasParams -> D.Decimal -> TransResult (D.Decimal, Word64)
 dec_sqrt gp x =
   case runArith (Op.squareRoot (fromDecimal x :: Decimal)
                   :: Arith Prec N.RoundHalfEven Decimal)
        (gasContext gp) of
-    (Left err, ctx) 
+    (Left err, ctx)
       | exceptionSignal err == GasExceeded -> TransGasExceeded (ctxGas ctx)
-      | otherwise -> error $ "ln error: " ++ show err
+      | otherwise -> error $ "sqrt error: " ++ show err
     (Right n, ctx) -> (,ctxGas ctx) <$> toDecimal n
