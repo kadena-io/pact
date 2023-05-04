@@ -89,13 +89,18 @@
 
  (defun wrap10 (a) (id (id (id (id (id (id (id (id (id (id a)))))))))))
 
+ (defun wrap10_integer:integer (a:integer) (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer a)))))))))))
+
  (defun rep10 (a) (id a) (id a) (id a) (id a) (id a) (id a) (id a) (id a) (id a) (id a))
 
  (defun withr () (with-read bench-accounts "Acct1" { "balance":= b } b))
 
+ (defun accum:integer (xs) (fold (+) 0 xs))
+
  (defun fst (a b) a)
  (defun snd (a b) b)
  (defun id (a) a)
+ (defun id_integer:integer (a:integer) a)
 
 )
 

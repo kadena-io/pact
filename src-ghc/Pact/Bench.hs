@@ -326,6 +326,9 @@ main = do
   replS <- setReplLib <$> initReplState Quiet Nothing
   let tt = evalReplEval def replS (mapM eval timeTest)
   void $! eitherDie "timeTest failed" . fmapL show =<< tt
+  wrap10Cmd <- parseCode "(bench.wrap10 100)"
+  wrap10MonoCmd <- parseCode "(bench.wrap10_integer 100)"
+  accumCmd <- parseCode "(bench.accum (enumerate 1 100))"
 
 
   let cleanupSqlite = do
@@ -384,4 +387,9 @@ main = do
       , benchNFIO "round4" $ runPactExec def "round4" [] Null Nothing pureDb round4
       ]
     , benchNFIO "time" $ fmap fst <$> evalReplEval def replS (mapM eval timeTest)
+    , bgroup "defun"
+      [ benchNFIO "wrap10" $ runPactExec def "wrap10" [] Null Nothing pureDb wrap10Cmd
+      , benchNFIO "wrap10_mono" $ runPactExec def "wrap10_mono" [] Null Nothing pureDb wrap10MonoCmd
+      , benchNFIO "accum" $ runPactExec def "accum" [] Null Nothing pureDb accumCmd
+      ]
     ]
