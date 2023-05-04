@@ -245,7 +245,7 @@ returns true.
 .. code:: lisp
 
    pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-   <interactive>:0:0: Chaos reigns
+   <interactive>:0:0:Error: Chaos reigns
 
 enforce-one
 ~~~~~~~~~~~
@@ -517,7 +517,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "4.6.0"
+   "4.7.0"
 
 Top level only: this function will fail if used in module code.
 
@@ -2222,7 +2222,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisableNewTrans”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePact45”,“DisablePact46”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisableNewTrans”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePact45”,“DisablePact46”,“DisablePact47”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
 
 .. code:: lisp
 
@@ -2352,6 +2352,18 @@ list of associated capabilities.
 .. code:: lisp
 
    (env-sigs [{'key: "my-key", 'caps: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'caps: []}
+
+env-simulate-onchain
+~~~~~~~~~~~~~~~~~~~~
+
+*on-chain* ``bool`` *→* ``string``
+
+Set a flag to simulate on-chain behavior that differs from the repl, in
+particular for observing things like errors and stack traces.
+
+.. code:: lisp
+
+   (env-simulate-onchain true)
 
 expect
 ~~~~~~

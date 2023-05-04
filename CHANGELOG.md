@@ -1,3 +1,38 @@
+4.7.0
+---
+
+### Eval
+
+- Improve advice implementation (#1187)
+- Fix inconsistent trace output (#1153)
+- Fix coverage, restore defun advice (#1151)
+- Create persistence dirs if missing (#1148)
+- Differentiate between errors on-chain and off-chain (#1185)
+- Don't display function documentation in non-repl context (#1185)
+
+### Natives
+
+- Allow native function versioning in eval (#1195)
+- Add new native `dec` for integer to decimal conversion (#1150)
+- Implement `shift` in terms of other natives for better gas costing (#1208)
+- Intialize body of `env-data` to an empty object instead of Null (#1188)
+
+### Typechecking
+
+- Fix Typechecker treatment of special binding forms (#1212)
+
+### Formal Verification
+- Enable warnings during symbolic eval (#1175)
+- Remove `emit-event` shim (#1168)
+- Remove `hash` shims (#1158)
+- Remove `enumerate` shim (#1155)
+- Remove `distinct` shim (#1154)
+- Remove `describe-namespace` shim (#1156)
+
+### Documentation
+
+- Remove mention of private defpacts from the reference manual (#1207)
+- Add documentation for `enumerate` (#1176)
 4.6.0
 ---
 * Add `DisablePact46` execution flag (#1138)
