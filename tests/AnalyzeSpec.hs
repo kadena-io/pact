@@ -2752,6 +2752,38 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "validate-principal" $ do
+    let code =
+         [text| (defun test:bool (ks: keyset)
+              (enforce (validate-principal (read-keyset "keyset") (create-principal (read-keyset "keyset"))) "")
+              (enforce (not (validate-principal (read-keyset "keyset") "a")) "")
+              true)
+              |]
+    expectPass code $ Valid Success'
+
+  describe "is-principal" $ do
+    let code =
+         [text|
+          (defun test:bool ()
+            @model[ (property (= result (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
+            (enforce (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69") "")
+            (enforce (is-principal (create-principal (read-keyset "keyset"))) "")
+            true
+            )
+        |]
+    expectPass code$ Valid Success'
+    expectVerified code
+
+  describe "typeof-principal" $ do
+    let code =
+         [text|
+          (defun test:string ()
+            @model[ (property (= result (typeof-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")))]
+            (enforce (= "k:" (typeof-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")) "")
+            "k:")
+        |]
+    expectPass code$ Valid Success'
+
   describe "hash property (str)" $ do
     let code =
           [text|
@@ -2782,6 +2814,31 @@ spec = describe "analyze" $ do
             (defun test:string ()
               @model [(property (= result (hash false)))]
               (hash false))|]
+    expectVerified code
+
+  describe "hash symbolic (integer, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: integer)
+                 ;; shim value (hash 1)
+                 @model[(property (= result "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (bool, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: bool)
+                 ;; shim value (hash "true")
+                 @model[(property (= result "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (string, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: string)
+                 ;; shim value (hash "hello pact")
+                 @model[(property (= result "HsVo-gcG-pk1BciGr2xovMyR7sVH0Kt9gTgqicXDXMM"))]
+                 (hash x))|]
     expectVerified code
 
   describe "enforce-keyset.row-level.read" $ do

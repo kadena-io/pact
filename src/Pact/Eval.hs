@@ -33,6 +33,7 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
+    ,reduceEnscoped
     ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
     ,enforceGuard
@@ -189,7 +190,6 @@ evalByName n as i = do
   app <- enscope (TApp (App (TVar n def) as i) i)
 
   -- lens into user function if any to test for loop
-
   case preview (tApp . appFun . tVar . _Ref . tDef) app of
     Nothing -> return ()
     Just Def{..} -> do
@@ -346,7 +346,19 @@ eval' (TModule _tm@(MDInterface m) bod i) =
     writeRow i Write Modules (_interfaceName mangledI) =<< traverse (traverse toPersistDirect') govI
     endAdvice govI
     return (g, msg $ "Loaded interface " <> pretty (_interfaceName mangledI))
-eval' t = enscope t >>= reduce
+eval' t = enscope t >>= reduceEnscoped
+
+reduceEnscoped :: Term Ref -> Eval e (Term Name)
+reduceEnscoped = \case
+  TVar (Direct t'@TNative{}) i ->
+    isOffChainForkedError >>= \case
+      OnChainError -> evalError' i "Cannot display native function details in non-repl context"
+      OffChainError -> pure t'
+  TVar (Ref t'@TDef{}) i ->
+    isOffChainForkedError >>= \case
+      OnChainError -> evalError' i "Cannot display function details in non-repl context"
+      OffChainError -> toTerm <$> compatPretty t'
+  t' -> reduce t'
 
 -- | Enforce namespace/root access on install.
 enforceNamespaceInstall
@@ -1037,8 +1049,14 @@ reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
 reduce TLam{..} = evalError _tInfo "Cannot reduce bound lambda"
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
-reduce t@TDef {} = toTerm <$> compatPretty t
-reduce t@TNative {} = toTerm <$> compatPretty t
+reduce t@TDef {} =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> toTerm <$> compatPretty t
+    False -> evalError' (_tInfo t) "Cannot display function details in non-repl context"
+reduce t@TNative {} =
+  isExecutionFlagSet FlagDisablePact47 >>= \case
+    True -> toTerm <$> compatPretty t
+    False -> evalError' (_tInfo t) "Cannot display native function details in non-repl context"
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
   CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " <> pretty a
@@ -1053,7 +1071,7 @@ reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModuleName _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
 reduce t@TModRef{} = unsafeReduce t
-reduce (TDynamic tref tmem i)  = reduceDynamic tref tmem i >>= \rd -> case rd of
+reduce (TDynamic tref tmem i)  = reduceDynamic tref tmem i >>= \case
   Left v -> return v
   Right d -> reduce (TDef d (getInfo d))
 

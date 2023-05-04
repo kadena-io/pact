@@ -405,6 +405,20 @@ inferPreProp preProp = case preProp of
           [from, to, step] -> pure $ Some (SList SInteger) $ CoreProp $ Enumerate from to step
           _otherwise -> throwErrorIn preProp "expected 2 or 3 integer arguments"
 
+  PreApp s [arg]
+    | s == SIsPrincipal -> do
+        arg' <- inferPreProp arg
+        case arg' of
+          Some SStr str -> pure $ Some SBool $ CoreProp $ IsPrincipal str
+          _otherwise -> throwErrorIn preProp "expected string argument"
+
+  PreApp s [arg]
+    | s == STypeOfPrincipal -> do
+        arg' <- inferPreProp arg
+        case arg' of
+          Some SStr str -> pure $ Some SStr $ CoreProp $ TypeOfPrincipal str
+          _otherwise -> throwErrorIn preProp "expected string argument"
+
   PreApp s [arg] | s == SStringLength -> do
     arg' <- inferPreProp arg
     case arg' of
@@ -430,6 +444,8 @@ inferPreProp preProp = case preProp of
   PreApp (toOp roundingLikeOpP -> Just op) [a, b] -> do
     it <- RoundingLikeOp2 op <$> checkPreProp SDecimal a <*> checkPreProp SInteger b
     pure $ Some SDecimal (PNumerical it)
+  PreApp (toOp castingLikeOpP -> Just op) [a] ->
+    Some SDecimal . PNumerical . CastingLikeOp op <$> checkPreProp SInteger a
   PreApp s [a, b] | s == STemporalAddition -> do
     a' <- checkPreProp STime a
     b' <- inferPreProp b

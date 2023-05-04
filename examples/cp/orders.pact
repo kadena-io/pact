@@ -50,20 +50,10 @@
 
   (defun with-order-status:object{order} (order-id status)
     "Check that order status is correct, returning details"
-    (with-read orders order-id {
-      "cusip" := cusip,
-      "status" := ostatus,
-      "qty" := qty,
-      "price" := price,
-      "seller" := seller,
-      "buyer" := buyer
-      }
-      (enforce (= ostatus status) (format "order must be {}" [status]))
-      {"cusip": cusip,
-       "qty": qty,
-       "price": price,
-       "buyer": buyer,
-       "seller": seller })
+    (let ((o (read orders order-id)))
+      (enforce (= (at 'status o) status)
+        (format "order must be {}" [status]))
+      o)
   )
 
   (defun with-order:object{order} (order-id)

@@ -314,6 +314,9 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
 
   Typeof :: SingTy a -> t a -> Core t 'TyStr
 
+  IsPrincipal     :: t 'TyStr -> Core t 'TyBool
+  TypeOfPrincipal :: t 'TyStr -> Core t 'TyStr
+
 mkLiteralObject
   :: (IsTerm tm, Monad m)
   => (forall a. String -> Existential (Core tm) -> m a)
@@ -477,6 +480,8 @@ eqNumerical _ty (RoundingLikeOp1 op1 a1) (RoundingLikeOp1 op2 a2)
   = op1 == op2 && eqTm a1 a2
 eqNumerical _ty (RoundingLikeOp2 op1 a1 b1) (RoundingLikeOp2 op2 a2 b2)
   = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (CastingLikeOp op1 a1) (CastingLikeOp op2 a2)
+  = op1 == op2 && eqTm a1 a2
 eqNumerical _ty (BitwiseOp op1 args1) (BitwiseOp op2 args2)
   = op1 == op2 && and (zipWith eqTm args1 args2)
 eqNumerical _ _ _ = False
@@ -538,6 +543,11 @@ showsNumerical _ty p tm = showParen (p > 10) $ case tm of
     . showsTm 11 a
     . showChar ' '
     . showsTm 11 b
+  CastingLikeOp op a ->
+      showString "CastingLikeOp "
+    . showsPrec 11 op
+    . showChar ' '
+    . showsTm 11 a
   BitwiseOp op args ->
       showString "BitwiseOp "
     . showsPrec 11 op
@@ -555,6 +565,7 @@ prettyNumerical _ty = \case
   ModOp a b              -> parensSep [prettyTm a, prettyTm b            ]
   RoundingLikeOp1 op a   -> parensSep [pretty op,  prettyTm a            ]
   RoundingLikeOp2 op a b -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  CastingLikeOp op a     -> parensSep [pretty op,  prettyTm a            ]
   BitwiseOp op args      -> parensSep $ pretty op : fmap prettyTm args
 
 eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
@@ -707,6 +718,11 @@ eqCoreTm _ (Typeof ty1 a1) (Typeof ty2 a2)
   = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> singEqTm ty1 a1 a2
+
+eqCoreTm _ (IsPrincipal a) (IsPrincipal b)
+  = eqTm a b
+eqCoreTm _ (TypeOfPrincipal a) (TypeOfPrincipal b)
+  = eqTm a b
 
 eqCoreTm _ _ _                          = False
 
@@ -974,6 +990,14 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
     . showsPrec 11 tya
     . showChar ' '
     . singShowsTm tya 11 a
+  IsPrincipal a ->
+      showString "is-principal"
+    . showChar ' '
+    . showsTm 11 a
+  TypeOfPrincipal a ->
+      showString "typeof-principal"
+      . showChar ' '
+      . showsTm 11 a
 
 prettyCore :: IsTerm tm => SingTy ty -> Core tm ty -> Doc
 prettyCore ty = \case
@@ -1063,6 +1087,9 @@ prettyCore ty = \case
     , singPrettyTm tyobj obj
     ]
   Typeof ty' a -> parensSep [pretty STypeof, singPrettyTm ty' a]
+
+  IsPrincipal a     -> parensSep [pretty SIsPrincipal, prettyTm a]
+  TypeOfPrincipal a -> parensSep [pretty STypeOfPrincipal, prettyTm a]
 
 
 data BeforeOrAfter = Before | After
@@ -1447,6 +1474,10 @@ data Term (a :: Ty) where
   Yield  :: TagId -> Term a -> Term a
   Resume :: TagId ->           Term a
 
+  -- Principals
+  CreatePrincipal   :: Term 'TyGuard -> Term 'TyStr
+  ValidatePrincipal :: Term 'TyGuard -> Term 'TyStr -> Term 'TyBool
+
 data PactStep where
   Step
     :: (Term a, SingTy a)  -- exec
@@ -1598,6 +1629,9 @@ showsTerm ty p tm = withSing ty $ showParen (p > 10) $ case tm of
   Yield tid a      ->
     showString "Yield " . showsPrec 11 tid . showChar ' ' . singShowsTm ty 11 a
   Resume tid       -> showString "Resume " . showsPrec 11 tid
+  CreatePrincipal g -> showString "CreatePrincipal " . showsPrec 11 g
+  ValidatePrincipal g s ->  showString "ValidatePrincipal " . showsPrec 11 g . showChar ' ' . showsPrec 11 s
+  
 
 instance Show PactStep where
   showsPrec _ (Step (exec , execTy) path mEntity mCancelVid mRollback) =
@@ -1688,6 +1722,8 @@ prettyTerm ty = \case
   Pact steps -> vsep (pretty <$> steps)
   Yield _tid tm -> parensSep [ "yield", singPrettyTm ty tm ]
   Resume _tid -> "resume"
+  CreatePrincipal g -> parensSep ["create-principal", pretty g]
+  ValidatePrincipal g s -> parensSep ["validate-principal", pretty g, pretty s]
 
 instance Pretty PactStep where
   pretty (Step (exec , execTy) _ mEntity _ mRollback) = parensSep $
@@ -1939,7 +1975,10 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     Where ty1 ty2 <$> f tm1 <*> openF o <*> f tm2
   Typeof ty tm ->
     Typeof ty <$> f tm
-
+  IsPrincipal tm ->
+    IsPrincipal <$> f tm
+  TypeOfPrincipal tm ->
+    TypeOfPrincipal <$> f tm
   where
     f = propToInvariant
     openF = openPropToInv
@@ -1991,6 +2030,8 @@ numPropToInv num = case num of
     RoundingLikeOp1 op <$> f tm
   RoundingLikeOp2 op tm1 tm2 ->
     RoundingLikeOp2 op <$> f tm1 <*> f tm2
+  CastingLikeOp op tm ->
+    CastingLikeOp op <$> f tm
   BitwiseOp op tms ->
     BitwiseOp op <$> traverse f tms
 

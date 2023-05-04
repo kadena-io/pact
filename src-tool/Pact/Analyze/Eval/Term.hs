@@ -77,6 +77,7 @@ instance Analyzer Analyze where
   getVar vid                 = view (scope . at vid)
   withVar vid val m          = local (scope . at vid ?~ val) m
   markFailure b              = succeeds %= (.&& sansProv (sNot b))
+  emitWarning w              = analyzeWarnings %= ( ++ [w])
   withMergeableAnalyzer ty f = withSymVal ty f
 
 addConstraint :: S Bool -> Analyze ()
@@ -93,11 +94,11 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     let run act = runRWST (runAnalyze act) r
     in do
-      (lRes, AnalyzeState lls lgs, ()) <- run left s
-      (rRes, AnalyzeState rls rgs, ()) <- run right $ s & globalState .~ lgs
+      (lRes, AnalyzeState lls lgs lw, ()) <- run left s
+      (rRes, AnalyzeState rls rgs rw, ()) <- run right $ s & globalState .~ lgs
 
       return ( symbolicMerge force test lRes rRes
-             , AnalyzeState (symbolicMerge force test lls rls) rgs
+             , AnalyzeState (symbolicMerge force test lls rls) rgs (lw ++ rw)
              , ()
              )
 
@@ -714,7 +715,6 @@ evalTerm = \case
           Nothing   -> succeeds .= sFalse >> pure 0
           Just time -> pure $ literalS $ fromPact timeIso time
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
-
   Pact steps -> local (inPact .~ sTrue) $ do
     -- We execute through all the steps once (via a left fold), then we execute
     -- all the rollbacks (via for), in reverse order.
@@ -804,6 +804,25 @@ evalTerm = \case
         markFailure $ SBV.isNothing mVal
         tagResume tid $ mkAVal' $ SBV.fromJust mVal
         pure $ S prov $ SBV.fromJust mVal
+
+  CreatePrincipal g -> do
+    guard <- evalTerm g
+    let
+      (S _ iGuard) = coerceS @Guard @Integer guard
+      sGuard = SBV.natToStr iGuard
+      prefix = literal "internal-principal-"
+      guardStr = SBV.concat prefix sGuard
+    pure $ coerceS @String @Str (sansProv guardStr)
+
+  ValidatePrincipal g s -> do
+    guard <- evalTerm g
+    S _ guardStr <- evalTerm s
+    let
+      (S _ iGuard) = coerceS @Guard @Integer guard
+      sGuard = SBV.natToStr iGuard
+      prefix = literal "internal-principal-"
+      S _ guardStr' = coerceS @String @Str (sansProv (SBV.concat prefix sGuard))
+    pure $ sansProv (guardStr .== guardStr')
 
 -- | Private pacts must be evaluated by the right entity. Fail if the current
 -- entity doesn't match the provided.

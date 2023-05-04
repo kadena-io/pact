@@ -151,13 +151,15 @@ reservedAtom = bareAtom >>= \AtomExp{..} -> case HM.lookup _atomAtom reserveds o
   Just r -> commit >> return r
 
 compile :: ParseEnv -> MkInfo -> Exp Parsed -> Either PactError (Term Name)
-compile pe mi e = let ei = mi <$> e in runCompile pe topLevel (initParseState ei) ei
+compile pe mi e = runCompile pe topLevel (initParseState ei) ei
+ where
+  ei = mi <$> e
 
 compileExps :: Traversable t => ParseEnv -> MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
-compileExps pe mi exps = sequence $ compile pe mi <$> exps
+compileExps pe mi exps = traverse (compile pe mi) exps
 
 moduleState :: Compile ModuleState
-moduleState = use (psUser . csModule) >>= \m -> case m of
+moduleState = use (psUser . csModule) >>= \case
   Just m' -> return m'
   Nothing -> context >>= tokenErr' "Must be declared within module"
 
@@ -213,7 +215,7 @@ cToTV n | n < 26 = fromString [toC n]
   where toC i = toEnum (fromEnum 'a' + i)
 
 
-sexp :: (Compile a) -> Compile a
+sexp :: Compile a -> Compile a
 sexp body = withList' Parens (body <* eof)
 
 specialFormOrApp :: (Reserved -> Compile (Compile (Term Name))) -> Compile (Term Name)
@@ -246,7 +248,7 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
     _ -> expected "value level form (let, let*, with-capability, cond)"
 
 moduleLevel :: Compile [Term Name]
-moduleLevel = specialForm $ \r -> case r of
+moduleLevel = specialForm $ \case
     RUse -> returnl useForm
     RDefconst -> returnl defconst
     RBless -> return (bless >> return [])
@@ -411,7 +413,7 @@ meta modelAllowed =
       ModelAllowed -> a
       ModelNotAllowed -> unexpected' "@model not allowed in this declaration"
     atPairs = do
-      ps <- sort <$> (some (docPair <|> modelPair))
+      ps <- sort <$> some (docPair <|> modelPair)
       case ps of
         [DocPair doc] -> return (Meta (Just doc) [])
         [ModelPair es] -> whenModelAllowed $ return (Meta Nothing es)
@@ -447,7 +449,7 @@ defcapManaged dt = case dt of
   _ -> return Nothing
   where
     doDefcapMeta = symbol "@managed" *>
-      ((DMDefcap . DefcapManaged) <$> (doUserMgd <|> doAuto))
+      (DMDefcap . DefcapManaged <$> (doUserMgd <|> doAuto))
     doUserMgd = Just <$> ((,) <$> (_atomAtom <$> userAtom) <*> userVar)
     doAuto = pure Nothing
     doEvent = symbol "@event" *> pure (DMDefcap DefcapEvent)
@@ -458,7 +460,7 @@ defpact = do
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
-  (body,bi) <- bodyForm' $ specialForm $ \r -> case r of
+  (body,bi) <- bodyForm' $ specialForm $ \case
     RStep -> return step
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
@@ -479,7 +481,7 @@ moduleForm = do
   modName' <- _atomAtom <$> userAtom
   gov <- Governance <$> ((Left <$> keysetNameStr) <|> (Right <$> userVar))
   m <- meta ModelAllowed
-  use (psUser . csModule) >>= \cm -> case cm of
+  use (psUser . csModule) >>= \case
     Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
   i <- contextInfo
@@ -504,7 +506,7 @@ interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
   m <- meta ModelAllowed
-  use (psUser . csModule) >>= \ci -> case ci of
+  use (psUser . csModule) >>= \case
     Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
   info <- contextInfo
@@ -514,7 +516,7 @@ interface = do
       iname = ModuleName iname' Nothing
       ihash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
-            bodyForm $ specialForm $ \r -> case r of
+            bodyForm $ specialForm $ \case
               RDefun -> return $ defSig Defun
               RDefconst -> return defconst
               RUse -> return useForm

@@ -34,7 +34,14 @@ module Pact.Interpreter
   , Interpreter (..)
   , defaultInterpreter
   , defaultInterpreterState
+  , versionedNativesRefStore
   , ExecutionConfig (..)
+  , pact40Natives
+  , pact420Natives
+  , pact43Natives
+  , pact431Natives
+  , pact46Natives
+  , pact47Natives
   ) where
 
 import Control.Concurrent
@@ -46,7 +53,10 @@ import Control.Lens
 import Data.Aeson
 import Data.Default
 import Data.HashMap.Strict (HashMap)
+import Data.Monoid(Endo(..))
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Foldable(foldl')
 import Data.IORef
 import Data.Maybe
 import qualified Data.Set as S
@@ -201,8 +211,61 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 
+disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
+disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
+  if S.member flag ec then over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
+  else id
+
+disablePact40Natives :: ExecutionConfig -> Endo RefStore
+disablePact40Natives =
+  disablePactNatives pact40Natives FlagDisablePact40
+
+disablePact420Natives :: ExecutionConfig -> Endo RefStore
+disablePact420Natives = disablePactNatives pact420Natives FlagDisablePact420
+
+disablePact43Natives :: ExecutionConfig -> Endo RefStore
+disablePact43Natives = disablePactNatives pact43Natives FlagDisablePact43
+
+disablePact431Natives :: ExecutionConfig -> Endo RefStore
+disablePact431Natives = disablePactNatives pact431Natives FlagDisablePact431
+
+disablePact46Natives :: ExecutionConfig -> Endo RefStore
+disablePact46Natives = disablePactNatives pact46Natives FlagDisablePact46
+
+disablePact47Natives :: ExecutionConfig -> Endo RefStore
+disablePact47Natives = disablePactNatives pact47Natives FlagDisablePact47
+
+pact40Natives :: [Text]
+pact40Natives = ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
+
+pact420Natives :: [Text]
+pact420Natives = ["zip", "fold-db"]
+
+pact43Natives :: [Text]
+pact43Natives = ["create-principal", "validate-principal", "continue"]
+
+pact431Natives :: [Text]
+pact431Natives = ["is-principal", "typeof-principal"]
+
+pact46Natives :: [Text]
+pact46Natives = ["point-add", "scalar-mult", "pairing-check"]
+
+pact47Natives :: [Text]
+pact47Natives = ["dec"]
+
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
+
+versionedNativesRefStore :: ExecutionConfig -> RefStore
+versionedNativesRefStore ec = versionNatives initRefStore
+  where
+  versionNatives = appEndo $ mconcat
+    [ disablePact40Natives ec
+    , disablePact420Natives ec
+    , disablePact43Natives ec
+    , disablePact431Natives ec
+    , disablePact46Natives ec
+    , disablePact47Natives ec]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
