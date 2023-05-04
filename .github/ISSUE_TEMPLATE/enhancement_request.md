@@ -4,7 +4,6 @@ about: I have an idea for how to make Pact better
 title: ''
 labels: 'status: needs triage, type: enhancement'
 assignees: ''
-
 ---
 
 ## Is your enhancement request related to a problem? Please describe.
