@@ -11,4 +11,5 @@ Please include the following checklist in your PR:
 Additionally, please justify why you should or should not do the following:
 
 * [ ] Confirm replay/back compat
-* [ ] Benchmark regressions.
+* [ ] Benchmark regressions
+* [ ] (For Kadena engineers) Run integration-tests against a Chainweb built with this version of Pact
