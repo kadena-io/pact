@@ -291,6 +291,7 @@ tableGasModel gasConfig =
           Pairing np -> pairingGas np
   in GasModel
       { gasModelName = "table"
+      , gasModelType = TableGasModel
       , gasModelDesc = "table-based cost model"
       , runGasModel = run
       }

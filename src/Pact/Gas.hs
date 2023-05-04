@@ -95,5 +95,6 @@ freeGasEnv = GasEnv 0 0.0 (constGasModel 0)
 constGasModel :: Word64 -> GasModel
 constGasModel r = GasModel
   { gasModelName = "fixed " <> tShow r
+  , gasModelType = ConstantGasModel (fromIntegral r)
   , gasModelDesc = "constant rate gas model with fixed rate " <> tShow r
   , runGasModel = \_ _ -> fromIntegral r }

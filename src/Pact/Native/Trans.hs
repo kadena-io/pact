@@ -27,7 +27,7 @@ import Data.Decimal
 import Data.Word(Word64)
 import Data.IORef(writeIORef, readIORef)
 import GHC.Int(Int(..))
-import Numeric.Decimal.Arithmetic 
+import Numeric.Decimal.Arithmetic
 import qualified Numeric.Decimal.Number as NDec
 
 
@@ -65,8 +65,13 @@ chooseFunction2 fp_double fp_musl fp_dec =
 getTransGasParams :: Eval e Dec.TransGasParams
 getTransGasParams = do
   gUsed <- view eeGas >>= liftIO . readIORef
-  gLim <- view (eeGasEnv . geGasLimit)
-  pure (Dec.TransGasParams (fromIntegral gUsed) (fromIntegral gLim) chargePactArith)
+  gEnv <- view eeGasEnv
+  let chargeFn = getCharge (view (geGasModel . to gasModelType) gEnv)
+      gLim = view geGasLimit gEnv
+  pure (Dec.TransGasParams (fromIntegral gUsed) (fromIntegral gLim) chargeFn)
+  where
+  getCharge (ConstantGasModel g) = const (chargeArithGas (fromIntegral g))
+  getCharge _ = chargePactArith
 
 trans_exp :: HasInfo i => i -> Decimal -> Eval e Decimal
 trans_exp i x = go
@@ -177,13 +182,13 @@ liftBinInt i f a b = do
   d2Int <$> checkGasTransResult i (f gc (int2D a) (int2D b))
 
 chargePactArith :: GasArithOp a b c d -> Arith p r ()
-chargePactArith (GasArithOp _ l r) = 
+chargePactArith (GasArithOp _ l r) =
   chargeArithGas (fromIntegral (decimalCost l + decimalCost r + 1))
 
 decimalCost :: NDec.Decimal a b -> Gas
-decimalCost (NDec.Num _sign coeff _exp) 
+decimalCost (NDec.Num _sign coeff _exp)
   | intValue < threshold = 0
-  | otherwise = 
+  | otherwise =
     let !nbytes = (I# (IntLog.integerLog2# intValue) + 1) `quot` 8
     in fromIntegral (nbytes * nbytes `quot` 100)
   where
@@ -236,7 +241,7 @@ checkTransResult i r = case r of
   TransGasExceeded gUsed -> do
     gasLimit <- view (eeGasEnv . geGasLimit)
     putGas (fromIntegral gUsed)
-    throwErr GasError (getInfo i) $ 
+    throwErr GasError (getInfo i) $
       "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty (fromIntegral gUsed :: Gas)
   where
   go n = do
@@ -249,7 +254,7 @@ chargeGasAmt i gUsed = do
     gasLimit <- view (eeGasEnv . geGasLimit)
     putGas gUsed
     when (gUsed > fromIntegral gasLimit) $
-      throwErr GasError (getInfo i) $ 
+      throwErr GasError (getInfo i) $
         "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
 
 checkGasTransResult :: HasInfo i => i -> TransResult (a, Word64) -> Eval e a
@@ -257,14 +262,14 @@ checkGasTransResult i r = case r of
   TransNaN r' -> go r'
   TransInf r' -> go r'
   TransNegInf r' -> go r'
-  TransNumber (r', gas)  -> 
+  TransNumber (r', gas)  ->
     r' <$ chargeGasAmt i (fromIntegral gas)
   TransGasExceeded gUsed -> do
     gasRef <- view eeGas
     gasLimit <- view (eeGasEnv . geGasLimit)
     liftIO (writeIORef gasRef (fromIntegral gUsed))
-    throwErr GasError (getInfo i) $ 
+    throwErr GasError (getInfo i) $
       "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty (fromIntegral gUsed :: Gas)
   where
   go (_, _) = evalError' i "Operation resulted in +- infinity or NaN"
-    
+

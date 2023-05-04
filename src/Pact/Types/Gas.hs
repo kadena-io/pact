@@ -32,6 +32,7 @@ module Pact.Types.Gas
   , geGasModel
   , IntThreshold(..)
   , thresholdToInteger
+  , GasModelType(..)
   ) where
 
 import Control.DeepSeq (NFData)
@@ -239,8 +240,14 @@ instance FromJSON GasLimit where
 
 instance Wrapped GasLimit
 
+data GasModelType
+  = ConstantGasModel Gas
+  | TableGasModel
+  deriving Show
+
 data GasModel = GasModel
   { gasModelName :: !Text
+  , gasModelType :: GasModelType
   , gasModelDesc :: !Text
   , runGasModel :: !(Text -> GasArgs -> Gas)
   }
