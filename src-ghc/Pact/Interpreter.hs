@@ -169,7 +169,7 @@ evalContinuation runner ee cm = case (_cmProof cm) of
     contError spvErr =
       if S.member FlagDisablePact47 (_ecFlags $ _eeExecutionConfig ee)
       then throw $ userError (show spvErr)
-      else throw $ PactError EvalError def def ("error resuming from continuation: " <> pretty spvErr)
+      else throw $ PactError ContinuationError def def (pretty spvErr)
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
 setupEvalEnv
