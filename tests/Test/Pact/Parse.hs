@@ -137,13 +137,9 @@ quoted s = "\"" <> s <> "\""
 -- are the number of characters and the number of bytes.
 --
 cols :: T.Text -> D.Delta
-#if MIN_VERSION_text(2,0,0) && LEGACY_PARSER == 1
-cols s = D.Columns (fromIntegral $ B.length (T.encodeUtf16LE s) `div` 2) (fromIntegral $ B.length (T.encodeUtf16LE s) `div` 2)
-#elif MIN_VERSION_text(2,0,0)
-cols s = D.Columns (fromIntegral $ T.length s) (fromIntegral $ B.length (T.encodeUtf8 s))
-#elif LEGACY_PARSER == 1
+#ifdef LEGACY_PARSER
 cols s = D.Columns (fromIntegral $ B.length (T.encodeUtf16LE s) `div` 2) (fromIntegral $ B.length (T.encodeUtf16LE s) `div` 2)
 #else
-cols s = D.Columns (fromIntegral $ T.length s) (fromIntegral $ B.length (T.encodeUtf16LE s))
+cols s = D.Columns (fromIntegral $ T.length s) (fromIntegral $ B.length (T.encodeUtf8 s))
 #endif
 

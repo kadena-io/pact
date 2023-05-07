@@ -128,7 +128,7 @@ mkTextInfo s d = Info $ Just (Code code, d)
   where
     code = T.take len $ T.drop offset s
     len = _pLength d
-#if DELTA_BYTES == 1
+#ifdef LEGACY_PARSER
     offset = fromIntegral $ TF.bytes (_pDelta d)
 #else
     offset = fromIntegral $ TF.column (_pDelta d)
