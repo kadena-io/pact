@@ -32,7 +32,6 @@ import Bound
 import Control.Monad
 
 import Data.Aeson hiding (Object)
-import Data.Aeson.Encoding
 import Data.Proxy
 import Data.Typeable
 
@@ -124,32 +123,12 @@ checkAesonCompat :: ToJSON a => J.Encode a => (String, a -> Property)
 checkAesonCompat =
   ("encoding is compatible with Aeson encoding", prop_checkAesonCompat)
 
-
--- -------------------------------------------------------------------------- --
--- LegacyHashable Compat
-
--- | This test only succeeds when it is build with hashable <1.3.1 and
--- unordered-containers <0.2.16.0.
---
--- It validates that the implementation of toJSON and toEncoding are compatible.
--- For hashable >=1.3.1 or unordered-containers >=0.2.16.0 the behavior of
--- 'toJSON' is different and it CAN NOT be used for encoding 'Value' to JSON.
---
-prop_checkLegacyHashableCompat :: ToJSON a => a -> Property
-prop_checkLegacyHashableCompat a =
-  encode (toJSON a) === encodingToLazyByteString (toEncoding a)
-
-checkLegacyHashableCompat :: ToJSON a => (String, a -> Property)
-checkLegacyHashableCompat =
-  ("toJSON and toEncoding are equivalent", prop_checkLegacyHashableCompat)
-
 -- -------------------------------------------------------------------------- --
 -- Tools
 
 data Case a
   = Case !(Eq a => Show a => FromJSON a => ToJSON a => (String, a -> Property))
   | Pending !(Eq a => Show a => FromJSON a => ToJSON a => (String, a -> Property))
-  | CaseOldHashable !(Eq a => Show a => FromJSON a => ToJSON a => (String, a -> Property))
 
 spec_case
   :: forall a
@@ -166,16 +145,6 @@ spec_case props =
     forM_ props $ \case
       Case (n, p) -> it n $ property p
       Pending (n, p) -> xit n $ property p
-      CaseOldHashable (n, _p) ->
-#ifdef MIN_VERSION_hashable
-#if ! MIN_VERSION_hashable(1,3,1) && !MIN_VERSION_unordered_containers(0,2,16)
-        xit n $ property _p
-#else
-        xit n $ pendingWith "test only succeeds for hashable <1.3.1 and unordered-containers <0.2.16.0"
-#endif
-#else
-        xit n $ pendingWith "test only succeeds for hashable <1.3.1 and unordered-containers <0.2.16.0"
-#endif
 
 -- -------------------------------------------------------------------------- --
 -- Orphans
@@ -208,28 +177,24 @@ spec_pact_types_orphans =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Var () (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Scope Int [] (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Scope Int (Var ()) (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -241,7 +206,6 @@ spec_pact_types_namespace =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -253,14 +217,12 @@ spec_pact_types_chainid =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @NetworkId
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -272,14 +234,12 @@ spec_pact_types_parse =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ParsedDecimal
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -291,14 +251,12 @@ spec_pact_types_gas =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @GasPrice
       [ Pending checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -310,49 +268,42 @@ spec_pact_types_chainmeta =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @TTLSeconds
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @TxCreationTime
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Address
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PrivateMeta
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PublicMeta
       [ Pending checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PublicData
       [ Pending checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -364,14 +315,12 @@ spec_pact_types_info =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Code
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
   -- ---------------------------------------------- --
@@ -383,35 +332,30 @@ spec_pact_types_names =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ModuleName
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @DefName
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @FullyQualifiedName
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @QualifiedName
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    -- spec_case @BareName [ ]
    spec_case @DynamicName
@@ -419,7 +363,6 @@ spec_pact_types_names =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
    spec_case @Name
@@ -427,21 +370,18 @@ spec_pact_types_names =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @NativeDefName
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @TableName
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 -- ---------------------------------------------- --
 
@@ -453,14 +393,12 @@ spec_pact_types_keyset =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @KeySetName
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -472,56 +410,48 @@ spec_pact_types_exp =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ListDelimiter
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Separator
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(LiteralExp (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(AtomExp (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(ListExp (A ()))
       [ Pending checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(SeparatorExp (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Exp (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -533,70 +463,60 @@ spec_pact_types_type =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Arg (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(FunType (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @GuardType
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PrimType
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @SchemaType
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @TypeVarName
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
       , Case checkAesonCompat
       , Case checkRoundtrip2
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(TypeVar (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @SchemaPartial
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Type (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -608,91 +528,78 @@ spec_pact_types_term =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PactId
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(UserGuard (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @DefType
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Gas
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(BindType (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(BindPair (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(App (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Governance (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ModuleHash
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(DefcapMeta (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(DefMeta (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(ConstVal (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    -- spec_case @Example []
    spec_case @FieldKey
@@ -700,91 +607,78 @@ spec_pact_types_term =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Step (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ModRef
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ModuleGuard
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PactGuard
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(ObjectMap (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Use
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(CapabilityGuard (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Guard (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Module (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Interface
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(ModuleDef (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @FunApp
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    -- spec_case @Ref [ ]
    -- spec_case @NativeDFun [ ]
@@ -793,28 +687,24 @@ spec_pact_types_term =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Lam (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Object (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Term (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -826,7 +716,6 @@ spec_pact_types_pactvalue =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -838,35 +727,30 @@ spec_pact_types_continuation =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Yield
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PactContinuation
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @NestedPactExec
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PactExec
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -878,14 +762,12 @@ spec_pact_types_hash =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PactHash
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -897,7 +779,6 @@ spec_pact_types_scheme =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -909,21 +790,18 @@ spec_pact_types_persistence =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(ModuleData (A ()))
       [ Pending checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PersistModuleData
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    -- spec_case @RowKey [ ]
    spec_case @(Ref' PersistDirect)
@@ -931,21 +809,18 @@ spec_pact_types_persistence =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(TxLog (A ()))
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @TxId
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -957,21 +832,18 @@ spec_pact_types_runtime =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ExecutionConfig
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ExecutionFlag
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -983,7 +855,6 @@ spec_pact_types_spv =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- ---------------------------------------------- --
@@ -995,7 +866,6 @@ spec_pact_types_capability =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 
@@ -1008,21 +878,18 @@ spec_pact_types_rowData =
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
     spec_case @RowDataVersion
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
     spec_case @RowData
       [ Pending checkRoundtrip
       , Pending checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
     -- Not  exported
@@ -1031,7 +898,6 @@ spec_pact_types_rowData =
     --   , Case checkRoundtrip2
     --   , Case checkAesonCompat
     --   , Case checkLegacyValueCompat
-    --   , CaseOldHashable checkLegacyHashableCompat
     --   ]
 
 -- ---------------------------------------------- --
@@ -1043,7 +909,6 @@ spec_pact_persistPactDb =
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
 -- -------------------------------------------------------------------------- --
@@ -1059,27 +924,22 @@ spec = describe "JSON encoding backward compatibility" $ do
    spec_case @PactErrorType
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @StackFrame
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PactError
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @OutputType
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @RenderedOutput
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
   spec_pact_types_namespace
@@ -1107,17 +967,14 @@ spec = describe "JSON encoding backward compatibility" $ do
    spec_case @(PactRPC ())
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(ExecMsg ())
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @ContMsg
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
   -- ---------------------------------------------- --
@@ -1125,37 +982,30 @@ spec = describe "JSON encoding backward compatibility" $ do
    spec_case @UserSig
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Command ())
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @Signer
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(Payload () ())
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @PactResult
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(CommandResult ())
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @RequestKey
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
   -- ---------------------------------------------- --
@@ -1163,12 +1013,10 @@ spec = describe "JSON encoding backward compatibility" $ do
    spec_case @PublicKeyHex
       [ Case checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
    spec_case @(SigData ())
       [ Pending checkRoundtrip
       , Case checkLegacyValueCompat
-      , CaseOldHashable checkLegacyHashableCompat
       ]
 
   spec_pact_types_rowData
