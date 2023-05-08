@@ -1256,6 +1256,18 @@ pact> (ceiling 100.15234 2)
 ```
 
 
+### dec {#dec}
+
+*x*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
+
+
+Cast an integer to a decimal value of integer X as decimal.
+```lisp
+pact> (dec 3)
+3.0
+```
+
+
 ### exp {#exp}
 
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`

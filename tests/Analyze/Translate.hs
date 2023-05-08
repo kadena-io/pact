@@ -74,6 +74,9 @@ toPactTm = \case
       RoundingLikeOp2 op x y ->
         mkApp (roundingLikeOpToDef op) [Some SDecimal x, Some SInteger y]
 
+      CastingLikeOp op x ->
+        mkApp (castingLikeOpToDef op) [Some SInteger x]
+
       DecIntArithOp op x y ->
         mkApp (arithOpToDef op) [Some SDecimal x, Some SInteger y]
 
@@ -260,6 +263,10 @@ toPactTm = \case
       Round   -> roundDef
       Ceiling -> ceilDef
       Floor   -> floorDef
+
+    castingLikeOpToDef :: CastingLikeOp -> NativeDef
+    castingLikeOpToDef = \case
+      Dec -> decDef
 
     comparisonOpToDef :: ComparisonOp -> NativeDef
     comparisonOpToDef = \case
