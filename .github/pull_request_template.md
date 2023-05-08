@@ -1,13 +1,4 @@
----
-name: Pact Pull Request
-about: I would like to submit code to the Pact project
-title: ''
-labels: 'status: needs triage'
-assignees: ''
----
-
-
-Please include the following checklist in your PR:
+PR checklist:
 
 * [ ] Test coverage for the proposed changes
 * [ ] PR description contains example output from repl interaction or a snippet from unit test output
