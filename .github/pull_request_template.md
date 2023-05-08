@@ -1,9 +1,5 @@
 ---
-name: Pact Pull Request
 about: I would like to submit code to the Pact project
-title: ''
-labels: 'status: needs triage'
-assignees: ''
 ---
 
 
