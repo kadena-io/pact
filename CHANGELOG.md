@@ -1,3 +1,8 @@
+4.7.0
+---
+* `read-*` functions are now recoverable if the key doesn't exist
+
+
 4.6.0
 ---
 * Add `DisablePact46` execution flag (#1138)
