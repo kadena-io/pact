@@ -75,7 +75,7 @@ colsToList argFail _ = argFail
 parseMsgKey :: (FromJSON t) => FunApp -> String -> Text -> Eval e t
 parseMsgKey f s t = parseMsgKey' f s (Just t)
 
-parseMsgKey' :: (FromJSON t) => FunApp -> String -> (Maybe Text) -> Eval e t
+parseMsgKey' :: (FromJSON t) => FunApp -> String -> Maybe Text -> Eval e t
 parseMsgKey' i msg key = do
   b <- view eeMsgBody
   let go v = case fromJSON v of
@@ -85,7 +85,12 @@ parseMsgKey' i msg key = do
   case key of
     Nothing -> go b
     Just k -> case preview (A.key k) b of
-      Nothing -> evalError' i $ "No such key in message: " <> pretty k
+      Nothing ->
+        isExecutionFlagSet FlagDisablePact47 >>= \case
+            True ->
+              evalError' i $ "No such key in message: " <> pretty k
+            False ->
+              failTx' i $ "No such key in message: " <> pretty k
       Just v -> go v
 
 
