@@ -73,6 +73,7 @@ import Pact.Types.Command
 import Pact.Types.ExpParser
 import Pact.Types.Logger
 import Pact.Types.PactValue
+import Pact.Types.Pretty
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
@@ -164,9 +165,13 @@ evalContinuation runner ee cm = case (_cmProof cm) of
     interpret runner (setStep Nothing) (Left Nothing)
   Just p -> do
     etpe <- (_spvVerifyContinuation . _eeSPVSupport $ ee) p
-    pe <- throwEither . over _Left (userError . show) $ etpe
+    pe <- either contError return etpe
     interpret runner (setStep (_peYield pe)) (Left $ Just pe)
   where
+    contError spvErr =
+      if S.member FlagDisablePact47 (_ecFlags $ _eeExecutionConfig ee)
+      then throw $ userError (show spvErr)
+      else throw $ PactError ContinuationError def def (pretty spvErr)
     setStep y = set eePactStep (Just $ PactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) ee
 
 setupEvalEnv

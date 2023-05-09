@@ -117,6 +117,7 @@ data PactErrorType
   | TxFailure
   | SyntaxError
   | GasError
+  | ContinuationError
   deriving (Show,Eq,Generic)
 instance NFData PactErrorType
 instance ToJSON PactErrorType
@@ -205,6 +206,7 @@ instance Show PactError where
               DbError -> Just "Database exception"
               SyntaxError -> Just "Syntax error"
               GasError -> Just "Gas Error"
+              ContinuationError -> Just "Continuation Error"
 
 data OutputType =
   OutputFailure |
