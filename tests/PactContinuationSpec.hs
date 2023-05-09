@@ -611,23 +611,34 @@ testPactYield = do
     testResetYield mname3 pactWithSameNameYield testFlags
 
   it "testCrossChainYield:succeeds with same module" $
-      testCrossChainYield "" Nothing mkFakeSPV False
+      testCrossChainYield "" Nothing mkFakeSPV False testFlags
 
   it "testCrossChainYield:succeeds with back compat" $
-      testCrossChainYield "" Nothing mkFakeSPV True
+      testCrossChainYield "" Nothing mkFakeSPV True testFlags
 
   it "testCrossChainYield:fails with different module" $
       testCrossChainYield ";;1"
         (Just ((`shouldContain` "enforceYield: yield provenance") . show . peDoc))
-        mkFakeSPV False
+        mkFakeSPV False testFlags
 
   it "testCrossChainYield:succeeds with blessed module" $
-      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" Nothing mkFakeSPV False
+      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" Nothing mkFakeSPV False testFlags
 
-  it "testCrossChainYield:fails with a ContinuationError" $
+  it "testCrossChainYield:fails with a userError pre-fork" $
       testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")"
-        (Just (\e -> shouldBe (peType e) ContinuationError *> shouldBe (peDoc e) "Cross-chain continuations not supported"))
-        (const noSPVSupport) False
+        (Just $ \e -> do
+          peType e `shouldBe` EvalError
+          peDoc e `shouldBe` "user error (\"Cross-chain continuations not supported\")"
+          )
+        (const noSPVSupport) False (FlagDisablePact47 : testFlags)
+
+  it "testCrossChainYield:fails with a ContinuationError post-fork" $
+      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")"
+        (Just $ \e -> do
+          peType e `shouldBe` ContinuationError
+          peDoc e `shouldBe` "Cross-chain continuations not supported"
+          )
+        (const noSPVSupport) False testFlags
 
 testNestedPactYield :: Spec
 testNestedPactYield = do
@@ -980,8 +991,8 @@ mkFakeSPV pe =
         return $ Left "Invalid proof"
   }
 
-testCrossChainYield :: T.Text -> Maybe (PactError -> Expectation) -> (PactExec -> SPVSupport) -> Bool -> Expectation
-testCrossChainYield blessCode expectFailure mkSpvSupport backCompat = step0
+testCrossChainYield :: T.Text -> Maybe (PactError -> Expectation) -> (PactExec -> SPVSupport) -> Bool -> [ExecutionFlag] -> Expectation
+testCrossChainYield blessCode expectFailure mkSpvSupport backCompat spvFlags = step0
   where
 
     -- STEP 0: runs on server for "chain0results"
@@ -1043,7 +1054,7 @@ testCrossChainYield blessCode expectFailure mkSpvSupport backCompat = step0
       chain1ContDupe <- makeContCmdWith 1 "chain1ContDupe"
 
       chain1Results <-
-        runAll' [moduleCmd,chain1Cont,chain1ContDupe] (mkSpvSupport pe) testFlags
+        runAll' [moduleCmd,chain1Cont,chain1ContDupe] (mkSpvSupport pe) spvFlags
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
 
