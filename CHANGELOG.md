@@ -1,6 +1,8 @@
 4.7.0
 ---
-* `read-*` functions are now recoverable if the key doesn't exist
+* `read-*` functions are now recoverable if the key doesn't exist. That is, a call such as `(read-string 'key)` is recoverable
+if `'key` does not exist in the data payload by surrounding it with `try`. As an example, `(try "string if key isn't present" (read-string "key"))`. This applies to
+`read-integer`, `read-string`, `read-decimal`, `read-keyset` and `read-msg` (as long as `read-msg` has a key supplied as an argument).
 
 
 4.6.0
