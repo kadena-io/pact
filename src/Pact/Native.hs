@@ -553,8 +553,17 @@ namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
   where
     namespace :: GasRNativeFun e
     namespace g i as = case as of
-      [TLitString nsn] -> go g i nsn
+      [TLitString nsn] ->
+        ifExecutionFlagSet FlagDisablePact47
+          (go g i nsn)
+          (if T.null nsn then
+             goEmpty g i
+           else go g i nsn)
       _ -> argsError i as
+
+    goEmpty g0 fa = computeGas' g0 fa (GUnreduced [])
+      $ success "Namespace reset to root"
+      $ evalRefs . rsNamespace .= Nothing
 
     go g0 fa ns = do
       let name = NamespaceName ns
