@@ -56,7 +56,7 @@ backCompatFlags :: [ExecutionFlag]
 backCompatFlags = [ FlagDisablePact40, FlagDisablePact43, FlagDisablePact44 ]
 
 nestedDefPactFlags :: [ExecutionFlag]
-nestedDefPactFlags = [ FlagDisablePact44 ]
+nestedDefPactFlags = []
 
 serverRoot :: Port -> String
 serverRoot port = "http://localhost:" ++ show port ++ "/"

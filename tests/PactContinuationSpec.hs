@@ -70,13 +70,40 @@ testElideModRefEvents = do
           (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
 
   it "doesn't elide on backcompat" $ do
-    cmd <- mkExec code Null def [] Nothing Nothing
+    cmd <- mkExec codePreFork Null def [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport backCompatFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
         encode (_crEvents cr) `shouldSatisfy`
           (("refInfo" `isInfixOf`) . BSL8.unpack)
   where
+    codePreFork =
+      [text|
+
+           (interface iface
+             (defun f:bool ()))
+
+           (module evmodule G
+
+             (defcap G () true)
+
+             (defcap BURN (a:module{iface})
+               @event
+               1)
+
+             (implements iface)
+
+             (defun f:bool () true)
+
+             (defun usecap (a:module{iface})
+               (with-capability (BURN a)
+                 1
+               )
+             )
+            )
+
+           (usecap evmodule)
+           |]
     code =
       [text|
 
@@ -249,17 +276,18 @@ threeStepPactCode moduleName =
 threeStepNestedPactCode :: T.Text -> T.Text
 threeStepNestedPactCode moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
     (interface iface
 
      (defpact ndp:string ())
     )
-    (module $moduleName 'k
+    (module $moduleName g
+     (defcap g () true)
      (defpact tester ()
        (step "step 0")
        (step "step 1")
        (step "step 2")))
-     (module $moduleName-2 'k
+     (module $moduleName-2 g
+     (defcap g () true)
      (implements iface)
      (defpact ndp:string ()
        (step
@@ -282,7 +310,8 @@ threeStepNestedPactCode moduleName =
        ))
        )
 
-     (module $moduleName-nested 'k
+     (module $moduleName-nested g
+       (defcap g () true)
        (defpact nestedTester (m:module{iface})
          (step
          (let
@@ -384,13 +413,14 @@ errorStepPactCode moduleName =
 errorStepNestedPactCode :: T.Text -> T.Text
 errorStepNestedPactCode moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-      (module $moduleName 'k
+      (module $moduleName g
+       (defcap g () true)
        (defpact tester ()
          (step "step 0")
          (step (+ "will throw error in step 1"))
          (step "step 2")))
-       (module $moduleName-nested 'k
+       (module $moduleName-nested g
+         (defcap g () true)
          (defpact nestedTester ()
            (step
            (let
@@ -581,17 +611,34 @@ testPactYield = do
     testResetYield mname3 pactWithSameNameYield testFlags
 
   it "testCrossChainYield:succeeds with same module" $
-      testCrossChainYield "" True False
+      testCrossChainYield "" Nothing mkFakeSPV False testFlags
 
   it "testCrossChainYield:succeeds with back compat" $
-      testCrossChainYield "" True True
+      testCrossChainYield "" Nothing mkFakeSPV True testFlags
 
   it "testCrossChainYield:fails with different module" $
-      testCrossChainYield ";;1" False False
+      testCrossChainYield ";;1"
+        (Just ((`shouldContain` "enforceYield: yield provenance") . show . peDoc))
+        mkFakeSPV False testFlags
 
   it "testCrossChainYield:succeeds with blessed module" $
-      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" True False
+      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")" Nothing mkFakeSPV False testFlags
 
+  it "testCrossChainYield:fails with a userError pre-fork" $
+      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")"
+        (Just $ \e -> do
+          peType e `shouldBe` EvalError
+          peDoc e `shouldBe` "user error (\"Cross-chain continuations not supported\")"
+          )
+        (const noSPVSupport) False (FlagDisablePact47 : testFlags)
+
+  it "testCrossChainYield:fails with a ContinuationError post-fork" $
+      testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1xc\")"
+        (Just $ \e -> do
+          peType e `shouldBe` ContinuationError
+          peDoc e `shouldBe` "Cross-chain continuations not supported"
+          )
+        (const noSPVSupport) False testFlags
 
 testNestedPactYield :: Spec
 testNestedPactYield = do
@@ -676,7 +723,7 @@ testNestedPactYield = do
       chain1ContDupe <- makeContCmdWith 1 "chain1ContDupe"
 
       chain1Results <-
-        runAll' [moduleCmd, chain1Cont,chain1ContDupe] spv testFlags
+        runAll' [moduleCmd, chain1Cont,chain1ContDupe] spv nestedDefPactFlags
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
 
@@ -741,8 +788,8 @@ pactWithYield moduleName =
 nestedPactWithYield :: T.Text -> T.Text
 nestedPactWithYield moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-    (module nested-$moduleName 'k
+    (module nested-$moduleName g
+      (defcap g () true)
       (defpact tester (name)
         (step
           (let ((result0 (+ name "->Step0")))
@@ -756,7 +803,8 @@ nestedPactWithYield moduleName =
         (step
           (resume { "step1-result" := res1 }
              (+ res1 "->Step2")))))
-     (module $moduleName 'k
+     (module $moduleName g
+      (defcap g () true)
       (defpact tester (name)
         (step
           (let ((result0 (+ name "->Step0")))
@@ -818,8 +866,8 @@ pactWithYieldErr moduleName =
 nestedPactWithYieldErr :: T.Text -> T.Text
 nestedPactWithYieldErr moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-    (module nested-$moduleName 'k
+    (module nested-$moduleName g
+      (defcap g () true)
       (defpact tester (name)
        (step
          (let ((result0 (+ name "->Step0")))
@@ -829,7 +877,8 @@ nestedPactWithYieldErr moduleName =
        (step
          (resume { "step0-result" := res0 }
             (+ res0 "->Step2")))))
-    (module $moduleName 'k
+    (module $moduleName g
+     (defcap g () true)
      (defpact tester (name)
        (step
          (let ((result0 (+ name "->Step0")))
@@ -896,8 +945,8 @@ pactWithSameNameYield moduleName =
 nestedPactWithSameNameYield :: T.Text -> T.Text
 nestedPactWithSameNameYield moduleName =
   [text|
-    (define-keyset 'k (read-keyset "admin-keyset"))
-    (module nested-$moduleName 'k
+    (module nested-$moduleName g
+      (defcap g () true)
       (defpact tester ()
         (step
           (let ((result0 "step 0"))
@@ -910,7 +959,8 @@ nestedPactWithSameNameYield moduleName =
         (step
           (resume { "result" := res }
             res))))
-     (module $moduleName 'k
+     (module $moduleName g
+      (defcap g () true)
       (defpact tester ()
         (step
           (let ((result0 "step 0"))
@@ -928,9 +978,21 @@ nestedPactWithSameNameYield moduleName =
             res))))
             |]
 
+fakeProof :: ContProof
+fakeProof = ContProof "hi there"
 
-testCrossChainYield :: T.Text -> Bool -> Bool -> Expectation
-testCrossChainYield blessCode succeeds backCompat = step0
+mkFakeSPV :: PactExec -> SPVSupport
+mkFakeSPV pe =
+  noSPVSupport {
+    _spvVerifyContinuation = \cp ->
+      if cp == fakeProof then
+        return $ Right pe
+      else
+        return $ Left "Invalid proof"
+  }
+
+testCrossChainYield :: T.Text -> Maybe (PactError -> Expectation) -> (PactExec -> SPVSupport) -> Bool -> [ExecutionFlag] -> Expectation
+testCrossChainYield blessCode expectFailure mkSpvSupport backCompat spvFlags = step0
   where
 
     -- STEP 0: runs on server for "chain0results"
@@ -985,43 +1047,35 @@ testCrossChainYield blessCode succeeds backCompat = step0
     -- the module, and run the step.
     step1 adminKeys executePactCmd moduleCmd pe mhash = do
 
-      let proof = (ContProof "hi there")
-          makeContCmdWith = makeContCmd' (Just proof) adminKeys False Null executePactCmd
-          spv = noSPVSupport {
-            _spvVerifyContinuation = \cp ->
-                if cp == proof then
-                  return $ Right pe
-                else
-                  return $ Left "Invalid proof"
-            }
+      let
+          makeContCmdWith = makeContCmd' (Just fakeProof) adminKeys False Null executePactCmd
 
       chain1Cont <- makeContCmdWith 1 "chain1Cont"
       chain1ContDupe <- makeContCmdWith 1 "chain1ContDupe"
 
       chain1Results <-
-        runAll' [moduleCmd,chain1Cont,chain1ContDupe] spv testFlags
+        runAll' [moduleCmd,chain1Cont,chain1ContDupe] (mkSpvSupport pe) spvFlags
       let completedPactMsg =
             "resumePact: pact completed: " ++ showPretty (_cmdHash executePactCmd)
-          provenanceFailedMsg = "enforceYield: yield provenance"
 
       runResults chain1Results $ do
-        moduleCmd `succeedsWith`  Nothing
-        if succeeds
-            then do
-          -- chain1Cont `succeedsWith` textVal "emily->A->B"
-          chain1Cont `succeedsWith'`
-            Just (textVal' "emily->A->B",
-                  if backCompat then [] else
-                    [PactEvent
+        moduleCmd `succeedsWith` Nothing
+        case expectFailure of
+          Nothing -> do
+            -- chain1Cont `succeedsWith` textVal "emily->A->B"
+            chain1Cont `succeedsWith'`
+              Just (textVal' "emily->A->B",
+                     if backCompat then [] else
+                     [PactEvent
                      "X_RESUME"
-                     [ textVal' ""
-                     , textVal' "cross-chain-tester.cross-chain"
-                     , PList $ V.fromList [ textVal' "emily" ]]
+                       [ textVal' ""
+                       , textVal' "cross-chain-tester.cross-chain"
+                       , PList $ V.fromList [ textVal' "emily" ]]
                      "pact"
-                     mhash])
-          chain1ContDupe `failsWith` Just completedPactMsg
-            else do
-          chain1Cont `failsWith` Just provenanceFailedMsg
+                       mhash])
+            chain1ContDupe `failsWith` Just completedPactMsg
+          Just expected ->
+            chain1ContDupe `failsWith'` expected
 
 
 pactCrossChainYield :: T.Text -> T.Text
@@ -1278,6 +1332,9 @@ shouldMatch' CommandResultCheck{..} results = checkResult _crcExpect apiRes
 
 
 
+shouldBeIfPresent :: (Show a, Eq a) => a -> Maybe a -> Expectation
+shouldBeIfPresent _ Nothing = return ()
+shouldBeIfPresent actual (Just expected) = actual `shouldBe` expected
 
 succeedsWith :: HasCallStack => Command Text -> Maybe PactValue ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
@@ -1285,11 +1342,15 @@ succeedsWith cmd r = succeedsWith' cmd ((,[]) <$> r)
 
 succeedsWith' :: HasCallStack => Command Text -> Maybe (PactValue,[PactEvent]) ->
                 ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right r)
+succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right (`shouldBeIfPresent` r))
 
 failsWith :: HasCallStack => Command Text -> Maybe String ->
              ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-failsWith cmd r = shouldMatch cmd (resultShouldBe $ Left r)
+failsWith cmd r = failsWith' cmd ((`shouldBeIfPresent` r) . show . peDoc)
+
+failsWith' :: HasCallStack => Command Text -> (PactError -> Expectation) ->
+             ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
+failsWith' cmd r = shouldMatch cmd (resultShouldBe $ Left r)
 
 runResults :: r -> ReaderT r m a -> m a
 runResults rs act = runReaderT act rs
@@ -1405,31 +1466,16 @@ doSend clientEnv req = runClientM (sendClient req) clientEnv
 doPoll :: ClientEnv -> Poll -> IO (Either ClientError PollResponses)
 doPoll clientEnv req = runClientM (pollClient req) clientEnv
 
-
 resultShouldBe
     :: HasCallStack
-    => Either (Maybe String) (Maybe (PactValue,[PactEvent]))
+    => Either (PactError -> Expectation) ((PactValue,[PactEvent]) -> Expectation)
     -> ExpectResult
 resultShouldBe expect = ExpectResult $ \cr ->
-  case (expect,actual cr) of
-    (Left (Just expErr),
-     Left err)             -> unless (expErr `isInfixOf` err) (toExpectationFailure expErr err)
-    (Right (Just expVal),
-     Right val)            -> unless (expVal == val) (toExpectationFailure expVal val)
-    (Left Nothing,
-     Left _)               -> return ()
-    (Right Nothing,
-     Right _)              -> return ()
-    _                      -> toExpectationFailure expect cr
-  where
-    actual CommandResult{..}= case _pactResult _crResult of
-      Left e -> Left (show $ peDoc e)
-      Right pv -> Right (pv,_crEvents)
-
-
-
-toExpectationFailure :: (HasCallStack, Show e, Show a) => e -> a -> Expectation
-toExpectationFailure = toExpectationFailure' ""
+  case (expect, _pactResult (_crResult cr)) of
+    (Left expErr, Left e) -> expErr e
+    (Right expVal, Right pv) -> expVal (pv, _crEvents cr)
+    _ -> expectationFailure $ unwords
+      [ "Expected", either (\_ -> "PactError") (\_ -> "PactValue") expect, ", found", show cr ]
 
 toExpectationFailure' :: (HasCallStack, Show e, Show a) => String -> e -> a -> Expectation
 toExpectationFailure' msg expect actual =

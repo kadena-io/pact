@@ -66,6 +66,7 @@ instance Analyzer Query where
   getVar vid        = view (scope . at vid)
   withVar vid val m = local (scope . at vid ?~ val) m
   markFailure b     = id %= (.&& SymbolicSuccess (sNot b))
+  emitWarning _     = pure ()
   withMergeableAnalyzer ty f = withSymVal ty f
 
 aval
