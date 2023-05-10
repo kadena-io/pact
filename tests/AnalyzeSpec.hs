@@ -4564,3 +4564,11 @@ spec = describe "analyze" $ do
         (enforce false ""))
       |]
       "Vacuous property encountered!"
+
+  describe "regression #1182" $ do
+          expectVerified [text|
+               (defun test:[string] (x: [string])
+                  @model [(property (= x x))]
+                 (let ((default-val:[string] [])) default-val)
+                 x)
+           |]
