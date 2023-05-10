@@ -389,6 +389,6 @@
 
 (env-exec-config ["DisablePact47"])
 (expect
-  "evaluatingn ill-typed function should succeed with pact-4.7 features disabled"
+  "evaluating ill-typed function should succeed with pact-4.7 features disabled"
   3
   (tc-test-function-return-types.f))
