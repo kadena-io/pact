@@ -28,6 +28,9 @@
 - Remove `enumerate` shim (#1155)
 - Remove `distinct` shim (#1154)
 - Remove `describe-namespace` shim (#1156)
+- Remove `is-principal`, `typeof-principal`, `create-principal`, and `validate-principal` shims (#1160)
+- Remove `format` shim (#1159)
+- ```
 
 ### Documentation
 
