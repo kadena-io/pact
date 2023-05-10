@@ -9,6 +9,7 @@
 - Create persistence dirs if missing (#1148)
 - Differentiate between errors on-chain and off-chain (#1185)
 - Don't display function documentation in non-repl context (#1185)
+- Runtime type checking on return types now enforced (#1209)
 
 ### Natives
 
@@ -22,6 +23,7 @@
 - Fix Typechecker treatment of special binding forms (#1212)
 
 ### Formal Verification
+
 - Enable warnings during symbolic eval (#1175)
 - Remove `emit-event` shim (#1168)
 - Remove `hash` shims (#1158)
@@ -30,12 +32,18 @@
 - Remove `describe-namespace` shim (#1156)
 - Remove `is-principal`, `typeof-principal`, `create-principal`, and `validate-principal` shims (#1160)
 - Remove `format` shim (#1159)
-- ```
 
 ### Documentation
 
 - Remove mention of private defpacts from the reference manual (#1207)
 - Add documentation for `enumerate` (#1176)
+
+### Misc
+
+- New PR and Issue templates introduced.
+
+Thanks to everyone for their contributions, especially @CryptoPascal31 for his wonderful feedback and commentary, and welcome to our newest Pact team member, @ak3n!.
+
 4.6.0
 ---
 * Add `DisablePact46` execution flag (#1138)
