@@ -86,11 +86,9 @@ parseMsgKey' i msg key = do
     Nothing -> go b
     Just k -> case preview (A.key k) b of
       Nothing ->
-        isExecutionFlagSet FlagDisablePact47 >>= \case
-            True ->
-              evalError' i $ "No such key in message: " <> pretty k
-            False ->
-              failTx' i $ "No such key in message: " <> pretty k
+        ifExecutionFlagSet FlagDisablePact47
+          (evalError' i $ "No such key in message: " <> pretty k)
+          (failTx' i $ "No such key in message: " <> pretty k)
       Just v -> go v
 
 
