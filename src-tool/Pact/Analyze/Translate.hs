@@ -1516,6 +1516,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
 
+  -- rs (2023-05-10): Note, we handle the empty list properly (see #1182)
+  -- as the element type is otherwise inferred as `Any`.
+  AST_List node [] -> translateType node >>= \case
+    EType retTy -> case retTy of
+      SList _ -> pure $ Some retTy $ CoreTerm $ Lit []
+      _ -> throwError' $ TypeError node
+
   AST_List node elems -> do
     elems' <- traverse translateNode elems
     Some ty litList <- mkLiteralList elems' ?? TypeError node
