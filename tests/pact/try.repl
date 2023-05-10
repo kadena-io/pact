@@ -131,3 +131,28 @@
 ;; require-cap works in enforce-one post-fork
 (expect "require-cap works sin enforce-one" true (enforce-cap))
 (commit-tx)
+
+; read-* functions made recoverable
+
+(begin-tx)
+(env-data {})
+(env-exec-config ["DisablePact47"])
+(expect-failure "read-integer fails on non-existent key" (try 1 (read-integer "somekey")))
+(expect-failure "read-string fails on non-existent key" (try 1 (read-string "somekey")))
+(expect-failure "read-keyset fails on non-existent key" (try 1 (read-keyset "somekey")))
+(expect-failure "read-decimal fails on non-existent key" (try 1 (read-decimal "somekey")))
+(expect-failure "read-msg fails on non-existent key" (try 1 (read-msg "somekey")))
+(commit-tx)
+
+; Post-fork, they are recoverable
+(begin-tx)
+
+(env-data {})
+(env-exec-config [])
+(expect "read-integer fails on non-existent key but is recoverable" 1 (try 1 (read-integer "somekey")))
+(expect "read-string fails on non-existent key but is recoverable" 1 (try 1 (read-string "somekey")))
+(expect "read-keyset fails on non-existent key but is recoverable" 1 (try 1 (read-keyset "somekey")))
+(expect "read-decimal fails on non-existent key but is recoverable" 1 (try 1 (read-decimal "somekey")))
+(expect "read-msg fails on non-existent key but is recoverable" 1 (try 1 (read-msg "somekey")))
+(commit-tx)
+
