@@ -1516,7 +1516,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
 
-  -- rs (2023-05-10): Note, we handle the empty list properly (see #1182)
+  -- rs (2023-05-10): Note, we handle the empty list as a special case (see #1182)
   -- as the element type is otherwise inferred as `Any`.
   AST_List node [] -> translateType node >>= \case
     EType retTy -> case retTy of
