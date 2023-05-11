@@ -64,6 +64,9 @@ jobs:
         version: "4.12.1"
         architecture: "x64"
         distribution: "osx-10.16"
+    - name: Print Z3 version
+      shell: bash
+      run: z3 -version
 
 
     - name: Install non-Haskell dependencies (windows)
