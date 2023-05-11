@@ -29,9 +29,6 @@ jobs:
           cabal: '3.8'
           cabalcache: 'true'
           flags: '+build-tool'
-        # include:
-        # - os: 'windows-latest'
-        #   storepath: '--store-path=${HOME}/AppData/Roaming/cabal/store'
 
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
@@ -69,10 +66,6 @@ jobs:
       run: z3 -version
 
 
-    - name: Install non-Haskell dependencies (windows)
-      if: contains(matrix.os, 'windows')
-      run: choco install -y -r awscli
-
     # Haskell Setup
     - name: Set permissions for .ghcup (ubuntu)
       if: startsWith(matrix.os, 'ubuntu-')
@@ -86,21 +79,6 @@ jobs:
       run: |
         ghc --version
         cabal --version
-    - name: Setup PATHs (windows)
-      if: "contains(matrix.os, 'windows')"
-      shell: bash
-      run: |
-        echo "/c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin" >> $GITHUB_PATH
-        echo "C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-${{ matrix.ghc }}\\bin" >> $GITHUB_PATH
-        echo "/c/ProgramData/chocolatey/lib/cabal/tools/cabal-3.2.0.0" >> $GITHUB_PATH
-        echo "C:\\ProgramData\\chocolatey\\lib\\cabal\\tools\\cabal-3.2.0.0" >> $GITHUB_PATH
-        echo "/c/Users/runneradmin/AppData/Roaming/cabal/bin" >> $GITHUB_PATH
-        echo "C:\\Users\\runneradmin\\AppData\\Roaming\\cabal\\bin" >> $GITHUB_PATH
-        echo "/c/Program Files/Amazon/AWSCLI/bin" >> $GITHUB_PATH
-        echo "C:\\Program Files\\Amazon\\AWSCLI\\bin" >> $GITHUB_PATH
-
-        # these are needed for cabal-cache to work
-        ln -s /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg.exe /c/ProgramData/chocolatey/lib/ghc/tools/ghc-${{ matrix.ghc }}/bin/ghc-pkg-${{ matrix.ghc }}
 
     # Project Setup
     - name: Create cabal.project.local
@@ -200,7 +178,7 @@ jobs:
 
     # Publish to S3
     - name: Publish applications to S3
-      if: "!contains(matrix.flags, '-build-tool') && !contains(matrix.os, 'windows')"
+      if: "!contains(matrix.flags, '-build-tool')"
       shell: bash
       run: |
         tar -C ./artifacts/pact/ -czf $BINFILE '.'
