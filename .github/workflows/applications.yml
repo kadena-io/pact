@@ -55,6 +55,7 @@ jobs:
       with:
         version: "4.12.1"
         architecture: "x64"
+        distribution: "glibc-2.35"
     - name: Install z3 (macOS)
       if: contains(matrix.os, 'mac')
       # uses: pavpanchekha/setup-z3@v0.3.0
@@ -62,7 +63,7 @@ jobs:
       with:
         version: "4.12.1"
         architecture: "x64"
-        distribution: "osx-10.15.7"
+        distribution: "osx-10.16"
 
 
     - name: Install non-Haskell dependencies (windows)
