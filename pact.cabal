@@ -87,6 +87,7 @@ library
     Pact.Native.Keysets
     Pact.Native.Decrypt
     Pact.Native.Pairing
+    Pact.Native.ModularArithmetic
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
@@ -422,6 +423,7 @@ test-suite hspec
         TypecheckSpec
         PactCLISpec
         ZkSpec
+        ModularArithmeticSpec
         ReplSpec
         PairingSpec
         Utils

@@ -217,6 +217,9 @@ defaultGasTable =
   ,("scalar-mult", 1)
   ,("point-add", 1)
   ,("pairing-check", 1)
+
+  -- Modular inverse
+  ,("egcd", 3)
   ]
 
 {-# NOINLINE defaultGasTable #-}

@@ -221,6 +221,7 @@ allTests = HM.fromList
     , ("point-add", pointAddTests)
     , ("scalar-mult", scalarMulTests)
     , ("pairing-check", pairingCheckTests)
+    , ("egcd", egcdTests)
 
       -- Non-native concepts to benchmark
     , ("use", useTests)
@@ -2000,3 +2001,12 @@ pairingCheckTests = defGasUnitTests allExprs
     , 'y: [8495653923123431417604973247489272438418190587263600148770280649306958101930, 4082367875863433681332203403145435568316851327593401208105741076214120093531]}]
     )|]
   allExprs = fmap defPactExpression [pairingCheck]
+
+egcdTests :: NativeDefName -> GasUnitTests
+egcdTests = defGasUnitTest $ PactExpression egcdExprText Nothing
+  where
+    egcdExprText = [text|
+    (egcd 3 26)
+    (egcd 5865413254 646787313212)
+    (egcd 98765432109876543212 12345678901234567896)
+    |]

@@ -105,6 +105,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
+import Pact.Native.ModularArithmetic (egcdDefs)
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -119,6 +120,7 @@ natives =
   , decryptDefs
   , guardDefs
   , zkDefs
+  , egcdDefs
   ]
 
 
