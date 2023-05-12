@@ -4564,3 +4564,26 @@ spec = describe "analyze" $ do
         (enforce false ""))
       |]
       "Vacuous property encountered!"
+
+  describe "partial bind (regression #1173)" $ do
+    expectVerified [text|
+      (defschema ty
+       ""
+       a: integer
+       b: time)
+
+      (defun test (x:object{ty})
+        @model[(property true)]
+        (bind x
+          {"b" := _}
+          1))|]
+
+    expectVerified [text|
+       (defun test(x:integer)
+       @model [ (property (>= x 0))]
+       (enforce (> x 0) "x must be greater than 0")
+       (bind (chain-data)
+         { "block-height" := block-height
+         , "block-time"   := block-time }
+         (* block-height  x)))
+      |]
