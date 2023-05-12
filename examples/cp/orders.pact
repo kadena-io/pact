@@ -48,7 +48,7 @@
 
   )
 
-  (defun with-order-status:object{order} (order-id status)
+  (defun with-order-status (order-id status)
     "Check that order status is correct, returning details"
     (let ((o (read orders order-id)))
       (enforce (= (at 'status o) status)
