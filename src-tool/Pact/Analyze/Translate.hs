@@ -1395,12 +1395,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
   AST_Bind node objectA bindings schemaNode body -> translateType schemaNode >>= \case
-    EType objTy@SObject{} -> typeOfPartialBind objTy bindings >>= \case
-      EType partialReadTy@SObject{} -> do
+    EType objTy@SObject{} -> do
         objectT <- translateNode objectA
         withNodeContext node $
-          translateObjBinding bindings partialReadTy body objectT
-      _ -> unexpectedNode astNode
+          translateObjBinding bindings objTy body objectT
     _ -> unexpectedNode astNode
 
   AST_WithCapability (AST_InlinedApp modName funName _ bindings appBodyA) withBodyA -> do
