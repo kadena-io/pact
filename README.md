@@ -169,7 +169,7 @@ pact> (+ "hello, " "world")
 ## Supported Editors
 
 Pact is supported by a variety of editors ranging from full-fledged IDE environments to syntax highlighting.
-Moreover, our offering includes a Pact Language Server, which can be seamlessly integrated with a wide range of editors.
+Moreover, we also provide a Pact Language Server, which can be seamlessly integrated with a wide range of editors.
 The Pact Language Server can be found [here](https://github.com/kadena-io/pact-lsp).
 
 ### Chainweaver
