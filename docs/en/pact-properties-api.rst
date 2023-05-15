@@ -627,6 +627,22 @@ or?
 
 Supported in either invariants or properties.
 
+.. _FBoolHash:
+
+hash
+~~~~
+
+.. code:: lisp
+
+   (hash s)
+
+-  takes ``s``: ``bool``
+-  produces ``string``
+
+BLAKE2b 256-bit hash of bool values
+
+Supported in properties only.
+
 .. _Object:
 
 Object operators
@@ -803,6 +819,24 @@ List / string / object contains
 
 Supported in either invariants or properties.
 
+.. _FEnumerate:
+
+enumerate
+~~~~~~~~~
+
+.. code:: lisp
+
+   (enumerate from to step)
+
+-  takes ``from``: ``integer``
+-  takes ``to``: ``integer``
+-  takes ``step``: ``integer``
+-  produces [``integer``]
+
+Returns a sequence of numbers as a list
+
+Supported in either invariants or properties.
+
 .. _FReverse:
 
 reverse
@@ -922,6 +956,22 @@ filter a list by keeping the values for which ``f`` returns ``true``
 
 Supported in either invariants or properties.
 
+.. _FDistinct:
+
+distinct
+~~~~~~~~
+
+.. code:: lisp
+
+   (distinct xs)
+
+-  takes ``xs``: [*a*]
+-  produces [*a*]
+
+returns a list of distinct values
+
+Supported in either invariants or properties.
+
 .. _FFold:
 
 fold
@@ -939,6 +989,24 @@ fold
 reduce a list by applying ``f`` to each element and the previous result
 
 Supported in either invariants or properties.
+
+.. _FListHash:
+
+hash
+~~~~
+
+.. code:: lisp
+
+   (hash xs)
+
+-  takes ``xs``: [*a*]
+-  produces ``string``
+-  where *a* is of type ``integer``, ``decimal``, ``bool``, or
+   ``string``
+
+BLAKE2b 256-bit hash of lists
+
+Supported in properties only.
 
 .. _String:
 
@@ -1045,6 +1113,39 @@ drop the first ``n`` values from ``xs`` (dropped from the end if ``n``
 is negative)
 
 Supported in either invariants or properties.
+
+.. _FStringHash:
+
+hash
+~~~~
+
+.. code:: lisp
+
+   (hash s)
+
+-  takes ``s``: ``string``
+-  produces ``string``
+
+BLAKE2b 256-bit hash of string values
+
+Supported in properties only.
+
+.. _FNumericalHash:
+
+hash
+~~~~
+
+.. code:: lisp
+
+   (hash s)
+
+-  takes ``s``: *a*
+-  produces ``string``
+-  where *a* is of type ``integer`` or ``decimal``
+
+BLAKE2b 256-bit hash of numerical values
+
+Supported in properties only.
 
 .. _Temporal:
 
@@ -1480,6 +1581,39 @@ row-enforced
 Whether the keyset in the row is enforced by the function under analysis
 
 Supported in properties only.
+
+.. _FIsPrincipal:
+
+is-principal
+~~~~~~~~~~~~
+
+.. code:: lisp
+
+   (is-principal s)
+
+-  takes ``s``: ``string``
+-  produces ``bool``
+
+Whether ``s`` conforms to the principal format without proving validity.
+
+Supported in either invariants or properties.
+
+.. _FTypeOfPrincipal:
+
+typeof-principal
+~~~~~~~~~~~~~~~~
+
+.. code:: lisp
+
+   (typeof-principal s)
+
+-  takes ``s``: ``string``
+-  produces ``string``
+
+Return the protocol type of the given ``s`` value. If input value is not
+a principal type, then the empty string is returned.
+
+Supported in either invariants or properties.
 
 .. _Function:
 
