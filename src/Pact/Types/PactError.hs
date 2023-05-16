@@ -130,6 +130,7 @@ instance J.Encode PactErrorType where
   build TxFailure = J.text "TxFailure"
   build SyntaxError = J.text "SyntaxError"
   build GasError = J.text "GasError"
+  build ContinuationError = J.text "ContinuationError"
   {-# INLINE build #-}
 
 instance Arbitrary PactErrorType where
