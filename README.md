@@ -64,12 +64,14 @@ The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.
 
 Pact can be installed via binary distribution for Linux or Mac by following the instructions below:
 
-- Install [z3](https://github.com/Z3Prover/z3/wiki).
+- Install [z3](https://github.com/Z3Prover/z3/wiki) `>= 4.11.2`.
 - Download the [prebuilt binaries](https://github.com/kadena-io/pact/releases) for either Linux or Mac, depending on your OS.
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
 
 Once you have Pact in your path, proceed to validating your installation by trying out [the repl](#verifying-installation).
+
+
 
 ### Instructions for Mac Users
 
