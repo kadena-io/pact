@@ -45,12 +45,6 @@ instance (Serialize i) => Serialize (DecimalRaw i) where
     {-# INLINE put #-}
     {-# INLINE get #-}
 
-instance Serialize A.Value where
-    put v = put (A.encode v)
-    get = get >>= \g -> either fail return $ A.eitherDecode g
-    {-# INLINE put #-}
-    {-# INLINE get #-}
-
 instance NFData Delta
 
 instance Default Text where def = ""
