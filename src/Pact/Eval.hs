@@ -59,8 +59,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Monoid (Sum(..))
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.Aeson as A
 import Data.Default
 import Data.Foldable
 import Data.Functor.Classes
@@ -89,6 +87,7 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
 
+import qualified Pact.JSON.Encode as J
 import qualified Pact.JSON.Legacy.HashMap as LHM
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
@@ -1308,7 +1307,7 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
 createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
   let pc = PactContinuation (QName qn{_qnInfo = def}) pvs
-  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
+  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> J.encodeStrict pc
 createNestedPactId i n _ =
   evalError' i $ "Error creating nested pact id, name is not qualified: " <> pretty n
 

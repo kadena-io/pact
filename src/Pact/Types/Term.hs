@@ -1076,7 +1076,7 @@ instance FromJSON n => FromJSON (Term n) where
     _ -> fail $ "unexpected properties for Term: "
       <> "[" <> T.unpack (T.intercalate "," (props v)) <> "]"
       <> ", " <> show propsWithoutOptionals
-      <> ", " <> show (encode v)
+      <> ", " <> show (J.encode v)
     -- A.<?> A.Key (A.fromText $ "Term[" <> T.intercalate "," (props v) <> "]")
    where
     p = prop

@@ -19,7 +19,6 @@ import Criterion.Main hiding (env)
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -59,6 +58,7 @@ import Pact.Repl.Types
 import Pact.Types.Capability
 import Pact.Runtime.Utils
 import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Encode as J
 
 -- | Flags for enabling file-based perf bracketing,
 -- see 'mkFilePerf' below.
@@ -236,8 +236,8 @@ benchReadValue _ (TxTable _t) _k = rcp Nothing
 mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
-    $ toStrict . encode
-    $ Payload payload "nonce" () ss Nothing
+    $ J.encodeStrict
+    $ Payload payload "nonce" (J.Aeson ()) ss Nothing
   return (str, cmd)
   where
     payload = Exec $ ExecMsg t (toLegacyJson Null)

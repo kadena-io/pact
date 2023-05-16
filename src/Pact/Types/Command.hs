@@ -82,7 +82,6 @@ import qualified Pact.JSON.Encode as J
 
 
 #if !defined(ghcjs_HOST_OS)
-import qualified Data.ByteString.Lazy as BSL
 import Pact.Types.Crypto              as Base
 #else
 import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
@@ -122,6 +121,14 @@ instance (FromJSON a) => FromJSON (Command a) where
                         <*> (o .: "sigs")
                         <*> (o .: "hash")
     {-# INLINE parseJSON #-}
+
+instance J.Encode a => J.Encode (Command a) where
+  build o = J.object
+    [ "hash" J..= _cmdHash o
+    , "sigs" J..= J.Array (_cmdSigs o)
+    , "cmd" J..= _cmdPayload o
+    ]
+  {-# INLINE build #-}
 
 instance NFData a => NFData (Command a)
 
@@ -177,8 +184,8 @@ mkCommand' creds env = do
   return $ Command env sigs hsh
 
 mkUnsignedCommand
-  :: ToJSON m
-  => ToJSON c
+  :: J.Encode m
+  => J.Encode c
   => [Signer]
   -> m
   -> Text
@@ -186,7 +193,7 @@ mkUnsignedCommand
   -> PactRPC c
   -> IO (Command ByteString)
 mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
-  where encodedPayload = BSL.toStrict $ A.encode payload
+  where encodedPayload = J.encodeStrict payload
         payload = Payload rpc nonce meta signers nid
 
 signHash :: TypedHash h -> SomeKeyPair -> IO UserSig
@@ -221,7 +228,7 @@ hasInvalidSigs hsh sigs signers
   where verifyFailed (sig, signer) = not $ verifyUserSig hsh sig signer
         -- assumes nth Signer is responsible for the nth UserSig
         failedSigs = filter verifyFailed (zip sigs signers)
-        formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode <$> failedSigs)
+        formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
 
 
 verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
@@ -360,6 +367,10 @@ instance ToJSON UserSig where
   toEncoding = pairs . mconcat . userSigProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance J.Encode UserSig where
+  build s = J.object [ "sig" J..= _usSig s ]
+  {-# INLINE build #-}
 
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do

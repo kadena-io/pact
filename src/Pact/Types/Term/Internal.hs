@@ -1096,7 +1096,7 @@ instance FromJSON a => FromJSON (Guard a) where
     [GuardCgArgs, GuardCgName, GuardCgPactId] -> GCapability <$> parseJSON v
     _ -> fail $ "unexpected properties for Guard: "
       <> show (props v)
-      <> ", " <> show (encode v)
+      <> ", " <> show (J.encode v)
    where
     props (A.Object o) = sort $ ungprop <$> A.keys o
     props _ = []

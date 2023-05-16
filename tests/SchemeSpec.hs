@@ -13,7 +13,6 @@ import qualified Data.ByteString          as BS
 import Data.Aeson as A
 import qualified Control.Lens             as Lens
 import qualified Data.ByteString.Base16   as B16
-import qualified Data.ByteString.Lazy     as BSL
 
 import Pact.ApiReq
 import Pact.Types.Crypto
@@ -22,6 +21,7 @@ import Pact.Types.Util (toB16Text, fromJSON')
 import Pact.Types.RPC
 import Pact.Types.Hash
 import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Encode as J
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
@@ -81,9 +81,9 @@ toSigners kps = return $ map makeSigner kps
 
 
 toExecPayload :: [Signer] -> Text -> ByteString
-toExecPayload signers t = BSL.toStrict $ A.encode payload
+toExecPayload signers t = J.encodeStrict payload
   where
-    payload = Payload (Exec (ExecMsg t $ toLegacyJson Null)) "nonce" () signers Nothing
+    payload = Payload (Exec (ExecMsg t $ toLegacyJson Null)) "nonce" (J.Aeson ()) signers Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Expectation

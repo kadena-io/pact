@@ -75,6 +75,8 @@ import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519
 #endif
 
+import qualified Pact.JSON.Encode as J
+
 
 
 --------- INTERNAL SCHEME CLASS ---------
@@ -280,11 +282,14 @@ instance Show SomeKeyPair where
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
   deriving (Eq, Generic, Hashable)
 instance ToJSON PublicKeyBS where
-  toJSON (PubBS p) = toB16JSON p
+  toJSON (PubBS p) = enableToJSON "Pact.Types.Crypto.PublicKeyBS" $ toJSON $ toB16Text p
 instance FromJSON PublicKeyBS where
   parseJSON = withText "PublicKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PubBS s'
+instance J.Encode PublicKeyBS where
+  build (PubBS p) = J.text $ toB16Text p
+  {-# INLINE build #-}
 instance IsString PublicKeyBS where
   fromString s = case parseB16TextOnly (T.pack s) of
     Left e -> PubBS $ "Bad public key: " <> T.encodeUtf8 (T.pack e)
@@ -302,11 +307,14 @@ instance FromJSONKey PublicKeyBS where
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
   deriving (Eq, Generic, Hashable)
 instance ToJSON PrivateKeyBS where
-  toJSON (PrivBS p) = toB16JSON p
+  toJSON (PrivBS p) = enableToJSON "Pact.Types.Crypto.PrivateKeyBS" $ toJSON $ toB16Text p
 instance FromJSON PrivateKeyBS where
   parseJSON = withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PrivBS s'
+instance J.Encode PrivateKeyBS where
+  build (PrivBS p) = J.text $ toB16Text p
+  {-# INLINE build #-}
 instance IsString PrivateKeyBS where
   fromString s = case parseB16TextOnly (T.pack s) of
     Left e -> PrivBS $ "Bad private key: " <> T.encodeUtf8 (T.pack e)
@@ -317,14 +325,14 @@ instance Show PrivateKeyBS where
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic, Hashable)
 instance ToJSON SignatureBS where
-  toJSON (SigBS p) = toB16JSON p
+  toJSON (SigBS p) = enableToJSON "Pact.Types.Crypto.SigBS" $ toJSON $ toB16Text p
 instance FromJSON SignatureBS where
   parseJSON = withText "SignatureBS" $ \s -> do
     s' <- parseB16Text s
     return $ SigBS s'
-
-
-
+instance J.Encode SignatureBS where
+  build (SigBS p) = J.text $ toB16Text p
+  {-# INLINE build #-}
 
 --------- SCHEME HELPER FUNCTIONS ---------
 

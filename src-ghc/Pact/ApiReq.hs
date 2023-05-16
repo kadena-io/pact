@@ -72,6 +72,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
+import qualified Pact.JSON.Encode as J
 import Pact.JSON.Legacy.Value
 
 -- | For fully-signed commands
@@ -313,7 +314,7 @@ returnSigDataOrCommand  outputLocal sd
       Left "Number of signers in the payload does not match number of signers in the sigData"
     usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
     let failedSigs = filter (not . verifySig h) usrSigs
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
+    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
     _ <- verifyHash h (encodeUtf8 cmd)
     pure ()
     where
@@ -328,7 +329,7 @@ returnSigDataOrCommand  outputLocal sd
     sigs' <- foldrM toVerifPair [] sigs
     let scheme = toScheme ED25519
         failedSigs = filter (\(pk, sig) -> not $ verify scheme (toUntypedHash h) pk sig) sigs'
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
+    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
     pure ()
     where
     toVerifPair (PublicKeyHex pktext, Just UserSig{..}) m = do
@@ -343,7 +344,7 @@ returnCommandIfDone outputLocal sd =
     Left _ -> return $ Y.encodeWith yamlOptions sd
     Right c -> do
       let res = verifyCommand $ fmap encodeUtf8 c
-          out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
+          out = if outputLocal then J.encode c else J.encode (SubmitBatch (c :| []))
       case res :: ProcessedCommand Value ParsedCode of
         ProcSucc _ -> pure $ BSL.toStrict out
         ProcFail e -> do
@@ -421,8 +422,8 @@ decodeYaml :: FromJSON b => FilePath -> IO b
 decodeYaml fp = either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
 
-putJSON :: ToJSON b => b -> IO ()
-putJSON = BSL.putStrLn . encode
+putJSON :: J.Encode b => b -> IO ()
+putJSON = BSL.putStrLn . J.encode
 
 -- | The formatting of the result and in particular the sorting items in the
 -- result is not specified. Do not use this function if deterministc and

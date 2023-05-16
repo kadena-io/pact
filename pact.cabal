@@ -443,7 +443,7 @@ test-suite hspec
       , semirings
       , text
       , transformers
-        , trifecta
+      , trifecta
       , vector
 
     if flag(build-tool)

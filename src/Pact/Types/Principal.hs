@@ -15,10 +15,8 @@ module Pact.Types.Principal
 import Control.Applicative
 import Control.Lens
 
-import Data.Aeson (encode)
 import Data.Attoparsec.Text
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import Data.Foldable
 import Data.Functor (void)
 import Data.Text (Text)
@@ -36,6 +34,7 @@ import Pact.Types.Util
 import Text.Parser.Combinators (eof)
 import Data.Char (isHexDigit)
 
+import qualified Pact.JSON.Encode as J
 
 data Principal
   = K !PublicKeyText
@@ -204,4 +203,4 @@ guardToPrincipal chargeGas = \case
       let bs = mconcat bss
       chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
       return $ pactHash bs
-    toJSONPactValue = toStrict . encode
+    toJSONPactValue = J.encodeStrict

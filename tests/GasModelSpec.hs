@@ -21,6 +21,7 @@ import Control.Lens hiding ((.=))
 import Control.Exception (bracket, throwIO)
 import Control.Monad (when, forM_)
 import Data.Aeson
+import Data.Bifunctor (first)
 import Data.IORef
 import Data.Int (Int64)
 import Data.List (foldl', sortOn)
@@ -48,6 +49,7 @@ import Test.Hspec.Core.Spec
 
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Legacy.HashMap as LHM
+import qualified Pact.JSON.Encode as J
 
 spec :: Spec
 spec = describe "gas model tests" $ do
@@ -193,7 +195,7 @@ _generateGoldenPactValues = mapM_ f pactValuesDescAndGen
       jsonEncode fp (sizeOf SizeOfV0 pv, pv)
 
     jsonEncode :: FilePath -> (Int64, PactValue) -> IO ()
-    jsonEncode fp = BL.writeFile fp . encode
+    jsonEncode fp = BL.writeFile fp . J.encode . J.Array . first J.Aeson
 
 
 -- | List of pact value pseudo-random generators and their descriptions

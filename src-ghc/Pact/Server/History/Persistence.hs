@@ -16,10 +16,9 @@ module Pact.Server.History.Persistence
 import Control.Monad
 
 import qualified Data.Text as T
-import qualified Data.Aeson as A
+import qualified Data.Aeson as A (eitherDecodeStrict')
 import Data.Text.Encoding (encodeUtf8)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as BSL
 
 import Data.List (sortBy)
 import Data.HashSet (HashSet)
@@ -36,8 +35,10 @@ import Pact.Types.SQLite
 
 import Pact.Server.History.Types
 
+import qualified Pact.JSON.Encode as J
+
 hashToField :: Hash -> SType
-hashToField h = SText $ Utf8 $ BSL.toStrict $ A.encode h
+hashToField h = SText $ Utf8 $! J.encodeStrict h
 
 hashFromField :: ByteString -> Hash
 hashFromField h = case A.eitherDecodeStrict' h of
@@ -45,7 +46,7 @@ hashFromField h = case A.eitherDecodeStrict' h of
   Right v -> v
 
 crToField :: CommandResult Hash -> SType
-crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode r
+crToField r = SText $ Utf8 $! J.encodeStrict r
 
 crFromField :: ByteString -> CommandResult Hash
 crFromField cr = case A.eitherDecodeStrict' cr of
@@ -53,7 +54,7 @@ crFromField cr = case A.eitherDecodeStrict' cr of
       Right v' -> v'
 
 userSigsToField :: [UserSig] -> SType
-userSigsToField us = SText $ Utf8 $ BSL.toStrict $ A.encode us
+userSigsToField us = SText $ Utf8 $! J.encodeStrict (J.Array us)
 
 userSigsFromField :: ByteString -> [UserSig]
 userSigsFromField us = case A.eitherDecodeStrict' us of

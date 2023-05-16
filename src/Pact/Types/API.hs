@@ -39,6 +39,8 @@ import GHC.Generics
 import Pact.Types.Command
 import Pact.Types.Runtime
 
+import qualified Pact.JSON.Encode as J
+
 newtype RequestKeys = RequestKeys { _rkRequestKeys :: NonEmpty RequestKey }
   deriving (Show, Eq, Ord, Generic, NFData)
 makeLenses ''RequestKeys
@@ -73,6 +75,10 @@ instance ToJSON SubmitBatch where
 
 instance FromJSON SubmitBatch where
    parseJSON = lensyParseJSON 3
+
+instance J.Encode SubmitBatch where
+  build o = J.object [ "cmds" J..= J.Array (_sbCmds o) ]
+  {-# INLINE build #-}
 
 -- | Poll for results by RequestKey
 newtype Poll = Poll { _pRequestKeys :: NonEmpty RequestKey }

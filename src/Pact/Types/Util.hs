@@ -31,7 +31,7 @@ module Pact.Types.Util
   , (.?=)
   -- | Base 16 helpers
   , parseB16JSON, parseB16Text, parseB16TextOnly
-  , toB16JSON, toB16Text
+  , toB16Text
   , B16JsonBytes(..)
   -- | Base64Url helpers
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
@@ -56,7 +56,7 @@ module Pact.Types.Util
 #define ENABLE_TOJSON
 
 -- Enable to make trace calls to toJSON (only for debugging purposes)
--- #define ENABLE_TOJSON_WARNING
+#define ENABLE_TOJSON_WARNING
 
 import Data.Aeson
 import Data.Aeson.Types
@@ -87,6 +87,7 @@ import Debug.Trace
 #endif
 import GHC.Stack (HasCallStack)
 
+import qualified Pact.JSON.Encode as J
 
 class ParseText a where
   parseText :: Text -> Parser a
@@ -173,9 +174,6 @@ parseB16Text t = case B16.decode (encodeUtf8 t) of
 
 parseB16TextOnly :: Text -> Either String ByteString
 parseB16TextOnly t = resultToEither $ parse parseB16Text t
-
-toB16JSON :: ByteString -> Value
-toB16JSON s = String $ toB16Text s
 
 toB16Text :: ByteString -> Text
 toB16Text s = decodeUtf8 $ B16.encode s
@@ -275,8 +273,8 @@ unsafeFromJSON :: HasCallStack => FromJSON a => Value -> a
 unsafeFromJSON v = case fromJSON v of Success a -> a; Error e -> error ("JSON parse failed: " ++ show e)
 
 -- | Utility for GHCI output of JSON
-outputJSON :: ToJSON a => a -> IO ()
-outputJSON a = BSL8.putStrLn $ encode a
+outputJSON :: J.Encode a => a -> IO ()
+outputJSON a = BSL8.putStrLn $ J.encode a
 
 -- | Tagging ByteStrings (and isomorphic types) that are JSON encoded as
 -- Hex strings
