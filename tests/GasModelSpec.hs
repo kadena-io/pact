@@ -1,9 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 module GasModelSpec (spec) where
 
@@ -51,6 +55,33 @@ import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import qualified Pact.JSON.Encode as J
 
+-- -------------------------------------------------------------------------- --
+-- YAML Utils
+
+newtype ObjectResult a = ObjectResult [(T.Text, a)]
+  deriving newtype (Show, Eq)
+
+instance J.Encode a => J.Encode (ObjectResult a) where
+  build (ObjectResult r) = J.build $ J.Object r
+
+instance FromJSON a => FromJSON (ObjectResult a) where
+  parseJSON = fmap ObjectResult . parseJSON
+
+encodeYaml :: J.Encode a => a -> B.ByteString
+encodeYaml = Y.encode
+  . either (error . show) id
+  . Y.decodeEither' @Value
+  . J.encodeStrict
+
+encodeYamlFile :: J.Encode a => FilePath -> a -> IO ()
+encodeYamlFile file = Y.encodeFile file
+  . either (error . show) id
+  . Y.decodeEither' @Value
+  . J.encodeStrict
+
+-- -------------------------------------------------------------------------- --
+-- Spec
+
 spec :: Spec
 spec = describe "gas model tests" $ do
   describe "untestedNativesCheck" untestedNativesCheck
@@ -95,13 +126,13 @@ allGasTestsAndGoldenShouldPass' = beforeAll (newIORef []) $ sequential $ do
     it "gas model tests should not return a PactError, but should pass golden" $
       golden "gas-model"
  where
-   formatResults = fmap toGoldenOutput . concatMap snd . sortOn fst
+   formatResults = ObjectResult . fmap toGoldenOutput . concatMap snd . sortOn fst
 
-golden :: (FromJSON a,ToJSON a) => String -> a -> Golden a
+golden :: (FromJSON a, J.Encode a) => String -> a -> Golden a
 golden name obj = Golden
   { G.output = obj
-  , G.encodePretty = B.unpack . Y.encode
-  , G.writeToFile = Y.encodeFile
+  , G.encodePretty = B.unpack . encodeYaml
+  , G.writeToFile = encodeYamlFile
   , G.readFromFile = Y.decodeFileThrow
   , G.testName = name
   , G.directory = "golden"
@@ -264,4 +295,7 @@ _diffGoldens g1 g2 = do
   (y2 :: Map.Map T.Text [Int]) <- fmap pure . Map.fromList <$> Y.decodeFileThrow g2
   let merge [c1] [c2] = [c1,c2,c2-c1]
       merge _ _ = []
-  Y.encodeFile "diff.yaml" $ Map.unionWith merge y1 y2
+  encodeYamlFile "diff.yaml" $ formatJson $ Map.unionWith merge y1 y2
+ where
+  formatJson = J.Object . fmap (J.Array. fmap J.Aeson)
+
