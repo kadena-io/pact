@@ -57,7 +57,7 @@ import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Util (lensyToJSON, lensyParseJSON, JsonProperties, JsonMProperties, enableToJSON, (.?=))
-import Pact.JSON.Legacy.Value
+import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 
 import qualified Pact.JSON.Encode as J

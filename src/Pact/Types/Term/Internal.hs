@@ -129,7 +129,7 @@ import Pact.Types.Util
 
 import Pact.JSON.Legacy.Hashable
 import qualified Pact.JSON.Legacy.HashMap as LHM
-import Pact.JSON.Legacy.Value
+import Pact.JSON.Legacy.Utils
 
 import qualified Pact.JSON.Encode as J
 

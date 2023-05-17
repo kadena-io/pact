@@ -47,7 +47,7 @@ import Pact.Native
 import Test.Hspec.Core.Spec
 #endif
 
-import Pact.JSON.Legacy.Value
+import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import qualified Pact.JSON.Encode as J
 

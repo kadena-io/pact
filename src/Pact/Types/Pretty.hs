@@ -82,7 +82,7 @@ import           Data.Text.Prettyprint.Doc.Render.Text as RText
 import           Text.Trifecta.Delta hiding (prettyDelta)
 
 import qualified Pact.JSON.Legacy.HashMap as LH
-import qualified Pact.JSON.Legacy.Value as LV
+import qualified Pact.JSON.Legacy.Utils as JL
 
 data RenderColor = RColor | RPlain
 
@@ -208,7 +208,7 @@ instance Pretty Value where
   pretty = \case
     Object hm -> commaBraces
       $ (\(k, v) -> dquotes (pretty k) <> ": " <> pretty v)
-      <$> LH.toList (LV.legacyKeyMap hm)
+      <$> LH.toList (JL.legacyKeyMap hm)
     Array values -> bracketsSep $ pretty <$> toList values
     String str -> dquotes $ pretty str
     Number scientific -> viaShow scientific

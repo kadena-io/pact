@@ -72,7 +72,7 @@ import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow, JsonProperties, enableToJSON, (.?=))
 import Pact.Types.Namespace
-import Pact.JSON.Legacy.Value
+import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import qualified Pact.JSON.Encode as J
 
