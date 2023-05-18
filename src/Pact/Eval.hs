@@ -1172,7 +1172,12 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
   let body = instantiate (resolveArg ai args') fnBody
       fname = asString fnName
       fa = FunApp ai fname mod_ Defun (funTypes fty) docs
-  guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
+  retVal <- guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
+
+  unlessExecutionFlagSet FlagDisableReturnRTC $
+    typecheckTerm ai (_ftReturn fty) retVal
+
+  pure retVal
 
 -- | Evaluate a dynamic ref to either a fully-reduced value from a 'TConst'
 -- or a module member 'Def' for applying.
