@@ -26,11 +26,14 @@ source-repository-package
   type: git
   tag: f991ffb74a1a1ab86f14e751d7c4f4ba549785b3
   location: https://github.com/hackage-package-forks/trifecta
+  --sha256: sha256-m+IplwZ9DxJt6Mzkq961BzgiboHJul6w1uwDUqXnljo=
+
 
 source-repository-package
   type: git
   tag: f8314fe8313702b07102a9f8330ad91630d1b124
   location: https://github.com/kadena-io/pact-json
+  --sha256: sha256-hfiyzbBT+LTCwhsoKw0RmTPJeFGkAZY0IE1X0OxjVNs=
 
 -- Required for GHC-9.6
 
@@ -42,6 +45,7 @@ source-repository-package
   type: git
   tag: b66e3a04c20f753213fe7e5115a95b3fe34109f9
   location: https://github.com/larskuhtz/sbv
+  --sha256: sha256-NQ00KGhu4IWeAry0r6m6FR/iCu/XboWtjOhbU+gtijU=
 
 -- Servant is notoriously forcing outdated upper bounds onto its users.
 -- It is usually safe to just ignore those.
