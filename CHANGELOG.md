@@ -1,7 +1,8 @@
 4.7.1
 ---
 
-- Exchange runtime type checking on return types flag from `DisablePact47` to `DisableReturnRTC`.
+- Add feature flag `FlagDisableRuntimeTypeChecking` for disabling runtime typechecking
+  introduced in Pact 4.7 (#1231)
 
 ### Formal Verification
 

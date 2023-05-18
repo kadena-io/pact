@@ -388,7 +388,7 @@
   (tc-test-function-return-types.g (tc-test-function-return-types.f 1))
   )
 
-(env-exec-config ["DisableReturnRTC"])
+(env-exec-config ["DisableRuntimeReturnTypeChecking"])
 (expect
   "evaluating ill-typed function should succeed with pact-4.7 features disabled"
   3
