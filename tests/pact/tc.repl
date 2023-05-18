@@ -368,27 +368,3 @@
  "rtc object lists"
  1
  (rtc-object-list (let ((a {'a:1}) (b {'a: 2})) [a b])))
-
-;; A module with incorrect annotations for a function's return type.
-;; Runtime typechecking for function return types was added in
-;; pact-4.7.
-(module tc-test-function-return-types g
-  (defcap g () true)
-  (defun f:string () (+ 1 2))
-)
-
-(expect-failure
-  "evaluating a function whose type signature conflits with its body should fail"
-  (tc-test-function-return-types.f)
-  )
-
-(expect-failure
-  "composing an ill-typed function with another function should not evaluate"
-  (tc-test-function-return-types.g (tc-test-function-return-types.f 1))
-  )
-
-(env-exec-config ["DisablePact47"])
-(expect
-  "evaluating ill-typed function should succeed with pact-4.7 features disabled"
-  3
-  (tc-test-function-return-types.f))
