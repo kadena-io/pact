@@ -1174,7 +1174,7 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
       fa = FunApp ai fname mod_ Defun (funTypes fty) docs
   retVal <- guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
 
-  whenExecutionFlagSet FlagEnableRuntimeRTC $
+  unlessExecutionFlagSet FlagDisableReturnRTC $
     typecheckTerm ai (_ftReturn fty) retVal
 
   pure retVal

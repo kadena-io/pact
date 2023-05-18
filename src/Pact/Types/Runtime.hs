@@ -188,7 +188,7 @@ data ExecutionFlag
   -- | Disable Pact 4.7 Features
   | FlagDisablePact47
   -- | Disable runtime return type checking.
-  | FlagEnableRuntimeRTC
+  | FlagDisableReturnRTC
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
