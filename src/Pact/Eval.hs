@@ -1180,6 +1180,7 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
 
   return returnVal
 
+
 -- | Evaluate a dynamic ref to either a fully-reduced value from a 'TConst'
 -- or a module member 'Def' for applying.
 reduceDynamic
