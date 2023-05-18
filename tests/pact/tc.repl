@@ -371,7 +371,7 @@
 
 ;; A module with incorrect annotations for a function's return type.
 ;; Runtime typechecking for function return types was added in
-;; pact-4.7.1 and guarded via `DisableReturnRTC`.
+;; pact-4.7.1 and guarded via `DisableRuntimeReturnTypeChecking`.
 
 (module tc-test-function-return-types g
   (defcap g () true)
