@@ -1,3 +1,25 @@
+4.7.1
+---
+
+- Revert runtime type checking on return types (#1209)
+
+### Formal Verification
+
+- Fixed empty list type defaulting to any (#1224)
+- Fixed partial biniding (#1127)
+
+### Tests
+
+- Refactored test to avoid `runIO` within tests (#1129)
+- Add `CoverageSpec` (#1228)
+- Fix `ReplSpec` tests (#1216)
+- Cleanup `PactContinuationSpec` (#1222)
+
+### Others
+
+- Cleanup [README.md](README.md) (#1225)
+- Bump Z3 versions in GH actions (#1126)
+
 4.7.0
 ---
 
