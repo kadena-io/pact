@@ -1,7 +1,7 @@
 4.7.1
 ---
 
-- Revert runtime type checking on return types (#1209)
+- Exchange runtime type checking on return types flag from `DisablePact47` to `DisableReturnRTC`.
 
 ### Formal Verification
 
