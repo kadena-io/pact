@@ -371,7 +371,9 @@
 
 ;; A module with incorrect annotations for a function's return type.
 ;; Runtime typechecking for function return types was added in
-;; pact-4.7.1 and guarded via `DisableReturnRTC`.
+;; pact-4.7.1 and guarded via `EnableRuntimeRTC`.
+
+(env-exec-config ['EnableRuntimeRTC])
 
 (module tc-test-function-return-types g
   (defcap g () true)
@@ -388,7 +390,7 @@
   (tc-test-function-return-types.g (tc-test-function-return-types.f 1))
   )
 
-(env-exec-config ["DisableReturnRTC"])
+(env-exec-config [])
 (expect
   "evaluating ill-typed function should succeed with pact-4.7 features disabled"
   3
