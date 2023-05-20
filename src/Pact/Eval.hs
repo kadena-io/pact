@@ -1175,7 +1175,7 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
 
   returnVal <- guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
 
-  unlessExecutionFlagSet FlagDisablePact47 $
+  unlessExecutionFlagSet FlagDisableRuntimeReturnTypeChecking $
     typecheckTerm ai (_ftReturn fty) returnVal
 
   return returnVal
