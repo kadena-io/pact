@@ -46,6 +46,8 @@ For additional information, press, and development inquiries, please refer to th
 
 Extensive tutorials on every facet of the Pact language may be found [on docs.kadena.io](https://docs.kadena.io/learn-pact/intro). Additionally, users may find example scripts in Kadena's [pact-examples](https://github.com/kadena-io/pact-examples) repository, in the [examples](https://github.com/kadena-io/pact/tree/master/examples) directory, and in production as part of the [Kadena Public Blockchain](https://github.com/kadena-io/chainweb-node/).
 
+The [Real World Pact](https://github.com/thomashoneyman/real-world-pact) series contains tutorials and commented Pact code demonstrating how to write real-world smart contracts including a testnet faucet and a DeFi lending platform.
+
 ## Documentation
 
 The Pact language specification, API documentation, features, motivations, and in-depth tutorial content may be found [here](http://pact-language.readthedocs.io).
