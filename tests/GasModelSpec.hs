@@ -54,30 +54,19 @@ import Test.Hspec.Core.Spec
 import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import qualified Pact.JSON.Encode as J
+import Pact.JSON.Yaml
 
 -- -------------------------------------------------------------------------- --
 -- YAML Utils
 
-newtype ObjectResult a = ObjectResult [(T.Text, a)]
+newtype ArrayResult a = ArrayResult [(T.Text, a)]
   deriving newtype (Show, Eq)
 
-instance J.Encode a => J.Encode (ObjectResult a) where
-  build (ObjectResult r) = J.build $ J.Object r
+instance J.Encode a => J.Encode (ArrayResult a) where
+  build (ArrayResult r) = J.build $ J.Array $ J.Array <$> r
 
-instance FromJSON a => FromJSON (ObjectResult a) where
-  parseJSON = fmap ObjectResult . parseJSON
-
-encodeYaml :: J.Encode a => a -> B.ByteString
-encodeYaml = Y.encode
-  . either (error . show) id
-  . Y.decodeEither' @Value
-  . J.encodeStrict
-
-encodeYamlFile :: J.Encode a => FilePath -> a -> IO ()
-encodeYamlFile file = Y.encodeFile file
-  . either (error . show) id
-  . Y.decodeEither' @Value
-  . J.encodeStrict
+instance FromJSON a => FromJSON (ArrayResult a) where
+  parseJSON = fmap ArrayResult . parseJSON
 
 -- -------------------------------------------------------------------------- --
 -- Spec
@@ -126,7 +115,7 @@ allGasTestsAndGoldenShouldPass' = beforeAll (newIORef []) $ sequential $ do
     it "gas model tests should not return a PactError, but should pass golden" $
       golden "gas-model"
  where
-   formatResults = ObjectResult . fmap toGoldenOutput . concatMap snd . sortOn fst
+   formatResults = ArrayResult . fmap toGoldenOutput . concatMap snd . sortOn fst
 
 golden :: (FromJSON a, J.Encode a) => String -> a -> Golden a
 golden name obj = Golden
