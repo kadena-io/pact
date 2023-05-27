@@ -56,7 +56,7 @@ module Pact.Types.Util
 #define ENABLE_TOJSON
 
 -- Enable to make trace calls to toJSON (only for debugging purposes)
-#define ENABLE_TOJSON_WARNING
+-- #define ENABLE_TOJSON_WARNING
 
 import Data.Aeson
 import Data.Aeson.Types
