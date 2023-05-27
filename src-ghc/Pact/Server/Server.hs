@@ -39,13 +39,15 @@ import Data.Default
 
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (Update)
-import Pact.Types.SQLite
+import Pact.Types.SQLite hiding (_pragmas)
 import Pact.Types.Server
 import Pact.Types.Logger
 import Pact.Types.SPV
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
 import Pact.Server.PactService
+
+import qualified Pact.JSON.Encode as J
 
 data Config = Config {
   _port :: Word16,
@@ -58,8 +60,20 @@ data Config = Config {
   _gasRate :: Maybe Int,
   _execConfig :: Maybe ExecutionConfig
   } deriving (Eq,Show,Generic)
-instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
+
+instance J.Encode Config where
+  build o = J.object
+    [  "gasLimit" J..= fmap J.Aeson (_gasLimit o)
+    ,  "entity" J..= _entity o
+    ,  "persistDir" J..= fmap J.string (_persistDir o)
+    ,  "port" J..= J.Aeson (_port o)
+    ,  "logDir" J..= J.string (_logDir o)
+    ,  "pragmas" J..= J.Array (_pragmas o)
+    ,  "gasRate" J..= fmap J.Aeson (_gasRate o)
+    ,  "execConfig" J..= _execConfig o
+    ,  "verbose" J..= _verbose o
+    ]
 
 usage :: String
 usage =
