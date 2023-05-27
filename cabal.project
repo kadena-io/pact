@@ -29,7 +29,7 @@ source-repository-package
 
 source-repository-package
   type: git
-  tag: 4391716039dfd4500ee9b9b1deb344502ef15cca
+  tag: d5e136b36e321da636415a416b723614f5966c67
   location: https://github.com/kadena-io/pact-json
 
 -- Required for GHC-9.6
