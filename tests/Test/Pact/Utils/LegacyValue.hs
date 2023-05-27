@@ -62,6 +62,7 @@ import Pact.Types.Runtime
 import Pact.Types.Scheme
 import Pact.Types.SigData
 import Pact.Types.SPV
+import Pact.Types.SQLite
 import Pact.Types.Term.Arbitrary ()
 import Pact.PersistPactDb
 
@@ -911,6 +912,23 @@ spec_pact_persistPactDb =
       , Case checkLegacyValueCompat
       ]
 
+-- ---------------------------------------------- --
+spec_pact_types_sqlite :: Spec
+spec_pact_types_sqlite =
+  describe "Pact.Types.SQLite" $ do
+   spec_case @Pragma
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @SQLiteConfig
+      [ Pending checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+
 -- -------------------------------------------------------------------------- --
 --
 
@@ -1020,5 +1038,5 @@ spec = describe "JSON encoding backward compatibility" $ do
       ]
 
   spec_pact_types_rowData
-
   spec_pact_persistPactDb
+  spec_pact_types_sqlite
