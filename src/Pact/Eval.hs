@@ -744,6 +744,14 @@ fullyQualifyDefs info mdef defs = do
       Just t -> checkAddDep t *> return (Right t)
       Nothing -> action
 
+    resolveBareName memo f@(BareName fn _) = case HM.lookup fn defs of
+      Just _ -> do
+        let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
+        return (Left name') -- decl found
+      Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \case
+        Just mr -> return (Right mr) -- mod ref found
+        Nothing -> resolveError f
+
     resolveError f = lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
 
     -- | traverse to find deps and form graph
@@ -756,36 +764,17 @@ fullyQualifyDefs info mdef defs = do
             case (dm, f) of
               (Just t, _) -> checkAddDep t *> return (Right t) -- ref found
               -- for barenames, check decls and finally modules
-              (Nothing, Name (BareName fn _)) ->
-                case HM.lookup fn allDefs of
-                  Just _ -> do
-                    let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
-                    return (Left name') -- decl found
-                  Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \case
-                    Just mr -> return (Right mr) -- mod ref found
-                    Nothing -> resolveError f
+              (Nothing, Name bn@BareName{}) -> resolveBareName memo bn
               -- for qualified names, simply fail
               (Nothing, _) -> resolveError f
         else
         forM defTerm $ \case
-            f@(QName (QualifiedName qn fn _))
-              | qn == _mName mdef -> case HM.lookup fn allDefs of
-                  Just _ -> do
-                    let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
-                    return (Left name') -- decl found
+            -- If the qualified name refers to the current module, lookup the reference
+            -- in the same module.
+            (QName (QualifiedName qn fn i))
+              | qn == _mName mdef -> resolveBareName memo (BareName fn i)
 
-                  Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \case
-                    Just mr -> return (Right mr) -- mod ref found
-                    Nothing -> resolveError f
-
-            f@(Name (BareName fn _)) -> resolveOr f
-              (case HM.lookup fn allDefs of
-                 Just _ -> do
-                   let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
-                   return (Left name') -- decl found
-                 Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \case
-                   Just mr -> return (Right mr) -- mod ref found
-                   Nothing -> resolveError f)
+            f@(Name bn@BareName{}) -> resolveOr f (resolveBareName memo bn)
 
             f@QName{} -> resolveOr f (resolveError f)
             f@DName{} -> resolveOr f (resolveError f)
