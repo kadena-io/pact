@@ -752,33 +752,23 @@ fullyQualifyDefs info mdef defs = do
 
     resolveError f = lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
 
+    resolveName flagPact48Disabled memo = \case
+      (QName (QualifiedName qn fn i))
+        | not flagPact48Disabled && qn == _mName mdef -> resolveBareName memo (BareName fn i)
+      f  -> do
+        dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
+        case (dm, f) of
+          (Just t, _) -> checkAddDep t *> return (Right t) -- ref found
+            -- for barenames, check decls and finally modules
+          (Nothing, Name bn@BareName{}) -> resolveBareName memo bn
+              -- for qualified names, simply fail
+          (Nothing, _) -> resolveError f
+
     -- | traverse to find deps and form graph
     traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
       let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
       disablePact48 <- lift (isExecutionFlagSet FlagDisablePact48)
-      defTerm' <- if disablePact48 then
-        forM defTerm $ \(f :: Name) -> do
-            dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
-            case (dm, f) of
-              (Just t, _) -> checkAddDep t *> return (Right t) -- ref found
-              -- for barenames, check decls and finally modules
-              (Nothing, Name bn@BareName{}) -> resolveBareName memo bn
-              -- for qualified names, simply fail
-              (Nothing, _) -> resolveError f
-        else
-        forM defTerm $ \case
-            -- If the qualified name refers to the current module, lookup the reference
-            -- in the same module.
-            (QName (QualifiedName qn fn i))
-              | qn == _mName mdef -> resolveBareName memo (BareName fn i)
-
-            n -> do
-              dm <- lift (resolveRefFQN n n)
-              case dm of
-                Just t -> checkAddDep t *> return (Right t)
-                Nothing -> case n of
-                  Name bn@BareName{} -> resolveBareName memo bn
-                  other -> resolveError other
+      defTerm' <- forM defTerm $ \(f :: Name) -> resolveName disablePact48 memo f
 
       return (defTerm', defName', mapMaybe (either Just (const Nothing)) $ toList defTerm')
 
