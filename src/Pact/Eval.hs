@@ -319,8 +319,10 @@ eval' (TModule _tm@(MDModule m) bod i) =
         capMName <-
           ifExecutionFlagSet' FlagPreserveNsModuleInstallBug (_mName m) (_mName mangledM)
         void $ acquireModuleAdminCapability capMName $ return ()
-        modifying (evalRefs.rsLoadedModules) (HM.delete (_mName mangledM))
-        modifying (evalRefs.rsQualifiedDeps) (HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM))
+
+        unlessExecutionFlagSet FlagDisablePact48 $ do
+          modifying (evalRefs.rsLoadedModules) (HM.delete (_mName mangledM))
+          modifying (evalRefs.rsQualifiedDeps) (HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM))
 
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
@@ -740,10 +742,6 @@ fullyQualifyDefs info mdef defs = do
       Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
       _ -> pure ()
 
-    resolveOr f action = lift (resolveRefFQN f f) >>= \case
-      Just t -> checkAddDep t *> return (Right t)
-      Nothing -> action
-
     resolveBareName memo f@(BareName fn _) = case HM.lookup fn defs of
       Just _ -> do
         let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
@@ -774,11 +772,13 @@ fullyQualifyDefs info mdef defs = do
             (QName (QualifiedName qn fn i))
               | qn == _mName mdef -> resolveBareName memo (BareName fn i)
 
-            f@(Name bn@BareName{}) -> resolveOr f (resolveBareName memo bn)
-
-            f@QName{} -> resolveOr f (resolveError f)
-            f@DName{} -> resolveOr f (resolveError f)
-            f@FQName{} -> resolveError f
+            n -> do
+              dm <- lift (resolveRefFQN n n)
+              case dm of
+                Just t -> checkAddDep t *> return (Right t)
+                Nothing -> case n of
+                  Name bn@BareName{} -> resolveBareName memo bn
+                  other -> resolveError other
 
       return (defTerm', defName', mapMaybe (either Just (const Nothing)) $ toList defTerm')
 

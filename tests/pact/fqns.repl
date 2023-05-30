@@ -77,3 +77,66 @@
 
 (expect "selects correct test" (modB.get-test) "hello")
 (commit-tx)
+
+;;
+;; Module redeploy name resolution
+;;
+
+(begin-tx)
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+
+  (defcap test ()
+    (enforce false "boom"))
+
+  (defun f ()
+    (with-capability (test)
+      1))
+  )
+(commit-tx)
+
+(begin-tx)
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+  (defcap test ()
+    true)
+  (defun f ()
+    (with-capability (free.test-mod-redeploy-ref.test)
+      1))
+  )
+(expect "Namre resolution should find new reference" 1 (f))
+(commit-tx)
+
+; pact 4.7 behaviour
+
+(begin-tx)
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+
+  (defcap test ()
+    (enforce false "boom"))
+
+  (defun f ()
+    (with-capability (test)
+      1))
+  )
+(commit-tx)
+
+(begin-tx)
+(env-exec-config ["DisablePact48"])
+(namespace 'free)
+(module m g
+  (defcap g () true)
+  (defcap test ()
+    true)
+  (defun f ()
+    (with-capability (free.test-mod-redeploy-ref.test)
+      1))
+  )
+
+(expect-failure "Name resolution should find old reference of prev. deployed module" (f))
+
+(commit-tx)
