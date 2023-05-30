@@ -1,12 +1,13 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module      :  Pact.Compile
@@ -35,7 +36,6 @@ import Control.DeepSeq (NFData)
 import Control.Lens (Wrapped(..))
 import Control.Monad
 import qualified Data.Aeson as A
-import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
 import Data.Char (digitToInt)
 import Data.Decimal
@@ -55,6 +55,8 @@ import Pact.Types.Pretty (Pretty(..),viaShow)
 import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
 
+-- -------------------------------------------------------------------------- --
+-- Expression Parser
 
 
 -- | Main parser for Pact expressions.
@@ -63,7 +65,11 @@ expr = do
   delt <- position
   let inf = do
         end <- position
+#if LEGACY_PARSER == 1
         let len = bytes end - bytes delt
+#else
+        let len = column end - column delt
+#endif
         return $! Parsed delt (fromIntegral len)
       separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
   msum
@@ -141,7 +147,7 @@ newtype ParsedDecimal = ParsedDecimal Decimal
 
 instance A.FromJSON ParsedDecimal where
   parseJSON (A.String s) =
-    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
+    ParsedDecimal <$> case pactAttoParseOnly (unPactParser number) s of
                         Right (LDecimal d) -> return d
                         Right (LInteger i) -> return (fromIntegral i)
                         _ -> fail $ "Failure parsing decimal string: " ++ show s
@@ -167,7 +173,7 @@ newtype ParsedInteger = ParsedInteger Integer
 
 instance A.FromJSON ParsedInteger where
   parseJSON (A.String s) =
-    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
+    ParsedInteger <$> case pactAttoParseOnly (unPactParser number) s of
                         Right (LInteger i) -> return i
                         _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (A.Number n) = return $ ParsedInteger (round n)
@@ -181,16 +187,19 @@ instance A.ToJSON ParsedInteger where
 
 instance Wrapped ParsedInteger
 
+-- -------------------------------------------------------------------------- --
+-- Top Level Parsers
+
 -- | "Production" parser: atto, parse multiple exprs.
 parseExprs :: Text -> Either String [Exp Parsed]
-parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs <* TF.eof))
+parseExprs = pactAttoParseOnly (unPactParser (whiteSpace *> exprs <* TF.eof))
 {-# INLINABLE parseExprs #-}
 
 -- | Legacy version of "production" parser: atto, parse multiple exprs. This
 -- parser does not force EOF and thus accepts trailing inputs that are not valid
 -- pact code.
 legacyParseExprs :: Text -> Either String [Exp Parsed]
-legacyParseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
+legacyParseExprs = pactAttoParseOnly (unPactParser (whiteSpace *> exprs))
 {-# INLINABLE legacyParseExprs #-}
 
 -- | ParsedCode version of 'parseExprs'
@@ -209,7 +218,6 @@ _parseF p fp = do
   bs <- BS.readFile fp
   let s = unpack $ decodeUtf8 bs
   fmap (,s) <$> TF.parseFromFileEx p fp
-
 
 _parseS :: String -> TF.Result [Exp Parsed]
 _parseS = TF.parseString exprsOnly mempty

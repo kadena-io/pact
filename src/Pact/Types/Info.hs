@@ -71,7 +71,6 @@ instance Arbitrary Parsed where
         , Directed <$> genFilename <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 ]
 instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
-instance HasBytes Parsed where bytes = bytes . _pDelta
 instance Pretty Parsed where pretty = pretty . _pDelta
 
 
@@ -103,7 +102,7 @@ instance Default Info where def = Info Nothing
 instance SizeOf Info where
   sizeOf _ _ = 0
 
--- make an Info that refers to the indicated text
+-- | Make an Info that refers to the indicated text
 mkInfo :: Text -> Info
 mkInfo t = Info $ Just (Code t,Parsed delt len)
   where len = T.length t
