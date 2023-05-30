@@ -28,13 +28,14 @@ module Pact.Types.Typecheck
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,renderTcFailure,
     TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,
-    tcVarToTypes,tcYieldResume,tcDynEnv,
+    tcVarToTypes,tcYieldResume,tcDynEnv,tcBoundLambdas,
     DynEnv,
     TC (..), runTC, runTCState, mkTcState,
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
     Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,fRetId,
+    funName,
     Node (..),aId,aTy,
     Named (..),
     AstBindType (..),
@@ -161,11 +162,14 @@ data TcState = TcState {
   _tcVarToTypes :: !(M.Map (TypeVar UserType) (Type UserType)),
   -- | Used in AST walk to track step yields and resumes.
   _tcYieldResume :: !(Maybe (YieldResume Node)),
-  _tcDynEnv :: !DynEnv
+  -- | Associates interfaces with modules for modrefs
+  _tcDynEnv :: !DynEnv,
+  -- | Tracks let-bound lambda funs
+  _tcBoundLambdas :: !(M.Map TcId (Fun Node))
   } deriving (Eq,Show)
 
 mkTcState :: Int -> Bool -> DynEnv -> TcState
-mkTcState sup dbg dynEnv = TcState dbg sup def def def def def def dynEnv
+mkTcState sup dbg dynEnv = TcState dbg sup def def def def def def dynEnv def
 
 instance Pretty TcState where
   pretty TcState {..} = vsep
@@ -284,6 +288,11 @@ instance Pretty t => Pretty (Fun t) where
     , indent 2 $ vsep (map pretty _fBody)
     , ""
     ]
+
+-- | Get function name rep for debugging
+funName :: Fun t -> Text
+funName f@FDefun {} = asString (_fModule f) <> "." <> _fName f
+funName f = _fName f
 
 
 -- | Pair an AST with its type.

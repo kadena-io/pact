@@ -4565,6 +4565,13 @@ spec = describe "analyze" $ do
       |]
       "Vacuous property encountered!"
 
+  describe "regression #1182" $ do
+          expectVerified [text|
+               (defun test:[string] (x: [string])
+                  @model [(property (= x x))]
+                 (let ((default-val:[string] [])) default-val)
+                 x)
+           |]
   describe "partial bind (regression #1173)" $ do
     expectVerified [text|
       (defschema ty

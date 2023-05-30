@@ -319,6 +319,16 @@
   (defun tc-native-const:bool ()
     "test handling of native consts"
     (= 0 CHARSET_ASCII))
+
+  (defun tc-lambda-let:bool ()
+    "test let-bound lambdas"
+    (let ((lam (lambda (s:string) true)))
+      (lam "hello")))
+
+  (defun tc-lambda-anon:[bool] ()
+    "test anon lambdas"
+    (map (lambda (i) (> i 1)) [1 2 3]))
+
 )
 
 (create-table persons)
@@ -371,7 +381,8 @@
 
 ;; A module with incorrect annotations for a function's return type.
 ;; Runtime typechecking for function return types was added in
-;; pact-4.7.
+;; pact-4.7.1 and guarded via `DisableRuntimeReturnTypeChecking`.
+
 (module tc-test-function-return-types g
   (defcap g () true)
   (defun f:string () (+ 1 2))
@@ -387,7 +398,7 @@
   (tc-test-function-return-types.g (tc-test-function-return-types.f 1))
   )
 
-(env-exec-config ["DisablePact47"])
+(env-exec-config ["DisableRuntimeReturnTypeChecking"])
 (expect
   "evaluating ill-typed function should succeed with pact-4.7 features disabled"
   3
