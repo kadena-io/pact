@@ -319,6 +319,16 @@
   (defun tc-native-const:bool ()
     "test handling of native consts"
     (= 0 CHARSET_ASCII))
+
+  (defun tc-lambda-let:bool ()
+    "test let-bound lambdas"
+    (let ((lam (lambda (s:string) true)))
+      (lam "hello")))
+
+  (defun tc-lambda-anon:[bool] ()
+    "test anon lambdas"
+    (map (lambda (i) (> i 1)) [1 2 3]))
+
 )
 
 (create-table persons)

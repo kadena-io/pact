@@ -1,3 +1,5 @@
+- Support lambdas in static TC (#1232)
+
 4.7.1
 ---
 

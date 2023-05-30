@@ -99,10 +99,13 @@ prettyFail (Failure TcId{..} msg) = renderInfo _tiInfo ++ ": " ++ msg
 
 
 checkFun :: FilePath -> ModuleName -> Text -> Spec
-checkFun fp mn fn =
-  beforeAll (inferFun False fp mn fn) $
-    topLevelChecks (asString mn <> "." <> fn)
+checkFun = checkFun' False
 
+-- useful in ghci for testing a single fun with debug on
+checkFun' :: Bool -> FilePath -> ModuleName -> Text -> Spec
+checkFun' dbug fp mn fn =
+  beforeAll (inferFun dbug fp mn fn) $
+    topLevelChecks (asString mn <> "." <> fn)
 
 checkFuns :: Spec
 checkFuns = describe "pact typecheck" $ do
