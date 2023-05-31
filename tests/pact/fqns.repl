@@ -128,7 +128,7 @@
 (begin-tx)
 (env-exec-config ["DisablePact48"])
 (namespace 'free)
-(module m g
+(module test-mod-redeploy-ref g
   (defcap g () true)
   (defcap test ()
     true)
