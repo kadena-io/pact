@@ -43,7 +43,6 @@ import Pact.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 
-
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
 import Data.Maybe
@@ -403,8 +402,8 @@ setmsg i as = case as of
     case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
       Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
       Right v -> go v
-  [TObject (Object om _ _ _) _] -> go (toLegacyJson (fmap toPactValueLenient om))
-  [a] -> go (toLegacyJson a)
+  [TObject (Object om _ _ _) _] -> go (toLegacyJsonViaEncode (fmap toPactValueLenient om))
+  [a] -> go (toLegacyJsonViaEncode a)
   _ -> argsError i as
   where go (v :: LegacyValue) = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 

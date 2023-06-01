@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -32,15 +33,20 @@ module Pact.Types.Names
   , dynInfo, dynInterfaces, dynMember, dynRefArg
   , BareName(..)
   , FullyQualifiedName(..)
+
+  -- * Test Utils
+  , arbitraryName
   ) where
 
 
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
-import Data.Aeson (ToJSON(..), FromJSON(..), withText, pairs, object, (.=), FromJSONKey(..), ToJSONKey(..), ToJSONKeyFunction(..), FromJSONKeyFunction(..), Value(String))
+import Data.Aeson hiding ((<?>))
+#ifdef PACT_TOJSON
 import Data.Aeson.Encoding (text)
 import qualified Data.Aeson.Key as AK
+#endif
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString.Short as SB
 import Data.Default
@@ -67,7 +73,11 @@ import Pact.JSON.Legacy.Hashable
 import qualified Pact.JSON.Encode as J
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
-  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf, J.Encode)
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (FromJSON, IsString, AsString, Hashable, Pretty, NFData, SizeOf, J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
   deriving newtype (LegacyHashable)
 
 instance Arbitrary NamespaceName where
@@ -118,6 +128,7 @@ instance Pretty ModuleName where
   pretty (ModuleName n Nothing)   = pretty n
   pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
 
+#ifdef PACT_TOJSON
 moduleNameProperties :: JsonProperties ModuleName
 moduleNameProperties o =
   [ "namespace" .= _mnNamespace o
@@ -130,6 +141,7 @@ instance ToJSON ModuleName where
   toEncoding = pairs . mconcat . moduleNameProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode ModuleName where
   build o = J.object
@@ -153,7 +165,11 @@ parseModuleName = AP.parseOnly (moduleNameParser <* eof)
 
 
 newtype DefName = DefName { _unDefName :: Text }
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData,J.Encode)
+  deriving (Show,Eq,Ord)
+  deriving newtype (IsString,FromJSON,AsString,Hashable,Pretty,NFData,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance SizeOf DefName where
   sizeOf ver (DefName n) = sizeOf ver n
@@ -185,11 +201,13 @@ instance SizeOf QualifiedName where
   sizeOf ver (QualifiedName modName n i) =
     (constructorCost 3) + (sizeOf ver modName) + (sizeOf ver n) + (sizeOf ver i)
 
+#ifdef PACT_TOJSON
 instance ToJSON QualifiedName where
   toJSON = enableToJSON "Pact.Types.Names.QualifiedName" . toJSON . renderCompactString
   toEncoding = toEncoding . renderCompactString
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode QualifiedName where
   build = J.build . T.pack . renderCompactString
@@ -239,6 +257,7 @@ instance NFData DynamicName
 instance Arbitrary DynamicName where
   arbitrary = DynamicName <$> genBareText <*> genBareText <*> arbitrary <*> arbitrary
 
+#ifdef PACT_TOJSON
 dynamicNameProperties :: JsonProperties DynamicName
 dynamicNameProperties o =
   [ "interfaces" .= _dynInterfaces o
@@ -253,6 +272,7 @@ instance ToJSON DynamicName where
   toEncoding = pairs . mconcat . dynamicNameProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode DynamicName where
   build o = J.object
@@ -288,11 +308,13 @@ fqdnJsonText :: FullyQualifiedName -> T.Text
 fqdnJsonText (FullyQualifiedName n (ModuleName m ns) hsh) =
     maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
 
+#ifdef PACT_TOJSON
 instance ToJSON FullyQualifiedName where
   toJSON = toJSON . fqdnJsonText
   toEncoding = toEncoding .fqdnJsonText
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode FullyQualifiedName where
   build = J.build . fqdnJsonText
@@ -305,8 +327,11 @@ instance FromJSON FullyQualifiedName where
 
 instance FromJSONKey FullyQualifiedName where
   fromJSONKey = FromJSONKeyTextParser $ parseJSON . String
+
+#ifdef PACT_TOJSON
 instance ToJSONKey FullyQualifiedName where
   toJSONKey = ToJSONKeyText (AK.fromText . fqdnJsonText) (text . fqdnJsonText)
+#endif
 
 instance SizeOf FullyQualifiedName
 
@@ -347,6 +372,16 @@ instance Arbitrary Name where
     , (1, FQName <$> arbitrary)
     ]
 
+-- | Use 'arbitraryName (1,1,1,0)' for JSON roundtripable names
+--
+arbitraryName :: (Int, Int, Int, Int) -> Gen Name
+arbitraryName (f,q,n,d) = frequency
+  [ (f, FQName <$> arbitrary)
+  , (q, QName <$> arbitrary)
+  , (n, Name <$> arbitrary)
+  , (d, DName <$> arbitrary)
+  ]
+
 instance HasInfo Name where
   getInfo (QName q) = getInfo q
   getInfo (Name n) = getInfo n
@@ -368,11 +403,13 @@ instance SizeOf Name where
 
 instance AsString Name where asString = renderCompactText
 
+#ifdef PACT_TOJSON
 instance ToJSON Name where
   toJSON = toJSON . renderCompactString
   toEncoding = toEncoding . renderCompactString
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode Name where
   build = J.build . pack . renderCompactString
@@ -447,7 +484,11 @@ instance Ord Name where
 
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData,Hashable,LegacyHashable,J.Encode)
+  deriving (Show,Eq,Ord)
+  deriving newtype (IsString,FromJSON,AsString,NFData,Hashable,LegacyHashable,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name
@@ -459,7 +500,12 @@ instance Arbitrary NativeDefName where
   arbitrary = NativeDefName <$> genBareText
 
 newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,AsString,Hashable,Show,NFData,ToJSON,FromJSON,J.Encode)
+  deriving (Show,Eq,Ord)
+  deriving newtype (IsString,AsString,Hashable,NFData,FromJSON,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
+
 instance Pretty TableName where pretty (TableName s) = pretty s
 
 instance SizeOf TableName where

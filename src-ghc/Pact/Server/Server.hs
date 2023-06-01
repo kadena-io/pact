@@ -1,5 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -21,33 +22,34 @@ module Pact.Server.Server
 
 import Control.Concurrent
 import Control.Concurrent.Async (async, link, withAsync)
+import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Exception
 
 import Data.Aeson
-import Data.Maybe
-import qualified Data.Yaml as Y
 import qualified Data.ByteString.Char8 as B8
-import qualified Data.HashMap.Strict as HashMap
-import Data.Foldable (traverse_)
-import Data.Word
-import GHC.Generics
-import System.Log.FastLogger
-import System.Directory (createDirectoryIfMissing)
 import Data.Default
+import Data.Foldable (traverse_)
+import qualified Data.HashMap.Strict as HashMap
+import Data.Maybe
+import Data.Word
+import qualified Data.Yaml as Y
 
-import Pact.Types.Command
-import Pact.Types.Runtime hiding (Update)
-import Pact.Types.SQLite hiding (_pragmas)
-import Pact.Types.Server
-import Pact.Types.Logger
-import Pact.Types.SPV
+import GHC.Generics
+
+import qualified Pact.JSON.Encode as J
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
 import Pact.Server.PactService
+import Pact.Types.Command
+import Pact.Types.Logger
+import Pact.Types.Runtime hiding (Update)
+import Pact.Types.Server
+import Pact.Types.SPV
+import Pact.Types.SQLite hiding (_pragmas)
 
-import qualified Pact.JSON.Encode as J
+import System.Directory (createDirectoryIfMissing)
+import System.Log.FastLogger
 
 data Config = Config {
   _port :: Word16,
@@ -60,7 +62,14 @@ data Config = Config {
   _gasRate :: Maybe Int,
   _execConfig :: Maybe ExecutionConfig
   } deriving (Eq,Show,Generic)
-instance FromJSON Config where parseJSON = lensyParseJSON 1
+
+#ifdef PACT_TOJSON
+instance ToJSON Config where
+  toJSON = lensyToJSON 1
+#endif
+
+instance FromJSON Config where
+  parseJSON = lensyParseJSON 1
 
 instance J.Encode Config where
   build o = J.object
@@ -76,18 +85,19 @@ instance J.Encode Config where
     ]
 
 usage :: String
-usage =
-  "Config file is YAML format with the following properties: \n\
-  \port       - HTTP server port \n\
-  \persistDir - Directory for database files. \n\
-  \             If ommitted, runs in-memory only. \n\
-  \logDir     - Directory for HTTP logs \n\
-  \pragmas    - SQLite pragmas to use with persistence DBs \n\
-  \entity     - Entity name for simulating privacy, defaults to \"entity\" \n\
-  \gasLimit   - Gas limit for each transaction, defaults to 0 \n\
-  \gasRate    - Gas price per action, defaults to 0 \n\
-  \flags      - Pact runtime execution flags \n\
-  \\n"
+usage = unlines
+  [ "Config file is YAML format with the following properties:"
+  , "port       - HTTP server port"
+  , "persistDir - Directory for database files."
+  , "             If ommitted, runs in-memory only."
+  , "logDir     - Directory for HTTP logs"
+  , "pragmas    - SQLite pragmas to use with persistence DBs"
+  , "entity     - Entity name for simulating privacy, defaults to \"entity\""
+  , "gasLimit   - Gas limit for each transaction, defaults to 0"
+  , "gasRate    - Gas price per action, defaults to 0"
+  , "flags      - Pact runtime execution flags"
+  , "\n"
+  ]
 
 serve :: FilePath -> SPVSupport -> IO ()
 serve = serve_ False

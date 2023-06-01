@@ -1,10 +1,11 @@
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Capability
@@ -70,6 +71,7 @@ instance NFData SigCapability
 instance Pretty SigCapability where
   pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
 
+#ifdef PACT_TOJSON
 sigCapabilityProperties :: JsonProperties SigCapability
 sigCapabilityProperties o =
   [ "args" .= _scArgs o
@@ -82,6 +84,7 @@ instance ToJSON SigCapability where
   toEncoding = pairs . mconcat . sigCapabilityProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode SigCapability where
   build o = J.object
@@ -96,7 +99,7 @@ instance FromJSON SigCapability where
     <*> o .: "args"
 
 instance Arbitrary SigCapability where
-  arbitrary = SigCapability <$> arbitrary <*> resize 10 arbitrary
+  arbitrary = SigCapability <$> arbitrary <*> scale (min 10) arbitrary
 
 -- | Various results of evaluating a capability.
 -- Note: dupe managed install is an error, thus no case here.

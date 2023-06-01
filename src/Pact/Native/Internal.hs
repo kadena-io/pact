@@ -40,29 +40,33 @@ module Pact.Native.Internal
   ) where
 
 import Bound
+
 import Control.Lens hiding (Fold)
 import Control.Monad
+
 import Data.Aeson hiding (Object)
+import qualified Data.Aeson as A
 import qualified Data.Aeson.Key as AK
-import qualified Data.Aeson.Lens as A
+import qualified Data.Aeson.KeyMap as AKM
 import Data.Default
 import Data.Foldable
-import qualified Data.Vector as V
-import Data.Text (Text)
-import Unsafe.Coerce
 import Data.Functor (($>))
+import Data.Text (Text)
+import qualified Data.Vector as V
 
 import Pact.Eval
 import Pact.Gas
+import qualified Pact.JSON.Legacy.HashMap as LHM
+import Pact.JSON.Legacy.Value
+import Pact.Runtime.Utils
 import Pact.Types.Capability
+import Pact.Types.KeySet (parseAnyKeysetName)
 import Pact.Types.Native
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Pact.Runtime.Utils
-import Pact.Types.KeySet (parseAnyKeysetName)
-import Pact.JSON.Legacy.Value
-import qualified Pact.JSON.Legacy.HashMap as LHM
+
+import Unsafe.Coerce
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
@@ -78,22 +82,25 @@ colsToList argFail _ = argFail
 parseMsgKey :: (FromJSON t) => FunApp -> String -> Text -> Eval e t
 parseMsgKey f s t = parseMsgKey' f s (Just t)
 
-parseMsgKey' :: (FromJSON t) => FunApp -> String -> Maybe Text -> Eval e t
+parseMsgKey' :: FromJSON t => FunApp -> String -> Maybe Text -> Eval e t
 parseMsgKey' i msg key = do
   b <- view (eeMsgBody . to _getLegacyValue)
-  let go v = case fromJSON v of
-        Success t -> return t
-        Error e -> evalError' i $ prettyString msg <> ": parse failed: "
-                   <> prettyString e <> ": " <> pretty v
   case key of
     Nothing -> go b
-    Just k -> case preview (A.key $ AK.fromText k) b of
+    Just k -> case getKey k b of
       Nothing ->
         ifExecutionFlagSet FlagDisablePact47
           (evalError' i $ "No such key in message: " <> pretty k)
           (failTx' i $ "No such key in message: " <> pretty k)
       Just v -> go v
+ where
+  go v = case fromJSON v of
+    Success t -> return t
+    Error e -> evalError' i $ prettyString msg <> ": parse failed: "
+      <> prettyString e <> ": " <> pretty v
 
+  getKey k (A.Object o) = AKM.lookup (AK.fromText k) o
+  getKey _ _ = Nothing
 
 bindReduce :: [BindPair (Term Ref)] -> Scope Int Term Ref -> Info ->
               (Text -> Maybe (Term Name)) -> Eval e (Term Name)

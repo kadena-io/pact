@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -24,7 +25,6 @@ module Pact.Types.Info
    mkInfo,
    renderInfo,
    renderParsed,
-   parseRenderedInfo,
    HasInfo(..)
    ) where
 
@@ -39,7 +39,6 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Text as T
 import Data.Aeson
 import qualified Data.Aeson.Types as A
-import Data.Attoparsec.Text as AP
 import Data.String
 import Data.Default
 import GHC.Generics (Generic)
@@ -66,22 +65,32 @@ data Parsed = Parsed {
   } deriving (Eq,Show,Ord,Generic)
 
 instance Arbitrary Parsed where
-  arbitrary = Parsed <$> genDelta <*> arbitrary
+  -- Renderer and parser ignore length, so we set it to 0
+  arbitrary = Parsed <$> genDelta <*> pure 0
     where
       genPositiveInt64 = getPositive <$> arbitrary
       genFilename = encodeUtf8 <$> genBareText
       genDelta = oneof
-        [ Columns <$> genPositiveInt64 <*> genPositiveInt64
-        , Tab <$> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64
-        , Lines <$> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64
-        , Directed <$> genFilename <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 <*> genPositiveInt64 ]
+        -- The parser assumes that the second number of columns is always 0
+        [ Columns <$> genPositiveInt64 <*> pure 0
+
+        -- Tab is not supported by parser
+        -- The parser always assumes that the last to numbers are zero
+        , Lines <$> genPositiveInt64 <*> genPositiveInt64 <*> pure 0 <*> pure 0
+
+        -- The parser always assumes that the last to numbers are zero
+        , Directed <$> genFilename <*> genPositiveInt64 <*> genPositiveInt64 <*> pure 0 <*> pure 0 ]
 instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
 instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString,SizeOf,J.Encode)
+  deriving (Eq,Ord,Generic)
+  deriving newtype (IsString,FromJSON,Semigroup,Monoid,NFData,AsString,SizeOf,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 instance Show Code where show = T.unpack . _unCode
 instance Pretty Code where
   pretty (Code c)
@@ -91,11 +100,12 @@ instance Pretty Code where
     where maxLen = 30
 
 instance Arbitrary Code where
-  arbitrary = Code <$> resize 1000 genBareText
+  arbitrary = Code <$> scale (min 1000) genBareText
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-newtype Info = Info { _iInfo :: Maybe (Code,Parsed) } deriving (Eq,Ord,Generic,Arbitrary)
+newtype Info = Info { _iInfo :: Maybe (Code,Parsed) }
+  deriving (Eq,Ord,Generic,Arbitrary)
 
 instance NFData Info
 instance Show Info where
@@ -139,36 +149,12 @@ renderParsed (Parsed d _) = case d of
   (Columns c _) -> "<interactive>:0:" ++ show c
   (Tab _ c _ ) -> "<interactive>:0:" ++ show c
 
--- | Lame parsing of 'renderInfo' parsing for UX only.
-parseRenderedInfo :: AP.Parser Info
-parseRenderedInfo = peekChar >>= \case
-  Nothing -> return (Info Nothing)
-  Just _ -> do
-    fOrI <- takeTill isColon
-    colon'
-    ln <- round <$> scientific
-    colon'
-    cn <- round <$> scientific
-    let delt = case fOrI of
-          "<interactive>"
-            -- heuristic: ln == 0 means Columns ...
-            | ln == 0 -> Columns cn 0
-            -- otherwise Lines, which reverses the 'succ' above
-            | otherwise -> Lines (pred ln) cn 0 0
-          f -> Directed (encodeUtf8 f) (pred ln) cn 0 0
-    return (Info (Just ("",Parsed delt 0)))
-  where
-    colon' = void $ char ':'
-    isColon = (== ':')
-
-_parseInfo :: Text -> Either String Info
-_parseInfo = AP.parseOnly parseRenderedInfo
-
 class HasInfo a where
   getInfo :: a -> Info
 
 instance HasInfo Info where getInfo = id
 
+#ifdef PACT_TOJSON
 instance ToJSON Info where
   toJSON (Info Nothing) = Null
   toJSON (Info (Just (code,Parsed{..}))) = object
@@ -191,6 +177,7 @@ instance ToJSON Info where
     , "c" .= code
     ]
    where pl = _pLength
+#endif
 
 instance J.Encode Info where
   build (Info Nothing) = J.null
@@ -207,7 +194,9 @@ instance J.Encode Info where
     i :: forall n . n -> J.Aeson n
     i = J.Aeson
 
-
+-- | This instance is not used everywhere. For instance, the FromJSON instance
+-- of PactError uses a custom 'Info' parser that uses 'parseRenderedInfo'.
+--
 instance FromJSON Info where
   parseJSON Null = pure $ Info Nothing
   parseJSON v = withObject "Info" go v

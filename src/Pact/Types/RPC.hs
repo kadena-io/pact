@@ -1,10 +1,11 @@
 {-# LANGUAGE DeriveTraversable #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.RPC
@@ -20,14 +21,18 @@ module Pact.Types.RPC
     PactRPC(..)
   , ExecMsg(..)
   , ContMsg(..)
+#ifdef PACT_TOJSON
   , contMsgJsonPairs
+#endif
   ) where
 
 import Control.Applicative
 import Control.DeepSeq
 
 -- Remove once migration is complete
+#ifdef PACT_TOJSON
 import Data.Aeson (toEncoding)
+#endif
 
 import GHC.Generics
 
@@ -39,7 +44,9 @@ import Pact.Types.SPV
 import Pact.JSON.Legacy.Value
 
 import Pact.JSON.Decode
+#ifdef PACT_TOJSON
 import Pact.JSON.Value
+#endif
 import qualified Pact.JSON.Encode as J
 
 
@@ -55,6 +62,7 @@ instance FromJSON c => FromJSON (PactRPC c) where
             (Exec <$> o .: "exec") <|> (Continuation <$> o .: "cont")
     {-# INLINE parseJSON #-}
 
+#ifdef PACT_TOJSON
 pactRpcProperties :: ToJSON c => JsonProperties (PactRPC c)
 pactRpcProperties (Exec p) = ["exec" .= p]
 pactRpcProperties (Continuation p) = ["cont" .= p]
@@ -64,6 +72,7 @@ instance ToJSON c => ToJSON (PactRPC c) where
     toEncoding = pairs . mconcat . pactRpcProperties
     {-# INLINE toJSON #-}
     {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode c => J.Encode (PactRPC c) where
   build (Exec p) = J.object ["exec" J..= p]
@@ -85,6 +94,7 @@ instance FromJSON c => FromJSON (ExecMsg c) where
           ExecMsg <$> o .: "code" <*> o .: "data"
   {-# INLINE parseJSON #-}
 
+#ifdef PACT_TOJSON
 execMsgProperties :: ToJSON c => JsonProperties (ExecMsg c)
 execMsgProperties o =
   [ "data" .= _pmData o
@@ -97,6 +107,7 @@ instance ToJSON c => ToJSON (ExecMsg c) where
   toEncoding = pairs . mconcat . execMsgProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode c => J.Encode (ExecMsg c) where
   build o = J.object
@@ -124,6 +135,7 @@ instance FromJSON ContMsg where
           <*> o .: "proof"
   {-# INLINE parseJSON #-}
 
+#ifdef PACT_TOJSON
 contMsgProperties :: JsonProperties ContMsg
 contMsgProperties o =
   [ "proof" .= _cmProof o
@@ -139,6 +151,7 @@ instance ToJSON ContMsg where
   toEncoding = pairs . mconcat . contMsgProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode ContMsg where
   build o = J.object
@@ -158,7 +171,9 @@ instance Arbitrary ContMsg where
     <*> pure (toLegacyJson $ String "JSON VALUE")
     <*> arbitrary
 
+#ifdef PACT_TOJSON
 contMsgJsonPairs :: (Monoid a, KeyValue a) => ContMsg -> a
 contMsgJsonPairs = mconcat . contMsgProperties
 {-# INLINE contMsgJsonPairs #-}
+#endif
 

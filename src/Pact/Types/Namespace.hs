@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -47,6 +48,7 @@ instance (SizeOf n) => SizeOf (Namespace n) where
   sizeOf ver (Namespace name ug ag) =
     (constructorCost 3) + (sizeOf ver name) + (sizeOf ver ug) + (sizeOf ver ag)
 
+#ifdef PACT_TOJSON
 namespaceProperties :: ToJSON a => JsonProperties (Namespace a)
 namespaceProperties o =
   [ "admin" .= _nsAdmin o
@@ -60,6 +62,7 @@ instance ToJSON a => ToJSON (Namespace a) where
   toEncoding = pairs . mconcat . namespaceProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode a => J.Encode (Namespace a) where
   build o = J.object

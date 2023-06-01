@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -25,7 +26,10 @@ import GHC.Generics
 import Control.DeepSeq
 import Control.Lens
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON)
+#ifdef PACT_TOJSON
+import Data.Aeson (ToJSON)
+#endif
 import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Data.Text
@@ -46,10 +50,13 @@ newtype ChainId = ChainId { _chainId :: Text }
   deriving stock (Eq, Generic)
   deriving newtype
     ( Show, Pretty, IsString
-    , ToJSON, FromJSON
+    , FromJSON
     , Serialize, ToTerm, NFData
     , SizeOf, AsString, J.Encode
     )
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Arbitrary ChainId where
   arbitrary = ChainId <$> genBareText
@@ -70,9 +77,12 @@ newtype NetworkId = NetworkId { _networkId :: Text }
   deriving stock (Eq, Generic)
   deriving newtype
     ( Show, Pretty, IsString
-    , ToJSON, FromJSON, J.Encode
+    , FromJSON, J.Encode
     , Serialize, ToTerm, NFData
     )
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Wrapped NetworkId
 

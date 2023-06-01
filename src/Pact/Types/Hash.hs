@@ -33,7 +33,9 @@ import Data.Serialize (Serialize(..))
 import Pact.Types.Pretty
 import Pact.Types.Util
 import Data.Aeson
+#ifdef PACT_TOJSON
 import Data.Aeson.Types
+#endif
 import GHC.Generics
 import Pact.Types.SizeOf
 import Data.Text (Text)
@@ -76,15 +78,23 @@ instance Pretty Hash where
   pretty = pretty . asString
 
 instance AsString Hash where
-  asString (Hash h) = decodeUtf8 (encodeBase64UrlUnpadded $ fromShort h)
+  asString = hashToText
+
+hashToText :: Hash -> Text
+hashToText (Hash h) = toB64UrlUnpaddedText $ fromShort h
 
 instance NFData Hash
 
+#ifdef PACT_TOJSON
 instance ToJSON Hash where
   toJSON = enableToJSON "Pact.Types.Hash.Hash" . String . hashToText
   toEncoding = toEncoding . hashToText
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+instance ToJSONKey Hash where
+    toJSONKey = toJSONKeyText hashToText
+    {-# INLINE toJSONKey #-}
+#endif
 
 instance J.Encode Hash where
   build = J.build . hashToText
@@ -94,9 +104,6 @@ instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
   {-# INLINE parseJSON #-}
 
-instance ToJSONKey Hash where
-    toJSONKey = toJSONKeyText hashToText
-    {-# INLINE toJSONKey #-}
 instance FromJSONKey Hash where
     fromJSONKey = FromJSONKeyTextParser parseText
     {-# INLINE fromJSONKey #-}
@@ -104,10 +111,6 @@ instance FromJSONKey Hash where
 instance ParseText Hash where
   parseText s = Hash . toShort <$> parseB64UrlUnpaddedText s
   {-# INLINE parseText #-}
-
-
-hashToText :: Hash -> Text
-hashToText (Hash h) = toB64UrlUnpaddedText $ fromShort h
 
 
 -- | All supported hashes in Pact (although not necessarily GHCJS pact).
@@ -148,11 +151,13 @@ instance AsString (TypedHash h) where
 
 instance NFData (TypedHash h)
 
+#ifdef PACT_TOJSON
 instance ToJSON (TypedHash h) where
   toJSON = String . typedHashToText
   toEncoding = toEncoding . typedHashToText
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode (TypedHash h) where
   build = J.build . typedHashToText

@@ -57,7 +57,7 @@ import qualified Pact.JSON.Encode as J
 import Pact.JSON.Yaml
 
 -- -------------------------------------------------------------------------- --
--- YAML Utils
+-- Yaml Encoding Utils
 
 newtype ArrayResult a = ArrayResult [(T.Text, a)]
   deriving newtype (Show, Eq)

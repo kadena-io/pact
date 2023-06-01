@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -52,14 +53,20 @@ import Test.QuickCheck
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
-import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON, JsonProperties, enableToJSON)
+import Pact.Types.Util (AsString, lensyParseJSON)
+#ifdef PACT_TOJSON
+import Pact.Types.Util (lensyToJSON, JsonProperties, enableToJSON)
+#endif
 
 import qualified Pact.JSON.Encode as J
 
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.
 newtype EntityName = EntityName Text
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString, J.Encode)
+  deriving newtype (Show, NFData, Hashable, Serialize, Default, FromJSON, IsString, AsString, J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Arbitrary EntityName where
   arbitrary = EntityName <$> arbitrary
@@ -68,7 +75,10 @@ instance Arbitrary EntityName where
 --
 newtype TTLSeconds = TTLSeconds ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize, J.Encode)
+  deriving newtype (Show, Num, NFData, FromJSON, Serialize, J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Arbitrary TTLSeconds where
   arbitrary = TTLSeconds <$> arbitrary
@@ -77,7 +87,10 @@ instance Arbitrary TTLSeconds where
 --
 newtype TxCreationTime = TxCreationTime ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize, J.Encode)
+  deriving newtype (Show, Num, NFData, FromJSON, Serialize, J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Arbitrary TxCreationTime where
   arbitrary = TxCreationTime <$> arbitrary
@@ -102,6 +115,7 @@ instance Serialize Address
 instance Arbitrary Address where
   arbitrary = Address <$> arbitrary <*> arbitrary
 
+#ifdef PACT_TOJSON
 addressProperties :: JsonProperties Address
 addressProperties o =
   [ "to" .= _aTo o
@@ -114,6 +128,7 @@ instance ToJSON Address where
   toEncoding = pairs . mconcat . addressProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode Address where
   build o = J.object
@@ -135,6 +150,7 @@ instance Default PrivateMeta where def = PrivateMeta def
 instance Arbitrary PrivateMeta where
   arbitrary = PrivateMeta <$> arbitrary
 
+#ifdef PACT_TOJSON
 privateMetaProperties :: JsonProperties PrivateMeta
 privateMetaProperties o = [ "address" .= _pmAddress o ]
 {-# INLINE privateMetaProperties #-}
@@ -144,6 +160,7 @@ instance ToJSON PrivateMeta where
   toEncoding = pairs . mconcat . privateMetaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PrivateMeta where
   build o = J.object [ "address" J..= _pmAddress o ]
@@ -182,6 +199,7 @@ instance Arbitrary PublicMeta where
     <*> arbitrary
     <*> arbitrary
 
+#ifdef PACT_TOJSON
 publicMetaProperties :: JsonProperties PublicMeta
 publicMetaProperties o =
   [ "creationTime" .= _pmCreationTime o
@@ -198,6 +216,7 @@ instance ToJSON PublicMeta where
   toEncoding = pairs . mconcat . publicMetaProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PublicMeta where
   build o = J.object
@@ -253,6 +272,7 @@ data PublicData = PublicData
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData
 
+#ifdef PACT_TOJSON
 publicDataProperties :: JsonProperties PublicData
 publicDataProperties o =
   [ "publicMeta" .= _pdPublicMeta o
@@ -267,6 +287,7 @@ instance ToJSON PublicData where
   toEncoding = pairs. mconcat . publicDataProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PublicData where
   build o = J.object

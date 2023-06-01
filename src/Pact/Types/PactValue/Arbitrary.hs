@@ -36,17 +36,20 @@ instance Arbitrary PactValue where
 -- Helper Functions
 
 -- | Determines how deep a generated PactValue _could_ be.
--- Restricts how many times a recursive PactValue constructor (i.e. PObject, PList, and PGuard)
--- can be called when creating a PactValue.
+-- Restricts how many times a recursive PactValue constructor (i.e. PObject,
+-- PList, and PGuard) can be called when creating a PactValue.
+--
 genSomePactValue :: PactValueGeneratorSize -> Gen PactValue
 genSomePactValue TerminateFast = oneof
   [ PLiteral <$> arbitrary
-  , PGuard <$> oneof genTerminatingPactValueGuard ]
+  , PGuard <$> oneof genTerminatingPactValueGuard
+  ]
 genSomePactValue s = oneof
   [ PLiteral <$> arbitrary
   , PList <$> genPactValueList (decreaseGenSize s)
   , PObject <$> genPactValueObjectMap (decreaseGenSize s)
-  , PGuard <$> genPactValueGuard (decreaseGenSize s) ]
+  , PGuard <$> genPactValueGuard (decreaseGenSize s)
+  ]
 
 data PactValueGeneratorSize = TerminateFast | RecurseOnce | RecurseTwice
 
@@ -60,15 +63,17 @@ genTerminatingPactValueGuard =
   [ GPact <$> arbitrary
   , GKeySet <$> arbitrary
   , GKeySetRef <$> arbitrary
-  , GModule <$> arbitrary ]
+  , GModule <$> arbitrary
+  ]
 
 genPactValueObjectMap :: PactValueGeneratorSize -> Gen (ObjectMap PactValue)
 genPactValueObjectMap genSize = ObjectMap . M.fromList <$> genMap
-  where genOneKeyValue = do
-          f <- arbitrary :: Gen FieldKey
-          pv <- genSomePactValue genSize
-          pure (f, pv)
-        genMap = listOf1 genOneKeyValue
+ where
+  genOneKeyValue = do
+    f <- arbitrary :: Gen FieldKey
+    pv <- genSomePactValue genSize
+    pure (f, pv)
+  genMap = listOf1 genOneKeyValue
 
 genPactValueList :: PactValueGeneratorSize -> Gen (V.Vector PactValue)
 genPactValueList genSize = V.fromList <$> listOf1 (genSomePactValue genSize)
@@ -79,6 +84,6 @@ genPactValueGuard genSize = oneof (genTerminatingPactValueGuard <> [genUserGuard
 genUserGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
 genUserGuard genSize = do
   args <- listOf1 (genSomePactValue genSize)
-  fun <- arbitrary  -- TODO enforce that it's a non-native Name
+  fun <- arbitraryName (0,1,1,0)
   pure $ GUser $ UserGuard fun args
 

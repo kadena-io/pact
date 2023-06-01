@@ -4,7 +4,6 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -13,6 +12,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.Command
@@ -101,6 +102,7 @@ data Command a = Command
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 
+#ifdef PACT_TOJSON
 commandProperties :: ToJSON a => JsonProperties (Command a)
 commandProperties o =
   [ "hash" .= _cmdHash o
@@ -114,6 +116,7 @@ instance (ToJSON a) => ToJSON (Command a) where
   toEncoding = pairs . mconcat . commandProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
@@ -149,8 +152,8 @@ type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
 -- CREATING AND SIGNING TRANSACTIONS
 
 mkCommand
-  :: ToJSON m
-  => ToJSON c
+  :: J.Encode c
+  => J.Encode m
   => [SomeKeyPairCaps]
   -> m
   -> Text
@@ -158,8 +161,9 @@ mkCommand
   -> PactRPC c
   -> IO (Command ByteString)
 mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
-  where encodedPayload = J.encodeStrict $ toLegacyJson payload
-        payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
+  where
+    encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
+    payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
 keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
@@ -270,6 +274,7 @@ data Signer = Signer
 
 instance NFData Signer
 
+#ifdef PACT_TOJSON
 signerProperties :: JsonMProperties Signer
 signerProperties o = mconcat
   [ "addr" .?= _siAddress o
@@ -285,6 +290,7 @@ instance ToJSON Signer where
   toEncoding = pairs . signerProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode Signer where
   build o = J.object
@@ -316,6 +322,7 @@ data Payload m c = Payload
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
 
+#ifdef PACT_TOJSON
 payloadProperties :: ToJSON m => ToJSON a => JsonProperties (Payload m a)
 payloadProperties o =
   [ "networkId" .= _pNetworkId o
@@ -331,6 +338,7 @@ instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
   toEncoding = pairs . mconcat . payloadProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
   build o = J.object
@@ -358,6 +366,7 @@ newtype UserSig = UserSig { _usSig :: Text }
 instance NFData UserSig
 instance Serialize UserSig
 
+#ifdef PACT_TOJSON
 userSigProperties :: JsonProperties UserSig
 userSigProperties o = [ "sig" .= _usSig o ]
 {-# INLINE userSigProperties #-}
@@ -367,6 +376,7 @@ instance ToJSON UserSig where
   toEncoding = pairs . mconcat . userSigProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode UserSig where
   build s = J.object [ "sig" J..= _usSig s ]
@@ -383,6 +393,7 @@ newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue
   } deriving (Eq, Show, Generic,NFData)
 
+#ifdef PACT_TOJSON
 pactResultProperties :: JsonProperties PactResult
 pactResultProperties (PactResult (Right s)) =
   [ "status" .= ("success" :: String)
@@ -398,6 +409,7 @@ instance ToJSON PactResult where
   toEncoding = pairs . mconcat . pactResultProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PactResult where
   build (PactResult (Right s)) = J.object
@@ -411,13 +423,15 @@ instance J.Encode PactResult where
   {-# INLINE build #-}
 
 instance FromJSON PactResult where
-  parseJSON (A.Object o) = PactResult <$>
-                           ((Left <$> o .: "error") <|>
-                            (Right <$> o .: "data"))
+  parseJSON (A.Object o) =
+    PactResult <$> ((Left . _getUxPactError <$> o .: "error") <|> (Right <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
 
 instance Arbitrary PactResult where
-  arbitrary = PactResult <$> arbitrary
+  arbitrary = PactResult <$> oneof
+    [ Left . _getUxPactError <$> arbitrary
+    , Right <$> arbitrary
+    ]
 
 -- | API result of attempting to execute a pact command, parametrized over level of logging type
 data CommandResult l = CommandResult {
@@ -439,6 +453,7 @@ data CommandResult l = CommandResult {
   , _crEvents :: ![PactEvent]
   } deriving (Eq,Show,Generic,Functor)
 
+#ifdef PACT_TOJSON
 commandResultProperties
   :: ToJSON l
   => ToJSON a
@@ -463,6 +478,7 @@ instance (ToJSON l) => ToJSON (CommandResult l) where
   toEncoding = pairs . commandResultProperties toLegacyJson
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode l => J.Encode (CommandResult l) where
   build o = J.object
@@ -521,7 +537,10 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
   deriving (Eq, Ord, Generic)
-  deriving newtype (Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, FromJSONKey, NFData, J.Encode)
+  deriving newtype (Serialize, Hashable, ParseText, FromJSON, FromJSONKey, NFData, J.Encode, AsString)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON, ToJSONKey)
+#endif
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

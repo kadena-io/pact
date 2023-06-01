@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -40,7 +41,9 @@ import Control.Monad.State.Strict
 import Data.String
 
 import Data.Aeson hiding ((.=))
+#ifdef PACT_TOJSON
 import qualified Data.Aeson as A ((.=))
+#endif
 import Data.Text (unpack)
 import GHC.Generics
 
@@ -89,6 +92,7 @@ instance Pretty UserTableInfo where
 
 instance FromJSON UserTableInfo
 
+#ifdef PACT_TOJSON
 instance ToJSON UserTableInfo where
   toJSON o = object
     [ "utModule" A..= utModule o ]
@@ -97,6 +101,7 @@ instance ToJSON UserTableInfo where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode UserTableInfo where
   build o = J.object

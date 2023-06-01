@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
@@ -13,7 +14,6 @@ import           Control.Monad.Except     (runExcept)
 import           Control.Monad.IO.Class   (liftIO)
 import           Control.Monad.Reader     (ReaderT (runReaderT))
 import           Control.Monad.RWS.Strict (runRWST)
-import           Data.Aeson               (toJSON)
 import qualified Data.Default             as Default
 import qualified Data.HashMap.Strict      as HM
 import           Data.List                (isPrefixOf)
@@ -46,6 +46,8 @@ import           Pact.JSON.Legacy.Value
 
 import           Analyze.Gen
 import           Analyze.Translate
+
+import qualified Pact.JSON.Encode as J
 
 data EvalResult
   = EvalResult !(Pact.Term Pact.Ref)
@@ -180,19 +182,19 @@ mkEvalEnv :: GenState -> IO (EvalEnv LibState)
 mkEvalEnv (GenState _ registryKSs txKSs txDecs txInts txStrs) = do
   evalEnv <- liftIO $ initPureEvalEnv Nothing
   let xformKsMap = HM.fromList
-        . fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
+        . fmap (\(k, (pks, _ks)) -> (T.pack k, toLegacyJsonViaEncode pks))
         . Map.toList
 
       registryKSs' = xformKsMap registryKSs
       txKSs' = xformKsMap txKSs
       txDecs' = HM.fromList
-        $ fmap (\(k, v) -> (T.pack k, toJSON (show (toPact decimalIso v))))
+        $ fmap (\(k, v) -> (T.pack k, toLegacyJsonViaEncode (J.string $ show (toPact decimalIso v))))
         $ Map.toList txDecs
       txInts' = HM.fromList
-        $ fmap (\(k, v) -> (T.pack k, toJSON v))
+        $ fmap (\(k, v) -> (T.pack k, toLegacyJsonViaEncode (J.Aeson v)))
         $ Map.toList txInts
       txStrs' = HM.fromList
-        $ fmap (\(k, Str v) -> (T.pack k, toJSON v))
+        $ fmap (\(k, Str v) -> (T.pack k, toLegacyJsonViaEncode (J.string v)))
         $ Map.toList txStrs
       body = toLegacyJson $ HM.unions [registryKSs', txKSs', txDecs', txInts', txStrs']
   pure $ evalEnv & eeMsgBody .~ body

@@ -1,13 +1,14 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 -- Module      :  Pact.Types.Continuation
@@ -46,7 +47,9 @@ import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Map.Strict(Map)
 import Data.Maybe(fromMaybe)
+#ifdef PACT_TOJSON
 import qualified Data.Map.Strict as Map
+#endif
 
 import Test.QuickCheck
 
@@ -56,7 +59,10 @@ import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term
-import Pact.Types.Util (lensyToJSON, lensyParseJSON, JsonProperties, JsonMProperties, enableToJSON, (.?=))
+import Pact.Types.Util (lensyParseJSON, asString)
+#ifdef PACT_TOJSON
+import Pact.Types.Util (lensyToJSON, JsonProperties, JsonMProperties, enableToJSON, (.?=))
+#endif
 import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 
@@ -84,6 +90,7 @@ instance SizeOf Provenance where
 
 instance NFData Provenance
 
+#ifdef PACT_TOJSON
 provenanceProperties :: JsonProperties Provenance
 provenanceProperties o =
   [ "targetChainId" .= _pTargetChainId o
@@ -96,6 +103,7 @@ instance ToJSON Provenance where
   toEncoding = pairs . mconcat . provenanceProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode Provenance where
   build o = J.object
@@ -118,7 +126,7 @@ data Yield = Yield
 
 instance Arbitrary Yield where
   arbitrary = Yield
-    <$> resize 10 arbitrary
+    <$> scale (min 10) arbitrary
     <*> frequency
       [ (1, pure Nothing)
       , (4, Just <$> arbitrary)
@@ -127,6 +135,7 @@ instance Arbitrary Yield where
 
 instance NFData Yield
 
+#ifdef PACT_TOJSON
 yieldProperties :: JsonMProperties Yield
 yieldProperties o = mconcat
   [ "data" .= _yData o
@@ -140,6 +149,7 @@ instance ToJSON Yield where
   toEncoding = pairs . yieldProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode Yield where
   build o = J.object
@@ -187,8 +197,11 @@ instance Pretty PactContinuation where
 instance NFData PactContinuation
 
 instance Arbitrary PactContinuation where
-  arbitrary = PactContinuation <$> arbitrary <*> resize 10 arbitrary
+  arbitrary = PactContinuation
+    <$> arbitraryName (0,1,1,0)
+    <*> scale (min 10) arbitrary
 
+#ifdef PACT_TOJSON
 pactContinuationProperties :: JsonProperties PactContinuation
 pactContinuationProperties o =
   [ "args" .= _pcArgs o
@@ -201,6 +214,7 @@ instance ToJSON PactContinuation where
   toEncoding = pairs . mconcat . pactContinuationProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PactContinuation where
   build o = J.object
@@ -244,8 +258,9 @@ instance Arbitrary PactExec where
     <*> arbitrary
     <*> arbitrary
     <*> arbitrary
-    <*> resize 2 arbitrary
+    <*> scale (min 2) arbitrary
 
+#ifdef PACT_TOJSON
 pactExecProperties
   :: ToJSON x
   => (Map PactId NestedPactExec -> x)
@@ -266,13 +281,14 @@ pactExecProperties f o =
 
 instance ToJSON PactExec where
   toJSON = enableToJSON "Pact.Types.Continuation.PactExec" . object . pactExecProperties id
-  toEncoding = pairs . mconcat . pactExecProperties legacyMap
+  toEncoding = pairs . mconcat . pactExecProperties (legacyMap asString)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PactExec where
   build o = J.object
-    [ "nested" J..?= J.ifMaybe (not . LHM.null) (legacyMap (_peNested o))
+    [ "nested" J..?= J.ifMaybe (not . LHM.null) (legacyMap asString (_peNested o))
     , "executed" J..= _peExecuted o
     , "pactId" J..= _pePactId o
     , "stepHasRollback" J..= _peStepHasRollback o
@@ -322,6 +338,7 @@ fromNestedPactExec :: Bool -> NestedPactExec -> PactExec
 fromNestedPactExec rollback (NestedPactExec stepCount yield exec step pid cont nested) =
   PactExec stepCount yield exec step pid cont rollback nested
 
+#ifdef PACT_TOJSON
 nestedPactExecProperties
   :: ToJSON x
   => (Map PactId NestedPactExec -> x)
@@ -340,13 +357,14 @@ nestedPactExecProperties f o =
 
 instance ToJSON NestedPactExec where
   toJSON = enableToJSON "Pact.Types.Continuation.NestedPactExec" . object . nestedPactExecProperties id
-  toEncoding = pairs. mconcat . nestedPactExecProperties legacyMap
+  toEncoding = pairs. mconcat . nestedPactExecProperties (legacyMap asString)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode NestedPactExec where
   build o = J.object
-    [ "nested" J..= legacyMap (_npeNested o)
+    [ "nested" J..= legacyMap asString (_npeNested o)
     , "executed" J..= _npeExecuted o
     , "pactId" J..= _npePactId o
     , "step" J..= J.Aeson (_npeStep o)

@@ -1,14 +1,16 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Runtime
@@ -137,7 +139,9 @@ data PactWarning
   | DeprecatedOverload !NativeDefName !Text
   deriving (Show, Eq, Ord, Generic)
 
+#ifdef PACT_TOJSON
 instance ToJSON PactWarning
+#endif
 instance FromJSON PactWarning
 
 instance Pretty PactWarning where
@@ -209,11 +213,13 @@ flagReps = M.fromList $ map go [minBound .. maxBound]
 instance Pretty ExecutionFlag where
   pretty = pretty . flagRep
 
+#ifdef PACT_TOJSON
 instance ToJSON ExecutionFlag where
   toJSON = enableToJSON "Pact.Types.Runtime.ExecutionFlat" . String . flagRep
   toEncoding = toEncoding . flagRep
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode ExecutionFlag where
   build = J.build . flagRep
@@ -230,7 +236,11 @@ instance Arbitrary ExecutionFlag where
 -- | Execution configuration flags, where empty is the "default".
 newtype ExecutionConfig = ExecutionConfig
   { _ecFlags :: S.Set ExecutionFlag }
-  deriving (Eq,Show,ToJSON,FromJSON)
+  deriving (Eq,Show)
+  deriving (FromJSON)
+#ifdef PACT_TOJSON
+  deriving (ToJSON)
+#endif
 makeLenses ''ExecutionConfig
 instance Default ExecutionConfig where def = ExecutionConfig def
 instance Pretty ExecutionConfig where
@@ -317,6 +327,7 @@ data PactEvent = PactEvent
   } deriving (Eq, Show, Generic)
 instance NFData PactEvent
 
+#ifdef PACT_TOJSON
 pactEventProperties :: JsonProperties PactEvent
 pactEventProperties o =
   [ "params" .= _eventParams o
@@ -330,6 +341,7 @@ instance ToJSON PactEvent where
   toEncoding = pairs . mconcat . pactEventProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PactEvent where
   build o = J.object
@@ -345,7 +357,7 @@ instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
 instance Arbitrary PactEvent where
   arbitrary = PactEvent
     <$> arbitrary
-    <*> resize 20 arbitrary
+    <*> scale (min 20) arbitrary
     <*> arbitrary
     <*> arbitrary
 

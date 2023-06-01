@@ -1,6 +1,9 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -20,17 +23,6 @@ import Test.QuickCheck
 import Pact.Types.Hash
 import Pact.Types.Term
 import Pact.Types.Util
-
--- -------------------------------------------------------------------------- --
--- Utils
-
-arbitraryName :: (Int, Int, Int, Int) -> Gen Name
-arbitraryName (f,q,n,d) = frequency
-  [ (f, FQName <$> arbitrary)
-  , (q, QName <$> arbitrary)
-  , (n, Name <$> arbitrary)
-  , (d, DName <$> arbitrary)
-  ]
 
 -- -------------------------------------------------------------------------- --
 -- Arbitrary Orphans for Scope
@@ -68,12 +60,18 @@ instance Arbitrary n => Arbitrary (BindPair n) where
 instance Arbitrary t => Arbitrary (App t) where
   arbitrary = App <$> arbitrary <*> arbitrary <*> arbitrary
 
-instance Arbitrary g => Arbitrary (Governance g) where
+instance {-# OVERLAPPABLE #-} Arbitrary g => Arbitrary (Governance g) where
   arbitrary = Governance <$> arbitrary
+
+instance {-# OVERLAPPING #-} Arbitrary (Governance Name) where
+  arbitrary = Governance <$> oneof
+    [ Left <$> arbitrary
+    , Right <$> arbitraryName (0,1,1,0)
+    ]
 
 instance Arbitrary ModuleHash where
   -- Coin contract is about 20K characters
-  arbitrary = ModuleHash <$> resize 20000 arbitrary
+  arbitrary = ModuleHash <$> scale (min 20000) arbitrary
 
 instance Arbitrary n => Arbitrary (DefcapMeta n) where
   arbitrary = oneof
@@ -98,7 +96,7 @@ instance Arbitrary Example where
     ]
 
 instance Arbitrary FieldKey where
-  arbitrary = resize 50 (FieldKey <$> genBareText)
+  arbitrary = scale (min 50) (FieldKey <$> genBareText)
 
 instance Arbitrary n => Arbitrary (Step n) where
   arbitrary = Step <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
@@ -132,6 +130,17 @@ instance (Arbitrary a) => Arbitrary (Guard a) where
     , GCapability <$> arbitrary
     ]
 
+instance {-# OVERLAPPING #-} Arbitrary (Module Name) where
+  arbitrary = Module
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> scale (min 10) arbitrary
+    <*> scale (min 10) arbitrary
+
 instance Arbitrary g => Arbitrary (Module g) where
   arbitrary = Module
     <$> arbitrary
@@ -149,6 +158,9 @@ instance Arbitrary Interface where
     <*> arbitrary
     <*> arbitrary
     <*> scale (min 10) arbitrary
+
+instance {-# OVERLAPPING #-} Arbitrary (ModuleDef Name) where
+  arbitrary = oneof [MDModule <$> arbitrary, MDInterface <$> arbitrary]
 
 instance Arbitrary g => Arbitrary (ModuleDef g) where
   arbitrary = oneof [MDModule <$> arbitrary, MDInterface <$> arbitrary]

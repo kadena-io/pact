@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -54,7 +55,9 @@ import Test.QuickCheck
 newtype Pragma = Pragma String
     deriving (Eq,Show)
     deriving newtype (FromJSON, IsString, Arbitrary)
+#ifdef PACT_TOJSON
     deriving newtype (ToJSON)
+#endif
 
 instance J.Encode Pragma where
   build (Pragma s) = J.string s
@@ -66,11 +69,13 @@ data SQLiteConfig = SQLiteConfig
 instance FromJSON SQLiteConfig
 makeLenses ''SQLiteConfig
 
+#ifdef PACT_TOJSON
 instance ToJSON SQLiteConfig where
   toEncoding o = pairs $ mconcat
     [ "_pragmas" .= _pragmas o
     , "_dbFile" .= _dbFile o
     ]
+#endif
 
 instance J.Encode SQLiteConfig where
   build o = J.object

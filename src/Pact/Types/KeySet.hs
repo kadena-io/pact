@@ -1,6 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Keyset
@@ -91,11 +92,14 @@ instance Serialize PublicKeyText
 instance NFData PublicKeyText
 instance FromJSON PublicKeyText where
   parseJSON = withText "PublicKey" (return . PublicKeyText)
+
+#ifdef PACT_TOJSON
 instance ToJSON PublicKeyText where
   toJSON = toJSON . _pubKey
   toEncoding = toEncoding . _pubKey
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PublicKeyText where
   build = J.build . _pubKey
@@ -156,6 +160,7 @@ instance FromJSON KeySet where
           <$> parseJSON v
           <*> pure defPred
 
+#ifdef PACT_TOJSON
 keySetProperties :: JsonProperties KeySet
 keySetProperties o =
   [ "pred" .= _ksPredFun o
@@ -167,6 +172,7 @@ instance ToJSON KeySet where
   toEncoding = pairs . mconcat . keySetProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode KeySet where
   build o = J.object
@@ -204,6 +210,7 @@ instance FromJSON KeySetName where
         <$> o .: "ksn"
         <*> (fromMaybe Nothing <$> o .:? "ns")
 
+#ifdef PACT_TOJSON
 keySetNameProperties :: JsonProperties KeySetName
 keySetNameProperties o =
   [ "ns" .= _ksnNamespace o
@@ -211,7 +218,6 @@ keySetNameProperties o =
   ]
 
 instance ToJSON KeySetName where
-
   toJSON ks@(KeySetName k n) = enableToJSON "Pact.Types.KeySet.KeySetName" $ case n of
     Nothing -> toJSON k
     Just{} -> object $ keySetNameProperties ks
@@ -222,6 +228,7 @@ instance ToJSON KeySetName where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode KeySetName where
   build ks@(KeySetName k n) = case n of

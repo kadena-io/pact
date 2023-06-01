@@ -1,7 +1,9 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -32,7 +34,10 @@ import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                from, iso, lens, makeLenses,
                                                makePrisms, over, (%~), (&),
                                                (<&>))
-import           Data.Aeson                   (FromJSON, ToJSON)
+import           Data.Aeson                   (FromJSON)
+#ifdef PACT_TOJSON
+import           Data.Aeson                   (ToJSON)
+#endif
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
@@ -165,7 +170,11 @@ mkConcreteInteger = SBVI.SBV
 
 newtype RegistryName
   = RegistryName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+  deriving (Eq,Ord)
+  deriving newtype (IsString,AsString,FromJSON)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Show RegistryName where show (RegistryName s) = show s
 

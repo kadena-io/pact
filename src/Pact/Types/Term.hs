@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -68,7 +69,10 @@ module Pact.Types.Term
    Object(..),oObject,oObjectType,oInfo,oKeyOrder,
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
-   ModRef(..),modRefName,modRefSpec,modRefInfo,modRefProperties_, modRefKeyValues_,
+   ModRef(..),modRefName,modRefSpec,modRefInfo,modRefKeyValues_,
+#ifdef PACT_TOJSON
+   modRefProperties_,
+#endif
    modRefTy,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
@@ -165,6 +169,7 @@ deriving instance (Show1 Term) => Show FunApp
 deriving instance (Eq1 Term) => Eq FunApp
 instance NFData FunApp
 
+#ifdef PACT_TOJSON
 funAppProperties :: JsonProperties FunApp
 funAppProperties o =
   [ "defType" .= _faDefType o
@@ -181,6 +186,7 @@ instance ToJSON FunApp where
   toEncoding = A.pairs . mconcat . funAppProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+#endif
 
 instance J.Encode FunApp where
   build o = J.object
@@ -271,6 +277,7 @@ instance Pretty (Term n) => Pretty (Def n) where
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
     ++ maybe [] (pure . pretty) _dDefMeta
 
+#ifdef PACT_TOJSON
 defProperties :: ToJSON n => JsonProperties (Def n)
 defProperties o =
   [ "defType" .= _dDefType o
@@ -289,6 +296,7 @@ instance ToJSON n => ToJSON (Def n) where
   toEncoding = A.pairs . mconcat . defProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+#endif
 
 instance J.Encode n => J.Encode (Def n) where
   build o = J.object
@@ -332,6 +340,7 @@ instance Pretty n => Pretty (Lam n) where
 
 instance NFData n => NFData (Lam n)
 
+#ifdef PACT_TOJSON
 -- The "am" prefix for property names is legacy.
 --
 lamProperties :: ToJSON n => JsonProperties (Lam n)
@@ -348,6 +357,7 @@ instance ToJSON n => ToJSON (Lam n) where
   toEncoding = A.pairs . mconcat . lamProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+#endif
 
 instance J.Encode n => J.Encode (Lam n) where
   build o = J.object
@@ -390,6 +400,7 @@ instance Pretty n => Pretty (Object n) where
 
 instance NFData n => NFData (Object n)
 
+#ifdef PACT_TOJSON
 objectProperties :: ToJSON n => JsonMProperties (Object n)
 objectProperties o = mconcat
   [ "obj" .= _oObject o
@@ -404,6 +415,7 @@ instance ToJSON n => ToJSON (Object n) where
   toEncoding = A.pairs . objectProperties
   {-# INLINEABLE toJSON #-}
   {-# INLINEABLE toEncoding #-}
+#endif
 
 instance J.Encode n => J.Encode (Object n) where
   build o = J.object
@@ -817,6 +829,7 @@ unprop "var" = TermVar
 unprop t = TermUnknown (show t)
 {-# INLINE unprop #-}
 
+#ifdef PACT_TOJSON
 instance ToJSON n => ToJSON (Term n) where
   toJSON = termEnc object toJSON
   toEncoding = termEnc (A.pairs . mconcat) toEncoding
@@ -908,16 +921,7 @@ termEnc kv val = \case
  where
   p = prop @Key
   inf i = ("i" :: Key) .= i
-
--- termEnc
---   :: KeyValue kv
---   => ToJSON n
---   => ([kv] -> e)
---   -> (forall a . ToJSON a => a -> e)
---   -> Term n
---   -> e
---
---   toEncoding = termEnc (A.pairs . mconcat) toEncoding
+#endif
 
 instance J.Encode n => J.Encode (Term n) where
   build = \case

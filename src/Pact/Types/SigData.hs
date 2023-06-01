@@ -1,4 +1,6 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -16,6 +18,7 @@ module Pact.Types.SigData
   , commandToSigData
   , sigDataToCommand
   , sampleSigData
+  , arbitraryRoundtripableSigData
   ) where
 
 import Control.Error
@@ -34,6 +37,9 @@ import Test.QuickCheck
 import Pact.Parse
 import Pact.Types.Command
 import Pact.Types.Runtime
+
+import qualified Pact.JSON.Encode as J
+
 import qualified Pact.JSON.Legacy.HashMap as LHM
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
@@ -41,19 +47,24 @@ newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
 
 instance IsString PublicKeyHex where
   fromString = PublicKeyHex . pack
-instance ToJSONKey PublicKeyHex
 instance FromJSONKey PublicKeyHex
+#ifdef PACT_TOJSON
+instance ToJSONKey PublicKeyHex
 instance ToJSON PublicKeyHex where
   toJSON (PublicKeyHex hex) = String hex
   toEncoding (PublicKeyHex hex) = toEncoding hex
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance FromJSON PublicKeyHex where
   parseJSON = withText "PublicKeyHex" $ \t -> do
     if T.length t == 64 && isRight (parseB16TextOnly t)
       then return $ PublicKeyHex t
       else fail "Public key must have 64 hex characters"
+
+instance J.Encode PublicKeyHex where
+  build (PublicKeyHex hex) = J.text hex
 
 instance Arbitrary PublicKeyHex where
   arbitrary = PublicKeyHex . T.pack <$> vectorOf 64 (elements "0123456789abcdef")
@@ -76,6 +87,7 @@ data SigData a = SigData
   , _sigDataCmd :: !(Maybe a)
   } deriving (Eq,Show,Generic)
 
+#ifdef PACT_TOJSON
 sigDataProperties :: ToJSON a => ToJSON x => ([(Text, Maybe Text)] -> x) -> JsonMProperties (SigData a)
 sigDataProperties f o = mconcat
   [ "hash" .= _sigDataHash o
@@ -91,6 +103,7 @@ instance ToJSON a => ToJSON (SigData a) where
   toEncoding = pairs . sigDataProperties LHM.fromList
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance FromJSON a => FromJSON (SigData a) where
   parseJSON = withObject "SigData" $ \o -> do
@@ -100,10 +113,29 @@ instance FromJSON a => FromJSON (SigData a) where
     pure $ SigData h s c
     where
       f v = flip (withObject "SigData Pairs") v $ \_ ->
-        fmap (bimap PublicKeyHex (fmap UserSig)) . HM.toList <$> parseJSON v
+        fmap (bimap PublicKeyHex (fmap UserSig)) . LHM.sortByKey . HM.toList <$> parseJSON v
+
+instance J.Encode a => J.Encode (SigData a) where
+  build o = J.object
+    [ "hash" J..= _sigDataHash o
+    , "sigs" J..= LHM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
+      -- FIXME: this instance seems to violate the comment on the respective
+      -- constructor field. Is that fine? Is it required for backward compat?
+    , "cmd" J..?= _sigDataCmd o
+    ]
+  {-# INLINE build #-}
 
 instance Arbitrary a => Arbitrary (SigData a) where
   arbitrary = SigData <$> arbitrary <*> arbitrary <*> arbitrary
+
+-- | Workaround for the sorting of SigData sigs. See the FIXME notes on the JSON
+-- encoding instances for details.
+--
+arbitraryRoundtripableSigData :: Arbitrary a => Gen (SigData a)
+arbitraryRoundtripableSigData = SigData
+  <$> arbitrary
+  <*> fmap (fmap (first PublicKeyHex) . LHM.sortByKey . fmap (first unPublicKeyHex)) arbitrary
+  <*> arbitrary
 
 commandToSigData :: Command Text -> Either String (SigData Text)
 commandToSigData c = do

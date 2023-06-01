@@ -1,5 +1,7 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -106,7 +108,11 @@ import qualified Pact.JSON.Encode as J
 
 
 newtype TypeName = TypeName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show,J.Encode)
+  deriving (Show,Eq,Ord,Generic)
+  deriving newtype (IsString,AsString,FromJSON,Pretty,NFData,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance SizeOf TypeName where
   sizeOf ver (TypeName n) = sizeOf ver n
@@ -126,6 +132,7 @@ instance Pretty o => Pretty (Arg o) where
   pretty (Arg n t _) = pretty n <> colon <> pretty t
 instance HasInfo (Arg o) where getInfo = _aInfo
 
+#ifdef PACT_TOJSON
 argProperties :: ToJSON o => JsonProperties (Arg o)
 argProperties o =
   [ "name" .= _aName o
@@ -139,6 +146,7 @@ instance ToJSON o => ToJSON (Arg o) where
   toEncoding = pairs . mconcat . argProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode o => J.Encode (Arg o) where
   build o = J.object
@@ -170,6 +178,7 @@ instance NFData o => NFData (FunType o)
 instance (Pretty o) => Pretty (FunType o) where
   pretty (FunType as t) = hsep (map pretty as) <+> "->" <+> pretty t
 
+#ifdef PACT_TOJSON
 funTypeProperties :: ToJSON o => JsonProperties (FunType o)
 funTypeProperties o =
   [ "args" .= _ftArgs o
@@ -182,6 +191,7 @@ instance ToJSON o => ToJSON (FunType o) where
   toEncoding = pairs . mconcat . funTypeProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode o => J.Encode (FunType o) where
   build o = J.object
@@ -223,6 +233,7 @@ data GuardType
   | GTyCapability
   deriving (Eq,Ord,Generic,Show)
 
+#ifdef PACT_TOJSON
 instance ToJSON GuardType where
   toJSON = enableToJSON "Pact.Types.Type.GuardType" . \case
     GTyKeySet -> "keyset"
@@ -240,6 +251,7 @@ instance ToJSON GuardType where
     GTyCapability -> toEncoding @Text "capability"
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode GuardType where
   build GTyKeySet = J.text "keyset"
@@ -278,6 +290,7 @@ data PrimType =
   deriving (Eq,Ord,Generic,Show)
 
 instance NFData PrimType
+#ifdef PACT_TOJSON
 instance ToJSON PrimType where
   toJSON = enableToJSON "Pact.Types.Type.PrimType" . \case
     TyInteger -> String tyInteger
@@ -295,6 +308,7 @@ instance ToJSON PrimType where
     TyGuard g -> pairs ("guard" .= g)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode PrimType where
   build TyInteger = J.build tyInteger
@@ -361,6 +375,7 @@ data SchemaType =
   TyBinding
   deriving (Eq,Ord,Generic,Show)
 
+#ifdef PACT_TOJSON
 instance ToJSON SchemaType where
   toJSON = enableToJSON "Pact.Types.Type.SchemaType" . \case
     TyTable -> "table"
@@ -373,6 +388,7 @@ instance ToJSON SchemaType where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode SchemaType where
   build TyTable = J.text "table"
@@ -401,7 +417,11 @@ instance Arbitrary SchemaType where
   arbitrary = elements [TyTable, TyObject, TyBinding]
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData,J.Encode)
+  deriving (Eq,Ord,Generic)
+  deriving newtype (IsString,AsString,FromJSON,Hashable,Pretty,NFData,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Arbitrary TypeVarName where
   arbitrary = TypeVarName <$> arbitrary
@@ -417,6 +437,7 @@ data TypeVar v =
   SchemaVar { _tvName :: !TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic,Show)
 
+#ifdef PACT_TOJSON
 typeVarProperties :: ToJSON v => JsonProperties (TypeVar v)
 typeVarProperties o@TypeVar{} =
   [ "tag" .= ("TypeVar" :: Text)
@@ -433,6 +454,7 @@ instance ToJSON v => ToJSON (TypeVar v) where
   toEncoding = pairs . mconcat . typeVarProperties
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode v => J.Encode (TypeVar v) where
   build o@TypeVar{} = J.object
@@ -490,6 +512,7 @@ instance Pretty SchemaPartial where
   pretty (PartialSchema s) = "PartialSchema " <> pretty (Set.toList s)
   pretty sp = viaShow sp
 
+#ifdef PACT_TOJSON
 instance ToJSON SchemaPartial where
   toJSON = enableToJSON "Pact.Types.Type.SchemaPartial" . \case
     FullSchema -> "full"
@@ -501,6 +524,7 @@ instance ToJSON SchemaPartial where
     (PartialSchema s) -> toEncoding s
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode SchemaPartial where
   build FullSchema = J.text "full"
@@ -580,6 +604,7 @@ instance (Pretty o) => Pretty (Type o) where
     TyAny          -> "*"
 
 
+#ifdef PACT_TOJSON
 instance ToJSON v => ToJSON (Type v) where
   toJSON = enableToJSON "Pact.Types.Type.Type" . \case
     TyAny -> "*"
@@ -601,6 +626,7 @@ instance ToJSON v => ToJSON (Type v) where
     TyModule is -> pairs ("modspec" .= is)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode v => J.Encode (Type v) where
   build TyAny = J.text "*"

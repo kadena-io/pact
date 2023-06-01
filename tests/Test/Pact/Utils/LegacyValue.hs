@@ -40,11 +40,14 @@ import Test.QuickCheck
 
 -- internal modules
 
+import Pact.ApiReq
+import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Parse
 import Pact.Types.Capability
 import Pact.Types.ChainId
 import Pact.Types.Command
 import Pact.Types.Continuation
+import Pact.Types.Crypto
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.Info
@@ -59,14 +62,16 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.RowData
 import Pact.Types.Runtime
-import Pact.Types.Scheme
+-- import Pact.Types.Scheme -- imported via Pact.Types.Crypto
 import Pact.Types.SigData
 import Pact.Types.SPV
 import Pact.Types.SQLite
 import Pact.Types.Term.Arbitrary ()
 import Pact.PersistPactDb
 
+#ifdef PACT_TOJSON
 import Pact.JSON.Legacy.Value
+#endif
 
 import qualified Pact.JSON.Encode as J
 
@@ -78,19 +83,33 @@ import qualified Pact.JSON.Encode as J
 -- However, they are useful for ensuring that the (old) parsing code is
 -- compatbile with the new encoding code paths.
 --
--- It is also documents which JSON instances do not roundtrip.
+-- It also documents which JSON instances do not roundtrip.
 --
+#ifdef PACT_TOJSON
 prop_checkRoundtrip :: Eq a => Show a => ToJSON a => FromJSON a => a -> Property
 prop_checkRoundtrip a = eitherDecode (encode a) === Right a
 
 checkRoundtrip :: Eq a => Show a => ToJSON a => FromJSON a => (String, a -> Property)
 checkRoundtrip = ("roundtrip", prop_checkRoundtrip)
+#else
+checkRoundtrip :: (String, a -> Property)
+checkRoundtrip = ("roundtrip disabled", \_ -> once True)
+#endif
 
 prop_checkRoundtrip2 :: Eq a => Show a => J.Encode a => FromJSON a => a -> Property
 prop_checkRoundtrip2 a = eitherDecode (J.encode a) === Right a
 
 checkRoundtrip2 :: Eq a => Show a => J.Encode a => FromJSON a => (String, a -> Property)
 checkRoundtrip2 = ("roundtrip2", prop_checkRoundtrip2)
+
+-- -------------------------------------------------------------------------- --
+-- Roundtripable
+
+newtype Roundtripable a = Roundtripable a
+  deriving newtype (Show, Eq, ToJSON, FromJSON, J.Encode)
+
+instance Arbitrary a => Arbitrary (Roundtripable (SigData a)) where
+  arbitrary = Roundtripable <$> arbitraryRoundtripableSigData
 
 -- -------------------------------------------------------------------------- --
 -- LegacyValue Compat
@@ -107,34 +126,52 @@ checkRoundtrip2 = ("roundtrip2", prop_checkRoundtrip2)
 -- properties provided by 'LegacyHashMap'. This test checks that those code
 -- paths produce the same result.
 --
+#ifdef PACT_TOJSON
 prop_checkLegacyValueCompat :: ToJSON a => a -> Property
 prop_checkLegacyValueCompat a = encode a === J.encode (toLegacyJson a)
 
 checkLegacyValueCompat :: ToJSON a => (String, a -> Property)
 checkLegacyValueCompat =
   ("encoding is compatible with toLegacyJson encoding", prop_checkLegacyValueCompat)
+#else
+checkLegacyValueCompat :: (String, a -> Property)
+checkLegacyValueCompat = ("toLegacyJson is disabled", \_ -> once True)
+#endif
 
 -- -------------------------------------------------------------------------- --
 --
 
+#ifdef PACT_TOJSON
 prop_checkAesonCompat :: ToJSON a => J.Encode a => a -> Property
 prop_checkAesonCompat a = encode a === J.encode a
 
 checkAesonCompat :: ToJSON a => J.Encode a => (String, a -> Property)
 checkAesonCompat =
   ("encoding is compatible with Aeson encoding", prop_checkAesonCompat)
+#else
+checkAesonCompat :: (String, a -> Property)
+checkAesonCompat =
+  ("aeson encoding compat is disabled", \_ -> once True)
+#endif
 
 -- -------------------------------------------------------------------------- --
 -- Tools
 
 data Case a
+#ifdef PACT_TOJSON
   = Case !(Eq a => Show a => FromJSON a => ToJSON a => (String, a -> Property))
   | Pending !(Eq a => Show a => FromJSON a => ToJSON a => (String, a -> Property))
+#else
+  = Case !(Eq a => Show a => FromJSON a => (String, a -> Property))
+  | Pending !(Eq a => Show a => FromJSON a => (String, a -> Property))
+#endif
 
 spec_case
   :: forall a
-  . ToJSON a
-  => FromJSON a
+  . FromJSON a
+#ifdef PACT_TOJSON
+  => ToJSON a
+#endif
   => Show a
   => Eq a
   => Typeable a
@@ -203,7 +240,7 @@ spec_pact_types_namespace :: Spec
 spec_pact_types_namespace =
   describe "Pact.Types.Namespace" $ do
    spec_case @(Namespace (A ()))
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
@@ -248,13 +285,13 @@ spec_pact_types_gas :: Spec
 spec_pact_types_gas =
   describe "Pact.Types.Gas" $ do
    spec_case @GasLimit
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @GasPrice
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
@@ -295,13 +332,13 @@ spec_pact_types_chainmeta =
       , Case checkLegacyValueCompat
       ]
    spec_case @PublicMeta
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @PublicData
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
@@ -437,7 +474,7 @@ spec_pact_types_exp =
       , Case checkLegacyValueCompat
       ]
    spec_case @(ListExp (A ()))
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
@@ -664,8 +701,8 @@ spec_pact_types_term =
       , Case checkLegacyValueCompat
       ]
    spec_case @Interface
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
@@ -713,8 +750,8 @@ spec_pact_types_pactvalue :: Spec
 spec_pact_types_pactvalue =
   describe "Pact.Types.PactValue" $ do
    spec_case @PactValue
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
@@ -725,31 +762,31 @@ spec_pact_types_continuation =
   describe "Pact.Types.Continuation" $ do
    spec_case @Provenance
       [ Case checkRoundtrip
-      , Pending checkRoundtrip2
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @Yield
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @PactContinuation
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @NestedPactExec
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @PactExec
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
@@ -787,27 +824,27 @@ spec_pact_types_persistence :: Spec
 spec_pact_types_persistence =
   describe "Pact.Types.Persistence" $ do
    spec_case @PersistDirect
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @(ModuleData (A ()))
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @PersistModuleData
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    -- spec_case @RowKey [ ]
    spec_case @(Ref' PersistDirect)
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
@@ -829,8 +866,8 @@ spec_pact_types_runtime :: Spec
 spec_pact_types_runtime =
   describe "Pact.Types.Runtime" $ do
    spec_case @PactEvent
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
@@ -863,20 +900,85 @@ spec_pact_types_capability :: Spec
 spec_pact_types_capability =
   describe "Pact.Types.Capability" $ do
    spec_case @SigCapability
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
 
+-- ---------------------------------------------- --
+spec_pact_analyze_remote_types :: Spec
+spec_pact_analyze_remote_types =
+  describe "Pact.Analyze.Remote.Types" $ do
+   spec_case @Analyze.Request
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @Analyze.Response
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @Analyze.ClientError
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_pactError :: Spec
+spec_pact_types_pactError =
+  describe "Pact.Types.PactError" $ do
+   spec_case @PactErrorType
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   -- spec_case @StackFrame
+   --    [ Case checkAesonCompat
+   --    , Case checkLegacyValueCompat
+   --    ]
+   spec_case @UxStackFrame
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   -- spec_case @PactError
+   --    [ Case checkAesonCompat
+   --    , Case checkLegacyValueCompat
+   --    ]
+   spec_case @UxPactError
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @OutputType
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @RenderedOutput
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
 
 -- ---------------------------------------------- --
 spec_pact_types_rowData :: Spec
 spec_pact_types_rowData =
   describe "Pact.Types.RowData" $ do
     spec_case @RowDataValue
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
@@ -887,8 +989,8 @@ spec_pact_types_rowData =
       , Case checkLegacyValueCompat
       ]
     spec_case @RowData
-      [ Pending checkRoundtrip
-      , Pending checkRoundtrip2
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
@@ -917,13 +1019,83 @@ spec_pact_types_sqlite :: Spec
 spec_pact_types_sqlite =
   describe "Pact.Types.SQLite" $ do
    spec_case @Pragma
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
    spec_case @SQLiteConfig
-      [ Pending checkRoundtrip
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_command :: Spec
+spec_pact_types_command =
+  describe "Pact.Types.Command" $ do
+   spec_case @UserSig
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @(Command (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @Signer
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @(Payload (A ()) (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @PactResult
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @(CommandResult (A ()))
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @RequestKey
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+
+-- ---------------------------------------------- --
+spec_pact_types_sigdata :: Spec
+spec_pact_types_sigdata =
+  describe "Pact.Types.SigData" $ do
+   spec_case @PublicKeyHex
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @(SigData (A ()))
+      [ Case checkRoundtrip
+      , Pending checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @(Roundtripable(SigData (A ())))
+      [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
@@ -937,29 +1109,8 @@ spec = describe "JSON encoding backward compatibility" $ do
 
   spec_pact_types_orphans
 
-  -- ---------------------------------------------- --
-  describe "Pact.Types.PactError" $ do
-   spec_case @PactErrorType
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @StackFrame
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @PactError
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @OutputType
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @RenderedOutput
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-
+  spec_pact_analyze_remote_types
+  spec_pact_types_pactError
   spec_pact_types_namespace
   spec_pact_types_chainid
   spec_pact_types_parse
@@ -995,48 +1146,62 @@ spec = describe "JSON encoding backward compatibility" $ do
       , Case checkLegacyValueCompat
       ]
 
-  -- ---------------------------------------------- --
-  describe "Pact.Types.Command" $ do
-   spec_case @UserSig
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @(Command ())
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @Signer
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @(Payload () ())
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @PactResult
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @(CommandResult ())
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @RequestKey
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-
-  -- ---------------------------------------------- --
-  describe "Pact.Types.SigData" $ do
-   spec_case @PublicKeyHex
-      [ Case checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-   spec_case @(SigData ())
-      [ Pending checkRoundtrip
-      , Case checkLegacyValueCompat
-      ]
-
+  spec_pact_types_command
+  spec_pact_types_sigdata
   spec_pact_types_rowData
   spec_pact_persistPactDb
   spec_pact_types_sqlite
+
+  -- ---------------------------------------------- --
+  describe "Pact.ApiReq" $ do
+    spec_case @ApiKeyPair
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+    spec_case @ApiSigner
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+    spec_case @ApiPublicMeta
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+    spec_case @ApiReq
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+    spec_case @AddSigsReq
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+
+  -- ---------------------------------------------- --
+  describe "Pact.Types.Crypto" $ do
+    spec_case @PublicKeyBS
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+    spec_case @PrivateKeyBS
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+    spec_case @SignatureBS
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]

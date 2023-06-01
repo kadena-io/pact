@@ -21,6 +21,7 @@ module Pact.Utils.Servant
 ) where
 
 import Data.Aeson
+import Data.Proxy
 
 import qualified Pact.JSON.Encode as J
 
@@ -37,5 +38,5 @@ instance {-# OVERLAPPING #-} MimeRender PactJson a => MimeRender PactJson (WithS
   mimeRender contentTypeProxy (WithStatus a) = mimeRender contentTypeProxy a
 
 instance FromJSON a => MimeUnrender PactJson a where
-  mimeUnrender = mimeUnrender @PactJson @a
+  mimeUnrender _ = mimeUnrender @JSON @a Proxy
 

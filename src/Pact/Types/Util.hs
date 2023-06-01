@@ -22,6 +22,9 @@ module Pact.Types.Util
   , fromText, fromText'
   -- | JSON helpers
   , satisfiesRoundtripJSON, roundtripJSONToEither
+#ifdef PACT_TOJSON
+  , satisfiesRoundtripJSONToEncoding, roundtripJSONToEncodingEither
+#endif
   , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
@@ -53,12 +56,13 @@ module Pact.Types.Util
   ) where
 
 -- Enable to make legacy toJSON available (required for yaml encodings)
-#define ENABLE_TOJSON
+-- #define ENABLE_TOJSON
 
 -- Enable to make trace calls to toJSON (only for debugging purposes)
 -- #define ENABLE_TOJSON_WARNING
 
 import Data.Aeson
+import Data.Aeson.Encoding (encodingToLazyByteString)
 import Data.Aeson.Types
 import GHC.Generics
 import Data.ByteString (ByteString)
@@ -105,13 +109,31 @@ resultToEither (Error s) = Left s
 fromText' :: ParseText a => Text -> Either String a
 fromText' = resultToEither . fromText
 
+#ifdef PACT_TOJSON
 satisfiesRoundtripJSON :: (Eq a, FromJSON a, ToJSON a) => a -> Bool
 satisfiesRoundtripJSON i = case roundtripJSONToEither i of
+  Left _ -> False
+  Right j -> i == j
+satisfiesRoundtripJSONToEncoding :: (Eq a, FromJSON a, ToJSON a) => a -> Bool
+satisfiesRoundtripJSONToEncoding i = case roundtripJSONToEither i of
   Left _ -> False
   Right j -> i == j
 
 roundtripJSONToEither :: (FromJSON a, ToJSON a) => a -> Either String a
 roundtripJSONToEither = resultToEither . fromJSON . toJSON
+
+roundtripJSONToEncodingEither :: (FromJSON a, ToJSON a) => a -> Either String a
+roundtripJSONToEncodingEither = eitherDecode . encodingToLazyByteString . toEncoding
+#else
+
+satisfiesRoundtripJSON :: (Eq a, FromJSON a, J.Encode a) => a -> Bool
+satisfiesRoundtripJSON i = case roundtripJSONToEither i of
+  Left _ -> False
+  Right j -> i == j
+
+roundtripJSONToEither :: (FromJSON a, J.Encode a) => a -> Either String a
+roundtripJSONToEither = eitherDecode . J.encode
+#endif
 
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
@@ -280,35 +302,45 @@ outputJSON a = BSL8.putStrLn $ J.encode a
 -- Hex strings
 newtype B16JsonBytes = B16JsonBytes { _b16JsonBytes :: B.ByteString }
     deriving (Show, Eq, Ord, Hashable, Generic)
+#ifdef PACT_TOJSON
 instance ToJSON B16JsonBytes where
-    toJSON = toJSON . toB16Text . _b16JsonBytes
+    toJSON = toJSON . asString
     {-# INLINE toJSON #-}
+instance ToJSONKey B16JsonBytes where
+    toJSONKey = toJSONKeyText asString
+    {-# INLINE toJSONKey #-}
+#endif
 instance FromJSON B16JsonBytes where
     parseJSON = fmap B16JsonBytes . parseB16JSON
     {-# INLINE parseJSON #-}
-instance ToJSONKey B16JsonBytes where
-    toJSONKey = toJSONKeyText (toB16Text . _b16JsonBytes)
-    {-# INLINE toJSONKey #-}
 instance FromJSONKey B16JsonBytes where
     fromJSONKey = FromJSONKeyTextParser (fmap B16JsonBytes . parseB16Text)
     {-# INLINE fromJSONKey #-}
+instance AsString B16JsonBytes where
+    asString = toB16Text . _b16JsonBytes
+    {-# INLINE asString #-}
 
 -- | Tagging ByteStrings (and isomorphic types) that are JSON encoded as
 -- Base64Url (without padding) strings
 newtype B64JsonBytes = B64JsonBytes { _b64JsonBytes :: B.ByteString }
     deriving (Show, Eq, Ord, Hashable, Generic)
+#ifdef PACT_TOJSON
 instance ToJSON B64JsonBytes where
-    toJSON = toJSON . toB64UrlUnpaddedText . _b64JsonBytes
+    toJSON = toJSON . asString
     {-# INLINE toJSON #-}
+instance ToJSONKey B64JsonBytes where
+    toJSONKey = toJSONKeyText asString
+    {-# INLINE toJSONKey #-}
+#endif
 instance FromJSON B64JsonBytes where
     parseJSON = fmap B64JsonBytes . withText "Base64" parseB64UrlUnpaddedText
     {-# INLINE parseJSON #-}
-instance ToJSONKey B64JsonBytes where
-    toJSONKey = toJSONKeyText (toB64UrlUnpaddedText . _b64JsonBytes)
-    {-# INLINE toJSONKey #-}
 instance FromJSONKey B64JsonBytes where
     fromJSONKey = FromJSONKeyTextParser (fmap B64JsonBytes . parseB64UrlUnpaddedText)
     {-# INLINE fromJSONKey #-}
+instance AsString B64JsonBytes where
+    asString = toB64UrlUnpaddedText . _b64JsonBytes
+    {-# INLINE asString #-}
 
 -- | Provide unquoted string representation.
 class AsString a where asString :: a -> Text

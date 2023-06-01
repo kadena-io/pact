@@ -158,11 +158,13 @@ instance A.FromJSON ParsedDecimal where
   parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
   parseJSON v = fail $ "Failure parsing decimal: " ++ show v
 
+#ifdef PACT_TOJSON
 instance A.ToJSON ParsedDecimal where
   toJSON (ParsedDecimal d) = A.Number $ fromRational $ toRational d
   toEncoding (ParsedDecimal d) = A.toEncoding @Scientific $ fromRational $ toRational d
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode ParsedDecimal where
   build (ParsedDecimal d) = J.build $ J.Aeson @Scientific $ fromRational $ toRational d
@@ -196,11 +198,13 @@ instance A.FromJSON ParsedInteger where
     _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
+#ifdef PACT_TOJSON
 instance A.ToJSON ParsedInteger where
   toJSON (ParsedInteger i) = A.Number (fromIntegral i)
   toEncoding (ParsedInteger i) = A.toEncoding @Scientific (fromIntegral i)
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode ParsedInteger where
   build (ParsedInteger i) = J.build $ J.Aeson i

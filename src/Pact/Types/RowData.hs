@@ -1,6 +1,7 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
@@ -22,7 +23,9 @@ module Pact.Types.RowData
 import Control.Applicative
 import Control.DeepSeq (NFData)
 import Data.Aeson
+#ifdef PACT_TOJSON
 import Data.Aeson.Encoding
+#endif
 import Data.Default
 import Data.Maybe(fromMaybe)
 import Data.Text (Text)
@@ -35,7 +38,9 @@ import Pact.Types.PactValue
 import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.Term
+#ifdef PACT_TOJSON
 import Pact.Types.Util
+#endif
 
 import qualified Pact.JSON.Encode as J
 
@@ -53,6 +58,7 @@ instance NFData RowDataValue
 instance Arbitrary RowDataValue where
   arbitrary = pactValueToRowData <$> arbitrary
 
+#ifdef PACT_TOJSON
 tag :: ToJSON v => KeyValue kv => Text -> v -> [kv]
 tag t rv =
   [ "$t" .= t
@@ -85,6 +91,7 @@ instance ToJSON RowDataValue where
           ]
       ]
   {-# INLINE toEncoding #-}
+#endif
 
 instance FromJSON RowDataValue where
   parseJSON v1 =
@@ -137,11 +144,13 @@ instance NFData RowDataVersion
 instance Arbitrary RowDataVersion where
   arbitrary = elements [RDV0, RDV1]
 
+#ifdef PACT_TOJSON
 instance ToJSON RowDataVersion where
   toJSON = toJSON . fromEnum
   toEncoding = toEncoding . fromEnum
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance FromJSON RowDataVersion where
   parseJSON = withScientific "RowDataVersion" $ \case
@@ -192,6 +201,7 @@ rowDataToPactValue rdv = case rdv of
 instance Pretty RowDataValue where
   pretty = pretty . rowDataToPactValue
 
+#ifdef PACT_TOJSON
 rowDataProperties :: JsonProperties RowData
 rowDataProperties o =
   [ "$d" .= _rdData o
@@ -208,6 +218,7 @@ instance ToJSON RowData where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode RowData where
   build (RowData RDV0 m) = J.build $ fmap rowDataToPactValue m
@@ -247,6 +258,7 @@ data OldPactValue
   | OldPGuard !(Guard OldPactValue)
   | OldPModRef !ModRef
 
+#ifdef PACT_TOJSON
 -- Needed for parsing guard
 instance ToJSON OldPactValue where
   toJSON = enableToJSON "Pact.Types.RowData.OldPactValue" . \case
@@ -267,6 +279,7 @@ instance ToJSON OldPactValue where
 
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+#endif
 
 instance J.Encode OldPactValue where
   build (OldPLiteral l) = J.build l

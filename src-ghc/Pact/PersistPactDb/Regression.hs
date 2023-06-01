@@ -92,19 +92,19 @@ runRegression p = do
 
       [ TxLog { _txDomain = "SYS_keysets"
               , _txKey = "ks1"
-              , _txValue = toLegacyJson ks
+              , _txValue = toLegacyJsonViaEncode ks
               }
       , TxLog { _txDomain = "SYS_modules"
               , _txKey = asString modName
-              , _txValue = toLegacyJson mod'
+              , _txValue = toLegacyJsonViaEncode mod'
               }
       , TxLog { _txDomain = "USER_user1"
               , _txKey = "key1"
-              , _txValue = toLegacyJson row
+              , _txValue = toLegacyJsonViaEncode row
               }
       , TxLog { _txDomain = "USER_user1"
               , _txKey = "key1"
-              , _txValue = toLegacyJson row'
+              , _txValue = toLegacyJsonViaEncode row'
               }
       ]
     )

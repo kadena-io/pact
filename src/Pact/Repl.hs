@@ -30,7 +30,6 @@ module Pact.Repl
   , evalPact
   , evalRepl
   , evalRepl'
-  , evalString
   , handleCompile
   , handleParse
   , initPureEvalEnv
@@ -62,7 +61,6 @@ import Control.Exception.Safe
 import Control.Lens hiding (op)
 import Control.Monad.State.Strict
 
-import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
 import Data.Char
@@ -458,17 +456,6 @@ evalRepl' cmd = useReplLib >> evalPact cmd
 
 evalRepl :: ReplMode -> String -> IO (Either String (Term Name))
 evalRepl m cmd = initReplState m Nothing >>= evalStateT (evalRepl' cmd)
-
-evalString :: Bool -> String -> IO Value
-evalString showLog cmd = do
-  (er,s) <- initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
-  return $ object $ case (showLog,er) of
-    (False,Right v) -> [ "success" A..= v]
-    (True,Right _) -> ["success" A..= trim (_rOut s) ]
-    (False,Left e) -> ["failure" A..= e ]
-    (True,Left e) -> ["failure" A..= (_rOut s ++ e) ]
-
-
 
 _eval :: String -> IO (Term Name)
 _eval cmd = evalRepl (Script True "_eval") cmd >>= \r ->

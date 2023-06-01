@@ -1,9 +1,11 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Module      :  Pact.Types.Gas
@@ -65,7 +67,11 @@ parseGT0 v = parseJSON v >>= \a ->
 
 -- | API Price value, basically a newtype over `Decimal`
 newtype GasPrice = GasPrice ParsedDecimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON,Pretty,J.Encode)
+  deriving (Eq,Ord,Generic)
+  deriving newtype (Num,Real,Fractional,RealFrac,NFData,Serialize,ToTerm,Pretty,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 instance Show GasPrice where
   show (GasPrice (ParsedDecimal d)) = show d
 
@@ -218,7 +224,11 @@ instance Pretty GasArgs where
     GZKArgs arg -> "GZKArgs:" <> pretty arg
 
 newtype GasLimit = GasLimit ParsedInteger
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty,J.Encode)
+  deriving (Eq,Ord,Generic)
+  deriving newtype (Num,Real,Integral,Enum,Serialize,NFData,ToTerm,Pretty,J.Encode)
+#ifdef PACT_TOJSON
+  deriving newtype (ToJSON)
+#endif
 
 instance Arbitrary GasLimit where
   arbitrary = GasLimit <$> (getPositive <$> arbitrary)
