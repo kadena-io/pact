@@ -31,6 +31,7 @@ module Pact.Types.Exp
    genLiteralDecimal,
    genLiteralBool,
    genLiteralTime,
+   genArbitraryUTCTime,
    simpleISO8601,formatLTime,
    litToPrim,
    LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),

@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -240,7 +241,7 @@ defEvalEnv db = do
   setupEvalEnv db entity Transactional (initMsgData pactInitialHash) (versionedNativesRefStore noPact44EC)
     prodGasModel permissiveNamespacePolicy noSPVSupport def noPact44EC
   where entity = Just $ EntityName "entity"
-        prodGasModel = GasEnv 10000000 0.01 $ tableGasModel defaultGasConfig
+        prodGasModel = GasEnv 1_000_000_000 0.01 (tableGasModel defaultGasConfig)
         noPact44EC = mkExecutionConfig [FlagDisablePact44]
 
 -- MockDb

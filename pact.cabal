@@ -356,6 +356,35 @@ executable gasmodel
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+executable gasmodel2
+  if impl(ghcjs) || !flag(build-tool)
+    buildable: False
+  main-is:             GasModel2.hs
+  build-depends:       base
+                     , Decimal
+                     , aeson >= 0.11.3.0 && < 1.6
+                     , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
+                     , bytestring >=0.10.8.1 && < 0.12
+                     , cassava >= 0.5
+                     , criterion
+                     , data-default
+                     , deepseq >= 1.4.2.0 && < 1.5
+                     , hedgehog >= 1.0.1 && < 1.3
+                     , lens
+                     , pact
+                     , statistics >= 0.13.3 && < 0.17
+                     , tasty >=0.11 && <1.5
+                     , tasty-hedgehog >= 1.3.0.0 && < 1.4
+                     , text
+                     , time
+                     , transformers
+                     , unordered-containers
+                     , vector >= 0.11.0.0 && < 0.13
+  hs-source-dirs:      executables
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
 test-suite hspec
   main-is:          PactTests.hs
   type:             exitcode-stdio-1.0
