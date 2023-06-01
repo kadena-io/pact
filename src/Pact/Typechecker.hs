@@ -934,10 +934,20 @@ toAST (TApp Term.App{..} _) = do
 
   case fun of
 
-    FDefun {..} -> do
-      if null _fBody
-      then assocNode _fRetId n -- TODO: is this necessary?
-      else assocAST i (last _fBody)
+    FDefun {} -> do
+      if null (_fBody fun)
+      then assocNode (_fRetId fun) n -- TODO: is this necessary?
+      else do
+        let !nArgs = length args
+            !nFunArgs =  length (_ftArgs (_fType fun))
+
+        unless (nArgs == nFunArgs) $
+          addFailure i
+            $ "function " <> show (_fName fun) <> " supplied "
+            <> (if nArgs < nFunArgs then "too few" else "too many")
+            <> " args: "
+            <> showPretty args
+        assocAST i (last (_fBody fun))
 
       mkApp fun args
 
