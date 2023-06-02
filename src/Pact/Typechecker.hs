@@ -529,9 +529,13 @@ substAppDefun Nothing Post (App appNode fun args) = do -- Post, to allow AST sub
       FNative {} ->
         return fun -- noop
       FDefun {_fType,_fArgs,_fBody} -> do
+        rejectPartials _fType
         body' <- inlineAppArgs appNode _fType _fArgs _fBody args
         return $ set fBody body' fun
     return (App appNode fun' args)
+  where
+    rejectPartials fty =
+      when (length (_ftArgs fty) > length args) $ addFailure (_aId appNode) "buh BOOM"
 substAppDefun _ _ t = return t
 
 -- | Track AST as a TypeVar pointing to a Types. If the provided node type is already a var use that,
@@ -908,7 +912,12 @@ toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
 toAST t@TLam{} =
-  -- Lambda values are converted to Apps
+  -- The only valid site for a lambda value is in a binding,
+  -- whereas a direct lambda app will be consumed in the `TApp` case.
+  -- An 'App' is constructed to teleport the 'Fun' value to the binding,
+  -- where it will be replaced in the AST with a dummy value.
+  -- If this proves unworkable going forward, a 'Lam' case needs to
+  -- be added to 'AST', and handled/ignored in FV, etc.
   toAST $ TApp (Term.App t [] (getInfo t)) (getInfo t)
 toAST TModRef{..} = do
   tcid <- freshId _tInfo $ renderCompactText _tModRef
@@ -1021,12 +1030,14 @@ toAST TBinding {..} = do
     aid <- freshId ai (pfx (pack $ show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid
-    v' <- toAST v
-    case (v,v') of
+    -- handle lam App teleport and dummy substitution
+    v' <- toAST v >>= \va -> case (v,va) of
       (TLam {},App _ fun _) -> do
         debug $ "toAST: Tracking bound lambda " ++ show aid ++ " -> " ++ unpack (funName fun)
         tcBoundLambdas %= M.insert aid fun
-      _ -> return ()
+        -- replace binding value with dummy in AST
+        trackPrim (getInfo v) TyString (PrimLit (LString (funName fun <> ":lambda-dummy")))
+      _ -> return va
     case _tBindType of
       BindLet -> do
         assocAST aid v'

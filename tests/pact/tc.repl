@@ -329,6 +329,13 @@
     "test anon lambdas"
     (map (lambda (i) (> i 1)) [1 2 3]))
 
+  (defun partial-test-fun:bool (a:bool b:bool) b)
+
+  (defun fails-partial-app-user ()
+    "fail unsaturated app of user fun"
+    (partial-test-fun true))
+
+
 )
 
 (create-table persons)
