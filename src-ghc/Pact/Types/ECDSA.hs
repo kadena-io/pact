@@ -13,6 +13,7 @@ module Pact.Types.ECDSA
   , exportPublic,    importPublic
   , exportPrivate,   importPrivate
   , exportSignature, importSignature
+  , keccak256Hash, bsToInteger
   ) where
 
 
