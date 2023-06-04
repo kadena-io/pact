@@ -24,7 +24,7 @@ For additional information, press, and development inquiries, please refer to th
 - [Documentation](#documentation)
 - [Quickstart](#quickstart)
 - [Installing Pact](#installing-pact)
-  - [Binary Distributions](#binary-distributions)
+  - [Binary Downloads](#binary-downloads)
   - [Instructions for Mac users](#instructions-for-mac-users)
   - [Instructions for Linux users](#instructions-for-linux-users)
   - [Building from Source](#building-from-source)
@@ -60,9 +60,9 @@ The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.
 ## Installing Pact
 
 
-### Binary Distributions
+### Binary Downloads
 
-Pact can be installed via binary distribution for Linux or Mac by following the instructions below:
+Pact can be installed via ready-to-use binary downloads for Linux or Mac by following the instructions below:
 
 - Install [z3](https://github.com/Z3Prover/z3/wiki) `>= 4.11.2`.
 - Download the [prebuilt binaries](https://github.com/kadena-io/pact/releases) for either Linux or Mac, depending on your OS.
@@ -89,7 +89,7 @@ If you want to install from source, see [building from source](#building-from-so
 
 ### Instructions for Linux Users
 
-Linux is supported in terms of both the binary distributions (see below) and building from source. For installing `pact` on Linux distributions in the Arch family, refer to [this package on the AUR](https://aur.archlinux.org/packages/pact/). Otherwise, please refer to [building from source](#building-from-source).
+Linux is supported both in terms of ready-to-use binary downloads (see [Binary Downloads](#binary-downloads)) and building from source. For installing `pact` on Linux distributions in the Arch family, refer to [this package on the AUR](https://aur.archlinux.org/packages/pact/). Otherwise, please refer to [building from source](#building-from-source).
 
 ### Building from Source
 
