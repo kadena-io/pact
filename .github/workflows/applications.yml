@@ -68,6 +68,14 @@ jobs:
         version: "4.12.1"
         architecture: "x64"
         distribution: "osx-10.16"
+    - name: Insatall z3 (Windows)
+      if: contains(matrix.os, 'windows')
+      uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
+      with:
+        version: "4.12.1"
+        architecture: "x64"
+        distribution: "win"
+
     - name: Print Z3 version
       shell: bash
       run: z3 -version
