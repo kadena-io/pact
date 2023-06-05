@@ -28,9 +28,12 @@ import qualified RemoteVerifySpec
 import qualified TypecheckSpec
 import qualified PactCLISpec
 import qualified ZkSpec
-import qualified ReplSpec
 import qualified CoverageSpec
-# endif
+
+#ifndef mingw32_HOST_OS
+import qualified ReplSpec
+#endif
+#endif
 #endif
 
 main :: IO ()
@@ -49,7 +52,7 @@ main = hspec $ parallel $ do
   describe "SignatureSpec" SignatureSpec.spec
   describe "SchemeSpec" SchemeSpec.spec
 
-# ifdef BUILD_TOOL
+#ifdef BUILD_TOOL
 
   describe "AnalyzePropertiesSpec" AnalyzePropertiesSpec.spec
   describe "AnalyzeSpec" AnalyzeSpec.spec
@@ -64,8 +67,10 @@ main = hspec $ parallel $ do
   describe "TypecheckSpec" TypecheckSpec.spec
   describe "PactCLISpec" PactCLISpec.spec
   describe "ZkSpec" ZkSpec.spec
-  describe "ReplSpec" ReplSpec.spec
   describe "CoverageSpec" CoverageSpec.spec
+#ifndef mingw32_HOST_OS
+  describe "ReplSpec" ReplSpec.spec
+#endif
+#endif
 
-# endif
 #endif

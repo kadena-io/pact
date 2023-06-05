@@ -422,10 +422,8 @@ test-suite hspec
         TypecheckSpec
         PactCLISpec
         ZkSpec
-        ReplSpec
         PairingSpec
         Utils
-
       build-depends:
         , Decimal
         , QuickCheck
@@ -449,4 +447,8 @@ test-suite hspec
         , temporary >=1.3
         , yaml
         , process
-        , posix-pty
+
+   if flag(build-tool) && !os(windows)
+      cpp-options: -DBUILD_TOOL
+      other-modules: ReplSpec
+      build-depends: posix-pty

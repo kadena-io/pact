@@ -6,7 +6,7 @@ module ReplSpec where
 import Test.Hspec
 
 import Data.ByteString (ByteString)
--- import Control.Monad.IO.Class
+import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
 import System.Posix.Pty (spawnWithPty, writePty, readPty, closePty)
 import System.Process (terminateProcess)
