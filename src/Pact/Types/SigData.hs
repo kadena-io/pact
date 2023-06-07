@@ -94,6 +94,7 @@ sigDataProperties f o = mconcat
   , "sigs" .= f (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
     -- FIXME: this instance seems to violate the comment on the respective
     -- constructor field. Is that fine? Is it required for backward compat?
+    -- This instance also does not roundtrip.
   , "cmd" .?= _sigDataCmd o
   ]
 {-# INLINE sigDataProperties #-}
@@ -121,6 +122,7 @@ instance J.Encode a => J.Encode (SigData a) where
     , "sigs" J..= LHM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
       -- FIXME: this instance seems to violate the comment on the respective
       -- constructor field. Is that fine? Is it required for backward compat?
+      -- This instance also does not roundtrip.
     , "cmd" J..?= _sigDataCmd o
     ]
   {-# INLINE build #-}

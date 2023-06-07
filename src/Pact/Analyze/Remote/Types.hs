@@ -23,6 +23,7 @@ import GHC.Generics
 import qualified Pact.JSON.Encode as J
 import Pact.Types.PactError
 import Pact.Types.Term (ModuleDef, ModuleName, Name)
+import Pact.Types.Util
 
 import Test.QuickCheck
 
@@ -36,11 +37,18 @@ instance A.FromJSON Request where
             <*> o A..: "verify"
 
 #ifdef PACT_TOJSON
+requestProperties :: JsonProperties Request
+requestProperties (Request mods modName) =
+  [ "verify"  A..= modName
+  , "modules" A..= mods
+  ]
+{-# INLINE requestProperties #-}
+
 instance A.ToJSON Request where
-  toJSON (Request mods modName) = A.object
-    [ "modules" A..= mods
-    , "verify"  A..= modName
-    ]
+  toJSON = enableToJSON "Pact.Analyze.Remote.Types" . A.object . requestProperties
+  toEncoding = A.pairs . mconcat . requestProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 #endif
 
 instance J.Encode Request where
@@ -66,10 +74,17 @@ instance A.FromJSON Response where
     Response <$> o A..: "output"
 
 #ifdef PACT_TOJSON
+responseProperties :: JsonProperties Response
+responseProperties (Response outputLines) =
+  [ "output" A..= outputLines
+  ]
+{-# INLINE responseProperties #-}
+
 instance A.ToJSON Response where
-  toJSON (Response outputLines) = A.object
-    [ "output" A..= outputLines
-    ]
+  toJSON = enableToJSON "Pact.Analyze.Remote.Types" . A.object . responseProperties
+  toEncoding = A.pairs . mconcat . responseProperties
+  {-# INLINE toJSON #-}
+  {-# INLINE toEncoding #-}
 #endif
 
 instance J.Encode Response where

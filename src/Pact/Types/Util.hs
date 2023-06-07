@@ -56,7 +56,7 @@ module Pact.Types.Util
   ) where
 
 -- Enable to make legacy toJSON available (required for yaml encodings)
--- #define ENABLE_TOJSON
+#define ENABLE_TOJSON
 
 -- Enable to make trace calls to toJSON (only for debugging purposes)
 -- #define ENABLE_TOJSON_WARNING
