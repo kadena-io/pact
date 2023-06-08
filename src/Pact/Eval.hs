@@ -321,8 +321,8 @@ eval' (TModule _tm@(MDModule m) bod i) =
         void $ acquireModuleAdminCapability capMName $ return ()
 
         unlessExecutionFlagSet FlagDisablePact48 $ do
-          modifying (evalRefs.rsLoadedModules) (HM.delete (_mName mangledM))
-          modifying (evalRefs.rsQualifiedDeps) (HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM))
+          evalRefs.rsLoadedModules %= HM.delete (_mName mangledM)
+          evalRefs.rsQualifiedDeps %= HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM)
 
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
