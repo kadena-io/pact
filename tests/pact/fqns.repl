@@ -106,7 +106,7 @@
     (with-capability (free.test-mod-redeploy-ref.test)
       1))
   )
-(expect "Namre resolution should find new reference" 1 (f))
+(expect "Name resolution should find new reference" 1 (f))
 (commit-tx)
 
 ; pact 4.7 behaviour
