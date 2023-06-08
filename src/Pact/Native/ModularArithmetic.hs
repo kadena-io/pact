@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 
-module Pact.Native.ModularArithmetic (egcdDefs, egcd) where
+module Pact.Native.ModularArithmetic (egcdDefs, egcd, keccak256bs) where
 
 import Crypto.Number.Serialize (i2ospOf_)
 import Pact.Types.ECDSA (keccak256Hash, bsToInteger)
@@ -39,7 +39,7 @@ egcdDef = defRNative
   egcd'
   (funType (TyList tTyInteger) [("x", tTyInteger), ("y", tTyInteger)])
   ["Computes the extended euclidean algorithm of two integers."]
-  "Computes the extended euclidean algorithm of two integers and returns the result as a tuple. The function also calculates the gas cost for the operation."
+  "Computes the extended euclidean algorithm of two integers and returns the result as a tuple."
 
 -- keccak256bs
 

@@ -220,7 +220,7 @@ defaultGasTable =
 
   -- Modular inverse
   ,("egcd", 3)
-  ,("keccak256-bs", 3)
+  ,("keccak256-bs", 13)
   ]
 
 {-# NOINLINE defaultGasTable #-}

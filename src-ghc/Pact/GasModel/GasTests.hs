@@ -222,6 +222,7 @@ allTests = HM.fromList
     , ("scalar-mult", scalarMulTests)
     , ("pairing-check", pairingCheckTests)
     , ("egcd", egcdTests)
+    , ("keccak256-bs", keccak256bsTests)
 
       -- Non-native concepts to benchmark
     , ("use", useTests)
@@ -2009,4 +2010,13 @@ egcdTests = defGasUnitTest $ PactExpression egcdExprText Nothing
     (egcd 3 26)
     (egcd 5865413254 646787313212)
     (egcd 98765432109876543212 12345678901234567896)
+    |]
+
+keccak256bsTests :: NativeDefName -> GasUnitTests
+keccak256bsTests = defGasUnitTest $ PactExpression keccak256bsExprText Nothing
+  where
+    keccak256bsExprText = [text|
+    (keccak256-bs 64 4637928374822348932)
+    (keccak256-bs 128 86734239273823482392374839238192)
+    (keccak256-bs 256 2939802230983298498274024970323894828329382938283938293283)
     |]
