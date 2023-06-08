@@ -94,6 +94,7 @@
     (with-capability (test)
       1))
   )
+(expect-failure "Execution fails due to the falsy defcap" (f))
 (commit-tx)
 
 (begin-tx)
