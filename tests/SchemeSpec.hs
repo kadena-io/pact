@@ -176,7 +176,7 @@ testUserSig = do
         (_,_,wrongAddr,_) = someETHPair
     [signer] <- toSigners [someED25519Pair]
     [(kp,_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
-    sig      <- sign kp (toUntypedHash hsh)
+    sig      <- sign kp hsh
     let myUserSig   = UserSig (toB16Text sig)
         wrongSigner = Lens.set siAddress wrongAddr signer
     (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` False
@@ -187,7 +187,7 @@ testUserSig = do
     let hsh = hash "(somePactFunction)"
     [signer] <- toSigners [someED25519Pair]
     [(kp,_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
-    sig      <- sign kp (toUntypedHash hsh)
+    sig      <- sign kp hsh
     let myUserSig   = UserSig (toB16Text sig)
         wrongScheme = ETH
         wrongSigner = Lens.set siScheme (Just wrongScheme) signer

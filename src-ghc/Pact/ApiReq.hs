@@ -251,7 +251,7 @@ returnSigDataOrCommand  outputLocal sd
   verifyPartialSigData (SigData h sigs Nothing) = do
     sigs' <- foldrM toVerifPair [] sigs
     let scheme = toScheme ED25519
-        failedSigs = filter (\(pk, sig) -> not $ verify scheme (toUntypedHash h) pk sig) sigs'
+        failedSigs = filter (\(pk, sig) -> not $ verify scheme h pk sig) sigs'
     when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
     pure ()
     where
@@ -359,7 +359,7 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       let signSingle kp = do
-            sig <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
+            sig <- signHash (Hash $ SBS.toShort h) kp
             return $ toB16Text (getPublic kp) .= _usSig sig
       sigs <- mapM signSingle kps
       return $ Y.encode $ object sigs

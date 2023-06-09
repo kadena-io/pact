@@ -1169,7 +1169,7 @@ testTwoPartyEscrow = do
 
 twoPartyEscrow
   :: [Command Text]
-  -> (PactHash -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ())
+  -> (Hash -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ())
   -> Expectation
 twoPartyEscrow testCmds act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
@@ -1202,13 +1202,13 @@ checkContHash
   :: HasCallStack
   => [ApiReqParts]
   -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
-  -> PactHash
+  -> Hash
   -> ReaderT (HM.HashMap RequestKey (CommandResult Hash)) IO ()
 checkContHash reqs act hsh = forM_ reqs $ \req ->
   let desc = show $ view (_1 . to _ylNonce) req
   in case preview (_1 . to _ylPactTxHash . _Just) req of
     Nothing -> liftIO $ expectationFailure $ "Expected pact hash in request: " ++ desc
-    Just ph | ph == toUntypedHash hsh -> act
+    Just ph | ph == hsh -> act
             | otherwise -> liftIO $ toExpectationFailure' ("checkContHash for req " ++ desc ++ ": ") ph hsh
 
 
@@ -1394,8 +1394,7 @@ textVal :: Text -> PactValue
 textVal = PLiteral . LString
 
 getPactId :: Command Text -> PactId
-getPactId cmd = toPactId hsh
-  where hsh = (toUntypedHash . _cmdHash) cmd
+getPactId cmd = toPactId (_cmdHash cmd)
 
 
 pactIdNotFoundMsg :: Command Text -> String

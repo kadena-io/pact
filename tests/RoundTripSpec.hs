@@ -70,7 +70,7 @@ testJSONModules = rt "module" tmod
   where
     tmod = TModule
            (MDModule (Module "foo" (Governance (Right (tStr "hi")))
-                      def "" (ModuleHash pactInitialHash) HS.empty [] []))
+                      def "" (ModuleHash initialHash) HS.empty [] []))
            (abstract (const (Just ()))
             (toTList TyAny def
              [tlet1]))

@@ -39,7 +39,7 @@ cmd :: Command ByteString
 cmd = Command "" [] initialHash
 
 rq :: RequestKey
-rq = RequestKey pactInitialHash
+rq = RequestKey initialHash
 
 res :: Either PactError PactValue
 res = Left $ PactError TxFailure def def . viaShow $ ("some error message" :: String)

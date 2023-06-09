@@ -136,7 +136,7 @@ resultSuccess tx cmd gas a pe l evs =
   where hshLog = fullToHashLogCr l
 
 fullToHashLogCr :: [TxLog Value] -> Hash
-fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
+fullToHashLogCr full = (hash . BSL.toStrict . encode) full
 
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p (CommandResult Hash)
@@ -145,13 +145,13 @@ runPayload c@Command{..} = case (_pPayload _cmdPayload) of
   Continuation ym -> applyContinuation (cmdToRequestKey c) _cmdHash (_pSigners _cmdPayload) ym
 
 
-applyExec :: RequestKey -> PactHash -> [Signer] -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
+applyExec :: RequestKey -> Hash -> [Signer] -> ExecMsg ParsedCode -> CommandM p (CommandResult Hash)
 applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   evalEnv
     <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-        (MsgData edata Nothing (toUntypedHash hsh) signers)
+        (MsgData edata Nothing hsh signers)
         initRefStore _ceGasEnv permissiveNamespacePolicy
         _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
@@ -159,12 +159,12 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents
 
 
-applyContinuation :: RequestKey -> PactHash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
+applyContinuation :: RequestKey -> Hash -> [Signer] -> ContMsg -> CommandM p (CommandResult Hash)
 applyContinuation rk hsh signers cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
   evalEnv <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) (versionedNativesRefStore _ceExecutionConfig)
+                (MsgData (_cmData cm) Nothing hsh signers) (versionedNativesRefStore _ceExecutionConfig)
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

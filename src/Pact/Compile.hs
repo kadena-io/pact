@@ -489,7 +489,7 @@ moduleForm = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       modName = ModuleName modName' Nothing
-      modHash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
+      modHash = ModuleHash . hash . encodeUtf8 . _unCode $ code
   ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
     (MDModule $ Module modName gov m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
@@ -514,7 +514,7 @@ interface = do
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       iname = ModuleName iname' Nothing
-      ihash = ModuleHash . pactHash . encodeUtf8 . _unCode $ code
+      ihash = ModuleHash . hash . encodeUtf8 . _unCode $ code
   (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
             bodyForm $ specialForm $ \case
               RDefun -> return $ defSig Defun
@@ -740,7 +740,7 @@ _compile = _compileWith topLevel
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]
 _compileStrInModule = fmap concat . _compileStr' moduleLevel
-  (set (psUser . csModule) (Just (initModuleState "mymodule" (ModuleHash $ pactHash mempty))))
+  (set (psUser . csModule) (Just (initModuleState "mymodule" (ModuleHash initialHash))))
 
 _compileStr :: String -> IO [Term Name]
 _compileStr = _compileStr' topLevel id

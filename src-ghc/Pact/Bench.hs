@@ -154,7 +154,7 @@ loadBenchModule db = do
             , "acct" .= [pk]
             ])
            Nothing
-           pactInitialHash
+           initialHash
            [Signer Nothing pk Nothing []]
   let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- setupEvalEnv db entity Transactional md (versionedNativesRefStore ec)
@@ -183,7 +183,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData cdata Nothing pactInitialHash ss
+  let md = MsgData cdata Nothing initialHash ss
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Transactional md (versionedNativesRefStore ec)
           prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -195,7 +195,7 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
-  let md = MsgData Null Nothing pactInitialHash []
+  let md = MsgData Null Nothing initialHash []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   env <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Local md (versionedNativesRefStore ec)
             prodGasEnv permissiveNamespacePolicy noSPVSupport def ec

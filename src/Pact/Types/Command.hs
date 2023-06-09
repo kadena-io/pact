@@ -93,7 +93,7 @@ import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
 data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
-  , _cmdHash :: !PactHash
+  , _cmdHash :: !Hash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
@@ -173,8 +173,8 @@ mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = BSL.toStrict $ A.encode payload
         payload = Payload rpc nonce meta signers nid
 
-signHash :: TypedHash h -> SomeKeyPair -> IO UserSig
-signHash hsh cred = UserSig . toB16Text <$> sign cred (toUntypedHash hsh)
+signHash :: Hash -> SomeKeyPair -> IO UserSig
+signHash hsh cred = UserSig . toB16Text <$> sign cred hsh
 
 -- VALIDATING TRANSACTIONS
 
@@ -197,7 +197,7 @@ verifyCommand orig@Command{..} =
     verifiedHash = verifyHash _cmdHash _cmdPayload
 {-# INLINE verifyCommand #-}
 
-hasInvalidSigs :: PactHash -> [UserSig] -> [Signer] -> Maybe String
+hasInvalidSigs :: Hash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers
   | not (length sigs == length signers)  = Just "Number of sig(s) does not match number of signer(s)"
   | otherwise                            = if (length failedSigs == 0)
@@ -208,13 +208,13 @@ hasInvalidSigs hsh sigs signers
         formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode <$> failedSigs)
 
 
-verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
+verifyUserSig :: Hash -> UserSig -> Signer -> Bool
 verifyUserSig msg UserSig{..} Signer{..} =
   case (pubT, sigT, addrT) of
     (Right p, Right sig, addr) ->
       (isValidAddr addr p) &&
       verify (toScheme $ fromMaybe defPPKScheme _siScheme)
-             (toUntypedHash msg) (PubBS p) (SigBS sig)
+             msg (PubBS p) (SigBS sig)
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
         sigT = parseB16TextOnly _usSig
@@ -358,7 +358,7 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
 instance NFData a => NFData (CommandResult a)
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
+cmdToRequestKey Command {..} = RequestKey _cmdHash
 
 
 

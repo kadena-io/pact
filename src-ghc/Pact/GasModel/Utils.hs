@@ -413,7 +413,7 @@ someModuleName :: ModuleName
 someModuleName = ModuleName "some-module" Nothing
 
 someModuleHash :: ModuleHash
-someModuleHash = ModuleHash $ pactHash ""
+someModuleHash = ModuleHash initialHash
 
 someStackFrame :: StackFrame
 someStackFrame =

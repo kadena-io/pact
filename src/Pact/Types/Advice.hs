@@ -54,7 +54,7 @@ data AdviceContext r where
     -- | Advise on native, return result
     AdviceNative :: !NativeDefName -> AdviceContext (Term Name)
     -- | Transaction execution wrapper
-    AdviceTx :: !PactHash -> AdviceContext ()
+    AdviceTx :: !Hash -> AdviceContext ()
     -- | Db operation
     AdviceDb :: !DbContext -> AdviceContext ()
     -- | Module or interface install/upgrade, returns loaded module data.

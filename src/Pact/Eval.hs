@@ -1308,7 +1308,7 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
 createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
   let pc = PactContinuation (QName qn{_qnInfo = def}) pvs
-  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
+  pure $ toPactId $ hash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
 createNestedPactId i n _ =
   evalError' i $ "Error creating nested pact id, name is not qualified: " <> pretty n
 
