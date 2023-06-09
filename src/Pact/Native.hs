@@ -258,24 +258,6 @@ formatDef =
   (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
   ["(format \"My {} has {}\" [\"dog\" \"fleas\"])"]
   "Interpolate VARS into TEMPLATE using {}."
-  where
-    format :: RNativeFun e
-    format i [TLitString s,TList es _ _] = do
-      let parts = T.splitOn "{}" s
-          plen = length parts
-      if | plen == 1 -> return $ tStr s
-         | plen - length es > 1 -> evalError' i "format: not enough arguments for template"
-         | otherwise -> do
-          let args = rep <$> V.toList es
-              !totalArgLen = sum (T.length <$> args)
-              inputLength = T.length s
-          unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
-          return $ tStr $ T.concat $ alternate parts (take (plen - 1) args)
-    format i as = argsError i as
-    rep (TLitString t) = t
-    rep t = renderCompactText t
-    alternate (x:xs) ys = x : alternate ys xs
-    alternate _ _ = []
 
 strToListDef :: NativeDef
 strToListDef = defGasRNative "str-to-list" strToList
@@ -974,8 +956,42 @@ enumerate i = \case
         computeList g' (max (abs from') (abs to')) $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
-reverse' _ [l@TList{}] = return $ over tList V.reverse l
-reverse' i as = argsError i as
+reverse' i [l@TList{}] = do
+  unlessExecutionFlagSet FlagDisablePact48 $ computeGas (Right i) (GReverse listLen)
+  pure $ over tList V.reverse l
+  where
+    listLen = V.length $ view tList l
+reverse' i args = argsError i args
+
+format :: RNativeFun e
+format i [TLitString s,TList es _ _] = do
+  let parts = T.splitOn "{}" s
+      plen = length parts
+  if | plen == 1 -> return $ tStr s
+     | plen - length es > 1 -> evalError' i "format: not enough arguments for template"
+     | otherwise -> do
+        let formatLegacyArgs = do
+              let args = repTerm <$> V.toList es
+                  !totalArgLen = sum (T.length <$> args)
+                  inputLength = T.length s
+              unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
+              pure args
+        let formatFullGassedArgs = do
+              vals <- traverse enforcePactValue es
+              void $ computeGas (Right i) (GFormatValues s vals)
+              pure $ repVal <$> V.toList vals
+        args <- ifExecutionFlagSet FlagDisablePact48 formatLegacyArgs formatFullGassedArgs
+        return $ tStr $ T.concat $ alternate parts (take (plen - 1) args)
+  where
+    repVal (PLiteral (LString t)) = t
+    repVal t = renderCompactText t
+
+    repTerm (TLitString t) = t
+    repTerm t = renderCompactText t
+
+    alternate (x:xs) ys = x : alternate ys xs
+    alternate _ _ = []
+format i as = argsError i as
 
 fold' :: NativeFun e
 fold' i as@[tLamToApp -> app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \case

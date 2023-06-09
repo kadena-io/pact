@@ -101,6 +101,7 @@ library
     Pact.Eval
     Pact.Gas
     Pact.Gas.Table
+    Pact.Gas.Table.Format
     Pact.Native
     Pact.Native.Capabilities
     Pact.Native.Guards

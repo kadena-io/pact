@@ -8,9 +8,9 @@
 
 module Pact.Gas.Table where
 
-import Data.Ratio
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
 #if !defined(ghcjs_HOST_OS)
@@ -23,6 +23,8 @@ import Pact.Types.Gas
 import Pact.Types.RowData
 import Pact.Types.SizeOf
 import Pact.Types.Term
+
+import Pact.Gas.Table.Format
 
 -- NB: If pact ends up not having any variadic primitives (currently, I didn't spot any thus far, but also the types don't rule it out)
 -- then the primTable here could lose the [Term Ref] function parameter, and simply be Map Text Gas.
@@ -51,6 +53,8 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_defPactCost :: Gas
   , _gasCostConfig_foldDBCost :: Gas
   , _gasCostConfig_principalCost :: Gas
+  , _gasCostConfig_reverseElemsPerGas :: Gas
+  , _gasCostConfig_formatBytesPerGas :: Gas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -73,6 +77,8 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   , _gasCostConfig_foldDBCost = 1
   , _gasCostConfig_principalCost = 5 -- matches 'hash' cost
+  , _gasCostConfig_reverseElemsPerGas = 100
+  , _gasCostConfig_formatBytesPerGas = 10
   }
 
 defaultGasTable :: Map Text Gas
@@ -311,6 +317,11 @@ tableGasModel gasConfig =
           PointAdd g -> pointAddGas g
           ScalarMult g -> scalarMulGas g
           Pairing np -> pairingGas np
+        GReverse len -> gasToMilliGas $ fromIntegral len `quot` _gasCostConfig_reverseElemsPerGas gasConfig
+        GFormatValues s args ->
+          let totalBytesEstimate = estimateFormatText s + estimateFormatValues args
+          in gasToMilliGas $ fromIntegral totalBytesEstimate `quot` _gasCostConfig_formatBytesPerGas gasConfig
+
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"

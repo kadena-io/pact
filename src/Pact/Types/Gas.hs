@@ -43,6 +43,7 @@ import Data.Text (Text, unpack)
 import Data.Aeson.Types (Parser)
 import Data.Serialize
 import Data.Decimal
+import qualified Data.Vector as V
 
 import GHC.Generics
 
@@ -172,6 +173,10 @@ data GasArgs
   | GMakeList2 !Integer !(Maybe Integer)
   -- ^ List versioning 2
   | GZKArgs !ZKArg
+  | GReverse !Int
+  -- ^ Cost of reversing a list of a given length
+  | GFormatValues !Text !(V.Vector PactValue)
+  -- ^ Cost of formatting with the given format string and args
 
 -- | The elliptic curve pairing group we are
 -- handling
@@ -226,6 +231,8 @@ instance Pretty GasArgs where
     GDecimalOpCost i j -> "GDecimalOpCost:" <> pretty (show i) <> colon <> pretty (show j)
     GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
     GZKArgs arg -> "GZKArgs:" <> pretty arg
+    GReverse len -> "GReverse:" <> pretty len
+    GFormatValues s args -> "GFormatValues:" <> pretty s <> pretty (V.toList args)
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Generic)
