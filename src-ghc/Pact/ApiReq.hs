@@ -556,7 +556,7 @@ putJSON = BSL.putStrLn . J.encode
 
 -- | The formatting of the result and in particular the sorting items in the
 -- result is not specified. Do not use this function if deterministc and
--- repeatble formatting is needed.
+-- repeatable formatting is needed.
 --
 signCmd
   :: [FilePath]

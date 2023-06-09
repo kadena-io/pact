@@ -130,8 +130,8 @@ resultSuccess :: Maybe TxId ->
                  [TxLogJson] ->
                  [PactEvent] ->
                  CommandResult Hash
-resultSuccess tx cmd gas a pe l =
-  CommandResult cmd tx (PactResult $ Right a) gas (Just hshLog) pe Nothing
+resultSuccess tx cmd gas a pe l es =
+  CommandResult cmd tx (PactResult $ Right a) gas (Just hshLog) pe Nothing es
  where
   hshLog = fullToHashLogCr l
 

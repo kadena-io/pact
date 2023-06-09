@@ -5,7 +5,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators              #-}
 
 -- | Monadic contexts, more restricted than 'Symbolic', that only allow
 -- allocation of quantified symbolic variables.

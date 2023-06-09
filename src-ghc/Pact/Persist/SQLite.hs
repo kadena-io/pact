@@ -107,10 +107,6 @@ decodeBlob :: (FromJSON v) => SType -> IO v
 decodeBlob (SText (Utf8 t)) = liftEither (return $ eitherDecodeStrict' t)
 decodeBlob v = throwDbError $ "Expected text blob, got: " <> viaShow v
 
-encodeBlob :: B.ByteString -> SType
-encodeBlob a = SText $ Utf8 a
-{-# INLINE encodeBlob #-}
-
 expectSing :: Show a => String -> [a] -> IO a
 expectSing _ [s] = return s
 expectSing desc v = throwDbError $ "Expected single-" <> prettyString desc <> " result, got: " <> viaShow v
@@ -185,6 +181,8 @@ writeData' t wt k v e = do
         Insert -> sInsert
         Update -> sReplace
   getStmts e t >>= \s -> execs (ws s) [inFun (kTys t) k, encodeBlob v]
+ where
+  encodeBlob a = SText $ Utf8 a
 
 
 initSQLite :: SQLiteConfig -> Loggers -> IO SQLite

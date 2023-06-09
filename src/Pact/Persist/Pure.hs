@@ -66,7 +66,6 @@ initPureDb :: PureDb
 initPureDb = def
 
 overM :: s -> Lens' s a -> (a -> IO a) -> IO s
--- overM s l f = f (view l s) >>= \a -> return (set l a s)
 overM s l f = l f s
 {-# INLINE overM #-}
 
