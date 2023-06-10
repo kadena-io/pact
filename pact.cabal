@@ -28,7 +28,7 @@ extra-source-files:
     cbits/musl/sqrt_data.h
 
 flag cryptonite-ed25519
-  description: use cryptonite instead of ed25519-donna
+  description: use crypton instead of ed25519-donna
   default:     True
   manual:      True
 
@@ -236,7 +236,7 @@ library
       Pact.Types.SQLite
     build-depends:
       , criterion >=1.1.4
-      , cryptonite
+      , crypton
       , direct-sqlite >=2.3.27
       , memory
       , safe-exceptions >=0.1.5.0
