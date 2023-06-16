@@ -141,3 +141,31 @@
 (expect-failure "Name resolution should find old reference of prev. deployed module" (f))
 
 (commit-tx)
+
+
+; pact 4.8 module ref
+
+(begin-tx)
+(namespace 'free)
+(module test-mod-deploy-parent g
+  (defcap g () true)
+
+  (defcap test ()
+    true)
+  )
+(commit-tx)
+
+(begin-tx)
+(namespace 'free)
+(module test-mod-deploy-child g
+  (defcap g () true)
+  (defcap test ()
+    true)
+  (defun f ()
+    (with-capability (free.test-mod-deploy-parent.test)
+      1))
+  )
+
+(expect "Name resolution should find parent reference of module" 1 (f))
+
+(commit-tx)
