@@ -89,6 +89,8 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
+import Control.Applicative (liftA2)
+
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -753,8 +755,13 @@ fullyQualifyDefs info mdef defs = do
     resolveError f = lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
 
     resolveName flagPact48Disabled memo = \case
-      (QName (QualifiedName qn fn i))
-        | not flagPact48Disabled && qn == _mName mdef -> resolveBareName memo (BareName fn i)
+      (QName (QualifiedName (ModuleName mn mNs) fn i))
+        | not flagPact48Disabled
+          && mn == _mnName (_mName mdef)
+          && isNsMatch -> resolveBareName memo (BareName fn i)
+          where
+            isNsMatch = fromMaybe True (liftA2 (==) modNs mNs)
+            modNs = _mnNamespace (_mName mdef)
       f  -> do
         dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
         case (dm, f) of
