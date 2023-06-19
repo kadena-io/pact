@@ -88,9 +88,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,Generic)
   deriving newtype (IsString,FromJSON,Semigroup,Monoid,NFData,AsString,SizeOf,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
+
 instance Show Code where show = T.unpack . _unCode
 instance Pretty Code where
   pretty (Code c)
@@ -153,31 +151,6 @@ class HasInfo a where
   getInfo :: a -> Info
 
 instance HasInfo Info where getInfo = id
-
-#ifdef PACT_TOJSON
-instance ToJSON Info where
-  toJSON (Info Nothing) = Null
-  toJSON (Info (Just (code,Parsed{..}))) = object
-    [ case _pDelta of
-      (Directed a b c d e) -> "d" .= (pl, decodeUtf8 a, b, c, d, e)
-      (Lines a b c d) -> "d" .= (pl, a, b, c, d)
-      (Columns a b) -> "d" .= (pl, a, b)
-      (Tab a b c) -> "d" .= (pl, a, b, c)
-    , "c" .= code
-    ]
-   where pl = _pLength
-
-  toEncoding (Info Nothing) = toEncoding Null
-  toEncoding (Info (Just (code,Parsed{..}))) = pairs $ mconcat
-    [ case _pDelta of
-      (Directed a b c d e) -> "d" .= (pl, decodeUtf8 a, b, c, d, e)
-      (Lines a b c d) -> "d" .= (pl, a, b, c, d)
-      (Columns a b) -> "d" .= (pl, a, b)
-      (Tab a b c) -> "d" .= (pl, a, b, c)
-    , "c" .= code
-    ]
-   where pl = _pLength
-#endif
 
 instance J.Encode Info where
   build (Info Nothing) = J.null

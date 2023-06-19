@@ -69,9 +69,7 @@ parseGT0 v = parseJSON v >>= \a ->
 newtype GasPrice = GasPrice ParsedDecimal
   deriving (Eq,Ord,Generic)
   deriving newtype (Num,Real,Fractional,RealFrac,NFData,Serialize,ToTerm,Pretty,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
+
 instance Show GasPrice where
   show (GasPrice (ParsedDecimal d)) = show d
 
@@ -226,9 +224,6 @@ instance Pretty GasArgs where
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Generic)
   deriving newtype (Num,Real,Integral,Enum,Serialize,NFData,ToTerm,Pretty,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance Arbitrary GasLimit where
   arbitrary = GasLimit <$> (getPositive <$> arbitrary)

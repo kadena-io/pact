@@ -85,30 +85,12 @@ import Pact.JSON.Yaml
 
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {
-  _akpSecret :: !PrivateKeyBS,
-  _akpPublic :: !(Maybe PublicKeyBS),
-  _akpAddress :: !(Maybe Text),
-  _akpScheme :: !(Maybe PPKScheme),
-  _akpCaps :: !(Maybe [SigCapability])
+  _akpSecret :: PrivateKeyBS,
+  _akpPublic :: Maybe PublicKeyBS,
+  _akpAddress :: Maybe Text,
+  _akpScheme :: Maybe PPKScheme,
+  _akpCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
-
-#ifdef PACT_TOJSON
-apiKeyPairProperties :: JsonProperties ApiKeyPair
-apiKeyPairProperties o =
-  [ "address" .= _akpAddress o
-  , "secret" .= _akpSecret o
-  , "scheme" .= _akpScheme o
-  , "caps" .= _akpCaps o
-  , "public" .= _akpPublic o
-  ]
-{-# INLINE apiKeyPairProperties #-}
-
-instance ToJSON ApiKeyPair where
-  toJSON = enableToJSON "Pact.ApiReq.ApiKeyPair" . lensyToJSON 4
-  toEncoding = pairs . mconcat . apiKeyPairProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
 
@@ -141,23 +123,6 @@ data ApiSigner = ApiSigner {
   _asCaps :: !(Maybe [SigCapability])
   } deriving (Eq, Show, Generic)
 
-#ifdef PACT_TOJSON
-apiSignerProperties :: JsonProperties ApiSigner
-apiSignerProperties o =
-  [ "address" .= _asAddress o
-  , "scheme" .= _asScheme o
-  , "caps" .= _asCaps o
-  , "public" .= _asPublic o
-  ]
-{-# INLINE apiSignerProperties #-}
-
-instance ToJSON ApiSigner where
-  toJSON = enableToJSON "Pact.ApiReq.ApiSigner" . lensyToJSON 3
-  toEncoding = pairs . mconcat . apiSignerProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
 
 instance J.Encode ApiSigner where
@@ -187,25 +152,6 @@ data ApiPublicMeta = ApiPublicMeta
   , _apmTTL :: !(Maybe TTLSeconds)
   , _apmCreationTime :: !(Maybe TxCreationTime)
   } deriving (Eq, Show, Generic)
-
-#ifdef PACT_TOJSON
-apiPublicMetaProperties :: Monoid kv => KeyValue kv => ApiPublicMeta -> [kv]
-apiPublicMetaProperties o =
-  [ "creationTime" .?= _apmCreationTime o
-  , "ttl" .?= _apmTTL o
-  , "gasLimit" .?= _apmGasLimit o
-  , "chainId" .?= _apmChainId o
-  , "gasPrice" .?= _apmGasPrice o
-  , "sender" .?= _apmSender o
-  ]
-{-# INLINE apiPublicMetaProperties #-}
-
-instance ToJSON ApiPublicMeta where
-  toJSON = enableToJSON "Pact.ApiReq.ApiPublicMeta" . Data.Aeson.Object . mconcat . apiPublicMetaProperties
-  toEncoding = pairs . mconcat . apiPublicMetaProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON ApiPublicMeta where
   parseJSON = withObject "ApiPublicMeta" $ \o -> ApiPublicMeta
@@ -252,33 +198,6 @@ data ApiReq = ApiReq {
   _ylNetworkId :: !(Maybe NetworkId)
   } deriving (Eq,Show,Generic)
 
-#ifdef PACT_TOJSON
-apiReqProperties :: JsonProperties ApiReq
-apiReqProperties o =
-  [ "publicMeta" .= _ylPublicMeta o
-  , "proof" .= _ylProof o
-  , "data" .= _ylData o
-  , "networkId" .= _ylNetworkId o
-  , "rollback" .= _ylRollback o
-  , "signers" .= _ylSigners o
-  , "step" .= _ylStep o
-  , "code" .= _ylCode o
-  , "pactTxHash" .= _ylPactTxHash o
-  , "type" .= _ylType o
-  , "codeFile" .= _ylCodeFile o
-  , "keyPairs" .= _ylKeyPairs o
-  , "dataFile" .= _ylDataFile o
-  , "nonce" .= _ylNonce o
-  ]
-{-# INLINE apiReqProperties #-}
-
-instance ToJSON ApiReq where
-  toJSON = enableToJSON "Pact.ApiReq.ApiReq" . lensyToJSON 3
-  toEncoding = pairs . mconcat . apiReqProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 instance J.Encode ApiReq where
@@ -318,21 +237,6 @@ data AddSigsReq = AddSigsReq
   { _asrUnsigned :: Command Text
   , _asrSigs :: [UserSig]
   } deriving (Eq,Show,Generic)
-
-#ifdef PACT_TOJSON
-addSigsReqProperties :: JsonProperties AddSigsReq
-addSigsReqProperties o =
-  [ "sigs" .= _asrSigs o
-  , "unsigned" .= _asrUnsigned o
-  ]
-{-# INLINE addSigsReqProperties #-}
-
-instance ToJSON AddSigsReq where
-  toJSON = enableToJSON "Pact.ApiReq.AddSigsReq" . object . addSigsReqProperties
-  toEncoding = pairs . mconcat . addSigsReqProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON AddSigsReq where
   parseJSON = withObject "AddSigsReq" $ \o -> AddSigsReq

@@ -43,10 +43,6 @@ import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
 import Data.Aeson hiding ((<?>))
-#ifdef PACT_TOJSON
-import Data.Aeson.Encoding (text)
-import qualified Data.Aeson.Key as AK
-#endif
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString.Short as SB
 import Data.Default
@@ -75,9 +71,6 @@ import qualified Pact.JSON.Encode as J
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (FromJSON, IsString, AsString, Hashable, Pretty, NFData, SizeOf, J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
   deriving newtype (LegacyHashable)
 
 instance Arbitrary NamespaceName where
@@ -128,21 +121,6 @@ instance Pretty ModuleName where
   pretty (ModuleName n Nothing)   = pretty n
   pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
 
-#ifdef PACT_TOJSON
-moduleNameProperties :: JsonProperties ModuleName
-moduleNameProperties o =
-  [ "namespace" .= _mnNamespace o
-  , "name" .= _mnName o
-  ]
-{-# INLINE moduleNameProperties #-}
-
-instance ToJSON ModuleName where
-  toJSON = enableToJSON "Pact.Types.Names.ModuleName" . object . moduleNameProperties
-  toEncoding = pairs . mconcat . moduleNameProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode ModuleName where
   build o = J.object
     [ "namespace" J..= _mnNamespace o
@@ -167,9 +145,6 @@ parseModuleName = AP.parseOnly (moduleNameParser <* eof)
 newtype DefName = DefName { _unDefName :: Text }
   deriving (Show,Eq,Ord)
   deriving newtype (IsString,FromJSON,AsString,Hashable,Pretty,NFData,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance SizeOf DefName where
   sizeOf ver (DefName n) = sizeOf ver n
@@ -201,13 +176,6 @@ instance SizeOf QualifiedName where
   sizeOf ver (QualifiedName modName n i) =
     (constructorCost 3) + (sizeOf ver modName) + (sizeOf ver n) + (sizeOf ver i)
 
-#ifdef PACT_TOJSON
-instance ToJSON QualifiedName where
-  toJSON = enableToJSON "Pact.Types.Names.QualifiedName" . toJSON . renderCompactString
-  toEncoding = toEncoding . renderCompactString
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode QualifiedName where
   build = J.build . T.pack . renderCompactString
@@ -257,23 +225,6 @@ instance NFData DynamicName
 instance Arbitrary DynamicName where
   arbitrary = DynamicName <$> genBareText <*> genBareText <*> arbitrary <*> arbitrary
 
-#ifdef PACT_TOJSON
-dynamicNameProperties :: JsonProperties DynamicName
-dynamicNameProperties o =
-  [ "interfaces" .= _dynInterfaces o
-  , "refArg" .= _dynRefArg o
-  , "member" .= _dynMember o
-  , "info" .= _dynInfo o
-  ]
-{-# INLINE dynamicNameProperties #-}
-
-instance ToJSON DynamicName where
-  toJSON = enableToJSON "Pact.Types.Names.DynamicName" . lensyToJSON 4
-  toEncoding = pairs . mconcat . dynamicNameProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode DynamicName where
   build o = J.object
     [ "interfaces" J..= J.array (_dynInterfaces o)
@@ -308,14 +259,6 @@ fqdnJsonText :: FullyQualifiedName -> T.Text
 fqdnJsonText (FullyQualifiedName n (ModuleName m ns) hsh) =
     maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
 
-#ifdef PACT_TOJSON
-instance ToJSON FullyQualifiedName where
-  toJSON = toJSON . fqdnJsonText
-  toEncoding = toEncoding .fqdnJsonText
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode FullyQualifiedName where
   build = J.build . fqdnJsonText
   {-# INLINE build #-}
@@ -327,11 +270,6 @@ instance FromJSON FullyQualifiedName where
 
 instance FromJSONKey FullyQualifiedName where
   fromJSONKey = FromJSONKeyTextParser $ parseJSON . String
-
-#ifdef PACT_TOJSON
-instance ToJSONKey FullyQualifiedName where
-  toJSONKey = ToJSONKeyText (AK.fromText . fqdnJsonText) (text . fqdnJsonText)
-#endif
 
 instance SizeOf FullyQualifiedName
 
@@ -403,13 +341,6 @@ instance SizeOf Name where
 
 instance AsString Name where asString = renderCompactText
 
-#ifdef PACT_TOJSON
-instance ToJSON Name where
-  toJSON = toJSON . renderCompactString
-  toEncoding = toEncoding . renderCompactString
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode Name where
   build = J.build . pack . renderCompactString
@@ -486,9 +417,6 @@ instance Ord Name where
 newtype NativeDefName = NativeDefName Text
   deriving (Show,Eq,Ord)
   deriving newtype (IsString,FromJSON,AsString,NFData,Hashable,LegacyHashable,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name
@@ -502,9 +430,6 @@ instance Arbitrary NativeDefName where
 newtype TableName = TableName Text
   deriving (Show,Eq,Ord)
   deriving newtype (IsString,AsString,Hashable,NFData,FromJSON,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance Pretty TableName where pretty (TableName s) = pretty s
 

@@ -70,9 +70,6 @@ module Pact.Types.Term
    FieldKey(..),
    Step(..),sEntity,sExec,sRollback,sInfo,
    ModRef(..),modRefName,modRefSpec,modRefInfo,modRefKeyValues_,
-#ifdef PACT_TOJSON
-   modRefProperties_,
-#endif
    modRefTy,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
@@ -169,25 +166,6 @@ deriving instance (Show1 Term) => Show FunApp
 deriving instance (Eq1 Term) => Eq FunApp
 instance NFData FunApp
 
-#ifdef PACT_TOJSON
-funAppProperties :: JsonProperties FunApp
-funAppProperties o =
-  [ "defType" .= _faDefType o
-  , "types" .= _faTypes o
-  , "name" .= _faName o
-  , "module" .= _faModule o
-  , "docs" .= _faDocs o
-  , "info" .= _faInfo o
-  ]
-{-# INLINE funAppProperties #-}
-
-instance ToJSON FunApp where
-  toJSON = enableToJSON "Pact.Types.Term.FunApp" . lensyToJSON 3
-  toEncoding = A.pairs . mconcat . funAppProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode FunApp where
   build o = J.object
     [ "defType" J..= _faDefType o
@@ -277,27 +255,6 @@ instance Pretty (Term n) => Pretty (Def n) where
     ] ++ maybe [] (\docs -> [pretty docs]) (_mDocs _dMeta)
     ++ maybe [] (pure . pretty) _dDefMeta
 
-#ifdef PACT_TOJSON
-defProperties :: ToJSON n => JsonProperties (Def n)
-defProperties o =
-  [ "defType" .= _dDefType o
-  , "defMeta" .= _dDefMeta o
-  , "funType" .= _dFunType o
-  , "defName" .= _dDefName o
-  , "defBody" .= _dDefBody o
-  , "module" .= _dModule o
-  , "meta" .= _dMeta o
-  , "info" .= _dInfo o
-  ]
-{-# INLINE defProperties #-}
-
-instance ToJSON n => ToJSON (Def n) where
-  toJSON = enableToJSON "Pact.Types.Term.Def n" . lensyToJSON 2
-  toEncoding = A.pairs . mconcat . defProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode n => J.Encode (Def n) where
   build o = J.object
     [ "defType" J..= _dDefType o
@@ -340,25 +297,6 @@ instance Pretty n => Pretty (Lam n) where
 
 instance NFData n => NFData (Lam n)
 
-#ifdef PACT_TOJSON
--- The "am" prefix for property names is legacy.
---
-lamProperties :: ToJSON n => JsonProperties (Lam n)
-lamProperties o =
-  [ "amArg" .= _lamArg o
-  , "amInfo" .= _lamInfo o
-  , "amBindBody" .= _lamBindBody o
-  , "amTy" .= _lamTy o
-  ]
-{-# INLINE lamProperties #-}
-
-instance ToJSON n => ToJSON (Lam n) where
-  toJSON = enableToJSON "Pact.Types.Term.Lam n" . lensyToJSON 2
-  toEncoding = A.pairs . mconcat . lamProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode n => J.Encode (Lam n) where
   build o = J.object
     [ "amArg" J..= _lamArg o
@@ -399,23 +337,6 @@ instance Pretty n => Pretty (Object n) where
     where keyOrder f = elemIndex f ko
 
 instance NFData n => NFData (Object n)
-
-#ifdef PACT_TOJSON
-objectProperties :: ToJSON n => JsonMProperties (Object n)
-objectProperties o = mconcat
-  [ "obj" .= _oObject o
-  , "keyorder" .?= _oKeyOrder o
-  , "type" .= _oObjectType o
-  , "i" .= _oInfo o
-  ]
-{-# INLINE objectProperties #-}
-
-instance ToJSON n => ToJSON (Object n) where
-  toJSON = enableToJSON "Pact.Types.Term.Object n" . A.Object . objectProperties
-  toEncoding = A.pairs . objectProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode n => J.Encode (Object n) where
   build o = J.object
@@ -828,100 +749,6 @@ unprop "imports" = TermUseImports
 unprop "var" = TermVar
 unprop t = TermUnknown (show t)
 {-# INLINE unprop #-}
-
-#ifdef PACT_TOJSON
-instance ToJSON n => ToJSON (Term n) where
-  toJSON = termEnc object toJSON
-  toEncoding = termEnc (A.pairs . mconcat) toEncoding
-
-termEnc
-  :: KeyValue kv
-  => ToJSON n
-  => ([kv] -> e)
-  -> (forall a . ToJSON a => a -> e)
-  -> Term n
-  -> e
-termEnc kv val = \case
-  (TModule d b i) -> kv
-    [ p TermBody .= b
-    , p TermModule .= d
-    , inf i
-    ]
-  (TList ts ty i) -> kv
-    [ p TermList .= ts
-    , p TermType .= ty
-    , inf i
-    ]
-  (TDef d _i) -> val d
-  -- TNative intentionally not marshallable
-  (TNative n _fn tys _exs d tl i) -> kv
-    [ p TermNatFunTypes .= tys
-    , p TermName .= n
-    , p TermFun .= Null {- TODO fn -}
-    , p TermNatTopLevel .= tl
-    , p TermNatExamples .= Null {- TODO exs -}
-    , p TermNatDocs .= d
-    , inf i
-    ]
-  (TConst d m c met i) -> kv
-    [ p TermModName .= m
-    , p TermConstArg .= d
-    , p TermMeta .= met
-    , p TermConstVal .= c
-    , inf i
-    ]
-  (TApp a _i) -> val a
-  (TVar n i) -> kv
-    [ p TermVar .= n
-    , inf i
-    ]
-  (TBinding bs b c i) -> kv
-    [ p TermBody .= b
-    , p TermPairs .= bs
-    , p TermType .= c
-    , inf i
-    ]
-  (TObject o _i) -> val o
-  (TLiteral l i) -> kv
-    [ inf i
-    , p TermLiteral .= l
-    ]
-  (TLam tlam _i) -> val tlam
-  (TGuard k i) -> kv
-    [ p TermGuard .= k
-    , inf i
-    ]
-  (TUse u _i) -> val u
-  (TStep s tmeta i) -> kv
-    [ p TermBody .= s
-    , p TermMeta .= tmeta
-    , inf i
-    ]
-  (TSchema sn smod smeta sfs i) -> kv
-    [ p TermModName .= smod
-    , p TermName .= sn
-    , p TermMeta .= smeta
-    , inf i
-    , p TermFields .= sfs
-    ]
-  (TTable tn tmod th tty tmeta i) -> kv
-    [ p TermHash .= th
-    , p TermModName .= tmod
-    , p TermName .= tn
-    , p TermMeta .= tmeta
-    , p TermType .= tty
-    , inf i
-    ]
-  (TDynamic r m i) -> kv
-   [ p TermDynRef .= r
-   , inf i
-   , p TermDynMem .= m
-   ]
-  (TModRef mr _i) -> val mr
- where
-  p = prop @Key
-  inf i = ("i" :: Key) .= i
-#endif
 
 instance J.Encode n => J.Encode (Term n) where
   build = \case

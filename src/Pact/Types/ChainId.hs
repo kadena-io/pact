@@ -27,9 +27,6 @@ import Control.DeepSeq
 import Control.Lens
 
 import Data.Aeson (FromJSON)
-#ifdef PACT_TOJSON
-import Data.Aeson (ToJSON)
-#endif
 import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Data.Text
@@ -54,9 +51,6 @@ newtype ChainId = ChainId { _chainId :: Text }
     , Serialize, ToTerm, NFData
     , SizeOf, AsString, J.Encode
     )
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance Arbitrary ChainId where
   arbitrary = ChainId <$> genBareText
@@ -80,9 +74,6 @@ newtype NetworkId = NetworkId { _networkId :: Text }
     , FromJSON, J.Encode
     , Serialize, ToTerm, NFData
     )
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance Wrapped NetworkId
 

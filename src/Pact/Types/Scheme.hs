@@ -20,9 +20,6 @@ import Data.Kind (Type)
 import Data.Serialize
 import Data.Aeson
 import Test.QuickCheck
-#ifdef PACT_TOJSON
-import qualified Data.Text as T
-#endif
 
 import Pact.Types.Util (ParseText(..))
 
@@ -37,17 +34,6 @@ data PPKScheme = ED25519 | ETH
 
 instance NFData PPKScheme
 instance Serialize PPKScheme
-
-#ifdef PACT_TOJSON
-instance ToJSON PPKScheme where
-  toJSON ED25519 = "ED25519"
-  toJSON ETH = "ETH"
-
-  toEncoding ED25519 = toEncoding @T.Text "ED25519"
-  toEncoding ETH = toEncoding @T.Text "ETH"
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" parseText

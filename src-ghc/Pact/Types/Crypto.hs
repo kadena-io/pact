@@ -56,9 +56,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Data.Aeson                        as A
-#ifdef PACT_TOJSON
-import Data.Aeson.Types                  as A
-#endif
 import Data.Hashable
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
@@ -284,10 +281,7 @@ instance Show SomeKeyPair where
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
   deriving (Eq, Generic, Hashable)
-#ifdef PACT_TOJSON
-instance ToJSON PublicKeyBS where
-  toJSON (PubBS p) = enableToJSON "Pact.Types.Crypto.PublicKeyBS" $ toJSON $ toB16Text p
-#endif
+
 instance FromJSON PublicKeyBS where
   parseJSON = withText "PublicKeyBS" $ \s -> do
     s' <- parseB16Text s
@@ -301,11 +295,7 @@ instance IsString PublicKeyBS where
     Right b -> PubBS b
 instance Show PublicKeyBS where
   show (PubBS b) = T.unpack $ toB16Text b
-#ifdef PACT_TOJSON
-instance ToJSONKey PublicKeyBS where
-    toJSONKey = toJSONKeyText (toB16Text . _pktPublic)
-    {-# INLINE toJSONKey #-}
-#endif
+
 instance FromJSONKey PublicKeyBS where
     fromJSONKey = FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
     {-# INLINE fromJSONKey #-}
@@ -315,10 +305,7 @@ instance Arbitrary PublicKeyBS where
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
   deriving (Eq, Generic, Hashable)
-#ifdef PACT_TOJSON
-instance ToJSON PrivateKeyBS where
-  toJSON (PrivBS p) = enableToJSON "Pact.Types.Crypto.PrivateKeyBS" $ toJSON $ toB16Text p
-#endif
+
 instance FromJSON PrivateKeyBS where
   parseJSON = withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
@@ -337,10 +324,7 @@ instance Arbitrary PrivateKeyBS where
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic, Hashable)
-#ifdef PACT_TOJSON
-instance ToJSON SignatureBS where
-  toJSON (SigBS p) = enableToJSON "Pact.Types.Crypto.SigBS" $ toJSON $ toB16Text p
-#endif
+
 instance FromJSON SignatureBS where
   parseJSON = withText "SignatureBS" $ \s -> do
     s' <- parseB16Text s

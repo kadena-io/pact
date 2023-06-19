@@ -33,10 +33,6 @@ import Bound
 import Control.Applicative ((<|>))
 import Test.QuickCheck (Arbitrary(..))
 
-#ifdef PACT_TOJSON
-import Pact.Types.Util
-#endif
-
 import qualified Pact.JSON.Encode as J
 
 instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
@@ -57,18 +53,6 @@ instance Serialize Text where
 
 ------ Bound/Scope/Var instances ------
 
-#ifdef PACT_TOJSON
-instance (A.ToJSON a, A.ToJSON b) => A.ToJSON (Var b a) where
-  toJSON = enableToJSON "Pact.Types.Orphans.Var" . \case
-    (B b) -> A.object [ "b" A..= b ]
-    (F a) -> A.object [ "f" A..= a ]
-
-  toEncoding (B b) = A.pairs ("b" A..= b)
-  toEncoding (F a) = A.pairs ("f" A..= a)
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance (J.Encode a, J.Encode (J.Aeson b)) => J.Encode (Var b a) where
   build (B b) = J.object ["b" J..= J.Aeson b]
   build (F a) = J.object ["f" J..= a]
@@ -79,14 +63,6 @@ instance (A.FromJSON a, A.FromJSON b) =>
   parseJSON = A.withObject "Var" $ \v ->
     (B <$> v A..: "b") <|> (F <$> v A..: "f")
   {-# INLINE parseJSON #-}
-
-#ifdef PACT_TOJSON
-instance (Functor f, A.ToJSON (f (Var b (f a)))) => A.ToJSON (Scope b f a) where
-  toJSON (Scope s) = A.object [ "scope" A..= s ]
-  toEncoding (Scope s) = A.pairs ("scope" A..= s)
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance (J.Encode (f (Var b (f a)))) => J.Encode (Scope b f a) where
   build (Scope s) = J.object ["scope" J..= s]

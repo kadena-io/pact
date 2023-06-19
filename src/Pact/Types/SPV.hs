@@ -46,13 +46,6 @@ newtype ContProof = ContProof { _contProof :: ByteString }
 instance Wrapped ContProof
 
 instance NFData ContProof
-#ifdef PACT_TOJSON
-instance ToJSON ContProof where
-  toJSON (ContProof bs) = String (decodeUtf8 bs)
-  toEncoding (ContProof bs) = toEncoding (decodeUtf8 bs)
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode ContProof where
   build (ContProof bs) = J.build $ decodeUtf8 bs

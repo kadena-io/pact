@@ -31,9 +31,6 @@ import Criterion
 import Criterion.Main
 
 import qualified Data.Aeson as A
-#ifdef PACT_TOJSON
-import qualified Data.Aeson.Encoding as A
-#endif
 import qualified Data.ByteString.Lazy as BL
 
 import qualified Pact.JSON.Encode as J
@@ -72,38 +69,15 @@ benchmarks = bgroup "JsonEncoding"
 
 group
   :: J.Encode a
-#ifdef PACT_TOJSON
-  => A.ToJSON a
-#endif
   => String
   -> a
   -> Benchmark
 group l a = bgroup l
   [ bench_encode a
-#ifdef PACT_TOJSON
-  , bench_toJSON a
-  , bench_toEncoding a
-#endif
   ]
 
 -- -------------------------------------------------------------------------- --
 -- Benchmark Functions
-
-#ifdef PACT_TOJSON
-bench_toJSON :: A.ToJSON a => a -> Benchmark
-bench_toJSON a = bench "bench_toJSON" $ nf run_toJSON a
-
-run_toJSON :: A.ToJSON a => a -> BL.ByteString
-run_toJSON x = A.encode (A.toJSON x)
-{-# NOINLINE run_toJSON #-}
-
-bench_toEncoding :: A.ToJSON a => a -> Benchmark
-bench_toEncoding a = bench "bench_toEncoding" $ nf run_toEncoding a
-
-run_toEncoding :: A.ToJSON a => a -> BL.ByteString
-run_toEncoding = A.encodingToLazyByteString . A.toEncoding
-{-# NOINLINE run_toEncoding #-}
-#endif
 
 bench_encode :: J.Encode a => a -> Benchmark
 bench_encode a = bench "bench_encode" $ nf run_encode a

@@ -63,11 +63,6 @@ data Config = Config {
   _execConfig :: Maybe ExecutionConfig
   } deriving (Eq,Show,Generic)
 
-#ifdef PACT_TOJSON
-instance ToJSON Config where
-  toJSON = lensyToJSON 1
-#endif
-
 instance FromJSON Config where
   parseJSON = lensyParseJSON 1
 

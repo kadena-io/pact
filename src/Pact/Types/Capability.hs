@@ -71,21 +71,6 @@ instance NFData SigCapability
 instance Pretty SigCapability where
   pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
 
-#ifdef PACT_TOJSON
-sigCapabilityProperties :: JsonProperties SigCapability
-sigCapabilityProperties o =
-  [ "args" .= _scArgs o
-  , "name" .= _scName o
-  ]
-{-# INLINE sigCapabilityProperties #-}
-
-instance ToJSON SigCapability where
-  toJSON = enableToJSON "Pact.Types.Capability.SigCapability" . object . sigCapabilityProperties
-  toEncoding = pairs . mconcat . sigCapabilityProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode SigCapability where
   build o = J.object
     [ "args" J..= J.Array (_scArgs o)

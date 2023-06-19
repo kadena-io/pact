@@ -139,9 +139,6 @@ data PactWarning
   | DeprecatedOverload !NativeDefName !Text
   deriving (Show, Eq, Ord, Generic)
 
-#ifdef PACT_TOJSON
-instance ToJSON PactWarning
-#endif
 instance FromJSON PactWarning
 
 instance Pretty PactWarning where
@@ -213,14 +210,6 @@ flagReps = M.fromList $ map go [minBound .. maxBound]
 instance Pretty ExecutionFlag where
   pretty = pretty . flagRep
 
-#ifdef PACT_TOJSON
-instance ToJSON ExecutionFlag where
-  toJSON = enableToJSON "Pact.Types.Runtime.ExecutionFlat" . String . flagRep
-  toEncoding = toEncoding . flagRep
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode ExecutionFlag where
   build = J.build . flagRep
   {-# INLINE build #-}
@@ -238,9 +227,7 @@ newtype ExecutionConfig = ExecutionConfig
   { _ecFlags :: S.Set ExecutionFlag }
   deriving (Eq,Show)
   deriving (FromJSON)
-#ifdef PACT_TOJSON
-  deriving (ToJSON)
-#endif
+
 makeLenses ''ExecutionConfig
 instance Default ExecutionConfig where def = ExecutionConfig def
 instance Pretty ExecutionConfig where
@@ -326,22 +313,6 @@ data PactEvent = PactEvent
   , _eventModuleHash :: !ModuleHash
   } deriving (Eq, Show, Generic)
 instance NFData PactEvent
-
-#ifdef PACT_TOJSON
-pactEventProperties :: JsonProperties PactEvent
-pactEventProperties o =
-  [ "params" .= _eventParams o
-  , "name" .= _eventName o
-  , "module" .= _eventModule o
-  , "moduleHash" .= _eventModuleHash o
-  ]
-
-instance ToJSON PactEvent where
-  toJSON = enableToJSON "Pact.Types.Runtime.PactEvent" . lensyToJSON 6
-  toEncoding = pairs . mconcat . pactEventProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode PactEvent where
   build o = J.object

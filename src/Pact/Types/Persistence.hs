@@ -50,9 +50,6 @@ import Control.DeepSeq (NFData)
 import Control.Lens (makeLenses)
 
 import Data.Aeson hiding (Object)
-#ifdef PACT_TOJSON
-import qualified Data.Aeson as A
-#endif
 import Data.Default
 import qualified Data.ByteString as B
 import Data.Hashable (Hashable)
@@ -74,9 +71,6 @@ import Pact.Types.RowData
 import Pact.Types.Term
 import Pact.Types.Type
 import Pact.Types.Util (AsString(..), tShow)
-#ifdef PACT_TOJSON
-import Pact.Types.Util (JsonProperties, enableToJSON, (.?=))
-#endif
 import Pact.Types.Namespace
 import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
@@ -92,21 +86,6 @@ data PersistDirect =
   deriving (Eq,Show,Generic)
 
 instance NFData PersistDirect
-
-#ifdef PACT_TOJSON
-instance ToJSON PersistDirect where
-  toJSON = enableToJSON "Pact.Types.Persistence.PersistDirect" . object . \case
-    (PDValue v) -> [ "pdval" .= v ]
-    (PDNative n) -> [ "pdnat" .= n ]
-    (PDFreeVar n) -> [ "pdfv" .= n]
-
-  toEncoding (PDValue v) = pairs $ "pdval" .= v
-  toEncoding (PDNative n) = pairs $ "pdnat" .= n
-  toEncoding (PDFreeVar n) = pairs $ "pdfv" .= n
-
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode PersistDirect where
   build (PDValue v) = J.object ["pdval" J..= v]
@@ -168,26 +147,6 @@ instance NFData r => NFData (ModuleData r)
 -- * refMap: object
 -- * dependencies: Array
 
-#ifdef PACT_TOJSON
-instance ToJSON r => ToJSON (ModuleData r) where
-  toJSON o = enableToJSON "Pact.Types.Persistence.ModuleData r" $ A.Object $ mconcat
-    [ "dependencies" .?= if HM.null (_mdDependencies o)
-      then Nothing
-      else Just (LHM.toList $ legacyHashMap_ $ _mdDependencies o)
-    , "module" .= _mdModule o
-    , "refMap" .= _mdRefMap o
-    ]
-  toEncoding o = pairs $ mconcat
-    [ "dependencies" .?= if HM.null (_mdDependencies o)
-      then Nothing
-      else Just (LHM.toList $ legacyHashMap_ $ _mdDependencies o)
-    , "module" .= _mdModule o
-    , "refMap" .= legacyHashMap id (_mdRefMap o)
-    ]
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance (J.Encode r, Eq r) => J.Encode (ModuleData r) where
   build o = J.object
     [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap_ (_mdDependencies o)))
@@ -214,19 +173,6 @@ instance Arbitrary r => Arbitrary (ModuleData r) where
 -- PersistModuleData
 
 type PersistModuleData = ModuleData (Ref' PersistDirect)
-
-#ifdef PACT_TOJSON
-instance ToJSON (Ref' PersistDirect) where
-  toJSON = enableToJSON "Pact.Types.Persistence.ModuleData r" . object . \case
-    (Ref t) -> [ "ref" .= t ]
-    (Direct pd) -> [ "direct" .= pd ]
-
-  toEncoding (Ref t) = pairs ("ref" .= t)
-  toEncoding (Direct pd) = pairs ("direct" .= pd)
-
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode (Ref' PersistDirect) where
   build (Ref t) = J.object ["ref" J..= t]
@@ -289,22 +235,6 @@ data TxLog v =
     deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
     deriving anyclass (Hashable, NFData)
 makeLenses ''TxLog
-
-#ifdef PACT_TOJSON
-txLogProperties :: (ToJSON v) => JsonProperties (TxLog v)
-txLogProperties o =
-  [ "value" .= _txValue o
-  , "key" .= _txKey o
-  , "table" .= _txDomain o
-  ]
-{-# INLINE txLogProperties #-}
-
-instance ToJSON v => ToJSON (TxLog v) where
-  toJSON = enableToJSON "Pact.Types.Persistence.TxLog" . object . txLogProperties
-  toEncoding = pairs . mconcat . txLogProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode v => J.Encode (TxLog v) where
   build o = J.object
@@ -415,9 +345,6 @@ instance Pretty WriteType where
 newtype TxId = TxId Word64
     deriving (Eq,Ord,Generic)
     deriving newtype (Enum,Num,Real,Integral,Bounded,Default,FromJSON)
-#ifdef PACT_TOJSON
-    deriving newtype (ToJSON)
-#endif
     deriving J.Encode via (J.Aeson Word64)
 
 instance NFData TxId

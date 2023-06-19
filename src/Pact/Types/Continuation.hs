@@ -47,9 +47,6 @@ import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Map.Strict(Map)
 import Data.Maybe(fromMaybe)
-#ifdef PACT_TOJSON
-import qualified Data.Map.Strict as Map
-#endif
 
 import Test.QuickCheck
 
@@ -60,9 +57,6 @@ import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Util (lensyParseJSON, asString)
-#ifdef PACT_TOJSON
-import Pact.Types.Util (lensyToJSON, JsonProperties, JsonMProperties, enableToJSON, (.?=))
-#endif
 import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 
@@ -89,21 +83,6 @@ instance SizeOf Provenance where
     (constructorCost 2) + (sizeOf ver chainId) + (sizeOf ver modHash)
 
 instance NFData Provenance
-
-#ifdef PACT_TOJSON
-provenanceProperties :: JsonProperties Provenance
-provenanceProperties o =
-  [ "targetChainId" .= _pTargetChainId o
-  , "moduleHash" .= _pModuleHash o
-  ]
-{-# INLINE provenanceProperties #-}
-
-instance ToJSON Provenance where
-  toJSON = enableToJSON "Pact.Types.Continuation.Provenance" . lensyToJSON 2
-  toEncoding = pairs . mconcat . provenanceProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode Provenance where
   build o = J.object
@@ -134,22 +113,6 @@ instance Arbitrary Yield where
     <*> pure Nothing
 
 instance NFData Yield
-
-#ifdef PACT_TOJSON
-yieldProperties :: JsonMProperties Yield
-yieldProperties o = mconcat
-  [ "data" .= _yData o
-  , "source" .?= _ySourceChain o
-  , "provenance" .= _yProvenance o
-  ]
-{-# INLINE yieldProperties #-}
-
-instance ToJSON Yield where
-  toJSON = enableToJSON "Pact.Types.Continuation.Yield" . Data.Aeson.Object . yieldProperties
-  toEncoding = pairs . yieldProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode Yield where
   build o = J.object
@@ -201,21 +164,6 @@ instance Arbitrary PactContinuation where
     <$> arbitraryName (0,1,1,0)
     <*> scale (min 10) arbitrary
 
-#ifdef PACT_TOJSON
-pactContinuationProperties :: JsonProperties PactContinuation
-pactContinuationProperties o =
-  [ "args" .= _pcArgs o
-  , "def" .= _pcDef o
-  ]
-{-# INLINE pactContinuationProperties #-}
-
-instance ToJSON PactContinuation where
-  toJSON = enableToJSON "Pact.Types.Continuation.PactContinuation" . lensyToJSON 3
-  toEncoding = pairs . mconcat . pactContinuationProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode PactContinuation where
   build o = J.object
     [ "args" J..= J.Array (_pcArgs o)
@@ -260,31 +208,6 @@ instance Arbitrary PactExec where
     <*> arbitrary
     <*> scale (min 2) arbitrary
 
-#ifdef PACT_TOJSON
-pactExecProperties
-  :: ToJSON x
-  => (Map PactId NestedPactExec -> x)
-    -- ^ adjust ordering of properties in the map for legacy JSON encoding
-  -> JsonProperties PactExec
-pactExecProperties f o =
-    [ "nested" .= f (_peNested o) | not (Map.null (_peNested o))]
-    ++
-    [ "executed" .= _peExecuted o
-    , "pactId" .= _pePactId o
-    , "stepHasRollback" .= _peStepHasRollback o
-    , "step" .= _peStep o
-    , "yield" .= _peYield o
-    , "continuation" .= _peContinuation o
-    , "stepCount" .= _peStepCount o
-    ]
-{-# INLINE pactExecProperties #-}
-
-instance ToJSON PactExec where
-  toJSON = enableToJSON "Pact.Types.Continuation.PactExec" . object . pactExecProperties id
-  toEncoding = pairs . mconcat . pactExecProperties (legacyMap asString)
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode PactExec where
   build o = J.object
@@ -338,29 +261,6 @@ fromNestedPactExec :: Bool -> NestedPactExec -> PactExec
 fromNestedPactExec rollback (NestedPactExec stepCount yield exec step pid cont nested) =
   PactExec stepCount yield exec step pid cont rollback nested
 
-#ifdef PACT_TOJSON
-nestedPactExecProperties
-  :: ToJSON x
-  => (Map PactId NestedPactExec -> x)
-    -- ^ adjust ordering of properties in the map for legacy JSON encoding
-  -> JsonProperties NestedPactExec
-nestedPactExecProperties f o =
-  [ "nested" .= f (_npeNested o)
-  , "executed" .= _npeExecuted o
-  , "pactId" .= _npePactId o
-  , "step" .= _npeStep o
-  , "yield" .= _npeYield o
-  , "continuation" .= _npeContinuation o
-  , "stepCount" .= _npeStepCount o
-  ]
-{-# INLINE nestedPactExecProperties #-}
-
-instance ToJSON NestedPactExec where
-  toJSON = enableToJSON "Pact.Types.Continuation.NestedPactExec" . object . nestedPactExecProperties id
-  toEncoding = pairs. mconcat . nestedPactExecProperties (legacyMap asString)
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode NestedPactExec where
   build o = J.object

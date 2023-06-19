@@ -102,22 +102,6 @@ data Command a = Command
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 
-#ifdef PACT_TOJSON
-commandProperties :: ToJSON a => JsonProperties (Command a)
-commandProperties o =
-  [ "hash" .= _cmdHash o
-  , "sigs" .= _cmdSigs o
-  , "cmd" .= _cmdPayload o
-  ]
-{-# INLINE commandProperties #-}
-
-instance (ToJSON a) => ToJSON (Command a) where
-  toJSON = enableToJSON "Pact.Types.Command.Command a" . object . commandProperties
-  toEncoding = pairs . mconcat . commandProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
                 Command <$> (o .: "cmd")
@@ -274,24 +258,6 @@ data Signer = Signer
 
 instance NFData Signer
 
-#ifdef PACT_TOJSON
-signerProperties :: JsonMProperties Signer
-signerProperties o = mconcat
-  [ "addr" .?= _siAddress o
-  , "scheme" .?= _siScheme o
-  , "pubKey" .= _siPubKey o
-  , "clist" .?= case _siCapList o of
-    [] -> Nothing
-    l -> Just l
-  ]
-
-instance ToJSON Signer where
-  toJSON = enableToJSON "Pact.Types.Command.Signer" . A.Object . signerProperties
-  toEncoding = pairs . signerProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode Signer where
   build o = J.object
     [ "addr" J..?= _siAddress o
@@ -322,24 +288,6 @@ data Payload m c = Payload
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
 
-#ifdef PACT_TOJSON
-payloadProperties :: ToJSON m => ToJSON a => JsonProperties (Payload m a)
-payloadProperties o =
-  [ "networkId" .= _pNetworkId o
-  , "payload" .= _pPayload o
-  , "signers" .= _pSigners o
-  , "meta" .= _pMeta o
-  , "nonce" .= _pNonce o
-  ]
-{-# INLINE payloadProperties #-}
-
-instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where
-  toJSON = enableToJSON "Pact.Types.Command.Payload m a" . lensyToJSON 2
-  toEncoding = pairs . mconcat . payloadProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
   build o = J.object
     [ "networkId" J..= _pNetworkId o
@@ -366,18 +314,6 @@ newtype UserSig = UserSig { _usSig :: Text }
 instance NFData UserSig
 instance Serialize UserSig
 
-#ifdef PACT_TOJSON
-userSigProperties :: JsonProperties UserSig
-userSigProperties o = [ "sig" .= _usSig o ]
-{-# INLINE userSigProperties #-}
-
-instance ToJSON UserSig where
-  toJSON = enableToJSON "Pact.Types.Command.UserSig" . object . userSigProperties
-  toEncoding = pairs . mconcat . userSigProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode UserSig where
   build s = J.object [ "sig" J..= _usSig s ]
   {-# INLINE build #-}
@@ -392,24 +328,6 @@ instance Arbitrary UserSig where
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue
   } deriving (Eq, Show, Generic,NFData)
-
-#ifdef PACT_TOJSON
-pactResultProperties :: JsonProperties PactResult
-pactResultProperties (PactResult (Right s)) =
-  [ "status" .= ("success" :: String)
-  , "data" .= s
-  ]
-pactResultProperties (PactResult (Left f)) =
-  [ "status" .= ("failure" :: String)
-  , "error" .= f
-  ]
-
-instance ToJSON PactResult where
-  toJSON = enableToJSON "Pact.Types.Command.PactResult" . object . pactResultProperties
-  toEncoding = pairs . mconcat . pactResultProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode PactResult where
   build (PactResult (Right s)) = J.object
@@ -452,33 +370,6 @@ data CommandResult l = CommandResult {
   -- | Events
   , _crEvents :: ![PactEvent]
   } deriving (Eq,Show,Generic,Functor)
-
-#ifdef PACT_TOJSON
-commandResultProperties
-  :: ToJSON l
-  => ToJSON a
-  => (Value -> a)
-  -> JsonMProperties (CommandResult l)
-commandResultProperties toVal o = mconcat
-    [ "gas" .= _crGas o
-    , "result" .= _crResult o
-    , "reqKey" .= _crReqKey o
-    , "logs" .= _crLogs o
-    , "events" .?= case _crEvents o of
-      [] -> Nothing
-      l -> Just l
-    , "metaData" .= fmap toVal (_crMetaData o)
-    , "continuation" .= _crContinuation o
-    , "txId" .= _crTxId o
-    ]
-{-# INLINE commandResultProperties #-}
-
-instance (ToJSON l) => ToJSON (CommandResult l) where
-  toJSON = enableToJSON "Pact.Types.Command.CommandResult l" . A.Object . commandResultProperties id
-  toEncoding = pairs . commandResultProperties toLegacyJson
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode l => J.Encode (CommandResult l) where
   build o = J.object
@@ -538,9 +429,6 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
   deriving (Eq, Ord, Generic)
   deriving newtype (Serialize, Hashable, ParseText, FromJSON, FromJSONKey, NFData, J.Encode, AsString)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON, ToJSONKey)
-#endif
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

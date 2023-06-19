@@ -39,9 +39,6 @@ import Control.Applicative ((<|>))
 import Control.DeepSeq (NFData)
 import Control.Lens (makePrisms,set)
 import Data.Aeson hiding (Value(..))
-#ifdef PACT_TOJSON
-import qualified Data.Aeson as A
-#endif
 import Data.Default (def)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -54,9 +51,6 @@ import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
 import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
-#ifdef PACT_TOJSON
-import Pact.Types.Util (enableToJSON)
-#endif
 
 import qualified Pact.JSON.Encode as J
 
@@ -69,27 +63,6 @@ data PactValue
   deriving (Eq,Show,Generic,Ord)
 
 instance NFData PactValue
-
-#ifdef PACT_TOJSON
-instance ToJSON PactValue where
-  toJSON = enableToJSON "Pact.Types.PactValue.PactValue" . \case
-    (PLiteral l) -> toJSON l
-    (PObject o) -> toJSON o
-    (PList v) -> toJSON v
-    (PGuard x) -> toJSON x
-    (PModRef m) -> A.Object $ modRefProperties_ m
-      -- this uses a non-standard alternative JSON encoding for 'ModRef'
-
-  toEncoding (PLiteral l) = toEncoding l
-  toEncoding (PObject o) = toEncoding o
-  toEncoding (PList v) = toEncoding v
-  toEncoding (PGuard x) = toEncoding x
-  toEncoding (PModRef m) = pairs $ modRefProperties_ m
-    -- this uses a non-standard alternative JSON encoding for 'ModRef'
-
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode PactValue where
   build (PLiteral l) = J.build l

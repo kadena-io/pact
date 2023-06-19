@@ -35,9 +35,6 @@ import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                makePrisms, over, (%~), (&),
                                                (<&>))
 import           Data.Aeson                   (FromJSON)
-#ifdef PACT_TOJSON
-import           Data.Aeson                   (ToJSON)
-#endif
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
@@ -172,9 +169,6 @@ newtype RegistryName
   = RegistryName Text
   deriving (Eq,Ord)
   deriving newtype (IsString,AsString,FromJSON)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance Show RegistryName where show (RegistryName s) = show s
 

@@ -69,9 +69,6 @@ import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime, toPosixTimestam
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText)
-#ifdef PACT_TOJSON
-import Pact.Types.Util (JsonProperties, JsonMProperties, enableToJSON, (.?=))
-#endif
 
 import qualified Pact.JSON.Encode as J
 
@@ -164,24 +161,6 @@ instance Pretty Literal where
     pretty (LBool False) = "false"
     pretty (LTime t)     = dquotes $ pretty $ formatLTime t
 
-#ifdef PACT_TOJSON
-instance ToJSON Literal where
-    toJSON (LString s) = enableToJSON "Pact.Types.Exp.Literal" $ toJSON s
-    toJSON (LInteger i) = enableToJSON "Pact.Types.Exp.Literal" $ valueEncoder integerCodec i
-    toJSON (LDecimal r) = enableToJSON "Pact.Types.Exp.Literal" $ valueEncoder decimalCodec r
-    toJSON (LBool b) = enableToJSON "Pact.Types.Exp.Literal" $ toJSON b
-    toJSON (LTime t) = enableToJSON "Pact.Types.Exp.Literal" $ valueEncoder timeCodec t
-
-    toEncoding (LString s) = toEncoding s
-    toEncoding (LInteger i) = aesonEncoder integerCodec i
-    toEncoding (LDecimal r) = aesonEncoder decimalCodec r
-    toEncoding (LBool b) = toEncoding b
-    toEncoding (LTime t) = aesonEncoder timeCodec t
-
-    {-# INLINE toJSON #-}
-    {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode Literal where
     build (LString s) = J.build s
     build (LInteger i) = encoder integerCodec i
@@ -210,19 +189,6 @@ litToPrim LTime {} = TyTime
 
 data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
 instance NFData ListDelimiter
-#ifdef PACT_TOJSON
-instance ToJSON ListDelimiter where
-  toJSON Parens = enableToJSON "Pact.Types.Exp.ListDelimiter" $ "()"
-  toJSON Brackets = enableToJSON "Pact.Types.Exp.ListDelimiter" $ "[]"
-  toJSON Braces = enableToJSON "Pact.Types.Exp.ListDelimiter" $ "{}"
-
-  toEncoding Parens = toEncoding @String "()"
-  toEncoding Brackets = toEncoding @String "[]"
-  toEncoding Braces = toEncoding @String "{}"
-
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode ListDelimiter where
   build Parens = J.build @Text "()"
@@ -254,15 +220,6 @@ instance Pretty Separator where
   pretty Colon = ":"
   pretty ColonEquals = ":="
   pretty Comma = ","
-#ifdef PACT_TOJSON
-instance ToJSON Separator where
-  toJSON Colon = enableToJSON "Pact.Types.Exp.Separator" ":"
-  toJSON ColonEquals = enableToJSON "Pact.Types.Exp.Separator" ":="
-  toJSON Comma = enableToJSON "Pact.Types.Exp.Separator" ","
-  toEncoding Colon = toEncoding @String ":"
-  toEncoding ColonEquals = toEncoding @String ":="
-  toEncoding Comma = toEncoding @String ","
-#endif
 
 instance J.Encode Separator where
   build Colon = J.build @Text ":"
@@ -294,21 +251,6 @@ instance NFData i => NFData (LiteralExp i)
 instance Arbitrary i => Arbitrary (LiteralExp i) where
   arbitrary = LiteralExp <$> arbitrary <*> arbitrary
 
-#ifdef PACT_TOJSON
-literalExpProperties :: ToJSON i => JsonProperties (LiteralExp i)
-literalExpProperties o =
-  [ expInfoField .= _litInfo o
-  , "lit" .= _litLiteral o
-  ]
-{-# INLINE literalExpProperties #-}
-
-instance ToJSON i => ToJSON (LiteralExp i) where
-  toJSON = enableToJSON "Pact.Types.Exp.LiteralExp i" . object . literalExpProperties
-  toEncoding = pairs . mconcat . literalExpProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode i => J.Encode (LiteralExp i) where
   build o = J.object
     [ expInfoField J..= _litInfo o
@@ -335,22 +277,6 @@ instance NFData i => NFData (AtomExp i)
 
 instance Arbitrary i => Arbitrary (AtomExp i) where
   arbitrary = AtomExp <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-
-#ifdef PACT_TOJSON
-atomExpProperties :: ToJSON i => JsonMProperties (AtomExp i)
-atomExpProperties o = mconcat
-  [ "atom" .= _atomAtom o
-  , "dyn" .?= if _atomDynamic o then Just True else Nothing
-  , "q" .= _atomQualifiers o
-  , expInfoField .= _atomInfo o
-  ]
-
-instance ToJSON i => ToJSON (AtomExp i) where
-  toJSON = enableToJSON "Pact.Types.Exp.AtomExp i" . Object . atomExpProperties
-  toEncoding = pairs . atomExpProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode i => J.Encode (AtomExp i) where
   build o = J.object
@@ -384,22 +310,6 @@ instance NFData i => NFData (ListExp i)
 instance Arbitrary i => Arbitrary (ListExp i) where
   arbitrary = ListExp <$> arbitrary <*> arbitrary <*> arbitrary
 
-#ifdef PACT_TOJSON
-listExpProperties :: ToJSON i => JsonProperties (ListExp i)
-listExpProperties o =
-  [ "list" .= _listList o
-  , "d" .= _listDelimiter o
-  , expInfoField .= _listInfo o
-  ]
-{-# INLINE listExpProperties #-}
-
-instance ToJSON i => ToJSON (ListExp i) where
-  toJSON = enableToJSON "Pact.Types.Exp.ListExp i" . object . listExpProperties
-  toEncoding = pairs . mconcat . listExpProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode i => J.Encode (ListExp i) where
   build o = J.object
     [ "list" J..= J.array (_listList o)
@@ -427,21 +337,6 @@ instance NFData i => NFData (SeparatorExp i)
 
 instance Arbitrary i => Arbitrary (SeparatorExp i) where
   arbitrary = SeparatorExp <$> arbitrary <*> arbitrary
-
-#ifdef PACT_TOJSON
-separatorExpProperties :: ToJSON i => JsonProperties (SeparatorExp i)
-separatorExpProperties o =
-  [ "sep" .= _sepSeparator o
-  , expInfoField .= _sepInfo o
-  ]
-{-# INLINE separatorExpProperties #-}
-
-instance ToJSON i => ToJSON (SeparatorExp i) where
-  toJSON = enableToJSON "Pact.Types.Exp.SeparatorExp i" . object . separatorExpProperties
-  toEncoding = pairs . mconcat . separatorExpProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON i => FromJSON (SeparatorExp i) where
   parseJSON = withObject "SeparatorExp" $ \o ->
@@ -493,19 +388,6 @@ instance HasInfo (Exp Info) where
     ESeparator s -> getInfo s
 
 instance (SizeOf i) => SizeOf (Exp i)
-
-#ifdef PACT_TOJSON
-instance ToJSON i => ToJSON (Exp i) where
-  toJSON (ELiteral a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
-  toJSON (EAtom a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
-  toJSON (EList a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
-  toJSON (ESeparator a) = enableToJSON "Pact.Types.Exp.Exp i" $ toJSON a
-
-  toEncoding (ELiteral a) = toEncoding a
-  toEncoding (EAtom a) = toEncoding a
-  toEncoding (EList a) = toEncoding a
-  toEncoding (ESeparator a) = toEncoding a
-#endif
 
 instance J.Encode i => J.Encode (Exp i) where
   build (ELiteral a) = J.build a

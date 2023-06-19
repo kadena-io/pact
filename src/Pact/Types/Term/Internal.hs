@@ -84,9 +84,6 @@ module Pact.Types.Term.Internal
 , modRefName
 , modRefSpec
 , modRefInfo
-#ifdef PACT_TOJSON
-, modRefProperties_
-#endif
 , modRefKeyValues_
 , Gas(..)
 ) where
@@ -156,21 +153,6 @@ prettyModel :: [Exp Info] -> Doc
 prettyModel []    = mempty
 prettyModel props = "@model " <> list (pretty <$> props)
 
-#ifdef PACT_TOJSON
-metaProperties :: JsonProperties Meta
-metaProperties o =
-  [ "model" .= _mModel o
-  , "docs" .= _mDocs o
-  ]
-{-# INLINE metaProperties #-}
-
-instance ToJSON Meta where
-  toJSON = enableToJSON "Pact.Types.Term.Meta" . lensyToJSON 2
-  toEncoding = A.pairs . mconcat . metaProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode Meta where
   build o = J.object
     [ "model" J..= J.array (_mModel o)
@@ -194,9 +176,6 @@ instance Monoid Meta where
 newtype PactId = PactId Text
   deriving (Eq,Ord,Show,Generic)
   deriving newtype (Pretty,AsString,IsString,FromJSON,FromJSONKey,NFData,SizeOf,LegacyHashable,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON, ToJSONKey)
-#endif
 
 -- -------------------------------------------------------------------------- --
 -- UserGuard
@@ -218,20 +197,6 @@ instance (SizeOf p) => SizeOf (UserGuard p) where
   sizeOf ver (UserGuard n arr) =
     constructorCost 2 + sizeOf ver n + sizeOf ver arr
 
-#ifdef PACT_TOJSON
-userGuardProperties :: ToJSON a => JsonProperties (UserGuard a)
-userGuardProperties o =
-  [ "args" .= _ugArgs o
-  , "fun" .= _ugFun o
-  ]
-{-# INLINE userGuardProperties #-}
-
-instance ToJSON a => ToJSON (UserGuard a) where
-  toJSON = enableToJSON "Pact.Types.Term.UserGuard" . lensyToJSON 3
-  toEncoding = A.pairs . mconcat . userGuardProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode a => J.Encode (UserGuard a) where
   build o = J.object
@@ -252,9 +217,6 @@ data DefType
   deriving (Eq,Show,Generic, Bounded, Enum)
 
 instance FromJSON DefType
-#ifdef PACT_TOJSON
-instance ToJSON DefType
-#endif
 instance NFData DefType
 
 instance J.Encode DefType where
@@ -281,9 +243,6 @@ instance Pretty DefType where
 newtype Gas = Gas Int64
   deriving (Eq,Ord,Generic)
   deriving newtype (Num,Real,Integral,Enum,FromJSON,NFData)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
   deriving J.Encode via (J.Aeson Int64)
 
 instance Show Gas where show (Gas g) = show g
@@ -311,18 +270,6 @@ data BindType n =
 instance (Pretty n) => Pretty (BindType n) where
   pretty BindLet = "let"
   pretty (BindSchema b) = "bind" <> pretty b
-
-#ifdef PACT_TOJSON
-instance ToJSON n => ToJSON (BindType n) where
-  toJSON BindLet = "let"
-  toJSON (BindSchema s) = object [ "bind" .= s ]
-
-  toEncoding BindLet = toEncoding ("let" :: String)
-  toEncoding (BindSchema s) = A.pairs ("bind" .= s)
-
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode n => J.Encode (BindType n) where
   build BindLet = J.text "let"
@@ -354,21 +301,6 @@ instance Pretty n => Pretty (BindPair n) where
 
 instance NFData n => NFData (BindPair n)
 
-#ifdef PACT_TOJSON
-bindPairProperties :: ToJSON n => JsonProperties (BindPair n)
-bindPairProperties o =
-  [ "arg" .= _bpArg o
-  , "val" .= _bpVal o
-  ]
-{-# INLINE bindPairProperties #-}
-
-instance ToJSON n => ToJSON (BindPair n) where
-  toJSON = enableToJSON "Pact.Types.Term.BindPair n" . lensyToJSON 3
-  toEncoding = A.pairs . mconcat . bindPairProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode n => J.Encode (BindPair n) where
   build o = J.object
     [ "arg" J..= _bpArg o
@@ -391,21 +323,6 @@ data App t = App
 
 instance HasInfo (App t) where getInfo = _appInfo
 
-#ifdef PACT_TOJSON
-appProperties :: ToJSON t => JsonProperties (App t)
-appProperties o =
-  [ "args" .= _appArgs o
-  , "fun" .= _appFun o
-  , "info" .= _appInfo o
-  ]
-{-# INLINE appProperties #-}
-
-instance ToJSON t => ToJSON (App t) where
-  toJSON = enableToJSON "Pact.Types.Term.App t" . lensyToJSON 4
-  toEncoding = A.pairs . mconcat . appProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode t => J.Encode (App t) where
   build o = J.object
@@ -442,19 +359,6 @@ instance Pretty g => Pretty (Governance g) where
     Governance (Left  k) -> pretty k
     Governance (Right r) -> pretty r
 
-#ifdef PACT_TOJSON
-governanceProperties :: ToJSON g => JsonProperties (Governance g)
-governanceProperties (Governance (Left ks)) = [ "keyset" .= ks ]
-governanceProperties (Governance (Right c)) = [ "capability" .= c ]
-{-# INLINE governanceProperties #-}
-
-instance ToJSON g => ToJSON (Governance g) where
-  toJSON = enableToJSON "Pact.Types.Term.Governance g" . object . governanceProperties
-  toEncoding = A.pairs . mconcat . governanceProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode g => J.Encode (Governance g) where
   build (Governance (Left ks)) = J.object [ "keyset" J..= ks ]
   build (Governance (Right c)) = J.object [ "capability" J..= c ]
@@ -473,9 +377,6 @@ instance FromJSON g => FromJSON (Governance g) where
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable, Serialize, AsString, Pretty, FromJSON, ParseText, J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
   deriving newtype (LegacyHashable)
   deriving newtype (NFData, SizeOf)
 
@@ -500,25 +401,6 @@ instance Pretty n => Pretty (DefcapMeta n) where
     where
       tag = "@managed"
   pretty DefcapEvent = "@event"
-
-#ifdef PACT_TOJSON
-defcapMetaManagedProperties :: ToJSON n => JsonProperties (Maybe (Text,n))
-defcapMetaManagedProperties (Just (p,f)) =
-  [ "managedParam" .= p
-  , "managerFun" .= f
-  ]
-defcapMetaManagedProperties Nothing = [ "managerAuto" .= True ]
-{-# INLINE defcapMetaManagedProperties #-}
-
-instance ToJSON n => ToJSON (DefcapMeta n) where
-  toJSON = enableToJSON "Pact.Types.Term.DefcapMeta n" . \case
-    (DefcapManaged c) -> object $ defcapMetaManagedProperties c
-    DefcapEvent -> "event"
-  toEncoding (DefcapManaged c) = A.pairs . mconcat $ defcapMetaManagedProperties c
-  toEncoding DefcapEvent = toEncoding ("event" :: String)
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode n => J.Encode (DefcapMeta n) where
   build (DefcapManaged (Just (p,f))) = J.object
@@ -557,14 +439,6 @@ instance NFData n => NFData (DefMeta n)
 instance Pretty n => Pretty (DefMeta n) where
   pretty (DMDefcap m) = pretty m
 
-#ifdef PACT_TOJSON
-instance ToJSON n => ToJSON (DefMeta n) where
-  toJSON (DMDefcap m) = toJSON m
-  toEncoding (DMDefcap m) = toEncoding m
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode n => J.Encode (DefMeta n) where
   build (DMDefcap m) = J.build m
   {-# INLINEABLE build #-}
@@ -584,19 +458,6 @@ data ConstVal n =
   deriving (Eq,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData n => NFData (ConstVal n)
-
-#ifdef PACT_TOJSON
-constValProperties :: ToJSON n => JsonProperties (ConstVal n)
-constValProperties (CVRaw n) = [ "raw" .= n ]
-constValProperties (CVEval n m) = [ "raw" .= n, "eval" .= m ]
-{-# INLINE constValProperties #-}
-
-instance ToJSON n => ToJSON (ConstVal n) where
-  toJSON = enableToJSON "Pact.Types.Term.ConstVal n" . object . constValProperties
-  toEncoding = A.pairs . mconcat . constValProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode n => J.Encode (ConstVal n) where
   build (CVRaw n) = J.object [ "raw" J..= n ]
@@ -649,9 +510,7 @@ instance SizeOf Example
 newtype FieldKey = FieldKey Text
   deriving (Show,Eq,Ord,Generic)
   deriving newtype (IsString,AsString,FromJSON,NFData,SizeOf,LegacyHashable,J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON, ToJSONKey)
-#endif
+
 instance Pretty FieldKey where
   pretty (FieldKey k) = dquotes $ pretty k
 
@@ -665,23 +524,6 @@ data Step n = Step
   , _sInfo :: !Info
   } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 instance NFData n => NFData (Step n)
-
-#ifdef PACT_TOJSON
-stepProperties :: ToJSON n => JsonProperties (Step n)
-stepProperties o =
-  [ "exec" .= _sExec o
-  , "rollback" .= _sRollback o
-  , "entity" .= _sEntity o
-  , "info" .= _sInfo o
-  ]
-{-# INLINE stepProperties #-}
-
-instance ToJSON n => ToJSON (Step n) where
-  toJSON = enableToJSON "Pact.Types.Term.Step n" . lensyToJSON 2
-  toEncoding = A.pairs . mconcat . stepProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode n => J.Encode (Step n) where
   build o = J.object
@@ -734,24 +576,6 @@ instance HasInfo ModRef where getInfo = _modRefInfo
 instance Pretty ModRef where
   pretty (ModRef mn _sm _i) = pretty mn
 
-#ifdef PACT_TOJSON
--- Note that this encoding is not used in 'PactValue'.
---
-modRefProperties :: JsonProperties ModRef
-modRefProperties o =
-  [ "refSpec" .= _modRefSpec o
-  , "refInfo" .= _modRefInfo o
-  , "refName" .= _modRefName o
-  ]
-{-# INLINE modRefProperties #-}
-
-instance ToJSON ModRef where
-  toJSON = enableToJSON "Pact.Types.Term.ModRef" . lensyToJSON 4
-  toEncoding = A.pairs . mconcat . modRefProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode ModRef where
   build o = J.object
     [ "refSpec" J..= (J.Array <$> _modRefSpec o)
@@ -766,7 +590,6 @@ instance Ord ModRef where
 instance SizeOf ModRef where
   sizeOf ver (ModRef n s _) = constructorCost 1 + sizeOf ver n + sizeOf ver s
 
-#ifdef PACT_TOJSON
 -- | This JSON encoding omits the @refInfo@ property when it is the default Value.
 --
 -- This is different from the encoding of the 'ToJSON' instance of ModRef which
@@ -775,18 +598,6 @@ instance SizeOf ModRef where
 -- The alternative encoding is used by the 'ToJSON' instances of 'PactValue' and
 -- 'OldPactValue'.
 --
-modRefProperties_ :: JsonMProperties ModRef
-modRefProperties_ o = mconcat
-    [ "refSpec" .= _modRefSpec o
-    , "refInfo" .?= if refInfo /= def then Just refInfo else Nothing
-      -- this property is different from the instance Pact.Types.Term.ModRef
-    , "refName" .= _modRefName o
-    ]
- where
-  refInfo = _modRefInfo o
-{-# INLINEABLE modRefProperties_ #-}
-#endif
-
 modRefKeyValues_ :: ModRef -> [Maybe J.KeyValue]
 modRefKeyValues_ o =
     [ "refSpec" J..= (J.Array <$> _modRefSpec o)
@@ -818,21 +629,6 @@ instance SizeOf ModuleGuard where
   sizeOf ver (ModuleGuard md n) =
     constructorCost 2 + sizeOf ver md + sizeOf ver n
 
-#ifdef PACT_TOJSON
-moduleGuardProperties :: JsonProperties ModuleGuard
-moduleGuardProperties o =
-  [ "moduleName" .= _mgModuleName o
-  , "name" .= _mgName o
-  ]
-{-# INLINEABLE moduleGuardProperties #-}
-
-instance ToJSON ModuleGuard where
-  toJSON = enableToJSON "Pact.Types.Term.ModuleGuard" . lensyToJSON 3
-  toEncoding = A.pairs . mconcat . moduleGuardProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode ModuleGuard where
   build o = J.object
     [ "moduleName" J..= _mgModuleName o
@@ -862,21 +658,6 @@ instance SizeOf PactGuard where
   sizeOf ver (PactGuard pid pn) =
     (constructorCost 2) + (sizeOf ver pid) + (sizeOf ver pn)
 
-#ifdef PACT_TOJSON
-pactGuardProperties :: JsonProperties PactGuard
-pactGuardProperties o =
-  [ "pactId" .= _pgPactId o
-  , "name" .= _pgName o
-  ]
-{-# INLINE pactGuardProperties #-}
-
-instance ToJSON PactGuard where
-  toJSON = enableToJSON "Pact.Types.Term.PactGuard" . lensyToJSON 3
-  toEncoding = A.pairs . mconcat . pactGuardProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode PactGuard where
   build o = J.object
     [ "pactId" J..= _pgPactId o
@@ -902,17 +683,6 @@ objectMapToListWith f (ObjectMap m) = M.foldrWithKey (\k x xs -> (f k x):xs) [] 
 instance Pretty v => Pretty (ObjectMap v) where
   pretty om = annotate Val $ commaBraces $
     objectMapToListWith (\k v -> pretty k <> ": " <> pretty v) om
-
-#ifdef PACT_TOJSON
--- The order depends on the hash function that is used by HM.HashMap in aeson
--- when serialzing maps via Value.
---
-instance ToJSON v => ToJSON (ObjectMap v) where
-  toJSON (ObjectMap om) = enableToJSON "Pact.Types.Term.Internal.ObjectMap" $ toJSON om
-  toEncoding (ObjectMap om) = toEncoding $ legacyMap asString om
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode v => J.Encode (ObjectMap v) where
   build (ObjectMap om) = J.build $ legacyMap asString om
@@ -942,22 +712,6 @@ instance Pretty Use where
   pretty Use{..} =
     let args = pretty _uModuleName : maybe [] (\mh -> [pretty mh]) _uModuleHash
     in parensSep $ "use" : args
-
-#ifdef PACT_TOJSON
-useProperties :: JsonProperties Use
-useProperties o =
-  [ "hash" .= _uModuleHash o
-  , "imports" .= _uImports o
-  , "module" .= _uModuleName o
-  ,  "i" .= _uInfo o
-  ]
-
-instance ToJSON Use where
-  toJSON = enableToJSON "Pact.Types.Term.Use" . object . useProperties
-  toEncoding = A.pairs . mconcat . useProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode Use where
   build o = J.object
@@ -1002,21 +756,6 @@ instance Pretty a => Pretty (CapabilityGuard a) where
 instance (SizeOf a) => SizeOf (CapabilityGuard a) where
   sizeOf ver CapabilityGuard{..} =
     (constructorCost 2) + (sizeOf ver _cgName) + (sizeOf ver _cgArgs) + (sizeOf ver _cgPactId)
-
-#ifdef PACT_TOJSON
-capabilityGuardProperties :: ToJSON n => JsonProperties (CapabilityGuard n)
-capabilityGuardProperties o =
-  [ "cgPactId" .= _cgPactId o
-  , "cgArgs" .= _cgArgs o
-  , "cgName" .= _cgName o
-  ]
-
-instance ToJSON a => ToJSON (CapabilityGuard a) where
-  toJSON = enableToJSON "Pact.Types.Term.CapabilityGuard" . object . capabilityGuardProperties
-  toEncoding = A.pairs . mconcat . capabilityGuardProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode a => J.Encode (CapabilityGuard a) where
   build o = J.object
@@ -1113,26 +852,6 @@ ungprop "pred" = GuardPred
 ungprop t = GuardUnknown (show t)
 
 
-#ifdef PACT_TOJSON
-instance ToJSON a => ToJSON (Guard a) where
-  toJSON (GKeySet k) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON k
-  toJSON (GKeySetRef n) = enableToJSON "Pact.Types.Term.Guard a" $ object [ keyNamef .= n ]
-  toJSON (GPact g) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON g
-  toJSON (GModule g) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON g
-  toJSON (GUser g) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON g
-  toJSON (GCapability g) = enableToJSON "Pact.Types.Term.Guard a" $ toJSON g
-
-  toEncoding (GKeySet k) = toEncoding k
-  toEncoding (GKeySetRef n) = A.pairs (keyNamef .= n)
-  toEncoding (GPact g) = toEncoding g
-  toEncoding (GModule g) = toEncoding g
-  toEncoding (GUser g) = toEncoding g
-  toEncoding (GCapability g) = toEncoding g
-
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode a => J.Encode (Guard a) where
   build (GKeySet k) = J.build k
   build (GKeySetRef n) = J.object ["keysetref" J..= n]
@@ -1179,27 +898,6 @@ instance Pretty g => Pretty (Module g) where
   pretty Module{..} = parensSep
     [ "module" , pretty _mName , pretty _mGovernance , pretty _mHash ]
 
-#ifdef PACT_TOJSON
-moduleProperties :: ToJSON g => JsonProperties (Module g)
-moduleProperties o =
-  [ "hash" .= _mHash o
-  , "blessed" .=  LHM.sort (HS.toList $ _mBlessed o)
-  , "interfaces" .= _mInterfaces o
-  , "imports" .= _mImports o
-  , "name" .= _mName o
-  , "code" .= _mCode o
-  , "meta" .= _mMeta o
-  , "governance" .= _mGovernance o
-  ]
-{-# INLINE moduleProperties #-}
-
-instance ToJSON g => ToJSON (Module g) where
-  toJSON = enableToJSON "Pact.Types.Term.Module g" . object . moduleProperties
-  toEncoding = A.pairs . mconcat . moduleProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
-
 instance J.Encode g => J.Encode (Module g) where
   build o = J.object
     [ "hash" J..= _mHash o
@@ -1228,23 +926,6 @@ data Interface = Interface
   } deriving (Eq,Show,Generic)
 instance Pretty Interface where
   pretty Interface{..} = parensSep [ "interface", pretty _interfaceName ]
-
-#ifdef PACT_TOJSON
-interfaceProperties :: JsonProperties Interface
-interfaceProperties o =
-  [ "imports" .= _interfaceImports o
-  , "name" .= _interfaceName o
-  , "code" .= _interfaceCode o
-  , "meta" .= _interfaceMeta o
-  ]
-{-# INLINE interfaceProperties #-}
-
-instance ToJSON Interface where
-  toJSON = enableToJSON "Pact.Types.Term.Interface" . lensyToJSON 10
-  toEncoding = A.pairs . mconcat . interfaceProperties
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode Interface where
   build o = J.object
@@ -1275,18 +956,6 @@ instance Pretty g => Pretty (ModuleDef g) where
   pretty = \case
     MDModule    m -> pretty m
     MDInterface i -> pretty i
-
-#ifdef PACT_TOJSON
-instance ToJSON g => ToJSON (ModuleDef g) where
-  toJSON (MDModule m) = enableToJSON "Pact.Types.Term.ModuleDef g" $ toJSON m
-  toJSON (MDInterface i) = enableToJSON "Pact.Types.Term.ModuleDef g" $ toJSON i
-
-  toEncoding (MDModule m) = toEncoding m
-  toEncoding (MDInterface i) = toEncoding i
-
-  {-# INLINEABLE toJSON #-}
-  {-# INLINEABLE toEncoding #-}
-#endif
 
 instance J.Encode g => J.Encode (ModuleDef g) where
   build (MDModule m) = J.build m

@@ -23,9 +23,6 @@ module Pact.Types.RowData
 import Control.Applicative
 import Control.DeepSeq (NFData)
 import Data.Aeson
-#ifdef PACT_TOJSON
-import Data.Aeson.Encoding
-#endif
 import Data.Default
 import Data.Maybe(fromMaybe)
 import Data.Text (Text)
@@ -38,9 +35,6 @@ import Pact.Types.PactValue
 import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.Term
-#ifdef PACT_TOJSON
-import Pact.Types.Util
-#endif
 
 import qualified Pact.JSON.Encode as J
 
@@ -57,41 +51,6 @@ data RowDataValue
 instance NFData RowDataValue
 instance Arbitrary RowDataValue where
   arbitrary = pactValueToRowData <$> arbitrary
-
-#ifdef PACT_TOJSON
-tag :: ToJSON v => KeyValue kv => Text -> v -> [kv]
-tag t rv =
-  [ "$t" .= t
-  , "$v" .= rv
-  ]
-{-# INLINE tag #-}
-
-instance ToJSON RowDataValue where
-  toJSON = enableToJSON "Pact.Types.RowData.RowDataValue" . \case
-    RDLiteral l -> toJSON l
-    RDList l -> toJSON l
-    RDObject o -> object $ tag "o" o
-    RDGuard g -> object $ tag "g" g
-    RDModRef (ModRef refName refSpec _) -> object $ tag "m" $ object
-      [ "refSpec" .= refSpec
-      , "refName" .= refName
-      ]
-  {-# INLINE toJSON #-}
-
-  toEncoding rdv = case rdv of
-    RDLiteral l -> toEncoding l
-    RDList l -> toEncoding l
-    RDObject o -> pairs . mconcat $ tag "o" o
-    RDGuard g -> pairs . mconcat $ tag "g" g
-    RDModRef (ModRef refName refSpec _) -> pairs . mconcat $
-      [ "$t" .= ("m" :: Text)
-      , pair "$v" $ pairs $ mconcat
-          [ "refSpec" .= refSpec
-          , "refName" .= refName
-          ]
-      ]
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON RowDataValue where
   parseJSON v1 =
@@ -144,14 +103,6 @@ instance NFData RowDataVersion
 instance Arbitrary RowDataVersion where
   arbitrary = elements [RDV0, RDV1]
 
-#ifdef PACT_TOJSON
-instance ToJSON RowDataVersion where
-  toJSON = toJSON . fromEnum
-  toEncoding = toEncoding . fromEnum
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance FromJSON RowDataVersion where
   parseJSON = withScientific "RowDataVersion" $ \case
     0 -> pure RDV0
@@ -201,25 +152,6 @@ rowDataToPactValue rdv = case rdv of
 instance Pretty RowDataValue where
   pretty = pretty . rowDataToPactValue
 
-#ifdef PACT_TOJSON
-rowDataProperties :: JsonProperties RowData
-rowDataProperties o =
-  [ "$d" .= _rdData o
-  , "$v" .= _rdVersion o
-  ]
-{-# INLINE rowDataProperties #-}
-
-instance ToJSON RowData where
-  toJSON (RowData RDV0 m) = toJSON $ fmap rowDataToPactValue m
-  toJSON r = object $ rowDataProperties r
-
-  toEncoding (RowData RDV0 m) = toEncoding $ fmap rowDataToPactValue m
-  toEncoding r = pairs $ mconcat $ rowDataProperties r
-
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode RowData where
   build (RowData RDV0 m) = J.build $ fmap rowDataToPactValue m
   build o = J.object
@@ -257,29 +189,6 @@ data OldPactValue
   | OldPObject !(ObjectMap OldPactValue)
   | OldPGuard !(Guard OldPactValue)
   | OldPModRef !ModRef
-
-#ifdef PACT_TOJSON
--- Needed for parsing guard
-instance ToJSON OldPactValue where
-  toJSON = enableToJSON "Pact.Types.RowData.OldPactValue" . \case
-    OldPLiteral l -> toJSON l
-    OldPObject o -> toJSON o
-    OldPList v -> toJSON v
-    OldPGuard x -> toJSON x
-    OldPModRef m -> Data.Aeson.Object $ modRefProperties_ m
-      -- this uses a non-standard alternative JSON encoding for 'ModRef'
-
-  toEncoding = \case
-    OldPLiteral l -> toEncoding l
-    OldPObject o -> toEncoding o
-    OldPList v -> toEncoding v
-    OldPGuard x -> toEncoding x
-    OldPModRef m -> pairs $ modRefProperties_ m
-      -- this uses a non-standard alternative JSON encoding for 'ModRef'
-
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode OldPactValue where
   build (OldPLiteral l) = J.build l

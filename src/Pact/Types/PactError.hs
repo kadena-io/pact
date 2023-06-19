@@ -115,14 +115,6 @@ data StackFrame = StackFrame {
 
 instance NFData StackFrame
 
-#ifdef PACT_TOJSON
-instance ToJSON StackFrame where
-  toJSON = enableToJSON "Pact.Types.PactError.StackFrame" . toJSON . show
-  toEncoding = toEncoding . show
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
-
 instance J.Encode StackFrame where
   build = J.string . show
   {-# INLINE build #-}
@@ -150,9 +142,7 @@ instance Arbitrary StackFrame where
 newtype UxStackFrame = UxStackFrame { _getUxStackFrame :: StackFrame }
   deriving (Show, Eq)
   deriving newtype (J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
+
 
 instance FromJSON UxStackFrame where
   parseJSON = withText "StackFrame" $ \t ->
@@ -202,9 +192,7 @@ data PactErrorType
   | ContinuationError
   deriving (Show,Eq,Generic)
 instance NFData PactErrorType
-#ifdef PACT_TOJSON
-instance ToJSON PactErrorType
-#endif
+
 instance FromJSON PactErrorType
 
 instance J.Encode PactErrorType where
@@ -232,22 +220,6 @@ data PactError = PactError
 
 instance NFData PactError
 instance Exception PactError
-
-#ifdef PACT_TOJSON
-pactErrorProperties :: JsonProperties PactError
-pactErrorProperties o =
-  [ "callStack" .= peCallStack o
-  , "type" .= peType o
-  , "message" .= show (peDoc o)
-  , "info" .= renderInfo (peInfo o)
-  ]
-
-instance ToJSON PactError where
-  toJSON = enableToJSON "Pact.Types.PactError.PactError" . object . pactErrorProperties
-  toEncoding = pairs . mconcat . pactErrorProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance J.Encode PactError where
   build o = J.object
@@ -290,9 +262,6 @@ instance Arbitrary PactError where
 newtype UxPactError = UxPactError { _getUxPactError :: PactError }
   deriving (Show, Eq)
   deriving newtype (J.Encode)
-#ifdef PACT_TOJSON
-  deriving newtype (ToJSON)
-#endif
 
 instance FromJSON UxPactError where
   parseJSON = withObject "PactError" $ \o -> do
@@ -322,9 +291,7 @@ data OutputType =
   OutputWarning |
   OutputTrace
   deriving (Show,Eq,Generic)
-#ifdef PACT_TOJSON
-instance ToJSON OutputType
-#endif
+
 instance FromJSON OutputType
 
 instance J.Encode OutputType where
@@ -349,20 +316,6 @@ data RenderedOutput = RenderedOutput
 instance Pretty RenderedOutput where
   pretty (RenderedOutput t i f) = pretty (renderInfo i) <> ":" <> pretty (show f) <> ": " <> pretty t
 
-#ifdef PACT_TOJSON
-renderedOutputProperties :: JsonProperties RenderedOutput
-renderedOutputProperties o =
-  [ "text" .= _roText o
-  , "type" .= _roType o
-  , "info" .= renderInfo (_roInfo o)
-  ]
-
-instance ToJSON RenderedOutput where
-  toJSON = enableToJSON "Pact.Types.PactError.RenderedOutput" . object . renderedOutputProperties
-  toEncoding = pairs . mconcat . renderedOutputProperties
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON RenderedOutput where
   parseJSON = withObject "RenderedOutput" $ \o -> RenderedOutput

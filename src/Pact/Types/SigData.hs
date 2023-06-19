@@ -48,14 +48,6 @@ newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
 instance IsString PublicKeyHex where
   fromString = PublicKeyHex . pack
 instance FromJSONKey PublicKeyHex
-#ifdef PACT_TOJSON
-instance ToJSONKey PublicKeyHex
-instance ToJSON PublicKeyHex where
-  toJSON (PublicKeyHex hex) = String hex
-  toEncoding (PublicKeyHex hex) = toEncoding hex
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON PublicKeyHex where
   parseJSON = withText "PublicKeyHex" $ \t -> do
@@ -86,25 +78,6 @@ data SigData a = SigData
   -- ^ This is not a map because the order must be the same as the signers inside the command.
   , _sigDataCmd :: !(Maybe a)
   } deriving (Eq,Show,Generic)
-
-#ifdef PACT_TOJSON
-sigDataProperties :: ToJSON a => ToJSON x => ([(Text, Maybe Text)] -> x) -> JsonMProperties (SigData a)
-sigDataProperties f o = mconcat
-  [ "hash" .= _sigDataHash o
-  , "sigs" .= f (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
-    -- FIXME: this instance seems to violate the comment on the respective
-    -- constructor field. Is that fine? Is it required for backward compat?
-    -- This instance also does not roundtrip.
-  , "cmd" .?= _sigDataCmd o
-  ]
-{-# INLINE sigDataProperties #-}
-
-instance ToJSON a => ToJSON (SigData a) where
-  toJSON = enableToJSON "Pact.Types.SigData.SigData" . Data.Aeson.Object . sigDataProperties HM.fromList
-  toEncoding = pairs . sigDataProperties LHM.fromList
-  {-# INLINE toJSON #-}
-  {-# INLINE toEncoding #-}
-#endif
 
 instance FromJSON a => FromJSON (SigData a) where
   parseJSON = withObject "SigData" $ \o -> do

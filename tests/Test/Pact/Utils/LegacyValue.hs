@@ -69,10 +69,6 @@ import Pact.Types.SQLite
 import Pact.Types.Term.Arbitrary ()
 import Pact.PersistPactDb
 
-#ifdef PACT_TOJSON
-import Pact.JSON.Legacy.Value
-#endif
-
 import qualified Pact.JSON.Encode as J
 
 -- -------------------------------------------------------------------------- --
@@ -85,16 +81,8 @@ import qualified Pact.JSON.Encode as J
 --
 -- It also documents which JSON instances do not roundtrip.
 --
-#ifdef PACT_TOJSON
-prop_checkRoundtrip :: Eq a => Show a => ToJSON a => FromJSON a => a -> Property
-prop_checkRoundtrip a = eitherDecode (encode a) === Right a
-
-checkRoundtrip :: Eq a => Show a => ToJSON a => FromJSON a => (String, a -> Property)
-checkRoundtrip = ("roundtrip", prop_checkRoundtrip)
-#else
 checkRoundtrip :: (String, a -> Property)
 checkRoundtrip = ("roundtrip disabled", \_ -> once True)
-#endif
 
 prop_checkRoundtrip2 :: Eq a => Show a => J.Encode a => FromJSON a => a -> Property
 prop_checkRoundtrip2 a = eitherDecode (J.encode a) === Right a
@@ -126,52 +114,25 @@ instance Arbitrary a => Arbitrary (Roundtripable (SigData a)) where
 -- properties provided by 'LegacyHashMap'. This test checks that those code
 -- paths produce the same result.
 --
-#ifdef PACT_TOJSON
-prop_checkLegacyValueCompat :: ToJSON a => a -> Property
-prop_checkLegacyValueCompat a = encode a === J.encode (toLegacyJson a)
-
-checkLegacyValueCompat :: ToJSON a => (String, a -> Property)
-checkLegacyValueCompat =
-  ("encoding is compatible with toLegacyJson encoding", prop_checkLegacyValueCompat)
-#else
 checkLegacyValueCompat :: (String, a -> Property)
 checkLegacyValueCompat = ("toLegacyJson is disabled", \_ -> once True)
-#endif
 
 -- -------------------------------------------------------------------------- --
 --
 
-#ifdef PACT_TOJSON
-prop_checkAesonCompat :: ToJSON a => J.Encode a => a -> Property
-prop_checkAesonCompat a = encode a === J.encode a
-
-checkAesonCompat :: ToJSON a => J.Encode a => (String, a -> Property)
-checkAesonCompat =
-  ("encoding is compatible with Aeson encoding", prop_checkAesonCompat)
-#else
 checkAesonCompat :: (String, a -> Property)
 checkAesonCompat =
   ("aeson encoding compat is disabled", \_ -> once True)
-#endif
-
 -- -------------------------------------------------------------------------- --
 -- Tools
 
 data Case a
-#ifdef PACT_TOJSON
-  = Case !(Eq a => Show a => FromJSON a => ToJSON a => (String, a -> Property))
-  | Pending !(Eq a => Show a => FromJSON a => ToJSON a => (String, a -> Property))
-#else
   = Case !(Eq a => Show a => FromJSON a => (String, a -> Property))
   | Pending !(Eq a => Show a => FromJSON a => (String, a -> Property))
-#endif
 
 spec_case
   :: forall a
   . FromJSON a
-#ifdef PACT_TOJSON
-  => ToJSON a
-#endif
   => Show a
   => Eq a
   => Typeable a
