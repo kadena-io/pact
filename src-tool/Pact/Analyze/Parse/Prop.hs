@@ -517,6 +517,12 @@ inferPreProp preProp = case preProp of
       _               -> throwErrorIn preProp $
         pretty op' <> " applied to wrong number of arguments"
 
+  PreApp s [PreApp a p1, PreApp b p2 , c] | s == SOrQ ->
+    inferPreProp (PreApp SLogicalDisjunction [PreApp a (p1 ++ [c]), PreApp b (p2 ++ [c])])
+
+  PreApp s [PreApp a p1, PreApp b p2 , c] | s == SAndQ ->
+    inferPreProp (PreApp SLogicalConjunction [PreApp a (p1 ++ [c]), PreApp b (p2 ++ [c])])
+
   PreApp s [a, b] | s == SLogicalImplication -> do
     propNotA <- PNot <$> checkPreProp SBool a
     Some SBool . POr propNotA <$> checkPreProp SBool b

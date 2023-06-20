@@ -4594,3 +4594,25 @@ spec = describe "analyze" $ do
          , "block-time"   := block-time }
          (* block-height  x)))
       |]
+
+  describe "Properties involving `or?` and `and?` are handled" $ do
+    expectVerified [text|
+       (defun test()
+       @model [ (property (or? (> 1) (> 2) 1))]
+         true)
+      |]
+    expectFalsified [text|
+       (defun test()
+       @model [ (property (or? (> 1) (> 2) 3))]
+         true)
+      |]
+    expectVerified [text|
+       (defun test()
+       @model [ (property (and? (> 1) (> 2) 0))]
+         true)
+      |]
+    expectFalsified [text|
+       (defun test()
+       @model [ (property (and? (> 1) (> 2) 3))]
+         true)
+      |]
