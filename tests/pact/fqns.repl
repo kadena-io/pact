@@ -110,10 +110,19 @@
   (defun f ()
     (with-capability (free.test-mod-redeploy-ref.test)
       1))
+
+  (defun f1 ()
+    (with-capability (test-mod-redeploy-ref.test)
+      1))
+  
   )
 (expect "Name resolution should find new reference" 1 (f))
 (expect "Name resolution should find new reference" 1 (test-mod-redeploy-ref.f))
 (expect "Name resolution should find new reference" 1 (free.test-mod-redeploy-ref.f))
+
+(expect "Name resolution should find new reference" 1 (f1))
+(expect "Name resolution should find new reference" 1 (test-mod-redeploy-ref.f1))
+(expect "Name resolution should find new reference" 1 (free.test-mod-redeploy-ref.f1))
 (commit-tx)
 
 ; pact 4.7 behaviour
