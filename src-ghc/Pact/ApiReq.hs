@@ -117,10 +117,10 @@ instance Arbitrary ApiKeyPair where
 
 -- | For unsigned commands
 data ApiSigner = ApiSigner {
-  _asPublic :: !Text,
-  _asAddress :: !(Maybe Text),
-  _asScheme :: !(Maybe PPKScheme),
-  _asCaps :: !(Maybe [SigCapability])
+  _asPublic :: Text,
+  _asAddress :: Maybe Text,
+  _asScheme :: Maybe PPKScheme,
+  _asCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
@@ -182,20 +182,20 @@ instance Arbitrary ApiPublicMeta where
 -- ApiReq
 
 data ApiReq = ApiReq {
-  _ylType :: !(Maybe Text),
-  _ylPactTxHash :: !(Maybe Hash),
-  _ylStep :: !(Maybe Int),
-  _ylRollback :: !(Maybe Bool),
-  _ylData :: !(Maybe Value),
-  _ylProof :: !(Maybe ContProof),
-  _ylDataFile :: !(Maybe FilePath),
-  _ylCode :: !(Maybe Text),
-  _ylCodeFile :: !(Maybe FilePath),
-  _ylKeyPairs :: !(Maybe [ApiKeyPair]),
-  _ylSigners :: !(Maybe [ApiSigner]),
-  _ylNonce :: !(Maybe Text),
-  _ylPublicMeta :: !(Maybe ApiPublicMeta),
-  _ylNetworkId :: !(Maybe NetworkId)
+  _ylType :: Maybe Text,
+  _ylPactTxHash :: Maybe Hash,
+  _ylStep :: Maybe Int,
+  _ylRollback :: Maybe Bool,
+  _ylData :: Maybe Value,
+  _ylProof :: Maybe ContProof,
+  _ylDataFile :: Maybe FilePath,
+  _ylCode :: Maybe Text,
+  _ylCodeFile :: Maybe FilePath,
+  _ylKeyPairs :: Maybe [ApiKeyPair],
+  _ylSigners :: Maybe [ApiSigner],
+  _ylNonce :: Maybe Text,
+  _ylPublicMeta :: Maybe ApiPublicMeta,
+  _ylNetworkId :: Maybe NetworkId
   } deriving (Eq,Show,Generic)
 
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
