@@ -4616,3 +4616,16 @@ spec = describe "analyze" $ do
        @model [ (property (and? (> 1) (> 2) 3))]
          true)
       |]
+
+    expectVerified [text|
+       (defun test(x: integer y: integer z: integer)
+       @model [ (property (or? (> x) (> y) z))]
+       (enforce (or? (> x) (> y) z) "")
+         true)
+      |]
+    expectVerified [text|
+       (defun test(x: integer y: integer z: integer)
+       @model [ (property (and? (> x) (> y) z))]
+       (enforce (and? (> x) (> y) z) "")
+         true)
+      |]
