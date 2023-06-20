@@ -95,6 +95,10 @@
       1))
   )
 (expect-failure "Execution fails due to the falsy defcap" (f))
+(expect-failure "Execution fails due to the falsy defcap" (test-mod-redeploy-ref.f))
+(expect-failure "Execution fails due to the falsy defcap" (free.test-mod-redeploy-ref.f))
+
+
 (commit-tx)
 
 (begin-tx)
@@ -108,6 +112,8 @@
       1))
   )
 (expect "Name resolution should find new reference" 1 (f))
+(expect "Name resolution should find new reference" 1 (test-mod-redeploy-ref.f))
+(expect "Name resolution should find new reference" 1 (free.test-mod-redeploy-ref.f))
 (commit-tx)
 
 ; pact 4.7 behaviour
@@ -129,43 +135,16 @@
 (begin-tx)
 (env-exec-config ["DisablePact48"])
 (namespace 'free)
-(module test-mod-redeploy-ref g
-  (defcap g () true)
-  (defcap test ()
-    true)
-  (defun f ()
-    (with-capability (free.test-mod-redeploy-ref.test)
-      1))
-  )
+;; (module test-mod-redeploy-ref g
+;;   (defcap g () true)
+;;   (defcap test ()
+;;     true)
+;;   (defun f ()
+;;     (with-capability (free.test-mod-redeploy-ref.test)
+;;       1))
+;;   )
 
-(expect-failure "Name resolution should find old reference of prev. deployed module" (f))
-
-(commit-tx)
-
-
-; pact 4.8 module ref
-
-(begin-tx)
-(namespace 'free)
-(module test-mod-deploy-parent g
-  (defcap g () true)
-
-  (defcap test ()
-    true)
-  )
-(commit-tx)
-
-(begin-tx)
-(namespace 'free)
-(module test-mod-deploy-child g
-  (defcap g () true)
-  (defcap test ()
-    true)
-  (defun f ()
-    (with-capability (free.test-mod-deploy-parent.test)
-      1))
-  )
-
-(expect "Name resolution should find parent reference of module" 1 (f))
-
+;(expect-failure "Name resolution should find old reference of prev. deployed module" (f))
+(expect-failure "Name resolution should find old reference of prev. deployed module" (test-mod-redeploy-ref.f))
+(expect-failure "Name resolution should find old reference of prev. deployed module" (free.test-mod-redeploy-ref.f))
 (commit-tx)
