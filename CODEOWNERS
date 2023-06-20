@@ -1,43 +1,43 @@
 * @jwiegley @emilypi
-/src-ghc/Pact/ApiReq.hs @sirlensalot
-/src-ghc/Pact/Bench.hs @sirlensalot
-/src-ghc/Pact/Coverage.hs @sirlensalot
-/src-ghc/Pact/Coverage/Report.hs @sirlensalot
-/src-ghc/Pact/Interpreter.hs @sirlensalot
-/src/Crypto/Hash/Blake2Native.hs @sirlensalot
-/src/Pact/Compile.hs @sirlensalot
-/src/Pact/Eval.hs @sirlensalot
-/src/Pact/Gas.hs @sirlensalot
-/src/Pact/Native.hs @sirlensalot
-/src/Pact/Native/Capabilities.hs @sirlensalot
-/src/Pact/Native/Db.hs @sirlensalot
-/src/Pact/Native/Ops.hs @jmcardon
-/src/Pact/Parse.hs @sirlensalot
-/src/Pact/Persist.hs @sirlensalot
-/src/Pact/PersistPactDb.hs @sirlensalot
-/src/Pact/Repl.hs @sirlensalot
-/src/Pact/Repl/Lib.hs @sirlensalot
-/src/Pact/Repl/Types.hs @sirlensalot
-/src/Pact/Runtime/Capabilities.hs @sirlensalot
-/src/Pact/Runtime/Typecheck.hs @sirlensalot
-/src/Pact/Typechecker.hs @sirlensalot
-/src/Pact/Types/API.hs @sirlensalot
-/src/Pact/Types/Advice.hs @sirlensalot
-/src/Pact/Types/Capability.hs @sirlensalot
-/src/Pact/Types/Codec.hs @sirlensalot
-/src/Pact/Types/Command.hs @sirlensalot
-/src/Pact/Types/Continuation.hs @sirlensalot
-/src/Pact/Types/Exp.hs @sirlensalot
-/src/Pact/Types/Hash.hs @sirlensalot
-/src/Pact/Types/Info.hs @sirlensalot
-/src/Pact/Types/KeySet.hs @sirlensalot
-/src/Pact/Types/PactError.hs @sirlensalot
-/src/Pact/Types/PactValue.hs @sirlensalot
-/src/Pact/Types/Parser.hs @sirlensalot
-/src/Pact/Types/Persistence.hs @sirlensalot
-/src/Pact/Types/Purity.hs @sirlensalot
-/src/Pact/Types/RPC.hs @sirlensalot
-/src/Pact/Types/Runtime.hs @sirlensalot
-/src/Pact/Types/Term.hs @sirlensalot
-/src/Pact/Types/Type.hs @sirlensalot
-/src/Pact/Types/Typecheck.hs @sirlensalot
+/src-ghc/Pact/ApiReq.hs @sirlensalot @jwiegley @emilypi
+/src-ghc/Pact/Bench.hs @sirlensalot @jwiegley @emilypi
+/src-ghc/Pact/Coverage.hs @sirlensalot @jwiegley @emilypi
+/src-ghc/Pact/Coverage/Report.hs @sirlensalot @jwiegley @emilypi
+/src-ghc/Pact/Interpreter.hs @sirlensalot @jwiegley @emilypi
+/src/Crypto/Hash/Blake2Native.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Compile.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Eval.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Gas.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Native.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Native/Capabilities.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Native/Db.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Native/Ops.hs @jmcardon @jwiegley @emilypi
+/src/Pact/Parse.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Persist.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/PersistPactDb.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Repl.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Repl/Lib.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Repl/Types.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Runtime/Capabilities.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Runtime/Typecheck.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Typechecker.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/API.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Advice.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Capability.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Codec.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Command.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Continuation.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Exp.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Hash.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Info.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/KeySet.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/PactError.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/PactValue.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Parser.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Persistence.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Purity.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/RPC.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Runtime.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Term.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Type.hs @sirlensalot @jwiegley @emilypi
+/src/Pact/Types/Typecheck.hs @sirlensalot @jwiegley @emilypi
