@@ -23,7 +23,6 @@ import GHC.Generics
 import qualified Pact.JSON.Encode as J
 import Pact.Types.PactError
 import Pact.Types.Term (ModuleDef, ModuleName, Name)
-import Pact.Types.Util
 
 import Test.QuickCheck
 
