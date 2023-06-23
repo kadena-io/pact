@@ -86,12 +86,12 @@ computeGasCommit info name args = do
 
 
 -- | Pre-compute gas for some application before some action.
-computeGas' :: Gas -> FunApp -> GasArgs -> Eval e a -> Eval e (MicroGas,a)
-computeGas' g0 i gs action = computeGas (Right i) gs >>= \g -> (gasToMicroGas g0 <> g,) <$> action
+computeGas' :: FunApp -> GasArgs -> Eval e a -> Eval e a
+computeGas' i gs action = computeGas (Right i) gs *> action
 
 -- | Pre-compute gas for some application with unreduced args before some action.
-gasUnreduced :: FunApp -> [Term Ref] -> Eval e a -> Eval e (MicroGas,a)
-gasUnreduced i as = computeGas' 0 i (GUnreduced as)
+gasUnreduced :: FunApp -> [Term Ref] -> Eval e a -> Eval e a
+gasUnreduced i as = computeGas' i (GUnreduced as)
 
 -- | GasEnv for suppressing gas charging.
 freeGasEnv :: GasEnv
