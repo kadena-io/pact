@@ -2022,7 +2022,7 @@ pact> (env-hash (hash "hello"))
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
+DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
 ```lisp
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
