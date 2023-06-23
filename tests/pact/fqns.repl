@@ -82,7 +82,10 @@
 ;; Module redeploy name resolution
 ;;
 
+
 (begin-tx)
+(env-exec-config ["DisablePact48"])
+
 (namespace 'free)
 (module test-mod-redeploy-ref g
   (defcap g () true)
@@ -94,9 +97,55 @@
     (with-capability (test)
       1))
   )
-(expect-failure "Execution fails due to the falsy defcap" (f))
-(expect-failure "Execution fails due to the falsy defcap" (test-mod-redeploy-ref.f))
-(expect-failure "Execution fails due to the falsy defcap" (free.test-mod-redeploy-ref.f))
+(expect-failure "Execution fails due to the false defcap" (f))
+(expect-failure "Execution fails due to the false defcap" (test-mod-redeploy-ref.f))
+(expect-failure "Execution fails due to the false defcap" (free.test-mod-redeploy-ref.f))
+(commit-tx)
+
+(begin-tx)
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+  (defcap test ()
+    true)
+
+  (defun f ()
+    (with-capability (free.test-mod-redeploy-ref.test)
+      1))
+
+  (defun f1 ()
+    (with-capability (test-mod-redeploy-ref.test)
+      1))
+
+  )
+(expect-failure "Name resolution should use old reference" (f))
+(expect-failure "Name resolution should use old reference" (test-mod-redeploy-ref.f))
+(expect-failure "Name resolution should use old reference" (free.test-mod-redeploy-ref.f))
+
+(expect-failure "Name resolution should use old reference" (f1))
+(expect-failure "Name resolution should use old reference" (test-mod-redeploy-ref.f1))
+(expect-failure "Name resolution should use old reference" (free.test-mod-redeploy-ref.f1))
+(commit-tx)
+
+
+;; Check Pact48 behaviour
+
+(begin-tx)
+(env-exec-config []) ; reset
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+
+  (defcap test ()
+    (enforce false "boom"))
+
+  (defun f ()
+    (with-capability (test)
+      1))
+  )
+(expect-failure "Execution fails due to the false defcap" (f))
+(expect-failure "Execution fails due to the false defcap" (test-mod-redeploy-ref.f))
+(expect-failure "Execution fails due to the false defcap" (free.test-mod-redeploy-ref.f))
 
 
 (commit-tx)
@@ -114,7 +163,6 @@
   (defun f1 ()
     (with-capability (test-mod-redeploy-ref.test)
       1))
-  
   )
 (expect "Name resolution should find new reference" 1 (f))
 (expect "Name resolution should find new reference" 1 (test-mod-redeploy-ref.f))
@@ -123,28 +171,4 @@
 (expect "Name resolution should find new reference" 1 (f1))
 (expect "Name resolution should find new reference" 1 (test-mod-redeploy-ref.f1))
 (expect "Name resolution should find new reference" 1 (free.test-mod-redeploy-ref.f1))
-(commit-tx)
-
-; pact 4.7 behaviour
-
-(begin-tx)
-(namespace 'free)
-(module test-mod-redeploy-ref g
-  (defcap g () true)
-
-  (defcap test ()
-    (enforce false "boom"))
-
-  (defun f ()
-    (with-capability (test)
-      1))
-  )
-(commit-tx)
-
-(begin-tx)
-(env-exec-config ["DisablePact48"])
-(namespace 'free)
-
-(expect-failure "Name resolution should find old reference of prev. deployed module" (test-mod-redeploy-ref.f))
-(expect-failure "Name resolution should find old reference of prev. deployed module" (free.test-mod-redeploy-ref.f))
 (commit-tx)
