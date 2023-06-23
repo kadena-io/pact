@@ -214,28 +214,28 @@
   )
 ; These tests show that f now references the updated version of the fully qualified capability,
 ; regardless of whether f is invoked with its namespace and with its module name.
-(expect "Executation expected to find reference (fully qualified) to the current module \
+(expect "Execution expected to find reference (fully qualified) to the current module \
         \(fully qualified reference) - invoking with an unqualified reference."
         1 (f))
 
-(expect "Executation expected to find reference (fully qualified) to the current module \
+(expect "Execution expected to find reference (fully qualified) to the current module \
         \(fully qualified reference) - invoking with an qualified reference (no namespace)."
         1 (test-mod-redeploy-ref.f))
 
-(expect "Executation expected to find reference (fully qualified) to the current module \
+(expect "Execution expected to find reference (fully qualified) to the current module \
         \(fully qualified reference) - invoking with a fully qualified reference."
         1 (free.test-mod-redeploy-ref.f))
 
 ; The function should see the updated capability even if it used references without namespace.
-(expect "Executation expected to find reference (qualified, no namespace) to the current module \
+(expect "Execution expected to find reference (qualified, no namespace) to the current module \
         \(fully qualified reference) - invoking with an unqualified reference."
         1 (f1))
 
-(expect "Executation expected to find reference (qualified, no namespace) to the current module \
+(expect "Execution expected to find reference (qualified, no namespace) to the current module \
         \(fully qualified reference) - invoking with an qualified reference (no namespace)."
         1 (test-mod-redeploy-ref.f1))
 
-(expect "Executation expected to find reference (qualified, no namespace) to the current module \
+(expect "Execution expected to find reference (qualified, no namespace) to the current module \
         \(fully qualified reference) - invoking with a fully qualified reference."
         1 (free.test-mod-redeploy-ref.f1))
 (commit-tx)
