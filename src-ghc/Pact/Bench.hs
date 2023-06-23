@@ -327,6 +327,21 @@ main = do
   let tt = evalReplEval def replS (mapM eval timeTest)
   void $! eitherDie "timeTest failed" . fmapL show =<< tt
 
+  wrap10Cmd <- parseCode "(bench.wrap10 100)"
+  wrap10MonoCmd <- parseCode "(bench.wrap10_integer 100)"
+
+  arityCmd0 <- parseCode "(bench.arity_tc_0)"
+  arityCmd1 <- parseCode "(bench.arity_tc_1 1)"
+  arityCmd10 <- parseCode "(bench.arity_tc_10 1 1 1 1 1 1 1 1 1 1)"
+  arityCmd40 <- parseCode "(bench.arity_tc_40 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)"
+
+  aritySmallObj <- parseCode "(bench.arity_small_obj {\"a\": 1})"
+  arityMediumObj <- parseCode "(bench.arity_medium_obj {\"a\":1, \"b\":true, \"c\":1, \"d\":{\"a\":1}, \"e\":1, \"f\":true, \"g\":1, \"h\":{\"a\":1} })"
+  arityLargeObj <- parseCode "(bench.arity_large_obj {\"a\":1, \"b\":true, \"c\":1, \"d\":{\"a\":1}, \"e\":1, \"f\":true, \"g\":1, \"h\":{\"a\":1}, \"i\":1, \"j\":true, \"k\":1, \"l\":{\"a\":1}, \"m\":1, \"n\":true, \"o\":1, \"p\":{\"a\":1} })"
+
+  accumCmd0 <- parseCode "(bench.accum (enumerate 1 0))"
+  accumCmd1 <- parseCode "(bench.accum (enumerate 1 1))"
+  accumCmd100 <- parseCode "(bench.accum (enumerate 1 100))"
 
   let cleanupSqlite = do
         c <- readMVar $ pdPactDbVar sqliteDb
@@ -384,4 +399,27 @@ main = do
       , benchNFIO "round4" $ runPactExec def "round4" [] Null Nothing pureDb round4
       ]
     , benchNFIO "time" $ fmap fst <$> evalReplEval def replS (mapM eval timeTest)
+    , bgroup "defun"
+      [ bgroup "return-type-tc"
+        [ benchNFIO "wrap10" $ runPactExec def "wrap10" [] Null Nothing pureDb wrap10Cmd
+        , benchNFIO "wrap10_mono" $ runPactExec def "wrap10_mono" [] Null Nothing pureDb wrap10MonoCmd
+        , benchNFIO "accum100" $ runPactExec def "accum100" [] Null Nothing pureDb accumCmd100
+        ]
+      , bgroup "arity"
+        [ benchNFIO "00-args" $ runPactExec def "00-args" [] Null Nothing pureDb arityCmd0
+        , benchNFIO "01-args" $ runPactExec def "01-args" [] Null Nothing pureDb arityCmd1
+        , benchNFIO "10-args" $ runPactExec def "10-args" [] Null Nothing pureDb arityCmd10
+        , benchNFIO "40-args" $ runPactExec def "40-args" [] Null Nothing pureDb arityCmd40
+        ]
+      , bgroup "object-size"
+        [ benchNFIO "small-obj" $ runPactExec def "small-obj" [] Null Nothing pureDb aritySmallObj
+        , benchNFIO "medium-obj" $ runPactExec def "medium-obj" [] Null Nothing pureDb arityMediumObj
+        , benchNFIO "large-obj" $ runPactExec def "large-obj" [] Null Nothing pureDb arityLargeObj
+        ]
+      , bgroup "list-tc"
+        [ benchNFIO "000-items" $ runPactExec def "000-items" [] Null Nothing pureDb accumCmd0
+        , benchNFIO "001-items" $ runPactExec def "001-items" [] Null Nothing pureDb accumCmd1
+        , benchNFIO "100-items" $ runPactExec def "100-items" [] Null Nothing pureDb accumCmd100
+        ]
+      ]
     ]
