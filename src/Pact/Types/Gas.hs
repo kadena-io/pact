@@ -23,6 +23,7 @@ module Pact.Types.Gas
   , GasModel(..)
   , GasArgs(..)
   , GasLimit(..)
+  , MicroGasLimit(..)
   , ZKGroup(..)
   , ZKArg(..)
     -- * optics
@@ -222,10 +223,17 @@ instance FromJSON GasLimit where
 
 instance Wrapped GasLimit
 
+newtype MicroGasLimit
+  = MicroGasLimit MicroGas
+  deriving (Eq, Ord)
+
+instance Show MicroGasLimit where
+  show (MicroGasLimit (MicroGas i)) = show i
+
 data GasModel = GasModel
   { gasModelName :: !Text
   , gasModelDesc :: !Text
-  , runGasModel :: !(Text -> GasArgs -> Gas)
+  , runGasModel :: Text -> GasArgs -> MicroGas
   }
 
 instance Show GasModel where
@@ -235,7 +243,7 @@ instance Pretty GasModel where
   pretty m = viaShow m
 
 data GasEnv = GasEnv
-  { _geGasLimit :: !GasLimit
+  { _geGasLimit :: !MicroGasLimit
   , _geGasPrice :: !GasPrice
   , _geGasModel :: !GasModel
   }

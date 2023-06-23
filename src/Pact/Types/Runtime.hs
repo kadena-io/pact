@@ -245,7 +245,7 @@ data EvalEnv e = EvalEnv {
       -- | Gas Environment
     , _eeGasEnv :: GasEnv
       -- | Tallied gas
-    , _eeGas :: IORef Gas
+    , _eeGas :: IORef MicroGas
       -- | Namespace Policy
     , _eeNamespacePolicy :: NamespacePolicy
       -- | SPV backend
