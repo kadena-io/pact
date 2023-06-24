@@ -95,6 +95,7 @@ library
     Pact.Repl.Lib
     Pact.Repl.Types
     Pact.Runtime.Capabilities
+    Pact.Runtime.Memoize
     Pact.Runtime.Typecheck
     Pact.Runtime.Utils
     Pact.Server.API
