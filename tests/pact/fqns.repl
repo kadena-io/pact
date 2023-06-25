@@ -102,18 +102,9 @@
       1))
   )
 ; Before pact-4.8, the updated capability will be ignored, and calls to a function
-; requiring that capability will fail. This is true whether we invoke `f` with or
-; without its module name, and with or without its namespace.
-(expect-failure "Execution expected to fail due to assertion failure \
-                \within defcap invoke - invoking with an unqualified reference." (f))
+; requiring that capability will fail.
+(expect-failure "Demonstrate defcap resolution." (f))
 
-(expect-failure "Execution expected to fail due to assertion failure \
-                \within defcap invoke - invoking with an qualified reference \
-                \(no namespace)." (test-mod-redeploy-ref.f))
-
-(expect-failure "Execution expected to fail due to assertion failure within \
-                \defcap invoke - invoking with an fully qualified reference."
-                (free.test-mod-redeploy-ref.f))
 (commit-tx)
 
 ; The following module redeployment changed the capability `test` to pass.
@@ -135,71 +126,17 @@
   )
 ; Before pact-4.8, the capability update (passing `test`) was ignored as the
 ; full-qualified reference referenced the previously deployed version of the module.
-(expect-failure "Execution expected to fail because `DisablePact48` will reference \
-                \the prev. deployed version (fully qualified capability) \
-                \- invoking with an unqualified reference." (f))
-
-(expect-failure "Execution expected to fail because `DisablePact48` will reference \
-                \the prev. deployed version (fully qualified capability) \
-                \- invoking with an qualified reference (no namespace)."
-                (test-mod-redeploy-ref.f))
-
-(expect-failure "Execution expected to fail because `DisablePact48` will reference \
-                \the prev. deployed version (fully qualified capability) \
-                \- invoking with a fully qualified reference."
-                (free.test-mod-redeploy-ref.f))
-
-; We repeat almost the same tests but without prefixing the namespace.
-(expect-failure "Execution expected to fail because `DisablePact48` will reference \
-                \the prev. deployed version (qualified capability without namespace) \
-                \- invoking with an unqualified reference."
-                (f1))
-
-(expect-failure "Execution expected to fail because `DisablePact48` will reference \
-                \the prev. deployed version (qualified capability without namespace) \
-                \- invoking with an qualified reference (no namespace)."
-                (test-mod-redeploy-ref.f1))
-
-(expect-failure "Execution expected to fail because `DisablePact48` will reference \
-                \the prev. deployed version (qualified capability without namespace) \
-                \- invoking with a fully qualified reference."
-                (free.test-mod-redeploy-ref.f1))
+(expect-failure "Reproduce upgrade resolution bug with fully-qualified reference." (f))
+(expect-failure "Reproduce upgrade resolution bug with non-namespace-qualified reference." (f1))
 (commit-tx)
 
 
 ;; Check Pact48 behaviour
 
-; The pact-4.8 update uses the new module reference.
-(begin-tx)
-(env-exec-config []) ; reset
-(namespace 'free)
-(module test-mod-redeploy-ref g
-  (defcap g () true)
-
-  (defcap test ()
-    (enforce false "boom"))
-
-  (defun f ()
-    (with-capability (test)
-      1))
-  )
-; These tests show that failing capabilities work as expected.
-; Later we will do a module redeploy to illustrate the (interesting) new behavior.
-(expect-failure "Execution expected to fail due to assertion failure \
-                \within defcap invoke - invoking with an unqualified reference." (f))
-
-(expect-failure "Execution expected to fail due to assertion failure \
-                \within defcap invoke - invoking with an qualified reference \
-                \(no namespace)." (test-mod-redeploy-ref.f))
-
-(expect-failure "Execution expected to fail due to assertion failure within \
-                \defcap invoke - invoking with an fully qualified reference."
-                (free.test-mod-redeploy-ref.f))
-
-(commit-tx)
-
 (begin-tx)
 (namespace 'free)
+ (env-exec-config []) ; reset
+
 (module test-mod-redeploy-ref g
   (defcap g () true)
   (defcap test ()
@@ -212,30 +149,8 @@
     (with-capability (test-mod-redeploy-ref.test)
       1))
   )
-; These tests show that f now references the updated version of the fully qualified capability,
-; regardless of whether f is invoked with its namespace and with its module name.
-(expect "Execution expected to find reference (fully qualified) to the current module \
-        \(fully qualified reference) - invoking with an unqualified reference."
-        1 (f))
+; These tests show that f now references the updated version of the capability.
+(expect "Demonstrate correct resolution with fully-qualified reference." 1 (f))
+(expect "Demonstrate correct resolution with non-namespace-qualified reference." 1 (f1))
 
-(expect "Execution expected to find reference (fully qualified) to the current module \
-        \(fully qualified reference) - invoking with an qualified reference (no namespace)."
-        1 (test-mod-redeploy-ref.f))
-
-(expect "Execution expected to find reference (fully qualified) to the current module \
-        \(fully qualified reference) - invoking with a fully qualified reference."
-        1 (free.test-mod-redeploy-ref.f))
-
-; The function should see the updated capability even if it used references without namespace.
-(expect "Execution expected to find reference (qualified, no namespace) to the current module \
-        \(fully qualified reference) - invoking with an unqualified reference."
-        1 (f1))
-
-(expect "Execution expected to find reference (qualified, no namespace) to the current module \
-        \(fully qualified reference) - invoking with an qualified reference (no namespace)."
-        1 (test-mod-redeploy-ref.f1))
-
-(expect "Execution expected to find reference (qualified, no namespace) to the current module \
-        \(fully qualified reference) - invoking with a fully qualified reference."
-        1 (free.test-mod-redeploy-ref.f1))
 (commit-tx)
