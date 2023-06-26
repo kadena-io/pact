@@ -135,7 +135,21 @@
 
 (begin-tx)
 (namespace 'free)
- (env-exec-config []) ; reset
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+
+  (defcap test ()
+    (enforce false "boom"))
+
+  (defun f ()
+    (with-capability (test)
+      1))
+  )
+(commit-tx)
+
+(begin-tx)
+(namespace 'free)
+(env-exec-config []) ; reset
 
 (module test-mod-redeploy-ref g
   (defcap g () true)
