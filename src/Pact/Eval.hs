@@ -89,6 +89,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
+import Control.Applicative (liftA2)
 
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
@@ -320,6 +321,11 @@ eval' (TModule _tm@(MDModule m) bod i) =
         capMName <-
           ifExecutionFlagSet' FlagPreserveNsModuleInstallBug (_mName m) (_mName mangledM)
         void $ acquireModuleAdminCapability capMName $ return ()
+
+        unlessExecutionFlagSet FlagDisablePact48 $ do
+          evalRefs.rsLoadedModules %= HM.delete (_mName mangledM)
+          evalRefs.rsQualifiedDeps %= HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM)
+
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     szVer <- getSizeOfVersion
@@ -737,27 +743,42 @@ fullyQualifyDefs info mdef defs = do
     checkAddDep = \case
       Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
       _ -> pure ()
-    -- | traverse to find deps and form graph
-    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
-      let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
-      defTerm' <- forM defTerm $ \(f :: Name) -> do
+
+    resolveBareName memo f@(BareName fn _) = case HM.lookup fn defs of
+      Just _ -> do
+        let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
+        return (Left name') -- decl found
+      Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \case
+        Just mr -> return (Right mr) -- mod ref found
+        Nothing -> resolveError f
+
+    resolveError f = lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
+
+    resolveName flagPact48Disabled memo = \case
+      (QName (QualifiedName (ModuleName mn mNs) fn i))
+        | not flagPact48Disabled
+          && mn == _mnName (_mName mdef)
+          && isNsMatch -> resolveBareName memo (BareName fn i)
+          where
+            isNsMatch = fromMaybe True (liftA2 (==) modNs mNs)
+            modNs = _mnNamespace (_mName mdef)
+      f  -> do
         dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
         case (dm, f) of
           (Just t, _) -> checkAddDep t *> return (Right t) -- ref found
-          -- for barenames, check decls and finally modules
-          (Nothing, Name (BareName fn _)) ->
-            case HM.lookup fn allDefs of
-              Just _ -> do
-                let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
-                return (Left name') -- decl found
-              Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \r -> case r of
-                Just mr -> return (Right mr) -- mod ref found
-                Nothing ->
-                  lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
-          -- for qualified names, simply fail
-          (Nothing, _) -> lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
+            -- for barenames, check decls and finally modules
+          (Nothing, Name bn@BareName{}) -> resolveBareName memo bn
+              -- for qualified names, simply fail
+          (Nothing, _) -> resolveError f
+
+    -- | traverse to find deps and form graph
+    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+      let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
+      disablePact48 <- lift (isExecutionFlagSet FlagDisablePact48)
+      defTerm' <- forM defTerm $ \(f :: Name) -> resolveName disablePact48 memo f
 
       return (defTerm', defName', mapMaybe (either Just (const Nothing)) $ toList defTerm')
+
     moduleHash = _mhHash . _mHash
 
 
