@@ -90,8 +90,8 @@ module Pact.Types.Term
    prettyTypeTerm,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,termEq1,termRefEq,canEq,refEq,
-   Gas(..), MicroGas(..),
-   gasToMicroGas, microGasToGas,
+   Gas(..), MilliGas(..),
+   gasToMilliGas, milliGasToGas,
    module Pact.Types.Names
    ) where
 
@@ -254,27 +254,27 @@ instance Semigroup Gas where
 instance Monoid Gas where
   mempty = 0
 
-newtype MicroGas
-  = MicroGas Int64
+newtype MilliGas
+  = MilliGas Int64
   deriving (Eq, Ord, ToJSON, FromJSON, NFData, Generic)
 
-instance Semigroup MicroGas where
-  (MicroGas a) <> (MicroGas b) = MicroGas (a + b)
+instance Semigroup MilliGas where
+  (MilliGas a) <> (MilliGas b) = MilliGas (a + b)
 
-instance Monoid MicroGas where
-  mempty = MicroGas 0
+instance Monoid MilliGas where
+  mempty = MilliGas 0
 
-instance Pretty MicroGas where
-  pretty (MicroGas i) = pretty i
+instance Pretty MilliGas where
+  pretty (MilliGas i) = pretty i
 
 microsPerGas :: Int64
 microsPerGas = 1000
 
-gasToMicroGas :: Gas -> MicroGas
-gasToMicroGas (Gas n) = MicroGas (n * microsPerGas)
+gasToMilliGas :: Gas -> MilliGas
+gasToMilliGas (Gas n) = MilliGas (n * microsPerGas)
 
-microGasToGas :: MicroGas -> Gas
-microGasToGas (MicroGas n) = Gas (n `div` microsPerGas)
+milliGasToGas :: MilliGas -> Gas
+milliGasToGas (MilliGas n) = Gas (n `div` microsPerGas)
 
 
 -- -------------------------------------------------------------------------- --

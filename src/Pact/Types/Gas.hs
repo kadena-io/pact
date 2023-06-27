@@ -23,10 +23,10 @@ module Pact.Types.Gas
   , GasModel(..)
   , GasArgs(..)
   , GasLimit(..)
-  , MicroGasLimit(..)
+  , MilliGasLimit(..)
   , ZKGroup(..)
   , ZKArg(..)
-  , gasLimitToMicroGasLimit
+  , gasLimitToMilliGasLimit
     -- * optics
   , geGasLimit
   , geGasPrice
@@ -225,21 +225,21 @@ instance FromJSON GasLimit where
 instance Wrapped GasLimit
 
 -- Todo: this probably overflows but do we care?
-gasLimitToMicroGasLimit :: GasLimit -> MicroGasLimit
-gasLimitToMicroGasLimit (GasLimit (ParsedInteger i)) =
-  MicroGasLimit (gasToMicroGas (fromIntegral i))
+gasLimitToMilliGasLimit :: GasLimit -> MilliGasLimit
+gasLimitToMilliGasLimit (GasLimit (ParsedInteger i)) =
+  MilliGasLimit (gasToMilliGas (fromIntegral i))
 
-newtype MicroGasLimit
-  = MicroGasLimit MicroGas
+newtype MilliGasLimit
+  = MilliGasLimit MilliGas
   deriving (Eq, Ord)
 
-instance Show MicroGasLimit where
-  show (MicroGasLimit (MicroGas i)) = show i
+instance Show MilliGasLimit where
+  show (MilliGasLimit (MilliGas i)) = show i
 
 data GasModel = GasModel
   { gasModelName :: !Text
   , gasModelDesc :: !Text
-  , runGasModel :: Text -> GasArgs -> MicroGas
+  , runGasModel :: Text -> GasArgs -> MilliGas
   }
 
 instance Show GasModel where
@@ -249,7 +249,7 @@ instance Pretty GasModel where
   pretty m = viaShow m
 
 data GasEnv = GasEnv
-  { _geGasLimit :: !MicroGasLimit
+  { _geGasLimit :: !MilliGasLimit
   , _geGasPrice :: !GasPrice
   , _geGasModel :: !GasModel
   }

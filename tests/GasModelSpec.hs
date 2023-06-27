@@ -131,7 +131,7 @@ runTest t = runGasUnitTests t run run
         writeIORef (_eeGas e) mempty
         res <- mockRun expr (e,s)
         gas <- readIORef (_eeGas e)
-        return ((microGasToGas gas,) <$> res)
+        return ((milliGasToGas gas,) <$> res)
       res' <- eitherDie (getDescription expr dbSetup) res
       return (res', st, gas)
     setupEnv' dbs = do

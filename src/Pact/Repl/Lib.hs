@@ -706,15 +706,15 @@ envHash i as = argsError i as
 
 setGasLimit :: RNativeFun LibState
 setGasLimit _ [TLitInteger l] = do
-  setenv (eeGasEnv . geGasLimit) (gasLimitToMicroGasLimit (fromIntegral l))
+  setenv (eeGasEnv . geGasLimit) (gasLimitToMilliGasLimit (fromIntegral l))
   return $ tStr $ "Set gas limit to " <> tShow l
 setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
 envGas _ [] = do
-  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral (microGasToGas g))
+  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral (milliGasToGas g))
 envGas _ [TLitInteger g] = do
-  putGas $ gasToMicroGas (fromIntegral g)
+  putGas $ gasToMilliGas (fromIntegral g)
   return $ tStr $ "Set gas to " <> tShow g
 envGas i as = argsError i as
 

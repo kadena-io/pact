@@ -34,10 +34,10 @@ computeGas i args = do
     (info,name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
   let gUsed = g0 <> g1
-      gUsed' = microGasToGas gUsed
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed'),microGasToGas g1):)
+      gUsed' = milliGasToGas gUsed
+  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed'),milliGasToGas g1):)
   putGas gUsed
-  let (MicroGasLimit gasLimit) = _geGasLimit
+  let (MilliGasLimit gasLimit) = _geGasLimit
   when (gUsed > gasLimit) $
     throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
     -- else return gUsed
@@ -47,27 +47,27 @@ computeGas i args = do
 --   - Checks the gas calculations against the gas limit
 --   - Does not emit gas logs
 --   - Commit gas calc depending on `commit`
-computeGasNoLog :: (MicroGas -> Eval e ()) -> Info -> Text -> GasArgs -> Eval e MicroGas
+computeGasNoLog :: (MilliGas -> Eval e ()) -> Info -> Text -> GasArgs -> Eval e MilliGas
 computeGasNoLog commit info name args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- getGas
   let !gUsed = g0 <> runGasModel _geGasModel name args
   commit gUsed
-  let (MicroGasLimit gl) = _geGasLimit
+  let (MilliGasLimit gl) = _geGasLimit
   if gUsed > gl then
     throwErr GasError info $ "Gas limit (" <> pretty gl <> ") exceeded: " <> pretty gUsed
     else return gUsed
 
-putGas :: MicroGas -> Eval e ()
+putGas :: MilliGas -> Eval e ()
 putGas !g = do
   gasRef <- view eeGas
   liftIO (writeIORef gasRef g)
 
-getGas :: Eval e MicroGas
+getGas :: Eval e MilliGas
 getGas = view eeGas >>= liftIO . readIORef
 
 -- | See: ComputeGasNoLog, does not commit gas calculation.
-computeGasNonCommit :: Info -> Text -> GasArgs -> Eval e MicroGas
+computeGasNonCommit :: Info -> Text -> GasArgs -> Eval e MilliGas
 computeGasNonCommit = computeGasNoLog (const (pure ()))
 
 -- | See: ComputeGasNoLog, save currently used `evalGas`
@@ -77,10 +77,10 @@ computeGasCommit info name args = do
   g0 <- getGas
   let !g1 = runGasModel _geGasModel name args
       !gUsed = g0 <> g1
-      gUsed' = microGasToGas gUsed
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed'),microGasToGas g1):)
+      gUsed' = milliGasToGas gUsed
+  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed'),milliGasToGas g1):)
   putGas gUsed
-  let (MicroGasLimit gasLimit) = _geGasLimit
+  let (MilliGasLimit gasLimit) = _geGasLimit
   when (gUsed > gasLimit) $
     throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
     -- else return gUsed
@@ -96,11 +96,11 @@ gasUnreduced i as = computeGas' i (GUnreduced as)
 
 -- | GasEnv for suppressing gas charging.
 freeGasEnv :: GasEnv
-freeGasEnv = GasEnv (MicroGasLimit mempty) 0.0 (constGasModel 0)
+freeGasEnv = GasEnv (MilliGasLimit mempty) 0.0 (constGasModel 0)
 
 -- | Gas model that charges a fixed (positive) rate per tracked operation.
 constGasModel :: Word64 -> GasModel
 constGasModel r = GasModel
   { gasModelName = "fixed " <> tShow r
   , gasModelDesc = "constant rate gas model with fixed rate " <> tShow r
-  , runGasModel = \_ _ -> MicroGas (fromIntegral r) }
+  , runGasModel = \_ _ -> MilliGas (fromIntegral r) }
