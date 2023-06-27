@@ -232,7 +232,7 @@ tableGasModel gasConfig =
           Just g -> gasToMilliGas g
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GUserApp t -> case t of
-          Defpact -> gasToMilliGas $ (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
+          Defpact -> gasToMilliGas $ _gasCostConfig_defPactCost gasConfig * _gasCostConfig_functionApplicationCost gasConfig
           _ -> gasToMilliGas $ _gasCostConfig_functionApplicationCost gasConfig
         GIntegerOpCost i j ->
           gasToMilliGas $ intCost (fst i) + intCost (fst j)

@@ -106,4 +106,4 @@ constGasModel :: Word64 -> GasModel
 constGasModel r = GasModel
   { gasModelName = "fixed " <> tShow r
   , gasModelDesc = "constant rate gas model with fixed rate " <> tShow r
-  , runGasModel = \_ _ -> MilliGas (fromIntegral r) }
+  , runGasModel = \_ _ -> gasToMilliGas (fromIntegral r) }
