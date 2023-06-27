@@ -227,7 +227,7 @@ instance Wrapped GasLimit
 -- Todo: this probably overflows but do we care?
 gasLimitToMicroGasLimit :: GasLimit -> MicroGasLimit
 gasLimitToMicroGasLimit (GasLimit (ParsedInteger i)) =
-  MicroGasLimit (MicroGas (fromIntegral i))
+  MicroGasLimit (gasToMicroGas (fromIntegral i))
 
 newtype MicroGasLimit
   = MicroGasLimit MicroGas
