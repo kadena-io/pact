@@ -83,8 +83,9 @@ computeGasCommit info name args = do
       gUsed = milliGasToGas gMillisUsed
   evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),milliGasToGas g1):)
   putGas gMillisUsed
-  let (MilliGasLimit gasLimit) = _geGasLimit
-  when (gMillisUsed > gasLimit) $
+  let (MilliGasLimit milliGasLimit) = _geGasLimit
+  when (gMillisUsed > milliGasLimit) $ do
+    let gasLimit = milliGasToGas milliGasLimit
     throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
     -- else return gUsed
 

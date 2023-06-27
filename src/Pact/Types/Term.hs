@@ -264,9 +264,6 @@ instance Semigroup MilliGas where
 instance Monoid MilliGas where
   mempty = MilliGas 0
 
-instance Pretty MilliGas where
-  pretty (MilliGas i) = pretty i
-
 microsPerGas :: Int64
 microsPerGas = 1000
 
