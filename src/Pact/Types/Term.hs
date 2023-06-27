@@ -924,7 +924,7 @@ instance (SizeOf d) => SizeOf (Ref' d)
 
 data NativeDFun = NativeDFun
   { _nativeName :: !NativeDefName
-  , _nativeFun :: !(forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name))
+  , _nativeFun :: !(forall m . Monad m => FunApp -> [Term Ref] -> m (Term Name))
   }
 
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b

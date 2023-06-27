@@ -172,7 +172,7 @@ loadCompile f = do
 
 
 prodGasEnv :: GasEnv
-prodGasEnv = GasEnv 100000 0.01 $ tableGasModel defaultGasConfig
+prodGasEnv = GasEnv (gasLimitToMicroGasLimit 100000) 0.01 $ tableGasModel defaultGasConfig
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)

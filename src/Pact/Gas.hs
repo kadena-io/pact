@@ -15,6 +15,7 @@ module Pact.Gas
  , putGas)
  where
 
+import Control.Monad(when)
 import Data.Text
 import Data.IORef
 import Pact.Types.Gas
@@ -25,7 +26,7 @@ import Data.Word
 import Pact.Types.Pretty
 
 -- | Compute gas for some application or evaluation.
-computeGas :: Either (Info,Text) FunApp -> GasArgs -> Eval e MicroGas
+computeGas :: Either (Info,Text) FunApp -> GasArgs -> Eval e ()
 computeGas i args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- getGas
@@ -37,9 +38,9 @@ computeGas i args = do
   evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed'),microGasToGas g1):)
   putGas gUsed
   let (MicroGasLimit gasLimit) = _geGasLimit
-  if gUsed > gasLimit then
+  when (gUsed > gasLimit) $
     throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
-    else return gUsed
+    -- else return gUsed
 {-# INLINABLE computeGas #-}
 
 -- | Performs gas calculation for incremental computations with some caveats:
@@ -70,7 +71,7 @@ computeGasNonCommit :: Info -> Text -> GasArgs -> Eval e MicroGas
 computeGasNonCommit = computeGasNoLog (const (pure ()))
 
 -- | See: ComputeGasNoLog, save currently used `evalGas`
-computeGasCommit :: Info -> Text -> GasArgs -> Eval e MicroGas
+computeGasCommit :: Info -> Text -> GasArgs -> Eval e ()
 computeGasCommit info name args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- getGas
@@ -79,10 +80,10 @@ computeGasCommit info name args = do
       gUsed' = microGasToGas gUsed
   evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed'),microGasToGas g1):)
   putGas gUsed
-  let (MicroGasLimit gl) = _geGasLimit
-  if gUsed > gl then
-    throwErr GasError info $ "Gas limit (" <> pretty gl <> ") exceeded: " <> pretty gUsed
-    else return gUsed
+  let (MicroGasLimit gasLimit) = _geGasLimit
+  when (gUsed > gasLimit) $
+    throwErr GasError info $ "Gas limit (" <> pretty gasLimit <> ") exceeded: " <> pretty gUsed
+    -- else return gUsed
 
 
 -- | Pre-compute gas for some application before some action.

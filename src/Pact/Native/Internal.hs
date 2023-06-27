@@ -108,7 +108,7 @@ bindReduce ps bd bi lkpFun = do
   let prettyBindings = list $ pretty . fmap abbrev <$> vs
       textBindings   = renderCompactText' $ "(bind: " <> prettyBindings <> ")"
       frame          = StackFrame textBindings bi Nothing
-  call frame $! (0,) <$> reduceBody bd''
+  call frame $! reduceBody bd''
 
 setTopLevelOnly :: NativeDef -> NativeDef
 setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
@@ -121,12 +121,12 @@ defNative n fun ftype examples docs =
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defGasRNative name fun = defNative name (reduced fun)
-    where reduced f fi as = gasUnreduced fi as (mapM reduce as) >>= \(g,as') -> f g fi as'
+    where reduced f fi as = gasUnreduced fi as (mapM reduce as) >>= \as' -> f fi as'
 
 -- | Specify a 'RNativeFun'
 defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defRNative name fun = defNative name (reduced fun)
-    where reduced f fi as = gasUnreduced fi as (mapM reduce as) >>= \(g,as') -> (g,) <$> f fi as'
+    where reduced f fi as = gasUnreduced fi as (mapM reduce as) >>= \as' -> f fi as'
 
 
 defSchema :: NativeDefName -> Text -> [(FieldKey, Type (Term Name))] -> NativeDef

@@ -361,10 +361,10 @@ unlessExecutionFlagSet f onFalse =
   ifExecutionFlagSet f (return ()) (void onFalse)
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
-call :: StackFrame -> Eval e (Gas,a) -> Eval e a
+call :: StackFrame -> Eval e a -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act
+  r <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}

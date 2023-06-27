@@ -73,7 +73,7 @@ readKeySet' i key = do
   pure ks
 
 defineKeyset :: GasRNativeFun e
-defineKeyset g0 fi as = case as of
+defineKeyset fi as = case as of
   [TLitString name,TGuard (GKeySet ks) _] -> go name ks
   [TLitString name] -> readKeySet' fi name >>= go name
   _ -> argsError fi as
@@ -99,7 +99,7 @@ defineKeyset g0 fi as = case as of
             unlessExecutionFlagSet FlagDisablePact44 $
               evalError' fi "Cannot define a keyset outside of a namespace"
 
-            computeGas' g0 fi (GPreWrite (WriteKeySet ksn ks) szVer) $
+            computeGas' fi (GPreWrite (WriteKeySet ksn ks) szVer) $
               writeRow i Write KeySets ksn ks & success "Keyset defined"
           Just (Namespace nsn ug _ag) -> do
             ksn' <- ifExecutionFlagSet FlagDisablePact44
@@ -112,12 +112,12 @@ defineKeyset g0 fi as = case as of
                   -- otherwise, assume mismatching keysets
                   else evalError' fi "Mismatching keyset namespace")
 
-            computeGas' g0 fi (GPreWrite (WriteKeySet ksn' ks) szVer) $
+            computeGas' fi (GPreWrite (WriteKeySet ksn' ks) szVer) $
               writeRow i Write KeySets ksn' ks & success "Keyset defined"
 
         Just oldKs -> do
-          (g1,_) <- computeGas' g0 fi (GPostRead (ReadKeySet ksn oldKs)) $ return ()
-          computeGas' g1 fi (GPreWrite (WriteKeySet ksn ks) szVer) $ do
+          computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
+          computeGas' fi (GPreWrite (WriteKeySet ksn ks) szVer) $ do
             runSysOnly $ enforceKeySet i (Just ksn) oldKs
             writeRow i Write KeySets ksn ks & success "Keyset defined"
 

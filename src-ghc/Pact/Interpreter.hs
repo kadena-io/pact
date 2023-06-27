@@ -185,7 +185,7 @@ setupEvalEnv
   -> ExecutionConfig
   -> IO (EvalEnv e)
 setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
-  gasRef <- newIORef 0
+  gasRef <- newIORef (MicroGas 0)
   warnRef <- newIORef mempty
   pure EvalEnv {
     _eeRefStore = refStore
@@ -296,7 +296,7 @@ interpret :: Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
 interpret runner evalEnv terms = do
   ((rs,logs,txid),state) <-
     runEval def evalEnv $ evalTerms runner terms
-  gas <- readIORef (_eeGas evalEnv)
+  microGas <- readIORef (_eeGas evalEnv)
   warnings <- readIORef (_eeWarnings evalEnv)
   let gasLogs = _evalLogGas state
       pactExec = _evalPactExec state
@@ -305,7 +305,7 @@ interpret runner evalEnv terms = do
   return $! EvalResult
     terms
     (map (elideModRefInfo . toPactValueLenient) rs)
-    logs pactExec gas modules txid gasLogs (_evalEvents state) warnings
+    logs pactExec (microGasToGas microGas) modules txid gasLogs (_evalEvents state) warnings
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
 evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)

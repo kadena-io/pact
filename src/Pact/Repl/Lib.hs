@@ -98,15 +98,12 @@ initLibState' ldb@(LibDb db') verifyUri = do
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
 
-zeroGas :: Eval e a -> Eval e (Gas,a)
-zeroGas = fmap (0,)
-
 defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
-defZNative name fun = Native.defNative name $ \fi as -> zeroGas $ fun fi as
+defZNative name fun = Native.defNative name $ \fi as -> fun fi as
 
 defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defZRNative name fun = Native.defNative name (reduced fun)
-    where reduced f fi as = mapM reduce as >>= zeroGas . f fi
+    where reduced f fi as = mapM reduce as >>= f fi
 
 replDefs :: NativeModule
 replDefs = ("Repl",
@@ -497,7 +494,7 @@ tx t fi as = do
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
   where
-    resetGas = views eeGas (`writeIORef` 0) >>= liftIO
+    resetGas = views eeGas (`writeIORef` mempty) >>= liftIO
     i = getInfo fi
     doBegin tname = do
       tid <- evalBeginTx i
@@ -709,15 +706,15 @@ envHash i as = argsError i as
 
 setGasLimit :: RNativeFun LibState
 setGasLimit _ [TLitInteger l] = do
-  setenv (eeGasEnv . geGasLimit) (fromIntegral l)
+  setenv (eeGasEnv . geGasLimit) (gasLimitToMicroGasLimit (fromIntegral l))
   return $ tStr $ "Set gas limit to " <> tShow l
 setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
 envGas _ [] = do
-  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral (microGasToGas g))
 envGas _ [TLitInteger g] = do
-  putGas $ fromIntegral g
+  putGas $ gasToMicroGas (fromIntegral g)
   return $ tStr $ "Set gas to " <> tShow g
 envGas i as = argsError i as
 

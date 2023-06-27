@@ -131,12 +131,12 @@ initPureEvalEnv verifyUri = do
 initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
-  gasRef <- newIORef 0
+  gasRef <- newIORef mempty
   warnRef <- newIORef mempty
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
-    , _eeMsgBody = A.Object HM.empty 
+    , _eeMsgBody = A.Object HM.empty
     , _eeMode = Transactional
     , _eeEntity = Nothing
     , _eePactStep = Nothing

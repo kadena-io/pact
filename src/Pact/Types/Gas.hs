@@ -26,6 +26,7 @@ module Pact.Types.Gas
   , MicroGasLimit(..)
   , ZKGroup(..)
   , ZKArg(..)
+  , gasLimitToMicroGasLimit
     -- * optics
   , geGasLimit
   , geGasPrice
@@ -222,6 +223,11 @@ instance FromJSON GasLimit where
   parseJSON = fmap GasLimit . parseGT0
 
 instance Wrapped GasLimit
+
+-- Todo: this probably overflows but do we care?
+gasLimitToMicroGasLimit :: GasLimit -> MicroGasLimit
+gasLimitToMicroGasLimit (GasLimit (ParsedInteger i)) =
+  MicroGasLimit (MicroGas (fromIntegral i))
 
 newtype MicroGasLimit
   = MicroGasLimit MicroGas
