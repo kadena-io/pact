@@ -95,7 +95,6 @@ library
     Pact.Repl.Lib
     Pact.Repl.Types
     Pact.Runtime.Capabilities
-    Pact.Runtime.Memoize
     Pact.Runtime.Typecheck
     Pact.Runtime.Utils
     Pact.Server.API
@@ -115,6 +114,7 @@ library
     Pact.Types.KeySet
     Pact.Types.Lang
     Pact.Types.Logger
+    Pact.Types.Memoize
     Pact.Types.Names
     Pact.Types.Namespace
     Pact.Types.Native

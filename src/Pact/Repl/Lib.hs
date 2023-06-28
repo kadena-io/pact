@@ -21,6 +21,7 @@
 
 module Pact.Repl.Lib where
 
+import Debug.Trace (trace)
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
@@ -73,6 +74,7 @@ import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
+import Pact.Types.Memoize (unguardedInsert)
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
@@ -275,6 +277,14 @@ replDefs = ("Repl",
        (funType tTyString [("on-chain", tTyBool)])
        [LitExample "(env-simulate-onchain true)"]
        "Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces."
+     ,defZRNative "env-memoize" envMemoize
+       (funType tTyString [("f", TyAny)] <>
+        funType tTyString [("f", TyAny), ("x", TyAny)] <>
+        funType tTyString [("f", TyAny), ("x", TyAny), ("y", TyAny)] <>
+        funType tTyString [("f", TyAny), ("x", TyAny), ("y", TyAny), ("z", TyAny)]
+       )
+       []
+       ("WIP")
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -880,3 +890,14 @@ envSimulateOnChain _i [TLiteral (LBool simulateOnChain) _] = do
   let ppInRepl = if simulateOnChain then "true" else "false"
   return $ tStr $ "Set on-chain simulation execution mode to: " <> ppInRepl
 envSimulateOnChain i as = argsError i as
+
+envMemoize :: RNativeFun LibState
+envMemoize _i [] = error "No arguments"
+envMemoize _i (memoFun:memoArgs) = do
+  let app :: App (Term Name) =
+        trace ("  memoArgs: " ++ show memoArgs) $ App memoFun memoArgs def
+  result <- eval (TApp app def)
+  table0 <- use evalMemoTable
+  table1 <- unguardedInsert (TApp app def, result) table0
+  evalMemoTable .= table1
+  return $ tStr "Ok"

@@ -82,6 +82,7 @@ import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
 import Pact.Types.Advice
 import Pact.Types.Capability
+import Pact.Types.Memoize (memoLookup)
 import Pact.Types.PactValue
 import Pact.Types.KeySet
 import Pact.Types.Pretty
@@ -214,7 +215,12 @@ evalByName n as i = do
 
 -- | Application with additional args.
 apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
-apply app as = reduceApp $ over appArgs (++ map liftTerm as) app
+apply app as = do
+  memoTable <- use evalMemoTable
+  case memoLookup (TApp app def) memoTable of
+      Just res -> return res
+      Nothing -> reduceApp $ over appArgs (++ map liftTerm as) app
+
 
 topLevelCall
   :: Info -> Text -> GasArgs -> (Gas -> Eval e (Gas, a)) -> Eval e a
