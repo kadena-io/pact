@@ -21,9 +21,9 @@
 
 module Pact.Repl.Lib where
 
-import Debug.Trace (trace)
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
+import Control.DeepSeq (deepseq)
 import Control.Lens
 import Control.Exception.Safe
 import Control.Monad.Reader
@@ -74,7 +74,7 @@ import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
-import Pact.Types.Memoize (unguardedInsert)
+import Pact.Types.Memoize (unguardedInsert, termFunctionCall')
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
@@ -277,12 +277,15 @@ replDefs = ("Repl",
        (funType tTyString [("on-chain", tTyBool)])
        [LitExample "(env-simulate-onchain true)"]
        "Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces."
-     ,defZRNative "env-memoize" envMemoize
-       (funType tTyString [("f", TyAny)] <>
-        funType tTyString [("f", TyAny), ("x", TyAny)] <>
-        funType tTyString [("f", TyAny), ("x", TyAny), ("y", TyAny)] <>
-        funType tTyString [("f", TyAny), ("x", TyAny), ("y", TyAny), ("z", TyAny)]
+
+     ,defZNative "env-memoize" envMemoize
+
+       (funType tTyString [("f", TyAny)]
+        -- funType tTyString [("f", TyAny), ("x", TyAny)] <>
+        -- funType tTyString [("f", TyAny), ("x", TyAny), ("y", TyAny)] <>
+        -- funType tTyString [("f", TyAny), ("x", TyAny), ("y", TyAny), ("z", TyAny)]
        )
+
        []
        ("WIP")
      ])
@@ -455,7 +458,7 @@ continuePact i as = case as of
       return (pid, y)
 
 mkSimpleYield
-  :: Pretty n
+  :: (Pretty n, Show n)
   => Maybe Provenance
   -> ObjectMap (Term n)
   -> Eval e (Maybe Yield)
@@ -891,13 +894,26 @@ envSimulateOnChain _i [TLiteral (LBool simulateOnChain) _] = do
   return $ tStr $ "Set on-chain simulation execution mode to: " <> ppInRepl
 envSimulateOnChain i as = argsError i as
 
-envMemoize :: RNativeFun LibState
-envMemoize _i [] = error "No arguments"
-envMemoize _i (memoFun:memoArgs) = do
-  let app :: App (Term Name) =
-        trace ("  memoArgs: " ++ show memoArgs) $ App memoFun memoArgs def
-  result <- eval (TApp app def)
+-- (env-memoize shift 10 1)
+envMemoize :: ZNativeFun LibState
+envMemoize _i [] = error "TODO: No arguments"
+envMemoize _i [TApp (App memoFun memoArgs _) _ ] = do
+
+  -- Reduce the args to the memoized function and ensure they
+  -- evaluate to values.
+  reducedArgs :: [Term Name] <- traverse (reduce >=> enforcePactValue >=> pure . fromPactValue) memoArgs
+
+  -- Raise the reduced args.
+  let liftedArgs = map liftTerm reducedArgs
+
+  let app  = App memoFun liftedArgs def
+  let app'  = App memoFun memoArgs def
+  result <- reduce $ TApp app def
+  -- result <- eval (TApp app def)
   table0 <- use evalMemoTable
-  table1 <- unguardedInsert (TApp app def, result) table0
+  entry <- termFunctionCall' reduce app'
+  let result' = either (\e -> error $ "Could not convert result: " ++ show e) id $ toPactValue result
+  let table1 = unguardedInsert (entry, result') table0
   evalMemoTable .= table1
-  return $ tStr "Ok"
+  return $ deepseq table1 $ tStr "Ok"
+envMemoize _i _ = error "Wrong args"

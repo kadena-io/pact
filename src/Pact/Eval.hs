@@ -52,6 +52,8 @@ module Pact.Eval
     ,getSizeOfVersion
     ) where
 
+import Debug.Trace (trace)
+
 import Bound
 import Control.Lens hiding (DefName)
 import Control.DeepSeq
@@ -82,7 +84,7 @@ import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
 import Pact.Types.Advice
 import Pact.Types.Capability
-import Pact.Types.Memoize (memoLookup)
+import Pact.Types.Memoize (memoLookup, termFunctionCall')
 import Pact.Types.PactValue
 import Pact.Types.KeySet
 import Pact.Types.Pretty
@@ -216,10 +218,7 @@ evalByName n as i = do
 -- | Application with additional args.
 apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
 apply app as = do
-  memoTable <- use evalMemoTable
-  case memoLookup (TApp app def) memoTable of
-      Just res -> return res
-      Nothing -> reduceApp $ over appArgs (++ map liftTerm as) app
+  reduceApp $ over appArgs (++ map liftTerm as) app
 
 
 topLevelCall
@@ -1049,7 +1048,7 @@ unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static te
 
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
-reduce (TApp a _) = reduceApp a
+reduce (TApp a _) = reduceAppWithMemoTable a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
@@ -1121,13 +1120,23 @@ resolveArg ai as i = case as ^? ix i of
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 
-enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
+enforcePactValue :: (Pretty n, Show n) => (Term n) -> Eval e PactValue
 enforcePactValue t = case toPactValue t of
   Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
   Right v -> return v
 
-enforcePactValue' :: (Pretty n, Traversable f) => f (Term n) -> Eval e (f PactValue)
+enforcePactValue' :: (Pretty n, Show n, Traversable f) => f (Term n) -> Eval e (f PactValue)
 enforcePactValue' = traverse enforcePactValue
+
+reduceAppWithMemoTable :: App (Term Ref) -> Eval e (Term Name)
+reduceAppWithMemoTable app = do
+  memoTable <- use evalMemoTable
+  fcResult <- catchesPactError (termFunctionCall' reduce app)
+  case fcResult of
+    Right fc -> case memoLookup fc memoTable of
+      Just res -> trace ("Cache hit: " ++ show res) $ return (fromPactValue res)
+      Nothing -> reduceApp app
+    Left _ -> reduceApp app
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai

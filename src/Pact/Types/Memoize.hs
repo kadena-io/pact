@@ -29,21 +29,22 @@ module Pact.Types.Memoize (
   -- the Eval environment.
   MemoTable (MemoTable),
 
-  FunctionCall(..)
+  FunctionCall(..),
+  termFunctionCall,
+  termFunctionCall',
 
 ) where
 
 import Control.DeepSeq (NFData)
-import Control.Monad.Catch (MonadThrow)
 import Data.Default (Default, def)
 import Data.Map (Map)
+import Data.Traversable (forM)
 import qualified Data.Map as Map
 import GHC.Generics (Generic)
 
-import Pact.Types.Names (DefName(..))
-import Pact.Types.PactValue (PactValue, toPactValue, fromPactValue)
-import Pact.Types.Pretty (Pretty)
-import Pact.Types.Term (App(App), Def(..), Term(TApp, TDef, TNative, _tNativeName, _tDef), Name, QualifiedName(..), NativeDefName(..), DefType(Defun))
+import Pact.Types.PactValue (PactValue, toPactValue)
+-- import Pact.Types.Pretty (Pretty)
+import Pact.Types.Term
 
 -- A MemoTable maps function applications to their evaluation result.
 -- The MemoTable is part of `EvalEnv`.
@@ -70,44 +71,64 @@ instance Default MemoTable where def = MemoTable mempty
 -- the pair is valid. The `Witness` is evaluated in some monad,
 -- (normally `Eval`).
 unguardedInsert
-  :: (MonadThrow m, Pretty n)
-  => (Term n, Term Name)
+  :: (FunctionCall, PactValue)
   -> MemoTable
-  -> m MemoTable
-unguardedInsert (funApp, result) MemoTable { unMemoTable = table0 } =
-  case termFunctionCall funApp of
-    Left _e -> undefined
-    Right fnCall -> do
-      resultValue <- case toPactValue result of
-        Left _e -> undefined
-        Right x -> return x
-      return $ MemoTable { unMemoTable =
-                  Map.insert fnCall resultValue table0 }
-
-termFunctionCall :: Pretty n =>  Term n -> Either String FunctionCall
-termFunctionCall t = case t of
-  TApp (App fn args _) _ -> do
-    fcFunction <- case fn of
-      TNative { _tNativeName } -> return $ Left _tNativeName
-      TDef { _tDef = Def { _dDefName = DefName fnName, _dModule, _dDefType = Defun } } ->
-        return $ Right $ QualifiedName { _qnName = fnName, _qnQual = _dModule, _qnInfo = def }
-      _ -> undefined
-    fcArgs <- case traverse toPactValue args of
-      Left _e -> undefined
-      Right xs -> return xs
-    return $ FunctionCall { fcFunction, fcArgs }
-  _ -> Left "TODO"
+  -> MemoTable
+unguardedInsert (funCall, result) MemoTable { unMemoTable = table0 } =
+      MemoTable { unMemoTable =
+                  Map.insert funCall result table0 }
 
 
-memoLookup :: Pretty n => Term n -> MemoTable -> Maybe (Term Name)
+memoLookup :: FunctionCall -> MemoTable -> Maybe PactValue
 memoLookup key MemoTable {unMemoTable = table} = do
-  case termFunctionCall key of
-    Left _ -> Nothing
-    Right fnCall -> fromPactValue <$> Map.lookup fnCall table
+  Map.lookup key table
+
+
+newtype AnyFunctionName = AnyFunctionName {
+  unAnyFunctionName :: Either NativeDefName QualifiedName
+  } deriving (Eq, Ord, Show, Generic)
+
+instance NFData AnyFunctionName
 
 data FunctionCall = FunctionCall {
-  fcFunction :: Either NativeDefName QualifiedName,
+  fcFunction :: AnyFunctionName,
   fcArgs :: [PactValue]
 } deriving (Eq, Show, Generic, Ord)
 
 instance NFData FunctionCall
+
+
+termFunctionCall :: App (Term Ref) -> Either String FunctionCall
+termFunctionCall App { _appFun = fn, _appArgs = args } = do
+    fcFunction <- case fn of
+      TNative { _tNativeName } -> return $ Left _tNativeName
+      -- TDef { _tDef = Def { _dDefName = DefName fnName, _dModule, _dDefType = Defun } } ->
+      --   return $ Right $ QualifiedName { _qnName = fnName, _qnQual = _dModule, _qnInfo = def }
+      TVar { _tVar } -> case _tVar of
+        Direct (TNative { _tNativeName  }) -> return $ Left _tNativeName
+        _ -> Left "TODO: Something other than DIRECT"
+      l -> Left (show l)
+    fcArgs <- case traverse toPactValue args of
+      Left e -> Left ("args toPactValue error: " ++ show e)
+      Right xs -> return xs
+    return $ FunctionCall { fcFunction = AnyFunctionName fcFunction , fcArgs }
+
+
+termFunctionCall' :: Monad m => (Term Ref -> m (Term Name)) -> App (Term Ref) -> m FunctionCall
+termFunctionCall' eval App { _appFun = fn, _appArgs = args } = do
+    let
+    fcFunction <-
+        case fn of
+          TNative { _tNativeName } -> return $ AnyFunctionName $ Left _tNativeName
+          -- TDef { _tDef = Def { _dDefName = DefName fnName, _dModule, _dDefType = Defun } } ->
+          --   return $ Right $ QualifiedName { _qnName = fnName, _qnQual = _dModule, _qnInfo = def }
+          TVar { _tVar } -> case _tVar of
+            Direct (TNative { _tNativeName  }) -> return $ AnyFunctionName $ Left _tNativeName
+            _ -> error "TODO" -- return $ Left "TODO: Something other than DIRECT"
+          l -> error $ "TODO " ++ show l -- return $ Left (show l)
+    fcArgs <- forM args $ \arg -> do
+      reducedArg <- eval arg
+      case toPactValue reducedArg of
+        Left e -> error $ "TODO: " ++ show e
+        Right a -> return a
+    return $ FunctionCall { fcFunction = fcFunction , fcArgs }
