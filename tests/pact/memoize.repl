@@ -1,6 +1,8 @@
 (env-gasmodel "table")
 (env-gaslimit 1000000)
 
+(env-clear-memotable)
+
 ; Define an expensive function, which we will use to test memoization.
 (module m g
   (defcap g () true)

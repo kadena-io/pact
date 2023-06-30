@@ -52,8 +52,6 @@ module Pact.Eval
     ,getSizeOfVersion
     ) where
 
-import Debug.Trace (trace)
-
 import Bound
 import Control.Lens hiding (DefName)
 import Control.DeepSeq
@@ -1134,7 +1132,7 @@ reduceAppWithMemoTable app = do
   fcResult <- catchesPactError (termFunctionCall reduce app)
   case fcResult of
     Right fc -> case memoLookup fc memoTable of
-      Just res -> trace ("Cache hit: " ++ show res) $ return (fromPactValue res)
+      Just res -> return (fromPactValue res)
       Nothing -> reduceApp app
     Left _ -> reduceApp app
 
