@@ -84,7 +84,7 @@ import Pact.Runtime.Typecheck
 import Pact.Runtime.Utils
 import Pact.Types.Advice
 import Pact.Types.Capability
-import Pact.Types.Memoize (memoLookup, termFunctionCall')
+import Pact.Types.Memoize (memoLookup, termFunctionCall)
 import Pact.Types.PactValue
 import Pact.Types.KeySet
 import Pact.Types.Pretty
@@ -1131,7 +1131,7 @@ enforcePactValue' = traverse enforcePactValue
 reduceAppWithMemoTable :: App (Term Ref) -> Eval e (Term Name)
 reduceAppWithMemoTable app = do
   memoTable <- use evalMemoTable
-  fcResult <- catchesPactError (termFunctionCall' reduce app)
+  fcResult <- catchesPactError (termFunctionCall reduce app)
   case fcResult of
     Right fc -> case memoLookup fc memoTable of
       Just res -> trace ("Cache hit: " ++ show res) $ return (fromPactValue res)

@@ -31,7 +31,6 @@ module Pact.Types.Memoize (
 
   FunctionCall(..),
   termFunctionCall,
-  termFunctionCall',
 
 ) where
 
@@ -98,24 +97,8 @@ data FunctionCall = FunctionCall {
 instance NFData FunctionCall
 
 
-termFunctionCall :: App (Term Ref) -> Either String FunctionCall
-termFunctionCall App { _appFun = fn, _appArgs = args } = do
-    fcFunction <- case fn of
-      TNative { _tNativeName } -> return $ Left _tNativeName
-      -- TDef { _tDef = Def { _dDefName = DefName fnName, _dModule, _dDefType = Defun } } ->
-      --   return $ Right $ QualifiedName { _qnName = fnName, _qnQual = _dModule, _qnInfo = def }
-      TVar { _tVar } -> case _tVar of
-        Direct (TNative { _tNativeName  }) -> return $ Left _tNativeName
-        _ -> Left "TODO: Something other than DIRECT"
-      l -> Left (show l)
-    fcArgs <- case traverse toPactValue args of
-      Left e -> Left ("args toPactValue error: " ++ show e)
-      Right xs -> return xs
-    return $ FunctionCall { fcFunction = AnyFunctionName fcFunction , fcArgs }
-
-
-termFunctionCall' :: Monad m => (Term Ref -> m (Term Name)) -> App (Term Ref) -> m FunctionCall
-termFunctionCall' eval App { _appFun = fn, _appArgs = args } = do
+termFunctionCall :: Monad m => (Term Ref -> m (Term Name)) -> App (Term Ref) -> m FunctionCall
+termFunctionCall eval App { _appFun = fn, _appArgs = args } = do
     let
     fcFunction <-
         case fn of
@@ -124,7 +107,7 @@ termFunctionCall' eval App { _appFun = fn, _appArgs = args } = do
             Direct (TNative { _tNativeName  }) -> return $ AnyFunctionName $ Left _tNativeName
             Ref (TDef { _tDef = Def { _dDefName = DefName fnName, _dModule, _dDefType = Defun } }) ->
               return $ AnyFunctionName $ Right $ QualifiedName { _qnQual = _dModule, _qnName = fnName, _qnInfo = def}
-            _ -> error ("TVar: " ++ show e)
+            e -> error ("TVar: " ++ show e)
           l -> error $ "TODO " ++ show l -- return $ Left (show l)
     fcArgs <- forM args $ \arg -> do
       reducedArg <- eval arg

@@ -74,7 +74,7 @@ import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
-import Pact.Types.Memoize (unguardedInsert, termFunctionCall')
+import Pact.Types.Memoize (unguardedInsert, termFunctionCall)
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
@@ -911,7 +911,7 @@ envMemoize _i [TApp (App memoFun memoArgs _) _ ] = do
   result <- reduce $ TApp app def
   -- result <- eval (TApp app def)
   table0 <- use evalMemoTable
-  entry <- termFunctionCall' reduce app'
+  entry <- termFunctionCall reduce app'
   let result' = either (\e -> error $ "Could not convert result: " ++ show e) id $ toPactValue result
   let table1 = unguardedInsert (entry, result') table0
   evalMemoTable .= table1
