@@ -288,6 +288,10 @@ replDefs = ("Repl",
 
        []
        ("WIP")
+     ,defZRNative "env-clear-memotable" envClearMemotable
+      (funType tTyString [])
+      ["(env-clear-memotable)"]
+      "Reset the memoization table."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -916,4 +920,10 @@ envMemoize _i [TApp (App memoFun memoArgs _) _ ] = do
   let table1 = unguardedInsert (entry, result') table0
   evalMemoTable .= table1
   return $ deepseq table1 $ tStr "Ok"
-envMemoize _i _ = error "Wrong args"
+envMemoize i as = argsError' i as
+
+envClearMemotable :: RNativeFun LibState
+envClearMemotable _i [] = do
+  evalMemoTable .= mempty
+  return $ tStr "Ok"
+envClearMemotable i as = argsError i as

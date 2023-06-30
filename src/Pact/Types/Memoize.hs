@@ -65,6 +65,12 @@ data MemoTable = MemoTable {
 instance NFData MemoTable
 instance Default MemoTable where def = MemoTable mempty
 
+instance Semigroup MemoTable where
+  MemoTable a <> MemoTable b = MemoTable (a <> b)
+
+instance Monoid MemoTable where
+  mempty = MemoTable mempty
+
 -- Insert a pair of function application and result into the memotable.
 -- Insertion is guarded by a `Witness` - a means of asserting that
 -- the pair is valid. The `Witness` is evaluated in some monad,
