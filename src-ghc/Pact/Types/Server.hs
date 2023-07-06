@@ -77,7 +77,7 @@ data CommandConfig = CommandConfig {
     , _ccEntity :: Maybe EntityName
     , _ccGasLimit :: Maybe Int
     , _ccGasRate :: Maybe Int
-    , _ccExecutionConfig :: !ExecutionConfig
+    , _ccExecutionConfig :: ExecutionConfig
     }
 $(makeLenses ''CommandConfig)
 
@@ -89,8 +89,8 @@ data CommandEnv p = CommandEnv {
     , _ceDbEnv :: PactDbEnv p
     , _ceLogger :: Logger
     , _ceGasEnv :: GasEnv
-    , _cePublicData :: !PublicData
-    , _ceSPVSupport :: !SPVSupport
+    , _cePublicData :: PublicData
+    , _ceSPVSupport :: SPVSupport
     , _ceNetworkId :: Maybe NetworkId
     , _ceExecutionConfig :: ExecutionConfig
     }
