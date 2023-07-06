@@ -23,12 +23,12 @@ type V = Vector
 
 -- | state context
 data Blake2Ctx w = Blake2Ctx
-  { _b :: !ByteString -- 128 input buffer
-  , _h :: !(V w)        --   8 chained state
-  , _t0 :: !w         --   total number of bytes 0
-  , _t1 :: !w         --                         1
-  , _c :: !Int        -- pointer for b[]
-  , _outlen :: !Int   -- digest size
+  { _b :: ByteString -- 128 input buffer
+  , _h :: V w        --   8 chained state
+  , _t0 :: w         --   total number of bytes 0
+  , _t1 :: w         --                         1
+  , _c :: Int        -- pointer for b[]
+  , _outlen :: Int   -- digest size
   } deriving (Eq)
 instance (Show w) => Show (Blake2Ctx w) where
   show (Blake2Ctx b h t0 t1 c outlen) =

@@ -93,8 +93,8 @@ getCurrentCreationTime = TxCreationTime
 
 -- | Confidential/Encrypted addressing info, for use in metadata on privacy-supporting platforms.
 data Address = Address
-  { _aFrom :: !EntityName
-  , _aTo :: !(Set EntityName)
+  { _aFrom :: EntityName
+  , _aTo :: Set EntityName
   } deriving (Eq,Show,Ord,Generic)
 
 instance NFData Address
@@ -108,7 +108,7 @@ instance J.Encode Address where
     [ "to" J..= J.Array (_aTo o)
     , "from" J..= _aFrom o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON Address where parseJSON = lensyParseJSON 2
 makeLenses ''Address
@@ -125,7 +125,7 @@ instance Arbitrary PrivateMeta where
 
 instance J.Encode PrivateMeta where
   build o = J.object [ "address" J..= _pmAddress o ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
@@ -169,7 +169,7 @@ instance J.Encode PublicMeta where
     , "gasPrice" J..= _pmGasPrice o
     , "sender" J..= _pmSender o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON PublicMeta where
   parseJSON = withObject "PublicMeta" $ \o -> PublicMeta
@@ -221,7 +221,7 @@ instance J.Encode PublicData where
     , "prevBlockHash" J..= _pdPrevBlockHash o
     , "blockHeight" J..= J.Aeson (_pdBlockHeight o)
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
 instance Default PublicData where def = PublicData def def def def

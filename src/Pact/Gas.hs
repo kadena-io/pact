@@ -15,7 +15,6 @@ module Pact.Gas
  , putGas)
  where
 
-import Control.Monad
 import Control.Monad.State.Strict
 import Data.Text
 import Data.IORef
@@ -31,16 +30,16 @@ computeGas i args = do
   GasEnv {..} <- view eeGasEnv
   g0 <- getGas
   let
-    (!info,!name) = either id (_faInfo &&& _faName) i
-    !g1 = runGasModel _geGasModel name args
-  let !gUsed = g0 + g1
-  modify' $ over evalLogGas $ (<$!>) ((:) (msg name gUsed, g1))
+    (info,name) = either id (_faInfo &&& _faName) i
+    g1 = runGasModel _geGasModel name args
+  let gUsed = g0 + g1
+  evalLogGas %= fmap ((msg name gUsed, g1):)
   putGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
     else return gUsed
  where
-  msg name used = renderCompactText' $! pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used
+  msg name used = renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used)
 {-# INLINABLE computeGas #-}
 
 -- | Performs gas calculation for incremental computations with some caveats:
@@ -59,7 +58,7 @@ computeGasNoLog commit info name args = do
 
 putGas :: Gas -> Eval e ()
 putGas !g = do
-  !gasRef <- view eeGas
+  gasRef <- view eeGas
   liftIO (writeIORef gasRef g)
 
 getGas :: Eval e Gas
@@ -76,7 +75,7 @@ computeGasCommit info name args = do
   g0 <- getGas
   let !g1 = runGasModel _geGasModel name args
       !gUsed = g0 + g1
-  evalLogGas %= (<$!>) ((renderCompactText' $! pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed,g1):)
+  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),g1):)
   putGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed

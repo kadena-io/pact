@@ -32,21 +32,21 @@ import Pact.Types.Term
 -- able to find instances where GReduced was in present use, so I've removed it for now.
 
 data GasCostConfig = GasCostConfig
-  { _gasCostConfig_primTable :: !(Map Text Gas)
-  , _gasCostConfig_selectColumnCost :: !Gas -- up-front cost per column in a select operation
-  , _gasCostConfig_readColumnCost :: !Gas -- cost per column to read a row
-  , _gasCostConfig_sortFactor :: !Gas
-  , _gasCostConfig_distinctFactor :: !Gas
-  , _gasCostConfig_concatenationFactor :: !Gas
-  , _gasCostConfig_moduleCost :: !Gas
-  , _gasCostConfig_moduleMemberCost :: !Gas
-  , _gasCostConfig_useModuleCost :: !Gas
-  , _gasCostConfig_interfaceCost :: !Gas
-  , _gasCostConfig_writeBytesCost :: !Gas -- cost per bytes to write to database
-  , _gasCostConfig_functionApplicationCost :: !Gas
-  , _gasCostConfig_defPactCost :: !Gas
-  , _gasCostConfig_foldDBCost :: !Gas
-  , _gasCostConfig_principalCost :: !Gas
+  { _gasCostConfig_primTable :: Map Text Gas
+  , _gasCostConfig_selectColumnCost :: Gas -- up-front cost per column in a select operation
+  , _gasCostConfig_readColumnCost :: Gas -- cost per column to read a row
+  , _gasCostConfig_sortFactor :: Gas
+  , _gasCostConfig_distinctFactor :: Gas
+  , _gasCostConfig_concatenationFactor :: Gas
+  , _gasCostConfig_moduleCost :: Gas
+  , _gasCostConfig_moduleMemberCost :: Gas
+  , _gasCostConfig_useModuleCost :: Gas
+  , _gasCostConfig_interfaceCost :: Gas
+  , _gasCostConfig_writeBytesCost :: Gas -- cost per bytes to write to database
+  , _gasCostConfig_functionApplicationCost :: Gas
+  , _gasCostConfig_defPactCost :: Gas
+  , _gasCostConfig_foldDBCost :: Gas
+  , _gasCostConfig_principalCost :: Gas
   }
 
 defaultGasConfig :: GasCostConfig

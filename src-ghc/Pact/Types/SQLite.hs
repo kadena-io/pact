@@ -60,8 +60,8 @@ instance J.Encode Pragma where
   build (Pragma s) = J.string s
 
 data SQLiteConfig = SQLiteConfig
-  { _dbFile :: !FilePath
-  , _pragmas :: ![Pragma]
+  { _dbFile :: FilePath
+  , _pragmas :: [Pragma]
   } deriving (Eq,Show,Generic)
 instance FromJSON SQLiteConfig
 makeLenses ''SQLiteConfig
@@ -76,7 +76,7 @@ instance Arbitrary SQLiteConfig where
   arbitrary = SQLiteConfig <$> arbitrary <*> arbitrary
 
 -- | Statement input types
-data SType = SInt !Int64 | SDouble !Double | SText !Utf8 | SBlob !BS.ByteString deriving (Eq,Show)
+data SType = SInt Int64 | SDouble Double | SText Utf8 | SBlob BS.ByteString deriving (Eq,Show)
 -- | Result types
 data RType = RInt | RDouble | RText | RBlob deriving (Eq,Show)
 

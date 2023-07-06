@@ -73,10 +73,10 @@ userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
 
 data CommandConfig = CommandConfig {
-      _ccSqlite :: !(Maybe SQLiteConfig)
-    , _ccEntity :: !(Maybe EntityName)
-    , _ccGasLimit :: !(Maybe Int)
-    , _ccGasRate :: !(Maybe Int)
+      _ccSqlite :: Maybe SQLiteConfig
+    , _ccEntity :: Maybe EntityName
+    , _ccGasLimit :: Maybe Int
+    , _ccGasRate :: Maybe Int
     , _ccExecutionConfig :: !ExecutionConfig
     }
 $(makeLenses ''CommandConfig)
@@ -84,15 +84,15 @@ $(makeLenses ''CommandConfig)
 
 
 data CommandEnv p = CommandEnv {
-      _ceEntity :: !(Maybe EntityName)
-    , _ceMode :: !ExecutionMode
-    , _ceDbEnv :: !(PactDbEnv p)
-    , _ceLogger :: !Logger
-    , _ceGasEnv :: !GasEnv
+      _ceEntity :: Maybe EntityName
+    , _ceMode :: ExecutionMode
+    , _ceDbEnv :: PactDbEnv p
+    , _ceLogger :: Logger
+    , _ceGasEnv :: GasEnv
     , _cePublicData :: !PublicData
     , _ceSPVSupport :: !SPVSupport
-    , _ceNetworkId :: !(Maybe NetworkId)
-    , _ceExecutionConfig :: !ExecutionConfig
+    , _ceNetworkId :: Maybe NetworkId
+    , _ceExecutionConfig :: ExecutionConfig
     }
 $(makeLenses ''CommandEnv)
 
@@ -139,8 +139,8 @@ newtype PossiblyIncompleteResults = PossiblyIncompleteResults
   } deriving (Show, Eq)
 
 data ListenerResult =
-  ListenerResult !(CommandResult Hash) |
-  GCed !String
+  ListenerResult (CommandResult Hash) |
+  GCed String
   deriving (Show, Eq)
 
 data History =
@@ -156,8 +156,8 @@ data History =
 
 
 data Inbound =
-  TxCmds { iCmds :: ![Command ByteString] } |
-  LocalCmd { iCmd :: !(Command ByteString),
-             iLocalResult :: !(MVar (CommandResult Hash))
+  TxCmds { iCmds :: [Command ByteString] } |
+  LocalCmd { iCmd :: Command ByteString,
+             iLocalResult :: MVar (CommandResult Hash)
            }
   deriving (Eq)

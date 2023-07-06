@@ -35,24 +35,24 @@ import qualified Pact.JSON.Encode as J
 
 
 data TableStmts = TableStmts
-  { sInsertReplace :: !Statement
-  , sInsert :: !Statement
-  , sReplace :: !Statement
-  , sRead :: !Statement
+  { sInsertReplace :: Statement
+  , sInsert :: Statement
+  , sReplace :: Statement
+  , sRead :: Statement
   }
 
 data TxStmts = TxStmts
-  { tBegin :: !Statement
-  , tCommit :: !Statement
-  , tRollback :: !Statement
+  { tBegin :: Statement
+  , tCommit :: Statement
+  , tRollback :: Statement
   }
 
 data SQLite = SQLite
-  { conn :: !Database
-  , config :: !SQLiteConfig
-  , logger :: !Logger
-  , tableStmts :: !(M.Map Utf8 TableStmts)
-  , txStmts :: !TxStmts
+  { conn :: Database
+  , config :: SQLiteConfig
+  , logger :: Logger
+  , tableStmts :: (M.Map Utf8 TableStmts)
+  , txStmts :: TxStmts
   }
 
 toUtf8 :: Text -> Utf8
@@ -89,10 +89,10 @@ persister = Persister {
   }
 
 data KeyTys k = KeyTys {
-  textTy :: !Utf8,
-  inFun :: !(k -> SType),
-  outTy :: !RType,
-  outFun :: !(SType -> IO k)
+  textTy :: Utf8,
+  inFun :: k -> SType,
+  outTy :: RType,
+  outFun :: SType -> IO k
   }
 
 decodeText :: SType -> IO DataKey

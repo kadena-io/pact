@@ -405,7 +405,7 @@ setmsg i as = case as of
   [TObject (Object om _ _ _) _] -> go (toLegacyJsonViaEncode (fmap toPactValueLenient om))
   [a] -> go (toLegacyJsonViaEncode a)
   _ -> argsError i as
-  where go (v :: LegacyValue) = setenv eeMsgBody v >> return (tStr "Setting transaction data")
+  where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 
 continuePact :: RNativeFun LibState
 continuePact i as = case as of

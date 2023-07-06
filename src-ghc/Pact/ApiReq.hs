@@ -145,12 +145,12 @@ instance Arbitrary ApiSigner where
 -- ApiPublicMeta
 
 data ApiPublicMeta = ApiPublicMeta
-  { _apmChainId :: !(Maybe ChainId)
-  , _apmSender :: !(Maybe Text)
-  , _apmGasLimit :: !(Maybe GasLimit)
-  , _apmGasPrice :: !(Maybe GasPrice)
-  , _apmTTL :: !(Maybe TTLSeconds)
-  , _apmCreationTime :: !(Maybe TxCreationTime)
+  { _apmChainId :: Maybe ChainId
+  , _apmSender :: Maybe Text
+  , _apmGasLimit :: Maybe GasLimit
+  , _apmGasPrice :: Maybe GasPrice
+  , _apmTTL :: Maybe TTLSeconds
+  , _apmCreationTime :: Maybe TxCreationTime
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiPublicMeta where

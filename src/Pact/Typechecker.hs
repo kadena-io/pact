@@ -138,10 +138,10 @@ isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
 
 
 data RoleTys = RoleTys
-  { _rtCandArgTy :: !(Type UserType)
-  , _rtAST :: !(AST Node)
-  , _rtTyVar :: !(TypeVar UserType)
-  , _rtResolvedTy :: !(Type UserType)
+  { _rtCandArgTy :: Type UserType
+  , _rtAST :: AST Node
+  , _rtTyVar :: TypeVar UserType
+  , _rtResolvedTy :: Type UserType
   }
 instance Show RoleTys where
   show (RoleTys a b c d) =

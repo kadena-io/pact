@@ -76,8 +76,8 @@ import Pact.Types.KeySet (KeySetName, parseAnyKeysetName)
 
 -- | Exp stream type.
 data Cursor = Cursor
-  { _cContext :: !(Maybe (Cursor,Exp Info))
-  , _cStream :: ![Exp Info]
+  { _cContext :: Maybe (Cursor,Exp Info)
+  , _cStream :: [Exp Info]
   } deriving (Show)
 instance Default Cursor where def = Cursor def def
 
@@ -102,8 +102,8 @@ instance Stream Cursor where
 
 -- | Capture last-parsed Exp, plus arbitrary state.
 data ParseState a = ParseState
-  { _psCurrent :: !(Exp Info)
-  , _psUser :: !a
+  { _psCurrent :: Exp Info
+  , _psUser :: a
   }
 makeLenses ''ParseState
 
@@ -243,15 +243,15 @@ commit = lift (lift pCommit)
 {-# INLINE exp #-}
 exp :: String -> Prism' (Exp Info) a -> ExpParse s (a,Exp Info)
 exp ty prism = do
-  !t <- current
+  t <- current
   let test i = case firstOf prism i of
-        Just !a -> Just (a,i)
+        Just a -> Just (a,i)
         Nothing -> Nothing
-      !errs = S.fromList [
+      errs = S.fromList [
         strErr $ "Expected: " ++ ty,
-        Tokens $! fromList [t]
+        Tokens (fromList [t])
         ]
-  !r <- lift $! lift $! pTokenEpsilon test errs
+  r <- lift $! lift $! pTokenEpsilon test errs
   psCurrent .= snd r
   return r
 

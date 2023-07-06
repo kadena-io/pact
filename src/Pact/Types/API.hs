@@ -52,7 +52,7 @@ instance FromJSON RequestKeys where
 
 instance J.Encode RequestKeys where
   build o = J.object [ "requestKeys" J..= J.Array (_rkRequestKeys o) ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 -- | Submit new commands for execution
 newtype SubmitBatch = SubmitBatch { _sbCmds :: NonEmpty (Command Text) }
@@ -64,7 +64,7 @@ instance FromJSON SubmitBatch where
 
 instance J.Encode SubmitBatch where
   build o = J.object [ "cmds" J..= J.Array (_sbCmds o) ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 -- | Poll for results by RequestKey
 newtype Poll = Poll { _pRequestKeys :: NonEmpty RequestKey }
@@ -75,7 +75,7 @@ instance FromJSON Poll where
 
 instance J.Encode Poll where
   build o = J.object [ "requestKeys" J..= J.Array (_pRequestKeys o) ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 -- | What you get back from a Poll
 newtype PollResponses = PollResponses (HM.HashMap RequestKey (CommandResult Hash))
@@ -87,7 +87,7 @@ instance FromJSON PollResponses where
 
 instance J.Encode PollResponses where
   build (PollResponses m) = J.build $ JL.legacyHashMap asString m
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 -- | ListenerRequest for results by RequestKey
 newtype ListenerRequest = ListenerRequest { _lrListen :: RequestKey }
@@ -98,7 +98,7 @@ instance FromJSON ListenerRequest where
 
 instance J.Encode ListenerRequest where
   build o = J.object [ "listen" J..= _lrListen o ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 -- -------------------------------------------------------------------------- --
 -- ListenResponse
@@ -125,4 +125,4 @@ instance J.Encode ListenResponse where
     [ "status" J..= J.text "timeout"
     , "timeout-micros" J..= J.Aeson i
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}

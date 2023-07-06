@@ -115,7 +115,7 @@ instance J.Encode a => J.Encode (Command a) where
     , "sigs" J..= J.Array (_cmdSigs o)
     , "cmd" J..= _cmdPayload o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance NFData a => NFData (Command a)
 
@@ -417,8 +417,8 @@ type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
 type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
 
 data CommandExecInterface m a l = CommandExecInterface
-  { _ceiApplyCmd :: !(ApplyCmd l)
-  , _ceiApplyPPCmd :: !(ApplyPPCmd m a l)
+  { _ceiApplyCmd :: ApplyCmd l
+  , _ceiApplyPPCmd :: ApplyPPCmd m a l
   }
 
 

@@ -366,10 +366,10 @@ instance (SizeOf i) => SizeOf (SeparatorExp i)
 
 -- | Pact syntax expressions
 data Exp i =
-  ELiteral !(LiteralExp i) |
-  EAtom !(AtomExp i) |
-  EList !(ListExp i) |
-  ESeparator !(SeparatorExp i)
+  ELiteral (LiteralExp i) |
+  EAtom (AtomExp i) |
+  EList (ListExp i) |
+  ESeparator (SeparatorExp i)
   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 
 instance Pretty (Exp i) where

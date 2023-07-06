@@ -76,5 +76,3 @@ instance MonadAlloc Alloc where
   singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvForall name
   singExists name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvExists name
   singFree   name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free name
-  -- singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> error "sbvForall removed in 10.0" name
-  -- singExists name ty = Alloc $ withSymVal ty $ sansProv <$> error "sbvExists removed in 10.0" name

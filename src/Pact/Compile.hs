@@ -66,11 +66,11 @@ import Pact.Types.Util
 
 
 data ModuleState = ModuleState
-  { _msName :: !ModuleName
-  , _msHash :: !ModuleHash
-  , _msBlessed :: ![ModuleHash]
-  , _msImplements :: ![ModuleName]
-  , _msImports :: ![Use]
+  { _msName :: ModuleName
+  , _msHash :: ModuleHash
+  , _msBlessed :: [ModuleHash]
+  , _msImplements :: [ModuleName]
+  , _msImports :: [Use]
   }
 makeLenses ''ModuleState
 
@@ -78,8 +78,8 @@ initModuleState :: ModuleName -> ModuleHash -> ModuleState
 initModuleState n h = ModuleState n h def def def
 
 data CompileState = CompileState
-  { _csFresh :: !Int
-  , _csModule :: !(Maybe ModuleState)
+  { _csFresh :: Int
+  , _csModule :: Maybe ModuleState
   }
 makeLenses ''CompileState
 
@@ -390,7 +390,7 @@ data ModelAllowed
   = ModelAllowed
   | ModelNotAllowed
 
-data AtPair = DocPair !Text | ModelPair ![Exp Info] deriving (Eq,Ord)
+data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
 
 modelOnly :: Compile Meta
 modelOnly = do

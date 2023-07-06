@@ -77,8 +77,8 @@ instance Arbitrary NamespaceName where
   arbitrary = NamespaceName <$> genBareText
 
 data ModuleName = ModuleName
-  { _mnName      :: !Text
-  , _mnNamespace :: !(Maybe NamespaceName)
+  { _mnName      :: Text
+  , _mnNamespace :: Maybe NamespaceName
   } deriving (Eq, Ord, Generic, Show)
 
 instance Arbitrary ModuleName where
@@ -153,9 +153,9 @@ instance Arbitrary DefName where
   arbitrary = DefName <$> genBareText
 
 data QualifiedName = QualifiedName
-  { _qnQual :: !ModuleName
-  , _qnName :: !Text
-  , _qnInfo :: !Info
+  { _qnQual :: ModuleName
+  , _qnName :: Text
+  , _qnInfo :: Info
   } deriving (Generic,Show)
 
 instance Arbitrary QualifiedName where
@@ -295,10 +295,10 @@ instance Arbitrary FullyQualifiedName where
 
 -- | A named reference from source.
 data Name
-  = QName !QualifiedName
-  | Name !BareName
-  | DName !DynamicName
-  | FQName !FullyQualifiedName
+  = QName QualifiedName
+  | Name BareName
+  | DName DynamicName
+  | FQName FullyQualifiedName
   deriving (Generic, Show)
 
 instance Arbitrary Name where
