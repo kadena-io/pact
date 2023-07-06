@@ -1,0 +1,34 @@
+name: Build and cache with Nix
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build-and-cache:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Nix with caching
+      uses: kadena-io/setup-nix-with-cache@v1
+      with:
+        cache_url: s3://nixcache.chainweb.com?region=us-east-1
+        signing_private_key: ${{ secrets.NIX_CACHE_PRIVATE_KEY }}
+
+    - name: Set up AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.NIX_CACHE_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.NIX_CACHE_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Build and cache artifacts
+      timeout-minutes: 740
+      run: |
+        echo Building the project and its devShell
+        nix build
