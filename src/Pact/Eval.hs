@@ -291,7 +291,7 @@ eval' ::  Term Name ->  Eval e (Term Name)
 eval' (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $
   evalUse u >> return (tStr $ renderCompactText' $ "Using " <> pretty _uModuleName)
 eval' (TModule _tm@(MDModule m) bod i) =
-  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $do
+  topLevelCall i "module" (GModuleDecl (_mName m) (_mCode m)) $ do
     endAdvice <- eAdvise i (AdviceModule _tm)
     checkAllowModule i
     mNs <- use $ evalRefs . rsNamespace
