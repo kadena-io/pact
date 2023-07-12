@@ -454,13 +454,13 @@ loadModule
   -> Eval e (ModuleData Ref)
 loadModule m bod1 mi = do
   mapM_ evalUse $ _mImports m
-  mdefs <- collectNames (GModuleMember $ MDModule m) bod1 $ \t -> case t of
+  mdefs <- collectNames (GModuleMember $ MDModule m) bod1 $ \case
     TDef d _ -> return $ Just $ asString (_dDefName d)
     TConst a _ _ _ _ -> return $ Just $ _aName a
     TSchema n _ _ _ _ -> return $ Just $ asString n
     tt@TTable{} -> return $ Just $ asString (_tTableName tt)
     TUse _ _ -> return Nothing
-    _ -> evalError' t "Invalid module member"
+    t -> evalError' t "Invalid module member"
   let mangled = mangleDefs (_mName m) <$> mdefs
   (evaluatedDefs, deps) <-
     ifExecutionFlagSet FlagDisablePact43
@@ -479,12 +479,12 @@ loadInterface
   -> Eval e (ModuleData Ref)
 loadInterface i body info = do
   mapM_ evalUse $ _interfaceImports i
-  idefs <- collectNames (GModuleMember $ MDInterface i) body $ \t -> case t of
+  idefs <- collectNames (GModuleMember $ MDInterface i) body $ \case
     TDef d _ -> return $ Just $ asString (_dDefName d)
     TConst a _ _ _ _ -> return $ Just $ _aName a
     TSchema n _ _ _ _ -> return $ Just $ asString n
     TUse _ _ -> return Nothing
-    _ -> evalError' t "Invalid interface member"
+    t -> evalError' t "Invalid interface member"
   evaluatedDefs <- evaluateDefs info (MDInterface i) $
       mangleDefs (_interfaceName i) <$> idefs
   let md = ModuleData (MDInterface i) evaluatedDefs mempty

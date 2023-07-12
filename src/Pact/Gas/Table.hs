@@ -236,7 +236,7 @@ tableGasModel gasConfig =
           _ -> gasToMilliGas $ _gasCostConfig_functionApplicationCost gasConfig
         GIntegerOpCost i j ->
           gasToMilliGas $ intCost (fst i) + intCost (fst j)
-        GDecimalOpCost _ _ -> MilliGas 0
+        GDecimalOpCost _ _ -> mempty
         GMakeList v -> gasToMilliGas $ expLengthPenalty v
         GSort len -> gasToMilliGas $ expLengthPenalty len
         GDistinct len -> gasToMilliGas $ expLengthPenalty len

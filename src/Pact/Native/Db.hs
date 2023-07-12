@@ -24,7 +24,6 @@ module Pact.Native.Db
     where
 
 import Bound
--- import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Control.Monad
 import Control.Monad.Reader (ask)

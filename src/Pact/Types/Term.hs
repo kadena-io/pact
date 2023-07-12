@@ -254,9 +254,12 @@ instance Semigroup Gas where
 instance Monoid Gas where
   mempty = 0
 
+-- | Gas compute cost unit that represents smaller units of compute time.
+-- 1 Gas = 1000 MilliGas, and in terms of compute time, 1 Gas = 2500 ns,
+-- thus 1 MilliGas = 2.5ns
 newtype MilliGas
   = MilliGas Int64
-  deriving (Eq, Ord, ToJSON, FromJSON, NFData, Generic)
+  deriving (Eq, Ord, NFData, Generic)
 
 instance Semigroup MilliGas where
   (MilliGas a) <> (MilliGas b) = MilliGas (a + b)
@@ -264,14 +267,14 @@ instance Semigroup MilliGas where
 instance Monoid MilliGas where
   mempty = MilliGas 0
 
-microsPerGas :: Int64
-microsPerGas = 1000
+millisPerGas :: Int64
+millisPerGas = 1000
 
 gasToMilliGas :: Gas -> MilliGas
-gasToMilliGas (Gas n) = MilliGas (n * microsPerGas)
+gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
 
 milliGasToGas :: MilliGas -> Gas
-milliGasToGas (MilliGas n) = Gas (n `div` microsPerGas)
+milliGasToGas (MilliGas n) = Gas (n `div` millisPerGas)
 
 
 -- -------------------------------------------------------------------------- --
