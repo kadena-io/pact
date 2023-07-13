@@ -1,3 +1,9 @@
+4.7.2
+---
+
+- Small optimization to avoid repeated traversals during parsing
+
+
 4.7.1
 ---
 
