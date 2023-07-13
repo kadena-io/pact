@@ -39,7 +39,7 @@ computeGas i args = do
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
     else return gUsed
  where
-  msg name used = renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used)
+   msg name used = renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used)
 {-# INLINABLE computeGas #-}
 
 -- | Performs gas calculation for incremental computations with some caveats:
