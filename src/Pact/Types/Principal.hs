@@ -203,5 +203,5 @@ guardToPrincipal chargeGas = \case
     mkHash bss = do
       let bs = mconcat bss
       chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
-      return $ pactHash bs
+      return $ hash bs
     toJSONPactValue = toStrict . encode

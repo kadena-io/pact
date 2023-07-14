@@ -42,7 +42,7 @@ import           Pact.Types.Pretty           (renderCompactString)
 import Data.Attoparsec.Text (parseOnly)
 import Pact.Types.Principal (principalParser, showPrincipalType)
 import Pact.Types.Info (Info(..))
-import Pact.Types.Hash (pactHash)
+import Pact.Types.Hash (hash)
 import Pact.Types.Util (AsString(asString))
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Aeson as Aeson
@@ -162,7 +162,7 @@ notStaticErrHash :: String -> VerificationWarning
 notStaticErrHash s = FVShimmedStaticContent "hash" (T.pack s)
 
 symHash :: BS.ByteString -> S Str
-symHash =  literalS . Str . T.unpack . asString . pactHash
+symHash =  literalS . Str . T.unpack . asString . hash
 
 evalCore :: forall m a.
   (Analyzer m, SingI a) => Core (TermOf m) a -> m (S (Concrete a))

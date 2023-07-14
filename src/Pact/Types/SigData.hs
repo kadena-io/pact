@@ -60,7 +60,7 @@ instance FromJSON PublicKeyHex where
 -- payload to facilitate easier transmission via QR codes and other low
 -- bandwidth channels.
 data SigData a = SigData
-  { _sigDataHash :: PactHash
+  { _sigDataHash :: Hash
   , _sigDataSigs :: [(PublicKeyHex, Maybe UserSig)]
   -- ^ This is not a map because the order must be the same as the signers inside the command.
   , _sigDataCmd :: Maybe a
