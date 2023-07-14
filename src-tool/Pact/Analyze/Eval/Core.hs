@@ -402,8 +402,8 @@ evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
   S _ bs' <- eval bs
   result <- bfoldrM listBound
     (\sbvb sbva -> fmap _sSbv $
-      withVar vid1 (mkAVal' sbvb) $
-        withVar vid2 (mkAVal' sbva) $
+      withVar vid1 (mkAVal' sbva) $
+        withVar vid2 (mkAVal' sbvb) $
           eval f)
     a' bs'
   pure $ sansProv result
