@@ -1617,9 +1617,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Compose tya tyb tyc a' (Open avid "a" f') (Open bvid "b" g')
 
   AST_NFun node SMap [ fun, l ] -> do
-    expectNoFreeVars
     Some bTy fun' <- translateNode fun
-    captureOneFreeVar >>= \case
+    captureLastFreeVar >>= \case
       (vid, varName, EType aType) -> translateNode l >>= \case
         Some (SList listTy) l' -> do
           Refl <- singEq listTy aType ?? TypeError node
@@ -1628,9 +1627,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
         _ -> unexpectedNode astNode
 
   AST_NFun node SFilter [ fun, l ] -> do
-    expectNoFreeVars
     translateNode fun >>= \case
-      Some SBool fun' -> captureOneFreeVar >>= \case
+      Some SBool fun' -> captureLastFreeVar >>= \case
         (vid, varName, EType aType) -> translateNode l >>= \case
           Some (SList listTy) l' -> do
             Refl <- singEq listTy aType ?? TypeError node
@@ -1640,7 +1638,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> unexpectedNode astNode
 
   AST_NFun node SFold [ fun, a, l ] -> do
-    expectNoFreeVars
     Some funTy fun' <- translateNode fun
 
     -- Note: The order of these variables is important. `a` should be the first
@@ -1651,8 +1648,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     --
     -- `a` encountered first, `b` will be consed on top of it, resulting in the
     -- variables coming out backwards.
-    captureTwoFreeVars >>= \case
-      [ (vidb, varNameb, EType tyb), (vida, varNamea, EType tya) ] -> do
+    liftM2 (,) captureLastFreeVar captureLastFreeVar >>= \case
+      ((vida, varNamea, EType tya), (vidb, varNameb, EType tyb)) -> do
         Some aTy' a' <- translateNode a
         translateNode l >>= \case
           Some (SList listTy) l' -> do
@@ -1662,7 +1659,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
             pure $ Some tya $ CoreTerm $
               ListFold tya tyb (Open vida varNamea (Open vidb varNameb fun')) a' l'
           _ -> unexpectedNode astNode
-      _ -> unexpectedNode astNode
 
   AST_NFun _ name [ f, g, a ]
     | name == SAndQ || name == SOrQ -> do
@@ -1848,6 +1844,16 @@ trackCapScope capName act = do
   tsStaticCapsInScope .= current
   return r
 
+captureLastFreeVar :: TranslateM (VarId, Text, EType)
+captureLastFreeVar = do
+  vs <- use tsFoundVars
+  case vs of
+    v:vs' -> do
+      tsFoundVars .= vs'
+      pure v
+    _ -> throwError' $ FreeVarInvariantViolation $
+      "unexpected vars found: " <> tShow vs
+
 captureOneFreeVar :: TranslateM (VarId, Text, EType)
 captureOneFreeVar = do
   vs <- use tsFoundVars
@@ -1938,6 +1944,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
               CheckDefconst
                 -> error "invariant violation: this cannot be a constant"
             _ <- extendPath -- form final edge for any remaining events
+            expectNoFreeVars
             pure res
 
           handleState translateState =
