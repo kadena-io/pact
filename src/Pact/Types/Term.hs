@@ -154,7 +154,7 @@ import qualified Pact.JSON.Encode as J
 
 -- | Capture function application metadata
 data FunApp = FunApp
-  { _faInfo :: !Info
+  { _faInfo :: Info
   , _faName :: !Text
   , _faModule :: !(Maybe ModuleName)
   , _faDefType :: !DefType
@@ -403,7 +403,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TLam {
-      _tLam :: !(Lam n)
+      _tLam :: Lam n
     , _tInfo :: !Info
     } |
     TObject {

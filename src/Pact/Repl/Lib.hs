@@ -120,7 +120,7 @@ replDefs = ("Repl",
       "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
-      ("DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. "<>
+      ("DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. "<>
        "See 'env-sigs' for setting keys with associated capabilities.")
      ,defZNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
       [LitExample $ "(env-sigs [{'key: \"my-key\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>

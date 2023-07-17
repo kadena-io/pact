@@ -252,7 +252,7 @@ data Signer = Signer
  -- ^ pub key value
  , _siAddress :: !(Maybe Text)
  -- ^ optional "address", for different pub key formats like ETH
- , _siCapList :: ![SigCapability]
+ , _siCapList :: [SigCapability]
  -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 

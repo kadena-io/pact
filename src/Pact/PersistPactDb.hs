@@ -92,7 +92,7 @@ instance FromJSON UserTableInfo
 instance J.Encode UserTableInfo where
   build o = J.object
     [ "utModule" J..= utModule o ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 userTable :: TableName -> TableId
 userTable tn = TableId $ "USER_" <> asString tn

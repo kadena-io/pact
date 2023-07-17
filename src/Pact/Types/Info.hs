@@ -123,7 +123,7 @@ instance SizeOf Info where
 -- This method is currently only used in testing and benchmarking in chainweb.
 --
 mkInfo :: Text -> Info
-mkInfo !t = Info $ Just (Code t,Parsed delt len)
+mkInfo t = Info $ Just (Code t,Parsed delt len)
   where len = B.length $ encodeUtf8 t
         delt = Directed (encodeUtf8 t) 0 0 (fromIntegral len) (fromIntegral len)
 

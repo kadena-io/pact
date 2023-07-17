@@ -82,9 +82,6 @@ import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
 
-#ifdef ENABLE_TOJSON_WARNING
-import Debug.Trace
-#endif
 import GHC.Stack (HasCallStack)
 
 import qualified Pact.JSON.Encode as J
@@ -248,24 +245,12 @@ k .?= v = case v of
 -- be to define a custom type for property names, which would allow to define
 -- backward compatile 'Ord' instances.
 --
-#ifdef ENABLE_TOJSON
-enableToJSON
-    :: String
-    -> Value
-    -> Value
-#ifdef ENABLE_TOJSON_WARNING
-enableToJSON t x = traceStack (t <> ": called 'toJSON'" <> show x) x
-#else
-enableToJSON _ a = a
-#endif
-#else
 enableToJSON
     :: HasCallStack
     => String
     -> Value
     -> Value
 enableToJSON t _ = error $ t <> ": encoding to Data.Aeson.Value is unstable and therefore not supported"
-#endif
 {-# INLINE enableToJSON #-}
 
 -- | Utility for unsafe parse of JSON

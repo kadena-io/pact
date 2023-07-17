@@ -55,11 +55,11 @@ import Pact.Types.Type (Type(TyAny))
 import qualified Pact.JSON.Encode as J
 
 data PactValue
-  = PLiteral !Literal
-  | PList !(Vector PactValue)
-  | PObject !(ObjectMap PactValue)
-  | PGuard !(Guard PactValue)
-  | PModRef !ModRef
+  = PLiteral Literal
+  | PList (Vector PactValue)
+  | PObject (ObjectMap PactValue)
+  | PGuard (Guard PactValue)
+  | PModRef ModRef
   deriving (Eq,Show,Generic,Ord)
 
 instance NFData PactValue

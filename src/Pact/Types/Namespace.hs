@@ -54,7 +54,7 @@ instance J.Encode a => J.Encode (Namespace a) where
     , "user" J..= _nsUser o
     , "name" J..= _nsName o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON a => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
 

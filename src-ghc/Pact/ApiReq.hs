@@ -171,7 +171,7 @@ instance J.Encode ApiPublicMeta where
     , "gasPrice" J..?= _apmGasPrice o
     , "sender" J..?= _apmSender o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance Arbitrary ApiPublicMeta where
   arbitrary = ApiPublicMeta
@@ -217,7 +217,7 @@ instance J.Encode ApiReq where
     , "dataFile" J..= fmap (J.text . pack) (_ylDataFile o)
     , "nonce" J..= _ylNonce o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance Arbitrary ApiReq where
   arbitrary = scale (min 5) $ ApiReq
@@ -248,7 +248,7 @@ instance J.Encode AddSigsReq where
     [ "sigs" J..= J.Array (_asrSigs o)
     , "unsigned" J..= _asrUnsigned o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance Arbitrary AddSigsReq where
   arbitrary = AddSigsReq

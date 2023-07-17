@@ -119,9 +119,9 @@ instance Arbitrary TypeName where
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
-  _aName :: !Text,
-  _aType :: !(Type o),
-  _aInfo :: !Info
+  _aName :: Text,
+  _aType :: Type o,
+  _aInfo :: Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (Arg o)

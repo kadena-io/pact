@@ -126,7 +126,7 @@ instance J.Encode ModuleName where
     [ "namespace" J..= _mnNamespace o
     , "name" J..= _mnName o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
 
@@ -200,8 +200,8 @@ parseQualifiedName i = AP.parseOnly (qualifiedNameParser i <* eof)
 
 
 data BareName = BareName
-  { _bnName :: !Text
-  , _bnInfo :: !Info
+  { _bnName :: Text
+  , _bnInfo :: Info
   } deriving (Generic,Eq,Show)
 instance Arbitrary BareName where
   arbitrary = BareName <$> genBareText <*> arbitrary
@@ -219,7 +219,7 @@ data DynamicName = DynamicName
     { _dynMember :: !Text
     , _dynRefArg :: !Text
     , _dynInterfaces :: !(Set ModuleName)
-    , _dynInfo :: !Info
+    , _dynInfo :: Info
     } deriving (Generic,Eq,Show)
 instance NFData DynamicName
 instance Arbitrary DynamicName where

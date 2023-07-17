@@ -157,7 +157,7 @@ instance J.Encode KeySet where
     [ "pred" J..= _ksPredFun o
     , "keys" J..= J.Array (_ksKeys o)
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 -- -------------------------------------------------------------------------- --
 -- KeySetName

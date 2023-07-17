@@ -83,7 +83,7 @@ instance J.Encode RowDataValue where
       , "refName" J..= refName
       ]
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 tagged :: J.Encode v => Text -> v -> J.Builder
 tagged t rv = J.object

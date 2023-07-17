@@ -66,7 +66,7 @@ import qualified Pact.JSON.Encode as J
 -- data to 'endorse' a yield object.
 --
 data Provenance = Provenance
-  { _pTargetChainId :: ChainId
+  { _pTargetChainId :: !ChainId
     -- ^ the target chain id for the endorsement
   , _pModuleHash :: ModuleHash
     -- ^ a hash of current containing module
@@ -89,7 +89,7 @@ instance J.Encode Provenance where
     [ "targetChainId" J..= _pTargetChainId o
     , "moduleHash" J..= _pModuleHash o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON Provenance where parseJSON = lensyParseJSON 2
 
@@ -120,7 +120,7 @@ instance J.Encode Yield where
     , "source" J..?= _ySourceChain o
     , "provenance" J..= _yProvenance o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON Yield where
   parseJSON = withObject "Yield" $ \o ->
@@ -150,8 +150,8 @@ instance Pretty PactStep where
 -- | The type of pact continuations (i.e. defpact)
 --
 data PactContinuation = PactContinuation
-  { _pcDef :: !Name
-  , _pcArgs :: ![PactValue]
+  { _pcDef :: Name
+  , _pcArgs :: [PactValue]
   } deriving (Eq, Show, Generic)
 
 instance Pretty PactContinuation where
@@ -169,7 +169,7 @@ instance J.Encode PactContinuation where
     [ "args" J..= J.Array (_pcArgs o)
     , "def" J..= _pcDef o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 
 instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
@@ -179,7 +179,7 @@ instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
 data PactExec = PactExec
   { _peStepCount :: Int
     -- ^ Count of steps in pact (discovered when code is executed)
-  , _peYield :: Maybe Yield
+  , _peYield :: !(Maybe Yield)
     -- ^ Yield value if invoked
   , _peExecuted :: Maybe Bool
     -- ^ Only populated for private pacts, indicates if step was executed or skipped.
@@ -220,7 +220,7 @@ instance J.Encode PactExec where
     , "continuation" J..= _peContinuation o
     , "stepCount" J..= J.Aeson (_peStepCount o)
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON PactExec where
   parseJSON = withObject "PactExec" $ \o ->
@@ -247,7 +247,7 @@ data NestedPactExec = NestedPactExec
     -- ^ Step that was executed or skipped
   , _npePactId :: PactId
     -- ^ Pact id. On a new pact invocation, is copied from tx id.
-  , _npeContinuation :: !PactContinuation
+  , _npeContinuation :: PactContinuation
     -- ^ Strict (in arguments) application of pact, for future step invocations.
   , _npeNested :: Map PactId NestedPactExec
     -- ^ Track whether a current step has nested defpact evaluation results
@@ -272,7 +272,7 @@ instance J.Encode NestedPactExec where
     , "continuation" J..= _npeContinuation o
     , "stepCount" J..= J.Aeson (_npeStepCount o)
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON NestedPactExec where
   parseJSON = withObject "NestedPactExec" $ \o ->

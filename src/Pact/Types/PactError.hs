@@ -190,7 +190,7 @@ data PactErrorType
   | SyntaxError
   | GasError
   | ContinuationError
-  deriving (Show,Eq,Generic)
+  deriving (Show,Eq,Generic, Bounded, Enum)
 instance NFData PactErrorType
 
 instance FromJSON PactErrorType
@@ -203,10 +203,10 @@ instance J.Encode PactErrorType where
   build SyntaxError = J.text "SyntaxError"
   build GasError = J.text "GasError"
   build ContinuationError = J.text "ContinuationError"
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance Arbitrary PactErrorType where
-  arbitrary = elements [ EvalError, ArgsError, DbError, TxFailure, SyntaxError, GasError ]
+  arbitrary = elements [ minBound .. maxBound ]
 
 -- -------------------------------------------------------------------------- --
 -- PactError

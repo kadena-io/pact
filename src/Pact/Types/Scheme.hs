@@ -29,7 +29,7 @@ import qualified Pact.JSON.Encode as J
 --------- PPKSCHEME DATA TYPE ---------
 
 data PPKScheme = ED25519 | ETH
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic, Bounded, Enum)
 
 
 instance NFData PPKScheme
@@ -46,7 +46,7 @@ instance ParseText PPKScheme where
   {-# INLINE parseText #-}
 
 instance Arbitrary PPKScheme where
-  arbitrary = elements [ED25519, ETH]
+  arbitrary = elements [ minBound .. maxBound ]
 
 instance J.Encode PPKScheme where
   build ED25519 = J.text "ED25519"

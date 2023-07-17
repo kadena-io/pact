@@ -84,7 +84,7 @@ instance NFData Hash
 
 instance J.Encode Hash where
   build = J.build . hashToText
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
@@ -92,7 +92,7 @@ instance FromJSON Hash where
 
 instance FromJSONKey Hash where
     fromJSONKey = FromJSONKeyTextParser parseText
-    {-# INLINE fromJSONKey #-}
+    {-# INLINABLE fromJSONKey #-}
 
 instance ParseText Hash where
   parseText s = Hash . toShort <$> parseB64UrlUnpaddedText s
@@ -139,7 +139,7 @@ instance NFData (TypedHash h)
 
 instance J.Encode (TypedHash h) where
   build = J.build . typedHashToText
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON (TypedHash h) where
   parseJSON = withText "Hash" parseText

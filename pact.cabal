@@ -50,7 +50,7 @@ flag tests-in-lib
 -- Pact library
 
 library
-  cpp-options: -DLEGACY_PARSER -DPACT_TOJSON
+  cpp-options: -DLEGACY_PARSER
   -- common to all configurations:
   hs-source-dirs: src
   default-language: Haskell2010
@@ -397,7 +397,7 @@ test-suite hspec
   hs-source-dirs:   tests
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-  cpp-options: -DLEGACY_PARSER -DDELTA_BYTES=1 -DPACT_TOJSON
+  cpp-options: -DLEGACY_PARSER -DDELTA_BYTES=1
   build-tool-depends: pact:pact
   build-depends:
     , aeson

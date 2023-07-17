@@ -58,7 +58,7 @@ import Data.Decimal
 import Control.DeepSeq
 import Data.Ratio ((%), denominator)
 import Data.Serialize (Serialize)
-import Data.String (IsString, fromString)
+import Data.String (IsString)
 import Test.QuickCheck
 import Test.QuickCheck.Instances ()
 
@@ -225,7 +225,7 @@ instance J.Encode Separator where
   build Colon = J.build @Text ":"
   build ColonEquals = J.build @Text ":="
   build Comma = J.build @Text ","
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON Separator where
   parseJSON = withText "Separator" $ \t -> case t of
@@ -238,7 +238,7 @@ instance Arbitrary Separator where
   arbitrary = elements [Colon, ColonEquals, Comma]
 
 expInfoField :: IsString a => a
-expInfoField = fromString "i"
+expInfoField = "i"
 
 data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
@@ -256,7 +256,7 @@ instance J.Encode i => J.Encode (LiteralExp i) where
     [ expInfoField J..= _litInfo o
     , "lit" J..= _litLiteral o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON i => FromJSON (LiteralExp i) where
   parseJSON = withObject "LiteralExp" $ \o ->
@@ -268,8 +268,8 @@ instance Pretty (LiteralExp i) where
 data AtomExp i = AtomExp
   { _atomAtom :: !Text
   , _atomQualifiers :: ![Text]
-  , _atomDynamic :: !Bool
-  , _atomInfo :: !i
+  , _atomDynamic :: Bool
+  , _atomInfo :: i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
@@ -285,7 +285,7 @@ instance J.Encode i => J.Encode (AtomExp i) where
     , "q" J..= J.array (_atomQualifiers o)
     , expInfoField J..= _atomInfo o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON i => FromJSON (AtomExp i) where
   parseJSON = withObject "AtomExp" $ \o ->
@@ -316,7 +316,7 @@ instance J.Encode i => J.Encode (ListExp i) where
     , "d" J..= _listDelimiter o
     , expInfoField J..= _listInfo o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON i => FromJSON (ListExp i) where
   parseJSON = withObject "ListExp" $ \o ->
@@ -347,7 +347,7 @@ instance J.Encode i => J.Encode (SeparatorExp i) where
     [ "sep" J..= _sepSeparator o
     , expInfoField J..= _sepInfo o
     ]
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance Pretty (SeparatorExp i) where
   pretty (SeparatorExp sep' _) = pretty sep'
@@ -394,7 +394,7 @@ instance J.Encode i => J.Encode (Exp i) where
   build (EAtom a) = J.build a
   build (EList a) = J.build a
   build (ESeparator a) = J.build a
-  {-# INLINE build #-}
+  {-# INLINABLE build #-}
 
 instance FromJSON i => FromJSON (Exp i) where
   parseJSON v =

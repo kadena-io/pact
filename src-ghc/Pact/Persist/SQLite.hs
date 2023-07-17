@@ -51,7 +51,7 @@ data SQLite = SQLite
   { conn :: Database
   , config :: SQLiteConfig
   , logger :: Logger
-  , tableStmts :: (M.Map Utf8 TableStmts)
+  , tableStmts :: M.Map Utf8 TableStmts
   , txStmts :: TxStmts
   }
 
