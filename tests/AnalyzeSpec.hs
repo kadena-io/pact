@@ -4167,6 +4167,11 @@ spec = describe "analyze" $ do
         @model [(property (= result 115))]
         (fold (+) 0 [100 10 5]))
       |]
+    expectVerified [text|
+      (defun test:bool ()
+        @model[(property (= result false))]
+        (fold (lambda (p: bool curr:string) false) false [""]))
+      |]
 
   describe "and?" $ do
     expectVerified [text|
