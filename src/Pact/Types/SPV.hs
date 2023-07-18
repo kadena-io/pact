@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -31,10 +32,13 @@ import Data.Text.Encoding
 
 import GHC.Generics hiding (to)
 
+import Test.QuickCheck
+
 import Pact.Types.Continuation (PactExec)
 import Pact.Types.Pretty (Pretty(..), prettyString)
 import Pact.Types.Term (Object, Name)
 
+import qualified Pact.JSON.Encode as J
 
 newtype ContProof = ContProof { _contProof :: ByteString }
   deriving (Eq, Ord, Show, Generic)
@@ -42,20 +46,26 @@ newtype ContProof = ContProof { _contProof :: ByteString }
 instance Wrapped ContProof
 
 instance NFData ContProof
-instance ToJSON ContProof where
-  toJSON (ContProof bs) = String (decodeUtf8 bs)
+
+instance J.Encode ContProof where
+  build (ContProof bs) = J.build $ decodeUtf8 bs
+  {-# INLINE build #-}
+
 instance FromJSON ContProof where
   parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
 instance Pretty ContProof where
   pretty = prettyString . show
 
+instance Arbitrary ContProof where
+  arbitrary = ContProof . encodeUtf8 <$> arbitrary
+
 -- | Backend for SPV support
 data SPVSupport = SPVSupport
-  { _spvSupport :: Text -> Object Name -> IO (Either Text (Object Name))
+  { _spvSupport :: !(Text -> (Object Name) -> IO (Either Text (Object Name)))
     -- ^ Attempt to verify an SPV proof of a given type,
     -- given a payload object. On success, returns the
     -- specific data represented by the proof.
-  , _spvVerifyContinuation :: ContProof -> IO (Either Text PactExec)
+  , _spvVerifyContinuation :: !(ContProof -> IO (Either Text PactExec))
     -- ^ Attempt to verify an SPV proof of a continuation given
     -- a continuation payload object bytestring. On success, returns
     -- the 'PactExec' associated with the proof.

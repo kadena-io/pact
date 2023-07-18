@@ -46,8 +46,11 @@ flag tests-in-lib
   default:     False
   manual:      True
 
-library
+-- -------------------------------------------------------------------------- --
+-- Pact library
 
+library
+  cpp-options: -DLEGACY_PARSER
   -- common to all configurations:
   hs-source-dirs: src
   default-language: Haskell2010
@@ -87,6 +90,7 @@ library
     Pact.Native.Keysets
     Pact.Native.Decrypt
     Pact.Native.Pairing
+    Pact.Native.Pairing.GaloisField
     Pact.Parse
     Pact.PersistPactDb
     Pact.Persist
@@ -119,6 +123,7 @@ library
     Pact.Types.Native
     Pact.Types.PactError
     Pact.Types.PactValue
+    Pact.Types.PactValue.Arbitrary
     Pact.Types.Parser
     Pact.Types.Principal
     Pact.Types.Advice
@@ -133,24 +138,20 @@ library
     Pact.Types.SizeOf
     Pact.Types.SPV
     Pact.Types.Term
+    Pact.Types.Term.Arbitrary
+    Pact.Types.Term.Internal
     Pact.Types.Type
     Pact.Types.Util
     Pact.Types.Version
     Pact.Types.Typecheck
     Pact.Typechecker
-  if flag(with-integer-gmp)
-    build-depends:
-        , base >=4.15.0.0
-  else
-    build-depends:
-      , base >=4.9.0.0 && < 4.15.0.0
-    if !impl(ghcjs)
-      build-depends:
-        , integer-gmp
+    Pact.Utils.Servant
+  
   build-depends:
+    , base >= 4.18.0.0
     , Decimal >=0.4.2
     , QuickCheck >=2.12.6.1
-    , aeson >=0.11.3.0
+    , aeson >=2
     , attoparsec >=0.13.0.2
     -- note: this is the real constraint, but due to base changes
     -- we split for compat.
@@ -169,24 +170,24 @@ library
     , errors >=2.3
     , exceptions >=0.8.3
     , filepath >=1.4.1.0
-    , hashable >=1.2.4.0
+    , hashable >=1.4
     , lens >=4.14
-    , lens-aeson >=1.0.0.5
     , megaparsec >=9
     , mtl >=2.2.1
+    , pact-json >=0.1
     , pact-time >=0.2
     , parsers >=0.12.4
     , prettyprinter >=1.2
     , prettyprinter-ansi-terminal >=1.1
     , quickcheck-instances >=0.3
     , reflection
+    , scientific >= 0.3
     , safe-exceptions
     , semigroupoids >=5.0
     , servant
-    , text >=1.2.2.1
-    , transformers >=0.5.2.0
-    , trifecta >=2.1
-    , unordered-containers >=0.2.7.2
+    , text >=2
+    , trifecta >=2.1.1.1
+    , unordered-containers >=0.2.19
     , utf8-string >=1.0.1.1
     , vector >=0.11.0.0
     , vector-algorithms >=0.7
@@ -232,8 +233,8 @@ library
       , direct-sqlite >=2.3.27
       , memory
       , safe-exceptions >=0.1.5.0
-      , servant-client
-      , servant-client-core
+      , servant-client >=0.16
+      , servant-client-core >=0.16
       , statistics >=0.13.3
       , yaml
     if flag(build-tool)
@@ -299,17 +300,19 @@ library
         , neat-interpolation >=0.4
         , optparse-applicative >=0.12.1.0
         , sbv >=9.0
+        , semigroupoids >=5.0
         , servant-server
+        , transformers >= 0.5.2.0 && < 0.7
         , wai-cors
         , warp
+      if !os(windows)
+        build-depends: unix
     if flag(cryptonite-ed25519)
       cpp-options: -DCRYPTONITE_ED25519
     else
       build-depends:
         , crypto-api
         , ed25519-donna
-    if !os(windows)
-      build-depends: unix
     if flag(tests-in-lib)
       hs-source-dirs: tests
       build-depends:
@@ -318,6 +321,9 @@ library
         , hspec-golden >=0.1.0.2
         , hw-hspec-hedgehog >=0.1
         , intervals
+
+-- -------------------------------------------------------------------------- --
+-- Executables and Benchmarks
 
 executable pact
   if impl(ghcjs) || !flag(build-tool)
@@ -356,12 +362,35 @@ executable gasmodel
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+benchmark bench-json
+  if impl(ghcjs) || !flag(build-tool)
+    buildable: False
+  type: exitcode-stdio-1.0
+  main-is: PactJson.hs
+  build-depends:
+    , QuickCheck
+    , aeson
+    , base
+    , bound
+    , bytestring
+    , criterion
+    , pact
+    , pact-json
+  hs-source-dirs: bench
+  ghc-options: -Wall -threaded -rtsopts "-with-rtsopts=-N" -O
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  default-language: Haskell2010
+
+-- -------------------------------------------------------------------------- --
+-- Test Suite
+
 test-suite hspec
   main-is:          PactTests.hs
   type:             exitcode-stdio-1.0
   hs-source-dirs:   tests
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  cpp-options: -DLEGACY_PARSER -DDELTA_BYTES=1
   build-tool-depends: pact:pact
   build-depends:
     , aeson
@@ -372,7 +401,6 @@ test-suite hspec
     , containers
     , data-default
     , hspec
-    , hspec-core
     , pact
     , unordered-containers
 
@@ -382,6 +410,7 @@ test-suite hspec
     RoundTripSpec
     PrincipalSpec
     SizeOfSpec
+    Test.Pact.Native.Pairing
 
   if !impl(ghcjs)
     other-modules:
@@ -389,16 +418,24 @@ test-suite hspec
       ParserSpec
       SchemeSpec
       SignatureSpec
+      Test.Pact.Parse
+      Test.Pact.Utils.LegacyValue
 
     build-depends:
+      , QuickCheck
       , base16-bytestring
       , directory
       , errors
       , filepath
+      -- only used via CPP min version macro:
+      , pact-json >= 0.1
       , lens
       , mtl
+      , mod
+      , semirings
       , text
       , transformers
+      , trifecta
       , vector
 
     if flag(build-tool)
@@ -428,13 +465,11 @@ test-suite hspec
 
       build-depends:
         , Decimal
-        , QuickCheck
         , deepseq
         , directory
         , exceptions
         , hedgehog >=1.0.1
         , hspec-golden >=0.1.0.2
-        , hspec-expectations
         , hspec-hedgehog
         , groups
         , http-client
@@ -442,10 +477,8 @@ test-suite hspec
         , intervals
         , mmorph
         , neat-interpolation
-        , semirings
-        , prettyprinter
         , sbv
-        , servant-client
+        , servant-client >=0.16
         , temporary >=1.3
         , yaml
         , process

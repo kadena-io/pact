@@ -1,7 +1,9 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.SQLite
@@ -31,30 +33,47 @@ module Pact.Types.SQLite
   , SQLiteConfig (..), dbFile, pragmas
   ) where
 
-
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Control.Monad
-import Database.SQLite3.Direct as SQ3
-import Data.String
+import Control.Monad.Catch
+
+import Data.Aeson
 import qualified Data.ByteString as BS
 import Data.Int
-import Data.Aeson
+import Data.String
+
+import Database.SQLite3.Direct as SQ3
 
 import GHC.Generics
 
+import qualified Pact.JSON.Encode as J
+
 import Prelude
-import Control.Monad.Catch
 
+import Test.QuickCheck
 
-newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
+newtype Pragma = Pragma String
+    deriving (Eq,Show)
+    deriving newtype (FromJSON, IsString, Arbitrary)
+
+instance J.Encode Pragma where
+  build (Pragma s) = J.string s
 
 data SQLiteConfig = SQLiteConfig
   { _dbFile :: FilePath
   , _pragmas :: [Pragma]
   } deriving (Eq,Show,Generic)
 instance FromJSON SQLiteConfig
-instance ToJSON SQLiteConfig
 makeLenses ''SQLiteConfig
+
+instance J.Encode SQLiteConfig where
+  build o = J.object
+    [ "_pragmas" J..= J.Array (_pragmas o)
+    , "_dbFile" J..= J.string (_dbFile o)
+    ]
+
+instance Arbitrary SQLiteConfig where
+  arbitrary = SQLiteConfig <$> arbitrary <*> arbitrary
 
 -- | Statement input types
 data SType = SInt Int64 | SDouble Double | SText Utf8 | SBlob BS.ByteString deriving (Eq,Show)
