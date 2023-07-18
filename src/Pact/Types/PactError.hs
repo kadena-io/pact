@@ -212,10 +212,10 @@ instance Arbitrary PactErrorType where
 -- PactError
 
 data PactError = PactError
-  { peType :: !PactErrorType
-  , peInfo :: !Info
-  , peCallStack :: ![StackFrame]
-  , peDoc :: !Doc }
+  { peType :: PactErrorType
+  , peInfo :: Info
+  , peCallStack :: [StackFrame]
+  , peDoc :: Doc }
   deriving (Eq,Generic)
 
 instance NFData PactError

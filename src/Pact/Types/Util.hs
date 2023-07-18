@@ -25,10 +25,7 @@ module Pact.Types.Util
   , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
-  , type JsonProperties
-  , type JsonMProperties
   , enableToJSON
-  , (.?=)
   -- | Base 16 helpers
   , parseB16JSON, parseB16Text, parseB16TextOnly
   , toB16Text
@@ -179,60 +176,6 @@ maybeToEither :: String -> Maybe a -> Either String a
 maybeToEither err Nothing = Left err
 maybeToEither _ (Just a)  = Right a
 
--- | Type of JSON properties that can be used efficiently with both 'toJSON' and
--- 'toEncoding'. Functions of this type should be inlined.
---
--- Usage:
---
--- @
--- data MyType = MyType { _mtA :: Int, _mtB :: Int }
---
--- myTypeProperties :: JsonProperties MyType
--- myTypeProperties o = [ "a" .= _mtA o, "b" .= _mtB o ]
--- {-# INLINE myTypeProperties #-}
---
--- instance ToJSON MyType where
---  toJSON = object . myTypeProperties
---  toEncoding = pairs . mconcat . myTypeProperties
---  {-# INLINE toJSON #-}
---  {-# INLINE toEncoding #-}
--- @
---
-type JsonProperties a = forall kv . KeyValue kv => a -> [kv]
-
--- | A variant of 'JsonProperties' that supports the use of '.?=' in order to
--- omit 'Nothing' values form the result instead of encoding them as 'null'.
---
--- This pattern is protentially less efficient for implementing 'toJSON'. Thus
--- 'JsonProperties' should be prefered.
---
--- In the following example @encode (MyType 0 Nothing)@ will be encoded as
--- @{ "a": 0 }@.
---
--- @
--- data MyType = MyType { _mtA :: Int, _mtB :: Maybe Int }
---
--- myTypeProperties :: JsonMProperties MyType
--- myTypeProperties o = mconcat [ "a" .= _mtA o, "b" .?= _mtB o ]
--- {-# INLINE myTypeProperties #-}
---
--- instance ToJSON MyType where
---  toJSON = Object . myTypeProperties -- note the use of upper case 'Object'
---  toEncoding = pairs . myTypeProperties
---  {-# INLINE toJSON #-}
---  {-# INLINE toEncoding #-}
--- @
---
-type JsonMProperties a = forall kv . Monoid kv => KeyValue kv => a -> kv
-
--- | Declare a JSON property where 'Nothing' values are omitted in the result.
--- To be used along with 'JsonMProperties'.
---
-(.?=) :: ToJSON v => Monoid kv => KeyValue kv => Key -> Maybe v -> kv
-k .?= v = case v of
-  Nothing -> mempty
-  Just v' -> k .= v'
-{-# INLINE (.?=) #-}
 
 -- | Support for 'toJSON' is required for YAML encodings, which is required by
 -- most Pact data types.

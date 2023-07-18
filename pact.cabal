@@ -146,16 +146,9 @@ library
     Pact.Types.Typecheck
     Pact.Typechecker
     Pact.Utils.Servant
-  if flag(with-integer-gmp)
-    build-depends:
-        , base >=4.15.0.0
-  else
-    build-depends:
-      , base >=4.9.0.0 && < 4.15.0.0
-    if !impl(ghcjs)
-      build-depends:
-        , integer-gmp
+  
   build-depends:
+    , base >= 4.18.0.0
     , Decimal >=0.4.2
     , QuickCheck >=2.12.6.1
     , aeson >=2

@@ -274,7 +274,7 @@ type TxLogRaw = TxLog RawTxLogData
 --
 -- This is only used by `getTxLogs` and the related "historic" pact db queries.
 --
--- We respresent the raw TxLog values as JSON Value. However we wrap it into a
+-- We represent the raw TxLog values as JSON Value. However we wrap it into a
 -- newtype to prevent it from being serialized to JSON directly. The reason is
 -- that we use the content of TxLogs to compute hashes and serialization via
 -- Value doesn't roundtrip safely. Ideally, we'd like to ban the direct use of
