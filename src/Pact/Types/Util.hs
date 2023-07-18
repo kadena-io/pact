@@ -49,12 +49,6 @@ module Pact.Types.Util
   , arbitraryIdent
   ) where
 
--- Enable to make legacy toJSON available (required for yaml encodings)
-#define ENABLE_TOJSON
-
--- Enable to make trace calls to toJSON (only for debugging purposes)
--- #define ENABLE_TOJSON_WARNING
-
 import Data.Aeson
 import Data.Aeson.Types
 import GHC.Generics
