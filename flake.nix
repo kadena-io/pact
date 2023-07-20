@@ -34,7 +34,7 @@
                 zlib
                 z3
                 pkgconfig
-                python3 python3Packages.sphinx python3Packages.sphinx_rtd_theme
+                (python3.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme]))
                 pandoc perl
               ];
               # shell.crossPlatforms = p: [ p.ghcjs ];
@@ -43,6 +43,21 @@
       ];
     in flake // {
       packages.default = flake.packages."pact:exe:pact";
+
+      packages.docs = pkgs.stdenv.mkDerivation {
+        name = "pact-docs";
+        src = ./docs;
+        buildInputs = [
+          (pkgs.python3.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme]))
+          pkgs.pandoc
+          pkgs.perl
+        ];
+        buildPhase = ''
+          source ./work.sh
+          mkdir $out
+          cp -r _build/* $out
+        '';
+      };
 
       devShell = pkgs.haskellPackages.shellFor {
         buildInputs = with pkgs.haskellPackages; [
