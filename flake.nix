@@ -52,18 +52,8 @@
       packages.default = flake.packages."pact:exe:pact";
       packages.check = pkgs.runCommand "check" {} ''
         echo ${mkCheck "pact" packages.default}
-        echo ${mkCheck "devShell" devShell}
+        echo ${mkCheck "devShell" flake.devShell}
         echo works > $out
       '';
-
-      devShell = pkgs.haskellPackages.shellFor {
-        buildInputs = with pkgs.haskellPackages; [
-          cabal-install
-          haskell-language-server
-          # hlint
-        ];
-
-        withHoogle = true;
-      };
     });
 }
