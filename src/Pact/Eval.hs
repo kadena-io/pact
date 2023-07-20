@@ -59,9 +59,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Monoid (Sum(..))
-import Data.Aeson (Value)
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.Aeson as A
 import Data.Default
 import Data.Foldable
 import Data.Functor.Classes
@@ -89,8 +86,9 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
-import Control.Applicative (liftA2)
 
+import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -100,7 +98,7 @@ evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx :: Info -> Eval e [TxLog Value]
+evalCommitTx :: Info -> Eval e [TxLogJson]
 evalCommitTx i = do
   revokeAllCapabilities
   -- backend now handles local exec
@@ -640,7 +638,7 @@ evaluateDefs info mdef defs = do
       pure (_hfAllDefs hf)
   where
   -- | traverse to find deps and form graph
-  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
     defTerm' <- forM defTerm $ \(f :: Name) -> do
       dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
       case (dm, f) of
@@ -772,7 +770,7 @@ fullyQualifyDefs info mdef defs = do
           (Nothing, _) -> resolveError f
 
     -- | traverse to find deps and form graph
-    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
       let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
       disablePact48 <- lift (isExecutionFlagSet FlagDisablePact48)
       defTerm' <- forM defTerm $ \(f :: Name) -> resolveName disablePact48 memo f
@@ -798,7 +796,7 @@ evaluateConstraints info m evalMap = do
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
         Just (ModuleData (MDInterface Interface{..}) irefs _) -> do
-          em' <- HM.foldrWithKey (solveConstraint ifn info) (pure refMap) irefs
+          em' <- LHM.foldrWithKey (solveConstraint ifn info) (pure refMap) $ LHM.fromList $ HM.toList irefs
           let um = over mMeta (<> _interfaceMeta) m'
           newIf <- ifExecutionFlagSet' FlagPreserveModuleIfacesBug ifn _interfaceName
           pure (um, em', newIf:newIfs)
@@ -1329,7 +1327,7 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
 createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
   let pc = PactContinuation (QName qn{_qnInfo = def}) pvs
-  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
+  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> J.encodeStrict pc
 createNestedPactId i n _ =
   evalError' i $ "Error creating nested pact id, name is not qualified: " <> pretty n
 

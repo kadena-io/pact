@@ -28,7 +28,7 @@ import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 
-import Data.Aeson (eitherDecode,toJSON)
+import Data.Aeson (eitherDecode)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable
@@ -42,7 +42,6 @@ import Data.Text.Encoding
 import Pact.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
-
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
@@ -80,6 +79,7 @@ import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Interpreter
 import Pact.Runtime.Utils
+import Pact.JSON.Legacy.Value
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -402,8 +402,8 @@ setmsg i as = case as of
     case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
       Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
       Right v -> go v
-  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
-  [a] -> go (toJSON a)
+  [TObject (Object om _ _ _) _] -> go (toLegacyJsonViaEncode (fmap toPactValueLenient om))
+  [a] -> go (toLegacyJsonViaEncode a)
   _ -> argsError i as
   where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 

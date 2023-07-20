@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -29,10 +28,6 @@ import Pact.Server.API
 import Pact.Types.Runtime
 
 import Utils
-
-#if ! MIN_VERSION_servant_client(0,16,0)
-type ClientError = ServantError
-#endif
 
 spec :: Spec
 spec = do

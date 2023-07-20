@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Utils
 ( testMgr
@@ -14,9 +15,11 @@ module Utils
 import Control.Concurrent (threadDelay)
 import Control.Exception
 
-import Data.Aeson
+import qualified Data.Text as T
 
 import qualified Network.HTTP.Client as HTTP
+
+import qualified Pact.JSON.Encode as J
 
 import Servant.Client
 
@@ -87,13 +90,13 @@ withTestConfig :: String -> [ExecutionFlag] -> (FilePath -> IO a) -> IO a
 withTestConfig label flags inner =
   withSystemTempDirectory ("pact-tests." <> label) $ \dir -> do
     let confFilePath = dir <> "/" <> "test-config.yaml"
-    encodeFile confFilePath $ object
-      [ "port" .= (0 :: Int) -- ignored by test server
-      , "logDir" .= dir
-      , "persistDir" .= dir
-      , "pragmas" .= ([] :: [String])
-      , "verbose" .= False
-      , "execConfig" .= flags
+    J.encodeFile confFilePath $ J.object
+      [ "port" J..= J.Aeson @Int 0 -- ignored by test server
+      , "logDir" J..= J.string dir
+      , "persistDir" J..= J.string dir
+      , "pragmas" J..= J.Array @[T.Text] []
+      , "verbose" J..= False
+      , "execConfig" J..= J.Array flags
       ]
     inner confFilePath
 

@@ -19,7 +19,6 @@ import Criterion.Main hiding (env)
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -58,6 +57,8 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Capability
 import Pact.Runtime.Utils
+import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Encode as J
 
 -- | Flags for enabling file-based perf bracketing,
 -- see 'mkFilePerf' below.
@@ -147,7 +148,7 @@ loadBenchModule db = do
   m <- decodeUtf8 <$> BS.readFile "tests/bench/bench.pact"
   pc <- parseCode m
   let md = MsgData
-           (object
+           (toLegacyJson $ object
             [ "keyset" .= object
               [ "keys" .= ["benchadmin"::Text]
               , "pred" .= (">"::Text)]
@@ -183,7 +184,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData cdata Nothing pactInitialHash ss
+  let md = MsgData (toLegacyJson cdata) Nothing pactInitialHash ss
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Transactional md (versionedNativesRefStore ec)
           prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -195,7 +196,7 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
-  let md = MsgData Null Nothing pactInitialHash []
+  let md = MsgData (toLegacyJson Null) Nothing pactInitialHash []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   env <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Local md (versionedNativesRefStore ec)
             prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -235,11 +236,11 @@ benchReadValue _ (TxTable _t) _k = rcp Nothing
 mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
-    $ toStrict . encode
-    $ Payload payload "nonce" () ss Nothing
+    $ J.encodeStrict
+    $ Payload payload "nonce" (J.Aeson ()) ss Nothing
   return (str, cmd)
   where
-    payload = Exec $ ExecMsg t Null
+    payload = Exec $ ExecMsg t (toLegacyJson Null)
     ss = keyPairsToSigners kps
 
 pk :: Text

@@ -15,6 +15,7 @@ module Pact.Gas
  , putGas)
  where
 
+import Control.Monad.State.Strict
 import Data.Text
 import Data.IORef
 import Pact.Types.Runtime
@@ -32,11 +33,13 @@ computeGas i args = do
     (info,name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
   let gUsed = g0 + g1
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),g1):)
+  evalLogGas %= fmap ((msg name gUsed, g1):)
   putGas gUsed
   if gUsed > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> pretty _geGasLimit <> ") exceeded: " <> pretty gUsed
     else return gUsed
+ where
+   msg name used = renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used)
 {-# INLINABLE computeGas #-}
 
 -- | Performs gas calculation for incremental computations with some caveats:

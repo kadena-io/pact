@@ -6,13 +6,16 @@ import qualified Blake2Spec
 import qualified KeysetSpec
 import qualified RoundTripSpec
 import qualified PrincipalSpec
+import qualified Test.Pact.Utils.LegacyValue
 import qualified SizeOfSpec
+import qualified Test.Pact.Native.Pairing
 
 #ifndef ghcjs_HOST_OS
 import qualified PactTestsSpec
 import qualified ParserSpec
 import qualified SchemeSpec
 import qualified SignatureSpec
+import qualified Test.Pact.Parse
 
 # ifdef BUILD_TOOL
 import qualified AnalyzePropertiesSpec
@@ -40,7 +43,9 @@ main = hspec $ parallel $ do
   describe "KeysetSpec" KeysetSpec.spec
   describe "RoundTripSpec" RoundTripSpec.spec
   describe "PrincipalSpec" PrincipalSpec.spec
+  describe "Test.Pact.Utils.LegacyValue" Test.Pact.Utils.LegacyValue.spec
   describe "SizeOfSpec" SizeOfSpec.spec
+  describe "Test.Pact.Native.Pairing" Test.Pact.Native.Pairing.spec
 
 #ifndef ghcjs_HOST_OS
 
@@ -48,6 +53,7 @@ main = hspec $ parallel $ do
   describe "ParserSpec" ParserSpec.spec
   describe "SignatureSpec" SignatureSpec.spec
   describe "SchemeSpec" SchemeSpec.spec
+  describe "Test.Pact.Parse" Test.Pact.Parse.spec
 
 # ifdef BUILD_TOOL
 
