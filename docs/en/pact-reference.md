@@ -1277,9 +1277,52 @@ Declaring models shares the same syntax with modules:
 Module References {#modrefs}
 ---
 
-Pact 3.7 gains a form of _genericism_ with _module references_. This is motivated by the desire to interoperate between
-modules that implement a common interface, and to be able to treat the indicated module as a data value to gain
-_polymorphism_ across modules.
+Pact 3.7 introduces module references (also called "modrefs"), a new language feature that enables important use-cases
+that require polymorphism. For example, a Uniswap-like DEX allows users to specify pairs of tokens to allow trading
+between them. The `fungible-v2` interface allows tokens to offer identical operations such as `transfer-create`, but without
+a way to abstract over different `fungible-v2` implementations, a DEX smart contract would have to be upgraded for each
+pair with custom code for every operation.
+
+With module references, the DEX can now accept pairs of modref values where each value references a concrete module that
+implements the `fungible-v2` interface, giving it the ability to call `fungible-v2` operations using those values. The refmod
+values are "normal Pact values" that can be stored in the database, referenced in events and returned from
+functions.
+
+### Modrefs and Polymorphism
+
+Modrefs provide polymorphism for use cases like this with an emphasis on interoperability. A modref is specified with
+one or more interfaces, allowing for values of that modref to reference modules that implement those interfaces. So, for
+example, a modref that specifies `fungible-v2` accepts a reference to the Kadena `coin` KDA token module, because `coin`
+implements `fungible-v2`. Of course there is nothing special about `fungible-v2`: modrefs can specify any defined interface
+and accept any module that implements said interface. In this way, modrefs bring polymorphism to Pact.
+
+To programmers coming from polymorphic languages like Javascript, Java or Python, module references seem
+familiar. However, Pact is very much not object-oriented so there are important differences in how polymorphism works
+and what it is best used for.
+
+A key difference is that while modrefs allow polymorphism over modules, they don't offer polymorphism over data. Modules
+in Pact are not data in any practical sense: not only are they "code only", but they cannot be dynamically created
+within the Pact system. Meanwhile, data stored in the database is managed using schemas, which have no polymorphic
+features via modrefs or any other mechanism. This is why we suggest modrefs are more about "interoperation" instead of
+polymorphism per se, avoiding the OO connotation of "objects changing shape".
+
+Additionally, programmers should resist the urge to employ other OO-centric patterns using modrefs. A popular idea of
+"coding around interfaces, not implementations" is actually harmful in Pact if polymorphism is not needed. Programmers
+should prefer direct references whenever possible as they are not only faster but safer, as Pact aggressively and
+permanently inlines all directly-referenced code in the interests of code stability.
+
+### Important concerns when using modrefs.
+
+Modrefs are late-binding, which means that the latest version of a module will always be used when a module operation is
+invoked, in contrast with direct bindings which permanently reference the bound module version. _TODO here I would like to
+mention that we're going to be pinning modrefs in an upcoming release_.
+
+As modrefs introduce the ability to call code unknown at compile time, this means that **any modref call should be treated as
+untrusted code**. Thus programmers should avoid invoking modrefs when a sensitive capability is in scope, as it will
+make "private capability functions" callable by the modref, when normally this would not be possible. _TODO here I would
+like to note that we are going to prevent functions with `require-capability` from being called top-level to close this hole_.
+
+### Coding with modrefs
 
 Modules and interfaces thus need to be referenced directly, which is simply accomplished by issuing their name in code.
 
@@ -1327,7 +1370,6 @@ and using the [dereference operator](#deref) `::` to invoke a member function of
 (foo impl) ;; 'impl' references the module defined above, of type 'module{baz}'
 ```
 
-Module references can be used as normal pact values, which includes storage in the database.
 
 
 
