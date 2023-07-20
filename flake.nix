@@ -41,8 +41,20 @@
             };
         })
       ];
-    in flake // {
+      # This package depends on other packages at buildtime, but its output does not
+      # depend on them. This way, we don't have to download the entire closure to verify
+      # that those packages build.
+      mkCheck = name: package: pkgs.runCommand ("check-"+name) {} ''
+        echo ${name}: ${package}
+        echo works > $out
+      '';
+    in flake // rec {
       packages.default = flake.packages."pact:exe:pact";
+      packages.check = pkgs.runCommand "check" {} ''
+        echo ${mkCheck "pact" packages.default}
+        echo ${mkCheck "devShell" devShell}
+        echo works > $out
+      '';
 
       devShell = pkgs.haskellPackages.shellFor {
         buildInputs = with pkgs.haskellPackages; [
