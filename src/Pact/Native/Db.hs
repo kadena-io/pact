@@ -45,6 +45,8 @@ import Pact.Types.Runtime
 import Pact.Types.PactValue
 import Pact.Types.KeySet (parseAnyKeysetName)
 
+import Debug.Trace
+
 class Readable a where
   readable :: a -> ReadValue
 
@@ -464,8 +466,9 @@ createTable' g i [t@TTable {..}] = do
     success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
 createTable' _ i as = argsError i as
 
-guardTable :: Pretty n => FunApp -> Term n -> GuardTableOp -> Eval e ()
-guardTable i TTable {..} dbop =
+guardTable :: (Pretty n, Show n) => FunApp -> Term n -> GuardTableOp -> Eval e ()
+guardTable i t@TTable {..} dbop = do
+  traceM $ "Within guard-table for " <> show t <> " " <> show i
   checkLocalBypass $
     guardForModuleCall (_faInfo i) _tModuleName $
       enforceBlessedHashes i _tModuleName _tHash
@@ -484,8 +487,12 @@ guardTable i t _ = isOffChainForkedError >>= \case
 enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()
 enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of
         MDModule Module{..}
-          | h == _mHash -> return () -- current version ok
-          | h `HS.member` _mBlessed -> return () -- hash is blessed
+          | h == _mHash -> do
+            traceM $ "CURR module hash" <> show h
+            return () -- current version ok
+          | h `HS.member` _mBlessed -> do
+            traceM $ "Within blessed members " <> show h <> " | Blessed " <> show _mBlessed
+            return () -- hash is blessed
           | otherwise -> evalError' i $
             "Execution aborted, hash not blessed for module " <> pretty mn <> ": " <> pretty h
         _ -> evalError' i $ "Internal error: expected module reference " <> pretty mn
