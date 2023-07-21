@@ -493,6 +493,8 @@ enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of
           | h `HS.member` _mBlessed -> do
             traceM $ "Within blessed members " <> show h <> " | Blessed " <> show _mBlessed
             return () -- hash is blessed
-          | otherwise -> evalError' i $
-            "Execution aborted, hash not blessed for module " <> pretty mn <> ": " <> pretty h
+          | otherwise -> do
+            traceM $ "CURRENTLY LOADED MODULE FOR " <> show i <> "\n CURR LOADED MODULE HASH: " <> show _mHash
+            evalError' i $
+              "Execution aborted, hash not blessed for module " <> pretty mn <> ": " <> pretty h
         _ -> evalError' i $ "Internal error: expected module reference " <> pretty mn
