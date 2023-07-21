@@ -467,7 +467,7 @@ createTable' g i [t@TTable {..}] = do
 createTable' _ i as = argsError i as
 
 guardTable :: (Pretty n, Show n) => FunApp -> Term n -> GuardTableOp -> Eval e ()
-guardTable i TTable {..} dbop = do
+guardTable i t@TTable {..} dbop = do
   traceM $ "Within guard-table for " <> show t <> " " <> show i
   checkLocalBypass $
     guardForModuleCall (_faInfo i) _tModuleName $
