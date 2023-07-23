@@ -5,7 +5,6 @@
 module Pact.GasModel.Utils
   (
     compileCode
-  , printResult
   , eitherDie
 
   , sizes
@@ -61,7 +60,6 @@ module Pact.GasModel.Utils
 
 import Bound (abstract, Scope)
 import Control.Exception (throwIO)
-import Data.Aeson (toJSON, ToJSON(..))
 import Data.Default (def)
 import NeatInterpolation (text)
 
@@ -78,11 +76,12 @@ import Pact.Compile (compileExps, mkTextInfo)
 import Pact.Types.Capability (SigCapability)
 import Pact.Types.Command
 import Pact.Types.Lang
-import Pact.Types.PactValue (toPactValueLenient, PactValue(..))
+import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.Namespace
 import Pact.Parse
+import Pact.JSON.Legacy.Value
 
 
 -- | General helper functions
@@ -96,12 +95,6 @@ compileCode m = do
 parseCode :: T.Text -> IO ParsedCode
 parseCode m = do
   ParsedCode m <$> eitherDie m (parseExprs m)
-
-
-printResult :: Either PactError [Term Name] -> IO ()
-printResult res = case res of
-  Left err -> print (show err)
-  Right ts -> print $ show (toJSON $ map (toJSON . toPactValueLenient) ts)
 
 eitherDie :: (Show b) => T.Text -> Either b a -> IO a
 eitherDie annot
@@ -222,8 +215,8 @@ escapedStringsExpr = map format strings
 
 -- | Helper functions and types for creating pact expressions
 data PactExpression = PactExpression
-  { _pactExpressionFull :: T.Text
-  , _pactExpressionAbridged :: Maybe T.Text
+  { _pactExpressionFull :: !T.Text
+  , _pactExpressionAbridged :: !(Maybe T.Text)
   }
 
 defPactExpression :: T.Text -> PactExpression
@@ -282,9 +275,11 @@ toPactBinding  m = "{ " <> allKeys <> " }"
     allKeys = T.intercalate ", " $ map bindingFormat (HM.toList m)
     bindingFormat (key, _) = escapeText key <> " := " <> key
 
-toPactKeyset :: T.Text -> T.Text -> Maybe T.Text -> A.Value
+-- Only use in testing: Pact.GasModel.GasTests
+--
+toPactKeyset :: T.Text -> T.Text -> Maybe T.Text -> LegacyValue
 toPactKeyset ksName ksValue predicate =
-  A.object [ksName A..= A.object ["keys" A..= [ksValue], "pred" A..= pred']]
+  toLegacyJson $ HM.fromList [(ksName, A.object ["keys" A..= [ksValue], "pred" A..= pred'])]
   where pred' = maybe ">" id predicate
 
 

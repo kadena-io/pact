@@ -44,8 +44,8 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-import           GHC.Natural                (Natural)
-import           GHC.TypeLits
+import           Numeric.Natural            (Natural)
+import           GHC.TypeLits               (SomeSymbol(..), someSymbolVal, symbolVal)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang

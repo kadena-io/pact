@@ -28,6 +28,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.HashMap.Strict as HM
 
+import qualified Pact.JSON.Legacy.HashMap as LHM
 import Pact.Types.Util
 
 newtype LcovReport = LcovReport (HM.HashMap FilePath FileReport)
@@ -95,7 +96,7 @@ showReport (LcovReport fileReports) = T.unlines $ concatMap generateFileReport f
       , ["end_of_record"]
       ]
 
-    mmap f = map f . HM.elems
+    mmap f = map (f . snd) . LHM.sortByKey . HM.toList
 
     tShowFunctionDefinition FunctionReport{..} = line "FN" [tShow functionReportLine, functionReportName]
 

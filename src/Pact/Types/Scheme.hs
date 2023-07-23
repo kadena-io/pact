@@ -1,6 +1,8 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies, GADTs, DataKinds #-}
 
 
@@ -17,21 +19,22 @@ import Control.DeepSeq
 import Data.Kind (Type)
 import Data.Serialize
 import Data.Aeson
+import Test.QuickCheck
 
 import Pact.Types.Util (ParseText(..))
+
+import qualified Pact.JSON.Encode as J
 
 
 --------- PPKSCHEME DATA TYPE ---------
 
 data PPKScheme = ED25519 | ETH
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic, Bounded, Enum)
 
 
 instance NFData PPKScheme
 instance Serialize PPKScheme
-instance ToJSON PPKScheme where
-  toJSON ED25519 = "ED25519"
-  toJSON ETH = "ETH"
+
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" parseText
   {-# INLINE parseJSON #-}
@@ -41,6 +44,14 @@ instance ParseText PPKScheme where
     "ETH" -> return ETH
     _ -> fail $ "Unsupported PPKScheme: " ++ show s
   {-# INLINE parseText #-}
+
+instance Arbitrary PPKScheme where
+  arbitrary = elements [ minBound .. maxBound ]
+
+instance J.Encode PPKScheme where
+  build ED25519 = J.text "ED25519"
+  build ETH = J.text "ETH"
+  {-# INLINE build #-}
 
 
 defPPKScheme :: PPKScheme

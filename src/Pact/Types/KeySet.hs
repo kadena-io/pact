@@ -1,6 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      :  Pact.Types.Keyset
@@ -69,6 +70,8 @@ import Pact.Types.Parser (style)
 import Text.Parser.Combinators (eof)
 import Text.Parser.Token
 
+import qualified Pact.JSON.Encode as J
+
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
@@ -89,8 +92,10 @@ instance Serialize PublicKeyText
 instance NFData PublicKeyText
 instance FromJSON PublicKeyText where
   parseJSON = withText "PublicKey" (return . PublicKeyText)
-instance ToJSON PublicKeyText where
-  toJSON = toJSON . _pubKey
+
+instance J.Encode PublicKeyText where
+  build = J.build . _pubKey
+  {-# INLINE build #-}
 
 instance Pretty PublicKeyText where
   pretty (PublicKeyText s) = pretty s
@@ -131,6 +136,7 @@ instance Arbitrary KeySet where
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
 instance FromJSON KeySet where
+
     parseJSON v = withObject "KeySet" keyListPred v <|> keyListOnly
       where
         defPred = Name (BareName "keys-all" def)
@@ -143,11 +149,12 @@ instance FromJSON KeySet where
           <$> parseJSON v
           <*> pure defPred
 
-instance ToJSON KeySet where
-    toJSON (KeySet k f) = object
-      [ "keys" .= k
-      , "pred" .= f
-      ]
+instance J.Encode KeySet where
+  build o = J.object
+    [ "pred" J..= _ksPredFun o
+    , "keys" J..= J.Array (_ksKeys o)
+    ]
+  {-# INLINABLE build #-}
 
 -- -------------------------------------------------------------------------- --
 -- KeySetName
@@ -178,10 +185,15 @@ instance FromJSON KeySetName where
         <$> o .: "ksn"
         <*> (fromMaybe Nothing <$> o .:? "ns")
 
-instance ToJSON KeySetName where
-  toJSON (KeySetName k n) = case n of
-    Nothing -> toJSON k
-    Just ns -> object [ "ksn" .= k , "ns" .= ns ]
+
+instance J.Encode KeySetName where
+  build ks@(KeySetName k n) = case n of
+    Nothing -> J.build k
+    Just{} -> J.object
+      [ "ns" J..= _ksnNamespace ks
+      , "ksn" J..= _ksnName ks
+      ]
+  {-# INLINE build #-}
 
 instance AsString KeySetName where
   asString (KeySetName n mns) = case mns of
