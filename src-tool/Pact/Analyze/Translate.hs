@@ -1604,10 +1604,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     tsFoundVars .= []
 
     Some tyb f'  <- translateNode f
-    (avid, _, _) <- captureOneFreeVar
+    (avid, _, _) <- captureFreeVar
 
     Some tyc g'  <- translateNode g
-    (bvid, _, _) <- captureOneFreeVar
+    (bvid, _, _) <- captureFreeVar
 
     -- important: we captured a, so we need to leave it free (by restoring
     -- tsFoundVars)
@@ -1618,7 +1618,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun node SMap [ fun, l ] -> do
     Some bTy fun' <- translateNode fun
-    captureLastFreeVar >>= \case
+    captureFreeVar >>= \case
       (vid, varName, EType aType) -> translateNode l >>= \case
         Some (SList listTy) l' -> do
           Refl <- singEq listTy aType ?? TypeError node
@@ -1628,7 +1628,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun node SFilter [ fun, l ] -> do
     translateNode fun >>= \case
-      Some SBool fun' -> captureLastFreeVar >>= \case
+      Some SBool fun' -> captureFreeVar >>= \case
         (vid, varName, EType aType) -> translateNode l >>= \case
           Some (SList listTy) l' -> do
             Refl <- singEq listTy aType ?? TypeError node
@@ -1648,7 +1648,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     --
     -- `a` encountered first, `b` will be consed on top of it, resulting in the
     -- variables coming out backwards.
-    liftM2 (,) captureLastFreeVar captureLastFreeVar >>= \case
+    liftM2 (,) captureFreeVar captureFreeVar >>= \case
       ((vida, varNamea, EType tya), (vidb, varNameb, EType tyb)) -> do
         Some aTy' a' <- translateNode a
         translateNode l >>= \case
@@ -1662,13 +1662,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _ name [ f, g, a ]
     | name == SAndQ || name == SOrQ -> do
-    expectNoFreeVars
     translateNode f >>= \case
       Some SBool f' -> do
-        (fvid, fvarName, _) <- captureOneFreeVar
+        (fvid, fvarName, _) <- captureFreeVar
         translateNode g >>= \case
           Some SBool g' -> do
-            (gvid, gvarName, _) <- captureOneFreeVar
+            (gvid, gvarName, _) <- captureFreeVar
             Some aTy' a' <- translateNode a
             pure $ Some SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
               aTy' (Open fvid fvarName f') (Open gvid gvarName g') a'
@@ -1677,9 +1676,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _ SWhere [ field, fun, obj ] -> translateNode field >>= \case
     Some SStr field' -> do
-      expectNoFreeVars
       translateNode fun >>= \case
-        Some SBool fun' -> captureOneFreeVar >>= \case
+        Some SBool fun' -> captureFreeVar >>= \case
           (vid, varName, EType freeTy) -> translateNode obj >>= \case
             Some objTy@SObject{} obj' -> pure $ Some SBool $ CoreTerm $
               Where objTy freeTy field' (Open vid varName fun') obj'
@@ -1844,33 +1842,14 @@ trackCapScope capName act = do
   tsStaticCapsInScope .= current
   return r
 
-captureLastFreeVar :: TranslateM (VarId, Text, EType)
-captureLastFreeVar = do
+captureFreeVar :: TranslateM (VarId, Text, EType)
+captureFreeVar = do
   vs <- use tsFoundVars
   case vs of
     v:vs' -> do
       tsFoundVars .= vs'
       pure v
-    _ -> throwError' $ FreeVarInvariantViolation $
-      "unexpected vars found: " <> tShow vs
-
-captureOneFreeVar :: TranslateM (VarId, Text, EType)
-captureOneFreeVar = do
-  vs <- use tsFoundVars
-  tsFoundVars .= []
-  case vs of
-    [v] -> pure v
-    _   -> throwError' $ FreeVarInvariantViolation $
-      "unexpected vars found: " <> tShow vs
-
-captureTwoFreeVars :: TranslateM [(VarId, Text, EType)]
-captureTwoFreeVars = do
-  vs <- use tsFoundVars
-  tsFoundVars .= []
-  case vs of
-    [_, _] -> pure vs
-    _      -> throwError' $ FreeVarInvariantViolation $
-      "unexpected vars found: " <> tShow vs
+    _ -> throwError' $ FreeVarInvariantViolation "expected var"
 
 expectNoFreeVars :: TranslateM ()
 expectNoFreeVars = do
