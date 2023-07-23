@@ -44,8 +44,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-import           Numeric.Natural            (Natural)
-import           GHC.TypeLits               (SomeSymbol(..), someSymbolVal, symbolVal)
+import           GHC.TypeLits hiding (SSymbol)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
@@ -1649,7 +1648,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     -- `a` encountered first, `b` will be consed on top of it, resulting in the
     -- variables coming out backwards.
     liftM2 (,) captureFreeVar captureFreeVar >>= \case
-      ((vida, varNamea, EType tya), (vidb, varNameb, EType tyb)) -> do
+      ((vidb, varNameb, EType tyb), (vida, varNamea, EType tya)) -> do
         Some aTy' a' <- translateNode a
         translateNode l >>= \case
           Some (SList listTy) l' -> do
