@@ -1,4 +1,6 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -31,13 +33,16 @@ module Pact.Types.Names
   , dynInfo, dynInterfaces, dynMember, dynRefArg
   , BareName(..)
   , FullyQualifiedName(..)
+
+  -- * Test Utils
+  , arbitraryName
   ) where
 
 
 import Control.Applicative
 import Control.DeepSeq
 import Control.Lens (makeLenses)
-import Data.Aeson (ToJSON(..), FromJSON(..), withText, FromJSONKey(..), ToJSONKey(..))
+import Data.Aeson hiding ((<?>))
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString.Short as SB
 import Data.Default
@@ -59,10 +64,14 @@ import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
 import Pact.Types.Util
 import Pact.Types.Hash
+import Pact.JSON.Legacy.Hashable
 
+import qualified Pact.JSON.Encode as J
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
-  deriving (Eq, Ord, Show, FromJSON, ToJSON, IsString, AsString, Hashable, Pretty, Generic, NFData, SizeOf)
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (FromJSON, IsString, AsString, Hashable, Pretty, NFData, SizeOf, J.Encode)
+  deriving newtype (LegacyHashable)
 
 instance Arbitrary NamespaceName where
   arbitrary = NamespaceName <$> genBareText
@@ -82,6 +91,13 @@ instance Hashable ModuleName where
     s `hashWithSalt` (0::Int) `hashWithSalt` n
   hashWithSalt s (ModuleName n (Just ns)) =
     s `hashWithSalt` (1::Int) `hashWithSalt` n `hashWithSalt` ns
+
+instance LegacyHashable ModuleName where
+    legacyHash = legacyHashWithSalt legacyDefaultSalt
+    legacyHashWithSalt s (ModuleName n Nothing)   =
+      s `legacyHashWithSalt` (0::Int) `legacyHashWithSalt` n
+    legacyHashWithSalt s (ModuleName n (Just ns)) =
+      s `legacyHashWithSalt` (1::Int) `legacyHashWithSalt` n `legacyHashWithSalt` ns
 
 instance SizeOf ModuleName where
   sizeOf ver (ModuleName mn namespace) =
@@ -105,7 +121,13 @@ instance Pretty ModuleName where
   pretty (ModuleName n Nothing)   = pretty n
   pretty (ModuleName n (Just ns)) = pretty ns <> "." <> pretty n
 
-instance ToJSON ModuleName where toJSON = lensyToJSON 3
+instance J.Encode ModuleName where
+  build o = J.object
+    [ "namespace" J..= _mnNamespace o
+    , "name" J..= _mnName o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON ModuleName where parseJSON = lensyParseJSON 3
 
 moduleNameParser :: (TokenParsing m, Monad m) => m ModuleName
@@ -121,10 +143,14 @@ parseModuleName = AP.parseOnly (moduleNameParser <* eof)
 
 
 newtype DefName = DefName { _unDefName :: Text }
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty,Show,NFData)
+  deriving (Show,Eq,Ord)
+  deriving newtype (IsString,FromJSON,AsString,Hashable,Pretty,NFData,J.Encode)
 
 instance SizeOf DefName where
   sizeOf ver (DefName n) = sizeOf ver n
+
+instance Arbitrary DefName where
+  arbitrary = DefName <$> genBareText
 
 data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
@@ -150,8 +176,10 @@ instance SizeOf QualifiedName where
   sizeOf ver (QualifiedName modName n i) =
     (constructorCost 3) + (sizeOf ver modName) + (sizeOf ver n) + (sizeOf ver i)
 
-instance ToJSON QualifiedName where
-  toJSON = toJSON . renderCompactString
+
+instance J.Encode QualifiedName where
+  build = J.build . T.pack . renderCompactString
+  {-# INLINE build #-}
 
 instance FromJSON QualifiedName where
   parseJSON = withText "QualifiedName" $ \t -> case parseQualifiedName def t of
@@ -188,16 +216,24 @@ instance SizeOf BareName where
     (constructorCost 2) + (sizeOf ver n) + (sizeOf ver i)
 
 data DynamicName = DynamicName
-    { _dynMember :: Text
-    , _dynRefArg :: Text
-    , _dynInterfaces :: Set ModuleName
+    { _dynMember :: !Text
+    , _dynRefArg :: !Text
+    , _dynInterfaces :: !(Set ModuleName)
     , _dynInfo :: Info
     } deriving (Generic,Eq,Show)
 instance NFData DynamicName
 instance Arbitrary DynamicName where
   arbitrary = DynamicName <$> genBareText <*> genBareText <*> arbitrary <*> arbitrary
-instance ToJSON DynamicName where
-  toJSON = lensyToJSON 4
+
+instance J.Encode DynamicName where
+  build o = J.object
+    [ "interfaces" J..= J.array (_dynInterfaces o)
+    , "refArg" J..= _dynRefArg o
+    , "member" J..= _dynMember o
+    , "info" J..= _dynInfo o
+    ]
+  {-# INLINE build #-}
+
 instance FromJSON DynamicName where
   parseJSON = lensyParseJSON 4
 
@@ -213,23 +249,27 @@ instance SizeOf DynamicName where
 data FullyQualifiedName
   = FullyQualifiedName
   { _fqName :: !Text
-  , _fqModule :: ModuleName
-  , _fqModuleHash :: Hash
+  , _fqModule :: !ModuleName
+  , _fqModuleHash :: !Hash
   } deriving (Generic, Eq, Show)
 
 instance NFData FullyQualifiedName
 
-instance ToJSON FullyQualifiedName where
-  toJSON (FullyQualifiedName n (ModuleName m ns) hsh) =
-    toJSON $ maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
+fqdnJsonText :: FullyQualifiedName -> T.Text
+fqdnJsonText (FullyQualifiedName n (ModuleName m ns) hsh) =
+    maybe "" ((<> ".") . _namespaceName) ns <> m <> "." <> n <> ".{" <> hashToText hsh <> "}"
+
+instance J.Encode FullyQualifiedName where
+  build = J.build . fqdnJsonText
+  {-# INLINE build #-}
 
 instance FromJSON FullyQualifiedName where
   parseJSON = withText "FullyQualifiedName" $ \f -> case AP.parseOnly (fullyQualNameParser <* eof) f of
     Left s  -> fail s
     Right n -> return n
 
-instance FromJSONKey FullyQualifiedName
-instance ToJSONKey FullyQualifiedName
+instance FromJSONKey FullyQualifiedName where
+  fromJSONKey = FromJSONKeyTextParser $ parseJSON . String
 
 instance SizeOf FullyQualifiedName
 
@@ -241,9 +281,17 @@ instance Hashable FullyQualifiedName where
   hashWithSalt s FullyQualifiedName{..} =
     s `hashWithSalt` _fqName `hashWithSalt` _fqModule `hashWithSalt` _fqModuleHash
 
+instance LegacyHashable FullyQualifiedName where
+  legacyHash = legacyHashWithSalt legacyDefaultSalt
+  legacyHashWithSalt s FullyQualifiedName{..} =
+    s `legacyHashWithSalt` _fqName `legacyHashWithSalt` _fqModule `legacyHashWithSalt` _fqModuleHash
+
 instance Ord FullyQualifiedName where
   (FullyQualifiedName fq fm fh) `compare` (FullyQualifiedName fq' fm' fh') =
     (fq, fm, fh) `compare` (fq', fm', fh')
+
+instance Arbitrary FullyQualifiedName where
+  arbitrary = FullyQualifiedName <$> genBareText <*> arbitrary <*> arbitrary
 
 -- | A named reference from source.
 data Name
@@ -257,7 +305,20 @@ instance Arbitrary Name where
   -- assumes most names are qualified names
   arbitrary = frequency
     [ (4, QName <$> arbitrary)
-    , (1, Name <$> arbitrary) ]
+    , (1, Name <$> arbitrary)
+    , (1, DName <$> arbitrary)
+    , (1, FQName <$> arbitrary)
+    ]
+
+-- | Use 'arbitraryName (1,1,1,0)' for JSON roundtripable names
+--
+arbitraryName :: (Int, Int, Int, Int) -> Gen Name
+arbitraryName (f,q,n,d) = frequency
+  [ (f, FQName <$> arbitrary)
+  , (q, QName <$> arbitrary)
+  , (n, Name <$> arbitrary)
+  , (d, DName <$> arbitrary)
+  ]
 
 instance HasInfo Name where
   getInfo (QName q) = getInfo q
@@ -280,8 +341,10 @@ instance SizeOf Name where
 
 instance AsString Name where asString = renderCompactText
 
-instance ToJSON Name where
-  toJSON = toJSON . renderCompactString
+
+instance J.Encode Name where
+  build = J.build . pack . renderCompactString
+  {-# INLINE build #-}
 
 instance FromJSON Name where
   parseJSON = withText "Name" $ \t -> case parseName def t of
@@ -352,7 +415,8 @@ instance Ord Name where
 
 
 newtype NativeDefName = NativeDefName Text
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Show,NFData,Hashable)
+  deriving (Show,Eq,Ord)
+  deriving newtype (IsString,FromJSON,AsString,NFData,Hashable,LegacyHashable,J.Encode)
 
 instance Pretty NativeDefName where
   pretty (NativeDefName name) = pretty name
@@ -360,12 +424,20 @@ instance Pretty NativeDefName where
 instance SizeOf NativeDefName where
   sizeOf ver (NativeDefName n) = sizeOf ver n
 
+instance Arbitrary NativeDefName where
+  arbitrary = NativeDefName <$> genBareText
+
 newtype TableName = TableName Text
-    deriving (Eq,Ord,IsString,AsString,Hashable,Show,NFData,ToJSON,FromJSON)
+  deriving (Show,Eq,Ord)
+  deriving newtype (IsString,AsString,Hashable,NFData,FromJSON,J.Encode)
+
 instance Pretty TableName where pretty (TableName s) = pretty s
 
 instance SizeOf TableName where
   sizeOf ver (TableName t) = sizeOf ver t
+
+instance Arbitrary TableName where
+  arbitrary = TableName <$> genBareText
 
 makeLenses ''ModuleName
 makeLenses ''DynamicName

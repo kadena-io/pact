@@ -1,12 +1,11 @@
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -31,6 +30,7 @@ module Pact.Types.Exp
    genLiteralDecimal,
    genLiteralBool,
    genLiteralTime,
+   genRoundtripableTimeUTCTime,
    simpleISO8601,formatLTime,
    litToPrim,
    LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),
@@ -52,21 +52,25 @@ import Prelude
 import Data.Text (Text,pack)
 import Data.Aeson
 import Data.Maybe (fromMaybe)
+import Data.Monoid (Any(..))
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
+import Data.Ratio ((%), denominator)
 import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Test.QuickCheck
+import Test.QuickCheck.Instances ()
 
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
-import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime)
+import Pact.Time (UTCTime, fromPosixTimestampMicros, formatTime, toPosixTimestampMicros)
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText)
 
+import qualified Pact.JSON.Encode as J
 
 
 -- | Custom generator of arbitrary UTCTime from
@@ -76,7 +80,7 @@ genArbitraryUTCTime = fromPosixTimestampMicros
     <$> choose (-30610224000000000, 4133894400000000)
 
 genLiteralString :: Gen Literal
-genLiteralString = LString <$> resize 100 genBareText
+genLiteralString = LString <$> scale (min 100) genBareText
 
 genLiteralInteger :: Gen Literal
 genLiteralInteger =
@@ -89,8 +93,22 @@ genLiteralBool :: Gen Literal
 genLiteralBool = LBool <$> arbitrary
 
 genLiteralTime :: Gen Literal
-genLiteralTime = LTime <$> genArbitraryUTCTime
+genLiteralTime = LTime <$> genRoundtripableTimeUTCTime
 
+-- | Generate a an arbitrary UTCTime value that can roundtrip via 'Pact.Types.Codec.timeCodec'.
+--
+-- See the documentation of 'Pact.Types.Codec.timeCodec' for details.
+--
+genRoundtripableTimeUTCTime :: Gen UTCTime
+genRoundtripableTimeUTCTime = do
+  t <- genArbitraryUTCTime
+  if denom1000 t == 1 && denom t /= 1
+    then genRoundtripableTimeUTCTime
+    else return t
+ where
+  -- This works around a bug in the time codec
+  denom1000 = denominator @Integer . (% 1000) . fromIntegral . toPosixTimestampMicros
+  denom = denominator @Integer . (% 1000000) . fromIntegral . toPosixTimestampMicros
 
 data Literal =
     LString { _lString :: !Text } |
@@ -143,13 +161,14 @@ instance Pretty Literal where
     pretty (LBool False) = "false"
     pretty (LTime t)     = dquotes $ pretty $ formatLTime t
 
-instance ToJSON Literal where
-    toJSON (LString s)  = toJSON s
-    toJSON (LInteger i) = encoder integerCodec i
-    toJSON (LDecimal r) = encoder decimalCodec r
-    toJSON (LBool b)    = toJSON b
-    toJSON (LTime t)    = encoder timeCodec t
-    {-# INLINE toJSON #-}
+instance J.Encode Literal where
+    build (LString s) = J.build s
+    build (LInteger i) = encoder integerCodec i
+    build (LDecimal r) = encoder decimalCodec r
+    build (LBool b) = J.build b
+    build (LTime t) = encoder timeCodec t
+    {-# INLINE build #-}
+
 
 instance FromJSON Literal where
   parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
@@ -170,10 +189,16 @@ litToPrim LTime {} = TyTime
 
 data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
 instance NFData ListDelimiter
-instance ToJSON ListDelimiter where
-  toJSON Parens = "()"
-  toJSON Brackets = "[]"
-  toJSON Braces = "{}"
+
+instance J.Encode ListDelimiter where
+  build Parens = J.build @Text "()"
+  build Brackets = J.build @Text "[]"
+  build Braces = J.build @Text "{}"
+  {-# INLINE build #-}
+
+instance Arbitrary ListDelimiter where
+  arbitrary = elements [ Parens, Brackets, Braces ]
+
 instance FromJSON ListDelimiter where
   parseJSON = withText "ListDelimiter" $ \t -> case t of
     "()" -> pure Parens
@@ -195,10 +220,13 @@ instance Pretty Separator where
   pretty Colon = ":"
   pretty ColonEquals = ":="
   pretty Comma = ","
-instance ToJSON Separator where
-  toJSON Colon = ":"
-  toJSON ColonEquals = ":="
-  toJSON Comma = ","
+
+instance J.Encode Separator where
+  build Colon = J.build @Text ":"
+  build ColonEquals = J.build @Text ":="
+  build Comma = J.build @Text ","
+  {-# INLINABLE build #-}
+
 instance FromJSON Separator where
   parseJSON = withText "Separator" $ \t -> case t of
     ":" -> pure Colon
@@ -206,7 +234,10 @@ instance FromJSON Separator where
     "," -> pure Comma
     _ -> fail "Invalid separator"
 
-expInfoField :: Text
+instance Arbitrary Separator where
+  arbitrary = elements [Colon, ColonEquals, Comma]
+
+expInfoField :: IsString a => a
 expInfoField = "i"
 
 data LiteralExp i = LiteralExp
@@ -216,8 +247,17 @@ data LiteralExp i = LiteralExp
 instance HasInfo (LiteralExp Info) where
   getInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
-instance ToJSON i => ToJSON (LiteralExp i) where
-  toJSON (LiteralExp l i) = object [ "lit" .= l, expInfoField .= i ]
+
+instance Arbitrary i => Arbitrary (LiteralExp i) where
+  arbitrary = LiteralExp <$> arbitrary <*> arbitrary
+
+instance J.Encode i => J.Encode (LiteralExp i) where
+  build o = J.object
+    [ expInfoField J..= _litInfo o
+    , "lit" J..= _litLiteral o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON i => FromJSON (LiteralExp i) where
   parseJSON = withObject "LiteralExp" $ \o ->
     LiteralExp <$> o .: "lit" <*> o .: expInfoField
@@ -234,10 +274,19 @@ data AtomExp i = AtomExp
 instance HasInfo (AtomExp Info) where
   getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
-instance ToJSON i => ToJSON (AtomExp i) where
-  toJSON (AtomExp l q dyn i) =
-    object $ [ "atom" .= l, "q" .= q, expInfoField .= i ] ++
-    [ "dyn" .= dyn | dyn ]
+
+instance Arbitrary i => Arbitrary (AtomExp i) where
+  arbitrary = AtomExp <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
+instance J.Encode i => J.Encode (AtomExp i) where
+  build o = J.object
+    [ "atom" J..= _atomAtom o
+    , "dyn" J..??= Any (_atomDynamic o)
+    , "q" J..= J.array (_atomQualifiers o)
+    , expInfoField J..= _atomInfo o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON i => FromJSON (AtomExp i) where
   parseJSON = withObject "AtomExp" $ \o ->
     AtomExp <$> o .: "atom" <*> o .: "q"
@@ -250,16 +299,25 @@ instance Pretty (AtomExp i) where
     = mconcat $ punctuate (colon <> colon) $ fmap pretty $ qs ++ [atom]
 
 data ListExp i = ListExp
-  { _listList :: ![(Exp i)]
+  { _listList :: ![Exp i]
   , _listDelimiter :: !ListDelimiter
   , _listInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
 instance HasInfo (ListExp Info) where
   getInfo = _listInfo
 instance NFData i => NFData (ListExp i)
-instance ToJSON i => ToJSON (ListExp i) where
-  toJSON (ListExp l d i) =
-    object [ "list" .= l, "d" .= d, expInfoField .= i ]
+
+instance Arbitrary i => Arbitrary (ListExp i) where
+  arbitrary = ListExp <$> arbitrary <*> arbitrary <*> arbitrary
+
+instance J.Encode i => J.Encode (ListExp i) where
+  build o = J.object
+    [ "list" J..= J.array (_listList o)
+    , "d" J..= _listDelimiter o
+    , expInfoField J..= _listInfo o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON i => FromJSON (ListExp i) where
   parseJSON = withObject "ListExp" $ \o ->
     ListExp <$> o .: "list" <*> o .: "d" <*> o .: expInfoField
@@ -276,11 +334,20 @@ data SeparatorExp i = SeparatorExp
 instance HasInfo (SeparatorExp Info) where
   getInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
-instance ToJSON i => ToJSON (SeparatorExp i) where
-  toJSON (SeparatorExp s i) = object [ "sep" .= s, expInfoField .= i ]
+
+instance Arbitrary i => Arbitrary (SeparatorExp i) where
+  arbitrary = SeparatorExp <$> arbitrary <*> arbitrary
+
 instance FromJSON i => FromJSON (SeparatorExp i) where
   parseJSON = withObject "SeparatorExp" $ \o ->
     SeparatorExp <$> o .: "sep" <*> o.: expInfoField
+
+instance J.Encode i => J.Encode (SeparatorExp i) where
+  build o = J.object
+    [ "sep" J..= _sepSeparator o
+    , expInfoField J..= _sepInfo o
+    ]
+  {-# INLINABLE build #-}
 
 instance Pretty (SeparatorExp i) where
   pretty (SeparatorExp sep' _) = pretty sep'
@@ -322,11 +389,12 @@ instance HasInfo (Exp Info) where
 
 instance (SizeOf i) => SizeOf (Exp i)
 
-instance ToJSON i => ToJSON (Exp i) where
-  toJSON (ELiteral a) = toJSON a
-  toJSON (EAtom a) = toJSON a
-  toJSON (EList a) = toJSON a
-  toJSON (ESeparator a) = toJSON a
+instance J.Encode i => J.Encode (Exp i) where
+  build (ELiteral a) = J.build a
+  build (EAtom a) = J.build a
+  build (EList a) = J.build a
+  build (ESeparator a) = J.build a
+  {-# INLINABLE build #-}
 
 instance FromJSON i => FromJSON (Exp i) where
   parseJSON v =
@@ -335,6 +403,21 @@ instance FromJSON i => FromJSON (Exp i) where
     (EList <$> parseJSON v) <|>
     (ESeparator <$> parseJSON v)
 
+instance Arbitrary i => Arbitrary (Exp i) where
+  arbitrary = sized $ \case
+    0 -> oneof
+      [ ELiteral <$> arbitrary
+      , EAtom <$> arbitrary
+      , ESeparator <$> arbitrary
+      ]
+    s -> do
+      Positive k <- arbitrary
+      resize (s `div` k + 1) $ oneof
+        [ ELiteral <$> arbitrary
+        , EAtom <$> arbitrary
+        , EList <$> arbitrary
+        , ESeparator <$> arbitrary
+        ]
 
 makePrisms ''Exp
 
@@ -343,9 +426,6 @@ pattern CommaExp <- ESeparator (SeparatorExp Comma _i)
 
 pattern ColonExp :: Exp t
 pattern ColonExp <- ESeparator (SeparatorExp Colon _i)
-
-
-
 
 -- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode

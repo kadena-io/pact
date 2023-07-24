@@ -13,22 +13,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.10.7']
-        cabal: ['3.8']
+        ghc: ['9.6']
+        cabal: ['3.10']
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
         - os: 'ubuntu-22.04'
-          ghc: '8.10.7'
-          cabal: '3.8'
+          ghc: '9.6'
+          cabal: '3.10'
           cabalcache: 'true'
           flags: '-build-tool'
-        - os: 'ubuntu-22.04'
-          ghc: '9.0.2'
-          cabal: '3.8'
-          cabalcache: 'true'
-          flags: '+build-tool'
 
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
@@ -98,14 +93,13 @@ jobs:
           benchmarks: True
           documentation: False
           optimization: 1
-          flags: ${{ matrix.flags }}
+          flags: ${{ matrix.flags }} +cryptonite-ed25519
         EOF
     - name: Extend cabal.project.local for GHC-9.0.2
       if: "startsWith(matrix.ghc, '9')"
       shell: bash
       run: |
         cat >> cabal.project.local <<EOF
-        allow-newer: hashable:*
         package pact
           ghc-options: -Wwarn -Wunused-packages
         EOF
@@ -207,7 +201,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - ghc: "8.10.7"
+        - ghc: "9.6"
           os: "ubuntu-20.04"
     env:
       OS: ${{ matrix.os }}

@@ -21,8 +21,6 @@ import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word64)
 import Data.Default
-import Data.Aeson (Value, encode)
-import qualified Data.ByteString.Lazy  as BSL
 import Data.Text (Text)
 
 import Pact.Gas
@@ -39,6 +37,8 @@ import Pact.Types.PactValue (PactValue)
 import Pact.Types.SPV
 import Data.Time.Clock.System
 
+import qualified Pact.JSON.Encode as J
+import Pact.JSON.Legacy.Value
 
 initPactService
   :: CommandConfig
@@ -64,9 +64,9 @@ initPactService CommandConfig {..} loggers spv = do
                 spv _ccExecutionConfig
                 eMode cmd (verifyCommand cmd)
           , _ceiApplyPPCmd =
-            applyCmd logger _ccEntity p gasModel
-            blockHeight blockTime prevBlockHash
-            spv _ccExecutionConfig
+              applyCmd logger _ccEntity p gasModel
+                blockHeight blockTime prevBlockHash
+                spv _ccExecutionConfig
           }
   case _ccSqlite of
     Nothing -> do
@@ -128,16 +128,16 @@ resultSuccess :: Maybe TxId ->
                  Gas ->
                  PactValue ->
                  Maybe PactExec ->
-                 [TxLog Value] ->
+                 [TxLogJson] ->
                  [PactEvent] ->
                  CommandResult Hash
-resultSuccess tx cmd gas a pe l evs =
-  CommandResult cmd tx (PactResult $ Right a)
-    gas (Just hshLog) pe Nothing evs
-  where hshLog = fullToHashLogCr l
+resultSuccess tx cmd gas a pe l es =
+  CommandResult cmd tx (PactResult $ Right a) gas (Just hshLog) pe Nothing es
+ where
+  hshLog = fullToHashLogCr l
 
-fullToHashLogCr :: [TxLog Value] -> Hash
-fullToHashLogCr full = (pactHash . BSL.toStrict . encode) full
+fullToHashLogCr :: [TxLogJson] -> Hash
+fullToHashLogCr = pactHash . J.encodeStrict . J.array . fmap (J.embedJson . _getTxLogJson)
 
 
 runPayload :: Command (Payload PublicMeta ParsedCode) -> CommandM p (CommandResult Hash)
@@ -165,7 +165,7 @@ applyContinuation rk hsh signers cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
   evalEnv <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData (_cmData cm) Nothing (toUntypedHash hsh) signers) (versionedNativesRefStore _ceExecutionConfig)
+                (MsgData (toLegacyJson (_cmData cm)) Nothing (toUntypedHash hsh) signers) (versionedNativesRefStore _ceExecutionConfig)
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

@@ -78,6 +78,8 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 
+import Pact.JSON.Legacy.Value
+
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
   pdPactDb :: !(PactDb e),
@@ -86,7 +88,7 @@ data PactDbEnv e = PactDbEnv {
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData {
-  mdData :: !Value,
+  mdData :: !LegacyValue,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
   mdSigners :: [Signer]
@@ -94,7 +96,7 @@ data MsgData = MsgData {
 
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData Null def h def
+initMsgData h = MsgData (toLegacyJson Null) def h def
 
 -- | Describes either a ContMsg or ExecMsg.
 -- ContMsg is represented as a 'Maybe PactExec'
@@ -104,7 +106,7 @@ initMsgData h = MsgData Null def h def
 type EvalInput = Either (Maybe PactExec) [Term Name]
 
 -- | Captures results of execution
-type EvalOutput = ([Term Name],[TxLog Value],Maybe TxId)
+type EvalOutput = ([Term Name],[TxLogJson],Maybe TxId)
 
 -- | Interpreter indirection for executing user action.
 newtype Interpreter e = Interpreter
@@ -125,7 +127,7 @@ data EvalResult = EvalResult
     -- ^ compiled user input
   , _erOutput :: ![PactValue]
     -- ^ Output values
-  , _erLogs :: ![TxLog Value]
+  , _erLogs :: ![TxLogJson]
     -- ^ Transaction logs
   , _erExec :: !(Maybe PactExec)
     -- ^ Result of defpact execution if any
