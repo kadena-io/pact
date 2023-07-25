@@ -160,6 +160,14 @@ pactdb = PactDb
            Pacts -> readSysTable e (DataTable pactsTable) (asString k)
            (UserTables t) -> readUserTable e t k
 
+  , _sizeRow = \d k e ->
+       case d of
+           KeySets -> sizeSysTable e (DataTable keysetsTable) (asString k)
+           Modules -> sizeSysTable e (DataTable modulesTable) (asString k)
+           Namespaces -> sizeSysTable e (DataTable namespacesTable) (asString k)
+           Pacts -> sizeSysTable e (DataTable pactsTable) (asString k)
+           (UserTables t) -> sizeUserTable e t k
+
  , _writeRow = \wt d k v e ->
        case d of
            KeySets -> writeSys e wt keysetsTable k v
@@ -256,6 +264,11 @@ getLogs d tid = do
 debug :: Show a => String -> a -> MVState p ()
 debug s a = logDebug $ s ++ ": " ++ show a
 
+sizeUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe Int)
+sizeUserTable e t k = runMVState e $ doPersist $ \p -> sizeValue p (userDataTable t) (DataKey $ asString k)
+
+sizeSysTable :: MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe Int)
+sizeSysTable e t k = runMVState e $ doPersist $ \p -> sizeValue p t (DataKey k)
 
 readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe RowData)
 readUserTable e t k = runMVState e $ readUserTable' t k

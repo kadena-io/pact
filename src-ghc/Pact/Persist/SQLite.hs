@@ -39,6 +39,7 @@ data TableStmts = TableStmts
   , sInsert :: Statement
   , sReplace :: Statement
   , sRead :: Statement
+  , sSize :: Statement
   }
 
 data TxStmts = TxStmts
@@ -82,6 +83,8 @@ persister = Persister {
   ,
   readValue = \t k s -> (s,) <$> readData' t k s
   ,
+  sizeValue = \t k s -> (s,) <$> sizeData' t k s
+  ,
   writeValue = \t wt k v s -> (s,) <$> writeData' t wt k v s
   ,
   refreshConn = fmap (, ()) . refresh
@@ -99,7 +102,7 @@ decodeText :: SType -> IO DataKey
 decodeText (SText (Utf8 t)) = return $ DataKey $ decodeUtf8 t
 decodeText v = throwDbError $ "Expected text, got: " <> viaShow v
 
-decodeInt :: SType -> IO TxKey
+decodeInt :: SType -> IO Int
 decodeInt (SInt i) = return $ fromIntegral i
 decodeInt v = throwDbError $ "Expected int, got: " <> viaShow v
 
@@ -118,7 +121,7 @@ expectTwo desc v = throwDbError $ "Expected two-" <> prettyString desc <> " resu
 kTextTys :: KeyTys DataKey
 kTextTys = KeyTys "text" (SText . toUtf8 . asString) RText decodeText
 kIntTys :: KeyTys TxKey
-kIntTys = KeyTys "int" (SInt . fromIntegral) RInt decodeInt
+kIntTys = KeyTys "int" (SInt . fromIntegral) RInt (fmap fromIntegral . decodeInt)
 
 kTys :: Table k -> KeyTys k
 kTys DataTable {} = kTextTys
@@ -139,7 +142,8 @@ createTable' t e = do
            mkstmt ("INSERT OR REPLACE INTO " <> tn <> " VALUES (?,?)") <*>
            mkstmt ("INSERT INTO " <> tn <> " VALUES (?,?)") <*>
            mkstmt ("REPLACE INTO " <> tn <> " VALUES (?,?)") <*>
-           mkstmt ("SELECT VALUE FROM " <> tn <> " WHERE KEY = ?")
+           mkstmt ("SELECT VALUE FROM " <> tn <> " WHERE KEY = ?") <*>
+           mkstmt ("SELECT LENGTH(VALUE) FROM " <> tn <> " WHERE KEY = ?")
   return $ e { tableStmts = M.insert tn ss (tableStmts e) }
 
 
@@ -173,6 +177,13 @@ readData' t k e = do
   case r of
     [] -> return Nothing
     _ -> expectSing "row" r >>= expectSing "column" >>= (fmap Just . decodeBlob)
+
+sizeData' :: Table k -> k -> SQLite -> IO (Maybe Int)
+sizeData' t k e = do
+  r <- getStmts e t >>= \s -> qrys (sSize s) [inFun (kTys t) k] [RInt]
+  case r of
+    [] -> return Nothing
+    _ -> expectSing "row" r >>= expectSing "column" >>= (fmap Just . decodeInt)
 
 writeData' :: Table k -> WriteType -> k -> B.ByteString -> SQLite -> IO ()
 writeData' t wt k v e = do
@@ -209,6 +220,7 @@ closeSQLite SQLite{..} = fmap (either (Left . show) Right) $ runExceptT $ do
     finalizeT sInsert
     finalizeT sReplace
     finalizeT sRead
+    finalizeT sSize
   finalizeT $ tBegin txStmts
   finalizeT $ tCommit txStmts
   finalizeT $ tRollback txStmts

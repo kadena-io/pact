@@ -374,6 +374,8 @@ data PactDb e = PactDb {
     -- | Read a domain value at key, throwing an exception if not found.
     _readRow :: !(forall k v . (IsString k,FromJSON v) =>
       Domain k v -> k -> Method e (Maybe v))
+  , _sizeRow :: !(forall k v. IsString k =>
+      Domain k v -> k -> Method e (Maybe Int))
     -- | Write a domain value at key. WriteType argument governs key behavior.
   , _writeRow :: !(forall k v . (AsString k,J.Encode v) =>
       WriteType -> Domain k v -> k -> v -> Method e ())

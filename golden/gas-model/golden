@@ -145,7 +145,7 @@
 - - (* smallNumber.0 smallNumber)
   - 3
 - - (read accounts.accounts "someId")
-  - 11
+  - 14
 - - (read-string "name") with name=longString
   - 1
 - - (read-string "name") with name=medString
@@ -307,7 +307,7 @@
        { "balance":= bal }
        bal
     )
-  - 14
+  - 17
 - - (parse-time "%F" "2016-07-22")
   - 2
 - - (parse-time "%Y-%m-%dT%H:%M:%S%N" "2016-07-23T13:30:45+00:00")
@@ -839,7 +839,7 @@
       )
       (fold-db accounts.accounts (qry) (f))
       )
-  - 206
+  - 209
 - - (sort longNumberList)
   - 1027
 - - (sort medNumberList)
@@ -932,7 +932,7 @@
     (select accounts.accounts
       (where "balance" (constantly true))
     )
-  - 205
+  - 208
 - - (reverse longNumberList)
   - 2
 - - (reverse medNumberList)
@@ -1041,7 +1041,7 @@
        { "balance":= bal }
        bal
     )
-  - 15
+  - 18
 - - (create-module-guard "test")
   - 1
 - - (pact-id)

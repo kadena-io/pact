@@ -88,6 +88,8 @@ persister = Persister {
   ,
   readValue = \t k s -> fmap (s,) $ traverse conv $ firstOf (temp . tblType t . tbls . ix t . tbl . ix k) s
   ,
+  sizeValue = \t k s -> return $ (s, fromIntegral . B.length <$> firstOf (temp . tblType t . tbls . ix t . tbl . ix k) s)
+  ,
   writeValue = \t wt k v s -> fmap (,()) $ overM s (temp . tblType t . tbls) $ \ts -> case M.lookup t ts of
       Nothing -> throwDbError $ "writeValue: no such table: " <> pretty t
       Just tb -> fmap (\nt -> M.insert t nt ts) $ overM tb tbl $ \m -> case (M.lookup k m,wt) of

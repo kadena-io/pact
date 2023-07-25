@@ -27,11 +27,13 @@ import Bound
 import Control.Lens hiding ((.=))
 import Control.Monad
 import Control.Monad.Reader (ask)
+import Data.Aeson (FromJSON)
 import Data.Default
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 import Data.Foldable (foldlM, traverse_)
 import qualified Data.Vector as V
+import Data.String
 import Data.Text (pack)
 
 import Pact.Eval
@@ -184,7 +186,7 @@ descKeySet i [TLitString t] = do
        Left {} -> evalError' i "incorrect keyset name format"
        Right k -> pure k)
 
-  r <- readRow (_faInfo i) KeySets k
+  r <- nativeReadRow (_faInfo i) KeySets k
   case r of
     Just v -> computeGas' i (GPostRead (ReadKeySet k v)) $
               return $ toTerm v
@@ -224,6 +226,18 @@ userTable' :: Show n => Term n -> TableName
 userTable' TTable {..} = TableName $ asString _tModuleName <> "_" <> asString _tTableName
 userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
+nativeReadRow :: (IsString k, FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
+nativeReadRow i d k = do
+  case d of
+    UserTables _ ->
+      unlessExecutionFlagSet FlagDisablePact48 $
+        sizeRow i d k >>= \case
+          Just sz ->
+            computeGas (Left (i, "DB read JSON decode cost")) (GDecodeJson sz)
+          Nothing -> pure ()
+    _ -> pure ()
+
+  readRow i d k
 
 read' :: GasRNativeFun e
 read' i as@(table@TTable {}:TLitString key:rest) = do
@@ -232,7 +246,7 @@ read' i as@(table@TTable {}:TLitString key:rest) = do
     [l] -> colsToList (argsError i as) l
     _ -> argsError i as
   guardTable i table GtRead
-  mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
+  mrow <- nativeReadRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
     Nothing -> failTx (_faInfo i) $ "read: row not found: " <> pretty key
     Just cs -> do
@@ -265,7 +279,7 @@ foldDB' i [tbl, tLamToApp -> TApp qry _, tLamToApp -> TApp consumer _] = do
     guardTable i table GtKeys
     keys (_faInfo i) (userTable table)
   fdb table acc key = do
-    mrow <- readRow (_faInfo i) (userTable table) key
+    mrow <- nativeReadRow (_faInfo i) (userTable table) key
     case mrow of
       Just row -> do
         gasPostRead i row
@@ -326,7 +340,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
     fmap (\b -> TList (V.fromList (reverse b)) tblTy def) $
       (\f -> foldM f [] ks) $ \rs k -> do
 
-      mrow <- readRow fi (userTable tbl) k
+      mrow <- nativeReadRow fi (userTable tbl) k
       case mrow of
         Nothing -> evalError fi $ "select: unexpected error, key not found in select: "
                    <> pretty k <> ", table: " <> pretty tbl
@@ -353,7 +367,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
   case tkd of
     [table@TTable {}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
       guardTable fi table GtWithDefaultRead
-      mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
+      mrow <- nativeReadRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> bindToRow ps bd b =<< enforcePactValue' defaultRow
         (Just row) -> gasPostRead' fi row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
@@ -367,7 +381,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   case tk of
     [table@TTable {},TLitString key] -> do
       guardTable fi table GtWithRead
-      mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
+      mrow <- nativeReadRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
         (Just row) -> gasPostRead' fi row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)

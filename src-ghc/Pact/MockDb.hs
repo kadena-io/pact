@@ -16,6 +16,11 @@ newtype MockRead =
              Domain k v -> k -> Method () (Maybe v))
 instance Default MockRead where def = MockRead (\_t _k -> rc Nothing)
 
+newtype MockSize =
+  MockSize (forall k v . (IsString k) =>
+             Domain k v -> k -> Method () (Maybe Int))
+instance Default MockSize where def = MockSize (\_t _k -> rc Nothing)
+
 newtype MockKeys =
   MockKeys (forall k v . (IsString k,AsString k) => Domain k v -> Method () [k])
 instance Default MockKeys where def = MockKeys (\_t -> rc [])
@@ -39,18 +44,21 @@ instance Default MockGetTxLog where def = MockGetTxLog (\_t _i -> rc [])
 
 data MockDb = MockDb {
   mockRead :: MockRead,
+  mockSize :: MockSize,
   mockKeys :: MockKeys,
   mockTxIds :: MockTxIds,
   mockGetUserTableInfo :: MockGetUserTableInfo,
   mockCommitTx :: MockCommitTx,
   mockGetTxLog :: MockGetTxLog
   }
-instance Default MockDb where def = MockDb def def def def def def
+instance Default MockDb where def = MockDb def def def def def def def
 
 pactdb :: MockDb -> PactDb ()
-pactdb (MockDb (MockRead r) (MockKeys ks) (MockTxIds tids) (MockGetUserTableInfo uti)
+pactdb (MockDb (MockRead r) (MockSize sz) (MockKeys ks) (MockTxIds tids) (MockGetUserTableInfo uti)
         (MockCommitTx c) (MockGetTxLog gt)) = PactDb {
   _readRow = r
+  ,
+  _sizeRow = sz
   ,
   _writeRow = \_wt _t _k _v -> rc ()
   ,

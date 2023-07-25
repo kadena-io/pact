@@ -34,6 +34,7 @@ import Pact.Types.Term
 -- | Enum indicating which Db operation is running.
 data DbContext =
     DbRead
+  | DbRowSize
   | DbWrite
   | DbKeys
   | DbTxIds
@@ -105,6 +106,7 @@ defAdvice _ _ = pure $ const $ return ()
 advisePactDb :: Advice -> PactDb a -> PactDb a
 advisePactDb pt PactDb{..} = PactDb
   { _readRow = \d k e -> perf' DbRead $ _readRow d k e
+  , _sizeRow = \d k e -> perf' DbRowSize $ _sizeRow d k e
   , _writeRow = \w d k v e -> perf' DbWrite $ _writeRow w d k v e
   , _keys = \d e -> perf' DbKeys $ _keys d e
   , _txids = \t i e -> perf' DbTxIds $ _txids t i e

@@ -134,6 +134,8 @@ data Persister s = Persister {
   ,
   readValue :: forall k v . (PactDbKey k, FromJSON v, Typeable v) => Table k -> k -> Persist s (Maybe v)
   ,
+  sizeValue :: forall k . (PactDbKey k) => Table k -> k -> Persist s (Maybe Int)
+  ,
   writeValue :: forall k . (PactDbKey k) => Table k -> WriteType -> k -> B.ByteString -> Persist s ()
   ,
   refreshConn :: Persist s ()

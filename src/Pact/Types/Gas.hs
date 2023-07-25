@@ -140,6 +140,8 @@ data GasArgs
   -- ^ Cost of concatenating two strings, lists, and objects
   | GUnreduced ![Term Ref]
   -- ^ Cost of using a native function
+  | GDecodeJson !Int
+  -- ^ Cost of decoding this many bytes from JSON
   | GPostRead !ReadValue
   -- ^ Cost for reading from database
   | GPreWrite !WriteValue !SizeOfVersion
@@ -206,6 +208,7 @@ instance Pretty GasArgs where
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
     GUnreduced {} -> "GUnreduced"
     GPostRead rv -> "GPostRead:" <> pretty rv
+    GDecodeJson rs -> "GDecodeJson:" <> pretty rs
     GPreWrite wv szVer -> "GWrite:" <> pretty wv <> colon <> pretty szVer
     GModuleMember {} -> "GModuleMember"
     GModuleDecl {} -> "GModuleDecl"

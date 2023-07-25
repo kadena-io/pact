@@ -288,8 +288,8 @@ invokeEnv f e = withMVar e $ \ls -> f $! (_rlsDb ls)
 
 repldb :: PactDb LibState
 repldb = PactDb {
-
     _readRow = \d k -> invokeEnv $ \(LibDb e) -> _readRow pactdb d k e
+  , _sizeRow = \d k -> invokeEnv $ \(LibDb e) -> _sizeRow pactdb d k e
   , _writeRow = \wt d k v -> invokeEnv $ \(LibDb e) ->  _writeRow pactdb wt d k v e
   , _keys = \t -> invokeEnv $ \(LibDb e) ->  _keys pactdb t e
   , _txids = \t tid -> invokeEnv $ \(LibDb e) ->  _txids pactdb t tid e

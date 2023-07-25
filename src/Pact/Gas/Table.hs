@@ -5,7 +5,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Pact.Gas.Table where
+module Pact.Gas.Table
+  ( GasCostConfig(..)
+  , defaultGasConfig
+  , defaultGasModel
+  , pact421GasModel
+  , tableGasModel
+  , defaultGasTable
+  ) where
 
 import Data.Ratio
 import Data.Map (Map)
@@ -42,7 +49,8 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_moduleMemberCost :: Gas
   , _gasCostConfig_useModuleCost :: Gas
   , _gasCostConfig_interfaceCost :: Gas
-  , _gasCostConfig_writeBytesCost :: Gas -- cost per bytes to write to database
+  , _gasCostConfig_writeBytesCost :: Gas -- cost per ten bytes to write to database
+  , _gasCostConfig_decodeJsonBytesCost :: Gas -- cost per ten bytes to decode JSON
   , _gasCostConfig_functionApplicationCost :: Gas
   , _gasCostConfig_defPactCost :: Gas
   , _gasCostConfig_foldDBCost :: Gas
@@ -62,6 +70,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_useModuleCost = 1     -- TODO benchmark
   , _gasCostConfig_interfaceCost = 1     -- TODO benchmark
   , _gasCostConfig_writeBytesCost = 1
+  , _gasCostConfig_decodeJsonBytesCost = 1
   , _gasCostConfig_functionApplicationCost = 1
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   , _gasCostConfig_foldDBCost = 1
@@ -220,11 +229,8 @@ defaultGasTable =
   ,("pairing-check", 1)
   ]
 
-{-# NOINLINE defaultGasTable #-}
-
 expLengthPenalty :: Integral i => i -> Gas
 expLengthPenalty v = let lv = logBase (100::Float) (fromIntegral v) in 1 + floor (lv^(10::Int))
-{-# INLINE expLengthPenalty #-}
 
 tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
@@ -260,25 +266,26 @@ tableGasModel gasConfig =
           ReadNamespace _ns -> _gasCostConfig_readColumnCost gasConfig
           ReadKeySet _ksName _ks -> _gasCostConfig_readColumnCost gasConfig
           ReadYield (Yield _obj _ _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
+        GDecodeJson sz -> gasToMilliGas $ memoryCost sz (_gasCostConfig_decodeJsonBytesCost gasConfig)
         GPreWrite w szVer -> gasToMilliGas $ case w of
           WriteData _type key obj ->
-            (memoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost szVer obj (_gasCostConfig_writeBytesCost gasConfig))
+            (sizeOfMemoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
+            + (sizeOfMemoryCost szVer obj (_gasCostConfig_writeBytesCost gasConfig))
           WriteTable tableName ->
-            (memoryCost szVer tableName (_gasCostConfig_writeBytesCost gasConfig))
+            (sizeOfMemoryCost szVer tableName (_gasCostConfig_writeBytesCost gasConfig))
           WriteModule _modName _mCode ->
-            (memoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
+            (sizeOfMemoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (sizeOfMemoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
           WriteInterface _modName _mCode ->
-            (memoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
+            (sizeOfMemoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (sizeOfMemoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
           WriteNamespace ns ->
-            (memoryCost szVer ns (_gasCostConfig_writeBytesCost gasConfig))
+            (sizeOfMemoryCost szVer ns (_gasCostConfig_writeBytesCost gasConfig))
           WriteKeySet ksName ks ->
-            (memoryCost szVer ksName (_gasCostConfig_writeBytesCost gasConfig))
-            + (memoryCost szVer ks (_gasCostConfig_writeBytesCost gasConfig))
+            (sizeOfMemoryCost szVer ksName (_gasCostConfig_writeBytesCost gasConfig))
+            + (sizeOfMemoryCost szVer ks (_gasCostConfig_writeBytesCost gasConfig))
           WriteYield obj ->
-            (memoryCost szVer (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
+            (sizeOfMemoryCost szVer (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
         GModuleMember _module -> gasToMilliGas $ _gasCostConfig_moduleMemberCost gasConfig
         GModuleDecl _moduleName _mCode -> gasToMilliGas (_gasCostConfig_moduleCost gasConfig)
         GUse _moduleName _mHash -> gasToMilliGas (_gasCostConfig_useModuleCost gasConfig)
@@ -298,7 +305,6 @@ tableGasModel gasConfig =
       , gasModelDesc = "table-based cost model"
       , runGasModel = run
       }
-{-# INLINE tableGasModel #-}
 
 pointAddGas :: ZKGroup -> Gas
 pointAddGas = \case
@@ -322,12 +328,13 @@ perByteFactor :: Rational
 perByteFactor = 1%10
 {-# NOINLINE perByteFactor #-}
 
-memoryCost :: (SizeOf a) => SizeOfVersion -> a -> Gas -> Gas
-memoryCost szVer val (Gas cost) = Gas totalCost
-  where costFrac = realToFrac cost
-        sizeFrac = realToFrac (sizeOf szVer val)
-        totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
-{-# INLINE memoryCost #-}
+memoryCost :: Int -> Gas -> Gas
+memoryCost bytes (Gas cost) =
+  Gas (ceiling (perByteFactor * fromIntegral bytes * realToFrac cost))
+
+sizeOfMemoryCost :: (SizeOf a) => SizeOfVersion -> a -> Gas -> Gas
+sizeOfMemoryCost szVer val cost =
+  memoryCost (fromIntegral $ sizeOf szVer val) cost
 
 -- Slope to costing function,
 -- sets a 10mb practical limit on module sizes.

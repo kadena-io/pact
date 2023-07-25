@@ -40,7 +40,7 @@ module Pact.Types.Runtime
    evalCapabilities,evalLogGas,evalEvents,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
-   readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
+   readRow,sizeRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
    NamespacePolicy(..),
    permissiveNamespacePolicy,
@@ -427,6 +427,10 @@ emitPactWarning pw =
 -- | Invoke '_readRow'
 readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
 readRow i d k = method i $ \db -> _readRow db d k
+
+-- | Invoke '_sizeRow'
+sizeRow :: IsString k => Info -> Domain k v -> k -> Eval e (Maybe Int)
+sizeRow i d k = method i $ \db -> _sizeRow db d k
 
 -- | Invoke '_writeRow'
 writeRow :: (AsString k,J.Encode v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()

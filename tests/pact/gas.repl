@@ -142,7 +142,7 @@
 (env-gaslog)
 (transfer "Alice" "Bob" 5.0)
 (env-gaslog)
-(expect "Cost: simple transfer" 281 (env-gas))
+(expect "Cost: simple transfer" 287 (env-gas))
 
 (expect "Alice was debited 5" 5.0 (balance "Alice"))
 (expect "Bob was credited 5" 5.0 (balance "Bob"))
@@ -353,43 +353,43 @@ d.G3
 (env-gaslog)
 (select accounts ["balance"] (constantly true))
 (env-gaslog) ;; GOV user app charge applied. And used for rest of transaction.
-(expect "Cost: select with 1 out of 1 column filter" 212 (env-gas))
+(expect "Cost: select with 1 out of 1 column filter" 227 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (select accounts [] (constantly true))
 (env-gaslog) ;; GOV user app charge NOT applied.
-(expect "Cost: select with empty column list" 211 (env-gas))
+(expect "Cost: select with empty column list" 226 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (select accounts (constantly true))
 (env-gaslog) ;; GOV user app charge NOT applied.
-(expect "Cost: select with no column filter" 211 (env-gas))
+(expect "Cost: select with no column filter" 226 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (select accounts-with-nickname ["balance"] (constantly true))
 (env-gaslog)
-(expect "Cost: select with 1 out of 2 column filter" 210 (env-gas))
+(expect "Cost: select with 1 out of 2 column filter" 225 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (select accounts-with-nickname ["balance", "nickname"] (constantly true))
 (env-gaslog)
-(expect "Cost: select with 2 out of 2 column filter" 211 (env-gas))
+(expect "Cost: select with 2 out of 2 column filter" 226 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (select accounts-with-nickname [] (constantly true))
 (env-gaslog)
-(expect "Cost: select with empty column list" 210 (env-gas))
+(expect "Cost: select with empty column list" 225 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (select accounts-with-nickname (constantly true))
 (env-gaslog)
-(expect "Cost: select with no colum filter" 210 (env-gas))
+(expect "Cost: select with no colum filter" 225 (env-gas))
 
 (commit-tx)
 
@@ -447,43 +447,43 @@ d.G3
 (env-gaslog)
 (read accounts "a")
 (env-gaslog)
-(expect "Cost: read row, no column filter, 1 column schema" 12 (env-gas))
+(expect "Cost: read row, no column filter, 1 column schema" 15 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (read accounts "a" [])
 (env-gaslog)
-(expect "Cost: read row, empty list column filter, 1 column schema" 11 (env-gas))
+(expect "Cost: read row, empty list column filter, 1 column schema" 14 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (read accounts "a" ["balance"])
 (env-gaslog)
-(expect "Cost: read row, 1 column filter, 1 column schema" 11 (env-gas))
+(expect "Cost: read row, 1 column filter, 1 column schema" 14 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (read accounts-with-nickname "a")
 (env-gaslog)
-(expect "Cost: read, no column filter, 2 columns schema" 12 (env-gas))
+(expect "Cost: read, no column filter, 2 columns schema" 17 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (read accounts-with-nickname "a" [])
 (env-gaslog)
-(expect "Cost: read row, empty list column filter, 2 column schema" 12 (env-gas))
+(expect "Cost: read row, empty list column filter, 2 column schema" 17 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (read accounts-with-nickname "a" ["balance"])
 (env-gaslog)
-(expect "Cost: read row, 1 column filter, 2 column schema" 12 (env-gas))
+(expect "Cost: read row, 1 column filter, 2 column schema" 17 (env-gas))
 
 (env-gas 0)
 (env-gaslog)
 (read accounts-with-nickname "a" ["balance", "nickname"])
 (env-gaslog)
-(expect "Cost: read row, 2 column filter, 2 column schema" 12 (env-gas))
+(expect "Cost: read row, 2 column filter, 2 column schema" 17 (env-gas))
 
 (commit-tx)
 
@@ -714,7 +714,7 @@ d.G3
 ; select cost
 (env-gas 0)
 (select fdb-tbl (where 'a (> 0)))
-(expect "new select gas" 40025 (env-gas))
+(expect "new select gas" 40045 (env-gas))
 ; fold-db cost
 (env-gas 0)
 (let*
@@ -724,7 +724,7 @@ d.G3
   (fold-db fdb-tbl (qry) (consume))
   )
 
-(expect "new fold-db gas" 40027 (env-gas))
+(expect "new fold-db gas" 40047 (env-gas))
 
 (env-gas 0)
 (keys fdb-tbl)

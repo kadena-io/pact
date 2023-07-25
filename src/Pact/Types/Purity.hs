@@ -67,8 +67,10 @@ disallowed opName _ = throwM $ PactError EvalError def def $ "Illegal database a
 mkPureEnv :: (EvalEnv e -> f) -> Purity ->
              (forall k v . (IsString k,FromJSON v) =>
               Domain k v -> k -> Method f (Maybe v)) ->
+             (forall k v . (IsString k) =>
+              Domain k v -> k -> Method f (Maybe Int)) ->
              EvalEnv e -> Eval e (EvalEnv f)
-mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
+mkPureEnv holder purity readRowImpl sizeRowImpl env@EvalEnv{..} = do
   v <- liftIO $ newMVar (holder env)
   return $ EvalEnv
     _eeRefStore
@@ -80,6 +82,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     v
     PactDb {
       _readRow = readRowImpl
+    , _sizeRow = sizeRowImpl
     , _writeRow = \_ _ _ _ -> disallowed "writeRow"
     , _keys = const (disallowed "keys")
     , _txids = \_ _ -> (disallowed "txids")
@@ -114,14 +117,16 @@ mkSysOnlyEnv = mkPureEnv PureEnv PSysOnly (\(dom :: Domain key v) key ->
        KeySets -> read'
        Modules -> read'
        Namespaces -> read'
-       Pacts -> read')
+       Pacts -> read') (\_ _ _ -> return Nothing)
 
 
 -- | Operationally creates a read-only environment.
 -- Phantom type and typeclass assigned in 'runReadOnly'
 mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (PureEnv p e))
-mkReadOnlyEnv = mkPureEnv PureEnv PReadOnly $ \d k e ->
-  withMVar e $ \(PureEnv EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+mkReadOnlyEnv = mkPureEnv PureEnv PReadOnly rd sz
+  where
+  rd d k e = withMVar e $ \(PureEnv EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+  sz d k e = withMVar e $ \(PureEnv EvalEnv {..}) -> _sizeRow _eePactDb d k _eePactDbVar
 
 
 -- | Run monad in sysread-only environment.

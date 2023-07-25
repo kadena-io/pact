@@ -23,15 +23,20 @@ newtype MockReadValue =
   MockReadValue (forall k v . (PactDbKey k, FromJSON v) => Table k -> k -> Persist () (Maybe v))
 instance Default MockReadValue where def = MockReadValue (\_t _k -> rcp Nothing)
 
+newtype MockSizeValue =
+  MockSizeValue (forall k . (PactDbKey k) => Table k -> k -> Persist () (Maybe Int))
+instance Default MockSizeValue where def = MockSizeValue (\_t _k -> rcp Nothing)
+
 data MockPersist = MockPersist {
    mockQueryKeys :: MockQueryKeys
   ,mockQuery :: MockQuery
   ,mockReadValue :: MockReadValue
+  ,mockSizeValue :: MockSizeValue
   }
-instance Default MockPersist where def = MockPersist def def def
+instance Default MockPersist where def = MockPersist def def def def
 
 persister :: MockPersist -> Persister ()
-persister (MockPersist (MockQueryKeys qk) (MockQuery q) (MockReadValue rv)) = Persister {
+persister (MockPersist (MockQueryKeys qk) (MockQuery q) (MockReadValue rv) (MockSizeValue sv)) = Persister {
   createTable = \_t -> rcp ()
   ,
   beginTx = \_t -> rcp ()
@@ -45,6 +50,8 @@ persister (MockPersist (MockQueryKeys qk) (MockQuery q) (MockReadValue rv)) = Pe
   query = q
   ,
   readValue = rv
+  ,
+  sizeValue = sv
   ,
   writeValue = \_t _wt _k _v -> rcp ()
   ,
