@@ -12,7 +12,6 @@ module Pact.GasModel.GasTests
   ) where
 
 import Control.Lens hiding ((.=),DefName)
-import Data.Aeson (toJSON, ToJSON(..))
 import Data.Bool (bool)
 import Data.Default (def)
 import Data.List (foldl')
@@ -36,6 +35,7 @@ import Pact.Types.Capability
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
+import Pact.JSON.Legacy.Value
 
 
 -- | Gas benchmark tests for Pact native functions
@@ -1331,7 +1331,7 @@ readStringTests nativeName = tests
               " with name=" <> desc <> "String")
 
     updateEnvWithData s =
-      setEnv (set eeMsgBody $ A.object ["name" A..= s])
+      setEnv (set eeMsgBody $ toLegacyJson $ A.object ["name" A..= s])
 
     setupTests (desc, s)
       = createGasUnitTests
@@ -1355,7 +1355,7 @@ readMsgTests nativeName = tests
               " with msg=" <> desc <> "ObjectMap")
 
     updateEnvWithData m =
-      setEnv (set eeMsgBody $ toJSON m)
+      setEnv (set eeMsgBody $ toLegacyJson m)
 
     setupTests (desc, m)
       = createGasUnitTests
@@ -1379,7 +1379,7 @@ readIntegerTests nativeName = tests
               " with amount=" <> desc <> "Number")
 
     updateEnvWithData i =
-      setEnv (set eeMsgBody $ A.object ["amount" A..= i])
+      setEnv (set eeMsgBody $ toLegacyJson $ A.object ["amount" A..= i])
 
     setupTests (desc, i)
       = createGasUnitTests
@@ -1406,7 +1406,7 @@ readDecimalTests nativeName = tests
       setEnv (set eeMsgBody decVal)
       where
         d' = "0." <> intToStr d <> "1"
-        decVal = A.object ["amount" A..= d']
+        decVal = toLegacyJson $ A.object ["amount" A..= d']
 
     setupTests (desc, d)
       = createGasUnitTests
@@ -1785,7 +1785,7 @@ createPrincipalTests = createGasUnitTests
 
     updateStackFrame = setState (set evalCallStack [someStackFrame])
 
-    updateEnv = setEnv $ set eeMsgBody $ A.object
+    updateEnv = setEnv $ set eeMsgBody $ toLegacyJson $ A.object
       [ "ks1" A..= A.object
         [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
         , "pred" A..= ("keys-all" :: T.Text)
@@ -1854,7 +1854,7 @@ validatePrincipalTests = createGasUnitTests
 
     updateStackFrame = setState (set evalCallStack [someStackFrame])
 
-    updateEnv = setEnv $ set eeMsgBody $ A.object
+    updateEnv = setEnv $ set eeMsgBody $ toLegacyJson $ A.object
       [ "ks1" A..= A.object
         [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
         , "pred" A..= ("keys-all" :: T.Text)
@@ -1905,7 +1905,7 @@ isPrincipalTests = createGasUnitTests
 
     updateStackFrame = setState (set evalCallStack [someStackFrame])
 
-    updateEnv = setEnv $ set eeMsgBody $ A.object
+    updateEnv = setEnv $ set eeMsgBody $ toLegacyJson $ A.object
       [ "ks1" A..= A.object
         [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
         , "pred" A..= ("keys-all" :: T.Text)
@@ -1956,7 +1956,7 @@ typeofPrincipalTests = createGasUnitTests
 
     updateStackFrame = setState (set evalCallStack [someStackFrame])
 
-    updateEnv = setEnv $ set eeMsgBody $ A.object
+    updateEnv = setEnv $ set eeMsgBody $ toLegacyJson $ A.object
       [ "ks1" A..= A.object
         [ "keys" A..= ["76d458b3aa1b0d11a5be8385be2646d799ab898d863dc74e6b78c4726e7f4e8d" :: T.Text]
         , "pred" A..= ("keys-all" :: T.Text)

@@ -56,7 +56,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Data.Aeson                        as A
-import Data.Aeson.Types                  as A
 import Data.Hashable
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
@@ -75,6 +74,9 @@ import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519
 #endif
 
+import qualified Pact.JSON.Encode as J
+
+import Test.QuickCheck
 
 
 --------- INTERNAL SCHEME CLASS ---------
@@ -279,52 +281,59 @@ instance Show SomeKeyPair where
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
   deriving (Eq, Generic, Hashable)
-instance ToJSON PublicKeyBS where
-  toJSON (PubBS p) = toB16JSON p
+
 instance FromJSON PublicKeyBS where
   parseJSON = withText "PublicKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PubBS s'
+instance J.Encode PublicKeyBS where
+  build (PubBS p) = J.text $ toB16Text p
+  {-# INLINE build #-}
 instance IsString PublicKeyBS where
   fromString s = case parseB16TextOnly (T.pack s) of
     Left e -> PubBS $ "Bad public key: " <> T.encodeUtf8 (T.pack e)
     Right b -> PubBS b
 instance Show PublicKeyBS where
   show (PubBS b) = T.unpack $ toB16Text b
-instance ToJSONKey PublicKeyBS where
-    toJSONKey = toJSONKeyText (toB16Text . _pktPublic)
-    {-# INLINE toJSONKey #-}
+
 instance FromJSONKey PublicKeyBS where
     fromJSONKey = FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
     {-# INLINE fromJSONKey #-}
+instance Arbitrary PublicKeyBS where
+  arbitrary = PubBS . B.pack <$> vector 32
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
   deriving (Eq, Generic, Hashable)
-instance ToJSON PrivateKeyBS where
-  toJSON (PrivBS p) = toB16JSON p
+
 instance FromJSON PrivateKeyBS where
   parseJSON = withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PrivBS s'
+instance J.Encode PrivateKeyBS where
+  build (PrivBS p) = J.text $ toB16Text p
+  {-# INLINE build #-}
 instance IsString PrivateKeyBS where
   fromString s = case parseB16TextOnly (T.pack s) of
     Left e -> PrivBS $ "Bad private key: " <> T.encodeUtf8 (T.pack e)
     Right b -> PrivBS b
 instance Show PrivateKeyBS where
   show (PrivBS b) = T.unpack $ toB16Text b
+instance Arbitrary PrivateKeyBS where
+  arbitrary = PrivBS . B.pack <$> vector 32
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic, Hashable)
-instance ToJSON SignatureBS where
-  toJSON (SigBS p) = toB16JSON p
+
 instance FromJSON SignatureBS where
   parseJSON = withText "SignatureBS" $ \s -> do
     s' <- parseB16Text s
     return $ SigBS s'
-
-
-
+instance J.Encode SignatureBS where
+  build (SigBS p) = J.text $ toB16Text p
+  {-# INLINE build #-}
+instance Arbitrary SignatureBS where
+  arbitrary = SigBS . B.pack <$> vector 64
 
 --------- SCHEME HELPER FUNCTIONS ---------
 

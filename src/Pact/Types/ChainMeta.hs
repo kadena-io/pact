@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -45,29 +46,42 @@ import Data.Text
 import Pact.Time (getCurrentTime, toPosixTimestampMicros)
 import Data.Word (Word64)
 
+import Test.QuickCheck
+
 -- internal pact modules
 
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
-import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
+import Pact.Types.Util (AsString, lensyParseJSON)
+
+import qualified Pact.JSON.Encode as J
 
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.
 newtype EntityName = EntityName Text
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, NFData, Hashable, Serialize, Default, ToJSON, FromJSON, IsString, AsString)
+  deriving newtype (Show, NFData, Hashable, Serialize, Default, FromJSON, IsString, AsString, J.Encode)
+
+instance Arbitrary EntityName where
+  arbitrary = EntityName <$> arbitrary
 
 -- | Wrapper for 'PublicMeta' ttl field in seconds since offset
 --
 newtype TTLSeconds = TTLSeconds ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
+  deriving newtype (Show, Num, NFData, FromJSON, Serialize, J.Encode)
+
+instance Arbitrary TTLSeconds where
+  arbitrary = TTLSeconds <$> arbitrary
 
 -- | Wrapper for 'PublicMeta' creation time field in seconds since POSIX epoch
 --
 newtype TxCreationTime = TxCreationTime ParsedInteger
   deriving stock (Eq, Ord, Generic)
-  deriving newtype (Show, Num, NFData, ToJSON, FromJSON, Serialize)
+  deriving newtype (Show, Num, NFData, FromJSON, Serialize, J.Encode)
+
+instance Arbitrary TxCreationTime where
+  arbitrary = TxCreationTime <$> arbitrary
 
 -- | Get current time as TxCreationTime
 getCurrentCreationTime :: IO TxCreationTime
@@ -85,7 +99,17 @@ data Address = Address
 
 instance NFData Address
 instance Serialize Address
-instance ToJSON Address where toJSON = lensyToJSON 2
+
+instance Arbitrary Address where
+  arbitrary = Address <$> arbitrary <*> arbitrary
+
+instance J.Encode Address where
+  build o = J.object
+    [ "to" J..= J.Array (_aTo o)
+    , "from" J..= _aFrom o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON Address where parseJSON = lensyParseJSON 2
 makeLenses ''Address
 
@@ -95,7 +119,14 @@ newtype PrivateMeta = PrivateMeta { _pmAddress :: Maybe Address }
 makeLenses ''PrivateMeta
 
 instance Default PrivateMeta where def = PrivateMeta def
-instance ToJSON PrivateMeta where toJSON = lensyToJSON 3
+
+instance Arbitrary PrivateMeta where
+  arbitrary = PrivateMeta <$> arbitrary
+
+instance J.Encode PrivateMeta where
+  build o = J.object [ "address" J..= _pmAddress o ]
+  {-# INLINABLE build #-}
+
 instance FromJSON PrivateMeta where parseJSON = lensyParseJSON 3
 instance NFData PrivateMeta
 instance Serialize PrivateMeta
@@ -120,15 +151,25 @@ makeLenses ''PublicMeta
 
 instance Default PublicMeta where def = PublicMeta "" "" 0 0 0 0
 
-instance ToJSON PublicMeta where
-  toJSON (PublicMeta cid s gl gp ttl ct) = object
-    [ "chainId" .= cid
-    , "sender" .= s
-    , "gasLimit" .= gl
-    , "gasPrice" .= gp
-    , "ttl" .= ttl
-    , "creationTime" .= ct
+instance Arbitrary PublicMeta where
+  arbitrary = PublicMeta
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+
+instance J.Encode PublicMeta where
+  build o = J.object
+    [ "creationTime" J..= _pmCreationTime o
+    , "ttl" J..= _pmTTL o
+    , "gasLimit" J..= _pmGasLimit o
+    , "chainId" J..= _pmChainId o
+    , "gasPrice" J..= _pmGasPrice o
+    , "sender" J..= _pmSender o
     ]
+  {-# INLINABLE build #-}
 
 instance FromJSON PublicMeta where
   parseJSON = withObject "PublicMeta" $ \o -> PublicMeta
@@ -173,6 +214,21 @@ data PublicData = PublicData
   deriving (Show, Eq, Generic)
 makeLenses ''PublicData
 
-instance ToJSON PublicData where toJSON = lensyToJSON 3
+instance J.Encode PublicData where
+  build o = J.object
+    [ "publicMeta" J..= _pdPublicMeta o
+    , "blockTime" J..= J.Aeson (_pdBlockTime o)
+    , "prevBlockHash" J..= _pdPrevBlockHash o
+    , "blockHeight" J..= J.Aeson (_pdBlockHeight o)
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
 instance Default PublicData where def = PublicData def def def def
+
+instance Arbitrary PublicData where
+  arbitrary = PublicData
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary

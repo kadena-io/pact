@@ -29,7 +29,7 @@ newtype MockGetUserTableInfo =
 instance Default MockGetUserTableInfo where def = MockGetUserTableInfo (\_t -> rc "")
 
 newtype MockCommitTx =
-  MockCommitTx (Method () [TxLog Value])
+  MockCommitTx (Method () [TxLogJson])
 instance Default MockCommitTx where def = MockCommitTx (rc [])
 
 newtype MockGetTxLog =

@@ -3,6 +3,7 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -33,7 +34,7 @@ import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                from, iso, lens, makeLenses,
                                                makePrisms, over, (%~), (&),
                                                (<&>))
-import           Data.Aeson                   (FromJSON, ToJSON)
+import           Data.Aeson                   (FromJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
@@ -57,7 +58,7 @@ import           Data.SBV.Internals           (CV (..), CVal (..), Kind (..),
                                                SVal (SVal), genMkSymVar)
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
-import           Data.SBV.Trans               (MProvable (..), mkSymVal)
+import           Data.SBV.Trans               (mkSymVal)
 import           Data.SBV.Tuple               (_1, _2)
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
@@ -65,7 +66,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import Pact.Time                              (UTCTime, toMicroseconds, fromMicroseconds, mjdEpoch)
 import           Data.Type.Equality           ((:~:) (Refl))
-import           GHC.TypeLits
+import           GHC.TypeLits                 (KnownSymbol, SomeSymbol(..), Symbol, symbolVal, someSymbolVal)
 import           Prelude                      hiding (Float)
 
 import           Pact.Types.Pretty            hiding (list)
@@ -166,7 +167,8 @@ mkConcreteInteger = SBVI.SBV
 
 newtype RegistryName
   = RegistryName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+  deriving (Eq,Ord)
+  deriving newtype (IsString,AsString,FromJSON)
 
 instance Show RegistryName where show (RegistryName s) = show s
 
@@ -428,19 +430,6 @@ instance SDivisible (S Integer) where
   S _ a `sDivMod`  S _ b = a `sDivMod`  b & both %~ sansProv
 
 type PredicateS = Symbolic (S Bool)
-
-instance MProvable IO PredicateS where
-#if MIN_VERSION_sbv(8,17,5)
-  universal_   = fmap _sSbv
-  universal _  = fmap _sSbv
-  existential_  = fmap _sSbv
-  existential _ = fmap _sSbv
-#else
-  forAll_   = fmap _sSbv
-  forAll _  = fmap _sSbv
-  forSome_  = fmap _sSbv
-  forSome _ = fmap _sSbv
-#endif
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S Str -> S Str -> S Str

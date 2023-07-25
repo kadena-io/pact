@@ -1,4 +1,4 @@
 #!/bin/bash
 
 # --- Jump into Nix Shell --- #
-nix-shell --pure -p python3 python38Packages.sphinx python38Packages.sphinx_rtd_theme pandoc perl --run "./work.sh"
+nix-shell --pure -p 'python38.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme])' -p pandoc -p perl --run "./work.sh"

@@ -28,13 +28,14 @@ module Pact.Types.Typecheck
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,renderTcFailure,
     TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,
-    tcVarToTypes,tcYieldResume,tcDynEnv,
+    tcVarToTypes,tcYieldResume,tcDynEnv,tcBoundLambdas,
     DynEnv,
     TC (..), runTC, runTCState, mkTcState,
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,toplevelInfo,
     Special (..),
     Fun (..),fInfo,fModule,fName,fTypes,fSpecial,fType,fArgs,fBody,fDefType,fRetId,
+    funName,
     Node (..),aId,aTy,
     Named (..),
     AstBindType (..),
@@ -63,23 +64,23 @@ import Pact.Types.Pretty
 import Pact.Types.Native
 
 
-data CheckerException = CheckerException Info String deriving (Eq,Ord)
+data CheckerException = CheckerException !Info !String deriving (Eq,Ord)
 
 instance Exception CheckerException
 instance Show CheckerException where show (CheckerException i s) = renderInfo i ++ ": " ++ s
 
 data Schema = Schema
-  { _schName :: TypeName
-  , _schModule :: Maybe ModuleName
-  , _schFields :: [Arg UserType]
-  , _schInfo :: Info
+  { _schName :: !TypeName
+  , _schModule :: !(Maybe ModuleName)
+  , _schFields :: ![Arg UserType]
+  , _schInfo :: !Info
   } deriving (Eq, Ord)
 
 newtype ModSpec = ModSpec { _specModName :: ModuleName }
   deriving (Eq, Ord)
 
 -- | Model a user type. Currently only Schemas are supported..
-data UserType = UTSchema Schema | UTModSpec ModSpec
+data UserType = UTSchema !Schema | UTModSpec !ModSpec
   deriving (Eq,Ord)
 instance Show UserType where
   show (UTSchema Schema {..}) = "{" ++ unpack (maybe "" ((<>) "." . asString) _schModule) ++ unpack (asString _schName) ++ " " ++ show _schFields ++ "}"
@@ -90,9 +91,9 @@ instance Pretty UserType where
 
 -- | An ID for an AST node.
 data TcId = TcId {
-  _tiInfo :: Info,
-  _tiName :: Text,
-  _tiId :: Int
+  _tiInfo :: !Info,
+  _tiName :: !Text,
+  _tiId :: !Int
   }
 
 instance Eq TcId where
@@ -106,7 +107,7 @@ instance HasInfo TcId where getInfo = _tiInfo
 
 
 -- | Role of an AST in an overload.
-data VarRole = ArgVar Int | RetVar
+data VarRole = ArgVar !Int | RetVar
   deriving (Eq,Show,Ord)
 
 instance Pretty VarRole where pretty = viaShow
@@ -115,11 +116,11 @@ data OverloadSpecial = OAt | OSelect deriving (Eq,Show,Enum,Ord)
 
 -- | Combine an AST id with a role.
 data Overload m = Overload {
-  _oFunName :: Text,
-  _oRoles :: M.Map VarRole m,
-  _oTypes :: FunTypes UserType,
-  _oSolved :: Maybe (FunType UserType),
-  _oSpecial :: Maybe OverloadSpecial }
+  _oFunName :: !Text,
+  _oRoles :: !(M.Map VarRole m),
+  _oTypes :: !(FunTypes UserType),
+  _oSolved :: !(Maybe (FunType UserType)),
+  _oSpecial :: !(Maybe OverloadSpecial) }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 
 instance Pretty m => Pretty (Overload m) where
@@ -132,14 +133,14 @@ instance Pretty m => Pretty (Overload m) where
     , "Special:" <+> viaShow _oSpecial
     ]
 
-data Failure = Failure TcId String deriving (Eq,Ord,Show)
+data Failure = Failure !TcId !String deriving (Eq,Ord,Show)
 
 renderTcFailure :: Failure -> RenderedOutput
 renderTcFailure (Failure t m) = RenderedOutput (pack m) (_tiInfo t) OutputFailure
 
 data YieldResume n = YieldResume
-  { _yrYield :: Maybe n
-  , _yrResume :: Maybe n
+  { _yrYield :: !(Maybe n)
+  , _yrResume :: !(Maybe n)
   , _yrCrossChain :: !Bool }
   deriving (Eq,Show,Functor,Foldable,Traversable)
 instance Default (YieldResume n) where def = YieldResume def def False
@@ -149,23 +150,26 @@ type DynEnv = M.Map ModuleName (ModuleData Ref)
 
 -- | Typechecker state.
 data TcState = TcState {
-  _tcDebug :: Bool,
-  _tcSupply :: Int,
+  _tcDebug :: !Bool,
+  _tcSupply :: !Int,
   -- | Maps native app AST to an overloaded function type, and stores result of solver.
-  _tcOverloads :: M.Map TcId (Overload (AST Node)),
-  _tcOverloadOrder :: [TcId],
-  _tcFailures :: S.Set Failure,
+  _tcOverloads :: !(M.Map TcId (Overload (AST Node))),
+  _tcOverloadOrder :: ![TcId],
+  _tcFailures :: !(S.Set Failure),
   -- | Maps ASTs to a type var.
-  _tcAstToVar :: M.Map TcId (TypeVar UserType),
+  _tcAstToVar :: !(M.Map TcId (TypeVar UserType)),
   -- | Maps type vars to types.
-  _tcVarToTypes :: M.Map (TypeVar UserType) (Type UserType),
+  _tcVarToTypes :: !(M.Map (TypeVar UserType) (Type UserType)),
   -- | Used in AST walk to track step yields and resumes.
-  _tcYieldResume :: Maybe (YieldResume Node),
-  _tcDynEnv :: DynEnv
+  _tcYieldResume :: !(Maybe (YieldResume Node)),
+  -- | Associates interfaces with modules for modrefs
+  _tcDynEnv :: !DynEnv,
+  -- | Tracks let-bound lambda funs
+  _tcBoundLambdas :: !(M.Map TcId (Fun Node))
   } deriving (Eq,Show)
 
 mkTcState :: Int -> Bool -> DynEnv -> TcState
-mkTcState sup dbg dynEnv = TcState dbg sup def def def def def def dynEnv
+mkTcState sup dbg dynEnv = TcState dbg sup def def def def def def dynEnv def
 
 instance Pretty TcState where
   pretty TcState {..} = vsep
@@ -194,8 +198,8 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 
 -- | Storage for literal values.
 data PrimValue g =
-  PrimLit Literal |
-  PrimGuard (Guard g)
+  PrimLit !Literal |
+  PrimGuard !(Guard g)
   deriving (Eq,Show,Functor,Foldable,Traversable)
 instance (Pretty n) => Pretty (PrimValue n) where
   pretty (PrimLit   l) = viaShow l
@@ -205,8 +209,8 @@ instance (Pretty n) => Pretty (PrimValue n) where
 -- | A top-level module production.
 data TopLevel t =
   TopFun {
-    _tlFun :: Fun t,
-    _tlMeta :: Meta
+    _tlFun :: !(Fun t),
+    _tlMeta :: !Meta
     } |
   TopConst {
     _tlInfo :: Info,
@@ -244,27 +248,27 @@ toplevelInfo TopUserType{_tlInfo} = _tlInfo
 -- | Special-form handling (with-read, map etc)
 data Special t =
   SPartial |
-  SBinding (AST t)
+  SBinding !(AST t)
   deriving (Eq,Show,Functor,Foldable,Traversable)
 
 
 -- | A native or user function.
 data Fun t =
   FNative {
-    _fInfo :: Info,
-    _fName :: Text,
-    _fTypes :: FunTypes UserType,
-    _fSpecial :: Maybe (SpecialForm,Special t)
+    _fInfo :: !Info,
+    _fName :: !Text,
+    _fTypes :: !(FunTypes UserType),
+    _fSpecial :: !(Maybe (SpecialForm,Special t))
     } |
   FDefun {
-    _fInfo   :: Info,
-    _fModule :: ModuleName,
-    _fName   :: Text,
-    _fDefType :: DefType,
-    _fType   :: FunType UserType,
-    _fArgs   :: [Named t],
-    _fBody   :: [AST t],
-    _fRetId :: TcId
+    _fInfo   :: !Info,
+    _fModule :: !ModuleName,
+    _fName   :: !Text,
+    _fDefType :: !DefType,
+    _fType   :: !(FunType UserType),
+    _fArgs   :: ![Named t],
+    _fBody   :: ![AST t],
+    _fRetId :: !TcId
     }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
@@ -285,11 +289,16 @@ instance Pretty t => Pretty (Fun t) where
     , ""
     ]
 
+-- | Get function name rep for debugging
+funName :: Fun t -> Text
+funName f@FDefun {} = asString (_fModule f) <> "." <> _fName f
+funName f = _fName f
+
 
 -- | Pair an AST with its type.
 data Node = Node {
-  _aId :: TcId,
-  _aTy :: Type UserType
+  _aId :: !TcId,
+  _aTy :: !(Type UserType)
   } deriving (Eq,Ord)
 instance Show Node where
   show (Node i t) = show i ++ "::" ++ show t
@@ -299,9 +308,9 @@ instance HasInfo Node where getInfo = getInfo . _aId
 
 -- | Pair an unescaped, unmangled "bare" name with something.
 data Named i = Named {
-  _nnName :: Text,
-  _nnNamed :: i,
-  _nnId :: TcId
+  _nnName :: !Text,
+  _nnNamed :: !i,
+  _nnId :: !TcId
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance (Show i) => Show (Named i) where
   show (Named na no _) = show na ++ "(" ++ show no ++ ")"
@@ -311,7 +320,7 @@ data AstBindType n =
   -- | Normal "let" bind
   AstBindLet |
   -- | Schema-style binding, with string value for key
-  AstBindSchema n |
+  AstBindSchema !n |
   -- | Synthetic binding for function call arguments introduced during inlining
   -- to force call-by-value semantics
   AstBindInlinedCallArgs
@@ -329,52 +338,52 @@ instance (Pretty n) => Pretty (AstBindType n) where
 -- | Inlined AST.
 data AST n =
   App {
-  _aNode :: n,
-  _aAppFun :: Fun n,
-  _aAppArgs :: [AST n]
+  _aNode :: !n,
+  _aAppFun :: !(Fun n),
+  _aAppArgs :: ![AST n]
   } |
   Binding {
-  _aNode :: n,
-  _aBindings :: [(Named n,AST n)],
-  _aBody :: [AST n],
-  _aBindType :: AstBindType n
+  _aNode :: !n,
+  _aBindings :: ![(Named n,AST n)],
+  _aBody :: ![AST n],
+  _aBindType :: !(AstBindType n)
   } |
   List {
-  _aNode :: n,
-  _aList :: [AST n]
+  _aNode :: !n,
+  _aList :: ![AST n]
   } |
   Object {
-  _aNode :: n,
-  _aObject :: ObjectMap (AST n)
+  _aNode :: !n,
+  _aObject :: !(ObjectMap (AST n))
   } |
   Prim {
-  _aNode :: n,
-  _aPrimValue :: PrimValue (AST n)
+  _aNode :: !n,
+  _aPrimValue :: !(PrimValue (AST n))
   } |
   Var {
-  _aNode :: n
+  _aNode :: !n
   } |
   Table {
-  _aNode :: n,
-  _aTableName :: TableName
+  _aNode :: !n,
+  _aTableName :: !TableName
   } |
   Step {
-  _aNode :: n,
-  _aEntity :: Maybe (AST n),
-  _aExec :: AST n,
-  _aRollback :: Maybe (AST n),
-  _aYieldResume :: Maybe (YieldResume n),
+  _aNode :: !n,
+  _aEntity :: !(Maybe (AST n)),
+  _aExec :: !(AST n),
+  _aRollback :: !(Maybe (AST n)),
+  _aYieldResume :: !(Maybe (YieldResume n)),
   _aModel :: ![Exp Info]
   } |
   Dynamic {
-  _aNode :: n,
-  _aDynModRef :: AST n,
-  _aDynMember :: Fun n
+  _aNode :: !n,
+  _aDynModRef :: !(AST n),
+  _aDynMember :: !(Fun n)
   } |
   ModRef {
-  _aNode :: n,
-  _aModRefName :: ModuleName,
-  _aModRefSpec :: Maybe [ModuleName]
+  _aNode :: !n,
+  _aModRefName :: !ModuleName,
+  _aModRefSpec :: !(Maybe [ModuleName])
   }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 

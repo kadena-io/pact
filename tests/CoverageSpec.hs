@@ -22,18 +22,21 @@ spec = do
 
 testCover :: Spec
 testCover = do
-  rpt <- runIO $ do
-    let fn = "tests/lcov/lcov.repl"
-    (ref,adv) <- mkCoverageAdvice
-    s <- initReplState (Script False fn) Nothing
-    void $! execScriptState' fn s (set (rEnv . eeAdvice) adv)
-    readIORef ref
-  it "matches golden coverage" $ Golden
-      { output = T.unpack (showReport rpt)
-      , encodePretty = id
-      , writeToFile = writeFile
-      , readFromFile = readFile
-      , testName = "lcov"
-      , directory = "golden"
-      , failFirstTime = False
-      }
+  before rpt $
+    it "matches golden coverage" $ \a ->
+      Golden
+        { output = T.unpack (showReport a)
+        , encodePretty = id
+        , writeToFile = writeFile
+        , readFromFile = readFile
+        , testName = "lcov"
+        , directory = "golden"
+        , failFirstTime = False
+        }
+  where
+    rpt = do
+      let fn = "tests/lcov/lcov.repl"
+      (ref,adv) <- mkCoverageAdvice
+      s <- initReplState (Script False fn) Nothing
+      void $! execScriptState' fn s (set (rEnv . eeAdvice) adv)
+      readIORef ref

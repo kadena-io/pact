@@ -1,22 +1,23 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
@@ -62,39 +63,25 @@ import qualified Data.Euclidean as E
 import qualified Data.Text as T
 import qualified Data.Map.Strict as HM
 import Control.Monad.ST
-import Data.Mod
 import Data.Poly
 import Data.Vector(Vector)
 import Data.Default(def)
 import Data.Int(Int8)
 import GHC.Real(Ratio(..))
-import GHC.Natural(naturalToInteger)
 import GHC.Exts(IsList(..))
 
 import Control.DeepSeq (NFData)
-import Numeric.Natural(Natural)
 
 import Pact.Native.Internal
+import Pact.Native.Pairing.GaloisField
 import Pact.Types.Type
 import Pact.Types.Term
 import Pact.Types.Runtime
 
------------------------------------------------------
--- Galois fields and field extensions
-------------------------------------------------------
-class (Field k, Fractional k, Ord k, Show k) => GaloisField k where
-  -- | The characteristic of the field
-  characteristic :: k -> Natural
 
-  -- | The degree of the finite field
-  degree :: k -> Word
-
-  frobenius :: k -> k
-
-  -- | order of a field p^k
-  order :: k -> Natural
-  order k = characteristic k ^ degree k
-  {-# INLINABLE order #-}
+-----------------------------------------------------------------
+-- ExtensionField
+-----------------------------------------------------------------
 
 class GaloisField k => ExtensionField p k | p -> k, k -> p where
   -- | The degree of the
@@ -102,29 +89,9 @@ class GaloisField k => ExtensionField p k | p -> k, k -> p where
   fieldPoly :: VPoly k
 
 
-type Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583
-
-newtype Fq = Fq (Mod Q)
-  deriving (Eq, Show, Ord, Num, Fractional, Euclidean, Field, GcdDomain, Ring, Semiring, Bounded, Enum, NFData)
-
-instance Real Fq where
-  toRational = fromIntegral
-
-instance Integral Fq where
-  quotRem = E.quotRem
-  toInteger (Fq m) = naturalToInteger (unMod m)
-
 newtype Extension p k
   = Extension (VPoly k)
   deriving (Show, Eq, Ord, NFData)
-
-
-instance GaloisField Fq where
-  characteristic _ = 21888242871839275222246405745257275088696311157297823662689037894645226208583
-
-  degree _ = 1
-
-  frobenius = id
 
 -- | Frobenius endomorphism precomputation.
 frobenius' :: GaloisField k => Vector k -> Vector k -> Maybe (Vector k)

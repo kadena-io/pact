@@ -2816,6 +2816,31 @@ spec = describe "analyze" $ do
               (hash false))|]
     expectVerified code
 
+  describe "hash symbolic (integer, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: integer)
+                 ;; shim value (hash 1)
+                 @model[(property (= result "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (bool, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: bool)
+                 ;; shim value (hash "true")
+                 @model[(property (= result "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"))]
+                 (hash x))|]
+    expectVerified code
+  describe "hash symbolic (string, shim)" $ do
+    let code =
+          [text|
+             (defun test: string (x: string)
+                 ;; shim value (hash "hello pact")
+                 @model[(property (= result "HsVo-gcG-pk1BciGr2xovMyR7sVH0Kt9gTgqicXDXMM"))]
+                 (hash x))|]
+    expectVerified code
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|
@@ -4142,6 +4167,11 @@ spec = describe "analyze" $ do
         @model [(property (= result 115))]
         (fold (+) 0 [100 10 5]))
       |]
+    expectVerified [text|
+      (defun test:bool ()
+        @model[(property (= result false))]
+        (fold (lambda (p: bool curr:string) false) false [""]))
+      |]
 
   describe "and?" $ do
     expectVerified [text|
@@ -4539,3 +4569,68 @@ spec = describe "analyze" $ do
         (enforce false ""))
       |]
       "Vacuous property encountered!"
+
+  describe "regression #1182" $ do
+          expectVerified [text|
+               (defun test:[string] (x: [string])
+                  @model [(property (= x x))]
+                 (let ((default-val:[string] [])) default-val)
+                 x)
+           |]
+  describe "partial bind (regression #1173)" $ do
+    expectVerified [text|
+      (defschema ty
+       ""
+       a: integer
+       b: time)
+
+      (defun test (x:object{ty})
+        @model[(property true)]
+        (bind x
+          {"b" := _}
+          1))|]
+
+    expectVerified [text|
+       (defun test(x:integer)
+       @model [ (property (>= x 0))]
+       (enforce (> x 0) "x must be greater than 0")
+       (bind (chain-data)
+         { "block-height" := block-height
+         , "block-time"   := block-time }
+         (* block-height  x)))
+      |]
+
+  describe "Properties involving `or?` and `and?` are handled" $ do
+    expectVerified [text|
+       (defun test()
+       @model [ (property (or? (> 1) (> 2) 1))]
+         true)
+      |]
+    expectFalsified [text|
+       (defun test()
+       @model [ (property (or? (> 1) (> 2) 3))]
+         true)
+      |]
+    expectVerified [text|
+       (defun test()
+       @model [ (property (and? (> 1) (> 2) 0))]
+         true)
+      |]
+    expectFalsified [text|
+       (defun test()
+       @model [ (property (and? (> 1) (> 2) 3))]
+         true)
+      |]
+
+    expectVerified [text|
+       (defun test(x: integer y: integer z: integer)
+       @model [ (property (or? (> x) (> y) z))]
+       (enforce (or? (> x) (> y) z) "")
+         true)
+      |]
+    expectVerified [text|
+       (defun test(x: integer y: integer z: integer)
+       @model [ (property (and? (> x) (> y) z))]
+       (enforce (and? (> x) (> y) z) "")
+         true)
+      |]

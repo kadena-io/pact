@@ -16,6 +16,8 @@ import Pact.Types.RowData
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 
+import qualified Pact.JSON.Encode as J
+
 spec :: Spec
 spec = do
   describe "JSONRoundtrips" $ do
@@ -24,9 +26,9 @@ spec = do
     describe "testJSONModules" testJSONModules
   describe "testUnification" testUnification
 
-rt :: (FromJSON a,ToJSON a,Show a,Eq a) => String -> a -> Spec
+rt :: (FromJSON a,J.Encode a,Show a,Eq a) => String -> a -> Spec
 rt n p = it ("roundtrips " ++ n) $ do
-  decode (encode p) `shouldBe` Just p
+  decode (J.encode p) `shouldBe` Just p
 
 testJSONPersist :: Spec
 testJSONPersist = do
@@ -44,7 +46,7 @@ testJSONColumns :: Spec
 testJSONColumns = do
   rt "object" obj
   it "roundtrips as rowdata" $ do
-    decode @RowData (encode obj) `shouldBe` Just (RowData RDV0 (pactValueToRowData <$> obj))
+    decode @RowData (J.encode obj) `shouldBe` Just (RowData RDV0 (pactValueToRowData <$> obj))
   where
   uguard = GUser $ UserGuard (Name (BareName "a" def)) [PLiteral (LInteger 123)]
   pguard = GPact $ PactGuard (PactId "123") "456"

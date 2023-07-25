@@ -44,8 +44,8 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-import           GHC.Natural                (Natural)
-import           GHC.TypeLits
+import           Numeric.Natural            (Natural)
+import           GHC.TypeLits               (SomeSymbol(..), someSymbolVal, symbolVal)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
@@ -1229,6 +1229,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
         SDecimal -> pure $ Some SInteger $ inject $ RoundingLikeOp1 op a'
         _        -> throwError' $ MalformedArithOp fn args
 
+  AST_NFun_Basic fn@(toOp castingLikeOpP -> Just op) args@[a] -> do
+      Some ty a' <- translateNode a
+      case ty of
+        SInteger -> pure $ Some SDecimal $ inject $ CastingLikeOp op a'
+        _        -> throwError' $ MalformedArithOp fn args
+
   -- trap sqrt here to shim
   AST_NFun node fn@"sqrt" as@[a] -> translateNode a >>= \a' -> case a' of
     (Some SInteger _) -> shimNative' node fn [] "original value" a'
@@ -1389,12 +1395,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
   AST_Bind node objectA bindings schemaNode body -> translateType schemaNode >>= \case
-    EType objTy@SObject{} -> typeOfPartialBind objTy bindings >>= \case
-      EType partialReadTy@SObject{} -> do
+    EType objTy@SObject{} -> do
         objectT <- translateNode objectA
         withNodeContext node $
-          translateObjBinding bindings partialReadTy body objectT
-      _ -> unexpectedNode astNode
+          translateObjBinding bindings objTy body objectT
     _ -> unexpectedNode astNode
 
   AST_WithCapability (AST_InlinedApp modName funName _ bindings appBodyA) withBodyA -> do
@@ -1509,6 +1513,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> unexpectedNode astNode
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
+
+  -- rs (2023-05-10): Note, we handle the empty list as a special case (see #1182)
+  -- as the element type is otherwise inferred as `Any`.
+  AST_List node [] -> translateType node >>= \case
+    EType listTy -> case listTy of
+      SList _ -> pure $ Some listTy $ CoreTerm $ Lit []
+      _ -> throwError' $ TypeError node
 
   AST_List node elems -> do
     elems' <- traverse translateNode elems

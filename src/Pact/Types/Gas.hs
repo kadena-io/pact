@@ -1,9 +1,11 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Module      :  Pact.Types.Gas
@@ -29,6 +31,9 @@ module Pact.Types.Gas
   , geGasLimit
   , geGasPrice
   , geGasModel
+  , IntThreshold(..)
+  , thresholdToInteger
+  , GasModelType(..)
   ) where
 
 import Control.DeepSeq (NFData)
@@ -42,6 +47,8 @@ import Data.Decimal
 
 import GHC.Generics
 
+import Test.QuickCheck
+
 import Pact.Types.Continuation
 import Pact.Types.Info
 import Pact.Types.Persistence
@@ -53,6 +60,7 @@ import Pact.Types.Namespace
 import Pact.Parse
 import Pact.Types.SizeOf(Bytes, SizeOfVersion)
 
+import qualified Pact.JSON.Encode as J
 
 parseGT0 :: (FromJSON a,Num a,Ord a) => Value -> Parser a
 parseGT0 v = parseJSON v >>= \a ->
@@ -62,12 +70,17 @@ parseGT0 v = parseJSON v >>= \a ->
 
 -- | API Price value, basically a newtype over `Decimal`
 newtype GasPrice = GasPrice ParsedDecimal
-  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Serialize,Generic,ToTerm,ToJSON,Pretty)
+  deriving (Eq,Ord,Generic)
+  deriving newtype (Num,Real,Fractional,RealFrac,NFData,Serialize,ToTerm,Pretty,J.Encode)
+
 instance Show GasPrice where
   show (GasPrice (ParsedDecimal d)) = show d
 
 instance FromJSON GasPrice where
   parseJSON = fmap GasPrice . parseGT0
+
+instance Arbitrary GasPrice where
+  arbitrary = GasPrice <$> (getPositive <$> arbitrary)
 
 instance Wrapped GasPrice
 
@@ -114,7 +127,6 @@ instance Pretty WriteValue where
     WriteKeySet {} -> "WriteKeySet"
     WriteYield {} -> "WriteYield"
 
-
 data GasArgs
   = GSelect !(Maybe [(Info,FieldKey)])
   -- ^ Cost of selecting columns from a user table
@@ -130,7 +142,7 @@ data GasArgs
   -- ^ Cost of using a native function
   | GPostRead !ReadValue
   -- ^ Cost for reading from database
-  | GPreWrite !WriteValue SizeOfVersion
+  | GPreWrite !WriteValue !SizeOfVersion
   -- ^ Cost of writing to the database
   | GModuleMember !(ModuleDef (Term Name))
   -- ^ TODO documentation
@@ -146,17 +158,32 @@ data GasArgs
   -- ^ Cost of make-list
   | GFoldDB
   -- ^ Cost of the fold-db call
-  | GModuleMemory Bytes
+  | GModuleMemory !Bytes
   -- ^ The cost of the in-memory representation of the module
   | GPrincipal !Int
   -- ^ the cost of principal creation and validation
-  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer)
+  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer) IntThreshold
   -- ^ Integer costs
   | GDecimalOpCost !Decimal !Decimal
   -- ^ Decimal costs
   | GMakeList2 !Integer !(Maybe Integer)
   -- ^ List versioning 2
-  | GZKArgs ZKArg
+  | GZKArgs !ZKArg
+
+data IntThreshold
+  = ThresholdPrePact47
+  | ThresholdPact47
+  deriving (Show, Enum)
+
+thresholdToInteger :: IntThreshold -> Integer
+thresholdToInteger = \case
+  ThresholdPrePact47 -> (10 :: Integer) ^ (30 :: Integer)
+  ThresholdPact47 -> (10 :: Integer) ^ (80 :: Integer)
+
+instance Pretty IntThreshold where
+  pretty = \case
+    ThresholdPrePact47 -> "ThresholdPrePact47"
+    ThresholdPact47 -> "ThresholdPact47"
 
 -- | The elliptic curve pairing group we are
 -- handling
@@ -168,11 +195,11 @@ data ZKGroup
   deriving Show
 
 data ZKArg
-  = PointAdd ZKGroup
+  = PointAdd !ZKGroup
   -- ^ Point addition Gas arguments, where the gas is dependent on the group.
-  | ScalarMult ZKGroup
+  | ScalarMult !ZKGroup
   -- ^ Scalar multiplication gas, group dependent
-  | Pairing Int
+  | Pairing !Int
   -- ^ Pairing function gas, dependent on number of pairs
   deriving Show
 
@@ -206,13 +233,17 @@ instance Pretty GasArgs where
     GFoldDB -> "GFoldDB"
     GModuleMemory i -> "GModuleMemory: " <> pretty i
     GPrincipal i -> "GPrincipal: " <> pretty i
-    GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
+    GIntegerOpCost i j ts -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j <> colon <> pretty ts
     GDecimalOpCost i j -> "GDecimalOpCost:" <> pretty (show i) <> colon <> pretty (show j)
     GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
     GZKArgs arg -> "GZKArgs:" <> pretty arg
 
 newtype GasLimit = GasLimit ParsedInteger
-  deriving (Eq,Ord,Num,Real,Integral,Enum,Serialize,NFData,Generic,ToTerm,ToJSON,Pretty)
+  deriving (Eq,Ord,Generic)
+  deriving newtype (Num,Real,Integral,Enum,Serialize,NFData,ToTerm,Pretty,J.Encode)
+
+instance Arbitrary GasLimit where
+  arbitrary = GasLimit <$> (getPositive <$> arbitrary)
 
 instance Show GasLimit where
   show (GasLimit (ParsedInteger i)) = show i
@@ -222,8 +253,14 @@ instance FromJSON GasLimit where
 
 instance Wrapped GasLimit
 
+data GasModelType
+  = ConstantGasModel Gas
+  | TableGasModel
+  deriving Show
+
 data GasModel = GasModel
   { gasModelName :: !Text
+  , gasModelType :: GasModelType
   , gasModelDesc :: !Text
   , runGasModel :: !(Text -> GasArgs -> Gas)
   }

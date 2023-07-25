@@ -15,10 +15,8 @@ module Pact.Types.Principal
 import Control.Applicative
 import Control.Lens
 
-import Data.Aeson (encode)
 import Data.Attoparsec.Text
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import Data.Foldable
 import Data.Functor (void)
 import Data.Text (Text)
@@ -36,26 +34,27 @@ import Pact.Types.Util
 import Text.Parser.Combinators (eof)
 import Data.Char (isHexDigit)
 
+import qualified Pact.JSON.Encode as J
 
 data Principal
-  = K PublicKeyText
+  = K !PublicKeyText
     -- ^ format: `k:public key`, where hex public key
     -- is the text public key of the underlying keyset
-  | W Text Text
+  | W !Text !Text
     -- ^ format: `w:b64url-encoded hash:pred` where
     -- the hash is a b64url-encoding of the hash of
     -- the list of public keys of the multisig keyset
-  | R KeySetName
+  | R !KeySetName
     -- ^ format: `r:keyset-name` where keyset name is
     -- any definable keyset name
-  | U Text Text
+  | U !Text !Text
     -- ^ format: `u:fqn of user guard function:b64url-encoded
     -- hash of args
-  | M ModuleName Text
+  | M !ModuleName !Text
     -- ^ format: `m:fq module name:fqn of module guard function
-  | P PactId Text
+  | P !PactId !Text
     -- ^ format: `p:pactid:fqn of pact function
-  | C Text
+  | C !Text
     -- ^ format: `c:hash of cap name + cap params + pactId if any
   deriving Eq
 makePrisms ''Principal
@@ -204,4 +203,4 @@ guardToPrincipal chargeGas = \case
       let bs = mconcat bss
       chargeGas $ 1 + (BS.length bs `quot` 64) -- charge for 64 bytes of hashing
       return $ pactHash bs
-    toJSONPactValue = toStrict . encode
+    toJSONPactValue = J.encodeStrict

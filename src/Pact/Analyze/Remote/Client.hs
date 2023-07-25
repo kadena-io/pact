@@ -29,6 +29,8 @@ import           Pact.Types.Runtime         (ModuleData (..), RenderedOutput (..
 import           Pact.Types.Term            (ModuleName, derefDef,
                                              moduleDefName, Ref)
 
+import qualified Pact.JSON.Encode           as J
+
 verifyModule
   :: HM.HashMap ModuleName (ModuleData Ref) -- ^ all loaded modules
   -> (ModuleData Ref)                       -- ^ the module we're verifying
@@ -39,7 +41,7 @@ verifyModule namedMods mod' uri = do
       body       = Remote.Request
         (Foldable.toList $ fmap (fmap derefDef . _mdModule) namedMods)
         (moduleDefName $ _mdModule mod')
-      jsonBody   = T.decodeUtf8 . BSL.toStrict $ A.encode body
+      jsonBody   = T.decodeUtf8 $ J.encodeStrict body
   req <- XHR.newXMLHttpRequest
   let nothingText :: Maybe Text
       nothingText = Nothing

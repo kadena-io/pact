@@ -1,9 +1,11 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -45,18 +47,22 @@ import GHC.Generics
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
+import Test.QuickCheck (Arbitrary)
+
 import Pact.Types.RowData
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger
 
+import qualified Pact.JSON.Encode as J
+
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
   { _db :: !p
   , _persist :: !(Persister p)
   , _logger :: !Logger
-  , _txRecord :: !(M.Map TxTable [TxLog Value])
+  , _txRecord :: !(M.Map TxTable [TxLogJson])
   , _txId :: !TxId
   , _mode :: !(Maybe ExecutionMode)
   }
@@ -72,18 +78,21 @@ initDbEnv loggers funrec p = DbEnv {
   _mode = Nothing
   }
 
-data UserTableInfo = UserTableInfo
+newtype UserTableInfo = UserTableInfo
   { utModule :: ModuleName
-  } deriving (Eq,Show,Generic,Typeable)
+  } deriving (Eq,Show,Generic,Typeable,Arbitrary)
 
 instance Pretty UserTableInfo where
   pretty (UserTableInfo mod') = "UserTableInfo " <> commaBraces
     [ "module: " <> pretty mod'
     ]
 
-instance PactDbValue UserTableInfo where prettyPactDbValue = pretty
 instance FromJSON UserTableInfo
-instance ToJSON UserTableInfo
+
+instance J.Encode UserTableInfo where
+  build o = J.object
+    [ "utModule" J..= utModule o ]
+  {-# INLINABLE build #-}
 
 userTable :: TableName -> TableId
 userTable tn = TableId $ "USER_" <> asString tn
@@ -121,7 +130,7 @@ l .=! b = modify' (l .~ b)
 
 
 runMVState :: MVar (DbEnv p) -> MVState p a -> IO a
-runMVState v a = modifyMVar v $! \s -> do
+runMVState v a = modifyMVar v $ \s -> do
     (!r, !m') <- runStateT a s
     return (m',r)
 {-# INLINE runMVState #-}
@@ -198,23 +207,22 @@ doBegin m = do
     Local -> pure Nothing
 {-# INLINE doBegin #-}
 
-doCommit :: MVState p [TxLog Value]
-doCommit = use mode >>= \mm -> case mm of
+doCommit :: MVState p [TxLogJson]
+doCommit = use mode >>= \case
     Nothing -> rollback >> throwDbError "doCommit: Not in transaction"
     Just m -> do
       txrs <- M.toList <$> use txRecord
-      if (m == Transactional) then do
+      if m == Transactional then do
         -- grab current txid and increment in state
         tid' <- state (fromIntegral . _txId &&& over txId succ)
         -- write txlog
-        forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
+        forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' (encodeTxLogJsonArray es)
         -- commit
         doPersist P.commitTx
         resetTemp
       else rollback
       return (concatMap snd txrs)
 {-# INLINE doCommit #-}
-
 
 rollback :: MVState p ()
 rollback = do
@@ -225,8 +233,10 @@ rollback = do
   resetTemp
 
 
-getLogs :: FromJSON v => Domain k v -> TxId -> MVState p [TxLog v]
-getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn d) (fromIntegral tid))
+getLogs :: forall p k . Domain k RowData -> TxId -> MVState p [TxLog RowData]
+getLogs d tid = do
+    x <- doPersist (\p -> readValue p (tn d) (fromIntegral tid))
+    mapM convLog $ fromMaybe [] x
   where
     tn :: Domain k v -> TxTable
     tn KeySets    = TxTable keysetsTable
@@ -234,6 +244,8 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn Namespaces = TxTable namespacesTable
     tn Pacts = TxTable pactsTable
     tn (UserTables t) = userTxRecord t
+
+    convLog :: TxLog Value -> MVState p (TxLog RowData)
     convLog tl = case fromJSON (_txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " <> prettyString s
       Success v -> return $ set txValue v tl
@@ -253,7 +265,7 @@ readUserTable' :: TableName -> RowKey -> MVState p (Maybe RowData)
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
 {-# INLINE readUserTable' #-}
 
-readSysTable :: PactDbValue v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
+readSysTable :: FromJSON v => Typeable v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
 readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
 {-# INLINE readSysTable #-}
 
@@ -261,10 +273,10 @@ resetTemp :: MVState p ()
 resetTemp = txRecord .=! M.empty >> mode .=! Nothing
 {-# INLINE resetTemp #-}
 
-writeSys :: (AsString k,PactDbValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
+writeSys :: (AsString k, J.Encode v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
 writeSys s wt tbl k v = runMVState s $ do
   debug "writeSys" (tbl,asString k)
-  doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) v
+  doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) (J.encodeStrict v)
   record (TxTable tbl) k v
 
 {-# INLINE writeSys #-}
@@ -277,12 +289,12 @@ writeUser s wt tn rk row = runMVState s $ do
   olds <- readUserTable' tn rk
   let ins = do
         debug "writeUser: insert" (tn,rk)
-        doPersist $ \p -> writeValue p ut Insert rk' row
+        doPersist $ \p -> writeValue p ut Insert rk' (J.encodeStrict row)
         finish row
       upd oldrow = do
         -- version follows new input
         let row' = RowData (_rdVersion row) $ ObjectMap (M.union (_objectMap $ _rdData row) (_objectMap $ _rdData oldrow))
-        doPersist $ \p -> writeValue p ut Update rk' row'
+        doPersist $ \p -> writeValue p ut Update rk' (J.encodeStrict row')
         finish row'
       finish row' = record tt rk row'
   case (olds,wt) of
@@ -294,10 +306,13 @@ writeUser s wt tn rk row = runMVState s $ do
     (Nothing,Update) -> throwDbError $ "Update: no row found for key " <> pretty rk
 {-# INLINE writeUser #-}
 
-record :: (AsString k, PactDbValue v) => TxTable -> k -> v -> MVState p ()
+record :: (AsString k, J.Encode v) => TxTable -> k -> v -> MVState p ()
 record tt k v = modify'
     $ over txRecord
-    $ M.insertWith (flip append) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
+    $ M.insertWith
+        (flip append)
+        tt
+        (encodeTxLog <$> [TxLog (asString (tableId tt)) (asString k) v])
   where
     -- strict append (it would be better to use a datastructure with efficient append)
     append [] b = b
@@ -316,7 +331,7 @@ getUserTableInfo' e tn = runMVState e $ do
 createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> IO ()
 createUserTable' s tn mn = runMVState s $ do
   let uti = UserTableInfo mn
-  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) uti
+  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) (J.encodeStrict uti)
   record (TxTable userTableInfo) tn uti
   createTable' (userTable tn)
 

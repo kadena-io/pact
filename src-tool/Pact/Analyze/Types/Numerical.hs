@@ -141,6 +141,11 @@ banker'sMethod :: SBV Decimal -> SBV Integer
 banker'sMethod d
   = roundingDiv (coerceSBV @Decimal @Integer d) (coerceSBV @Decimal @Integer 1)
 
+decCast :: SBV Integer -> SBV Decimal
+decCast d
+  = coerceSBV @Integer @Decimal (d * 10^(255::Integer))
+  -- Note, our `Decimal` representation is x*10^255 within the FV system
+
 -- (Banker's method) rounding division for integers.
 roundingDiv :: SBV Integer -> SBV Integer -> SBV Integer
 roundingDiv num denom =
@@ -301,6 +306,19 @@ roundingLikeOpP = mkOpNamePrism
 instance Pretty RoundingLikeOp where
   pretty = toDoc roundingLikeOpP
 
+-- integer -> decimal
+data CastingLikeOp
+  = Dec    -- ^ A conversion from integer to decimal
+  deriving (Show, Eq, Ord)
+
+castingLikeOpP :: Prism' Text CastingLikeOp
+castingLikeOpP = mkOpNamePrism
+  [ (SDecCast,  Dec)
+  ]
+
+instance Pretty CastingLikeOp where
+  pretty = toDoc castingLikeOpP
+
 -- | Arithmetic ops
 --
 -- We partition the arithmetic operations in to these classes:
@@ -322,6 +340,7 @@ instance Pretty RoundingLikeOp where
 -- - RoundingLikeOp1: Rounding decimals to integers.
 --   - Operations: { round floor ceiling }
 -- - RoundingLikeOp2: Rounding decimals to decimals with a specified level of
+-- - CastingLikeOp: Casting integers to decimals
 --   precision.
 --   - Operations: { round floor ceiling }
 data Numerical t (a :: Ty) where
@@ -334,6 +353,7 @@ data Numerical t (a :: Ty) where
   ModOp           :: t 'TyInteger    -> t 'TyInteger ->                 Numerical t 'TyInteger
   RoundingLikeOp1 :: RoundingLikeOp  -> t 'TyDecimal ->                 Numerical t 'TyInteger
   RoundingLikeOp2 :: RoundingLikeOp  -> t 'TyDecimal -> t 'TyInteger -> Numerical t 'TyDecimal
+  CastingLikeOp   :: CastingLikeOp   -> t 'TyInteger ->                 Numerical t 'TyDecimal
   BitwiseOp       :: BitwiseOp       -> [t 'TyInteger]               -> Numerical t 'TyInteger
 
 instance (Pretty (t 'TyInteger), Pretty (t 'TyDecimal))
@@ -348,6 +368,7 @@ instance (Pretty (t 'TyInteger), Pretty (t 'TyDecimal))
     ModOp a b              -> [pretty SModulus, pretty a, pretty b]
     RoundingLikeOp1 op a   -> [pretty op, pretty a]
     RoundingLikeOp2 op a b -> [pretty op, pretty a, pretty b]
+    CastingLikeOp op a     -> [pretty op, pretty a]
     BitwiseOp op args      -> pretty op : fmap pretty args
 
 deriving instance (Eq   (t 'TyDecimal), Eq   (t 'TyInteger)) => Eq   (Numerical t a)

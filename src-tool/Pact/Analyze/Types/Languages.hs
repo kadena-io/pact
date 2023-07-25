@@ -480,6 +480,8 @@ eqNumerical _ty (RoundingLikeOp1 op1 a1) (RoundingLikeOp1 op2 a2)
   = op1 == op2 && eqTm a1 a2
 eqNumerical _ty (RoundingLikeOp2 op1 a1 b1) (RoundingLikeOp2 op2 a2 b2)
   = op1 == op2 && eqTm a1 a2 && eqTm b1 b2
+eqNumerical _ty (CastingLikeOp op1 a1) (CastingLikeOp op2 a2)
+  = op1 == op2 && eqTm a1 a2
 eqNumerical _ty (BitwiseOp op1 args1) (BitwiseOp op2 args2)
   = op1 == op2 && and (zipWith eqTm args1 args2)
 eqNumerical _ _ _ = False
@@ -541,6 +543,11 @@ showsNumerical _ty p tm = showParen (p > 10) $ case tm of
     . showsTm 11 a
     . showChar ' '
     . showsTm 11 b
+  CastingLikeOp op a ->
+      showString "CastingLikeOp "
+    . showsPrec 11 op
+    . showChar ' '
+    . showsTm 11 a
   BitwiseOp op args ->
       showString "BitwiseOp "
     . showsPrec 11 op
@@ -558,6 +565,7 @@ prettyNumerical _ty = \case
   ModOp a b              -> parensSep [prettyTm a, prettyTm b            ]
   RoundingLikeOp1 op a   -> parensSep [pretty op,  prettyTm a            ]
   RoundingLikeOp2 op a b -> parensSep [pretty op,  prettyTm a, prettyTm b]
+  CastingLikeOp op a     -> parensSep [pretty op,  prettyTm a            ]
   BitwiseOp op args      -> parensSep $ pretty op : fmap prettyTm args
 
 eqCoreTm :: IsTerm tm => SingTy ty -> Core tm ty -> Core tm ty -> Bool
@@ -2022,6 +2030,8 @@ numPropToInv num = case num of
     RoundingLikeOp1 op <$> f tm
   RoundingLikeOp2 op tm1 tm2 ->
     RoundingLikeOp2 op <$> f tm1 <*> f tm2
+  CastingLikeOp op tm ->
+    CastingLikeOp op <$> f tm
   BitwiseOp op tms ->
     BitwiseOp op <$> traverse f tms
 

@@ -585,7 +585,8 @@ abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int T
 abstractBody term args = abstractBody' args =<< bodyForm term
 
 abstractBody' :: [Arg (Term Name)] -> Term Name -> Compile (Scope Int Term Name)
-abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames) body
+abstractBody' args body =
+  (if M.null modRefArgs then pure else traverse enrichDynamic) $ abstract (`elemIndex` bNames) body
   where
     bNames = map arg2Name args
 

@@ -1,7 +1,7 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      :  Pact.Types.ChainId
 -- Copyright   :  (C) 2019 Stuart Popejoy, Emily Pillmore
@@ -26,7 +26,7 @@ import GHC.Generics
 import Control.DeepSeq
 import Control.Lens
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON)
 import Data.Serialize (Serialize)
 import Data.String (IsString)
 import Data.Text
@@ -39,15 +39,17 @@ import Pact.Types.SizeOf
 import Pact.Types.Term (ToTerm(..))
 import Pact.Types.Util (genBareText,AsString(..))
 
+import qualified Pact.JSON.Encode as J
+
 -- | Expresses unique platform-specific chain identifier.
 --
 newtype ChainId = ChainId { _chainId :: Text }
   deriving stock (Eq, Generic)
   deriving newtype
     ( Show, Pretty, IsString
-    , ToJSON, FromJSON
+    , FromJSON
     , Serialize, ToTerm, NFData
-    , SizeOf, AsString
+    , SizeOf, AsString, J.Encode
     )
 
 instance Arbitrary ChainId where
@@ -69,11 +71,14 @@ newtype NetworkId = NetworkId { _networkId :: Text }
   deriving stock (Eq, Generic)
   deriving newtype
     ( Show, Pretty, IsString
-    , ToJSON, FromJSON
+    , FromJSON, J.Encode
     , Serialize, ToTerm, NFData
     )
 
 instance Wrapped NetworkId
+
+instance Arbitrary NetworkId where
+  arbitrary = NetworkId <$> genBareText
 
 -- | Lens into the value of 'NetworkId'
 --

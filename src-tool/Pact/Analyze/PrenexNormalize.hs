@@ -67,6 +67,8 @@ singFloat ty p = case p of
     -> PNumerical ... ModOp              <$> float a <*> float b
   CoreProp (Numerical (RoundingLikeOp1 op a))
     -> PNumerical . RoundingLikeOp1 op   <$> float a
+  CoreProp (Numerical (CastingLikeOp op a))
+    -> PNumerical . CastingLikeOp op   <$> float a
   CoreProp (StrLength pStr)
     -> PStrLength <$> float pStr
   CoreProp (StrToInt s)

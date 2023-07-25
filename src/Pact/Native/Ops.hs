@@ -23,7 +23,7 @@ module Pact.Native.Ops
     , modDef, addDef, subDef, mulDef
     , divDef, powDef, logDef
     , sqrtDef, lnDef, expDef, absDef
-    , roundDef, ceilDef, floorDef
+    , decDef, roundDef, ceilDef, floorDef
     , gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
     , bitAndDef, bitOrDef, xorDef, complementDef, shiftDef
     ) where
@@ -154,16 +154,22 @@ powImpl i as@[TLiteral a _,TLiteral b _] = do
     | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
 powImpl i as = argsError i as
 
+getThreshold :: Eval e IntThreshold
+getThreshold = 
+  ifExecutionFlagSet' FlagDisablePact47 ThresholdPrePact47 ThresholdPact47
+
 twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
-twoArgIntOpGas loperand roperand =
-  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing))
+twoArgIntOpGas loperand roperand = do
+  ts <- getThreshold
+  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing) ts)
 
 twoArgDecOpGas :: Decimal -> Decimal -> Eval e Gas
-twoArgDecOpGas loperand roperand =
+twoArgDecOpGas loperand roperand = do
+  ts <- getThreshold
   computeGasCommit def ""
-  (GIntegerOpCost
-    (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
-    (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand))))
+    (GIntegerOpCost
+      (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
+      (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand))) ts)
 
 legalLogArg :: Literal -> Bool
 legalLogArg = \case
@@ -223,6 +229,9 @@ absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInte
   abs' _ [TLitInteger a] = return $ toTerm $ abs a
   abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
   abs' i as = argsError i as
+
+decDef :: NativeDef
+decDef = defCast "dec" "Cast an integer to a decimal" fromInteger
 
 roundDef :: NativeDef
 roundDef = defTrunc "round" "Performs Banker's rounding" round
@@ -302,7 +311,7 @@ opDefs = ("Operators",
     ,orDef, andDef, notDef
     ,gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
     ,addDef, subDef, mulDef, divDef, powDef, logDef
-    ,modDef, sqrtDef, lnDef, expDef, absDef, roundDef, ceilDef, floorDef
+    ,modDef, sqrtDef, lnDef, expDef, absDef, decDef, roundDef, ceilDef, floorDef
     ,bitAndDef, bitOrDef, xorDef, complementDef, shiftDef
     ])
     where r = mkTyVar "r" []
@@ -334,6 +343,15 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
           fun i [TLiteral (LDecimal d) _,TLitInteger p]
               | p >= 0 = return $ toTerm $ Dec.dec_reduce $ roundTo' op (fromIntegral p) d
               | otherwise = evalError' i "Negative precision not allowed"
+          fun i as = argsError i as
+
+defCast :: NativeDefName -> Text -> (Integer -> Rational) -> NativeDef
+defCast n desc op = defRNative n fun (unaryTy tTyDecimal tTyInteger)
+                     [ ExecExample $ "(" <> asString n <> " 3)"
+                     ]
+                     (desc <> " value of integer X as decimal.")
+    where fun :: RNativeFun e
+          fun _ [TLiteral (LInteger d) _] = return $ tLit $ LDecimal $ fromRational $ op d
           fun i as = argsError i as
 
 defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Bool -> NativeDef

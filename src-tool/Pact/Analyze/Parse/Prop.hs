@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
@@ -46,7 +47,9 @@ import           Control.Monad                (unless, when)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
 import           Control.Monad.State.Strict   (evalStateT)
+#if !MIN_VERSION_base(4,16,0)
 import           Data.Foldable                (asum)
+#endif
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
@@ -444,6 +447,8 @@ inferPreProp preProp = case preProp of
   PreApp (toOp roundingLikeOpP -> Just op) [a, b] -> do
     it <- RoundingLikeOp2 op <$> checkPreProp SDecimal a <*> checkPreProp SInteger b
     pure $ Some SDecimal (PNumerical it)
+  PreApp (toOp castingLikeOpP -> Just op) [a] ->
+    Some SDecimal . PNumerical . CastingLikeOp op <$> checkPreProp SInteger a
   PreApp s [a, b] | s == STemporalAddition -> do
     a' <- checkPreProp STime a
     b' <- inferPreProp b
@@ -514,6 +519,12 @@ inferPreProp preProp = case preProp of
       (OrOp,  [a, b]) -> POr  <$> checkPreProp SBool a <*> checkPreProp SBool b
       _               -> throwErrorIn preProp $
         pretty op' <> " applied to wrong number of arguments"
+
+  PreApp s [PreApp a p1, PreApp b p2 , c] | s == SOrQ ->
+    inferPreProp (PreApp SLogicalDisjunction [PreApp a (p1 ++ [c]), PreApp b (p2 ++ [c])])
+
+  PreApp s [PreApp a p1, PreApp b p2 , c] | s == SAndQ ->
+    inferPreProp (PreApp SLogicalConjunction [PreApp a (p1 ++ [c]), PreApp b (p2 ++ [c])])
 
   PreApp s [a, b] | s == SLogicalImplication -> do
     propNotA <- PNot <$> checkPreProp SBool a

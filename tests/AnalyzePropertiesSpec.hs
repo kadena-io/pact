@@ -60,9 +60,7 @@ testDualEvaluation' etm ty gState = do
       mEtm <- lift $ fromPactVal (EType ty) pactVal
       case mEtm of
         Just (Some ty' (CoreTerm (Lit pactSval))) -> do
-          someVal <- pure analyzeVal
-
-          case someVal of
+          case analyzeVal of
             Some ty'' (CoreTerm (Lit sval')) ->
 
               -- compare results
@@ -73,7 +71,7 @@ testDualEvaluation' etm ty gState = do
                   then discard -- TODO: check this case
                   else EType ty' === EType ty'' -- this'll fail
 
-            _ -> error $ "unexpected value (not literal): " ++ show someVal
+            _ -> error $ "unexpected value (not literal): " ++ show analyzeVal
 
         Just (Some _ (CoreTerm (LiteralObject _ _obj))) -> do
           footnote "can't property test evaluation of objects"

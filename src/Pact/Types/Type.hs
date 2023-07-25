@@ -1,11 +1,14 @@
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |
@@ -74,7 +77,7 @@ module Pact.Types.Type
 
 import Control.Applicative
 import Control.DeepSeq
-import Control.Lens hiding ((.=))
+import Control.Lens hiding ((.=), elements)
 import Control.Monad
 import Data.Aeson
 import Data.Default (Default(..))
@@ -92,18 +95,27 @@ import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving
 
+import Test.QuickCheck
+import Test.QuickCheck.Instances ()
+
 import Pact.Types.Codec
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.Util
 import Pact.Types.SizeOf
 
+import qualified Pact.JSON.Encode as J
+
 
 newtype TypeName = TypeName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData,Show)
+  deriving (Show,Eq,Ord,Generic)
+  deriving newtype (IsString,AsString,FromJSON,Pretty,NFData,J.Encode)
 
 instance SizeOf TypeName where
   sizeOf ver (TypeName n) = sizeOf ver n
+
+instance Arbitrary TypeName where
+  arbitrary = TypeName <$> arbitrary
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
@@ -115,26 +127,58 @@ data Arg o = Arg {
 instance NFData o => NFData (Arg o)
 instance Pretty o => Pretty (Arg o) where
   pretty (Arg n t _) = pretty n <> colon <> pretty t
-instance ToJSON o => ToJSON (Arg o) where toJSON = lensyToJSON 2
-instance FromJSON o => FromJSON (Arg o) where parseJSON = lensyParseJSON 2
 instance HasInfo (Arg o) where getInfo = _aInfo
+
+instance J.Encode o => J.Encode (Arg o) where
+  build o = J.object
+    [ "name" J..= _aName o
+    , "type" J..= _aType o
+    , "info" J..= _aInfo o
+    ]
+  {-# INLINE build #-}
+
+instance FromJSON o => FromJSON (Arg o) where
+  parseJSON = withObject "Arg" $ \o -> Arg
+    <$> o .: "name"
+    <*> o .: "type"
+    <*> o .:? "info" .!= Info Nothing
+  {-# INLINE parseJSON #-}
 
 instance (SizeOf o) => SizeOf (Arg o)
 
+instance Arbitrary o => Arbitrary (Arg o) where
+  arbitrary = Arg <$> arbitrary <*> arbitrary <*> arbitrary
+
 -- | Function type
 data FunType o = FunType {
-  _ftArgs :: [Arg o],
-  _ftReturn :: Type o
+  _ftArgs :: ![Arg o],
+  _ftReturn :: !(Type o)
   } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance NFData o => NFData (FunType o)
 instance (Pretty o) => Pretty (FunType o) where
   pretty (FunType as t) = hsep (map pretty as) <+> "->" <+> pretty t
 
-instance ToJSON o => ToJSON (FunType o) where toJSON = lensyToJSON 3
-instance FromJSON o => FromJSON (FunType o) where parseJSON = lensyParseJSON 3
+instance J.Encode o => J.Encode (FunType o) where
+  build o = J.object
+    [ "args" J..= J.array (_ftArgs o)
+    , "return" J..= _ftReturn o
+    ]
+  {-# INLINE build #-}
+
+instance FromJSON o => FromJSON (FunType o) where
+  parseJSON = withObject "FunType" $ \o -> FunType
+    <$> o .: "args"
+    <*> o .: "return"
+  {-# INLINE parseJSON #-}
 
 instance (SizeOf o) => SizeOf (FunType o)
+
+instance Arbitrary o => Arbitrary (FunType o) where
+  -- Let's keep the number of arguments small
+  arbitrary = do
+    Positive k <- arbitrary
+    scale (`div` (k + 1)) $ FunType <$> (take 5 <$> arbitrary) <*> arbitrary
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
@@ -155,16 +199,17 @@ data GuardType
   | GTyCapability
   deriving (Eq,Ord,Generic,Show)
 
-instance ToJSON GuardType where
-  toJSON g = case g of
-    GTyKeySet -> "keyset"
-    GTyKeySetName -> "keysetref"
-    GTyPact -> "pact"
-    GTyUser -> "user"
-    GTyModule -> "module"
-    GTyCapability -> "capability"
+instance J.Encode GuardType where
+  build GTyKeySet = J.text "keyset"
+  build GTyKeySetName = J.text "keysetref"
+  build GTyPact = J.text "pact"
+  build GTyUser = J.text "user"
+  build GTyModule = J.text "module"
+  build GTyCapability = J.text "capability"
+  {-# INLINE build #-}
+
 instance FromJSON GuardType where
-  parseJSON = withText "GuardType" $ \t -> case t of
+  parseJSON = withText "GuardType" $ \case
     "keyset" -> pure GTyKeySet
     "keysetref" -> pure GTyKeySetName
     "pact" -> pure GTyPact
@@ -172,8 +217,12 @@ instance FromJSON GuardType where
     "module" -> pure GTyModule
     "capability" -> pure GTyCapability
     _ -> fail "Unrecognized guard type"
+  {-# INLINE parseJSON #-}
 
 instance NFData GuardType
+
+instance Arbitrary GuardType where
+  arbitrary = elements [ GTyKeySet, GTyKeySetName, GTyPact, GTyUser, GTyModule ]
 
 -- | Primitive/unvarying types.
 -- Guard is lame Maybe to allow "wildcards".
@@ -183,18 +232,20 @@ data PrimType =
   TyTime |
   TyBool |
   TyString |
-  TyGuard (Maybe GuardType)
+  TyGuard !(Maybe GuardType)
   deriving (Eq,Ord,Generic,Show)
 
 instance NFData PrimType
-instance ToJSON PrimType where
-  toJSON a = case a of
-    TyInteger -> String tyInteger
-    TyDecimal -> String tyDecimal
-    TyTime -> String tyTime
-    TyBool -> String tyBool
-    TyString -> String tyString
-    TyGuard g -> object [ "guard" .= g ]
+
+instance J.Encode PrimType where
+  build TyInteger = J.build tyInteger
+  build TyDecimal = J.build tyDecimal
+  build TyTime = J.build tyTime
+  build TyBool = J.build tyBool
+  build TyString = J.build tyString
+  build (TyGuard g) = J.object [ "guard" J..= g ]
+  {-# INLINE build #-}
+
 instance FromJSON PrimType where
   parseJSON v = withText "PrimType" doStr v <|> withObject "PrimType" doObj v
     where
@@ -206,9 +257,20 @@ instance FromJSON PrimType where
         | s == tyString = pure TyString
         | otherwise = fail "Bad PrimType Value"
       doObj o = TyGuard <$> o .: "guard"
+  {-# INLINE parseJSON #-}
 
 instance SizeOf PrimType where
   sizeOf _ _ = 0
+
+instance Arbitrary PrimType where
+  arbitrary = oneof
+    [ pure TyInteger
+    , pure TyDecimal
+    , pure TyTime
+    , pure TyBool
+    , pure TyString
+    , TyGuard <$> arbitrary
+    ]
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,
   tyKeySet,tyTable,tyGuard :: Text
@@ -240,16 +302,19 @@ data SchemaType =
   TyBinding
   deriving (Eq,Ord,Generic,Show)
 
-instance ToJSON SchemaType where
-  toJSON TyTable = "table"
-  toJSON TyObject = "object"
-  toJSON TyBinding = "binding"
+instance J.Encode SchemaType where
+  build TyTable = J.text "table"
+  build TyObject = J.text "object"
+  build TyBinding = J.text "binding"
+  {-# INLINE build #-}
+
 instance FromJSON SchemaType where
-  parseJSON = withText "SchemaType" $ \t -> case t of
+  parseJSON = withText "SchemaType" $ \case
     "table" -> pure TyTable
     "object" -> pure TyObject
     "binding" -> pure TyBinding
     _ -> fail "Bad SchemaType value"
+  {-# INLINE parseJSON #-}
 
 instance NFData SchemaType
 instance Pretty SchemaType where
@@ -260,8 +325,15 @@ instance Pretty SchemaType where
 instance SizeOf SchemaType where
   sizeOf _ _ = 0
 
+instance Arbitrary SchemaType where
+  arbitrary = elements [TyTable, TyObject, TyBinding]
+
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
+  deriving (Eq,Ord,Generic)
+  deriving newtype (IsString,AsString,FromJSON,Hashable,Pretty,NFData,J.Encode)
+
+instance Arbitrary TypeVarName where
+  arbitrary = TypeVarName <$> arbitrary
 
 instance Show TypeVarName where show (TypeVarName t) = show t
 
@@ -270,12 +342,34 @@ instance SizeOf TypeVarName where
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
-  TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
-  SchemaVar { _tvName :: TypeVarName }
+  TypeVar { _tvName :: !TypeVarName, _tvConstraint :: ![Type v] } |
+  SchemaVar { _tvName :: !TypeVarName }
   deriving (Functor,Foldable,Traversable,Generic,Show)
 
-instance ToJSON v => ToJSON (TypeVar v) where toJSON = lensyToJSON 3
-instance FromJSON v => FromJSON (TypeVar v) where parseJSON = lensyParseJSON 3
+instance J.Encode v => J.Encode (TypeVar v) where
+  build o@TypeVar{} = J.object
+    [ "tag" J..= J.text "TypeVar"
+    , "name" J..= _tvName o
+    , "constraint" J..= J.Array (_tvConstraint o)
+    ]
+  build o@SchemaVar{} = J.object
+    [ "tag" J..= J.text "SchemaVar"
+    , "name" J..= _tvName o
+    ]
+  {-# INLINE build #-}
+
+instance FromJSON v => FromJSON (TypeVar v) where
+  parseJSON = withObject "TypeVar" $ \o -> (o .: "tag") >>= \case
+    ("TypeVar" :: Text) -> TypeVar <$> o .: "name" <*> o .: "constraint"
+    "SchemaVar" -> SchemaVar <$> o .: "name"
+    t -> fail ("unexpected constructor tag: " <> unpack t)
+  {-# INLINE parseJSON #-}
+
+instance Arbitrary v => Arbitrary (TypeVar v) where
+  arbitrary = oneof
+    [ TypeVar <$> arbitrary <*> arbitrary
+    , SchemaVar <$> arbitrary
+    ]
 
 instance NFData v => NFData (TypeVar v)
 instance Eq (TypeVar v) where
@@ -308,17 +402,27 @@ instance Pretty SchemaPartial where
   pretty (PartialSchema s) = "PartialSchema " <> pretty (Set.toList s)
   pretty sp = viaShow sp
 
-instance ToJSON SchemaPartial where
-  toJSON FullSchema = "full"
-  toJSON AnySubschema = "any"
-  toJSON (PartialSchema s) = toJSON s
+instance J.Encode SchemaPartial where
+  build FullSchema = J.text "full"
+  build AnySubschema = J.text "any"
+  build (PartialSchema s) = J.build $ J.Array s
+  {-# INLINE build #-}
+
 instance FromJSON SchemaPartial where
   parseJSON v =
-    (withThisText "FullSchema" "full" v $ pure FullSchema) <|>
-    (withThisText "AnySubschema" "any" v $ pure AnySubschema) <|>
+    withThisText "FullSchema" "full" v (pure FullSchema) <|>
+    withThisText "AnySubschema" "any" v (pure AnySubschema) <|>
     (PartialSchema <$> parseJSON v)
+  {-# INLINE parseJSON #-}
 
 instance SizeOf SchemaPartial
+
+instance Arbitrary SchemaPartial where
+  arbitrary = oneof
+    [ pure FullSchema
+    , PartialSchema <$> arbitrary
+    , pure AnySubschema
+    ]
 
 showPartial :: SchemaPartial -> String
 showPartial FullSchema = ""
@@ -329,22 +433,38 @@ showPartial AnySubschema = "~"
 -- | Pact types.
 data Type v =
   TyAny |
-  TyVar { _tyVar :: TypeVar v } |
+  TyVar { _tyVar :: !(TypeVar v) } |
   TyPrim PrimType |
-  TyList { _tyListType :: Type v } |
+  TyList { _tyListType :: !(Type v) } |
   TySchema
-  { _tySchema :: SchemaType
-  , _tySchemaType :: Type v
-  , _tySchemaPartial :: SchemaPartial } |
-  TyFun { _tyFunType :: FunType v } |
-  TyUser { _tyUser :: v } |
+  { _tySchema :: !SchemaType
+  , _tySchemaType :: !(Type v)
+  , _tySchemaPartial :: !SchemaPartial } |
+  TyFun { _tyFunType :: !(FunType v) } |
+  TyUser { _tyUser :: !v } |
   TyModule
-  { _tyModuleSpec :: Maybe [v]
+  { _tyModuleSpec :: !(Maybe [v])
     -- ^ Nothing for interfaces, implemented ifaces for modules
   }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
 
 instance SizeOf v => SizeOf (Type v)
+
+instance Arbitrary v => Arbitrary (Type v) where
+  arbitrary = sized $ \case
+    0 -> oneof [ pure TyAny, TyPrim <$> arbitrary ]
+    s -> do
+      Positive k <- arbitrary
+      resize (s `div` (k + 1)) $ oneof
+        [ pure TyAny
+        , TyVar <$> arbitrary
+        , TyPrim <$> arbitrary
+        , TyList <$> arbitrary
+        , TySchema <$> arbitrary <*> arbitrary <*> arbitrary
+        , TyFun <$> arbitrary
+        , TyUser <$> arbitrary
+        , TyModule <$> (fmap (take 5) <$> scale (`div` 2) arbitrary)
+        ]
 
 instance NFData v => NFData (Type v)
 
@@ -360,37 +480,33 @@ instance (Pretty o) => Pretty (Type o) where
     TyAny          -> "*"
 
 
-instance ToJSON v => ToJSON (Type v) where
-  toJSON t = case t of
-    TyAny -> "*"
-    TyVar n -> toJSON n
-    TyPrim pt -> toJSON pt
-    TyList l -> object [ "list" .= l ]
-    TySchema st ty p -> object [ "schema" .= st, "type" .= ty, "partial" .= p ]
-    TyFun f -> toJSON f
-    TyUser v -> toJSON v
-    TyModule is -> object [ "modspec" .= is ]
+instance J.Encode v => J.Encode (Type v) where
+  build TyAny = J.text "*"
+  build (TyVar n) = J.build n
+  build (TyPrim pt) = J.build pt
+  build (TyList l) = J.object [ "list" J..= l ]
+  build (TySchema st ty p) = J.object [ "schema" J..= st, "type" J..= ty, "partial" J..= p ]
+  build (TyFun f) = J.build f
+  build (TyUser v) = J.build v
+  build (TyModule is) = J.object [ "modspec" J..= (J.Array <$> is) ]
+  {-# INLINE build #-}
 
 instance FromJSON v => FromJSON (Type v) where
   parseJSON v =
-    (withThisText "TyAny" "*" v $ pure TyAny) <|>
+    withThisText "TyAny" "*" v (pure TyAny) <|>
     (TyVar <$> parseJSON v) <|>
     (TyPrim <$> parseJSON v) <|>
     (TyFun <$> parseJSON v) <|>
-    (TyUser <$> parseJSON v) <|>
-    (withObject "TyList"
-      (\o -> TyList <$> o .: "list") v) <|>
-    (withObject "TySchema"
+    withObject "TyList" (\o -> TyList <$> o .: "list") v <|>
+    withObject "TySchema"
       (\o -> TySchema
         <$> o .: "schema"
         <*> o .: "type"
         <*> o .: "partial")
-      v) <|>
-    (withObject "TyModule"
-      (\o -> TyModule <$> o .: "modspec") v)
-
-
-
+      v <|>
+    withObject "TyModule" (\o -> TyModule <$> o .: "modspec") v <|>
+    (TyUser <$> parseJSON v)
+  {-# INLINE parseJSON #-}
 
 mkTyVar :: TypeVarName -> [Type n] -> Type n
 mkTyVar n cs = TyVar (TypeVar n cs)

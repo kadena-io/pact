@@ -1,13 +1,14 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 -- Module      :  Pact.Types.Continuation
@@ -46,17 +47,20 @@ import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Map.Strict(Map)
 import Data.Maybe(fromMaybe)
-import qualified Data.Map.Strict as Map
 
 import Test.QuickCheck
 
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.PactValue
+import Pact.Types.PactValue.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Term
-import Pact.Types.Util (lensyToJSON, lensyParseJSON)
+import Pact.Types.Util (lensyParseJSON, asString)
+import Pact.JSON.Legacy.Utils
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
+import qualified Pact.JSON.Encode as J
 
 -- | Provenance datatype contains all of the necessary
 -- data to 'endorse' a yield object.
@@ -79,7 +83,14 @@ instance SizeOf Provenance where
     (constructorCost 2) + (sizeOf ver chainId) + (sizeOf ver modHash)
 
 instance NFData Provenance
-instance ToJSON Provenance where toJSON = lensyToJSON 2
+
+instance J.Encode Provenance where
+  build o = J.object
+    [ "targetChainId" J..= _pTargetChainId o
+    , "moduleHash" J..= _pModuleHash o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON Provenance where parseJSON = lensyParseJSON 2
 
 -- | The type of a set of yielded values of a pact step.
@@ -93,16 +104,24 @@ data Yield = Yield
   } deriving (Eq, Show, Generic)
 
 instance Arbitrary Yield where
-  arbitrary = Yield <$> (genPactValueObjectMap RecurseTwice) <*> frequency
-    [ (1, pure Nothing)
-    , (4, Just <$> arbitrary) ] <*> pure Nothing
+  arbitrary = Yield
+    <$> scale (min 10) arbitrary
+    <*> frequency
+      [ (1, pure Nothing)
+      , (4, Just <$> arbitrary)
+      ]
+    <*> pure Nothing
 
 instance NFData Yield
-instance ToJSON Yield where
-  toJSON Yield{..} = object $
-      [ "data" .= _yData
-      , "provenance" .= _yProvenance ] ++
-      maybe [] (\c -> [ "source" .= c ]) _ySourceChain
+
+instance J.Encode Yield where
+  build o = J.object
+    [ "data" J..= _yData o
+    , "source" J..?= _ySourceChain o
+    , "provenance" J..= _yProvenance o
+    ]
+  {-# INLINABLE build #-}
+
 instance FromJSON Yield where
   parseJSON = withObject "Yield" $ \o ->
     Yield <$> o .: "data" <*> o .: "provenance" <*> o .:? "source"
@@ -139,7 +158,20 @@ instance Pretty PactContinuation where
   pretty (PactContinuation d as) = parensSep (pretty d:map pretty as)
 
 instance NFData PactContinuation
-instance ToJSON PactContinuation where toJSON = lensyToJSON 3
+
+instance Arbitrary PactContinuation where
+  arbitrary = PactContinuation
+    <$> arbitraryName (0,1,1,0)
+    <*> scale (min 10) arbitrary
+
+instance J.Encode PactContinuation where
+  build o = J.object
+    [ "args" J..= J.Array (_pcArgs o)
+    , "def" J..= _pcDef o
+    ]
+  {-# INLINABLE build #-}
+
+
 instance FromJSON PactContinuation where parseJSON = lensyParseJSON 3
 
 -- | Result of evaluation of a 'defpact'.
@@ -164,16 +196,31 @@ data PactExec = PactExec
   } deriving (Eq, Show, Generic)
 
 instance NFData PactExec
-instance ToJSON PactExec where
-  toJSON PactExec{..} = object $
-    [ "executed" .= _peExecuted
-    , "pactId" .= _pePactId
-    , "stepHasRollback" .= _peStepHasRollback
-    , "step" .= _peStep
-    , "yield" .= _peYield
-    , "continuation" .= _peContinuation
-    , "stepCount" .= _peStepCount
-    ] ++ [ "nested" .= _peNested | not (Map.null _peNested)]
+
+instance Arbitrary PactExec where
+  arbitrary = PactExec
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> scale (min 2) arbitrary
+
+
+instance J.Encode PactExec where
+  build o = J.object
+    [ "nested" J..?= J.ifMaybe (not . LHM.null) (legacyMap asString (_peNested o))
+    , "executed" J..= _peExecuted o
+    , "pactId" J..= _pePactId o
+    , "stepHasRollback" J..= _peStepHasRollback o
+    , "step" J..= J.Aeson (_peStep o)
+    , "yield" J..= _peYield o
+    , "continuation" J..= _peContinuation o
+    , "stepCount" J..= J.Aeson (_peStepCount o)
+    ]
+  {-# INLINABLE build #-}
 
 instance FromJSON PactExec where
   parseJSON = withObject "PactExec" $ \o ->
@@ -215,16 +262,18 @@ fromNestedPactExec rollback (NestedPactExec stepCount yield exec step pid cont n
   PactExec stepCount yield exec step pid cont rollback nested
 
 
-instance ToJSON NestedPactExec where
-  toJSON NestedPactExec{..} = object $
-    [ "executed" .= _npeExecuted
-    , "pactId" .= _npePactId
-    , "yield" .= _npeYield
-    , "step" .= _npeStep
-    , "continuation" .= _npeContinuation
-    , "stepCount" .= _npeStepCount
-    , "nested" .= _npeNested
+instance J.Encode NestedPactExec where
+  build o = J.object
+    [ "nested" J..= legacyMap asString (_npeNested o)
+    , "executed" J..= _npeExecuted o
+    , "pactId" J..= _npePactId o
+    , "step" J..= J.Aeson (_npeStep o)
+    , "yield" J..= _npeYield o
+    , "continuation" J..= _npeContinuation o
+    , "stepCount" J..= J.Aeson (_npeStepCount o)
     ]
+  {-# INLINABLE build #-}
+
 instance FromJSON NestedPactExec where
   parseJSON = withObject "NestedPactExec" $ \o ->
     NestedPactExec
@@ -238,6 +287,17 @@ instance FromJSON NestedPactExec where
 instance NFData NestedPactExec
 instance Pretty NestedPactExec where pretty = viaShow
 
+instance Arbitrary NestedPactExec where
+  arbitrary = NestedPactExec
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> do
+      Positive k <- arbitrary
+      scale (`div` (k + 3)) arbitrary
 
 makeLenses ''PactExec
 makeLenses ''NestedPactExec

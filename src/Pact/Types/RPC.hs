@@ -1,13 +1,11 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.RPC
@@ -23,24 +21,27 @@ module Pact.Types.RPC
     PactRPC(..)
   , ExecMsg(..)
   , ContMsg(..)
-  , contMsgJsonPairs
   ) where
 
 import Control.Applicative
 import Control.DeepSeq
 
-import Data.Aeson as A
-
 import GHC.Generics
+
+import Test.QuickCheck
 
 import Pact.Types.Orphans ()
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.JSON.Legacy.Value
+
+import Pact.JSON.Decode
+import qualified Pact.JSON.Encode as J
 
 
 data PactRPC c =
-    Exec (ExecMsg c) |
-    Continuation ContMsg
+    Exec !(ExecMsg c) |
+    Continuation !ContMsg
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (PactRPC c)
@@ -50,52 +51,68 @@ instance FromJSON c => FromJSON (PactRPC c) where
             (Exec <$> o .: "exec") <|> (Continuation <$> o .: "cont")
     {-# INLINE parseJSON #-}
 
-instance ToJSON c => ToJSON (PactRPC c) where
-    toJSON (Exec p) = object ["exec" .= p]
-    toJSON (Continuation p) = object ["cont" .= p]
+instance J.Encode c => J.Encode (PactRPC c) where
+  build (Exec p) = J.object ["exec" J..= p]
+  build (Continuation p) = J.object ["cont" J..= p]
+  {-# INLINE build #-}
 
-
+instance Arbitrary c => Arbitrary (PactRPC c) where
+  arbitrary = oneof [Exec <$> arbitrary, Continuation <$> arbitrary]
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
-  , _pmData :: Value
+  , _pmData :: LegacyValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
 instance FromJSON c => FromJSON (ExecMsg c) where
-    parseJSON =
-        withObject "PactMsg" $ \o ->
-            ExecMsg <$> o .: "code" <*> o .: "data"
-    {-# INLINE parseJSON #-}
+  parseJSON =
+      withObject "PactMsg" $ \o ->
+          ExecMsg <$> o .: "code" <*> o .: "data"
+  {-# INLINE parseJSON #-}
 
-instance ToJSON c => ToJSON (ExecMsg c) where
-    toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
+
+instance J.Encode c => J.Encode (ExecMsg c) where
+  build o = J.object
+    [ "data" J..= _pmData o
+    , "code" J..= _pmCode o
+    ]
+  {-# INLINE build #-}
+
+instance Arbitrary c => Arbitrary (ExecMsg c) where
+  arbitrary = ExecMsg <$> arbitrary <*> pure (toLegacyJson $ String "JSON VALUE")
 
 data ContMsg = ContMsg
   { _cmPactId :: !PactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !Value
+  , _cmData :: !LegacyValue
   , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show,Generic)
 
-contMsgJsonPairs :: (Monoid a, KeyValue a) => ContMsg -> a
-contMsgJsonPairs ContMsg{..} = mconcat
-  [ "pactId" .= _cmPactId
-  , "step" .= _cmStep
-  , "rollback" .= _cmRollback
-  , "data" .= _cmData
-  , "proof" .= _cmProof
-  ]
-
 instance NFData ContMsg
 instance FromJSON ContMsg where
-    parseJSON =
-        withObject "ContMsg" $ \o ->
-            ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
-            <*> o .: "proof"
-    {-# INLINE parseJSON #-}
+  parseJSON =
+      withObject "ContMsg" $ \o ->
+          ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
+          <*> o .: "proof"
+  {-# INLINE parseJSON #-}
 
-instance ToJSON ContMsg where
-    toJSON = A.Object . contMsgJsonPairs
 
+instance J.Encode ContMsg where
+  build o = J.object
+    [ "proof" J..= _cmProof o
+    , "data" J..= _cmData o
+    , "pactId" J..= _cmPactId o
+    , "rollback" J..= _cmRollback o
+    , "step" J..= J.Aeson (_cmStep o)
+    ]
+  {-# INLINE build #-}
+
+instance Arbitrary ContMsg where
+  arbitrary = ContMsg
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> pure (toLegacyJson $ String "JSON VALUE")
+    <*> arbitrary

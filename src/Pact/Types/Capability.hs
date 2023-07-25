@@ -1,12 +1,11 @@
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Capability
@@ -40,11 +39,14 @@ import Data.Text (Text)
 
 import GHC.Generics
 
+import Test.QuickCheck
+
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 
+import qualified Pact.JSON.Encode as J
 
 
 data Capability
@@ -69,16 +71,20 @@ instance NFData SigCapability
 instance Pretty SigCapability where
   pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
 
-instance ToJSON SigCapability where
-  toJSON (SigCapability n args) = object $
-    [ "name" .=  n
-    , "args" .= args
+instance J.Encode SigCapability where
+  build o = J.object
+    [ "args" J..= J.Array (_scArgs o)
+    , "name" J..= _scName o
     ]
+  {-# INLINABLE build #-}
 
 instance FromJSON SigCapability where
   parseJSON = withObject "SigCapability" $ \o -> SigCapability
     <$> o .: "name"
     <*> o .: "args"
+
+instance Arbitrary SigCapability where
+  arbitrary = SigCapability <$> arbitrary <*> scale (min 10) arbitrary
 
 -- | Various results of evaluating a capability.
 -- Note: dupe managed install is an error, thus no case here.
@@ -179,7 +185,7 @@ data Capabilities = Capabilities
   , _capManaged :: Set (ManagedCapability UserCapability)
     -- ^ Set of installed managed capabilities. Maybe indicates whether it has been
     -- initialized from signature set.
-  , _capModuleAdmin :: (Set ModuleName)
+  , _capModuleAdmin :: Set ModuleName
     -- ^ Set of module admin capabilities.
   , _capAutonomous :: Set UserCapability
   }

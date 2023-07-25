@@ -6,6 +6,7 @@
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 -- | Toplevel module for types related to symbolic analysis of Pact programs.
 module Pact.Analyze.Types
@@ -34,6 +35,8 @@ module Pact.Analyze.Types
   , tableInvariants
   , tableName
   , tableType
+  , VerificationWarning(..)
+  , describeVerificationWarnings
 
   , pattern ColumnNameLit
   , pattern TableNameLit
@@ -55,6 +58,7 @@ import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.ObjUtil
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Types.Types
+import qualified Data.Text                    as T
 
 data Quantifier
   = Forall' VarId Text QType
@@ -127,3 +131,19 @@ data ModuleRefs = ModuleRefs
   } deriving Show
 
 makeLenses ''ModuleRefs
+
+data VerificationWarning
+  -- | Warning to indicate duplicated properties.
+  -- Parameter is the list of overloaded names.
+  = FVDuplicatedPropertyDef [Text]
+  -- | Warning to indicate a shimmed content.
+  -- First parameter reflects the content to be shimmed,
+  -- second parameter the actual shimmed value.
+  | FVShimmedStaticContent Text Text
+  deriving (Eq, Show)
+
+describeVerificationWarnings :: VerificationWarning -> Text
+describeVerificationWarnings (FVDuplicatedPropertyDef dups)
+  = "Duplicated property definitions for " <> T.intercalate ", " dups
+describeVerificationWarnings (FVShimmedStaticContent t h) = "Shimmed native '" <> t <> "'"
+  <> if T.null h then mempty else " (" <> h <> ")"

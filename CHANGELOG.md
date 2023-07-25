@@ -1,3 +1,77 @@
+- Support lambdas in static TC (#1232)
+
+4.7.1
+---
+
+- Add feature flag `FlagDisableRuntimeTypeChecking` for disabling runtime typechecking
+  introduced in Pact 4.7 (#1231)
+
+### Formal Verification
+
+- Fixed empty list type defaulting to any (#1224)
+- Fixed partial biniding (#1127)
+
+### Tests
+
+- Refactored test to avoid `runIO` within tests (#1129)
+- Add `CoverageSpec` (#1228)
+- Fix `ReplSpec` tests (#1216)
+- Cleanup `PactContinuationSpec` (#1222)
+
+### Others
+
+- Cleanup [README.md](README.md) (#1225)
+- Bump Z3 versions in GH actions (#1126)
+
+4.7.0
+---
+
+### Eval
+
+- Improve advice implementation (#1187)
+- Fix inconsistent trace output (#1153)
+- Fix coverage, restore defun advice (#1151)
+- Create persistence dirs if missing (#1148)
+- Differentiate between errors on-chain and off-chain (#1185)
+- Don't display function documentation in non-repl context (#1185)
+- Runtime type checking on return types now enforced (#1209)
+
+### Natives
+
+- Allow native function versioning in eval (#1195)
+- Add new native `dec` for integer to decimal conversion (#1150)
+- Implement `shift` in terms of other natives for better gas costing (#1208)
+- Intialize body of `env-data` to an empty object instead of Null (#1188)
+* `read-*` functions are now recoverable if the key doesn't exist. That is, a call such as `(read-string 'key)` is recoverable if `'key` does not exist in the data payload by surrounding it with `try`. As an example, `(try "string if key isn't present" (read-string "key"))`. This applies to
+`read-integer`, `read-string`, `read-decimal`, `read-keyset` and `read-msg` (as long as `read-msg` has a key supplied as an argument).
+
+
+### Typechecking
+
+- Fix Typechecker treatment of special binding forms (#1212)
+
+### Formal Verification
+
+- Enable warnings during symbolic eval (#1175)
+- Remove `emit-event` shim (#1168)
+- Remove `hash` shims (#1158)
+- Remove `enumerate` shim (#1155)
+- Remove `distinct` shim (#1154)
+- Remove `describe-namespace` shim (#1156)
+- Remove `is-principal`, `typeof-principal`, `create-principal`, and `validate-principal` shims (#1160)
+- Remove `format` shim (#1159)
+
+### Documentation
+
+- Remove mention of private defpacts from the reference manual (#1207)
+- Add documentation for `enumerate` (#1176)
+
+### Misc
+
+- New PR and Issue templates introduced.
+
+Thanks to everyone for their contributions, especially @CryptoPascal31 for his wonderful feedback and commentary, and welcome to our newest Pact team member, @ak3n!.
+
 4.6.0
 ---
 * Add `DisablePact46` execution flag (#1138)

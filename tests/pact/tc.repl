@@ -205,6 +205,39 @@
       (update persons "foo" partial)
       partial))
 
+  (defun fails-bind-bad-object:object{person} ()
+    (let ((o:object{person}
+            { 'name: 's
+            , 'age: 1
+            , 'dob: (parse-time "%F" "1996-12-31")
+            } ))
+      (bind o { 'name:= name, 'age:= age }
+        { 'foo: name
+        , 'bar: age })))
+
+  (defun fails-with-read-partial-schema:object{person} ()
+     (with-read persons 'dave
+       { 'name:= name
+       , 'age:= age }
+       { 'name: name
+       , 'age: age }))
+
+
+  (defun fails-with-default-read-partial-schema:object{person} ()
+     (with-default-read persons 'dave
+       { 'name:= name
+       , 'age:= age }
+       { 'name: "dave"
+       , 'age: 23 }
+       { 'name: name
+       , 'age: age }))
+
+  (defcap CAP () true)
+
+  (defun fails-with-capability-bad-object:object{person} ()
+    (with-capability (CAP)
+      { 'foo: 1 }))
+
   (defschema schema-a a:integer)
   (defschema schema-b b:integer)
 
@@ -286,6 +319,16 @@
   (defun tc-native-const:bool ()
     "test handling of native consts"
     (= 0 CHARSET_ASCII))
+
+  (defun tc-lambda-let:bool ()
+    "test let-bound lambdas"
+    (let ((lam (lambda (s:string) true)))
+      (lam "hello")))
+
+  (defun tc-lambda-anon:[bool] ()
+    "test anon lambdas"
+    (map (lambda (i) (> i 1)) [1 2 3]))
+
 )
 
 (create-table persons)
@@ -335,3 +378,28 @@
  "rtc object lists"
  1
  (rtc-object-list (let ((a {'a:1}) (b {'a: 2})) [a b])))
+
+;; A module with incorrect annotations for a function's return type.
+;; Runtime typechecking for function return types was added in
+;; pact-4.7.1 and guarded via `DisableRuntimeReturnTypeChecking`.
+
+(module tc-test-function-return-types g
+  (defcap g () true)
+  (defun f:string () (+ 1 2))
+)
+
+(expect-failure
+  "evaluating a function whose type signature conflits with its body should fail"
+  (tc-test-function-return-types.f)
+  )
+
+(expect-failure
+  "composing an ill-typed function with another function should not evaluate"
+  (tc-test-function-return-types.g (tc-test-function-return-types.f 1))
+  )
+
+(env-exec-config ["DisableRuntimeReturnTypeChecking"])
+(expect
+  "evaluating ill-typed function should succeed with pact-4.7 features disabled"
+  3
+  (tc-test-function-return-types.f))

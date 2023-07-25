@@ -89,14 +89,49 @@
 
  (defun wrap10 (a) (id (id (id (id (id (id (id (id (id (id a)))))))))))
 
+ (defun wrap10_integer:integer (a:integer) (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer (id_integer a)))))))))))
+
  (defun rep10 (a) (id a) (id a) (id a) (id a) (id a) (id a) (id a) (id a) (id a) (id a))
 
  (defun withr () (with-read bench-accounts "Acct1" { "balance":= b } b))
 
+ (defun accum:integer (xs) (fold (+) 0 xs))
+
  (defun fst (a b) a)
  (defun snd (a b) b)
  (defun id (a) a)
+ (defun id_integer:integer (a:integer) a)
 
+ (defun arity_tc_0:integer
+    () 1)
+
+ (defun arity_tc_1:integer
+    (a:integer) 1)
+
+ (defun arity_tc_10:integer
+    (a:integer b:integer c:integer d:integer e:integer f:integer g:integer h:integer i:integer j:integer) 1)
+
+ (defun arity_tc_40:integer
+    (a1:integer b1:integer c1:integer d1:integer e1:integer f1:integer g1:integer h1:integer i1:integer j1:integer a2:integer b2:integer c2:integer d2:integer e2:integer f2:integer g2:integer h2:integer i2:integer j2:integer a3:integer b3:integer c3:integer d3:integer e3:integer f3:integer g3:integer h3:integer i3:integer j3:integer a4:integer b4:integer c4:integer d4:integer e4:integer f4:integer g4:integer h4:integer i4:integer j4:integer) 1)
+
+
+ (defschema small_object
+     a:integer)
+ (defun arity_small_obj:integer (arg:object{small_object}) 1)
+
+ (defschema medium_object
+     a:integer b:bool c:integer d:object{small_object}
+     e:integer f:bool g:integer h:object{small_object}
+   )
+ (defun arity_medium_obj:integer (arg:object{medium_object}) 1)
+
+ (defschema large_object
+     a:integer b:bool c:integer d:object{small_object}
+     e:integer f:bool g:integer h:object{small_object}
+     i:integer j:bool k:integer l:object{small_object}
+     m:integer n:bool o:integer p:object{small_object}
+     )
+ (defun arity_large_obj:integer (arg:object{large_object}) 1)
 )
 
 (create-table bench-accounts)

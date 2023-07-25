@@ -1,12 +1,14 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  Pact.Compile
@@ -35,7 +37,6 @@ import Control.DeepSeq (NFData)
 import Control.Lens (Wrapped(..))
 import Control.Monad
 import qualified Data.Aeson as A
-import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as BS
 import Data.Char (digitToInt)
 import Data.Decimal
@@ -43,6 +44,7 @@ import Data.List
 import Data.Serialize (Serialize)
 import Data.Text (Text, unpack)
 import Data.Text.Encoding
+import Data.Scientific
 import GHC.Generics (Generic)
 import Prelude
 import Text.Trifecta as TF
@@ -54,16 +56,24 @@ import Pact.Types.Parser
 import Pact.Types.Pretty (Pretty(..),viaShow)
 import Pact.Types.Info
 import Pact.Types.Term (ToTerm)
+import Test.QuickCheck (Arbitrary, arbitrary)
 
+import qualified Pact.JSON.Encode as J
 
+-- -------------------------------------------------------------------------- --
+-- Expression Parser
 
 -- | Main parser for Pact expressions.
-expr :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
+expr :: DeltaParsing m => PactParser m (Exp Parsed)
 expr = do
   delt <- position
   let inf = do
         end <- position
+#ifdef LEGACY_PARSER
         let len = bytes end - bytes delt
+#else
+        let len = column end - column delt
+#endif
         return $! Parsed delt (fromIntegral len)
       separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
   msum
@@ -82,7 +92,7 @@ expr = do
     ]
 {-# INLINE expr #-}
 
-number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
+number :: DeltaParsing m => PactParser m Literal
 number = do
   -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather
   -- than `symbolic :: TokenParsing m => Char -> m Char` here. We use the char
@@ -117,7 +127,7 @@ dynamicAtom = do
   var <- ident style
   return (var,[ref])
 
-bool :: (Monad m, DeltaParsing m) => PactParser m Literal
+bool :: DeltaParsing m => PactParser m Literal
 bool = msum
   [ LBool True  <$ symbol "true"
   , LBool False <$ symbol "false"
@@ -126,11 +136,11 @@ bool = msum
 
 
 -- | Parse one or more Pact expressions.
-exprs :: (TokenParsing m, DeltaParsing m) => PactParser m [Exp Parsed]
+exprs :: DeltaParsing m => PactParser m [Exp Parsed]
 exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
-exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
+exprsOnly :: DeltaParsing m => m [Exp Parsed]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
 -- | JSON serialization for 'readDecimal' and public meta info;
@@ -141,21 +151,25 @@ newtype ParsedDecimal = ParsedDecimal Decimal
 
 instance A.FromJSON ParsedDecimal where
   parseJSON (A.String s) =
-    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
+    ParsedDecimal <$> case pactAttoParseOnly (unPactParser number) s of
                         Right (LDecimal d) -> return d
                         Right (LInteger i) -> return (fromIntegral i)
                         _ -> fail $ "Failure parsing decimal string: " ++ show s
   parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
   parseJSON v = fail $ "Failure parsing decimal: " ++ show v
 
-instance A.ToJSON ParsedDecimal where
-  toJSON (ParsedDecimal d) = A.Number $ fromRational $ toRational d
+instance J.Encode ParsedDecimal where
+  build (ParsedDecimal d) = J.build $ J.Aeson @Scientific $ fromRational $ toRational d
+  {-# INLINE build #-}
 
 instance Show ParsedDecimal where
   show (ParsedDecimal d) = show d
 
 instance Pretty ParsedDecimal where
   pretty (ParsedDecimal d) = viaShow d
+
+instance Arbitrary ParsedDecimal where
+  arbitrary = ParsedDecimal <$> arbitrary
 
 instance Wrapped ParsedDecimal
 
@@ -167,7 +181,7 @@ newtype ParsedInteger = ParsedInteger Integer
 
 instance A.FromJSON ParsedInteger where
   parseJSON (A.String s) =
-    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
+    ParsedInteger <$> case pactAttoParseOnly (unPactParser number) s of
                         Right (LInteger i) -> return i
                         _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (A.Number n) = return $ ParsedInteger (round n)
@@ -176,21 +190,28 @@ instance A.FromJSON ParsedInteger where
     _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
-instance A.ToJSON ParsedInteger where
-  toJSON (ParsedInteger i) = A.Number (fromIntegral i)
+instance J.Encode ParsedInteger where
+  build (ParsedInteger i) = J.build $ J.Aeson i
+  {-# INLINE build #-}
+
+instance Arbitrary ParsedInteger where
+  arbitrary = ParsedInteger <$> arbitrary
 
 instance Wrapped ParsedInteger
 
+-- -------------------------------------------------------------------------- --
+-- Top Level Parsers
+
 -- | "Production" parser: atto, parse multiple exprs.
 parseExprs :: Text -> Either String [Exp Parsed]
-parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs <* TF.eof))
+parseExprs = pactAttoParseOnly (unPactParser (whiteSpace *> exprs <* TF.eof))
 {-# INLINABLE parseExprs #-}
 
 -- | Legacy version of "production" parser: atto, parse multiple exprs. This
 -- parser does not force EOF and thus accepts trailing inputs that are not valid
 -- pact code.
 legacyParseExprs :: Text -> Either String [Exp Parsed]
-legacyParseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
+legacyParseExprs = pactAttoParseOnly (unPactParser (whiteSpace *> exprs))
 {-# INLINABLE legacyParseExprs #-}
 
 -- | ParsedCode version of 'parseExprs'
@@ -209,7 +230,6 @@ _parseF p fp = do
   bs <- BS.readFile fp
   let s = unpack $ decodeUtf8 bs
   fmap (,s) <$> TF.parseFromFileEx p fp
-
 
 _parseS :: String -> TF.Result [Exp Parsed]
 _parseS = TF.parseString exprsOnly mempty
