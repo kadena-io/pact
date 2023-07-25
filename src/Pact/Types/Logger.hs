@@ -15,6 +15,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Default
 import GHC.Generics
+import Control.Monad (forM_, when)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Prelude hiding (log)

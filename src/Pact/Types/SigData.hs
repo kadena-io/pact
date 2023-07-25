@@ -22,7 +22,7 @@ module Pact.Types.SigData
   ) where
 
 import Control.Error
-import Control.Monad.State.Strict
+import Control.Monad (join)
 import Data.Aeson
 import Data.Bifunctor
 import qualified Data.HashMap.Strict as HM
