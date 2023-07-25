@@ -19,7 +19,6 @@ import Criterion.Main hiding (env)
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -58,6 +57,8 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Capability
 import Pact.Runtime.Utils
+import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Encode as J
 
 -- | Flags for enabling file-based perf bracketing,
 -- see 'mkFilePerf' below.
@@ -147,7 +148,7 @@ loadBenchModule db = do
   m <- decodeUtf8 <$> BS.readFile "tests/bench/bench.pact"
   pc <- parseCode m
   let md = MsgData
-           (object
+           (toLegacyJson $ object
             [ "keyset" .= object
               [ "keys" .= ["benchadmin"::Text]
               , "pred" .= (">"::Text)]
@@ -157,7 +158,7 @@ loadBenchModule db = do
            pactInitialHash
            [Signer Nothing pk Nothing []]
   let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  e <- setupEvalEnv db entity Transactional md initRefStore
+  e <- setupEvalEnv db entity Transactional md (versionedNativesRefStore ec)
           freeGasEnv permissiveNamespacePolicy noSPVSupport def ec
   (r :: Either SomeException EvalResult) <- try $ evalExec  defaultInterpreter e pc
   void $ eitherDie "loadBenchModule (load)" $ fmapL show r
@@ -183,10 +184,10 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData cdata Nothing pactInitialHash ss
+  let md = MsgData (toLegacyJson cdata) Nothing pactInitialHash ss
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  e <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Transactional md
-          initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
+  e <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Transactional md (versionedNativesRefStore ec)
+          prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   let s = perfInterpreter pt $ defaultInterpreterState $
           maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
@@ -195,10 +196,10 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
-  let md = MsgData Null Nothing pactInitialHash []
+  let md = MsgData (toLegacyJson Null) Nothing pactInitialHash []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
-  env <- fmap (set eeAdvice pt) $ setupEvalEnv dbEnv entity Local md
-            initRefStore prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
+  env <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Local md (versionedNativesRefStore ec)
+            prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   o <- try $ runEval def env $ mapM eval ts
   case o of
     Left (e :: SomeException) -> die "execPure" (n ++ ": " ++ show e)
@@ -235,11 +236,11 @@ benchReadValue _ (TxTable _t) _k = rcp Nothing
 mkBenchCmd :: [SomeKeyPairCaps] -> (String, Text) -> IO (String, Command ByteString)
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
-    $ toStrict . encode
-    $ Payload payload "nonce" () ss Nothing
+    $ J.encodeStrict
+    $ Payload payload "nonce" (J.Aeson ()) ss Nothing
   return (str, cmd)
   where
-    payload = Exec $ ExecMsg t Null
+    payload = Exec $ ExecMsg t (toLegacyJson Null)
     ss = keyPairsToSigners kps
 
 pk :: Text
@@ -327,6 +328,21 @@ main = do
   let tt = evalReplEval def replS (mapM eval timeTest)
   void $! eitherDie "timeTest failed" . fmapL show =<< tt
 
+  wrap10Cmd <- parseCode "(bench.wrap10 100)"
+  wrap10MonoCmd <- parseCode "(bench.wrap10_integer 100)"
+
+  arityCmd0 <- parseCode "(bench.arity_tc_0)"
+  arityCmd1 <- parseCode "(bench.arity_tc_1 1)"
+  arityCmd10 <- parseCode "(bench.arity_tc_10 1 1 1 1 1 1 1 1 1 1)"
+  arityCmd40 <- parseCode "(bench.arity_tc_40 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)"
+
+  aritySmallObj <- parseCode "(bench.arity_small_obj {\"a\": 1})"
+  arityMediumObj <- parseCode "(bench.arity_medium_obj {\"a\":1, \"b\":true, \"c\":1, \"d\":{\"a\":1}, \"e\":1, \"f\":true, \"g\":1, \"h\":{\"a\":1} })"
+  arityLargeObj <- parseCode "(bench.arity_large_obj {\"a\":1, \"b\":true, \"c\":1, \"d\":{\"a\":1}, \"e\":1, \"f\":true, \"g\":1, \"h\":{\"a\":1}, \"i\":1, \"j\":true, \"k\":1, \"l\":{\"a\":1}, \"m\":1, \"n\":true, \"o\":1, \"p\":{\"a\":1} })"
+
+  accumCmd0 <- parseCode "(bench.accum (enumerate 1 0))"
+  accumCmd1 <- parseCode "(bench.accum (enumerate 1 1))"
+  accumCmd100 <- parseCode "(bench.accum (enumerate 1 100))"
 
   let cleanupSqlite = do
         c <- readMVar $ pdPactDbVar sqliteDb
@@ -384,4 +400,27 @@ main = do
       , benchNFIO "round4" $ runPactExec def "round4" [] Null Nothing pureDb round4
       ]
     , benchNFIO "time" $ fmap fst <$> evalReplEval def replS (mapM eval timeTest)
+    , bgroup "defun"
+      [ bgroup "return-type-tc"
+        [ benchNFIO "wrap10" $ runPactExec def "wrap10" [] Null Nothing pureDb wrap10Cmd
+        , benchNFIO "wrap10_mono" $ runPactExec def "wrap10_mono" [] Null Nothing pureDb wrap10MonoCmd
+        , benchNFIO "accum100" $ runPactExec def "accum100" [] Null Nothing pureDb accumCmd100
+        ]
+      , bgroup "arity"
+        [ benchNFIO "00-args" $ runPactExec def "00-args" [] Null Nothing pureDb arityCmd0
+        , benchNFIO "01-args" $ runPactExec def "01-args" [] Null Nothing pureDb arityCmd1
+        , benchNFIO "10-args" $ runPactExec def "10-args" [] Null Nothing pureDb arityCmd10
+        , benchNFIO "40-args" $ runPactExec def "40-args" [] Null Nothing pureDb arityCmd40
+        ]
+      , bgroup "object-size"
+        [ benchNFIO "small-obj" $ runPactExec def "small-obj" [] Null Nothing pureDb aritySmallObj
+        , benchNFIO "medium-obj" $ runPactExec def "medium-obj" [] Null Nothing pureDb arityMediumObj
+        , benchNFIO "large-obj" $ runPactExec def "large-obj" [] Null Nothing pureDb arityLargeObj
+        ]
+      , bgroup "list-tc"
+        [ benchNFIO "000-items" $ runPactExec def "000-items" [] Null Nothing pureDb accumCmd0
+        , benchNFIO "001-items" $ runPactExec def "001-items" [] Null Nothing pureDb accumCmd1
+        , benchNFIO "100-items" $ runPactExec def "100-items" [] Null Nothing pureDb accumCmd100
+        ]
+      ]
     ]

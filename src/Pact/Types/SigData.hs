@@ -1,5 +1,8 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
@@ -15,12 +18,13 @@ module Pact.Types.SigData
   , commandToSigData
   , sigDataToCommand
   , sampleSigData
+  , arbitraryRoundtripableSigData
   ) where
 
 import Control.Error
 import Control.Monad.State.Strict
 import Data.Aeson
-import Data.Aeson.Types
+import Data.Bifunctor
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Data.String
@@ -28,25 +32,34 @@ import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import GHC.Generics
+import Test.QuickCheck
 
 import Pact.Parse
 import Pact.Types.Command
 import Pact.Types.Runtime
+
+import qualified Pact.JSON.Encode as J
+
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
   deriving (Eq,Ord,Show,Generic)
 
 instance IsString PublicKeyHex where
   fromString = PublicKeyHex . pack
-instance ToJSONKey PublicKeyHex
 instance FromJSONKey PublicKeyHex
-instance ToJSON PublicKeyHex where
-  toJSON (PublicKeyHex hex) = String hex
+
 instance FromJSON PublicKeyHex where
   parseJSON = withText "PublicKeyHex" $ \t -> do
     if T.length t == 64 && isRight (parseB16TextOnly t)
       then return $ PublicKeyHex t
       else fail "Public key must have 64 hex characters"
+
+instance J.Encode PublicKeyHex where
+  build (PublicKeyHex hex) = J.text hex
+
+instance Arbitrary PublicKeyHex where
+  arbitrary = PublicKeyHex . T.pack <$> vectorOf 64 (elements "0123456789abcdef")
 
 -- | This type is designed to represent signatures in all possible situations
 -- where they might be wanted. It must satisfy at least the following
@@ -60,38 +73,48 @@ instance FromJSON PublicKeyHex where
 -- payload to facilitate easier transmission via QR codes and other low
 -- bandwidth channels.
 data SigData a = SigData
-  { _sigDataHash :: PactHash
-  , _sigDataSigs :: [(PublicKeyHex, Maybe UserSig)]
+  { _sigDataHash :: !PactHash
+  , _sigDataSigs :: ![(PublicKeyHex, Maybe UserSig)]
   -- ^ This is not a map because the order must be the same as the signers inside the command.
-  , _sigDataCmd :: Maybe a
+  , _sigDataCmd :: !(Maybe a)
   } deriving (Eq,Show,Generic)
-
-instance ToJSON a => ToJSON (SigData a) where
-  toJSON (SigData h s c) = object $ concat
-    [ ["hash" .= h]
-    , ["sigs" .= object (map (\(k,ms) -> (unPublicKeyHex k, maybe Null (toJSON . _usSig) ms)) s)]
-    , "cmd" .?= c
-    ]
-    where
-      k .?= v = case v of
-        Nothing -> mempty
-        Just v' -> [k .= v']
 
 instance FromJSON a => FromJSON (SigData a) where
   parseJSON = withObject "SigData" $ \o -> do
     h <- o .: "hash"
-    s <- withObject "SigData Pairs" f =<< (o .: "sigs")
+    s <- (o .: "sigs") >>= f
     c <- o .:? "cmd"
     pure $ SigData h s c
     where
-      f = mapM g . HM.toList
-      g (k,Null) = pure (PublicKeyHex k, Nothing)
-      g (k,String t) = pure (PublicKeyHex k, Just $ UserSig t)
-      g (_,v) = typeMismatch "Signature should be String or Null" v
+      f v = flip (withObject "SigData Pairs") v $ \_ ->
+        fmap (bimap PublicKeyHex (fmap UserSig)) . LHM.sortByKey . HM.toList <$> parseJSON v
+
+instance J.Encode a => J.Encode (SigData a) where
+  build o = J.object
+    [ "hash" J..= _sigDataHash o
+    , "sigs" J..= LHM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
+      -- FIXME: this instance seems to violate the comment on the respective
+      -- constructor field. Is that fine? Is it required for backward compat?
+      -- This instance also does not roundtrip.
+    , "cmd" J..?= _sigDataCmd o
+    ]
+  {-# INLINE build #-}
+
+instance Arbitrary a => Arbitrary (SigData a) where
+  arbitrary = SigData <$> arbitrary <*> arbitrary <*> arbitrary
+
+-- | Workaround for the sorting of SigData sigs. See the FIXME notes on the JSON
+-- encoding instances for details.
+--
+arbitraryRoundtripableSigData :: Arbitrary a => Gen (SigData a)
+arbitraryRoundtripableSigData = SigData
+  <$> arbitrary
+  <*> fmap (fmap (first PublicKeyHex) . LHM.sortByKey . fmap (first unPublicKeyHex)) arbitrary
+  <*> arbitrary
 
 commandToSigData :: Command Text -> Either String (SigData Text)
 commandToSigData c = do
-  let ep = traverse parsePact =<< (eitherDecodeStrict' $ encodeUtf8 $ _cmdPayload c)
+  let ep = traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 $ _cmdPayload c)
   case ep :: Either String (Payload Value ParsedCode) of
     Left e -> Left $ "Error decoding payload: " <> e
     Right p -> do
@@ -104,7 +127,9 @@ sigDataToCommand (SigData h sigList (Just c)) = do
   payload :: Payload Value ParsedCode <- traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 c)
   let sigMap = M.fromList sigList
   -- It is ok to use a map here because we're iterating over the signers list and only using the map for lookup.
-  let sigs = catMaybes $ map (\signer -> join $ M.lookup (PublicKeyHex $ _siPubKey signer) sigMap) $ _pSigners payload
+  let sigs = catMaybes
+        $ map (\signer -> join $ M.lookup (PublicKeyHex $ _siPubKey signer) sigMap)
+        $ _pSigners payload
   pure $ Command c sigs h
 
 sampleSigData :: SigData Text

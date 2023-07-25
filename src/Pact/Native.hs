@@ -5,7 +5,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 -- |
@@ -62,11 +61,9 @@ import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
@@ -105,6 +102,8 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
+
+import qualified Pact.JSON.Encode as J
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -334,7 +333,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ T.encodeUtf8 s
-      [a'] -> enforcePactValue a' >>= \pv -> go $ toStrict $ encode pv
+      [a'] -> enforcePactValue a' >>= \pv -> go $ J.encodeStrict pv
       _ -> argsError i as
       where go = return . tStr . asString . pactHash
 
@@ -553,8 +552,17 @@ namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
   where
     namespace :: GasRNativeFun e
     namespace g i as = case as of
-      [TLitString nsn] -> go g i nsn
+      [TLitString nsn] ->
+        ifExecutionFlagSet FlagDisablePact47
+          (go g i nsn)
+          (if T.null nsn then
+             goEmpty g i
+           else go g i nsn)
       _ -> argsError i as
+
+    goEmpty g0 fa = computeGas' g0 fa (GUnreduced [])
+      $ success "Namespace reset to root"
+      $ evalRefs . rsNamespace .= Nothing
 
     go g0 fa ns = do
       let name = NamespaceName ns

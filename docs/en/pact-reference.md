@@ -923,10 +923,10 @@ new `env-sigs` REPL function as follows:
   ...
 )
 
-(set-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
+(env-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
 (accounts.pay "alice" "bob" 10.0) ;; works as the cap match the signature caps
 
-(set-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
+(env-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
 (expect-failure "payment to bob will no longer be able to enforce alice's keyset"
   (accounts.pay "alice" "bob" 10.0))
 ```

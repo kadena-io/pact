@@ -28,7 +28,7 @@ import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 
-import Data.Aeson (eitherDecode,toJSON)
+import Data.Aeson (eitherDecode)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable
@@ -42,7 +42,6 @@ import Data.Text.Encoding
 import Pact.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
-
 
 #if defined(ghcjs_HOST_OS)
 import qualified Pact.Analyze.Remote.Client as RemoteClient
@@ -78,7 +77,9 @@ import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
+import Pact.Interpreter
 import Pact.Runtime.Utils
+import Pact.JSON.Legacy.Value
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -119,7 +120,7 @@ replDefs = ("Repl",
       "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
-      ("DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. "<>
+      ("DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. "<>
        "See 'env-sigs' for setting keys with associated capabilities.")
      ,defZNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
       [LitExample $ "(env-sigs [{'key: \"my-key\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>
@@ -401,8 +402,8 @@ setmsg i as = case as of
     case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
       Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
       Right v -> go v
-  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
-  [a] -> go (toJSON a)
+  [TObject (Object om _ _ _) _] -> go (toLegacyJsonViaEncode (fmap toPactValueLenient om))
+  [a] -> go (toLegacyJsonViaEncode a)
   _ -> argsError i as
   where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 
@@ -742,13 +743,13 @@ setGasPrice i as = argsError i as
 envExecConfig :: RNativeFun LibState
 envExecConfig i as = case as of
   [TList reps _ _] -> do
-    fs <- forM reps $ \s -> case s of
+    fs <- forM reps $ \case
       TLitString r -> case M.lookup r flagReps of
         Nothing -> evalError' i $ "Invalid flag, allowed: " <> viaShow (M.keys flagReps)
         Just f -> return f
       _ -> argsError i as
     let ec = ExecutionConfig $ S.fromList $ V.toList fs
-    setenv eeExecutionConfig ec
+    setop $ UpdateEnv $ Endo $ set eeExecutionConfig ec . set eeRefStore (versionedNativesRefStore ec)
     report ec
   [] -> view eeExecutionConfig >>= report
   _ -> argsError i as

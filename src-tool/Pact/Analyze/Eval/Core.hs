@@ -45,13 +45,13 @@ import Pact.Types.Info (Info(..))
 import Pact.Types.Hash (pactHash)
 import Pact.Types.Util (AsString(asString))
 import Data.Text.Encoding (encodeUtf8)
-import qualified Data.Aeson as Aeson
 import qualified Pact.Types.Lang as Pact
 import qualified Pact.Types.PactValue as Pact
-import Data.ByteString.Lazy.Char8 (toStrict)
 import qualified Data.ByteString as BS
 import Data.Functor ((<&>))
 import qualified Data.Vector as V
+
+import qualified Pact.JSON.Encode as J
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -158,8 +158,8 @@ truncate63 i = ite (i .< lowerBound)
     upperBound = literal bound
     lowerBound = literal (- bound)
 
-notStaticErr :: AnalyzeFailureNoLoc
-notStaticErr = FailureMessage "Hash requires statically known content"
+notStaticErrHash :: String -> VerificationWarning
+notStaticErrHash s = FVShimmedStaticContent "hash" (T.pack s)
 
 symHash :: BS.ByteString -> S Str
 symHash =  literalS . Str . T.unpack . asString . pactHash
@@ -250,30 +250,47 @@ evalCore (StrContains needle haystack) = do
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
 
--- hash values
--- TODO (RS): we should add warnings to the stack, allowing
---            to return shims in case, the content is not statically known
 evalCore (StrHash sT) = eval sT <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc notStaticErr
+  Nothing -> do
+     -- (hash "hello pact")
+    let h = "HsVo-gcG-pk1BciGr2xovMyR7sVH0Kt9gTgqicXDXMM"
+    emitWarning (notStaticErrHash ("of type 'string', substitute '" <> h <> "')"))
+    pure (literalS (Str h))
   Just (Str b)  -> pure (symHash (encodeUtf8 (T.pack b)))
 
 evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc notStaticErr
-  Just i  -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral ( Pact.LInteger i)))))
+  Nothing -> do
+     -- (hash 1)
+    let h = "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"
+    emitWarning (notStaticErrHash ("of type 'integer', substitute '" <> h <> "')"))
+    pure (literalS (Str h))
+  Just i  -> pure (symHash (J.encodeStrict (Pact.PLiteral ( Pact.LInteger i))))
 
 evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc notStaticErr
-  Just b  -> pure (symHash (toStrict ( Aeson.encode b)))
+  Nothing -> do
+    let h = "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"
+    emitWarning (notStaticErrHash ("of type 'bool', substitute '" <> h <> "'"))
+    pure (literalS (Str h)) -- (hash true)
+  Just b  -> pure (symHash (J.encodeStrict b))
 
 evalCore (DecHash d) = eval d <&> unliteralS >>= \case
-  Nothing -> throwErrorNoLoc notStaticErr
-  Just d' -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d'))))))
+  Nothing -> do
+    -- (hash 1.0)
+    let h = "ks31eMRwhaWZIlbw3Pl9Cxnx8cneTV_jDDrOYZG25ds"
+    emitWarning (notStaticErrHash ("of type 'decimal', subsitute '" <> h <> "'"))
+    pure (literalS (Str h))
+  Just d' ->
+    pure (symHash (J.encodeStrict (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d')))))
 
 evalCore (ListHash ty' xs) = do
   result <-  withSymVal ty' $ withSing ty' $ eval xs <&> unliteralS >>= \case
-      Nothing -> throwErrorNoLoc notStaticErr
+      Nothing -> do
+        -- (hash [])
+        let h = "wsATyGqckuIvlm89hhd2j4t6RMkCrcwJe_oeCYr7Th8"
+        emitWarning (notStaticErrHash ("of type 'list', substitute '" <> h <> "'"))
+        pure ([Pact.PLiteral (Pact.LString (T.pack h))])
       Just xs'' -> traverse (reify ty') xs''
-  pure (symHash (toStrict (Aeson.encode (Pact.PList (V.fromList result)))))
+  pure (symHash (J.encodeStrict (Pact.PList (V.fromList result))))
   where
     reify :: forall b. Sing b -> Concrete b -> m Pact.PactValue
     reify t c = case t of
@@ -385,8 +402,8 @@ evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
   S _ bs' <- eval bs
   result <- bfoldrM listBound
     (\sbvb sbva -> fmap _sSbv $
-      withVar vid1 (mkAVal' sbvb) $
-        withVar vid2 (mkAVal' sbva) $
+      withVar vid1 (mkAVal' sbva) $
+        withVar vid2 (mkAVal' sbvb) $
           eval f)
     a' bs'
   pure $ sansProv result
@@ -696,7 +713,10 @@ evalStrToIntBase bT sT = do
     -- Concrete base and symbolic string: only support base 10
     (Just conBase, Nothing)
       | conBase == 10 -> evalStrToInt $ inject' $ coerceS @String @Str s
-      | otherwise     -> pure $ literalS conBase -- return base. TODO: warning please
+      | otherwise     -> do
+          emitWarning (FVShimmedStaticContent "strToInt"
+            (T.pack ("unsupported base=" <> show conBase <> ", substitue " <> show conBase)))
+          pure $ literalS conBase
 
     -- Concrete base and string: use pact native impl
     (Just conBase, Just conStr) ->

@@ -5,14 +5,14 @@
 
 Constant denoting the ASCII charset
 
-Constant: 
+Constant:
 &nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
 
 ### CHARSET_LATIN1 {#CHARSET_LATIN1}
 
 Constant denoting the Latin-1 charset ISO-8859-1
 
-Constant: 
+Constant:
 &nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
 
 ### at {#at}
@@ -461,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.6.0"
+"4.7.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -765,7 +765,7 @@ Top level only: this function will fail if used in module code.
 
 Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER. Output is sorted by the ordering of keys.
 ```lisp
-(let* 
+(let*
  ((qry (lambda (k obj) true)) ;; select all rows
   (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
  )
@@ -924,7 +924,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") 15)
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N days, for use with 'add-time' 
+N days, for use with 'add-time'
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 "2016-07-23T12:00:00Z"
@@ -962,7 +962,7 @@ pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N hours, for use with 'add-time' 
+N hours, for use with 'add-time'
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 "2016-07-22T13:00:00Z"
@@ -976,7 +976,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N minutes, for use with 'add-time'. 
+N minutes, for use with 'add-time'.
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 "2016-07-22T12:01:00Z"
@@ -1000,7 +1000,7 @@ pact> (parse-time "%F" "2016-09-12")
 *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ). 
+Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
 ```lisp
 pact> (time "2016-07-22T11:26:35Z")
 "2016-07-22T11:26:35Z"
@@ -1253,6 +1253,18 @@ pact> (ceiling 3.5)
 4
 pact> (ceiling 100.15234 2)
 100.16
+```
+
+
+### dec {#dec}
+
+*x*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
+
+
+Cast an integer to a decimal value of integer X as decimal.
+```lisp
+pact> (dec 3)
+3.0
 ```
 
 
@@ -1916,7 +1928,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisableNewTransDec","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
@@ -2010,7 +2022,7 @@ pact> (env-hash (hash "hello"))
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
+DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
 ```lisp
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"

@@ -1189,10 +1189,10 @@ as follows:
      ...
    )
 
-   (set-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
+   (env-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
    (accounts.pay "alice" "bob" 10.0) ;; works as the cap match the signature caps
 
-   (set-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
+   (env-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
    (expect-failure "payment to bob will no longer be able to enforce alice's keyset"
      (accounts.pay "alice" "bob" 10.0))
 
@@ -2493,7 +2493,7 @@ sequential order.
        (credit payee amount)))
 
 Defpacts may be nested (though the recursion restrictions apply, so it
-must be a different defpact). They may be kicked off like a regular
+must be a different defpact). They may be executed like a regular
 function call within a defpact, but are continued after the first step
 by calling ``continue`` with the same arguments.
 

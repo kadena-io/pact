@@ -59,9 +59,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Monoid (Sum(..))
-import Data.Aeson (Value)
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.Aeson as A
 import Data.Default
 import Data.Foldable
 import Data.Functor.Classes
@@ -90,6 +87,8 @@ import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
 
+import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Legacy.HashMap as LHM
 
 evalBeginTx :: Info -> Eval e (Maybe TxId)
 evalBeginTx i = view eeMode >>= beginTx i
@@ -99,7 +98,7 @@ evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx :: Info -> Eval e [TxLog Value]
+evalCommitTx :: Info -> Eval e [TxLogJson]
 evalCommitTx i = do
   revokeAllCapabilities
   -- backend now handles local exec
@@ -190,7 +189,6 @@ evalByName n as i = do
   app <- enscope (TApp (App (TVar n def) as i) i)
 
   -- lens into user function if any to test for loop
-
   case preview (tApp . appFun . tVar . _Ref . tDef) app of
     Nothing -> return ()
     Just Def{..} -> do
@@ -321,6 +319,11 @@ eval' (TModule _tm@(MDModule m) bod i) =
         capMName <-
           ifExecutionFlagSet' FlagPreserveNsModuleInstallBug (_mName m) (_mName mangledM)
         void $ acquireModuleAdminCapability capMName $ return ()
+
+        unlessExecutionFlagSet FlagDisablePact48 $ do
+          evalRefs.rsLoadedModules %= HM.delete (_mName mangledM)
+          evalRefs.rsQualifiedDeps %= HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM)
+
     -- build/install module from defs
     (g,govM) <- loadModule mangledM bod i g0
     szVer <- getSizeOfVersion
@@ -635,7 +638,7 @@ evaluateDefs info mdef defs = do
       pure (_hfAllDefs hf)
   where
   -- | traverse to find deps and form graph
-  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
+  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
     defTerm' <- forM defTerm $ \(f :: Name) -> do
       dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
       case (dm, f) of
@@ -738,27 +741,42 @@ fullyQualifyDefs info mdef defs = do
     checkAddDep = \case
       Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
       _ -> pure ()
-    -- | traverse to find deps and form graph
-    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (HM.toList allDefs) $ \(defName,defTerm) -> do
-      let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
-      defTerm' <- forM defTerm $ \(f :: Name) -> do
+
+    resolveBareName memo f@(BareName fn _) = case HM.lookup fn defs of
+      Just _ -> do
+        let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
+        return (Left name') -- decl found
+      Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \case
+        Just mr -> return (Right mr) -- mod ref found
+        Nothing -> resolveError f
+
+    resolveError f = lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
+
+    resolveName flagPact48Disabled memo = \case
+      (QName (QualifiedName (ModuleName mn mNs) fn i))
+        | not flagPact48Disabled
+          && mn == _mnName (_mName mdef)
+          && isNsMatch -> resolveBareName memo (BareName fn i)
+          where
+            isNsMatch = fromMaybe True (liftA2 (==) modNs mNs)
+            modNs = _mnNamespace (_mName mdef)
+      f  -> do
         dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
         case (dm, f) of
           (Just t, _) -> checkAddDep t *> return (Right t) -- ref found
-          -- for barenames, check decls and finally modules
-          (Nothing, Name (BareName fn _)) ->
-            case HM.lookup fn allDefs of
-              Just _ -> do
-                let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
-                return (Left name') -- decl found
-              Nothing -> lift (resolveBareModRef info f fn memo (MDModule mdef)) >>= \r -> case r of
-                Just mr -> return (Right mr) -- mod ref found
-                Nothing ->
-                  lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
-          -- for qualified names, simply fail
-          (Nothing, _) -> lift (evalError' f $ "Cannot resolve " <> dquotes (pretty f))
+            -- for barenames, check decls and finally modules
+          (Nothing, Name bn@BareName{}) -> resolveBareName memo bn
+              -- for qualified names, simply fail
+          (Nothing, _) -> resolveError f
+
+    -- | traverse to find deps and form graph
+    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
+      let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
+      disablePact48 <- lift (isExecutionFlagSet FlagDisablePact48)
+      defTerm' <- forM defTerm $ \(f :: Name) -> resolveName disablePact48 memo f
 
       return (defTerm', defName', mapMaybe (either Just (const Nothing)) $ toList defTerm')
+
     moduleHash = _mhHash . _mHash
 
 
@@ -778,7 +796,7 @@ evaluateConstraints info m evalMap = do
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
         Just (ModuleData (MDInterface Interface{..}) irefs _) -> do
-          em' <- HM.foldrWithKey (solveConstraint ifn info) (pure refMap) irefs
+          em' <- LHM.foldrWithKey (solveConstraint ifn info) (pure refMap) $ LHM.fromList $ HM.toList irefs
           let um = over mMeta (<> _interfaceMeta) m'
           newIf <- ifExecutionFlagSet' FlagPreserveModuleIfacesBug ifn _interfaceName
           pure (um, em', newIf:newIfs)
@@ -1173,7 +1191,14 @@ functionApp fnName funTy mod_ as fnBody docs ai = do
   let body = instantiate (resolveArg ai args') fnBody
       fname = asString fnName
       fa = FunApp ai fname mod_ Defun (funTypes fty) docs
-  guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
+
+  returnVal <- guardRecursion fname mod_ $ appCall fa ai args' $ fmap (gas,) $ reduceBody body
+
+  unlessExecutionFlagSet FlagDisableRuntimeReturnTypeChecking $
+    typecheckTerm ai (_ftReturn fty) returnVal
+
+  return returnVal
+
 
 -- | Evaluate a dynamic ref to either a fully-reduced value from a 'TConst'
 -- or a module member 'Def' for applying.
@@ -1302,7 +1327,7 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pre
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
 createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
   let pc = PactContinuation (QName qn{_qnInfo = def}) pvs
-  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> BL.toStrict (A.encode pc)
+  pure $ toPactId $ pactHash $ T.encodeUtf8 parent <> ":" <> J.encodeStrict pc
 createNestedPactId i n _ =
   evalError' i $ "Error creating nested pact id, name is not qualified: " <> pretty n
 

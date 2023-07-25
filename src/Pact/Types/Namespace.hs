@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -9,16 +10,19 @@ module Pact.Types.Namespace
 ) where
 
 import Control.DeepSeq
-import Control.Lens
+import Control.Lens hiding ((.=))
 
 import Data.Aeson
 
 
 import Pact.Types.Names
 import Pact.Types.Term
+import Pact.Types.Term.Arbitrary ()
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
 import Pact.Types.Util
+
+import qualified Pact.JSON.Encode as J
 
 import GHC.Generics
 
@@ -44,8 +48,15 @@ instance (SizeOf n) => SizeOf (Namespace n) where
   sizeOf ver (Namespace name ug ag) =
     (constructorCost 3) + (sizeOf ver name) + (sizeOf ver ug) + (sizeOf ver ag)
 
-instance (ToJSON a, FromJSON a) => ToJSON (Namespace a) where toJSON = lensyToJSON 3
-instance (FromJSON a, ToJSON a) => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
+instance J.Encode a => J.Encode (Namespace a) where
+  build o = J.object
+    [ "admin" J..= _nsAdmin o
+    , "user" J..= _nsUser o
+    , "name" J..= _nsName o
+    ]
+  {-# INLINABLE build #-}
+
+instance FromJSON a => FromJSON (Namespace a) where parseJSON = lensyParseJSON 3
 
 instance (NFData a) => NFData (Namespace a)
 
@@ -53,9 +64,9 @@ instance (NFData a) => NFData (Namespace a)
 -- 1. Whether a namespace can be created.
 -- 2. Whether the default namespace can be used.
 data NamespacePolicy
-  = SimpleNamespacePolicy (Maybe (Namespace (Term Name)) -> Bool)
+  = SimpleNamespacePolicy !(Maybe (Namespace (Term Name)) -> Bool)
   -- ^ if namespace is Nothing/root, govern usage; otherwise govern creation.
-  | SmartNamespacePolicy Bool QualifiedName
+  | SmartNamespacePolicy !Bool !QualifiedName
   -- ^ Bool governs root usage, Name governs ns creation.
   -- Def is (defun xxx:bool (ns:string ns-admin:guard))
 

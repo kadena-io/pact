@@ -24,7 +24,7 @@ For additional information, press, and development inquiries, please refer to th
 - [Documentation](#documentation)
 - [Quickstart](#quickstart)
 - [Installing Pact](#installing-pact)
-  - [Binary Distributions](#binary-distributions)
+  - [Binary Downloads](#binary-downloads)
   - [Instructions for Mac users](#instructions-for-mac-users)
   - [Instructions for Linux users](#instructions-for-linux-users)
   - [Building from Source](#building-from-source)
@@ -60,16 +60,18 @@ The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.
 ## Installing Pact
 
 
-### Binary Distributions
+### Binary Downloads
 
-Pact can be installed via binary distribution for Linux or Mac by following the instructions below:
+Pact can be installed via ready-to-use binary downloads for Linux or Mac by following the instructions below:
 
-- Install [z3](https://github.com/Z3Prover/z3/wiki).
+- Install [z3](https://github.com/Z3Prover/z3/wiki) `>= 4.11.2`.
 - Download the [prebuilt binaries](https://github.com/kadena-io/pact/releases) for either Linux or Mac, depending on your OS.
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
 
 Once you have Pact in your path, proceed to validating your installation by trying out [the repl](#verifying-installation).
+
+
 
 ### Instructions for Mac Users
 
@@ -87,7 +89,7 @@ If you want to install from source, see [building from source](#building-from-so
 
 ### Instructions for Linux Users
 
-Linux is supported in terms of both the binary distributions (see below) and building from source. For installing `pact` on Linux distributions in the Arch family, refer to [this package on the AUR](https://aur.archlinux.org/packages/pact/). Otherwise, please refer to [building from source](#building-from-source).
+Linux is supported both in terms of ready-to-use binary downloads (see [Binary Downloads](#binary-downloads)) and building from source. For installing `pact` on Linux distributions in the Arch family, refer to [this package on the AUR](https://aur.archlinux.org/packages/pact/). Otherwise, please refer to [building from source](#building-from-source).
 
 ### Building from Source
 
@@ -140,36 +142,6 @@ cabal v2-exec pact
 Alternatively, running `cabal v2-install exe:pact` inside this repository's root will install the binary to `~/.cabal/bin/`, which
 you may need to add to your path. Then, you can call `pact` as-is.
 
-#### Building with Stack
-
-***(stack is no longer supported)***
-
-Stack is a Haskell build tool that manages compiler and dependency versions for
-you. It's easy to install and use.
-
-##### Dependencies
-
-- `stack >= 1.9`
-  - (Mac only) Homebrew: `brew install haskell-stack`
-  - (Linux/Mac) [Installer](https://docs.haskellstack.org/en/stable/README/)
-
-(You may also need to install `zlib`, `z3`, and `sqlite`)
-
-To build a Pact binary:
-
-```bash
-stack build
-```
-
-This will compile a runnable version of Pact, which you can run via:
-
-```bash
-stack exec pact
-```
-
-Alternatively, `stack install` will install the binary to `~/.local/bin/`, which
-you may need to add to your path. Then, you can call `pact` as-is.
-
 #### Building with Nix
 
 The fastest way to build and run Pact is to use the Nix package manager
@@ -199,6 +171,8 @@ pact> (+ "hello, " "world")
 ## Supported Editors
 
 Pact is supported by a variety of editors ranging from full-fledged IDE environments to syntax highlighting.
+Moreover, we also provide a Pact Language Server, which can be seamlessly integrated with a wide range of editors.
+The Pact Language Server can be found [here](https://github.com/kadena-io/pact-lsp).
 
 ### Chainweaver
 
