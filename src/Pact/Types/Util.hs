@@ -156,8 +156,8 @@ parseB16JSON = withText "Base16" parseB16Text
 
 parseB16Text :: Text -> Parser ByteString
 parseB16Text t = case B16.decode (encodeUtf8 t) of
-                 (s,leftovers) | leftovers == B.empty -> return s
-                               | otherwise -> fail $ "Base16 decode failed: " ++ show t
+  Right bs -> return bs
+  Left _ -> fail $ "Base16 decode failed: " ++ show t
 {-# INLINE parseB16Text #-}
 
 parseB16TextOnly :: Text -> Either String ByteString

@@ -4,12 +4,8 @@ packages: .
 constraints: sbv <10
 
 -- these upper bounds are required in order to not break payload validation in chainweb
-constraints: base16-bytestring <1
 constraints: prettyprinter <1.6.1
-constraints: base64-bytestring <1.1
 
-allow-newer: base64-bytestring:*
-allow-newer: base16-bytestring:*
 allow-newer: prettyprinter:*
 
 -- test upper bounds

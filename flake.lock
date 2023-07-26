@@ -151,11 +151,11 @@
     "hackage": {
       "flake": false,
       "locked": {
-        "lastModified": 1689640360,
-        "narHash": "sha256-837/6Bfs6UJx2GDSCLmCg3zyhW2tyBf1Ad4plT021WE=",
+        "lastModified": 1690331094,
+        "narHash": "sha256-xGJlmbRruW61N0rEcFn2pRlpLnE1TCKvvyz2nytYzE4=",
         "owner": "input-output-hk",
         "repo": "hackage.nix",
-        "rev": "c6a15a90fef46d4de1dbdfd6b20873b239599387",
+        "rev": "efc8a53a648a6a3b0973aaefc93ace7d0ddf198d",
         "type": "github"
       },
       "original": {
@@ -195,11 +195,11 @@
         "stackage": "stackage"
       },
       "locked": {
-        "lastModified": 1689686507,
-        "narHash": "sha256-Q3lDRmZoxnL1Ddrx4lI8mqQajLV+K0aToBNjUjaqBsw=",
+        "lastModified": 1690332668,
+        "narHash": "sha256-GtrWrvYe5GlUH6adZjcs4Z0yEY+JrGBS2uentXjVNyI=",
         "owner": "input-output-hk",
         "repo": "haskell.nix",
-        "rev": "b873d6f5bb5b1543bf0c8022e9d0943e24551b95",
+        "rev": "d9c1f82b37b4226eb22718b657bb80fe961f1cdf",
         "type": "github"
       },
       "original": {
@@ -284,11 +284,11 @@
     "iserv-proxy": {
       "flake": false,
       "locked": {
-        "lastModified": 1670983692,
-        "narHash": "sha256-avLo34JnI9HNyOuauK5R69usJm+GfW3MlyGlYxZhTgY=",
+        "lastModified": 1688517130,
+        "narHash": "sha256-hUqfxSlo+ffqVdkSZ1EDoB7/ILCL25eYkcCXW9/P3Wc=",
         "ref": "hkm/remote-iserv",
-        "rev": "50d0abb3317ac439a4e7495b185a64af9b7b9300",
-        "revCount": 10,
+        "rev": "9151db2a9a61d7f5fe52ff8836f18bbd0fd8933c",
+        "revCount": 13,
         "type": "git",
         "url": "https://gitlab.haskell.org/hamishmack/iserv-proxy.git"
       },
@@ -509,11 +509,11 @@
     "stackage": {
       "flake": false,
       "locked": {
-        "lastModified": 1689639109,
-        "narHash": "sha256-Jy7nQuxmKsWuxQp7ztCZz3zeVFjVnySLU8zcj/OlPvI=",
+        "lastModified": 1690330226,
+        "narHash": "sha256-ApHKqIP/Ubi92lZ0fp8EwiVdM7cejhYA4Hd5Zf8b7d8=",
         "owner": "input-output-hk",
         "repo": "stackage.nix",
-        "rev": "c2eec3ceb5fbe77fb6fa008460b9f64622a08ddf",
+        "rev": "22fbccd7b46469e9405a7c035b8f83682d9c68f1",
         "type": "github"
       },
       "original": {

@@ -144,7 +144,7 @@ mkCommand
   => J.Encode m
   => [(Ed25519KeyPair, [SigCapability])]
   -> m
--> Text
+  -> Text
   -> Maybe NetworkId
   -> PactRPC c
   -> IO (Command ByteString)

@@ -18,6 +18,7 @@ import GHC.Generics
 import Control.DeepSeq
 import Data.Kind (Type)
 import Data.Serialize
+import qualified Data.Text as T
 import Data.Aeson
 import Test.QuickCheck
 
