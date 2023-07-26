@@ -1,14 +1,9 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-#if __GLASGOW_HASKELL__ >= 810
 {-# options_ghc -fmax-pmcheck-models=100000000 #-}
-#else
-{-# options_ghc -fmax-pmcheck-iterations=100000000 #-}
-#endif
 
 module Analyze.Translate where
 
@@ -73,6 +68,9 @@ toPactTm = \case
 
       RoundingLikeOp2 op x y ->
         mkApp (roundingLikeOpToDef op) [Some SDecimal x, Some SInteger y]
+
+      CastingLikeOp op x ->
+        mkApp (castingLikeOpToDef op) [Some SInteger x]
 
       DecIntArithOp op x y ->
         mkApp (arithOpToDef op) [Some SDecimal x, Some SInteger y]
@@ -150,7 +148,7 @@ toPactTm = \case
 
     MakeList _ i a -> case ty of
       SList ty' -> mkApp makeListDef [ Some SInteger i, Some ty' a ]
-      
+
     StrHash x -> mkApp hashDef [Some SStr x]
     IntHash x -> mkApp hashDef [Some SInteger x]
     DecHash x -> mkApp hashDef [Some SDecimal x]
@@ -260,6 +258,10 @@ toPactTm = \case
       Round   -> roundDef
       Ceiling -> ceilDef
       Floor   -> floorDef
+
+    castingLikeOpToDef :: CastingLikeOp -> NativeDef
+    castingLikeOpToDef = \case
+      Dec -> decDef
 
     comparisonOpToDef :: ComparisonOp -> NativeDef
     comparisonOpToDef = \case

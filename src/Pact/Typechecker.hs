@@ -584,8 +584,9 @@ assocAstTy (Node ai _) ty = do
 -- The fact that one of these implies storage and the other
 -- is "just a type" is problematic, creating much cruft in here.
 assocTy :: TcId -> TypeVar UserType -> Type UserType -> TC ()
-assocTy ai av ty = do
+assocTy ai av ty' = do
   aty <- resolveTy =<< lookupTypes "assocTy" ai av
+  ty <- resolveTy ty'
   debug $ "assocTy: " ++ showPretty (av,aty) ++ " <=> " ++ showPretty ty
   unifyTypes' ai aty ty $ \r -> case r of
     Left _same -> do
@@ -791,7 +792,13 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
   ft' <- traverse (traverse toUserType') (fmap (fmap (fmap Right)) _tFunTypes)
   return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
-toFun (TVar Right {} i) = die i "Value in fun position"
+toFun (TVar (Right r) i) = case r of
+  Var (Node lamId _) -> preuse (tcBoundLambdas . ix lamId) >>= \case
+    Just lamFun -> do
+      debug $ "toFun: substituting lambda: " ++ show lamId ++ " -> " ++ unpack (funName lamFun)
+      return lamFun
+    Nothing -> die i "Var in fun position"
+  _ -> die i $ "Value in fun position"
 toFun (TLam (Lam name ty body _) i) = do
   TcId _ _ newIx <- freshId i "%anonlam"
   let mn = ModuleName ("%anonlam_" <> pack (show newIx)) Nothing
@@ -900,7 +907,9 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
-toAST TLam{..} = die _tInfo "lam in value position"
+toAST t@TLam{} =
+  -- Lambda values are converted to Apps
+  toAST $ TApp (Term.App t [] (getInfo t)) (getInfo t)
 toAST TModRef{..} = do
   tcid <- freshId _tInfo $ renderCompactText _tModRef
 
@@ -1013,6 +1022,11 @@ toAST TBinding {..} = do
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid
     v' <- toAST v
+    case (v,v') of
+      (TLam {},App _ fun _) -> do
+        debug $ "toAST: Tracking bound lambda " ++ show aid ++ " -> " ++ unpack (funName fun)
+        tcBoundLambdas %= M.insert aid fun
+      _ -> return ()
     case _tBindType of
       BindLet -> do
         assocAST aid v'

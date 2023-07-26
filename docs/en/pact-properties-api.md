@@ -227,6 +227,19 @@ Rounds the decimal `x` down to the previous integer, or to `prec` precision as d
 
 Supported in either invariants or properties.
 
+### dec {#FDecCast}
+
+```lisp
+(dec x)
+```
+
+* takes `x`: `integer`
+* produces `decimal`
+
+Casts the integer `x` to its decimal equivalent.
+
+Supported in either invariants or properties.
+
 ### mod {#FModulus}
 
 ```lisp
@@ -1249,6 +1262,32 @@ Supported in properties only.
 Whether the keyset in the row is enforced by the function under analysis
 
 Supported in properties only.
+
+### is-principal {#FIsPrincipal}
+
+```lisp
+(is-principal s)
+```
+
+* takes `s`: `string`
+* produces `bool`
+
+Whether `s` conforms to the principal format without proving validity.
+
+Supported in either invariants or properties.
+
+### typeof-principal {#FTypeOfPrincipal}
+
+```lisp
+(typeof-principal s)
+```
+
+* takes `s`: `string`
+* produces `string`
+
+Return the protocol type of the given `s` value. If input value is not a principal type, then the empty string is returned.
+
+Supported in either invariants or properties.
 
 ## Function operators {#Function}
 

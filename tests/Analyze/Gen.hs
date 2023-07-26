@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -19,9 +18,6 @@ import           Control.Monad.State.Strict (MonadState, StateT (runStateT))
 import qualified Data.Decimal               as Decimal
 import qualified Data.Map.Strict            as Map
 import qualified Data.Text                  as T
-#if !MIN_VERSION_base(4,13,0)
-import           Data.Type.Equality         ((:~:) (Refl))
-#endif
 import           GHC.Natural                (Natural)
 import           GHC.Stack                  (HasCallStack)
 import           Hedgehog                   hiding (Update, Var)
@@ -91,6 +87,9 @@ genUnaryArithOp = Gen.element [Negate, Abs] -- Sqrt, Ln, Exp, Signum
 
 genRoundingLikeOp :: MonadGen m => m RoundingLikeOp
 genRoundingLikeOp = Gen.element [Round, Ceiling, Floor]
+
+genCastingLikeOp :: MonadGen m => m CastingLikeOp
+genCastingLikeOp = Gen.element [Dec]
 
 genComparisonOp :: MonadGen m => m ComparisonOp
 genComparisonOp = Gen.element [Gt, Lt, Gte, Lte, Eq, Neq]
@@ -236,7 +235,9 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
       y <- genCore (BoundedInt (0 +/- 255))
       op <- genRoundingLikeOp
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
-
+  , do x <- genCore (BoundedInt size)
+       op <- genCastingLikeOp
+       mkDec $ CastingLikeOp op (extract x)
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
     Some SStr . StrLit
@@ -489,7 +490,7 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
          _ -> error "impossible (we only generated `STime`s)"
   , genTerm intSize >>= mkStr . IntHash . extract
   , genTerm strSize >>= mkStr . StrHash . extract
-  
+
   , genTermSpecific' size
   , Some SStr . ReadString . StrLit <$> genStringName len
   ]

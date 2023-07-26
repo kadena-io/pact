@@ -1,9 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE MagicHash #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+
 module Pact.Gas.Table where
 
 import Data.Ratio
@@ -104,6 +105,7 @@ defaultGasTable =
   ,("create-capability-guard", 1)
   ,("create-capability-pact-guard", 1)
   ,("days", 4)
+  ,("dec", 1)
   ,("decrypt-cc20p1305", 33)
   ,("diff-time", 8)
   ,("drop", 3)

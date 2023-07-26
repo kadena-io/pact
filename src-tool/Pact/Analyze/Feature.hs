@@ -80,6 +80,7 @@ data Feature
   | FBankersRound
   | FCeilingRound
   | FFloorRound
+  | FDecCast
   | FModulus
  
   -- Bitwise operators
@@ -166,6 +167,9 @@ data Feature
   -- Other
   | FWhere
   | FTypeof
+  -- Principals
+  | FIsPrincipal
+  | FTypeOfPrincipal
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -501,6 +505,19 @@ doc FFloorRound = Doc
         , ("prec", TyCon int)
         ]
         (TyCon int)
+  ]
+doc FDecCast = Doc
+  "dec"
+  CNumerical
+  InvAndProp
+  "Casts the integer `x` to its decimal equivalent."
+  [ Usage
+      "(dec x)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon int)]
+        (TyCon dec)
   ]
 doc FModulus = Doc
   "mod"
@@ -1748,6 +1765,33 @@ doc FTypeof = Doc
         (TyCon str)
   ]
 
+-- Principals
+doc FIsPrincipal = Doc
+  "is-principal"
+  CAuthorization
+  InvAndProp
+  "Whether `s` conforms to the principal format without proving validity."
+  [ Usage "(is-principal s)"
+    Map.empty
+    $ Fun
+    Nothing
+    [ ("s", TyCon str)
+    ]
+    (TyCon bool)
+  ]
+doc FTypeOfPrincipal = Doc
+  "typeof-principal"
+  CAuthorization
+  InvAndProp
+  "Return the protocol type of the given `s` value. If input value is not a principal type, then the empty string is returned."
+  [ Usage "(typeof-principal s)"
+    Map.empty
+    $ Fun
+    Nothing
+    [ ("s", TyCon str)
+    ]
+    (TyCon str)
+  ]
 allFeatures :: Set Feature
 allFeatures = Set.fromList $ enumFrom minBound
 
@@ -1795,6 +1839,7 @@ PAT(SAbsoluteValue, FAbsoluteValue)
 PAT(SBankersRound, FBankersRound)
 PAT(SCeilingRound, FCeilingRound)
 PAT(SFloorRound, FFloorRound)
+PAT(SDecCast, FDecCast)
 PAT(SModulus, FModulus)
 PAT(SBitwiseAnd, FBitwiseAnd)
 PAT(SBitwiseOr, FBitwiseOr)
@@ -1866,6 +1911,8 @@ PAT(SConstantly, FConstantly)
 PAT(SCompose, FCompose)
 PAT(SWhere, FWhere)
 PAT(STypeof, FTypeof)
+PAT(SIsPrincipal, FIsPrincipal)
+PAT(STypeOfPrincipal, FTypeOfPrincipal)
 
 -- 'Text'/op prisms
 

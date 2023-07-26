@@ -38,11 +38,14 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.JSON.Legacy.Value
+
+import qualified Pact.JSON.Encode as J
 
 spec :: Spec
 spec = do
   describe "goldenAccounts" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "accounts-module" "golden/golden.accounts.repl" "accounts"
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44, FlagDisablePact47] "accounts-module" "golden/golden.accounts.repl" "accounts"
     [("successCR",acctsSuccessCR)
     ,("failureCR",acctsFailureCR)
     ,("eventCR",eventCR)
@@ -50,11 +53,11 @@ spec = do
     ,("crossChainSendCRBackCompat",crossChainSendCR True)
     ]
   describe "goldenAutoCap" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44, FlagDisablePact47] "autocap-module" "golden/golden.autocap.repl" "auto-caps-mod" []
   describe "goldenLambdas" $
-    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44] "lambda-module" "golden/golden.lams.repl" "lams-test" []
+    goldenModule [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact44, FlagDisablePact47] "lambda-module" "golden/golden.lams.repl" "lams-test" []
   describe "goldenModuleMemcheck" $
-    goldenModule [FlagDisablePact43, FlagDisablePact44] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
+    goldenModule [FlagDisablePact43, FlagDisablePact44, FlagDisablePact47] "goldenModuleMemCheck" "golden/golden.memcheck.repl" "memcheck" []
   describe "goldenFullyQuals" $
     goldenModule [] "goldenFullyQuals" "golden/golden.fqns.repl" "fqns" []
   describe "goldenNamespaced keysets" $
@@ -103,10 +106,10 @@ acctsSuccessCR tn = doCRTest tn "1"
 -- Needs disablePact44 here, accts failure cr
 -- results in `interactive:0:0` which is an info that has been stripped
 acctsFailureCR :: String -> SpecWith ReplState
-acctsFailureCR tn = doCRTest' (mkExecutionConfig [FlagDisablePact44]) tn "(accounts.transfer \"a\" \"b\" 1.0 true)"
+acctsFailureCR tn = doCRTest' (mkExecutionConfig [FlagDisablePact44, FlagDisablePact47]) tn "(accounts.transfer \"a\" \"b\" 1.0 true)"
 
 eventCR :: String -> SpecWith ReplState
-eventCR tn = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]) tn
+eventCR tn = doCRTest' (mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact47]) tn
     "(module events-test G \
     \  (defcap G () true) \
     \  (defcap CAP (name:string amount:decimal) @managed \
@@ -124,8 +127,8 @@ crossChainSendCR backCompat tn = doCRTest' (ec backCompat) tn
     \  (step (resume { 'a:=a } a)))) \
     \(xchain.p 3)"
   where
-    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck, FlagDisablePact43]
-    ec False = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43]
+    ec True = mkExecutionConfig [FlagDisablePact40, FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact47]
+    ec False = mkExecutionConfig [FlagDisableInlineMemCheck, FlagDisablePact43, FlagDisablePact43, FlagDisablePact47]
 
 doCRTest :: String -> Text -> SpecWith ReplState
 doCRTest = doCRTest' def
@@ -141,7 +144,7 @@ doCRTest' ec tn code = beforeAllWith initRes $
     -- NOTE: an implication of "output roundtrip" is, on a golden failure, expected
     -- and actual are reversed, as the golden is read with 'readFromFile' which roundtrips.
     it "matches golden encoded" $ \r -> Golden
-      { output = encode r
+      { output = J.encode r
       , encodePretty = show
       , writeToFile = BL.writeFile
       , readFromFile = readOutputRoundtrip
@@ -156,14 +159,14 @@ doCRTest' ec tn code = beforeAllWith initRes $
         payload = Payload exec "" pubMeta [] Nothing
         pubMeta = def
         parsedCode = either error id $ parsePact code
-        exec = Exec $ ExecMsg parsedCode Null
+        exec = Exec $ ExecMsg parsedCode (toLegacyJson Null)
     applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 "" noSPVSupport ec Local cmd (ProcSucc cmd)
 
   -- hacks 'readFromFile' to run the golden value through the roundtrip.
   readOutputRoundtrip = fmap (tryEncode . eitherDecode) . BL.readFile
   tryEncode :: Either String (CommandResult Hash) -> BL.ByteString
   tryEncode (Left e) = error e
-  tryEncode (Right cr) = encode cr
+  tryEncode (Right cr) = J.encode cr
 
 cleanupActual :: String -> [String] -> IO ()
 cleanupActual testname subs = do
@@ -173,7 +176,7 @@ cleanupActual testname subs = do
     go tn = catch (removeFile $ "golden/" ++ tn ++ "/actual")
             (\(_ :: SomeException) -> return ())
 
-golden :: (Show a,FromJSON a,ToJSON a) => String -> a -> Golden a
+golden :: (Show a,FromJSON a, J.Encode a) => String -> a -> Golden a
 golden name obj = Golden
   { output = obj
   , encodePretty = elide . show
@@ -186,7 +189,7 @@ golden name obj = Golden
   where
     elide s | length s < 256 = s
             | otherwise = take 256 s ++ "..."
-    jsonEncode fp = BL.writeFile fp . encode
+    jsonEncode fp = BL.writeFile fp . J.encode
     jsonDecode fp = do
       r <- eitherDecode <$> BL.readFile fp
       case r of

@@ -461,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.6.0"
+"4.7.1"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1256,6 +1256,18 @@ pact> (ceiling 100.15234 2)
 ```
 
 
+### dec {#dec}
+
+*x*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
+
+
+Cast an integer to a decimal value of integer X as decimal.
+```lisp
+pact> (dec 3)
+3.0
+```
+
+
 ### exp {#exp}
 
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
@@ -1916,7 +1928,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
@@ -2010,7 +2022,7 @@ pact> (env-hash (hash "hello"))
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
+DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
 ```lisp
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
@@ -2036,6 +2048,17 @@ Install a managed namespace policy specifying ALLOW-ROOT and NS-POLICY-FUN.
 Set transaction signature keys and capabilities. SIGS is a list of objects with "key" specifying the signer key, and "caps" specifying a list of associated capabilities.
 ```lisp
 (env-sigs [{'key: "my-key", 'caps: [(accounts.USER_GUARD "my-account")]}, {'key: "admin-key", 'caps: []}
+```
+
+
+### env-simulate-onchain {#env-simulate-onchain}
+
+*on-chain*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces.
+```lisp
+(env-simulate-onchain true)
 ```
 
 

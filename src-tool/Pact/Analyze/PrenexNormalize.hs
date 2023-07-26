@@ -67,6 +67,8 @@ singFloat ty p = case p of
     -> PNumerical ... ModOp              <$> float a <*> float b
   CoreProp (Numerical (RoundingLikeOp1 op a))
     -> PNumerical . RoundingLikeOp1 op   <$> float a
+  CoreProp (Numerical (CastingLikeOp op a))
+    -> PNumerical . CastingLikeOp op   <$> float a
   CoreProp (StrLength pStr)
     -> PStrLength <$> float pStr
   CoreProp (StrToInt s)
@@ -196,7 +198,10 @@ singFloat ty p = case p of
   CoreProp ObjMerge{}      -> ([], p)
   CoreProp (Where objty tya a b c) -> CoreProp <$>
     (Where objty tya <$> float a <*> floatOpen b <*> singFloat objty c)
-
+  CoreProp (IsPrincipal a) -> CoreProp <$>
+    (IsPrincipal <$> float a)
+  CoreProp (TypeOfPrincipal a) -> CoreProp <$>
+    (TypeOfPrincipal <$> float a)
   where
 
     floatOpen :: SingI b => Open a Prop b -> ([Quantifier], Open a Prop b)

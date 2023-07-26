@@ -923,10 +923,10 @@ new `env-sigs` REPL function as follows:
   ...
 )
 
-(set-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
+(env-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
 (accounts.pay "alice" "bob" 10.0) ;; works as the cap match the signature caps
 
-(set-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
+(env-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
 (expect-failure "payment to bob will no longer be able to enforce alice's keyset"
   (accounts.pay "alice" "bob" 10.0))
 ```
@@ -1530,42 +1530,22 @@ To share new values
 with subsequent steps, a step can [yield](pact-functions.html#yield) values which the subsequent step can recover using
 the special [resume](pact-functions.html#resume) binding form.
 
-Pacts are designed to run in one of two different contexts, private and public. A private pact is
-indicated by each step identifying a single entity to execute the step, while public steps do
-not have entity indicators. A pact can only be uniformly public or private: if some steps
-has entity indicators and others do not, this results in an error at load time.
-
-### Public Pacts
-Public pacts are comprised of steps that can only execute in strict sequence. Any enforcement of who can execute a step
+Pacts are comprised of steps that can only execute in strict sequence. Any enforcement of who can execute a step
 happens within the code of the step expression. All steps are "manually" initiated by some participant
 in the transaction with CONTINUATION commands sent into the blockchain.
 
-### Private Pacts
-Private pacts are comprised of steps that execute in sequence where each step only executes on entity
-nodes as selected by the provided 'entity' argument in the step; other entity nodes "skip" the step.
-Private pacts are executed automatically by the blockchain platform after the initial step is sent
-in, with the executing entity's node automatically sending the CONTINUATION command for the next step.
-
 ### Failures, Rollbacks and Cancels
 
-Failure handling is dramatically different in public and private pacts.
-
-In public pacts, a rollback expression is specified to indicate that the pact can be "cancelled" at
+In pacts, a rollback expression is specified to indicate that the pact can be "cancelled" at
 this step with a participant sending in a CANCEL message before the next step is executed. Once the last
 step of a pact has been executed, the pact will be finished and cannot be rolled back. Failures
 in public steps are no different than a failure in a non-pact transaction: all changes are rolled back.
 Pacts can therefore only be canceled explicitly and should be modeled to offer all necessary cancel options.
 
-In private pacts, the sequential execution of steps is automated by the blockchain platform itself. A failure
-results in a ROLLBACK message being sent from the executing entity node which will trigger any rollback expression
-specified in the previous step, to be executed by that step's entity. This failure will then "cascade" to the
-previous step as a new ROLLBACK transaction, completing when the first step is rolled back.
-
 ### Yield and Resume
 
-A step can yield values to the following step using [yield](pact-functions.html#yield) and [resume](pact-functions.html#resume). In public,
-this is an unforgeable value, as it is maintained within the blockchain pact scope. In private, this is
-simply a value sent with a RESUME message from the executed entity.
+A step can yield values to the following step using [yield](pact-functions.html#yield) and [resume](pact-functions.html#resume).
+This is an unforgeable value, as it is maintained within the blockchain pact scope.
 
 ### Pact execution scope and `pact-id`
 
@@ -1954,9 +1934,7 @@ Define NAME as VALUE, with option DOC-OR-META. Value is evaluated upon module lo
 Define NAME as a _pact_, a computation comprised of multiple steps that occur
 in distinct transactions.
 Identical to [defun](#defun) except body must be comprised of [steps](#step) to be
-executed in strict sequential order. Steps must uniformly be "public" (no entity indicator)
-or "private" (with entity indicator). With private steps, failures result in a reverse-sequence
-"rollback cascade".
+executed in strict sequential order.
 
 ```lisp
 (defpact payment (payer payer-entity payee
@@ -1968,7 +1946,7 @@ or "private" (with entity indicator). With private steps, failures result in a r
     (credit payee amount)))
 ```
 
-Public defpacts may be nested (though the recursion restrictions apply, so it must be a different defpact). They may be kicked off
+Defpacts may be nested (though the recursion restrictions apply, so it must be a different defpact). They may be executed
 like a regular function call within a defpact, but are continued after the first step by calling `continue` with the same arguments.
 
 As such, they have the following restrictions:

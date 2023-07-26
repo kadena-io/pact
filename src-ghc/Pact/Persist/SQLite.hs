@@ -20,7 +20,7 @@ import Data.Text.Encoding
 import Data.String
 import Database.SQLite3.Direct as SQ3
 import Prelude hiding (log)
-import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString as B
 import System.Directory
 import Control.Monad.State
 
@@ -30,6 +30,8 @@ import Pact.Types.Pretty
 import Pact.Types.SQLite
 import Pact.Types.Util (AsString(..))
 import Pact.Types.Logger hiding (Logging (..))
+
+import qualified Pact.JSON.Encode as J
 
 
 data TableStmts = TableStmts
@@ -105,10 +107,6 @@ decodeBlob :: (FromJSON v) => SType -> IO v
 decodeBlob (SText (Utf8 t)) = liftEither (return $ eitherDecodeStrict' t)
 decodeBlob v = throwDbError $ "Expected text blob, got: " <> viaShow v
 
-encodeBlob :: ToJSON a => a -> SType
-encodeBlob a = SText $ Utf8 $ BSL.toStrict $ encode a
-{-# INLINE encodeBlob #-}
-
 expectSing :: Show a => String -> [a] -> IO a
 expectSing _ [s] = return s
 expectSing desc v = throwDbError $ "Expected single-" <> prettyString desc <> " result, got: " <> viaShow v
@@ -176,13 +174,15 @@ readData' t k e = do
     [] -> return Nothing
     _ -> expectSing "row" r >>= expectSing "column" >>= (fmap Just . decodeBlob)
 
-writeData' :: ToJSON v => Table k -> WriteType -> k -> v -> SQLite -> IO ()
+writeData' :: Table k -> WriteType -> k -> B.ByteString -> SQLite -> IO ()
 writeData' t wt k v e = do
   let ws = case wt of
         Write -> sInsertReplace
         Insert -> sInsert
         Update -> sReplace
-  getStmts e t >>= \s -> execs (ws s) [inFun (kTys t) k,encodeBlob v]
+  getStmts e t >>= \s -> execs (ws s) [inFun (kTys t) k, encodeBlob v]
+ where
+  encodeBlob a = SText $ Utf8 a
 
 
 initSQLite :: SQLiteConfig -> Loggers -> IO SQLite
@@ -240,10 +240,10 @@ _test = do
     run $ createTable p tt
     run $ commitTx p
     run $ beginTx p Transactional
-    run $ writeValue p dt Insert "stuff" (String "hello")
-    run $ writeValue p dt Insert "tough" (String "goodbye")
-    run $ writeValue p tt Write 1 (String "txy goodness")
-    run $ writeValue p tt Insert 2 (String "txalicious")
+    run $ writeValue p dt Insert "stuff" (J.encodeStrict $ J.text "hello")
+    run $ writeValue p dt Insert "tough" (J.encodeStrict $ J.text "goodbye")
+    run $ writeValue p tt Write 1 (J.encodeStrict $ J.text "txy goodness")
+    run $ writeValue p tt Insert 2 (J.encodeStrict $ J.text "txalicious")
     run $ commitTx p
     run (readValue p dt "stuff") >>= (liftIO . (print :: Maybe Value -> IO ()))
     run (query p dt (Just (KQKey KEQ "stuff"))) >>=
@@ -252,7 +252,7 @@ _test = do
     run (query p tt (Just (KQKey KGT 0 `kAnd` KQKey KLT 2))) >>=
       (liftIO . (print :: [(TxKey,Value)] -> IO ()))
     run $ beginTx p Transactional
-    run $ writeValue p tt Update 2 (String "txalicious-2!")
+    run $ writeValue p tt Update 2 (J.encodeStrict $ J.text "txalicious-2!")
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))
     run $ rollbackTx p
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))

@@ -1,16 +1,17 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- megaparsec <9.3 backard compatiblity
@@ -61,10 +62,9 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Arrow (second)
 import Prelude hiding (exp)
-import Data.String
 import Control.Lens hiding (prism)
 import Data.Default
-import Data.Text (Text,unpack)
+import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Set as S
 
@@ -108,7 +108,7 @@ data ParseState a = ParseState
 makeLenses ''ParseState
 
 -- | Current env has flag for try-narrow fix.
-data ParseEnv = ParseEnv
+newtype ParseEnv = ParseEnv
     { _peNarrowTry :: Bool }
 instance Default ParseEnv where def = ParseEnv True
 
@@ -120,13 +120,19 @@ mkEmptyInfo e = Info (Just (mempty,e))
 
 {-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
-mkStringInfo s d = Info (Just (fromString $ take (_pLength d) $
-                               drop (fromIntegral $ TF.bytes d) s,d))
+mkStringInfo = mkTextInfo . T.pack
 
 {-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
-mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $
-                             T.drop (fromIntegral $ TF.bytes d) s,d))
+mkTextInfo s d = Info $ Just (Code code, d)
+  where
+    code = T.take len $ T.drop offset s
+    len = _pLength d
+#ifdef LEGACY_PARSER
+    offset = fromIntegral $ TF.bytes (_pDelta d)
+#else
+    offset = fromIntegral $ TF.column (_pDelta d)
+#endif
 
 type ExpParse s a = ReaderT ParseEnv (StateT (ParseState s) (Parsec Void Cursor)) a
 
@@ -316,7 +322,7 @@ keysetNameStr = parseKsn =<< lit' "keyset-name" _LString
 list' :: ListDelimiter -> ExpParse s (ListExp Info,Exp Info)
 list' d = list >>= \l@(ListExp{..},_) ->
   if _listDelimiter == d then commit >> return l
-  else expected $ enlist d (\(s,e)->unpack(s<>"list"<>e))
+  else expected $ enlist d $ \(s,e)-> T.unpack (s<>"list"<>e)
 
 -- | Recongize a list with specified delimiter and act on contents, committing.
 {-# INLINE withList #-}
@@ -341,4 +347,4 @@ bareAtom = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
 {-# INLINE symbol #-}
 symbol :: Text -> ExpParse s ()
 symbol s = bareAtom >>= \AtomExp{..} ->
-  if _atomAtom == s then commit else expected $ unpack s
+  if _atomAtom == s then commit else expected $ T.unpack s

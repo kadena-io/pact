@@ -2,8 +2,7 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?rev=7a94fcdda304d143f9a40006c033d7e190311b54";
-    # nixpkgs.follows = "haskellNix/nixpkgs-unstable";
+    nixpkgs.follows = "haskellNix/nixpkgs";
     haskellNix.url = "github:input-output-hk/haskell.nix";
     flake-utils.url = "github:numtide/flake-utils";
   };
@@ -25,21 +24,36 @@
           pact =
             final.haskell-nix.project' {
               src = ./.;
-              compiler-nix-name = "ghc8107";
+              compiler-nix-name = "ghc962";
               shell.tools = {
                 cabal = {};
+                haskell-language-server = {};
                 # hlint = {};
               };
               shell.buildInputs = with pkgs; [
                 zlib
                 z3
                 pkgconfig
+                python3 python3Packages.sphinx python3Packages.sphinx_rtd_theme
+                pandoc perl
               ];
               # shell.crossPlatforms = p: [ p.ghcjs ];
             };
         })
       ];
-    in flake // {
+      # This package depends on other packages at buildtime, but its output does not
+      # depend on them. This way, we don't have to download the entire closure to verify
+      # that those packages build.
+      mkCheck = name: package: pkgs.runCommand ("check-"+name) {} ''
+        echo ${name}: ${package}
+        echo works > $out
+      '';
+    in flake // rec {
       packages.default = flake.packages."pact:exe:pact";
+      packages.check = pkgs.runCommand "check" {} ''
+        echo ${mkCheck "pact" packages.default}
+        echo ${mkCheck "devShell" flake.devShell}
+        echo works > $out
+      '';
     });
 }

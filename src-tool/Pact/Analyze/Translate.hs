@@ -44,8 +44,8 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-import           GHC.Natural                (Natural)
-import           GHC.TypeLits
+import           Numeric.Natural            (Natural)
+import           GHC.TypeLits               (SomeSymbol(..), someSymbolVal, symbolVal)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
@@ -1229,6 +1229,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
         SDecimal -> pure $ Some SInteger $ inject $ RoundingLikeOp1 op a'
         _        -> throwError' $ MalformedArithOp fn args
 
+  AST_NFun_Basic fn@(toOp castingLikeOpP -> Just op) args@[a] -> do
+      Some ty a' <- translateNode a
+      case ty of
+        SInteger -> pure $ Some SDecimal $ inject $ CastingLikeOp op a'
+        _        -> throwError' $ MalformedArithOp fn args
+
   -- trap sqrt here to shim
   AST_NFun node fn@"sqrt" as@[a] -> translateNode a >>= \a' -> case a' of
     (Some SInteger _) -> shimNative' node fn [] "original value" a'
@@ -1389,12 +1395,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
   AST_Bind node objectA bindings schemaNode body -> translateType schemaNode >>= \case
-    EType objTy@SObject{} -> typeOfPartialBind objTy bindings >>= \case
-      EType partialReadTy@SObject{} -> do
+    EType objTy@SObject{} -> do
         objectT <- translateNode objectA
         withNodeContext node $
-          translateObjBinding bindings partialReadTy body objectT
-      _ -> unexpectedNode astNode
+          translateObjBinding bindings objTy body objectT
     _ -> unexpectedNode astNode
 
   AST_WithCapability (AST_InlinedApp modName funName _ bindings appBodyA) withBodyA -> do
@@ -1509,6 +1513,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> unexpectedNode astNode
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
+
+  -- rs (2023-05-10): Note, we handle the empty list as a special case (see #1182)
+  -- as the element type is otherwise inferred as `Any`.
+  AST_List node [] -> translateType node >>= \case
+    EType listTy -> case listTy of
+      SList _ -> pure $ Some listTy $ CoreTerm $ Lit []
+      _ -> throwError' $ TypeError node
 
   AST_List node elems -> do
     elems' <- traverse translateNode elems
@@ -1750,27 +1761,28 @@ translateNode astNode = withAstContext astNode $ case astNode of
       [from, to', step] -> pure $ Some (SList SInteger) $ CoreTerm $ Enumerate from to' step
       _otherwise -> unexpectedNode astNode
 
-  AST_NFun node fn@"create-principal" [a] -> translateNode a >>= \case
-    -- assuming we have a guard as input, yield an empty string
-    Some SGuard _ -> shimNative astNode node fn []
+  AST_NFun node fn@"format" [a, b] -> translateNode a >>= \a' -> case a' of
+    -- uncaught case is dynamic list, sub format string
+    Some SStr _ -> shimNative' node fn [b] "format string" a'
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"validate-principal" [a, b] -> translateNode a >>= \case
-    -- term check inputs and produce an empty string
-    Some SGuard _ -> translateNode b >>= \case
-      Some SStr _ -> shimNative astNode node fn []
+  AST_CreatePrincipal guard -> translateNode guard >>= \case
+    Some SGuard g -> pure (Some SStr (CreatePrincipal g))
+    _ -> unexpectedNode astNode
+
+  AST_ValidatePrincipal guard name -> translateNode guard >>= \case
+    Some SGuard g -> translateNode name >>= \case
+      Some SStr s -> pure $ Some SBool (ValidatePrincipal g s)
       _ -> unexpectedNode astNode
     _ -> unexpectedNode astNode
 
-  AST_NFun node fn@"is-principal" [a] -> translateNode a >>= \case
-    -- assuming we have a principal string as input, yield true
-    Some SStr _ -> shimNative astNode node fn []
-    _ -> unexpectedNode astNode
+  AST_NFun _ "is-principal" [a] -> translateNode a >>= \xs' -> case xs' of
+    Some SStr l -> pure $ Some SBool $ CoreTerm $ IsPrincipal l
+    _otherwise -> unexpectedNode astNode
 
-  AST_NFun node fn@"typeof-principal" [a] -> translateNode a >>= \a' -> case a' of
-    -- assuming we have a principal string as input, yield empty string
-    Some SStr _ -> shimNative' node fn [] "principal" a'
-    _ -> unexpectedNode astNode
+  AST_NFun _ "typeof-principal" [a] -> translateNode a >>= \xs' -> case xs' of
+    Some SStr l -> pure $ Some SStr $ CoreTerm $ TypeOfPrincipal l
+    _otherwise -> unexpectedNode astNode
 
   AST_NFun _ fn@"describe-namespace" _ ->
     throwError' (InvalidNativeInModule fn)
