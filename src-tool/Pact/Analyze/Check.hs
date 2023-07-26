@@ -47,6 +47,7 @@ import           Control.Monad.Except
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.State.Strict (evalStateT)
+import           Control.Monad.Trans.Class  (lift)
 import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
 import           Data.Foldable              (foldl')

@@ -15,7 +15,7 @@ module Pact.Server.PactService where
 
 import Prelude
 
-import Control.Monad.Except
+import Control.Monad (when)
 import Control.Monad.Reader
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)

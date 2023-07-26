@@ -40,6 +40,7 @@ module Pact.ApiReq
 import Control.Applicative
 import Control.Error
 import Control.Lens hiding ((.=))
+import Control.Monad (foldM, forM, when)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Data.Aeson

@@ -5,6 +5,7 @@ module PactTestsSpec (spec) where
 import Test.Hspec
 
 import Control.Concurrent
+import Control.Monad (forM_)
 import Control.Monad.State.Strict
 import Control.Lens
 import Data.Text(Text)

@@ -4198,6 +4198,24 @@ spec = describe "analyze" $ do
         (typeof "foo"))
       |]
 
+  describe "nested application of higher-order functions (regression #1250)" $ do
+    expectVerified [text|
+        (defun child: bool (accParent: bool l: [integer])
+           (fold (lambda (acc:bool x:integer) (and (= x 0) acc)) accParent l))
+
+        (defun parent: bool ()
+           @model[(property (= result false))]
+           (fold (child) true [[1]]))
+     |]
+
+    expectVerified [text|
+        (defun child: [bool] (l : [integer])
+          (map (= 0) l))
+
+        (defun parent: [[bool]] ()
+          (map (child) [[1]]))
+     |]
+
   -- TODO: pending sbv unicode fix
   -- describe "unicode strings" $
   --   let code = [text|
