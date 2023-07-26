@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Pact.Gas.Table where
@@ -378,8 +379,8 @@ pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
   gasModel = tableGasModel gasConfig
   gasConfig = defaultGasConfig { _gasCostConfig_primTable = updTable }
   updTable = Map.union upd defaultGasTable
-  unknownOperationPenalty = gasToMilliGas (Gas 1000000)
-  multiRowOperation = Gas 40000
+  unknownOperationPenalty = gasToMilliGas (Gas 1_000_000)
+  multiRowOperation = Gas 40_000
   upd = Map.fromList
     [("keys",    multiRowOperation)
     ,("select",  multiRowOperation)

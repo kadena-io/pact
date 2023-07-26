@@ -15,6 +15,7 @@ module Pact.Gas
  , putGas)
  where
 
+import Control.Monad(when)
 import Control.Monad.State.Strict
 import Data.Text
 import Data.IORef
@@ -35,17 +36,22 @@ computeGas i args = do
     g1 = runGasModel _geGasModel name args
   let gMillisUsed = g0 <> g1
       gUsed = milliGasToGas gMillisUsed
-  evalLogGas %= fmap ((msg name gUsed, milliGasToGas g1):)
-  -- evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),milliGasToGas g1):)
+  evalLogGas %= fmap ((gasLogMsg name args gUsed, milliGasToGas g1):)
   putGas gMillisUsed
   let (MilliGasLimit gasLimit) = _geGasLimit
   when (gMillisUsed > gasLimit) $ do
     let oldGasLimit = milliGasToGas gasLimit
     throwErr GasError info $ "Gas limit (" <> pretty oldGasLimit <> ") exceeded: " <> pretty gUsed
-  where
-    msg name used = renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used)
     -- else return gUsed
 {-# INLINABLE computeGas #-}
+
+gasLogMsg
+  :: Text
+  -> GasArgs
+  -> Gas
+  -> Text
+gasLogMsg name args used =
+  renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used)
 
 -- | Performs gas calculation for incremental computations with some caveats:
 --   - Checks the gas calculations against the gas limit
@@ -84,7 +90,7 @@ computeGasCommit info name args = do
   let !g1 = runGasModel _geGasModel name args
       !gMillisUsed = g0 <> g1
       gUsed = milliGasToGas gMillisUsed
-  evalLogGas %= fmap ((renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty gUsed),milliGasToGas g1):)
+  evalLogGas %= fmap ((gasLogMsg name args gUsed,milliGasToGas g1):)
   putGas gMillisUsed
   let (MilliGasLimit milliGasLimit) = _geGasLimit
   when (gMillisUsed > milliGasLimit) $ do

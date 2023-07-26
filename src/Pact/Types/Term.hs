@@ -91,7 +91,7 @@ module Pact.Types.Term
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,termEq1,termRefEq,canEq,refEq,
    Gas(..), MilliGas(..),
-   gasToMilliGas, milliGasToGas,
+   gasToMilliGas, milliGasToGas, millisPerGas,
    module Pact.Types.Names
    ) where
 

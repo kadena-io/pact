@@ -300,14 +300,21 @@ interpret runner evalEnv terms = do
     runEval def evalEnv $ evalTerms runner terms
   milliGas <- readIORef (_eeGas evalEnv)
   warnings <- readIORef (_eeWarnings evalEnv)
-  let gasLogs = _evalLogGas state
+  let pact48Disabled = views (eeExecutionConfig . ecFlags) (S.member FlagDisablePact48) evalEnv
+      gasLogs = _evalLogGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
+      gasUsed = if pact48Disabled then milliGasToGas milliGas else gasRem milliGas
   -- output uses lenient conversion
   return $! EvalResult
     terms
     (map (elideModRefInfo . toPactValueLenient) rs)
-    logs pactExec (milliGasToGas milliGas) modules txid gasLogs (_evalEvents state) warnings
+    logs pactExec gasUsed modules txid gasLogs (_evalEvents state) warnings
+  where
+    -- Round up by 1 if the `MilliGas` amount is in any way fractional.
+    gasRem (MilliGas milliGas) =
+      let (d, r) = milliGas `divMod` millisPerGas
+      in Gas (if r == 0 then d else d+1)
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
 evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)
