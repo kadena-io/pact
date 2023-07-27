@@ -47,6 +47,28 @@ flag tests-in-lib
   manual:      True
 
 -- -------------------------------------------------------------------------- --
+-- Internal: prettyprinter-1.6.0 and prettyprinter-ansi-terminal-1.1.2
+
+library pact-prettyprinter
+  hs-source-dirs: vendored/prettyprinter-1.6.0/src
+  default-language: Haskell2010
+  exposed-modules:
+    Data.Text.Prettyprint.Doc
+    Data.Text.Prettyprint.Doc.Internal
+    Data.Text.Prettyprint.Doc.Render.String
+    Data.Text.Prettyprint.Doc.Render.Terminal
+    Data.Text.Prettyprint.Doc.Render.Text
+    Data.Text.Prettyprint.Doc.Render.Util.Panic
+    Data.Text.Prettyprint.Doc.Render.Util.StackMachine
+    Data.Text.Prettyprint.Doc.Symbols.Ascii
+    Data.Text.Prettyprint.Doc.Compat
+  build-depends:
+    , base >= 4.5 && < 5
+    , text >= 1.2
+    , ansi-terminal >=0.4
+    , prettyprinter >= 1.7
+
+-- -------------------------------------------------------------------------- --
 -- Pact library
 
 library
@@ -148,6 +170,7 @@ library
     Pact.Utils.Servant
 
   build-depends:
+    , pact-prettyprinter
     , base >= 4.18.0.0
     , Decimal >=0.4.2
     , QuickCheck >=2.12.6.1
@@ -177,8 +200,6 @@ library
     , pact-json >=0.1
     , pact-time >=0.2
     , parsers >=0.12.4
-    , prettyprinter >=1.2
-    , prettyprinter-ansi-terminal >=1.1
     , quickcheck-instances >=0.3
     , reflection
     , scientific >= 0.3

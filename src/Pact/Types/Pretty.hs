@@ -73,7 +73,7 @@ import           Data.Text.Prettyprint.Doc
   encloseSep, space, nest, align, hardline, tupled, indent, equals, reAnnotate,
   reAnnotateS, fillSep)
 import qualified Data.Text.Prettyprint.Doc as PP
-import qualified Data.Text.Prettyprint.Doc.Internal.Type as PP
+import qualified Data.Text.Prettyprint.Doc.Internal as PP
 import qualified Data.Text.Prettyprint.Doc.Render.String as PP
 import           Data.Text.Prettyprint.Doc.Render.Terminal
   (color, Color(..), AnsiStyle)
