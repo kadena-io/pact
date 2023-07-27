@@ -1358,13 +1358,8 @@ makeExecCmd' nonce keyPairs code = mkExec code
   (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing nonce
 
 
-<<<<<<< HEAD
-formatPubKeyForCmd :: SomeKeyPair -> T.Text
-formatPubKeyForCmd kp = toB16Text $ formatPublicKey kp
-=======
 formatPubKeyForCmd :: Ed25519KeyPair -> Value
 formatPubKeyForCmd kp = toB16JSON $ getPublic kp
->>>>>>> afd0687d (Implement webauthn signature checking)
 
 
 
