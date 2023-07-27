@@ -1359,7 +1359,7 @@ makeExecCmd' nonce keyPairs code = mkExec code
 
 
 formatPubKeyForCmd :: Ed25519KeyPair -> Value
-formatPubKeyForCmd kp = toB16JSON $ getPublic kp
+formatPubKeyForCmd kp = toJSON $ toB16Text $ getPublic kp
 
 
 
