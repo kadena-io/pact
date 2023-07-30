@@ -1647,42 +1647,119 @@ interface allows tokens to offer identical operations such as
 ``fungible-v2`` implementations, a DEX smart contract would have to be
 upgraded for each pair with custom code for every operation.
 
+.. code:: lisp
+
+   ;;; simplified DEX example with hardcoded dispatching on token symbols
+   (defun swap
+     ( a-token:string a-amount:decimal a-account:string
+       b-token:string b-amount:decimal b-account:string
+     )
+     (with-read pair-accounts (format "{}:{}" [a-token b-token])
+       { 'pair-a-account := pair-a-account
+       , 'pair-b-account := pair-b-account
+       }
+       (cond
+         ((= "KDA" a-token)
+          (coin.transfer a-account pair-a-account a-amount))
+         ((= "KBTC" a-token)
+          (kbtc.ledger.transfer a-account pair-a-account a-amount))
+         ((= "KUSD" a-token)
+          (kusd.ledger.transfer a-account pair-a-account a-amount))
+         "Unrecognized a-token value")
+       (cond
+         ((= "KDA" b-token)
+          (coin.transfer b-pair-account b-account b-amount))
+         ((= "KBTC" b-token)
+          (kbtc.ledger.transfer b-pair-account b-account b-amount))
+         ((= "KUSD" b-token)
+          (kusd.ledger.transfer b-pair-account b-account b-amount))
+         "Unrecognized b-token value"))
+   )
+
 With module references, the DEX can now accept pairs of modref values
 where each value references a concrete module that implements the
 ``fungible-v2`` interface, giving it the ability to call ``fungible-v2``
-operations using those values. The refmod values are “normal Pact
-values” that can be stored in the database, referenced in events and
-returned from functions.
+operations using those values.
+
+::
+
+   ;;; simplified DEX example with modref dynamic dispatch
+   (defun swap
+     ( a-token:module{fungible-v2} a-amount:decimal a-account:string
+       b-token:module{fungible-v2} b-amount:decimal b-account:string
+     )
+     (with-read pair-accounts (format "{}:{}" [a-token b-token])
+       { 'pair-a-account := pair-a-account
+       , 'pair-b-account := pair-b-account
+       }
+       (a-token::transfer a-account pair-a-account a-amount)
+       (b-token::transfer pair-b-account b-account b-amount))
+   )
+
+To invoke the above function, the module names are directly referenced
+in code.
+
+.. code:: lisp
+
+
+   (swap coin a-amount a-account
+         kbtc.ledger b-amount b-account)
+
+The refmod values are “normal Pact values” that can be stored in the
+database, referenced in events and returned from functions.
+
+::
+
+   ;;; simplified DEX example with stored pair modrefs
+   (defun swap
+     ( pair-symbol:string
+       a-amount:decimal a-account:string
+       b-amount:decimal b-account:string
+     )
+     (with-read pair-accounts pair-symbol
+       { 'pair-a-account := pair-a-account:string
+       , 'a-token := a-token:module{fungible-v2}
+       , 'pair-b-account := pair-b-account:string
+       , 'b-token := b-token:module{fungible-v2}
+       }
+       (a-token::transfer a-account pair-a-account a-amount)
+       (b-token::transfer pair-b-account b-account b-amount))
+   )
 
 Modrefs and Polymorphism
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Modrefs provide polymorphism for use cases like this with an emphasis on
-interoperability. A modref is specified with one or more interfaces,
-allowing for values of that modref to reference modules that implement
-those interfaces. So, for example, a modref that specifies
-``fungible-v2`` accepts a reference to the Kadena ``coin`` KDA token
-module, because ``coin`` implements ``fungible-v2``. Of course there is
-nothing special about ``fungible-v2``: modrefs can specify any defined
-interface and accept any module that implements said interface. In this
-way, modrefs bring polymorphism to Pact.
+Modrefs provide polymorphism for use cases like the example above with
+an emphasis on interoperability. A modref is specified with one or more
+interfaces, allowing for values of that modref to reference modules that
+implement those interfaces.
 
-To programmers coming from polymorphic languages like Javascript, Java
-or Python, module references seem familiar. However, Pact is very much
-not object-oriented so there are important differences in how
-polymorphism works and what it is best used for.
+In the calling example above, the modref ``a-token:module{fungible-v2}``
+accepts a reference to the Kadena ``coin`` KDA token module, because
+``coin`` implements ``fungible-v2``. Of course there is nothing special
+about ``fungible-v2``: modrefs can specify any defined interface and
+accept any module that implements said interface.
+
+In this way, modrefs bring polymorphism to Pact. To programmers coming
+from polymorphic languages like Javascript, Java or Python, module
+references may look familiar. However, Pact is very much not
+object-oriented so there are important differences in how polymorphism
+works and what it is best used for.
 
 A key difference is that while modrefs allow polymorphism over modules,
 they don’t offer polymorphism over data. Modules in Pact are not data in
 any practical sense: not only are they “code only”, but they cannot be
-dynamically created within the Pact system. Meanwhile, data stored in
-the database is managed using schemas, which have no polymorphic
-features via modrefs or any other mechanism. This is why we suggest
-modrefs are more about “interoperation” instead of polymorphism per se,
-avoiding the OO connotation of “objects changing shape”.
+dynamically created within the Pact system.
+
+Meanwhile, data stored in the database is managed using schemas, which
+have no polymorphic features via modrefs or any other mechanism. This is
+why we suggest modrefs are more about “interoperation” instead of
+polymorphism per se, avoiding the object-oriented connotation of
+“objects changing shape”. Modrefs allow modules to “interporate with
+each other”.
 
 Additionally, programmers should resist the urge to employ other
-OO-centric patterns using modrefs. A popular idea of “coding around
+object-oriented patterns using modrefs. A popular idea of “coding around
 interfaces, not implementations” is actually harmful in Pact if
 polymorphism is not needed. Programmers should prefer direct references
 whenever possible as they are not only faster but safer, as Pact
@@ -1692,19 +1769,70 @@ interests of code stability.
 Important concerns when using modrefs.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Modrefs are late-binding, which means that the latest version of a
-module will always be used when a module operation is invoked, in
-contrast with direct bindings which permanently reference the bound
-module version. *TODO here I would like to mention that we’re going to
-be pinning modrefs in an upcoming release*.
+Late Binding
+^^^^^^^^^^^^
+
+As of Pact 4.7, modrefs are “late-binding”, which means that the latest
+upgraded version of a module will be used when a module operation is
+invoked.
+
+Consider a modref to a module stored in the database when the module is
+at version 1. Sometime later the module is upgraded to version 2. The
+modref in the database will refer to the upgraded version 2 of the
+module when read back in and used.
+
+As described in the `Dependency Management <#dependency-management>`__
+section, Pact direct references are not late-binding, so this modref
+behavior might be surprising. “Pinned modrefs” that bind eagerly to the
+module version is being actively considered as an upcoming Pact change
+to extend the benefits of dependency management to modrefs.
+
+Modrefs introduce untrusted code
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As modrefs introduce the ability to call code unknown at compile time,
 this means that **any modref call should be treated as untrusted code**.
 Thus programmers should avoid invoking modrefs when a sensitive
 capability is in scope, as it will make “private capability functions”
-callable by the modref, when normally this would not be possible. *TODO
-here I would like to note that we are going to prevent functions with
-``require-capability`` from being called top-level to close this hole*.
+callable by the modref, when normally this would not be possible.
+
+Consider a module with a public function that is safe to call and a
+private function that is not intended to be invoked outside the module,
+guarded by the capability ``PRIVATE``. If a modref is invoked while the
+``PRIVATE`` capability is in scope, the calling code will be able to
+call the sensitive function directly.
+
+.. code:: lisp
+
+   ;; BAD CODE -- don't do this!
+   (defun collect-data (collector:module{data-collector} account:string)
+     (with-capability (COLLECT)
+       ;; BAD: modref invoked inside of with-capability call
+       (store-data (collector::collect))
+       (pay-fee account)))
+
+   (defun pay-fee (account:string)
+     (require-capability (COLLECT))
+     (coin.transfer FEE_BANK account FEE))
+
+In the above code, ``pay-fee`` is intended to run once. But because the
+``collector:module{data-collector}`` modref is invoked **inside of the
+capability acquisition**, the modref code in ``collect`` now has
+elevated privilege to directly call ``pay-fee``. Thus a malicious actor
+can call ``pay-fee`` as many times as they like.
+
+Fortunately, this is easily avoided by keeping modref calls out of scope
+of the sensitive capability.
+
+.. code:: lisp
+
+   ;; SAFE CODE -- do this!
+   (defun collect-data (collector:module{data-collector} account:string)
+     ;; GOOD: modref invoked outside of with-capability call
+     (let ((data (collector::collect)))
+       (with-capability (COLLECT)
+         (store-data data)
+         (pay-fee account))))
 
 Coding with modrefs
 ~~~~~~~~~~~~~~~~~~~
