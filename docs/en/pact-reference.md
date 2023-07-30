@@ -1367,7 +1367,7 @@ referenced in events and returned from functions.
 
 ### Modrefs and Polymorphism
 
-Modrefs provide polymorphism for use cases like this with an emphasis on
+Modrefs provide polymorphism for use cases like the example above with an emphasis on
 interoperability. A modref is specified with one or more interfaces, allowing
 for values of that modref to reference modules that implement those
 interfaces.
