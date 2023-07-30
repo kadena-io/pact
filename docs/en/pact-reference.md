@@ -1391,10 +1391,10 @@ created within the Pact system.
 Meanwhile, data stored in the database is managed using schemas, which have no
 polymorphic features via modrefs or any other mechanism. This is why we suggest
 modrefs are more about "interoperation" instead of polymorphism per se, avoiding
-the OO connotation of "objects changing shape". Modrefs allow modules to
+the object-oriented connotation of "objects changing shape". Modrefs allow modules to
 "interporate with each other".
 
-Additionally, programmers should resist the urge to employ other OO-centric
+Additionally, programmers should resist the urge to employ other object-oriented
 patterns using modrefs. A popular idea of "coding around interfaces, not
 implementations" is actually harmful in Pact if polymorphism is not
 needed. Programmers should prefer direct references whenever possible as they
