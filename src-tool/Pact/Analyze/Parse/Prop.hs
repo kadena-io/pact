@@ -44,7 +44,7 @@ import           Control.Lens                 (at, toListOf, view, (%~), (&),
                                                (.~), (?~))
 import qualified Control.Lens                 as Lens
 import           Control.Monad                (unless, when)
-import           Control.Monad.Except         (MonadError (throwError))
+import           Control.Monad.Except         (runExcept, MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
 import           Control.Monad.State.Strict   (evalStateT)
 #if !MIN_VERSION_base(4,16,0)
@@ -875,7 +875,7 @@ expToProp tableEnv' genStart nameEnv idEnv consts propDefs ty body = do
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs consts
-  _getEither $ runReaderT (checkPreProp ty preTypedBody) env
+  runExcept $ _getEither $ runReaderT (checkPreProp ty preTypedBody) env
 
 inferProp
   :: TableEnv
@@ -898,7 +898,7 @@ inferProp tableEnv' genStart nameEnv idEnv consts propDefs body = do
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs consts
-  _getEither $ runReaderT (inferPreProp preTypedBody) env
+  runExcept $ _getEither $ runReaderT (inferPreProp preTypedBody) env
 
 -- | Parse both a property body and defined properties from `Exp` to `PreProp`.
 parseToPreProp

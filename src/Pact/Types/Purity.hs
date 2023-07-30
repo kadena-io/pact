@@ -25,7 +25,6 @@ module Pact.Types.Purity
 
 import Control.Concurrent.MVar
 import Control.Monad.Catch
-import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Aeson hiding (Object)

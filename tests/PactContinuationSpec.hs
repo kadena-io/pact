@@ -8,6 +8,7 @@ module PactContinuationSpec (spec) where
 
 import qualified Control.Exception as Exception
 import Control.Lens hiding ((.=))
+import Control.Monad (forM_)
 import Control.Monad.Reader
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BSL8
