@@ -1755,7 +1755,7 @@ Meanwhile, data stored in the database is managed using schemas, which
 have no polymorphic features via modrefs or any other mechanism. This is
 why we suggest modrefs are more about “interoperation” instead of
 polymorphism per se, avoiding the object-oriented connotation of
-“objects changing shape”. Modrefs allow modules to “interporate with
+“objects changing shape”. Modrefs allow modules to “interoperate with
 each other”.
 
 Additionally, programmers should resist the urge to employ other
@@ -1796,11 +1796,11 @@ Thus programmers should avoid invoking modrefs when a sensitive
 capability is in scope, as it will make “private capability functions”
 callable by the modref, when normally this would not be possible.
 
-Consider a module with a public function that is safe to call and a
-private function that is not intended to be invoked outside the module,
-guarded by the capability ``PRIVATE``. If a modref is invoked while the
-``PRIVATE`` capability is in scope, the calling code will be able to
-call the sensitive function directly.
+Consider a module with a public function ``collect-data`` that is safe
+to call, and a private function ``pay-fee`` that is not intended to be
+invoked outside the module, guarded by the capability ``COLLECT``. If a
+modref is invoked while the ``COLLECT`` capability is in scope, the
+calling code will be able to call the sensitive function directly.
 
 .. code:: lisp
 
@@ -1819,7 +1819,8 @@ In the above code, ``pay-fee`` is intended to run once. But because the
 ``collector:module{data-collector}`` modref is invoked **inside of the
 capability acquisition**, the modref code in ``collect`` now has
 elevated privilege to directly call ``pay-fee``. Thus a malicious actor
-can call ``pay-fee`` as many times as they like.
+can craft a version of ``collect`` thatn can directly call ``pay-fee``
+as many times as they like.
 
 Fortunately, this is easily avoided by keeping modref calls out of scope
 of the sensitive capability.
@@ -1833,6 +1834,10 @@ of the sensitive capability.
        (with-capability (COLLECT)
          (store-data data)
          (pay-fee account))))
+
+Now, the modref call has safely returned before the capability is
+acquired, meaning a malicious implementation has no elevated privileges
+allowing it to call sensitive code.
 
 Coding with modrefs
 ~~~~~~~~~~~~~~~~~~~
