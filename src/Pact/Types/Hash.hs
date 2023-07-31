@@ -32,6 +32,7 @@ import Data.Hashable (Hashable(hashWithSalt))
 import Data.Serialize (Serialize(..))
 import Pact.Types.Pretty
 import Pact.Types.Util
+import Pact.Types.Util as Util
 import Data.Aeson
 import GHC.Generics
 import Pact.Types.SizeOf
@@ -95,7 +96,7 @@ instance FromJSONKey Hash where
     {-# INLINABLE fromJSONKey #-}
 
 instance ParseText Hash where
-  parseText s = Hash . toShort <$> parseB64UrlUnpaddedText s
+  parseText s = Hash . toShort <$> parseB64UrlUnpaddedText  Util.Base64Terse s
   {-# INLINE parseText #-}
 
 
@@ -146,7 +147,7 @@ instance FromJSON (TypedHash h) where
   {-# INLINE parseJSON #-}
 
 instance ParseText (TypedHash h) where
-  parseText s = TypedHash . toShort <$> parseB64UrlUnpaddedText s
+  parseText s = TypedHash . toShort <$> parseB64UrlUnpaddedText Util.Base64Terse s
   {-# INLINE parseText #-}
 
 instance Arbitrary (TypedHash a) where

@@ -34,6 +34,7 @@ module Pact.Types.Util
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
   , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText'
   , toB64UrlUnpaddedText, fromB64UrlUnpaddedText
+  , Base64ErrorFormat(..)
   , B64JsonBytes(..)
   -- | AsString
   , AsString(..), asString'
@@ -52,6 +53,7 @@ module Pact.Types.Util
 import Data.Aeson
 import Data.Aeson.Types
 import GHC.Generics
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString as B
@@ -63,6 +65,7 @@ import qualified Text.Trifecta as Trifecta
 import Data.Char
 import Data.Either (isRight)
 import Data.Hashable (Hashable)
+import qualified Data.List as List
 import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
@@ -124,27 +127,27 @@ lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
 encodeBase64UrlUnpadded :: ByteString -> ByteString
 encodeBase64UrlUnpadded = fst . B.spanEnd (== equalWord8) . B64URL.encode
 
-decodeBase64UrlUnpadded :: ByteString -> Either String ByteString
-decodeBase64UrlUnpadded = B64URL.decode . pad
+decodeBase64UrlUnpadded :: Base64ErrorFormat -> ByteString -> Either String ByteString
+decodeBase64UrlUnpadded fmt = first (shimBase64Error fmt) . B64URL.decode . pad
   where pad t = let s = B.length t `mod` 4 in t <> B.replicate ((4 - s) `mod` 4) equalWord8
 
 equalWord8 :: Word8
 equalWord8 = toEnum $ fromEnum '='
 
-parseB64UrlUnpaddedText :: Text -> Parser ByteString
-parseB64UrlUnpaddedText t = case decodeBase64UrlUnpadded (encodeUtf8 t) of
+parseB64UrlUnpaddedText :: Base64ErrorFormat -> Text -> Parser ByteString
+parseB64UrlUnpaddedText fmt t = case decodeBase64UrlUnpadded fmt (encodeUtf8 t) of
   Right s -> return s
   Left e -> fail $ "Base64URL decode failed: " ++ e
 {-# INLINE parseB64UrlUnpaddedText #-}
 
-parseB64UrlUnpaddedText' :: Text -> Either String ByteString
-parseB64UrlUnpaddedText' = resultToEither . parse parseB64UrlUnpaddedText
+parseB64UrlUnpaddedText' :: Base64ErrorFormat -> Text -> Either String ByteString
+parseB64UrlUnpaddedText' fmt = resultToEither . parse (parseB64UrlUnpaddedText fmt)
 
 toB64UrlUnpaddedText :: ByteString -> Text
 toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 
-fromB64UrlUnpaddedText :: ByteString -> Either String Text
-fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
+fromB64UrlUnpaddedText :: Base64ErrorFormat -> ByteString -> Either String Text
+fromB64UrlUnpaddedText fmt bs = case decodeBase64UrlUnpadded fmt bs of
   Right bs' -> case decodeUtf8' bs' of
     Left _ -> Left "Base64URL decode failed: invalid unicode"
     Right t -> Right t
@@ -219,10 +222,10 @@ newtype B64JsonBytes = B64JsonBytes { _b64JsonBytes :: B.ByteString }
     deriving (Show, Eq, Ord, Hashable, Generic)
 
 instance FromJSON B64JsonBytes where
-    parseJSON = fmap B64JsonBytes . withText "Base64" parseB64UrlUnpaddedText
+    parseJSON = fmap B64JsonBytes . withText "Base64" (parseB64UrlUnpaddedText Base64Terse)
     {-# INLINE parseJSON #-}
 instance FromJSONKey B64JsonBytes where
-    fromJSONKey = FromJSONKeyTextParser (fmap B64JsonBytes . parseB64UrlUnpaddedText)
+    fromJSONKey = FromJSONKeyTextParser (fmap B64JsonBytes . parseB64UrlUnpaddedText Base64Terse)
     {-# INLINE fromJSONKey #-}
 instance AsString B64JsonBytes where
     asString = toB64UrlUnpaddedText . _b64JsonBytes
@@ -332,3 +335,15 @@ arbitraryIdent = cons
   letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZñûüùúūÛÜÙÚŪß"
   digits = "0123456789"
 
+data Base64ErrorFormat
+  = Base64Pre10
+  | Base64Terse
+
+shimBase64Error :: Base64ErrorFormat -> String -> String
+shimBase64Error fmt e = case fmt of
+  Base64Terse -> "Base64 decoding error"
+  Base64Pre10 -> case e of
+    "Base64-encoded bytestring has invalid size" -> "invalid padding"
+    _ -> case List.findIndex (== ':') e of
+      Just n -> "invalid base64 encoding near offset" <> (snd $ List.splitAt (n + 1) e)
+      Nothing -> e
