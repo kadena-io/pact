@@ -31,6 +31,7 @@ import qualified Options.Applicative as O
 
 import Control.Applicative
 import Control.Lens
+import Control.Monad (forM, forM_)
 import Control.Monad.State.Strict
 
 import qualified Data.ByteString as BS

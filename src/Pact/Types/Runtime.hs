@@ -66,7 +66,7 @@ module Pact.Types.Runtime
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens hiding ((.=),DefName, elements)
-import Control.Monad.Except
+import Control.Monad (void)
 import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict
