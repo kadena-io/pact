@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | This module is adapted from the package prettyprinter-ansi-terminal-1.1.2
--- to work with prettyprinter-1.6.1 in the context of Pact.
+-- to work with prettyprinter-1.6.0 in the context of Pact.
 --
 -- prettyprinter-ansi-terminal-1.1.2 is Copyright 2008, Daan Leijen and Max
 -- Bolingbroke, 2016 David Luposchainsky.
