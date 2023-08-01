@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Pact.Gas.Table
@@ -50,7 +51,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_useModuleCost :: Gas
   , _gasCostConfig_interfaceCost :: Gas
   , _gasCostConfig_writeBytesCost :: Gas -- cost per ten bytes to write to database
-  , _gasCostConfig_decodeJsonBytesCost :: Gas -- cost per ten bytes to decode JSON
+  , _gasCostConfig_decodeJsonBytesCost :: MilliGas -- cost per byte to decode JSON
   , _gasCostConfig_functionApplicationCost :: Gas
   , _gasCostConfig_defPactCost :: Gas
   , _gasCostConfig_foldDBCost :: Gas
@@ -70,7 +71,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_useModuleCost = 1     -- TODO benchmark
   , _gasCostConfig_interfaceCost = 1     -- TODO benchmark
   , _gasCostConfig_writeBytesCost = 1
-  , _gasCostConfig_decodeJsonBytesCost = 1
+  , _gasCostConfig_decodeJsonBytesCost = MilliGas 4
   , _gasCostConfig_functionApplicationCost = 1
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   , _gasCostConfig_foldDBCost = 1
@@ -266,7 +267,9 @@ tableGasModel gasConfig =
           ReadNamespace _ns -> _gasCostConfig_readColumnCost gasConfig
           ReadKeySet _ksName _ks -> _gasCostConfig_readColumnCost gasConfig
           ReadYield (Yield _obj _ _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
-        GDecodeJson sz -> gasToMilliGas $ memoryCost sz (_gasCostConfig_decodeJsonBytesCost gasConfig)
+        GDecodeJson sz ->
+          case _gasCostConfig_decodeJsonBytesCost gasConfig of
+            MilliGas g -> MilliGas (fromIntegral sz * g)
         GPreWrite w szVer -> gasToMilliGas $ case w of
           WriteData _type key obj ->
             (sizeOfMemoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
@@ -385,8 +388,8 @@ pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
   gasModel = tableGasModel gasConfig
   gasConfig = defaultGasConfig { _gasCostConfig_primTable = updTable }
   updTable = Map.union upd defaultGasTable
-  unknownOperationPenalty = gasToMilliGas (Gas 1000000)
-  multiRowOperation = Gas 40000
+  unknownOperationPenalty = gasToMilliGas (Gas 1_000_000)
+  multiRowOperation = Gas 40_000
   upd = Map.fromList
     [("keys",    multiRowOperation)
     ,("select",  multiRowOperation)
