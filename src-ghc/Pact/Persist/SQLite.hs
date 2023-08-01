@@ -143,7 +143,7 @@ createTable' t e = do
            mkstmt ("INSERT INTO " <> tn <> " VALUES (?,?)") <*>
            mkstmt ("REPLACE INTO " <> tn <> " VALUES (?,?)") <*>
            mkstmt ("SELECT VALUE FROM " <> tn <> " WHERE KEY = ?") <*>
-           mkstmt ("SELECT OCTET_LENGTH(VALUE) FROM " <> tn <> " WHERE KEY = ?")
+           mkstmt ("SELECT LENGTH(CAST(VALUE AS BLOB)) FROM " <> tn <> " WHERE KEY = ?")
   return $ e { tableStmts = M.insert tn ss (tableStmts e) }
 
 

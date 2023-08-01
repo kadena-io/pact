@@ -15,6 +15,7 @@ module Pact.Gas
  , putGas)
  where
 
+import Control.Monad
 import Control.Monad.State.Strict
 import Data.Text
 import Data.IORef
