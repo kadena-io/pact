@@ -2,7 +2,8 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    nixpkgs.follows = "haskellNix/nixpkgs";
+    # nixpkgs.follows = "haskellNix/nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
     haskellNix.url = "github:input-output-hk/haskell.nix";
     flake-utils.url = "github:numtide/flake-utils";
   };
@@ -41,9 +42,15 @@
             };
         })
       ];
-    in flake // {
+      # This package depends on other packages at buildtime, but its output does not
+      # depend on them. This way, we don't have to download the entire closure to verify
+      # that those packages build.
+      mkCheck = name: package: pkgs.runCommand ("check-"+name) {} ''
+        echo ${name}: ${package}
+        echo works > $out
+      '';
+    in flake // rec {
       packages.default = flake.packages."pact:exe:pact";
-
       packages.docs = pkgs.stdenv.mkDerivation {
         name = "pact-docs";
         src = ./docs;
@@ -68,5 +75,11 @@
 
         withHoogle = true;
       };
+      packages.check = pkgs.runCommand "check" {} ''
+        echo ${mkCheck "pact" packages.default}
+        echo ${mkCheck "devShell" flake.devShell}
+        echo works > $out
+      '';
+
     });
 }

@@ -29,6 +29,7 @@ import Prelude hiding (log)
 
 import Control.Concurrent
 import Control.Lens hiding ((<|))
+import Control.Monad (when)
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
 

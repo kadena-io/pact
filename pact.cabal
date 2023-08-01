@@ -146,7 +146,7 @@ library
     Pact.Types.Typecheck
     Pact.Typechecker
     Pact.Utils.Servant
-  
+
   build-depends:
     , base >= 4.18.0.0
     , Decimal >=0.4.2
@@ -173,7 +173,7 @@ library
     , hashable >=1.4
     , lens >=4.14
     , megaparsec >=9
-    , mtl >=2.2.1
+    , mtl >=2.3
     , pact-json >=0.1
     , pact-time >=0.2
     , parsers >=0.12.4

@@ -9,6 +9,7 @@ module RemoteVerifySpec (spec) where
 import Test.Hspec
 
 import Control.Lens
+import Control.Monad ((>=>))
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Except
 
