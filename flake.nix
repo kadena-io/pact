@@ -61,6 +61,8 @@
         ];
         buildPhase = ''
           source ./work.sh
+        '';
+        installPhase = ''
           mkdir $out
           cp -r _build/* $out
         '';
