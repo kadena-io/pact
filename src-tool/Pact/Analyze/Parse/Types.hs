@@ -12,7 +12,7 @@ module Pact.Analyze.Parse.Types where
 
 import           Control.Applicative        (Alternative)
 import           Control.Lens               (makeLenses, (<&>))
-import           Control.Monad.Except       (MonadError (throwError))
+import           Control.Monad.Except       (Except, MonadError (throwError))
 import           Control.Monad.Reader       (ReaderT)
 import           Control.Monad.State.Strict (StateT)
 import qualified Data.HashMap.Strict        as HM
@@ -154,7 +154,7 @@ data PropCheckEnv = PropCheckEnv
   , _localVars         :: HM.HashMap Text EProp
   }
 
-newtype EitherFail e a = EitherFail { _getEither :: Either e a }
+newtype EitherFail e a = EitherFail { _getEither :: Except e a }
     deriving (Show, Eq, Ord, Functor, Applicative, Alternative, Monad, MonadError e)
 
 type ParseEnv = Map Text VarId

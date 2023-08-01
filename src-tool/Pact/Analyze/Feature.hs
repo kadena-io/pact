@@ -1142,7 +1142,7 @@ doc FFold = Doc
         , ("a", a)
         , ("bs", TyList' b)
         ]
-      (TyList' a)
+      a
   ]
 
 

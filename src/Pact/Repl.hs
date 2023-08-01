@@ -59,6 +59,7 @@ import System.FilePath
 import Control.Concurrent
 import Control.Exception.Safe
 import Control.Lens hiding (op)
+import Control.Monad (foldM, forever, forM, forM_, when, void)
 import Control.Monad.State.Strict
 
 import qualified Data.Aeson as A
@@ -72,6 +73,7 @@ import qualified Data.Map.Strict as M
 import Data.Monoid (appEndo)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Text.Prettyprint.Doc.Compat (docToInternal)
 import Data.Foldable(traverse_)
 
 import Text.Trifecta as TF hiding (line,err,try,newline)
@@ -200,7 +202,7 @@ getDelta = do
 handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)) -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
   mode <- use rMode
-  let errDoc = _errDoc e
+  let errDoc = docToInternal (_errDoc e)
   outStrLn HErr $ renderPrettyString' (colors mode) $ unAnnotate errDoc
   return $ Left $ renderCompactString' $ unAnnotate $ errDoc
 handleParse (TF.Success es) a = a es
