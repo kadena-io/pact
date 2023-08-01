@@ -2,7 +2,8 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    nixpkgs.follows = "haskellNix/nixpkgs";
+    # nixpkgs.follows = "haskellNix/nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
     haskellNix.url = "github:input-output-hk/haskell.nix";
     flake-utils.url = "github:numtide/flake-utils";
   };
@@ -34,7 +35,7 @@
                 zlib
                 z3
                 pkgconfig
-                python3 python3Packages.sphinx python3Packages.sphinx_rtd_theme
+                (python3.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme]))
                 pandoc perl
               ];
               # shell.crossPlatforms = p: [ p.ghcjs ];
@@ -50,10 +51,37 @@
       '';
     in flake // rec {
       packages.default = flake.packages."pact:exe:pact";
+      packages.docs = pkgs.stdenv.mkDerivation {
+        name = "pact-docs";
+        src = ./docs;
+        buildInputs = [
+          (pkgs.python3.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme]))
+          pkgs.pandoc
+          pkgs.perl
+        ];
+        buildPhase = ''
+          source ./work.sh
+        '';
+        installPhase = ''
+          mkdir $out
+          cp -r _build/* $out
+        '';
+      };
+
+      devShell = pkgs.haskellPackages.shellFor {
+        buildInputs = with pkgs.haskellPackages; [
+          cabal-install
+          haskell-language-server
+          # hlint
+        ];
+
+        withHoogle = true;
+      };
       packages.check = pkgs.runCommand "check" {} ''
         echo ${mkCheck "pact" packages.default}
         echo ${mkCheck "devShell" flake.devShell}
         echo works > $out
       '';
+
     });
 }
