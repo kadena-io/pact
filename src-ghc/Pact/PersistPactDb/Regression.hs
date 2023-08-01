@@ -76,15 +76,19 @@ runRegression p = do
   let row = RowData RDV0 $ ObjectMap $ M.fromList [("gah",pactValueToRowData $ PLiteral (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" row v
   assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
+  assertEquals' "user insert size" (Just 18) (_sizeRow pactdb usert "key1" v)
   let row' = RowData RDV1 $ ObjectMap $ fmap pactValueToRowData $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
   _writeRow pactdb Update usert "key1" row' v
   assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
+  assertEquals' "user update size" (Just 34) (_sizeRow pactdb usert "key1" v)
   let ks = mkKeySet [PublicKeyText "skdjhfskj"] "predfun"
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
+  assertEquals' "keyset write size" (Just 39) $ _sizeRow pactdb KeySets "ks1" v
   (modName,modRef,mod') <- loadModule
   _writeRow pactdb Write Modules modName mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules modName v
+  assertEquals' "module write size" (Just 1873) $ _sizeRow pactdb Modules modName v
   assertEquals "module native repopulation" (Right modRef) $
     traverse (traverse (fromPersistDirect nativeLookup)) mod'
   assertEquals' "result of commit 3"
@@ -118,9 +122,11 @@ runRegression p = do
     _getTxLog pactdb usert (head tids) v
   _writeRow pactdb Insert usert "key2" row v
   assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pactdb usert "key2" v)
+  assertEquals' "user insert key2 pre-rollback size" (Just 18) (_sizeRow pactdb usert "key2" v)
   assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb (UserTables user1) v
   _rollbackTx pactdb v
   assertEquals' "rollback erases key2" Nothing $ _readRow pactdb usert "key2" v
+  assertEquals' "rollback erases key2 size" Nothing $ _sizeRow pactdb usert "key2" v
   assertEquals' "keys" ["key1"] $ _keys pactdb (UserTables user1) v
   -- Reversed just to ensure inserts are not in order.
   for_ (reverse [2::Int .. 9]) $ \k ->
