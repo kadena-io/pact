@@ -272,23 +272,23 @@ tableGasModel gasConfig =
             MilliGas g -> MilliGas (fromIntegral sz * g)
         GPreWrite w szVer -> gasToMilliGas $ case w of
           WriteData _type key obj ->
-            (sizeOfMemoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
-            + (sizeOfMemoryCost szVer obj (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer obj (_gasCostConfig_writeBytesCost gasConfig))
           WriteTable tableName ->
-            (sizeOfMemoryCost szVer tableName (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer tableName (_gasCostConfig_writeBytesCost gasConfig))
           WriteModule _modName _mCode ->
-            (sizeOfMemoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
-            + (sizeOfMemoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
           WriteInterface _modName _mCode ->
-            (sizeOfMemoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
-            + (sizeOfMemoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer _modName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer _mCode (_gasCostConfig_writeBytesCost gasConfig))
           WriteNamespace ns ->
-            (sizeOfMemoryCost szVer ns (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer ns (_gasCostConfig_writeBytesCost gasConfig))
           WriteKeySet ksName ks ->
-            (sizeOfMemoryCost szVer ksName (_gasCostConfig_writeBytesCost gasConfig))
-            + (sizeOfMemoryCost szVer ks (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer ksName (_gasCostConfig_writeBytesCost gasConfig))
+            + (memoryCost szVer ks (_gasCostConfig_writeBytesCost gasConfig))
           WriteYield obj ->
-            (sizeOfMemoryCost szVer (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
+            (memoryCost szVer (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
         GModuleMember _module -> gasToMilliGas $ _gasCostConfig_moduleMemberCost gasConfig
         GModuleDecl _moduleName _mCode -> gasToMilliGas (_gasCostConfig_moduleCost gasConfig)
         GUse _moduleName _mHash -> gasToMilliGas (_gasCostConfig_useModuleCost gasConfig)
@@ -331,13 +331,12 @@ perByteFactor :: Rational
 perByteFactor = 1%10
 {-# NOINLINE perByteFactor #-}
 
-memoryCost :: Int -> Gas -> Gas
-memoryCost bytes (Gas cost) =
-  Gas (ceiling (perByteFactor * fromIntegral bytes * realToFrac cost))
-
-sizeOfMemoryCost :: (SizeOf a) => SizeOfVersion -> a -> Gas -> Gas
-sizeOfMemoryCost szVer val cost =
-  memoryCost (fromIntegral $ sizeOf szVer val) cost
+memoryCost :: (SizeOf a) => SizeOfVersion -> a -> Gas -> Gas
+memoryCost szVer val (Gas cost) = Gas totalCost
+  where costFrac = realToFrac cost
+        sizeFrac = realToFrac (sizeOf szVer val)
+        totalCost = ceiling (perByteFactor * sizeFrac * costFrac)
+{-# INLINE memoryCost #-}
 
 -- Slope to costing function,
 -- sets a 10mb practical limit on module sizes.
