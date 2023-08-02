@@ -1740,9 +1740,9 @@ accepts a reference to the Kadena ``coin`` KDA token module, because
 about ``fungible-v2``: modrefs can specify any defined interface and
 accept any module that implements said interface.
 
-The polymorphism offered by modrefs resembles Generics in Java or Traits
+The polymorphism offered by modrefs resembles generics in Java or traits
 in Rust, and should not be confused with more object-oriented
-polymorphism like that found with Java classes or Typescript types.
+polymorphism like that found with Java classes or TypeScript types.
 Modules cannot “extend” one another, they can only offer operations that
 match some interface specification, and interfaces themselves cannot
 extend some other interface.
