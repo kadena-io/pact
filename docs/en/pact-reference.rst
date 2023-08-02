@@ -1705,8 +1705,8 @@ in code.
    (swap coin a-amount a-account
          kbtc.ledger b-amount b-account)
 
-The refmod values are “normal Pact values” that can be stored in the
-database, referenced in events and returned from functions.
+Module reference values are “normal Pact values” that can be stored in
+the database, referenced in events and returned from functions.
 
 ::
 
@@ -1740,31 +1740,18 @@ accepts a reference to the Kadena ``coin`` KDA token module, because
 about ``fungible-v2``: modrefs can specify any defined interface and
 accept any module that implements said interface.
 
-In this way, modrefs bring polymorphism to Pact. To programmers coming
-from polymorphic languages like Javascript, Java or Python, module
-references may look familiar. However, Pact is very much not
-object-oriented so there are important differences in how polymorphism
-works and what it is best used for.
+The polymorphism offered by modrefs resembles Generics in Java or Traits
+in Rust, and should not be confused with more object-oriented
+polymorphism like that found with Java classes or Typescript types.
+Modules cannot “extend” one another, they can only offer operations that
+match some interface specification, and interfaces themselves cannot
+extend some other interface.
 
-A key difference is that while modrefs allow polymorphism over modules,
-they don’t offer polymorphism over data. Modules in Pact are not data in
-any practical sense: not only are they “code only”, but they cannot be
-dynamically created within the Pact system.
-
-Meanwhile, data stored in the database is managed using schemas, which
-have no polymorphic features via modrefs or any other mechanism. This is
-why we suggest modrefs are more about “interoperation” instead of
-polymorphism per se, avoiding the object-oriented connotation of
-“objects changing shape”. Modrefs allow modules to “interoperate with
-each other”.
-
-Additionally, programmers should resist the urge to employ other
-object-oriented patterns using modrefs. A popular idea of “coding around
-interfaces, not implementations” is actually harmful in Pact if
-polymorphism is not needed. Programmers should prefer direct references
-whenever possible as they are not only faster but safer, as Pact
-aggressively and permanently inlines all directly-referenced code in the
-interests of code stability.
+Modrefs introduce indirection which increases overall complexity, making
+the system harder to understand and reason about. Reach for modrefs when
+your code wants to offer flexible interoperation to other smart
+contracts, but if it’s just your code, strive to use direct references
+whenever possible.
 
 Important concerns when using modrefs.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1772,9 +1759,8 @@ Important concerns when using modrefs.
 Late Binding
 ^^^^^^^^^^^^
 
-As of Pact 4.7, modrefs are “late-binding”, which means that the latest
-upgraded version of a module will be used when a module operation is
-invoked.
+Modrefs are “late-binding”, which means that the latest upgraded version
+of a module will be used when a module operation is invoked.
 
 Consider a modref to a module stored in the database when the module is
 at version 1. Sometime later the module is upgraded to version 2. The
@@ -1783,61 +1769,84 @@ module when read back in and used.
 
 As described in the `Dependency Management <#dependency-management>`__
 section, Pact direct references are not late-binding, so this modref
-behavior might be surprising. “Pinned modrefs” that bind eagerly to the
-module version is being actively considered as an upcoming Pact change
-to extend the benefits of dependency management to modrefs.
+behavior might be surprising.
 
-Modrefs introduce untrusted code
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Modrefs can introduce untrusted code
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-As modrefs introduce the ability to call code unknown at compile time,
-this means that **any modref call should be treated as untrusted code**.
-Thus programmers should avoid invoking modrefs when a sensitive
-capability is in scope, as it will make “private capability functions”
-callable by the modref, when normally this would not be possible.
+In the common case of employing modrefs to allow foreign modules to
+operate with your code, this of course means that you should not assume
+that this code is safe: indeed, **any modref call should be treated as
+untrusted code**.
 
-Consider a module with a public function ``collect-data`` that is safe
-to call, and a private function ``pay-fee`` that is not intended to be
-invoked outside the module, guarded by the capability ``COLLECT``. If a
-modref is invoked while the ``COLLECT`` capability is in scope, the
-calling code will be able to call the sensitive function directly.
+Specifically, modref invocation in the context of capability acquisition
+can result in unintended privilege escalation, in the common case of
+using ``require-capability`` to protect functions from being called
+directly.
+
+Consider a module with a public function ``collect-data`` that is
+intended to allow foreign modules to provide some data, resulting in the
+one-time payment of a fee. The foreign modules implement
+``data-collector`` which offers ``collect`` to get the data, and
+``get-fee-recipient`` to identify the receiving account. The module code
+acquires the ``COLLECT`` capability, and uses this to prevent two
+delegate functions from being called directly. Unfortunately, with the
+wrong code, this seemingly benign code can be exploited by a malicious
+modref implementor.
 
 .. code:: lisp
 
-   ;; BAD CODE -- don't do this!
-   (defun collect-data (collector:module{data-collector} account:string)
-     (with-capability (COLLECT)
-       ;; BAD: modref invoked inside of with-capability call
-       (store-data (collector::collect))
-       (pay-fee account)))
+   (module data-market GOVERNANCE
+     ...
 
-   (defun pay-fee (account:string)
-     (require-capability (COLLECT))
-     (coin.transfer FEE_BANK account FEE))
+     (defun collect-data (collector:module{data-collector})
+       "Provide data, get paid!"
+       ;; BAD: capability acquired before modref calls
+       (with-capability (COLLECT)
+         ;; BAD: modref invoked with capability in scope!
+         (store-data (collector::collect))
+         (pay-fee (collector::get-fee-recipient)))
 
-In the above code, ``pay-fee`` is intended to run once. But because the
-``collector:module{data-collector}`` modref is invoked **inside of the
-capability acquisition**, the modref code in ``collect`` now has
-elevated privilege to directly call ``pay-fee``. Thus a malicious actor
-can craft a version of ``collect`` thatn can directly call ``pay-fee``
-as many times as they like.
+     (defun pay-fee (account:string)
+       "Private function to pay one-time fee for collection"
+       (require-capability (COLLECT))
+       (coin.transfer FEE_BANK account FEE))
+
+     (defun store-data (data:object{data-schema})
+       "Private function to update database with data collection results"
+       (require-capability (COLLECT))
+       ...)
+
+The problem with the above code is that the ``with-capability`` call
+happens *before* the calls to the modref operations, such that while the
+foreign module code is executing, the ``COLLECT`` capability is in
+scope. While this is true, ``pay-fee`` (and ``store-data`` as well) can
+be called from anywhere.
+
+As such, a malicious coder could provide a modref whose code directly
+calls ``data-market.pay-fee`` as many times as they like in the
+seemingly innocent calls to ``collect`` or ``get-fee-recipient``. They
+could also call ``data-market.store-data`` and wreak havoc that way.
+Once a capability is in scope, the protections provided by
+``require-capability`` are not available.
 
 Fortunately, this is easily avoided by keeping modref calls out of scope
 of the sensitive capability.
 
 .. code:: lisp
 
-   ;; SAFE CODE -- do this!
-   (defun collect-data (collector:module{data-collector} account:string)
-     ;; GOOD: modref invoked outside of with-capability call
-     (let ((data (collector::collect)))
+   (defun collect-data (collector:module{data-collector})
+     "Provide data, get paid!"
+     ;; GOOD: modref invoked before with-capability call
+     (let ((data (collector::collect))
+           (account (collector::get-fee-recipient)))
        (with-capability (COLLECT)
          (store-data data)
          (pay-fee account))))
 
-Now, the modref call has safely returned before the capability is
-acquired, meaning a malicious implementation has no elevated privileges
-allowing it to call sensitive code.
+Now, the modref calls have safely returned before the capability is
+acquired. A malicious implementation has no way to invoke the sensitive
+code.
 
 Coding with modrefs
 ~~~~~~~~~~~~~~~~~~~
