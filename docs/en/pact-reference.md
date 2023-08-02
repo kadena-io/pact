@@ -1343,7 +1343,7 @@ To invoke the above function, the module names are directly referenced in code.
 ```
 
 
-The refmod values are "normal Pact values" that can be stored in the database,
+Module reference values are "normal Pact values" that can be stored in the database,
 referenced in events and returned from functions.
 
 ```
@@ -1405,7 +1405,7 @@ directly-referenced code in the interests of code stability.
 
 #### Late Binding
 
-As of Pact 4.7, modrefs are "late-binding", which means that the latest
+Modrefs are "late-binding", which means that the latest
 upgraded version of a module will be used when a module operation is invoked.
 
 Consider a modref to a module stored in the database when the module is
@@ -1450,7 +1450,7 @@ In the above code, `pay-fee` is intended to run once. But because the
 `collector:module{data-collector}` modref is invoked **inside of the capability
 acquisition**, the modref code in `collect` now has elevated privilege to
 directly call `pay-fee`. Thus a malicious actor can craft a version of `collect`
-thatn can directly call `pay-fee` as many times as they like.
+that can directly call `pay-fee` as many times as they like.
 
 Fortunately, this is easily avoided by keeping modref calls out of scope of the
 sensitive capability.
