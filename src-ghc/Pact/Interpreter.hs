@@ -313,7 +313,7 @@ interpret runner evalEnv terms = do
   where
     -- Round up by 1 if the `MilliGas` amount is in any way fractional.
     gasRem (MilliGas milliGas) =
-      let (d, r) = milliGas `divMod` millisPerGas
+      let (d, r) = milliGas `quotRem` millisPerGas
       in Gas (if r == 0 then d else d+1)
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
