@@ -355,11 +355,11 @@ eval' t = enscope t >>= reduceEnscoped
 reduceEnscoped :: Term Ref -> Eval e (Term Name)
 reduceEnscoped = \case
   TVar (Direct t'@TNative{}) i ->
-    isOffChainForkedError >>= \case
+    isOffChainForkedError FlagDisablePact47 >>= \case
       OnChainError -> evalError' i "Cannot display native function details in non-repl context"
       OffChainError -> pure t'
   TVar (Ref t'@TDef{}) i ->
-    isOffChainForkedError >>= \case
+    isOffChainForkedError FlagDisablePact47 >>= \case
       OnChainError -> evalError' i "Cannot display function details in non-repl context"
       OffChainError -> toTerm <$> compatPretty t'
   t' -> reduce t'
@@ -1169,7 +1169,10 @@ reduceApp (App (TDynamic tref tmem ti) as ai) =
   reduceDynamic tref tmem ti >>= \rd -> case rd of
     Left v -> evalError ti $ "reduceApp: expected module member for dynamic: " <> pretty v
     Right d -> reduceApp $ App (TDef d (getInfo d)) as ai
-reduceApp (App r _ ai) = evalError' ai $ "Expected def: " <> pretty r
+reduceApp (App r _ ai) =
+  isOffChainForkedError FlagDisablePact48 >>= \case
+    OnChainError -> evalError' ai $ "reduceApp: cannot apply non-function " <> pretty (typeof' r)
+    OffChainError -> evalError' ai $ "Expected def: " <> pretty r
 
 -- | Apply a userland function, and don't reduce args
 -- that correspond to higher order functions.
@@ -1321,8 +1324,14 @@ reduceDirect (TVar (FQName fq) _) args i = do
     Just r -> reduceApp (App (TVar r def) args i)
     Nothing -> do
       evalError i $ "unbound free variable: " <> pretty fq
-reduceDirect (TLitString errMsg) _ i = evalError i $ pretty errMsg
-reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " <> pretty r
+reduceDirect (TLitString errMsg) _ i =
+  isOffChainForkedError FlagDisablePact48 >>= \case
+    OffChainError -> evalError i $ pretty errMsg
+    OnChainError -> evalError i $ "Unexpected string, expected function"
+reduceDirect r _ ai =
+  isOffChainForkedError FlagDisablePact48 >>= \case
+    OffChainError -> evalError ai $ "Unexpected non-native direct ref: " <> pretty r
+    OnChainError -> evalError ai $ "Unexpected non-native direct ref of type: " <> pretty (typeof' r)
 
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
 createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
