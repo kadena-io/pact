@@ -86,6 +86,10 @@ module Pact.Types.Term.Internal
 , modRefInfo
 , modRefKeyValues_
 , Gas(..)
+, MilliGas(..)
+, gasToMilliGas
+, milliGasToGas
+, millisPerGas
 ) where
 
 import Control.Applicative
@@ -255,6 +259,29 @@ instance Semigroup Gas where
 
 instance Monoid Gas where
   mempty = 0
+
+-- | Gas compute cost unit that represents smaller units of compute time.
+-- 1 Gas = 1000 MilliGas, and in terms of compute time, 1 Gas = 2500 ns,
+-- thus 1 MilliGas = 2.5ns
+newtype MilliGas
+  = MilliGas Int64
+  deriving (Eq, Ord, NFData, Generic)
+
+instance Semigroup MilliGas where
+  (MilliGas a) <> (MilliGas b) = MilliGas (a + b)
+
+instance Monoid MilliGas where
+  mempty = MilliGas 0
+
+millisPerGas :: Int64
+millisPerGas = 1000
+
+gasToMilliGas :: Gas -> MilliGas
+gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
+
+milliGasToGas :: MilliGas -> Gas
+milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
+
 
 -- -------------------------------------------------------------------------- --
 -- BindType

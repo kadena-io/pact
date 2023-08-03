@@ -99,7 +99,8 @@ applyCmd logger conf dbv gasModel bh _ pbh spv exConfig exMode _ (ProcSucc cmd) 
   blocktime <-  (((*) 1000000) <$> systemSeconds <$> getSystemTime)
 
   let payload = _cmdPayload cmd
-      gasEnv = GasEnv (_pmGasLimit pubMeta) (_pmGasPrice pubMeta) gasModel
+      gasLimit = gasLimitToMilliGasLimit (_pmGasLimit pubMeta)
+      gasEnv = GasEnv gasLimit (_pmGasPrice pubMeta) gasModel
       pd = PublicData pubMeta bh blocktime pbh
       pubMeta = _pMeta payload
       nid = _pNetworkId payload

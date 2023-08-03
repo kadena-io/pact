@@ -2,6 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Pact.Bench where
 
@@ -173,7 +174,7 @@ loadCompile f = do
 
 
 prodGasEnv :: GasEnv
-prodGasEnv = GasEnv 100000 0.01 $ tableGasModel defaultGasConfig
+prodGasEnv = GasEnv (gasLimitToMilliGasLimit 100_000) 0.01 $ tableGasModel defaultGasConfig
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)

@@ -25,8 +25,10 @@ module Pact.Types.Gas
   , GasModel(..)
   , GasArgs(..)
   , GasLimit(..)
+  , MilliGasLimit(..)
   , ZKGroup(..)
   , ZKArg(..)
+  , gasLimitToMilliGasLimit
     -- * optics
   , geGasLimit
   , geGasPrice
@@ -236,10 +238,22 @@ instance FromJSON GasLimit where
 
 instance Wrapped GasLimit
 
+-- Todo: this probably overflows but do we care?
+gasLimitToMilliGasLimit :: GasLimit -> MilliGasLimit
+gasLimitToMilliGasLimit (GasLimit (ParsedInteger i)) =
+  MilliGasLimit (gasToMilliGas (fromIntegral i))
+
+newtype MilliGasLimit
+  = MilliGasLimit MilliGas
+  deriving (Eq, Ord)
+
+instance Show MilliGasLimit where
+  show (MilliGasLimit (MilliGas i)) = show i
+
 data GasModel = GasModel
   { gasModelName :: !Text
   , gasModelDesc :: !Text
-  , runGasModel :: !(Text -> GasArgs -> Gas)
+  , runGasModel :: Text -> GasArgs -> MilliGas
   }
 
 instance Show GasModel where
@@ -249,7 +263,7 @@ instance Pretty GasModel where
   pretty m = viaShow m
 
 data GasEnv = GasEnv
-  { _geGasLimit :: !GasLimit
+  { _geGasLimit :: !MilliGasLimit
   , _geGasPrice :: !GasPrice
   , _geGasModel :: !GasModel
   }

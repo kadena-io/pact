@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Pact.Gas.Table where
@@ -230,36 +231,37 @@ tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
   let run name ga = case ga of
         GUnreduced _ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
-          Just g -> g
+          Just g -> gasToMilliGas g
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GUserApp t -> case t of
-          Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
-          _ -> _gasCostConfig_functionApplicationCost gasConfig
+          Defpact -> gasToMilliGas $ _gasCostConfig_defPactCost gasConfig * _gasCostConfig_functionApplicationCost gasConfig
+          _ -> gasToMilliGas $ _gasCostConfig_functionApplicationCost gasConfig
         GIntegerOpCost i j ->
-          intCost (fst i) + intCost (fst j)
-        GDecimalOpCost _ _ -> 0
-        GMakeList v -> expLengthPenalty v
-        GSort len -> expLengthPenalty len
-        GDistinct len -> expLengthPenalty len
-        GSelect mColumns -> case mColumns of
+          gasToMilliGas $ intCost (fst i) + intCost (fst j)
+        GDecimalOpCost _ _ -> mempty
+        GMakeList v -> gasToMilliGas $ expLengthPenalty v
+        GSort len -> gasToMilliGas $ expLengthPenalty len
+        GDistinct len -> gasToMilliGas $ expLengthPenalty len
+        GSelect mColumns -> gasToMilliGas $ case mColumns of
           Nothing -> 1
           Just [] -> 1
-          Just cs -> _gasCostConfig_selectColumnCost gasConfig * (fromIntegral (length cs))
+          Just cs -> _gasCostConfig_selectColumnCost gasConfig * fromIntegral (length cs)
         GSortFieldLookup n ->
-          fromIntegral n * _gasCostConfig_sortFactor gasConfig
+          gasToMilliGas $ fromIntegral n * _gasCostConfig_sortFactor gasConfig
         GConcatenation i j ->
-          fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
-        GFoldDB -> _gasCostConfig_foldDBCost gasConfig
-        GPostRead r -> case r of
+          gasToMilliGas $ fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
+        GFoldDB ->
+          gasToMilliGas $ _gasCostConfig_foldDBCost gasConfig
+        GPostRead r -> gasToMilliGas $ case r of
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap $ _rdData cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
           ReadTxId -> _gasCostConfig_readColumnCost gasConfig
-          ReadModule _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
-          ReadInterface _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
-          ReadNamespace _ns ->  _gasCostConfig_readColumnCost gasConfig
-          ReadKeySet _ksName _ks ->  _gasCostConfig_readColumnCost gasConfig
+          ReadModule _moduleName _mCode -> _gasCostConfig_readColumnCost gasConfig
+          ReadInterface _moduleName _mCode -> _gasCostConfig_readColumnCost gasConfig
+          ReadNamespace _ns -> _gasCostConfig_readColumnCost gasConfig
+          ReadKeySet _ksName _ks -> _gasCostConfig_readColumnCost gasConfig
           ReadYield (Yield _obj _ _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
-        GPreWrite w szVer -> case w of
+        GPreWrite w szVer -> gasToMilliGas $ case w of
           WriteData _type key obj ->
             (memoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
             + (memoryCost szVer obj (_gasCostConfig_writeBytesCost gasConfig))
@@ -278,17 +280,17 @@ tableGasModel gasConfig =
             + (memoryCost szVer ks (_gasCostConfig_writeBytesCost gasConfig))
           WriteYield obj ->
             (memoryCost szVer (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
-        GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
-        GModuleDecl _moduleName _mCode -> (_gasCostConfig_moduleCost gasConfig)
-        GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
+        GModuleMember _module -> gasToMilliGas $ _gasCostConfig_moduleMemberCost gasConfig
+        GModuleDecl _moduleName _mCode -> gasToMilliGas (_gasCostConfig_moduleCost gasConfig)
+        GUse _moduleName _mHash -> gasToMilliGas (_gasCostConfig_useModuleCost gasConfig)
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
-        GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
-        GModuleMemory i -> moduleMemoryCost i
-        GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
+        GInterfaceDecl _interfaceName _iCode -> gasToMilliGas (_gasCostConfig_interfaceCost gasConfig)
+        GModuleMemory i -> gasToMilliGas $ moduleMemoryCost i
+        GPrincipal g -> gasToMilliGas $ fromIntegral g * _gasCostConfig_principalCost gasConfig
         GMakeList2 len msz ->
           let glen = fromIntegral len
-          in glen + maybe 0 ((* glen) . intCost) msz
-        GZKArgs arg -> case arg of
+          in gasToMilliGas $ glen + maybe 0 ((* glen) . intCost) msz
+        GZKArgs arg -> gasToMilliGas $ case arg of
           PointAdd g -> pointAddGas g
           ScalarMult g -> scalarMulGas g
           Pairing np -> pairingGas np
@@ -377,8 +379,8 @@ pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
   gasModel = tableGasModel gasConfig
   gasConfig = defaultGasConfig { _gasCostConfig_primTable = updTable }
   updTable = Map.union upd defaultGasTable
-  unknownOperationPenalty = 1000000
-  multiRowOperation = 40000
+  unknownOperationPenalty = gasToMilliGas (Gas 1_000_000)
+  multiRowOperation = Gas 40_000
   upd = Map.fromList
     [("keys",    multiRowOperation)
     ,("select",  multiRowOperation)
@@ -386,6 +388,6 @@ pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
     ]
   modifiedRunFunction name ga = case ga of
     GUnreduced _ts -> case Map.lookup name updTable of
-      Just g -> g
+      Just g -> gasToMilliGas g
       Nothing -> unknownOperationPenalty
     _ -> runGasModel defaultGasModel name ga

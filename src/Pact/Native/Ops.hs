@@ -67,25 +67,24 @@ addDef = defGasRNative "+" plus plusTy
   "Add numbers, concatenate strings/lists, or merge objects."
   where
     plus :: GasRNativeFun e
-    plus g fi [TLitString a,TLitString b] = gasConcat g fi (T.length a) (T.length b) $
+    plus fi [TLitString a,TLitString b] = gasConcat fi (T.length a) (T.length b) $
       (return (tStr $ a <> b))
-    plus g fi [TList a aty _,TList b bty _] = gasConcat g fi (length a) (length b) $
+    plus fi [TList a aty _,TList b bty _] = gasConcat fi (length a) (length b) $
       return (TList
       (a <> b)
       (if aty == bty then aty else TyAny)
       def)
-    plus g fi [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
-      gasConcat g fi (M.size as) (M.size bs) $
+    plus fi [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
+      gasConcat fi (M.size as) (M.size bs) $
       return ((`TObject` def) $ Object
            (ObjectMap $ M.union as bs)
            (if aty == bty then aty else TyAny)
            def
            def)
-    plus g i as =
-      (g,) <$> binop' "+" (+) (+) i as
+    plus i as = binop' "+" (+) (+) i as
     {-# INLINE plus #-}
 
-    gasConcat g fi aLength bLength = computeGas' g fi (GConcatenation aLength bLength)
+    gasConcat fi aLength bLength = computeGas' fi (GConcatenation aLength bLength)
 
     plusTy :: FunTypes n
     plusTy = coerceBinNum <> binTy plusA plusA plusA
@@ -162,11 +161,11 @@ powImpl i as@[TLiteral a _,TLiteral b _] = do
     | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
 powImpl i as = argsError i as
 
-twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
+twoArgIntOpGas :: Integer -> Integer -> Eval e ()
 twoArgIntOpGas loperand roperand =
   computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing))
 
-twoArgDecOpGas :: Decimal -> Decimal -> Eval e Gas
+twoArgDecOpGas :: Decimal -> Decimal -> Eval e ()
 twoArgDecOpGas loperand roperand =
   computeGasCommit def ""
   (GIntegerOpCost

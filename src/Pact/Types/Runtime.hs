@@ -270,7 +270,7 @@ data EvalEnv e = EvalEnv {
       -- | Gas Environment
     , _eeGasEnv :: !GasEnv
       -- | Tallied gas
-    , _eeGas :: !(IORef Gas)
+    , _eeGas :: !(IORef MilliGas)
       -- | Namespace Policy
     , _eeNamespacePolicy :: !NamespacePolicy
       -- | SPV backend
@@ -403,10 +403,10 @@ unlessExecutionFlagSet f onFalse =
   ifExecutionFlagSet f (return ()) (void onFalse)
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
-call :: StackFrame -> Eval e (Gas,a) -> Eval e a
+call :: StackFrame -> Eval e a -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act
+  r <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
