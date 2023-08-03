@@ -280,7 +280,7 @@ gasToMilliGas :: Gas -> MilliGas
 gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
 
 milliGasToGas :: MilliGas -> Gas
-milliGasToGas (MilliGas n) = Gas (n `div` millisPerGas)
+milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
 
 
 -- -------------------------------------------------------------------------- --
