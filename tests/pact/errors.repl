@@ -173,11 +173,11 @@
 ; reducing direct ref post fork
 (expect-failure
     "Native direct ref post fork"
-    "Unexpected non-native direct ref of type: integer"
+    "Tried to call a value which is not a function, but a(n) integer"
     (let ((x 1)) (x x)))
 (expect-failure
-    "Native direct ref pre fork"
-    "Unexpected non-native direct ref of type: string"
+    "Native direct ref post fork"
+    "Tried to call a value which is not a function, but a(n) string"
     (let ((x "h")) (x x)))
 
 (commit-tx)

@@ -1324,13 +1324,12 @@ reduceDirect (TVar (FQName fq) _) args i = do
     Just r -> reduceApp (App (TVar r def) args i)
     Nothing -> do
       evalError i $ "unbound free variable: " <> pretty fq
-reduceDirect (TLitString errMsg) _ i = isExecutionFlagSet FlagDisablePact48 >>= \case
+reduceDirect r@(TLitString errMsg) _ i = isExecutionFlagSet FlagDisablePact48 >>= \case
   True -> evalError i $ pretty errMsg
-  False -> evalError i $ "Unexpected non-native direct ref of type: string"
-reduceDirect r _ ai =
-  isOffChainForkedError FlagDisablePact48 >>= \case
-    OffChainError -> evalError ai $ "Unexpected non-native direct ref: " <> pretty r
-    OnChainError -> evalError ai $ "Unexpected non-native direct ref of type: " <> pretty (typeof' r)
+  False -> evalError i $ "Tried to call a value which is not a function, but a(n) " <> pretty (typeof' r)
+reduceDirect r _ ai = isExecutionFlagSet FlagDisablePact48 >>= \case
+  True -> evalError ai $ "Unexpected non-native direct ref: " <> pretty r
+  False -> evalError ai $ "Tried to call a value which is not a function, but a(n) " <> pretty (typeof' r)
 
 createNestedPactId :: HasInfo i => i -> PactContinuation -> PactId -> Eval e PactId
 createNestedPactId _ (PactContinuation (QName qn) pvs) (PactId parent) = do
