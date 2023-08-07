@@ -37,7 +37,6 @@ import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
-
 --
 -- TODO: rename this. @Query@ is already taken by sbv.
 --

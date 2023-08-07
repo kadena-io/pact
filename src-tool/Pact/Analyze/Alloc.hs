@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE DataKinds                  #-}
 
 -- | Monadic contexts, more restricted than 'Symbolic', that only allow
 -- allocation of quantified symbolic variables.
@@ -26,6 +27,8 @@ import qualified Control.Monad.Writer.Lazy   as LW
 import           Control.Monad.Writer.Strict (WriterT)
 import           Data.SBV                    (Symbolic)
 import qualified Data.SBV                    as SBV
+import qualified Data.SBV.Internals          as SBVI
+
 
 import           Pact.Analyze.Types          (Concrete, S, SingI (sing), SingTy,
                                               sansProv, withSymVal)
@@ -72,7 +75,13 @@ instance (MonadAlloc m, Monoid w) => MonadAlloc (LW.WriterT w m)
 newtype Alloc a = Alloc { runAlloc :: Symbolic a }
   deriving (Functor, Applicative, Monad)
 
+sbvForall :: SBVI.SymVal a => String -> Symbolic (SBVI.SBV a)
+sbvForall = SBV.mkSymVal (SBVI.NonQueryVar (Just SBVI.ALL)) . Just
+
+sbvExists :: SBVI.SymVal a => String -> Symbolic (SBVI.SBV a)
+sbvExists = SBV.mkSymVal (SBVI.NonQueryVar (Just SBVI.EX)) . Just
+
 instance MonadAlloc Alloc where
-  singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvForall name
-  singExists name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.sbvExists name
+  singForAll name ty = Alloc $ withSymVal ty $ sansProv <$> sbvForall name
+  singExists name ty = Alloc $ withSymVal ty $ sansProv <$> sbvExists name
   singFree   name ty = Alloc $ withSymVal ty $ sansProv <$> SBV.free name

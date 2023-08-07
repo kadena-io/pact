@@ -106,8 +106,7 @@ import Pact.Types.Exp
 
 smtConfig :: SBV.SMTConfig
 smtConfig = SBV.z3
-  { SBVI.allowQuantifiedQueries = True
-  , SBVI.verbose = False -- set to True for debugging SMT formulas
+  { SBVI.verbose = False -- set to True for debugging SMT formulas
   , SBVI.transcript = Nothing -- Just "smt.transcript"
   }
 
@@ -553,8 +552,8 @@ verifyFunctionProperty (CheckEnv tables _consts _propDefs moduleData caps gov _d
     -- Run a 'Symbolic' in the mode corresponding to our goal
     runSymbolicGoal :: Symbolic a -> IO a
     runSymbolicGoal = fmap fst
-      . SBVI.runSymbolic (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup
-        (goal == Satisfaction) smtConfig)
+      . SBVI.runSymbolic smtConfig
+      (SBVI.SMTMode SBVI.QueryExternal SBVI.ISetup (goal == Satisfaction) smtConfig)
 
 -- | Get the set of tables in the specified modules.
 moduleTables

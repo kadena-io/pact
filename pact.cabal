@@ -320,7 +320,7 @@ library
         , mmorph >=1.1
         , neat-interpolation >=0.4
         , optparse-applicative >=0.12.1.0
-        , sbv >=9.0
+        , sbv >=10.0
         , semigroupoids >=5.0
         , servant-server
         , transformers >= 0.5.2.0 && < 0.7

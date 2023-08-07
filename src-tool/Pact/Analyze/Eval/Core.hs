@@ -361,7 +361,7 @@ evalCore (ListTake ty n list) = withSymVal ty $ withSing ty $ do
 evalCore (ListConcat ty p1 p2) = withSymVal ty $ withSing ty $ do
   S _ p1' <- eval p1
   S _ p2' <- eval p2
-  pure $ sansProv $ SBVL.concat p1' p2'
+  pure $ sansProv $ p1' SBVL.++ p2'
 evalCore (ListReverse ty l) = withSymVal ty $ withSing ty $ do
   S prov l' <- eval l
   pure $ S prov $ breverse listBound l'
