@@ -970,16 +970,6 @@ format i [TLitString s,TList es _ _] = do
   if | plen == 1 -> return $ tStr s
      | plen - length es > 1 -> evalError' i "format: not enough arguments for template"
      | otherwise -> do
-        let formatLegacyArgs = do
-              let args = repTerm <$> V.toList es
-                  !totalArgLen = sum (T.length <$> args)
-                  inputLength = T.length s
-              unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
-              pure args
-        let formatFullGassedArgs = do
-              vals <- traverse enforcePactValue es
-              void $ computeGas (Right i) (GFormatValues s vals)
-              pure $ repVal <$> V.toList vals
         args <- ifExecutionFlagSet FlagDisablePact48 formatLegacyArgs formatFullGassedArgs
         return $ tStr $ T.concat $ alternate parts (take (plen - 1) args)
   where
@@ -991,6 +981,17 @@ format i [TLitString s,TList es _ _] = do
 
     alternate (x:xs) ys = x : alternate ys xs
     alternate _ _ = []
+
+    formatLegacyArgs = do
+      let args = repTerm <$> V.toList es
+          !totalArgLen = sum (T.length <$> args)
+          inputLength = T.length s
+      unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
+      pure args
+    formatFullGassedArgs = do
+      vals <- traverse enforcePactValue es
+      void $ computeGas (Right i) (GFormatValues s vals)
+      pure $ repVal <$> V.toList vals
 format i as = argsError i as
 
 fold' :: NativeFun e
