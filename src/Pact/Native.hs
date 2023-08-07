@@ -1285,7 +1285,7 @@ concat' i [TList ls _ _] = do
       concatTextList = flip TLiteral def . LString . T.concat
     in fmap concatTextList $ forM ls' $ \case
       TLitString s -> return s
-      t -> isOffChainForkedError >>= \case
+      t -> isOffChainForkedError FlagDisablePact47 >>= \case
         OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
         OnChainError -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
 concat' i as = argsError i as
