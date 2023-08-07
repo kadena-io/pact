@@ -1279,9 +1279,10 @@ concat' i [TList ls _ _] = do
               nStrings = V.length ls
           in
           GTextConcatenation nChars nStrings
-  computeGas' i concatGasCost $ let
-    ls' = V.toList ls
-    concatTextList = flip TLiteral def . LString . T.concat
+  computeGas' i concatGasCost $
+    let
+      ls' = V.toList ls
+      concatTextList = flip TLiteral def . LString . T.concat
     in fmap concatTextList $ forM ls' $ \case
       TLitString s -> return s
       t -> isOffChainForkedError >>= \case
