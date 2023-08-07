@@ -798,3 +798,34 @@ d.G3
 (str-to-list "0123456789")
 (expect "gas of str-to-list post-fork" 11 (env-gas))
 (commit-tx)
+
+
+; Test that `concat` is gassed by the number of characters
+; at pact-4.8.
+(begin-tx)
+(env-gaslimit 1000000)
+(module m G
+  (defcap G () true)
+  (defun ten_x_string (n)
+      (fold (lambda (acc unused) (+ acc "aaaaaaaaaa")) "" (enumerate 1 n)))
+  (defconst strings_1000_1000:[string] (make-list 1000 (ten_x_string 100)))
+  (defconst strings_1000_2000:[string] (make-list 2000 (ten_x_string 100)))
+  (defconst strings_2000_1000:[string] (make-list 1000 (ten_x_string 200)))
+  )
+
+; ============================================================ ;
+;; TEST: cost of running concat on large strings.
+;;
+(env-gas 0)
+(concat strings_1000_1000)
+(expect "calling (concat strings_1000_1000)" 111 (env-gas))
+
+(env-gas 0)
+(concat strings_2000_1000)
+(expect "calling (concat strings_2000_1000)" 131 (env-gas))
+
+(env-gas 0)
+(concat strings_1000_2000)
+(expect "calling (concat strings_1000_2000)" 151 (env-gas))
+
+(commit-tx)
