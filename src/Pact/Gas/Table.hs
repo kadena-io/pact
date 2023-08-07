@@ -39,6 +39,9 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_sortFactor :: Gas
   , _gasCostConfig_distinctFactor :: Gas
   , _gasCostConfig_concatenationFactor :: Gas
+  , _gasCostConfig_textConcatenationFactorOffset :: Gas -- up-front cost of text concatenation
+  , _gasCostConfig_textConcatenationFactorStringLen :: Gas -- additional cost of concatenation per 1K characters in the average string
+  , _gasCostConfig_textConcatenationFactorStrings :: Gas -- additional cost of concatenation per 1K strings
   , _gasCostConfig_moduleCost :: Gas
   , _gasCostConfig_moduleMemberCost :: Gas
   , _gasCostConfig_useModuleCost :: Gas
@@ -58,6 +61,9 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_sortFactor = 1
   , _gasCostConfig_distinctFactor = 1
   , _gasCostConfig_concatenationFactor = 1  -- TODO benchmark
+  , _gasCostConfig_textConcatenationFactorOffset = 50
+  , _gasCostConfig_textConcatenationFactorStringLen = 20
+  , _gasCostConfig_textConcatenationFactorStrings = 40
   , _gasCostConfig_moduleCost = 1        -- TODO benchmark
   , _gasCostConfig_moduleMemberCost = 1
   , _gasCostConfig_useModuleCost = 1     -- TODO benchmark
@@ -248,10 +254,13 @@ tableGasModel gasConfig =
           Just cs -> _gasCostConfig_selectColumnCost gasConfig * fromIntegral (length cs)
         GSortFieldLookup n ->
           gasToMilliGas $ fromIntegral n * _gasCostConfig_sortFactor gasConfig
-        GConcatenation i j ->
-          gasToMilliGas $ fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
-        GFoldDB ->
-          gasToMilliGas $ _gasCostConfig_foldDBCost gasConfig
+        GConcatenation i j -> gasToMilliGas $
+          fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
+        GTextConcatenation nChars nStrings -> gasToMilliGas $
+          _gasCostConfig_textConcatenationFactorOffset gasConfig +
+          (fromIntegral nChars  * _gasCostConfig_textConcatenationFactorStringLen gasConfig) `div` 1000 `div` fromIntegral nStrings +
+          (fromIntegral nStrings * _gasCostConfig_textConcatenationFactorStrings gasConfig) `div` 1000
+        GFoldDB -> gasToMilliGas $ _gasCostConfig_foldDBCost gasConfig
         GPostRead r -> gasToMilliGas $ case r of
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap $ _rdData cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig

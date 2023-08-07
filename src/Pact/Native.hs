@@ -1259,15 +1259,34 @@ identity _ [a'] = return a'
 identity i as = argsError i as
 
 concat' :: GasRNativeFun e
-concat' i [TList ls _ _] = computeGas' i (GMakeList $ fromIntegral $ V.length ls) $ let
-  -- Use GMakeList because T.concat is O(n) on the number of strings in the list
-  ls' = V.toList ls
-  concatTextList = flip TLiteral def . LString . T.concat
-  in fmap concatTextList $ forM ls' $ \case
-    TLitString s -> return s
-    t -> isOffChainForkedError FlagDisablePact47 >>= \case
-      OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
-      OnChainError -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
+concat' i [TList ls _ _] = do
+
+  disablePact48 <- isExecutionFlagSet FlagDisablePact48
+  let concatGasCost =
+        if disablePact48
+        then
+          -- Prior to pact-4.8, gas cost is proportional to the number of
+          -- strings being concatenated.
+          GMakeList $ fromIntegral $ V.length ls
+        else
+          -- Beginning with pact-4.8, gas cost in proportional to the number of
+          -- characters being concatinated and the length of the list.
+          let nChars = sum $ termLen <$> ls
+                where
+                  termLen t = case t of
+                    TLitString s -> T.length s
+                    _ -> 0
+              nStrings = V.length ls
+          in
+          GTextConcatenation nChars nStrings
+  computeGas' i concatGasCost $ let
+    ls' = V.toList ls
+    concatTextList = flip TLiteral def . LString . T.concat
+    in fmap concatTextList $ forM ls' $ \case
+      TLitString s -> return s
+      t -> isOffChainForkedError >>= \case
+        OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+        OnChainError -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
 concat' i as = argsError i as
 
 -- | Converts a string to a vector of single character strings

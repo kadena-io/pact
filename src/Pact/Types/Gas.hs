@@ -137,7 +137,10 @@ data GasArgs
   | GSortFieldLookup !Int
   -- ^ Cost of sorting by lookup fields
   | GConcatenation !Int !Int
-  -- ^ Cost of concatenating two strings, lists, and objects
+  -- ^ Cost of concatenating two strings before pact 4.8, lists, and objects
+  | GTextConcatenation !Int !Int
+  -- ^ Cost of concatenating a list of strings with the given total character
+  -- count and list length after pact 4.8
   | GUnreduced ![Term Ref]
   -- ^ Cost of using a native function
   | GPostRead !ReadValue
@@ -204,6 +207,7 @@ instance Pretty GasArgs where
     GSelect {} -> "GSelect"
     GSortFieldLookup i -> "GSortFieldLookup:" <> pretty i
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
+    GTextConcatenation nChars nStrings -> "GTextConcatenation:" <> pretty nChars <> colon <> pretty nStrings
     GUnreduced {} -> "GUnreduced"
     GPostRead rv -> "GPostRead:" <> pretty rv
     GPreWrite wv szVer -> "GWrite:" <> pretty wv <> colon <> pretty szVer
