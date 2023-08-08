@@ -848,3 +848,31 @@ d.G3
 (expect "gas of formatting a sample list" 10014 (env-gas))
 
 (commit-tx)
+
+; tests for pre/post integer ops
+(begin-tx)
+(module m G (defcap G () true)
+  (defconst i79:integer (+ (^ 10 79) 1))
+  (defconst i80:integer (+ (^ 10 80) 1))
+)
+(env-exec-config ["DisablePact48"])
+(env-gas 0)
+(+ i79 i79)
+(expect "gas of + pre-fork 10^79" (env-gas) 21)
+
+(env-gas 0)
+(+ i80 i80)
+(expect "gas of + pre-fork 10^80" (env-gas) 21)
+
+; post-fork
+(env-gas 0)
+(env-exec-config [])
+(env-gas 0)
+(+ i79 i79)
+(expect "gas of + post-fork 10^79" (env-gas) 1)
+
+(env-gas 0)
+(+ i80 i80)
+(expect "gas of + post-fork 10^80" (env-gas) 21)
+
+(commit-tx)
