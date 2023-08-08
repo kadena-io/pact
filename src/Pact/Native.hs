@@ -912,7 +912,8 @@ list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set 
 makeList :: GasRNativeFun e
 makeList i [TLitInteger len,value] = case typeof value of
   Right ty -> do
-    ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
+    ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
+    ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing ts)
     computeGas' i ga $ return $
       toTListV ty def $ V.replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
@@ -936,7 +937,8 @@ enumerate i = \case
       -- ^ The generated vector
       -> Eval e (Term Name)
     computeList len sz v = do
-      ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len (Just sz))
+      ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
+      ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len (Just sz) ts)
       computeGas' i ga $ pure $ toTListV tTyInteger def $ fmap toTerm v
 
     step to' inc acc
@@ -1315,7 +1317,8 @@ stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
 strToList :: GasRNativeFun e
 strToList i [TLitString s] = do
   let len = fromIntegral $ T.length s
-  ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
+  ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
+  ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing ts)
   computeGas' i ga $ return $ toTListV tTyString def $ stringToCharList s
 strToList i as = argsError i as
 
