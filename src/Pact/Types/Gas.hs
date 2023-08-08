@@ -28,6 +28,7 @@ module Pact.Types.Gas
   , MilliGasLimit(..)
   , ZKGroup(..)
   , ZKArg(..)
+  , IntOpThreshold(..)
   , gasLimitToMilliGasLimit
     -- * optics
   , geGasLimit
@@ -166,17 +167,28 @@ data GasArgs
   -- ^ The cost of the in-memory representation of the module
   | GPrincipal !Int
   -- ^ the cost of principal creation and validation
-  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer)
+  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer) IntOpThreshold
   -- ^ Integer costs
   | GDecimalOpCost !Decimal !Decimal
   -- ^ Decimal costs
-  | GMakeList2 !Integer !(Maybe Integer)
+  | GMakeList2 !Integer !(Maybe Integer) IntOpThreshold
   -- ^ List versioning 2
   | GZKArgs !ZKArg
   | GReverse !Int
   -- ^ Cost of reversing a list of a given length
   | GFormatValues !Text !(V.Vector PactValue)
   -- ^ Cost of formatting with the given format string and args
+
+data IntOpThreshold
+  = Pact43IntThreshold
+  | Pact48IntThreshold
+  deriving (Eq, Show, Enum, Bounded)
+
+instance Pretty IntOpThreshold where
+  pretty = \case
+    Pact43IntThreshold -> "Pact43IntThreshold"
+    Pact48IntThreshold -> "Pact48IntThreshold"
+
 
 -- | The elliptic curve pairing group we are
 -- handling
@@ -227,9 +239,9 @@ instance Pretty GasArgs where
     GFoldDB -> "GFoldDB"
     GModuleMemory i -> "GModuleMemory: " <> pretty i
     GPrincipal i -> "GPrincipal: " <> pretty i
-    GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
+    GIntegerOpCost i j ts -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j <> colon <> pretty ts
     GDecimalOpCost i j -> "GDecimalOpCost:" <> pretty (show i) <> colon <> pretty (show j)
-    GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
+    GMakeList2 i k ts -> "GMakeList2:" <> pretty i <> colon <> pretty k <> colon <> pretty ts
     GZKArgs arg -> "GZKArgs:" <> pretty arg
     GReverse len -> "GReverse:" <> pretty len
     GFormatValues s args -> "GFormatValues:" <> pretty s <> pretty (V.toList args)

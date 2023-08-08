@@ -248,8 +248,8 @@ tableGasModel gasConfig =
         GUserApp t -> case t of
           Defpact -> gasToMilliGas $ _gasCostConfig_defPactCost gasConfig * _gasCostConfig_functionApplicationCost gasConfig
           _ -> gasToMilliGas $ _gasCostConfig_functionApplicationCost gasConfig
-        GIntegerOpCost i j ->
-          gasToMilliGas $ intCost (fst i) + intCost (fst j)
+        GIntegerOpCost i j ts ->
+          gasToMilliGas $ intCost ts (fst i) + intCost ts (fst j)
         GDecimalOpCost _ _ -> mempty
         GMakeList v -> gasToMilliGas $ expLengthPenalty v
         GSort len -> gasToMilliGas $ expLengthPenalty len
@@ -310,9 +310,9 @@ tableGasModel gasConfig =
         GInterfaceDecl _interfaceName _iCode -> gasToMilliGas (_gasCostConfig_interfaceCost gasConfig)
         GModuleMemory i -> gasToMilliGas $ moduleMemoryCost i
         GPrincipal g -> gasToMilliGas $ fromIntegral g * _gasCostConfig_principalCost gasConfig
-        GMakeList2 len msz ->
+        GMakeList2 len msz ts ->
           let glen = fromIntegral len
-          in gasToMilliGas $ glen + maybe 0 ((* glen) . intCost) msz
+          in gasToMilliGas $ glen + maybe 0 ((* glen) . intCost ts) msz
         GZKArgs arg -> gasToMilliGas $ case arg of
           PointAdd g -> pointAddGas g
           ScalarMult g -> scalarMulGas g
@@ -374,16 +374,16 @@ defaultGasModel = tableGasModel defaultGasConfig
 
 #if !defined(ghcjs_HOST_OS)
 -- | Costing function for binary integer ops
-intCost :: Integer -> Gas
-intCost !a
-  | (abs a) < threshold = 0
+intCost :: IntOpThreshold -> Integer -> Gas
+intCost ts !a
+  | (abs a) < threshold ts = 0
   | otherwise =
     let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
     in fromIntegral (nbytes * nbytes `quot` 100)
   where
-  threshold :: Integer
-  threshold = (10 :: Integer) ^ (30 :: Integer)
-
+  threshold :: IntOpThreshold -> Integer
+  threshold Pact43IntThreshold = (10 :: Integer) ^ (30 :: Integer)
+  threshold Pact48IntThreshold = (10 :: Integer) ^ (80 :: Integer)
 
 _intCost :: Integer -> Int
 _intCost !a =
