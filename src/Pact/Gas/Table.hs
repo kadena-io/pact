@@ -221,6 +221,7 @@ defaultGasTable =
   -- Modular inverse
   ,("egcd", 3)
   ,("keccak256-bs", 13)
+  ,("poseidon-hash", 8)
   ]
 
 {-# NOINLINE defaultGasTable #-}
