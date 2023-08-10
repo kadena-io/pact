@@ -71,6 +71,7 @@ library
       Pact.Native.Trans.TOps
   exposed-modules:
     Crypto.Hash.Blake2Native
+    Crypto.Hash.PoseidonNative
     Pact.Analyze.Remote.Types
     Pact.Compile
     Pact.Eval
@@ -424,6 +425,7 @@ test-suite hspec
         PactCLISpec
         ZkSpec
         ModularArithmeticSpec
+        PoseidonSpec
         ReplSpec
         PairingSpec
         Utils

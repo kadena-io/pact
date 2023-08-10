@@ -223,7 +223,7 @@ allTests = HM.fromList
     , ("pairing-check", pairingCheckTests)
     , ("egcd", egcdTests)
     , ("keccak256-bs", keccak256bsTests)
-    , ("poseidon-hash", poseidonTests)
+    , ("poseidon-hash", poseidonHashTests)
 
       -- Non-native concepts to benchmark
     , ("use", useTests)
@@ -2022,10 +2022,10 @@ keccak256bsTests = defGasUnitTest $ PactExpression keccak256bsExprText Nothing
     (keccak256-bs 256 2939802230983298498274024970323894828329382938283938293283)
     |]
 
-poseidonTests:: NativeDefName -> GasUnitTests
-poseidonTests = defGasUnitTest $ PactExpression poseidonExprText Nothing
+poseidonHashTests:: NativeDefName -> GasUnitTests
+poseidonHashTests = defGasUnitTest $ PactExpression poseidonHashExprText Nothing
   where
-    poseidonExprText = [text|
+    poseidonHashExprText = [text|
     (poseidon-hash 1 2)
     (poseidon-hash 999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999 88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888)
     |]

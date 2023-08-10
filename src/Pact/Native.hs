@@ -106,6 +106,7 @@ import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
 import Pact.Native.ModularArithmetic (egcdDefs)
+import Crypto.Hash.PoseidonNative (poseidonDefs)
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -121,6 +122,7 @@ natives =
   , guardDefs
   , zkDefs
   , egcdDefs
+  , poseidonDefs
   ]
 
 

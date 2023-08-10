@@ -30,6 +30,7 @@ import qualified PactCLISpec
 import qualified ZkSpec
 import qualified ReplSpec
 import qualified ModularArithmeticSpec
+import qualified PoseidonSpec
 import qualified CoverageSpec
 # endif
 #endif
@@ -67,6 +68,7 @@ main = hspec $ parallel $ do
   describe "ZkSpec" ZkSpec.spec
   describe "ReplSpec" ReplSpec.spec
   describe "ModularArithmeticSpec" ModularArithmeticSpec.spec
+  describe "PoseidonSpec" PoseidonSpec.spec
   describe "CoverageSpec" CoverageSpec.spec
 
 # endif
