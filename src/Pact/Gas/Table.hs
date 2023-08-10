@@ -217,6 +217,8 @@ defaultGasTable =
   ,("scalar-mult", 1)
   ,("point-add", 1)
   ,("pairing-check", 1)
+
+  ,("poseidon-hash", 122)
   ]
 
 {-# NOINLINE defaultGasTable #-}
