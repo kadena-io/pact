@@ -141,6 +141,7 @@ library
     Pact.Types.KeySet
     Pact.Types.Lang
     Pact.Types.Logger
+    Pact.Types.Memoize
     Pact.Types.Names
     Pact.Types.Namespace
     Pact.Types.Native

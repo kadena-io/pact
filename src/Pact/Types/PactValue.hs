@@ -41,7 +41,7 @@ import Control.Lens (makePrisms,set)
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Generics hiding (Meta)
@@ -101,13 +101,14 @@ instance SizeOf PactValue where
   sizeOf ver (PModRef m) = (constructorCost 1) + (sizeOf ver m)
 
 -- | Strict conversion.
-toPactValue :: Pretty n => Term n -> Either Text PactValue
+toPactValue :: (Show n, Pretty n) => Term n -> Either Text PactValue
 toPactValue (TLiteral l _) = pure $ PLiteral l
 toPactValue (TObject (Object o _ _ _) _) = PObject <$> traverse toPactValue o
 toPactValue (TList l _ _) = PList <$> V.mapM toPactValue l
 toPactValue (TGuard x _) = PGuard <$> traverse toPactValue x
 toPactValue (TModRef m _) = pure $ PModRef m
-toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
+-- toPactValue t = Left $ "Unable to convert Term: " <> renderCompactText t
+toPactValue t = Left $ "Unable to convert Term: " <> pack (show t)
 
 fromPactValue :: PactValue -> Term Name
 fromPactValue (PLiteral l) = TLiteral l def

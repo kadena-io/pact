@@ -1,0 +1,34 @@
+(env-gasmodel "table")
+(env-gaslimit 1000000)
+
+(env-clear-memotable)
+
+; Define an expensive function, which we will use to test memoization.
+(module m g
+  (defcap g () true)
+  (defun go(n:integer) "Do an expensive computation"
+         (let ((xs (enumerate 1 n))
+               (fn (lambda (a b) (+ a b))))
+           (fold (fn) 0 xs)
+           )))
+
+; We will test memoization by checking that gas usage is lower
+; for a memo table hit than for a miss.
+(env-gas 0)
+(m.go 10)
+(expect "Executing unmemoized function costs gas" 36 (env-gas))
+
+(env-memoize (m.go 10))
+(env-gas 0)
+(m.go 10)
+(expect "Executing memoized function is cheap" 0 (env-gas))
+
+
+(env-gas 0)
+(shift 10 (shift 1 1))
+(expect "Executing unmemoized native costs gas" 3 (env-gas))
+
+(env-memoize (shift 10 (shift 1 1)))
+(env-gas 0)
+(shift 10 2)
+(expect "Executing memoized native is cheap" 0 (env-gas))
