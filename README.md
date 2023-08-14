@@ -147,7 +147,11 @@ you may need to add to your path. Then, you can call `pact` as-is.
 The fastest way to build and run Pact is to use the Nix package manager
 which has binary caching capabilities that allow you to download pre-built
 binaries for everything needed by Pact.
-We use nix flakes to build pact and its dependencies. To build the Pact executable:
+We use nix flakes (which requires users to set `--experimental-features "nix-command flakes"`)
+to build pact and its dependencies. For detailed instructions see [our
+￼wiki](https://github.com/kadena-io/pact/wiki/Building-Kadena-Projects).
+
+To build the Pact executable:
 ```bash
 nix build
 ```
