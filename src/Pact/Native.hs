@@ -315,7 +315,10 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ T.encodeUtf8 s
-      [a'] -> enforcePactValue a' >>= \pv -> go $ J.encodeStrict pv
+      [a'] -> do
+        elide <- ifExecutionFlagSet' FlagDisablePact48 id elideModRefInfo
+        pv <- elide <$> enforcePactValue a'
+        go $ J.encodeStrict pv
       _ -> argsError i as
       where go = return . tStr . asString . pactHash
 
