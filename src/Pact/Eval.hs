@@ -162,7 +162,8 @@ enforceGuard i g = case g of
     void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
   GCapability CapabilityGuard{..} -> do
     traverse_ (enforcePactId True) _cgPactId
-    args <- enforcePactValue' _cgArgs
+    elide <- ifExecutionFlagSet' FlagDisablePact48 id elideModRefInfo
+    args <- traverse (fmap elide . enforcePactValue) _cgArgs
     acquired <- capabilityAcquired $ SigCapability _cgName args
     unless acquired $ failTx' i "Capability not acquired"
   where
