@@ -448,7 +448,7 @@ mkSimpleYield
   -> ObjectMap (Term n)
   -> Eval e (Maybe Yield)
 mkSimpleYield p om =
-  Just . (\yieldData -> Yield yieldData p Nothing) <$> enforcePactValue' om
+  Just . (\yieldData -> Yield yieldData p Nothing) <$> traverse enforcePactValue om
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
