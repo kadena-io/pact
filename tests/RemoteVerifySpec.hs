@@ -3,7 +3,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- | Tests remote verification on the server side (i.e. no GHCJS involvement)
+-- | Tests remote verification on the server side
 module RemoteVerifySpec (spec) where
 
 import Test.Hspec

@@ -5,7 +5,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | Types for remote verification of pact programs from GHCJS in the browser.
+-- | Types for remote verification of pact programs.
+--
 module Pact.Analyze.Remote.Types
 ( Request(..)
 , Response(..)

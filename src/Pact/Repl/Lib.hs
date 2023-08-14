@@ -44,11 +44,6 @@ import Pact.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 
-#if defined(ghcjs_HOST_OS)
-import qualified Pact.Analyze.Remote.Client as RemoteClient
-import Data.Maybe
-#else
-
 import Criterion
 import Criterion.Types
 
@@ -59,7 +54,6 @@ import qualified Pact.Analyze.Check as Check
 import System.Directory
 # endif
 import qualified Pact.Types.Crypto as Crypto
-#endif
 
 import Pact.Typechecker
 import qualified Pact.Types.Typecheck as TC
@@ -342,7 +336,6 @@ mockSPV i as = case as of
   _ -> argsError i as
 
 formatAddr :: RNativeFun LibState
-#if !defined(ghcjs_HOST_OS)
 formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
   let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
       eitherEvalErr res effectStr transformFunc =
@@ -360,10 +353,6 @@ formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
            toB16Text
   return (tStr addr)
 formatAddr i as = argsError i as
-#else
-formatAddr i _ = evalError' i "Address formatting not supported in GHCJS"
-#endif
-
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
@@ -599,7 +588,6 @@ expectThat i as = argsError' i as
 
 
 bench' :: ZNativeFun LibState
-#if !defined(ghcjs_HOST_OS)
 bench' i as = do
   e <- ask
   s <- get
@@ -622,9 +610,6 @@ bench' i as = do
                tperr = (1/(val - (sd/2))) - (1/(val + (sd/2)))
            liftIO $ putStrLn $ show (round tps :: Integer) ++ "/s, +-" ++ show (round tperr :: Integer) ++ "/s"
            return (tStr "Done")
-#else
-bench' i _ = evalError' i "Benchmarking not supported in GHCJS"
-#endif
 
 tc :: RNativeFun LibState
 tc i as = case as of
@@ -652,16 +637,7 @@ verify i = \case
   other -> argsError i other
   where
     go modName d = do
-#if defined(ghcjs_HOST_OS)
-      -- ghcjs: use remote server
-      (md,modules) <- _loadModules modName
-
-      uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
-      renderedLines <- liftIO $
-                       RemoteClient.verifyModule modules md uri
-      setop $ Output renderedLines
-      return (_failureMessage modName)
-#elif defined(BUILD_TOOL)
+#if defined(BUILD_TOOL)
     -- ghc + build-tool: run verify
       (md,modules) <- _loadModules modName
       de <- viewLibState _rlsDynEnv

@@ -37,10 +37,6 @@ flag build-tool
   default:     True
   manual:      True
 
-flag with-integer-gmp
-  description: Include integer-gmp package (removed after GHC 9)
-  manual:      False
-
 flag tests-in-lib
   description: Include test src and deps in lib
   default:     False
@@ -73,51 +69,66 @@ library pact-prettyprinter
 
 library
   cpp-options: -DLEGACY_PARSER
-  -- common to all configurations:
-  hs-source-dirs: src
+  hs-source-dirs:
+    src
+    src-ghc
   default-language: Haskell2010
-  ghc-prof-options: -fprof-auto -fprof-auto-calls
-  if !impl(ghcjs)
-    c-sources:
-      cbits/musl/__math_invalid.c
-      cbits/musl/__math_divzero.c
-      cbits/musl/__math_oflow.c
-      cbits/musl/__math_uflow.c
-      cbits/musl/__math_xflow.c
-      cbits/musl/exp.c
-      cbits/musl/exp_data.c
-      cbits/musl/log.c
-      cbits/musl/log_data.c
-      cbits/musl/pow.c
-      cbits/musl/pow_data.c
-      cbits/musl/sqrt.c
-      cbits/musl/sqrt_data.c
-    exposed-modules:
-      Pact.Native.Trans.TOps
+  ghc-prof-options:
+    -fprof-auto
+    -fprof-auto-calls
+  ghc-options:
+    -Wall
+    -Werror
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wredundant-constraints
+  c-sources:
+    cbits/musl/__math_invalid.c
+    cbits/musl/__math_divzero.c
+    cbits/musl/__math_oflow.c
+    cbits/musl/__math_uflow.c
+    cbits/musl/__math_xflow.c
+    cbits/musl/exp.c
+    cbits/musl/exp_data.c
+    cbits/musl/log.c
+    cbits/musl/log_data.c
+    cbits/musl/pow.c
+    cbits/musl/pow_data.c
+    cbits/musl/sqrt.c
+    cbits/musl/sqrt_data.c
   exposed-modules:
     Crypto.Hash.Blake2Native
     Pact.Analyze.Remote.Types
+    Pact.ApiReq
     Pact.Compile
+    Pact.Coverage
+    Pact.Coverage.Report
     Pact.Eval
     Pact.Gas
     Pact.Gas.Table
     Pact.Gas.Table.Format
+    Pact.Interpreter
+    Pact.MockDb
     Pact.Native
     Pact.Native.Capabilities
-    Pact.Native.Guards
     Pact.Native.Db
-    Pact.Native.Internal
-    Pact.Native.SPV
-    Pact.Native.Time
-    Pact.Native.Ops
-    Pact.Native.Keysets
     Pact.Native.Decrypt
+    Pact.Native.Guards
+    Pact.Native.Internal
+    Pact.Native.Keysets
+    Pact.Native.Ops
     Pact.Native.Pairing
     Pact.Native.Pairing.GaloisField
+    Pact.Native.SPV
+    Pact.Native.Time
+    Pact.Native.Trans.TOps
     Pact.Parse
-    Pact.PersistPactDb
     Pact.Persist
+    Pact.Persist.MockPersist
     Pact.Persist.Pure
+    Pact.Persist.SQLite
+    Pact.PersistPactDb
+    Pact.PersistPactDb.Regression
     Pact.Repl
     Pact.Repl.Lib
     Pact.Repl.Types
@@ -125,14 +136,18 @@ library
     Pact.Runtime.Typecheck
     Pact.Runtime.Utils
     Pact.Server.API
+    Pact.Server.PactService
+    Pact.Typechecker
     Pact.Types.API
+    Pact.Types.Advice
     Pact.Types.Capability
     Pact.Types.ChainId
     Pact.Types.ChainMeta
     Pact.Types.Codec
     Pact.Types.Command
     Pact.Types.Continuation
-    Pact.Types.Scheme
+    Pact.Types.Crypto
+    Pact.Types.ECDSA
     Pact.Types.Exp
     Pact.Types.ExpParser
     Pact.Types.Gas
@@ -144,42 +159,43 @@ library
     Pact.Types.Names
     Pact.Types.Namespace
     Pact.Types.Native
+    Pact.Types.Orphans
     Pact.Types.PactError
     Pact.Types.PactValue
     Pact.Types.PactValue.Arbitrary
     Pact.Types.Parser
-    Pact.Types.Principal
-    Pact.Types.Advice
     Pact.Types.Persistence
     Pact.Types.Pretty
+    Pact.Types.Principal
     Pact.Types.Purity
-    Pact.Types.RowData
     Pact.Types.RPC
+    Pact.Types.RowData
     Pact.Types.Runtime
-    Pact.Types.Orphans
+    Pact.Types.SPV
+    Pact.Types.SQLite
+    Pact.Types.Scheme
+    Pact.Types.Server
     Pact.Types.SigData
     Pact.Types.SizeOf
-    Pact.Types.SPV
     Pact.Types.Term
     Pact.Types.Term.Arbitrary
     Pact.Types.Term.Internal
     Pact.Types.Type
+    Pact.Types.Typecheck
     Pact.Types.Util
     Pact.Types.Version
-    Pact.Types.Typecheck
-    Pact.Typechecker
     Pact.Utils.Servant
 
   build-depends:
+    -- internal
     , pact-prettyprinter
-    , base >= 4.18.0.0
+
+    -- external
     , Decimal >=0.4.2
     , QuickCheck >=2.12.6.1
     , aeson >=2
     , attoparsec >=0.13.0.2
-    -- note: this is the real constraint, but due to base changes
-    -- we split for compat.
-    -- , base >=4.9.0.0 && < 4.17
+    , base >= 4.18.0.0
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.0.0.1
         -- base64-bytestring >=1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
@@ -187,168 +203,138 @@ library
     , bytestring >=0.10.8.1
     , cereal >=0.5.4.0
     , containers >=0.5.7
+    , criterion >=1.1.4
+    , crypton
     , data-default >=0.7.1.1
     , deepseq >=1.4.2.0
     , deriving-compat >=0.5.1
+    , direct-sqlite >=2.3.27
     , directory >=1.2.6.2
     , errors >=2.3
     , exceptions >=0.8.3
     , filepath >=1.4.1.0
+    , groups
     , hashable >=1.4
     , lens >=4.14
     , megaparsec >=9
+    , memory
+    , mod >=0.1.2
     , mtl >=2.3
     , pact-json >=0.1
     , pact-time >=0.2
     , parsers >=0.12.4
+    , poly >=0.5.0
     , quickcheck-instances >=0.3
     , reflection
-    , scientific >= 0.3
     , safe-exceptions
+    , safe-exceptions >=0.1.5.0
+    , scientific >= 0.3
     , semigroupoids >=5.0
+    , semirings
     , servant
+    , servant-client >=0.16
+    , servant-client-core >=0.16
+    , statistics >=0.13.3
     , text >=2
+    , time
     , trifecta >=2.1.1.1
     , unordered-containers >=0.2.19
     , utf8-string >=1.0.1.1
     , vector >=0.11.0.0
     , vector-algorithms >=0.7
     , vector-space >=0.10.4
-    , groups
-    , semirings
-    , mod >=0.1.2
-    , poly >=0.5.0
-    , time
+    , yaml
 
-  -- GHCJS
-  if impl(ghcjs)
+  if flag(build-tool)
+    cpp-options: -DBUILD_TOOL
+    hs-source-dirs: src-tool
     exposed-modules:
-      Pact.Analyze.Remote.Client
+      Pact.Docgen
+      Pact.Analyze
+      Pact.Analyze.Alloc
+      Pact.Analyze.Eval
+      Pact.Analyze.Eval.Invariant
+      Pact.Analyze.Eval.Numerical
+      Pact.Analyze.Eval.Prop
+      Pact.Analyze.Eval.Core
+      Pact.Analyze.Eval.Term
+      Pact.Analyze.Check
+      Pact.Analyze.Errors
+      Pact.Analyze.Feature
+      Pact.Analyze.PactSFunArray
+      Pact.Analyze.Model
+      Pact.Analyze.Model.Dot
+      Pact.Analyze.Model.Graph
+      Pact.Analyze.Model.Tags
+      Pact.Analyze.Model.Text
+      Pact.Analyze.Parse
+      Pact.Analyze.Parse.Invariant
+      Pact.Analyze.Parse.Prop
+      Pact.Analyze.Parse.Types
+      Pact.Analyze.Patterns
+      Pact.Analyze.PrenexNormalize
+      Pact.Analyze.Translate
+      Pact.Analyze.Types
+      Pact.Analyze.Types.Capability
+      Pact.Analyze.Types.Eval
+      Pact.Analyze.Types.Languages
+      Pact.Analyze.Types.Model
+      Pact.Analyze.Types.Numerical
+      Pact.Analyze.Types.ObjUtil
+      Pact.Analyze.Types.Shared
+      Pact.Analyze.Types.Types
+      Pact.Analyze.Util
+      Pact.Analyze.Remote.Server
+      Pact.Bench
+      Pact.Main
+      Pact.ReplTools
+      Pact.Server.ApiServer
+      Pact.Server.History.Persistence
+      Pact.Server.History.Service
+      Pact.Server.History.Types
+      Pact.Server.Server
+      Pact.GasModel.GasModel
+      Pact.GasModel.Types
+      Pact.GasModel.Utils
+      Pact.GasModel.GasTests
     build-depends:
-      , ghcjs-base
-      , ghcjs-dom
-      , ghcjs-prim
+      , algebraic-graphs >=0.2
+      , async
+      , cassava >=0.5
+      , constraints
+      , fast-logger
+      , haskeline >=0.7.3
+      , mmorph >=1.1
+      , neat-interpolation >=0.4
       , optparse-applicative >=0.12.1.0
-
-  -- Normal GHC
+      , sbv >=9.0
+      , semigroupoids >=5.0
+      , servant-server
+      , transformers >= 0.5.2.0 && < 0.7
+      , wai-cors
+      , warp
+    if !os(windows)
+      build-depends: unix
+  if flag(cryptonite-ed25519)
+    cpp-options: -DCRYPTONITE_ED25519
   else
-    hs-source-dirs: src-ghc
-    ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-    cc-options: -w
-    exposed-modules:
-      Pact.ApiReq
-      Pact.Coverage
-      Pact.Coverage.Report
-      Pact.Interpreter
-      Pact.MockDb
-      Pact.Persist.MockPersist
-      Pact.Persist.SQLite
-      Pact.PersistPactDb.Regression
-      Pact.Server.PactService
-      Pact.Types.Crypto
-      Pact.Types.ECDSA
-      Pact.Types.Server
-      Pact.Types.SQLite
     build-depends:
-      , criterion >=1.1.4
-      , crypton
-      , direct-sqlite >=2.3.27
-      , memory
-      , safe-exceptions >=0.1.5.0
-      , servant-client >=0.16
-      , servant-client-core >=0.16
-      , statistics >=0.13.3
-      , yaml
-    if flag(build-tool)
-      hs-source-dirs: src-tool
-      cpp-options: -DBUILD_TOOL
-      exposed-modules:
-        Pact.Docgen
-        Pact.Analyze
-        Pact.Analyze.Alloc
-        Pact.Analyze.Eval
-        Pact.Analyze.Eval.Invariant
-        Pact.Analyze.Eval.Numerical
-        Pact.Analyze.Eval.Prop
-        Pact.Analyze.Eval.Core
-        Pact.Analyze.Eval.Term
-        Pact.Analyze.Check
-        Pact.Analyze.Errors
-        Pact.Analyze.Feature
-        Pact.Analyze.PactSFunArray
-        Pact.Analyze.Model
-        Pact.Analyze.Model.Dot
-        Pact.Analyze.Model.Graph
-        Pact.Analyze.Model.Tags
-        Pact.Analyze.Model.Text
-        Pact.Analyze.Parse
-        Pact.Analyze.Parse.Invariant
-        Pact.Analyze.Parse.Prop
-        Pact.Analyze.Parse.Types
-        Pact.Analyze.Patterns
-        Pact.Analyze.PrenexNormalize
-        Pact.Analyze.Translate
-        Pact.Analyze.Types
-        Pact.Analyze.Types.Capability
-        Pact.Analyze.Types.Eval
-        Pact.Analyze.Types.Languages
-        Pact.Analyze.Types.Model
-        Pact.Analyze.Types.Numerical
-        Pact.Analyze.Types.ObjUtil
-        Pact.Analyze.Types.Shared
-        Pact.Analyze.Types.Types
-        Pact.Analyze.Util
-        Pact.Analyze.Remote.Server
-        Pact.Bench
-        Pact.Main
-        Pact.ReplTools
-        Pact.Server.ApiServer
-        Pact.Server.History.Persistence
-        Pact.Server.History.Service
-        Pact.Server.History.Types
-        Pact.Server.Server
-        Pact.GasModel.GasModel
-        Pact.GasModel.Types
-        Pact.GasModel.Utils
-        Pact.GasModel.GasTests
-      build-depends:
-        , algebraic-graphs >=0.2
-        , async
-        , cassava >=0.5
-        , constraints
-        , fast-logger
-        , haskeline >=0.7.3
-        , mmorph >=1.1
-        , neat-interpolation >=0.4
-        , optparse-applicative >=0.12.1.0
-        , sbv >=9.0
-        , semigroupoids >=5.0
-        , servant-server
-        , transformers >= 0.5.2.0 && < 0.7
-        , wai-cors
-        , warp
-      if !os(windows)
-        build-depends: unix
-    if flag(cryptonite-ed25519)
-      cpp-options: -DCRYPTONITE_ED25519
-    else
-      build-depends:
-        , crypto-api
-        , ed25519-donna
-    if flag(tests-in-lib)
-      hs-source-dirs: tests
-      build-depends:
-        , hedgehog >=1.0.1
-        , hspec
-        , hspec-golden >=0.1.0.2
-        , hw-hspec-hedgehog >=0.1
-        , intervals
+      , crypto-api
+      , ed25519-donna
+  if flag(tests-in-lib)
+    hs-source-dirs: tests
+    build-depends:
+      , hedgehog >=1.0.1
+      , hspec
+      , hspec-golden >=0.1.0.2
+      , hw-hspec-hedgehog >=0.1
+      , intervals
 
 -- -------------------------------------------------------------------------- --
 -- Executables and Benchmarks
 
 executable pact
-  if impl(ghcjs) || !flag(build-tool)
+  if !flag(build-tool)
     buildable: False
   main-is:             Repl.hs
   build-depends:       base
@@ -362,7 +348,7 @@ executable pact
     ghc-options: -optP-Wno-nonportable-include-path
 
 benchmark bench
-  if impl(ghcjs) || !flag(build-tool)
+  if !flag(build-tool)
     buildable: False
   type:                exitcode-stdio-1.0
   main-is:             Bench.hs
@@ -374,7 +360,7 @@ benchmark bench
   default-language:    Haskell2010
 
 executable gasmodel
-  if impl(ghcjs) || !flag(build-tool)
+  if !flag(build-tool)
     buildable: False
   main-is:             GasModel.hs
   build-depends:       base
@@ -385,7 +371,7 @@ executable gasmodel
   default-language:    Haskell2010
 
 benchmark bench-json
-  if impl(ghcjs) || !flag(build-tool)
+  if !flag(build-tool)
     buildable: False
   type: exitcode-stdio-1.0
   main-is: PactJson.hs
@@ -415,93 +401,87 @@ test-suite hspec
   cpp-options: -DLEGACY_PARSER -DDELTA_BYTES=1
   build-tool-depends: pact:pact
   build-depends:
+    , QuickCheck
     , aeson
     , attoparsec
     , base
+    , base16-bytestring
     , bound
     , bytestring
     , containers
     , data-default
+    , directory
+    , errors
+    , filepath
     , hspec
+    , lens
+    , mod
+    , mtl
     , pact
+    , pact-json >= 0.1
+    , semirings
+    , text
+    , transformers
+    , trifecta
     , unordered-containers
+    , vector
 
   other-modules:
     Blake2Spec
     KeysetSpec
-    RoundTripSpec
+    PactTestsSpec
+    ParserSpec
     PrincipalSpec
+    RoundTripSpec
+    SchemeSpec
+    SignatureSpec
     SizeOfSpec
     Test.Pact.Native.Pairing
+    Test.Pact.Parse
+    Test.Pact.Utils.LegacyValue
 
-  if !impl(ghcjs)
+  if flag(build-tool)
+    cpp-options: -DBUILD_TOOL
     other-modules:
-      PactTestsSpec
-      ParserSpec
-      SchemeSpec
-      SignatureSpec
-      Test.Pact.Parse
-      Test.Pact.Utils.LegacyValue
+      AnalyzePropertiesSpec
+      AnalyzeSpec
+      Analyze.Eval
+      Analyze.Gen
+      Analyze.TimeGen
+      Analyze.Translate
+      ClientSpec
+      CoverageSpec
+      DocgenSpec
+      GasModelSpec
+      GoldenSpec
+      HistoryServiceSpec
+      PactContinuationSpec
+      PersistSpec
+      RemoteVerifySpec
+      TypecheckSpec
+      PactCLISpec
+      ZkSpec
+      ReplSpec
+      PairingSpec
+      Utils
 
     build-depends:
-      , QuickCheck
-      , base16-bytestring
+      , Decimal
+      , deepseq
       , directory
-      , errors
-      , filepath
-      -- only used via CPP min version macro:
-      , pact-json >= 0.1
-      , lens
-      , mtl
-      , mod
-      , semirings
-      , text
-      , transformers
-      , trifecta
-      , vector
-
-    if flag(build-tool)
-      cpp-options: -DBUILD_TOOL
-      other-modules:
-        AnalyzePropertiesSpec
-        AnalyzeSpec
-        Analyze.Eval
-        Analyze.Gen
-        Analyze.TimeGen
-        Analyze.Translate
-        ClientSpec
-        CoverageSpec
-        DocgenSpec
-        GasModelSpec
-        GoldenSpec
-        HistoryServiceSpec
-        PactContinuationSpec
-        PersistSpec
-        RemoteVerifySpec
-        TypecheckSpec
-        PactCLISpec
-        ZkSpec
-        ReplSpec
-        PairingSpec
-        Utils
-
-      build-depends:
-        , Decimal
-        , deepseq
-        , directory
-        , exceptions
-        , hedgehog >=1.0.1
-        , hspec-golden >=0.1.0.2
-        , hspec-hedgehog
-        , groups
-        , http-client
-        , hw-hspec-hedgehog >=0.1
-        , intervals
-        , mmorph
-        , neat-interpolation
-        , sbv
-        , servant-client >=0.16
-        , temporary >=1.3
-        , yaml
-        , process
-        , posix-pty
+      , exceptions
+      , hedgehog >=1.0.1
+      , hspec-golden >=0.1.0.2
+      , hspec-hedgehog
+      , groups
+      , http-client
+      , hw-hspec-hedgehog >=0.1
+      , intervals
+      , mmorph
+      , neat-interpolation
+      , sbv
+      , servant-client >=0.16
+      , temporary >=1.3
+      , yaml
+      , process
+      , posix-pty

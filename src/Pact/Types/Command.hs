@@ -26,7 +26,6 @@
 
 module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
-#if !defined(ghcjs_HOST_OS)
   , mkCommand
   , mkCommand'
   , mkUnsignedCommand
@@ -36,9 +35,6 @@ module Pact.Types.Command
   , verifyUserSig
   , verifyCommand
   , SomeKeyPairCaps
-#else
-  , PPKScheme(..)
-#endif
   , ProcessedCommand(..),_ProcSucc,_ProcFail
   , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
@@ -82,12 +78,7 @@ import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
 
 
-#if !defined(ghcjs_HOST_OS)
 import Pact.Types.Crypto              as Base
-#else
-import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
-#endif
-
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -128,8 +119,6 @@ data ProcessedCommand m a =
   ProcFail !String
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
-
-#if !defined(ghcjs_HOST_OS)
 
 type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
 
@@ -238,10 +227,6 @@ verifyUserSig msg UserSig{..} Signer{..} =
             case formatPublicKeyBS (toScheme' _siScheme) (PubBS pubBS) of
               Right expectAddr -> givenAddr == expectAddr
               Left _           -> False
-
-#endif
-
-
 
 -- | Signer combines PPKScheme, PublicKey, and the Address (aka the
 --   formatted PublicKey).
