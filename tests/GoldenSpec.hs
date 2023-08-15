@@ -38,6 +38,9 @@ import Pact.Types.Persistence
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.JSON.Legacy.Value
+
+import qualified Pact.JSON.Encode as J
 
 spec :: Spec
 spec = do
@@ -141,7 +144,7 @@ doCRTest' ec tn code = beforeAllWith initRes $
     -- NOTE: an implication of "output roundtrip" is, on a golden failure, expected
     -- and actual are reversed, as the golden is read with 'readFromFile' which roundtrips.
     it "matches golden encoded" $ \r -> Golden
-      { output = encode r
+      { output = J.encode r
       , encodePretty = show
       , writeToFile = BL.writeFile
       , readFromFile = readOutputRoundtrip
@@ -156,14 +159,14 @@ doCRTest' ec tn code = beforeAllWith initRes $
         payload = Payload exec "" pubMeta [] Nothing
         pubMeta = def
         parsedCode = either error id $ parsePact code
-        exec = Exec $ ExecMsg parsedCode Null
+        exec = Exec $ ExecMsg parsedCode (toLegacyJson Null)
     applyCmd (newLogger neverLog "") Nothing dbEnv (constGasModel 0) 0 0 "" noSPVSupport ec Local cmd (ProcSucc cmd)
 
   -- hacks 'readFromFile' to run the golden value through the roundtrip.
   readOutputRoundtrip = fmap (tryEncode . eitherDecode) . BL.readFile
   tryEncode :: Either String (CommandResult Hash) -> BL.ByteString
   tryEncode (Left e) = error e
-  tryEncode (Right cr) = encode cr
+  tryEncode (Right cr) = J.encode cr
 
 cleanupActual :: String -> [String] -> IO ()
 cleanupActual testname subs = do
@@ -173,7 +176,7 @@ cleanupActual testname subs = do
     go tn = catch (removeFile $ "golden/" ++ tn ++ "/actual")
             (\(_ :: SomeException) -> return ())
 
-golden :: (Show a,FromJSON a,ToJSON a) => String -> a -> Golden a
+golden :: (Show a,FromJSON a, J.Encode a) => String -> a -> Golden a
 golden name obj = Golden
   { output = obj
   , encodePretty = elide . show
@@ -186,7 +189,7 @@ golden name obj = Golden
   where
     elide s | length s < 256 = s
             | otherwise = take 256 s ++ "..."
-    jsonEncode fp = BL.writeFile fp . encode
+    jsonEncode fp = BL.writeFile fp . J.encode
     jsonDecode fp = do
       r <- eitherDecode <$> BL.readFile fp
       case r of

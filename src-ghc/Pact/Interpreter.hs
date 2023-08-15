@@ -78,6 +78,8 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 
+import Pact.JSON.Legacy.Value
+
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
   pdPactDb :: !(PactDb e),
@@ -86,7 +88,7 @@ data PactDbEnv e = PactDbEnv {
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData {
-  mdData :: !Value,
+  mdData :: !LegacyValue,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
   mdSigners :: [Signer]
@@ -94,7 +96,7 @@ data MsgData = MsgData {
 
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData Null def h def
+initMsgData h = MsgData (toLegacyJson Null) def h def
 
 -- | Describes either a ContMsg or ExecMsg.
 -- ContMsg is represented as a 'Maybe PactExec'
@@ -104,7 +106,7 @@ initMsgData h = MsgData Null def h def
 type EvalInput = Either (Maybe PactExec) [Term Name]
 
 -- | Captures results of execution
-type EvalOutput = ([Term Name],[TxLog Value],Maybe TxId)
+type EvalOutput = ([Term Name],[TxLogJson],Maybe TxId)
 
 -- | Interpreter indirection for executing user action.
 newtype Interpreter e = Interpreter
@@ -125,7 +127,7 @@ data EvalResult = EvalResult
     -- ^ compiled user input
   , _erOutput :: ![PactValue]
     -- ^ Output values
-  , _erLogs :: ![TxLog Value]
+  , _erLogs :: ![TxLogJson]
     -- ^ Transaction logs
   , _erExec :: !(Maybe PactExec)
     -- ^ Result of defpact execution if any
@@ -185,7 +187,7 @@ setupEvalEnv
   -> ExecutionConfig
   -> IO (EvalEnv e)
 setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
-  gasRef <- newIORef 0
+  gasRef <- newIORef mempty
   warnRef <- newIORef mempty
   pure EvalEnv {
     _eeRefStore = refStore
@@ -296,16 +298,23 @@ interpret :: Interpreter e -> EvalEnv e -> EvalInput -> IO EvalResult
 interpret runner evalEnv terms = do
   ((rs,logs,txid),state) <-
     runEval def evalEnv $ evalTerms runner terms
-  gas <- readIORef (_eeGas evalEnv)
+  milliGas <- readIORef (_eeGas evalEnv)
   warnings <- readIORef (_eeWarnings evalEnv)
-  let gasLogs = _evalLogGas state
+  let pact48Disabled = views (eeExecutionConfig . ecFlags) (S.member FlagDisablePact48) evalEnv
+      gasLogs = _evalLogGas state
       pactExec = _evalPactExec state
       modules = _rsLoadedModules $ _evalRefs state
+      gasUsed = if pact48Disabled then milliGasToGas milliGas else gasRem milliGas
   -- output uses lenient conversion
   return $! EvalResult
     terms
     (map (elideModRefInfo . toPactValueLenient) rs)
-    logs pactExec gas modules txid gasLogs (_evalEvents state) warnings
+    logs pactExec gasUsed modules txid gasLogs (_evalEvents state) warnings
+  where
+    -- Round up by 1 if the `MilliGas` amount is in any way fractional.
+    gasRem (MilliGas milliGas) =
+      let (d, r) = milliGas `quotRem` millisPerGas
+      in Gas (if r == 0 then d else d+1)
 
 evalTerms :: Interpreter e -> EvalInput -> Eval e EvalOutput
 evalTerms interp input = withRollback (start (interpreter interp runInput) >>= end)

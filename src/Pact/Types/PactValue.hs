@@ -1,10 +1,11 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MagicHash #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 
 -- |
@@ -32,15 +33,6 @@ module Pact.Types.PactValue
   , _PObject
   , _PModRef
   , stripPactValueInfo
-  -- | Helper functions for generating arbitrary pact values
-  , PactValueGeneratorSize(..)
-  , decreaseGenSize
-  , genSomePactValue
-  , genTerminatingPactValueGuard
-  , genPactValueObjectMap
-  , genPactValueList
-  , genPactValueGuard
-  , genUserGuard
   ) where
 
 import Control.Applicative ((<|>))
@@ -48,13 +40,11 @@ import Control.DeepSeq (NFData)
 import Control.Lens (makePrisms,set)
 import Data.Aeson hiding (Value(..))
 import Data.Default (def)
-import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Generics hiding (Meta)
-import Test.QuickCheck
 
 import Pact.Types.Exp
 import Pact.Types.Pretty (Pretty(..),pretty,renderCompactText)
@@ -62,52 +52,7 @@ import Pact.Types.SizeOf
 import Pact.Types.Term
 import Pact.Types.Type (Type(TyAny))
 
--- | Determines how deep a generated PactValue _could_ be.
--- Restricts how many times a recursive PactValue constructor (i.e. PObject, PList, and PGuard)
--- can be called when creating a PactValue.
-genSomePactValue :: PactValueGeneratorSize -> Gen PactValue
-genSomePactValue TerminateFast = oneof
-  [ PLiteral <$> arbitrary
-  , PGuard <$> (oneof genTerminatingPactValueGuard) ]
-genSomePactValue s = oneof
-  [ PLiteral <$> arbitrary
-  , PList <$> genPactValueList (decreaseGenSize s)
-  , PObject <$> genPactValueObjectMap (decreaseGenSize s)
-  , PGuard <$> genPactValueGuard (decreaseGenSize s) ]
-
-data PactValueGeneratorSize = TerminateFast | RecurseOnce | RecurseTwice
-
-decreaseGenSize :: PactValueGeneratorSize -> PactValueGeneratorSize
-decreaseGenSize TerminateFast = TerminateFast -- lowest value
-decreaseGenSize RecurseOnce = TerminateFast
-decreaseGenSize RecurseTwice = RecurseOnce
-
-genTerminatingPactValueGuard :: [Gen (Guard PactValue)]
-genTerminatingPactValueGuard =
-  [ GPact <$> arbitrary
-  , GKeySet <$> arbitrary
-  , GKeySetRef <$> arbitrary
-  , GModule <$> arbitrary ]
-
-genPactValueObjectMap :: PactValueGeneratorSize -> Gen (ObjectMap PactValue)
-genPactValueObjectMap genSize = ObjectMap <$> M.fromList <$> genMap
-  where genOneKeyValue = do
-          f <- arbitrary :: Gen FieldKey
-          pv <- genSomePactValue genSize
-          pure (f, pv)
-        genMap = listOf1 genOneKeyValue
-
-genPactValueList :: PactValueGeneratorSize -> Gen (Vector PactValue)
-genPactValueList genSize = V.fromList <$> listOf1 (genSomePactValue genSize)
-
-genPactValueGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
-genPactValueGuard genSize = oneof (genTerminatingPactValueGuard <> [genUserGuard genSize])
-
-genUserGuard :: PactValueGeneratorSize -> Gen (Guard PactValue)
-genUserGuard genSize = do
-  args <- listOf1 (genSomePactValue genSize)
-  fun <- arbitrary  -- TODO enforce that it's a non-native Name
-  pure $ GUser $ UserGuard fun args
+import qualified Pact.JSON.Encode as J
 
 data PactValue
   = PLiteral Literal
@@ -117,21 +62,16 @@ data PactValue
   | PModRef ModRef
   deriving (Eq,Show,Generic,Ord)
 
-instance Arbitrary PactValue where
-  arbitrary = genSomePactValue RecurseTwice
-
 instance NFData PactValue
 
-instance ToJSON PactValue where
-  toJSON (PLiteral l) = toJSON l
-  toJSON (PObject o) = toJSON o
-  toJSON (PList v) = toJSON v
-  toJSON (PGuard x) = toJSON x
-  toJSON (PModRef (ModRef refName refSpec refInfo)) = object $
-    [ "refName" .= refName
-    , "refSpec" .= refSpec
-    ] ++
-    [ "refInfo" .= refInfo | refInfo /= def ]
+instance J.Encode PactValue where
+  build (PLiteral l) = J.build l
+  build (PObject o) = J.build o
+  build (PList v) = J.build (J.Array v)
+  build (PGuard x) = J.build x
+  build (PModRef m) = J.object $ modRefKeyValues_ m
+    -- this uses a non-standard alternative JSON encoding for 'ModRef'
+  {-# INLINE build #-}
 
 instance FromJSON PactValue where
   parseJSON v =
@@ -159,7 +99,6 @@ instance SizeOf PactValue where
   sizeOf ver (PObject o) = (constructorCost 1) + (sizeOf ver o)
   sizeOf ver (PGuard g) = (constructorCost 1) + (sizeOf ver g)
   sizeOf ver (PModRef m) = (constructorCost 1) + (sizeOf ver m)
-
 
 -- | Strict conversion.
 toPactValue :: Pretty n => Term n -> Either Text PactValue

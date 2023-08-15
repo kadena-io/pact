@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -30,6 +29,7 @@ import Prelude hiding (log)
 
 import Control.Concurrent
 import Control.Lens hiding ((<|))
+import Control.Monad (when)
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
 
@@ -56,11 +56,6 @@ import Pact.Types.Command
 import Pact.Types.Hash
 import Pact.Types.Server
 import Pact.Types.Version
-
-
-#if !MIN_VERSION_servant(0,16,0)
-type ServerError = ServantErr
-#endif
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()

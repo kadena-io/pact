@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -9,6 +8,7 @@ module PactContinuationSpec (spec) where
 
 import qualified Control.Exception as Exception
 import Control.Lens hiding ((.=))
+import Control.Monad (forM_)
 import Control.Monad.Reader
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as BSL8
@@ -38,12 +38,9 @@ import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import qualified Pact.JSON.Encode as J
 
 import Utils
-
-#if ! MIN_VERSION_servant_client(0,16,0)
-type ClientError = ServantError
-#endif
 
 ---- TESTS -----
 
@@ -52,7 +49,7 @@ spec = describe "pacts in dev server" $ do
   describe "testPactContinuation" testPactContinuation
   describe "testPactRollback" testPactRollback
   describe "testPactYield" testPactYield
-  describe "testTwoPartyEscrow" testTwoPartyEscrow
+  describe "testTwoPartyEscrow" $ sequential testTwoPartyEscrow
   describe "testOldNestedPacts" testOldNestedPacts
   describe "testManagedCaps" testManagedCaps
   describe "testElideModRefEvents" testElideModRefEvents
@@ -66,7 +63,7 @@ testElideModRefEvents = do
     results <- runAll' [cmd] noSPVSupport testFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
-        encode (_crEvents cr) `shouldSatisfy`
+        J.encode (J.Array (_crEvents cr)) `shouldSatisfy`
           (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
 
   it "doesn't elide on backcompat" $ do
@@ -74,7 +71,7 @@ testElideModRefEvents = do
     results <- runAll' [cmd] noSPVSupport backCompatFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
-        encode (_crEvents cr) `shouldSatisfy`
+        J.encode (J.Array (_crEvents cr)) `shouldSatisfy`
           (("refInfo" `isInfixOf`) . BSL8.unpack)
   where
     codePreFork =
@@ -1362,8 +1359,8 @@ makeExecCmd' nonce keyPairs code = mkExec code
   (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing nonce
 
 
-formatPubKeyForCmd :: SomeKeyPair -> Value
-formatPubKeyForCmd kp = toB16JSON $ formatPublicKey kp
+formatPubKeyForCmd :: SomeKeyPair -> T.Text
+formatPubKeyForCmd kp = toB16Text $ formatPublicKey kp
 
 
 

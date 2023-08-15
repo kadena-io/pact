@@ -18,8 +18,8 @@ module Pact.Coverage
   , writeCovReport'
   ) where
 
+import Control.Monad (foldM, when)
 import Control.Monad.IO.Class
-import Control.Monad.State.Strict
 import Data.Foldable
 import Data.IORef
 import qualified Data.HashMap.Strict as HM

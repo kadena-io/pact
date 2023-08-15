@@ -128,8 +128,8 @@ evalCap i scope inModule a@App{..} = do
       (cap,d,prep) <- appToCap a
       when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
       evalUserCapability i capFuns scope cap d $ do
-        g <- computeUserAppGas d _appInfo
-        void $ evalUserAppBody d prep _appInfo g reduceBody
+        computeUserAppGas d _appInfo
+        void $ evalUserAppBody d prep _appInfo reduceBody
 
 
 -- | Continuation to tie the knot with Pact.Eval (ie, 'apply') and also because the capDef is

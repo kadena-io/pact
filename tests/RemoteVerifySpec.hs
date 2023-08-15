@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -10,6 +9,7 @@ module RemoteVerifySpec (spec) where
 import Test.Hspec
 
 import Control.Lens
+import Control.Monad ((>=>))
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Except
 
@@ -29,10 +29,6 @@ import Pact.Server.API
 import Pact.Types.Runtime
 
 import Utils
-
-#if ! MIN_VERSION_servant_client(0,16,0)
-type ClientError = ServantError
-#endif
 
 spec :: Spec
 spec = do

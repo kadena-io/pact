@@ -1,4 +1,6 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -38,10 +40,12 @@ module Pact.ApiReq
 import Control.Applicative
 import Control.Error
 import Control.Lens hiding ((.=))
+import Control.Monad (foldM, forM, when)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Data.Aeson
-import Data.Aeson.Lens
+import qualified Data.Aeson.Key as AK
+import qualified Data.Aeson.KeyMap as AKM
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
@@ -62,6 +66,8 @@ import System.Exit hiding (die)
 import System.FilePath
 import System.IO
 
+import Test.QuickCheck
+
 import Pact.Parse
 import Pact.Types.API
 import Pact.Types.Capability
@@ -71,6 +77,12 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
+import qualified Pact.JSON.Encode as J
+import Pact.JSON.Legacy.Value
+import Pact.JSON.Yaml
+
+-- -------------------------------------------------------------------------- --
+-- ApiKeyPair
 
 -- | For fully-signed commands
 data ApiKeyPair = ApiKeyPair {
@@ -80,8 +92,29 @@ data ApiKeyPair = ApiKeyPair {
   _akpScheme :: Maybe PPKScheme,
   _akpCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
-instance ToJSON ApiKeyPair where toJSON = lensyToJSON 4
+
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
+
+instance J.Encode ApiKeyPair where
+  build o = J.object
+    [ "address" J..= _akpAddress o
+    , "secret" J..= _akpSecret o
+    , "scheme" J..= _akpScheme o
+    , "caps" J..= fmap J.Array (_akpCaps o)
+    , "public" J..= _akpPublic o
+    ]
+  {-# INLINE build #-}
+
+instance Arbitrary ApiKeyPair where
+  arbitrary = ApiKeyPair
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> scale (min 5) arbitrary
+
+-- -------------------------------------------------------------------------- --
+-- ApiSigner
 
 -- | For unsigned commands
 data ApiSigner = ApiSigner {
@@ -90,8 +123,27 @@ data ApiSigner = ApiSigner {
   _asScheme :: Maybe PPKScheme,
   _asCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
-instance ToJSON ApiSigner where toJSON = lensyToJSON 3
+
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
+
+instance J.Encode ApiSigner where
+  build o = J.object
+    [ "address" J..= _asAddress o
+    , "scheme" J..= _asScheme o
+    , "caps" J..= fmap J.Array (_asCaps o)
+    , "public" J..= _asPublic o
+    ]
+  {-# INLINE build #-}
+
+instance Arbitrary ApiSigner where
+  arbitrary = ApiSigner
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> scale (min 10) arbitrary
+
+-- -------------------------------------------------------------------------- --
+-- ApiPublicMeta
 
 data ApiPublicMeta = ApiPublicMeta
   { _apmChainId :: Maybe ChainId
@@ -102,21 +154,6 @@ data ApiPublicMeta = ApiPublicMeta
   , _apmCreationTime :: Maybe TxCreationTime
   } deriving (Eq, Show, Generic)
 
-instance ToJSON ApiPublicMeta where
-  toJSON (ApiPublicMeta cid s gl gp ttl ct) = object $ concat
-    [ "chainId" .?= cid
-    , "sender" .?= s
-    , "gasLimit" .?= gl
-    , "gasPrice" .?= gp
-    , "ttl" .?= ttl
-    , "creationTime" .?= ct
-    ]
-    where
-      k .?= v = case v of
-        Nothing -> mempty
-        Just v' -> [k .= v']
-
-
 instance FromJSON ApiPublicMeta where
   parseJSON = withObject "ApiPublicMeta" $ \o -> ApiPublicMeta
     <$> o .:? "chainId"
@@ -126,6 +163,24 @@ instance FromJSON ApiPublicMeta where
     <*> o .:? "ttl"
     <*> o .:? "creationTime"
 
+instance J.Encode ApiPublicMeta where
+  build o = J.object
+    [ "creationTime" J..?= _apmCreationTime o
+    , "ttl" J..?= _apmTTL o
+    , "gasLimit" J..?= _apmGasLimit o
+    , "chainId" J..?= _apmChainId o
+    , "gasPrice" J..?= _apmGasPrice o
+    , "sender" J..?= _apmSender o
+    ]
+  {-# INLINABLE build #-}
+
+instance Arbitrary ApiPublicMeta where
+  arbitrary = ApiPublicMeta
+    <$> arbitrary <*> arbitrary <*> arbitrary
+    <*> arbitrary <*> arbitrary <*> arbitrary
+
+-- -------------------------------------------------------------------------- --
+-- ApiReq
 
 data ApiReq = ApiReq {
   _ylType :: Maybe Text,
@@ -143,16 +198,66 @@ data ApiReq = ApiReq {
   _ylPublicMeta :: Maybe ApiPublicMeta,
   _ylNetworkId :: Maybe NetworkId
   } deriving (Eq,Show,Generic)
-instance ToJSON ApiReq where toJSON = lensyToJSON 3
+
 instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
+instance J.Encode ApiReq where
+  build o = J.object
+    [ "publicMeta" J..= _ylPublicMeta o
+    , "proof" J..= _ylProof o
+    , "data" J..= _ylData o
+    , "networkId" J..= _ylNetworkId o
+    , "rollback" J..= _ylRollback o
+    , "signers" J..= fmap J.Array (_ylSigners o)
+    , "step" J..= fmap J.Aeson (_ylStep o)
+    , "code" J..= _ylCode o
+    , "pactTxHash" J..= _ylPactTxHash o
+    , "type" J..= _ylType o
+    , "codeFile" J..= fmap (J.text . pack) (_ylCodeFile o)
+    , "keyPairs" J..= fmap J.Array (_ylKeyPairs o)
+    , "dataFile" J..= fmap (J.text . pack) (_ylDataFile o)
+    , "nonce" J..= _ylNonce o
+    ]
+  {-# INLINABLE build #-}
+
+instance Arbitrary ApiReq where
+  arbitrary = scale (min 5) $ ApiReq
+    <$> arbitrary <*> arbitrary <*> arbitrary
+    <*> arbitrary <*> arbitraryValue <*> arbitrary
+    <*> arbitrary <*> arbitrary <*> arbitrary
+    <*> arbitrary <*> arbitrary <*> arbitrary
+    <*> arbitrary <*> arbitrary
+   where
+    arbitraryValue = suchThat arbitrary (/= Just Null)
+
+
+-- -------------------------------------------------------------------------- --
+-- AddSigReq
 
 data AddSigsReq = AddSigsReq
   { _asrUnsigned :: Command Text
   , _asrSigs :: [UserSig]
   } deriving (Eq,Show,Generic)
-instance ToJSON AddSigsReq where toJSON = lensyToJSON 4
-instance FromJSON AddSigsReq where parseJSON = lensyParseJSON 4
+
+instance FromJSON AddSigsReq where
+  parseJSON = withObject "AddSigsReq" $ \o -> AddSigsReq
+    <$> o .: "unsigned"
+    <*> o .: "sigs"
+
+instance J.Encode AddSigsReq where
+  build o = J.object
+    [ "sigs" J..= J.Array (_asrSigs o)
+    , "unsigned" J..= _asrUnsigned o
+    ]
+  {-# INLINABLE build #-}
+
+instance Arbitrary AddSigsReq where
+  arbitrary = AddSigsReq
+    <$> arbitrary
+    <*> scale (min 5) arbitrary
+
+-- -------------------------------------------------------------------------- --
+-- Functions
 
 combineSigs :: [FilePath] -> Bool -> IO ByteString
 combineSigs fs outputLocal = do
@@ -166,7 +271,7 @@ combineSigDatas :: [SigData Text] -> Bool -> IO ByteString
 combineSigDatas [] _ = error "Nothing to combine"
 combineSigDatas sds outputLocal = do
   let hashes = S.fromList $ map _sigDataHash sds
-      cmds = S.fromList $ catMaybes $ map _sigDataCmd sds
+      cmds = S.fromList $ mapMaybe _sigDataCmd sds
   when (S.size hashes /= 1 || S.size cmds /= 1) $ do
     error "SigData files must contain exactly one unique hash and command.  Aborting..."
   let sigs = foldl1 f $ map _sigDataSigs sds
@@ -223,7 +328,7 @@ returnSigDataOrCommand  outputLocal sd
   | isPartialSigData = do
     case verifyPartialSigData sd of
       Right _ ->
-        pure $ Y.encodeWith yamlOptions sd
+        pure $ encodeYamlWith yamlOptions sd
       Left e -> do
         let msg = unlines ["Command verification failed!", e]
         hPutStrLn stderr msg >> hFlush stderr >> exitFailure
@@ -237,7 +342,7 @@ returnSigDataOrCommand  outputLocal sd
       Left "Number of signers in the payload does not match number of signers in the sigData"
     usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
     let failedSigs = filter (not . verifySig h) usrSigs
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
+    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
     _ <- verifyHash h (encodeUtf8 cmd)
     pure ()
     where
@@ -252,7 +357,7 @@ returnSigDataOrCommand  outputLocal sd
     sigs' <- foldrM toVerifPair [] sigs
     let scheme = toScheme ED25519
         failedSigs = filter (\(pk, sig) -> not $ verify scheme (toUntypedHash h) pk sig) sigs'
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (encode <$> failedSigs)
+    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
     pure ()
     where
     toVerifPair (PublicKeyHex pktext, Just UserSig{..}) m = do
@@ -264,10 +369,10 @@ returnSigDataOrCommand  outputLocal sd
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
 returnCommandIfDone outputLocal sd =
   case sigDataToCommand sd of
-    Left _ -> return $ Y.encodeWith yamlOptions sd
+    Left _ -> return $ encodeYamlWith yamlOptions sd
     Right c -> do
       let res = verifyCommand $ fmap encodeUtf8 c
-          out = if outputLocal then encode c else encode (SubmitBatch (c :| []))
+          out = if outputLocal then J.encode c else J.encode (SubmitBatch (c :| []))
       case res :: ProcessedCommand Value ParsedCode of
         ProcSucc _ -> pure $ BSL.toStrict out
         ProcFail e -> do
@@ -285,13 +390,19 @@ importKeyFile keyFile = do
   let ekp = do
         -- These keys are from genKeys in Main.hs. Might want to convert to a
         -- dedicated data type at some point.
-        pub <- parseB16TextOnly =<< note "Error parsing public key" (v ^? key "public" . _String)
-        sec <- parseB16TextOnly =<< note "Error parsing secret key" (v ^? key "secret" . _String)
+        pub <- getKey "public" v
+        sec <- getKey "secret" v
 
         importKeyPair defaultScheme (Just $ PubBS pub) (PrivBS sec)
   case ekp of
     Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
     Right kp -> return kp
+ where
+  getKey :: String -> Value -> Either String ByteString
+  getKey k (Data.Aeson.Object o) = case AKM.lookup (AK.fromString k) o of
+    Just (String t) -> parseB16TextOnly t
+    _ -> Left $ "Error parsing " <> k <> " key"
+  getKey k _ = Left $ "Error parsing " <> k <> " key"
 
 yamlOptions :: Y.EncodeOptions
 yamlOptions = Y.setFormat (Y.setWidth Nothing Y.defaultFormatOptions) Y.defaultEncodeOptions
@@ -307,8 +418,8 @@ apiReq fp local = do
 uapiReq :: FilePath -> IO ()
 uapiReq fp = do
   (_,exec) <- mkApiReq' True fp
-  let doEncode :: ToJSON b => b -> IO ()
-      doEncode = BS.putStrLn . Y.encodeWith yamlOptions
+  let doEncode :: J.Encode b => b -> IO ()
+      doEncode = BS.putStrLn . encodeYamlWith yamlOptions
   case commandToSigData exec of
     Left e -> dieAR $ "Error decoding command: " <> e
     Right a -> doEncode a
@@ -345,24 +456,26 @@ decodeYaml :: FromJSON b => FilePath -> IO b
 decodeYaml fp = either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
 
-putJSON :: ToJSON b => b -> IO ()
-putJSON = BSL.putStrLn . encode
+putJSON :: J.Encode b => b -> IO ()
+putJSON = BSL.putStrLn . J.encode
 
+-- | The formatting of the result and in particular the sorting items in the
+-- result is not specified. Do not use this function if deterministc and
+-- repeatable formatting is needed.
+--
 signCmd
   :: [FilePath]
   -> ByteString
-  -- ^ Takse a base64url encoded ByteString
+  -- ^ Takes a base64url encoded ByteString
   -> IO ByteString
 signCmd keyFiles bs = do
   case decodeBase64UrlUnpadded bs of
     Left e -> dieAR $ "stdin was not valid base64url: " <> e
     Right h -> do
       kps <- mapM importKeyFile keyFiles
-      let signSingle kp = do
+      fmap (encodeYaml . J.Object) $ forM kps $ \kp -> do
             sig <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
-            return $ toB16Text (getPublic kp) .= _usSig sig
-      sigs <- mapM signSingle kps
-      return $ Y.encode $ object sigs
+            return (asString (B16JsonBytes (getPublic kp)), _usSig sig)
 
 withKeypairsOrSigner
   :: Bool
@@ -449,7 +562,7 @@ mkExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         (Exec (ExecMsg code mdata))
+         (Exec (ExecMsg code (toLegacyJson mdata)))
   return $ decodeUtf8 <$> cmd
 
 -- | Construct an Exec request message
@@ -475,7 +588,7 @@ mkUnsignedExec code mdata pubMeta kps nid ridm = do
          pubMeta
          rid
          nid
-         (Exec (ExecMsg code mdata))
+         (Exec (ExecMsg code (toLegacyJson mdata)))
   return $ decodeUtf8 <$> cmd
 
 
@@ -538,7 +651,7 @@ mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
          pubMeta
          rid
          nid
-         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
 
@@ -571,7 +684,7 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          pubMeta
          (pack $ show rid)
          nid
-         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
 mkKeyPairs :: [ApiKeyPair] -> IO [SomeKeyPairCaps]

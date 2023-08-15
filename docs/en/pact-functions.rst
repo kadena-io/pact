@@ -2319,7 +2319,7 @@ env-keys
 
 *keys* ``[string]`` *→* ``string``
 
-DEPRECATED in favor of ‘set-sigs’. Set transaction signer KEYS. See
+DEPRECATED in favor of ‘env-sigs’. Set transaction signer KEYS. See
 ‘env-sigs’ for setting keys with associated capabilities.
 
 .. code:: lisp

@@ -53,6 +53,7 @@ import qualified Pact.Analyze.Remote.Types as Analyze
 import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Hash
+import Pact.Utils.Servant
 
 -- | Public Pact REST API.
 type ApiV1API = "api" :> "v1" :> (ApiSend :<|> ApiPoll :<|> ApiListen :<|> ApiLocal)
@@ -61,25 +62,25 @@ apiV1API :: Proxy ApiV1API
 apiV1API = Proxy
 
 type ApiSend = "send"
-  :> ReqBody '[JSON] SubmitBatch
-  :> Post '[JSON] RequestKeys
+  :> ReqBody '[PactJson] SubmitBatch
+  :> Post '[PactJson] RequestKeys
 
 type ApiPoll = "poll"
-  :> ReqBody '[JSON] Poll
-  :> Post '[JSON] PollResponses
+  :> ReqBody '[PactJson] Poll
+  :> Post '[PactJson] PollResponses
 
 type ApiListen = "listen"
-  :> ReqBody '[JSON] ListenerRequest
-  :> Post '[JSON] ListenResponse
+  :> ReqBody '[PactJson] ListenerRequest
+  :> Post '[PactJson] ListenResponse
 
 type ApiLocal = "local"
-  :> ReqBody '[JSON] (Command Text)
-  :> Post '[JSON] (CommandResult Hash)
+  :> ReqBody '[PactJson] (Command Text)
+  :> Post '[PactJson] (CommandResult Hash)
 
 #ifdef BUILD_TOOL
 type ApiVerify = "verify"
-  :> ReqBody '[JSON] Analyze.Request
-  :> Post '[JSON] Analyze.Response
+  :> ReqBody '[PactJson] Analyze.Request
+  :> Post '[PactJson] Analyze.Response
 #endif
 
 type ApiVersion = "version"

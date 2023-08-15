@@ -77,3 +77,94 @@
 
 (expect "selects correct test" (modB.get-test) "hello")
 (commit-tx)
+
+;;
+;; Module redeploy name resolution
+;;
+
+; In the following tests, we define a module `test-mod-redeploy-ref`, and then
+; redeploy the same module with the change to one capability: `test`.
+; In the old version, the `test` capability fails, in the new one it passes.
+
+(begin-tx)
+; First, demonstrate the behavior prior to pact-4.8.
+(env-exec-config ["DisablePact48"])
+
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+
+  (defcap test ()
+    (enforce false "boom"))
+
+  (defun f ()
+    (with-capability (test)
+      1))
+  )
+; Before pact-4.8, the updated capability will be ignored, and calls to a function
+; requiring that capability will fail.
+(expect-failure "Demonstrate defcap resolution." (f))
+
+(commit-tx)
+
+; The following module redeployment changed the capability `test` to pass.
+(begin-tx)
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+  (defcap test ()
+    true)
+
+  (defun f ()
+    (with-capability (free.test-mod-redeploy-ref.test)
+      1))
+
+  (defun f1 ()
+    (with-capability (test-mod-redeploy-ref.test)
+      1))
+
+  )
+; Before pact-4.8, the capability update (passing `test`) was ignored as the
+; full-qualified reference referenced the previously deployed version of the module.
+(expect-failure "Reproduce upgrade resolution bug with fully-qualified reference." (f))
+(expect-failure "Reproduce upgrade resolution bug with non-namespace-qualified reference." (f1))
+(commit-tx)
+
+
+;; Check Pact48 behaviour
+
+(begin-tx)
+(namespace 'free)
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+
+  (defcap test ()
+    (enforce false "boom"))
+
+  (defun f ()
+    (with-capability (test)
+      1))
+  )
+(commit-tx)
+
+(begin-tx)
+(namespace 'free)
+(env-exec-config []) ; reset
+
+(module test-mod-redeploy-ref g
+  (defcap g () true)
+  (defcap test ()
+    true)
+  (defun f ()
+    (with-capability (free.test-mod-redeploy-ref.test)
+      1))
+
+  (defun f1 ()
+    (with-capability (test-mod-redeploy-ref.test)
+      1))
+  )
+; These tests show that f now references the updated version of the capability.
+(expect "Demonstrate correct resolution with fully-qualified reference." 1 (f))
+(expect "Demonstrate correct resolution with non-namespace-qualified reference." 1 (f1))
+
+(commit-tx)

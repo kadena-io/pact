@@ -5,7 +5,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 -- |
@@ -62,11 +61,9 @@ import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.Aeson hiding ((.=),Object)
 import qualified Data.Attoparsec.Text as AP
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
@@ -105,6 +102,8 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
+
+import qualified Pact.JSON.Encode as J
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -164,7 +163,7 @@ enforceDef = defNative "enforce" enforce
             return (TLiteral (LBool True) def)
           else reduce msg >>= \case
             TLitString msg' -> failTx (_faInfo i) $ pretty msg'
-            e -> isOffChainForkedError >>= \case
+            e -> isOffChainForkedError FlagDisablePact47 >>= \case
               OffChainError -> evalError' i $ "Invalid message argument, expected string " <> pretty e
               OnChainError -> evalError' i $ "Invalid message argument, expected string, received argument of type: " <> pretty (typeof' e)
         cond' -> reduce msg >>= argsError i . reverse . (:[cond'])
@@ -259,24 +258,6 @@ formatDef =
   (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
   ["(format \"My {} has {}\" [\"dog\" \"fleas\"])"]
   "Interpolate VARS into TEMPLATE using {}."
-  where
-    format :: RNativeFun e
-    format i [TLitString s,TList es _ _] = do
-      let parts = T.splitOn "{}" s
-          plen = length parts
-      if | plen == 1 -> return $ tStr s
-         | plen - length es > 1 -> evalError' i "format: not enough arguments for template"
-         | otherwise -> do
-          let args = rep <$> V.toList es
-              !totalArgLen = sum (T.length <$> args)
-              inputLength = T.length s
-          unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
-          return $ tStr $ T.concat $ alternate parts (take (plen - 1) args)
-    format i as = argsError i as
-    rep (TLitString t) = t
-    rep t = renderCompactText t
-    alternate (x:xs) ys = x : alternate ys xs
-    alternate _ _ = []
 
 strToListDef :: NativeDef
 strToListDef = defGasRNative "str-to-list" strToList
@@ -334,7 +315,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ T.encodeUtf8 s
-      [a'] -> enforcePactValue a' >>= \pv -> go $ toStrict $ encode pv
+      [a'] -> enforcePactValue a' >>= \pv -> go $ J.encodeStrict pv
       _ -> argsError i as
       where go = return . tStr . asString . pactHash
 
@@ -347,7 +328,7 @@ ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
     if' :: NativeFun e
     if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
       TLiteral (LBool c') _ -> reduce (if c' then then' else else')
-      t -> isOffChainForkedError >>= \case
+      t -> isOffChainForkedError FlagDisablePact47 >>= \case
         OffChainError -> evalError' i $ "if: conditional not boolean: " <> pretty t
         OnChainError -> evalError' i $ "if: conditional not boolean, received value of type: " <> pretty (typeof' t)
 
@@ -460,13 +441,13 @@ describeNamespaceDef = setTopLevelOnly $ defGasRNative
     dnTy = TyUser (snd describeNamespaceSchema)
 
     describeNamespace :: GasRNativeFun e
-    describeNamespace g0 i as = case as of
+    describeNamespace i as = case as of
       [TLitString nsn] -> do
         readRow (getInfo i) Namespaces (NamespaceName nsn) >>= \case
           Just ns@(Namespace nsn' user admin) -> do
             let guardTermOf g = TGuard (fromPactValue <$> g) def
 
-            computeGas' g0 i (GPostRead (ReadNamespace ns)) $
+            computeGas' i (GPostRead (ReadNamespace ns)) $
               pure $ toTObject dnTy def
                 [ (dnUserGuard, guardTermOf user)
                 , (dnAdminGuard, guardTermOf admin)
@@ -484,13 +465,13 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
   \and GUARD will be rotated in its place."
   where
     defineNamespace :: GasRNativeFun e
-    defineNamespace g i as = case as of
+    defineNamespace i as = case as of
       [TLitString nsn, TGuard userg _, TGuard adming _] -> case parseName (_faInfo i) nsn of
         Left _ -> evalError' i $ "invalid namespace name format: " <> pretty nsn
-        Right _ -> go g i nsn userg adming
+        Right _ -> go i nsn userg adming
       _ -> argsError i as
 
-    go g0 fi nsn ug ag = do
+    go fi nsn ug ag = do
       let name = NamespaceName nsn
           info = _faInfo fi
           newNs = Namespace name ug ag
@@ -501,13 +482,13 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
         Just ns@(Namespace _ _ oldg) -> do
           -- if namespace is defined, enforce old guard
           nsPactValue <- toNamespacePactValue info ns
-          (g1,_) <- computeGas' g0 fi (GPostRead (ReadNamespace nsPactValue)) $ return ()
+          computeGas (Right fi) (GPostRead (ReadNamespace nsPactValue))
           enforceGuard fi oldg
-          computeGas' g1 fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
+          computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
         Nothing -> do
           enforcePolicy info name newNs
-          computeGas' g0 fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
+          computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
 
     enforcePolicy info nn ns = do
@@ -534,7 +515,7 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
       asBool =<< apply (App def' [] i) mkArgs
       where
         asBool (TLiteral (LBool allow) _) = return allow
-        asBool t = isOffChainForkedError >>= \case
+        asBool t = isOffChainForkedError FlagDisablePact47 >>= \case
           OffChainError -> evalError' fi $ "Unexpected return value from namespace policy: " <> pretty t
           OnChainError -> evalError' fi $ "Unexpected return value from namespace policy, received value of type: " <> pretty (typeof' t)
 
@@ -552,28 +533,28 @@ namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
   \until either the next namespace declaration, or the end of the tx."
   where
     namespace :: GasRNativeFun e
-    namespace g i as = case as of
+    namespace i as = case as of
       [TLitString nsn] ->
         ifExecutionFlagSet FlagDisablePact47
-          (go g i nsn)
+          (go i nsn)
           (if T.null nsn then
-             goEmpty g i
-           else go g i nsn)
+             goEmpty i
+           else go i nsn)
       _ -> argsError i as
 
-    goEmpty g0 fa = computeGas' g0 fa (GUnreduced [])
+    goEmpty fa = computeGas' fa (GUnreduced [])
       $ success "Namespace reset to root"
       $ evalRefs . rsNamespace .= Nothing
 
-    go g0 fa ns = do
+    go fa ns = do
       let name = NamespaceName ns
           info = _faInfo fa
 
       mNs <- readRow info Namespaces name
-      case (fromNamespacePactValue <$> mNs) of
+      case fromNamespacePactValue <$> mNs of
         Just n@(Namespace ns' g _) -> do
           nsPactValue <- toNamespacePactValue info n
-          computeGas' g0 fa (GPostRead (ReadNamespace nsPactValue)) $ do
+          computeGas' fa (GPostRead (ReadNamespace nsPactValue)) $ do
             -- Old behavior enforces ns at declaration.
             -- New behavior enforces at ns-related action:
             -- 1. Module install (NOT at module upgrade)
@@ -920,7 +901,7 @@ map' :: NativeFun e
 map' i as@[tLamToApp -> TApp app _,l] = gasUnreduced i as $ reduce l >>= \case
            TList ls _ _ -> (\b' -> TList b' TyAny def) <$> forM ls (apply app . pure)
            t ->
-            isOffChainForkedError >>= \case
+            isOffChainForkedError FlagDisablePact47 >>= \case
               OffChainError -> evalError' i $ "map: expecting list: " <> pretty (abbrev t)
               OnChainError -> evalError' i $ "map: expecting list, received argument of type: " <> pretty (typeof' t)
 map' i as = argsError' i as
@@ -929,16 +910,17 @@ list :: RNativeFun e
 list i as = return $ TList (V.fromList as) TyAny (_faInfo i) -- TODO, could set type here
 
 makeList :: GasRNativeFun e
-makeList g i [TLitInteger len,value] = case typeof value of
+makeList i [TLitInteger len,value] = case typeof value of
   Right ty -> do
-    ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
-    computeGas' g i ga $ return $
+    ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
+    ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing ts)
+    computeGas' i ga $ return $
       toTListV ty def $ V.replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
-makeList _ i as = argsError i as
+makeList i as = argsError i as
 
 enumerate :: GasRNativeFun e
-enumerate g i = \case
+enumerate i = \case
     [TLitInteger from', TLitInteger to', TLitInteger inc] ->
       createEnumerateList from' to' inc
     [TLitInteger from', TLitInteger to'] ->
@@ -953,10 +935,11 @@ enumerate g i = \case
       -- ^ size of the largest element.
       -> V.Vector Integer
       -- ^ The generated vector
-      -> Eval e (Gas, Term Name)
+      -> Eval e (Term Name)
     computeList len sz v = do
-      ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len (Just sz))
-      computeGas' g i ga $ pure $ toTListV tTyInteger def $ fmap toTerm v
+      ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
+      ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len (Just sz) ts)
+      computeGas' i ga $ pure $ toTListV tTyInteger def $ fmap toTerm v
 
     step to' inc acc
       | acc > to', inc > 0 = Nothing
@@ -975,15 +958,50 @@ enumerate g i = \case
         computeList g' (max (abs from') (abs to')) $ V.unfoldr (step to' inc) from'
 
 reverse' :: RNativeFun e
-reverse' _ [l@TList{}] = return $ over tList V.reverse l
-reverse' i as = argsError i as
+reverse' i [l@TList{}] = do
+  unlessExecutionFlagSet FlagDisablePact48 $ computeGas (Right i) (GReverse listLen)
+  pure $ over tList V.reverse l
+  where
+    listLen = V.length $ view tList l
+reverse' i args = argsError i args
+
+format :: RNativeFun e
+format i [TLitString s,TList es _ _] = do
+  let parts = T.splitOn "{}" s
+      plen = length parts
+  if | plen == 1 -> return $ tStr s
+     | plen - length es > 1 -> evalError' i "format: not enough arguments for template"
+     | otherwise -> do
+        args <- ifExecutionFlagSet FlagDisablePact48 formatLegacyArgs formatFullGassedArgs
+        return $ tStr $ T.concat $ alternate parts (take (plen - 1) args)
+  where
+    repVal (PLiteral (LString t)) = t
+    repVal t = renderCompactText t
+
+    repTerm (TLitString t) = t
+    repTerm t = renderCompactText t
+
+    alternate (x:xs) ys = x : alternate ys xs
+    alternate _ _ = []
+
+    formatLegacyArgs = do
+      let args = repTerm <$> V.toList es
+          !totalArgLen = sum (T.length <$> args)
+          inputLength = T.length s
+      unlessExecutionFlagSet FlagDisablePact44 $ computeGas (Right i) (GConcatenation inputLength totalArgLen)
+      pure args
+    formatFullGassedArgs = do
+      vals <- traverse enforcePactValue es
+      void $ computeGas (Right i) (GFormatValues s vals)
+      pure $ repVal <$> V.toList vals
+format i as = argsError i as
 
 fold' :: NativeFun e
 fold' i as@[tLamToApp -> app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \case
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a' -> apply (_tApp app) [r,a']) initv' ls
            t ->
-            isOffChainForkedError >>= \case
+            isOffChainForkedError FlagDisablePact47 >>= \case
               OffChainError -> evalError' i $ "fold: expecting list: " <> pretty (abbrev t)
               OnChainError -> evalError' i $ "fold: expecting list, received argument of type: " <> pretty (typeof' t)
 fold' i as = argsError' i as
@@ -998,7 +1016,7 @@ filter' i as@[tLamToApp -> app@TApp {},l] = gasUnreduced i as $ reduce l >>= \ca
       _ -> ifExecutionFlagSet FlagDisablePact420
              (return False)
              (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
-  t -> isOffChainForkedError >>= \case
+  t -> isOffChainForkedError FlagDisablePact47 >>= \case
       OffChainError -> evalError' i $ "filter: expecting list: " <> pretty (abbrev t)
       OnChainError -> evalError' i $ "filter: expecting list, received argument of type: " <> pretty (typeof' t)
 filter' i as = argsError' i as
@@ -1107,7 +1125,7 @@ bind i as = argsError' i as
 bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Name))
 bindObjectLookup (TObject (Object (ObjectMap o) _ _ _) _) =
   return $ \s -> M.lookup (FieldKey s) o
-bindObjectLookup t = isOffChainForkedError >>= \case
+bindObjectLookup t = isOffChainForkedError FlagDisablePact47 >>= \case
   OffChainError -> evalError (_tInfo t) $ "bind: expected object: " <> pretty t
   OnChainError -> evalError (_tInfo t) $ "bind: expected object, received value of type: " <> pretty (typeof' t)
 
@@ -1121,7 +1139,7 @@ listModules i _ = do
   return $ toTermList tTyString $ map asString mods
 
 yield :: GasRNativeFun e
-yield g i as = case as of
+yield i as = case as of
   [u@(TObject t _)] -> go t Nothing u
   [u@(TObject t _), (TLitString cid)] -> go t (Just $ ChainId cid) u
   _ -> argsError i as
@@ -1141,58 +1159,58 @@ yield g i as = case as of
                 then evalError' i "Cross-chain yield not allowed in step with rollback"
                 else fmap (\p -> Yield o' p sourceChain) $ provenanceOf i t
           szVer <- getSizeOfVersion
-          computeGas' g i (GPreWrite (WriteYield y) szVer) $ do
+          computeGas' i (GPreWrite (WriteYield y) szVer) $ do
             evalPactExec . _Just . peYield .= Just y
             return u
 
 resume :: NativeFun e
 resume i as = case as of
   [TBinding ps bd (BindSchema _) bi] -> do
-    (g0,_) <- gasUnreduced i as $ return ()
+    computeGas (Right i) (GUnreduced as)
     rm <- preview $ eePactStep . _Just . psResume . _Just
     case rm of
       Nothing -> evalError' i "Resume: no yielded value in context"
       Just y -> do
-        computeGas' g0 i (GPostRead (ReadYield y)) $ do
+        computeGas' i (GPostRead (ReadYield y)) $ do
           o <- fmap fromPactValue . _yData <$> enforceYield i y
           l <- bindObjectLookup (toTObjectMap TyAny def o)
           bindReduce ps bd bi l
   _ -> argsError' i as
 
 where' :: NativeFun e
-where' i as@[k',tLamToApp -> app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
+where' i as@[k',tLamToApp -> app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \case
   (k,r@TObject {}) -> lookupObj k (_oObject $ _tObject r) >>= \v -> apply (_tApp app) [v]
   _ -> argsError' i as
 where' i as = argsError' i as
 
 distinct :: GasRNativeFun e
-distinct g i = \case
-    [l@(TList v _ _ )] | V.null v -> pure (g,l)
+distinct i = \case
+    [l@(TList v _ _ )] | V.null v -> pure l
     [TList{..}] -> _tList
         & V.toList
         & L.nubBy termEq
         & V.fromList
         & toTListV _tListType def
         & pure
-        & computeGas' g i (GDistinct $ V.length _tList)
+        & computeGas' i (GDistinct $ V.length _tList)
     as -> argsError i as
 
 
 sort' :: GasRNativeFun e
-sort' g _ [l@(TList v _ _)] | V.null v = pure (g,l)
-sort' g i [TList{..}] = computeGas' g i (GSort (V.length _tList)) $ liftIO $ do
+sort' _ [l@(TList v _ _)] | V.null v = pure l
+sort' i [TList{..}] = computeGas' i (GSort (V.length _tList)) $ liftIO $ do
   m <- V.thaw _tList
   (`V.sortBy` m) $ \x y -> case (x,y) of
     (TLiteral xl _,TLiteral yl _) -> xl `compare` yl
     _ -> EQ
   toTListV _tListType def <$> V.freeze m
-sort' g0 fa [TList fields _ fi,l@(TList vs lty _)]
+sort' fa [TList fields _ fi,l@(TList vs lty _)]
   | V.null fields = evalError fi "Empty fields list"
-  | V.null vs = return (g0,l)
+  | V.null vs = return l
   | otherwise = do
-      (g1,_) <- computeGas' g0 fa (GSort (V.length vs)) $ return ()
+      computeGas (Right fa) (GSort (V.length vs))
       fields' <- asKeyList fields
-      computeGas' g1 fa (GSortFieldLookup (S.size fields')) $ liftIO $ do
+      computeGas' fa (GSortFieldLookup (S.size fields')) $ liftIO $ do
         m <- V.thaw vs
         (`V.sortBy` m) $ \x y -> case (x,y) of
           (TObject (Object (ObjectMap xo) _ _ _) _,TObject (Object (ObjectMap yo) _ _ _) _) ->
@@ -1203,7 +1221,7 @@ sort' g0 fa [TList fields _ fi,l@(TList vs lty _)]
             in foldr go EQ fields'
           _ -> EQ
         toTListV lty def <$> V.freeze m
-sort' _ i as = argsError i as
+sort' i as = argsError i as
 
 
 -- See: note in pact-version native
@@ -1260,16 +1278,36 @@ identity _ [a'] = return a'
 identity i as = argsError i as
 
 concat' :: GasRNativeFun e
-concat' g i [TList ls _ _] = computeGas' g i (GMakeList $ fromIntegral $ V.length ls) $ let
-  -- Use GMakeList because T.concat is O(n) on the number of strings in the list
-  ls' = V.toList ls
-  concatTextList = flip TLiteral def . LString . T.concat
-  in fmap concatTextList $ forM ls' $ \case
-    TLitString s -> return s
-    t -> isOffChainForkedError >>= \case
-      OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
-      OnChainError -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
-concat' _ i as = argsError i as
+concat' i [TList ls _ _] = do
+
+  disablePact48 <- isExecutionFlagSet FlagDisablePact48
+  let concatGasCost =
+        if disablePact48
+        then
+          -- Prior to pact-4.8, gas cost is proportional to the number of
+          -- strings being concatenated.
+          GMakeList $ fromIntegral $ V.length ls
+        else
+          -- Beginning with pact-4.8, gas cost in proportional to the number of
+          -- characters being concatinated and the length of the list.
+          let nChars = sum $ termLen <$> ls
+                where
+                  termLen t = case t of
+                    TLitString s -> T.length s
+                    _ -> 0
+              nStrings = V.length ls
+          in
+          GTextConcatenation nChars nStrings
+  computeGas' i concatGasCost $
+    let
+      ls' = V.toList ls
+      concatTextList = flip TLiteral def . LString . T.concat
+    in fmap concatTextList $ forM ls' $ \case
+      TLitString s -> return s
+      t -> isOffChainForkedError FlagDisablePact47 >>= \case
+        OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
+        OnChainError -> evalError' i $ "concat: expected list of strings, received value of type: " <> pretty (typeof' t)
+concat' i as = argsError i as
 
 -- | Converts a string to a vector of single character strings
 -- Ex. "kda" -> [ "k", "d", "a"]
@@ -1277,11 +1315,12 @@ stringToCharList :: Text -> V.Vector (Term a)
 stringToCharList t = V.fromList $ tLit . LString . T.singleton <$> T.unpack t
 
 strToList :: GasRNativeFun e
-strToList g i [TLitString s] = do
+strToList i [TLitString s] = do
   let len = fromIntegral $ T.length s
-  ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing)
-  computeGas' g i ga $ return $ toTListV tTyString def $ stringToCharList s
-strToList _ i as = argsError i as
+  ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
+  ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing ts)
+  computeGas' i ga $ return $ toTListV tTyString def $ stringToCharList s
+strToList i as = argsError i as
 
 strToInt :: RNativeFun e
 strToInt i as =

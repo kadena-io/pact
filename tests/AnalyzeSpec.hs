@@ -4167,6 +4167,11 @@ spec = describe "analyze" $ do
         @model [(property (= result 115))]
         (fold (+) 0 [100 10 5]))
       |]
+    expectVerified [text|
+      (defun test:bool ()
+        @model[(property (= result false))]
+        (fold (lambda (p: bool curr:string) false) false [""]))
+      |]
 
   describe "and?" $ do
     expectVerified [text|
@@ -4192,6 +4197,24 @@ spec = describe "analyze" $ do
         @model [(property (= result "string"))]
         (typeof "foo"))
       |]
+
+  describe "nested application of higher-order functions (regression #1250)" $ do
+    expectVerified [text|
+        (defun child: bool (accParent: bool l: [integer])
+           (fold (lambda (acc:bool x:integer) (and (= x 0) acc)) accParent l))
+
+        (defun parent: bool ()
+           @model[(property (= result false))]
+           (fold (child) true [[1]]))
+     |]
+
+    expectVerified [text|
+        (defun child: [bool] (l : [integer])
+          (map (= 0) l))
+
+        (defun parent: [[bool]] ()
+          (map (child) [[1]]))
+     |]
 
   -- TODO: pending sbv unicode fix
   -- describe "unicode strings" $
@@ -4593,4 +4616,39 @@ spec = describe "analyze" $ do
          { "block-height" := block-height
          , "block-time"   := block-time }
          (* block-height  x)))
+      |]
+
+  describe "Properties involving `or?` and `and?` are handled" $ do
+    expectVerified [text|
+       (defun test()
+       @model [ (property (or? (> 1) (> 2) 1))]
+         true)
+      |]
+    expectFalsified [text|
+       (defun test()
+       @model [ (property (or? (> 1) (> 2) 3))]
+         true)
+      |]
+    expectVerified [text|
+       (defun test()
+       @model [ (property (and? (> 1) (> 2) 0))]
+         true)
+      |]
+    expectFalsified [text|
+       (defun test()
+       @model [ (property (and? (> 1) (> 2) 3))]
+         true)
+      |]
+
+    expectVerified [text|
+       (defun test(x: integer y: integer z: integer)
+       @model [ (property (or? (> x) (> y) z))]
+       (enforce (or? (> x) (> y) z) "")
+         true)
+      |]
+    expectVerified [text|
+       (defun test(x: integer y: integer z: integer)
+       @model [ (property (and? (> x) (> y) z))]
+       (enforce (and? (> x) (> y) z) "")
+         true)
       |]

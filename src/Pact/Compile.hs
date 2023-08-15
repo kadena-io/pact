@@ -48,6 +48,7 @@ import qualified Data.Set as S
 import Data.String
 import Data.Text (Text,unpack, pack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Text.Prettyprint.Doc.Compat (docToInternal)
 import qualified Data.Vector as V
 
 import Text.Megaparsec as MP
@@ -585,7 +586,8 @@ abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int T
 abstractBody term args = abstractBody' args =<< bodyForm term
 
 abstractBody' :: [Arg (Term Name)] -> Term Name -> Compile (Scope Int Term Name)
-abstractBody' args body = traverse enrichDynamic $ abstract (`elemIndex` bNames) body
+abstractBody' args body =
+  (if M.null modRefArgs then pure else traverse enrichDynamic) $ abstract (`elemIndex` bNames) body
   where
     bNames = map arg2Name args
 
@@ -723,7 +725,7 @@ _compileF :: FilePath -> IO (Either PactError [Term Name])
 _compileF f = _parseF f >>= _compile id
 
 handleParseError :: TF.Result a -> IO a
-handleParseError (TF.Failure f) = putDoc (TF._errDoc f) >> error "parseFailed"
+handleParseError (TF.Failure f) = putDoc (docToInternal $ TF._errDoc f) >> error "parseFailed"
 handleParseError (TF.Success a) = return a
 
 _compileWith :: Compile a -> (ParseState CompileState -> ParseState CompileState) ->
@@ -767,7 +769,7 @@ _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
     p <- _parseF f
     rs <- case p of
-            (TF.Failure e) -> putDoc (TF._errDoc e) >> error "Parse failed"
+            (TF.Failure e) -> putDoc (docToInternal $ TF._errDoc e) >> error "Parse failed"
             (TF.Success (es,s)) -> return $ map (compile def s) es
     case sequence rs of
       Left e -> throwIO $ userError (show e)
