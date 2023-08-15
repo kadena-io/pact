@@ -45,18 +45,8 @@ import Test.QuickCheck.Instances()
 import qualified Pact.JSON.Encode as J
 import Pact.JSON.Legacy.Hashable (LegacyHashable)
 
-#if !defined(ghcjs_HOST_OS)
-
 import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
-
-#else
-
-import Crypto.Hash.Blake2Native
-
-#endif
-
-
 
 -- | Untyped hash value, encoded with unpadded base64url.
 -- Within Pact these are blake2b_256 but unvalidated as such,
@@ -99,7 +89,7 @@ instance ParseText Hash where
   {-# INLINE parseText #-}
 
 
--- | All supported hashes in Pact (although not necessarily GHCJS pact).
+-- | All supported hashes in Pact
 data HashAlgo =
   Blake2b_256 |
   SHA3_256
@@ -173,8 +163,6 @@ pactHashLength :: Int
 pactHashLength = hashLength Blake2b_256
 
 
-#if !defined(ghcjs_HOST_OS)
-
 hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
 hash = TypedHash . toShort . go
   where
@@ -184,19 +172,6 @@ hash = TypedHash . toShort . go
       SHA3_256 -> ByteArray.convert . Crypto.hashWith Crypto.SHA3_256
 {-# INLINE hash #-}
 
-#else
-
-hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
-hash bs = TypedHash (toShort go)
-  where
-    algo = reflect (Proxy :: Proxy h)
-    go = case algo of
-      Blake2b_256 -> case blake2b (hashLength algo) mempty bs of
-        Left _ -> error "hashing failed"
-        Right h -> h
-      _ -> error $ "Unsupported hash algo: " ++ show algo
-
-#endif
 verifyHash :: Reifies h HashAlgo => TypedHash h -> ByteString -> Either String Hash
 verifyHash h b = if hashed == h
   then Right (toUntypedHash h)

@@ -4,8 +4,8 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE TypeOperators     #-}
 
--- | HTTP Server for GHCJS to use verification from the browser (where we can't
--- run sbv).
+-- | HTTP Server to use for remote verification
+--
 module Pact.Analyze.Remote.Server
   ( verifyHandler
   , runServantServer
