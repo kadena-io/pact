@@ -29,6 +29,8 @@
   ( (h1 (get-hash "a"))
     (h2 (get-hash "b"))
   )
+  (enforce (= h1 "eU1QsrHzLyYN9620ongvIlpxzzX1KiVGbTDBT6zbh14") "h1 does not match expected value")
+  (enforce (= h2 "q9JZXDohMARxsVUtQWCiK7APdaiYpvqfJyq-aF3LhAA") "h2 does not match expected value")
   (expect-failure "hashes do not match pre-fork" (enforce (= h1 h2) "boom"))
   )
 
@@ -43,6 +45,7 @@
   ( (h1 (get-hash "a"))
     (h2 (get-hash "b"))
   )
+  (enforce (= h1 "0j95GFheG-uAWbGAjvTqV4QSGE74ZY38jxnNuHJ2p8A") "h1 does not match expected value")
   (expect "hashes match post-fork" true (enforce (= h1 h2) "boom"))
   )
 (commit-tx)
