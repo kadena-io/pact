@@ -96,7 +96,6 @@ shouldBeProcFail pcmd = pcmd `shouldSatisfy` isProcFail
 
 ---- HSPEC TESTS ----
 
-#if !defined(ghcjs_HOST_OS)
 spec :: Spec
 spec = describe "working with crypto schemes" $ do
   describe "test importing Key Pair for each Scheme" testKeyPairImport
@@ -106,9 +105,6 @@ spec = describe "working with crypto schemes" $ do
   describe "test UserSig creation and verificaton" testUserSig
   describe "test signature non-malleability" testSigNonMalleability
   describe "testSigsRoundtrip" testSigsRoundtrip
-#else
-spec = return ()
-#endif
 
 testKeyPairImport :: Spec
 testKeyPairImport = do

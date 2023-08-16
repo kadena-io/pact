@@ -25,8 +25,11 @@ module Pact.Types.Gas
   , GasModel(..)
   , GasArgs(..)
   , GasLimit(..)
+  , MilliGasLimit(..)
   , ZKGroup(..)
   , ZKArg(..)
+  , IntOpThreshold(..)
+  , gasLimitToMilliGasLimit
     -- * optics
   , geGasLimit
   , geGasPrice
@@ -41,6 +44,7 @@ import Data.Text (Text, unpack)
 import Data.Aeson.Types (Parser)
 import Data.Serialize
 import Data.Decimal
+import qualified Data.Vector as V
 
 import GHC.Generics
 
@@ -135,7 +139,10 @@ data GasArgs
   | GSortFieldLookup !Int
   -- ^ Cost of sorting by lookup fields
   | GConcatenation !Int !Int
-  -- ^ Cost of concatenating two strings, lists, and objects
+  -- ^ Cost of concatenating two strings before pact 4.8, lists, and objects
+  | GTextConcatenation !Int !Int
+  -- ^ Cost of concatenating a list of strings with the given total character
+  -- count and list length after pact 4.8
   | GUnreduced ![Term Ref]
   -- ^ Cost of using a native function
   | GPostRead !ReadValue
@@ -160,13 +167,28 @@ data GasArgs
   -- ^ The cost of the in-memory representation of the module
   | GPrincipal !Int
   -- ^ the cost of principal creation and validation
-  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer)
+  | GIntegerOpCost !(Integer, Maybe Integer) !(Integer, Maybe Integer) IntOpThreshold
   -- ^ Integer costs
   | GDecimalOpCost !Decimal !Decimal
   -- ^ Decimal costs
-  | GMakeList2 !Integer !(Maybe Integer)
+  | GMakeList2 !Integer !(Maybe Integer) IntOpThreshold
   -- ^ List versioning 2
   | GZKArgs !ZKArg
+  | GReverse !Int
+  -- ^ Cost of reversing a list of a given length
+  | GFormatValues !Text !(V.Vector PactValue)
+  -- ^ Cost of formatting with the given format string and args
+
+data IntOpThreshold
+  = Pact43IntThreshold
+  | Pact48IntThreshold
+  deriving (Eq, Show, Enum, Bounded)
+
+instance Pretty IntOpThreshold where
+  pretty = \case
+    Pact43IntThreshold -> "Pact43IntThreshold"
+    Pact48IntThreshold -> "Pact48IntThreshold"
+
 
 -- | The elliptic curve pairing group we are
 -- handling
@@ -202,6 +224,7 @@ instance Pretty GasArgs where
     GSelect {} -> "GSelect"
     GSortFieldLookup i -> "GSortFieldLookup:" <> pretty i
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
+    GTextConcatenation nChars nStrings -> "GTextConcatenation:" <> pretty nChars <> colon <> pretty nStrings
     GUnreduced {} -> "GUnreduced"
     GPostRead rv -> "GPostRead:" <> pretty rv
     GPreWrite wv szVer -> "GWrite:" <> pretty wv <> colon <> pretty szVer
@@ -216,10 +239,12 @@ instance Pretty GasArgs where
     GFoldDB -> "GFoldDB"
     GModuleMemory i -> "GModuleMemory: " <> pretty i
     GPrincipal i -> "GPrincipal: " <> pretty i
-    GIntegerOpCost i j -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j
+    GIntegerOpCost i j ts -> "GIntegerOpCost:" <> pretty i <> colon <> pretty j <> colon <> pretty ts
     GDecimalOpCost i j -> "GDecimalOpCost:" <> pretty (show i) <> colon <> pretty (show j)
-    GMakeList2 i k -> "GMakeList2:" <> pretty i <> colon <> pretty k
+    GMakeList2 i k ts -> "GMakeList2:" <> pretty i <> colon <> pretty k <> colon <> pretty ts
     GZKArgs arg -> "GZKArgs:" <> pretty arg
+    GReverse len -> "GReverse:" <> pretty len
+    GFormatValues s args -> "GFormatValues:" <> pretty s <> pretty (V.toList args)
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Generic)
@@ -236,10 +261,22 @@ instance FromJSON GasLimit where
 
 instance Wrapped GasLimit
 
+-- Todo: this probably overflows but do we care?
+gasLimitToMilliGasLimit :: GasLimit -> MilliGasLimit
+gasLimitToMilliGasLimit (GasLimit (ParsedInteger i)) =
+  MilliGasLimit (gasToMilliGas (fromIntegral i))
+
+newtype MilliGasLimit
+  = MilliGasLimit MilliGas
+  deriving (Eq, Ord)
+
+instance Show MilliGasLimit where
+  show (MilliGasLimit (MilliGas i)) = show i
+
 data GasModel = GasModel
   { gasModelName :: !Text
   , gasModelDesc :: !Text
-  , runGasModel :: !(Text -> GasArgs -> Gas)
+  , runGasModel :: Text -> GasArgs -> MilliGas
   }
 
 instance Show GasModel where
@@ -249,7 +286,7 @@ instance Pretty GasModel where
   pretty m = viaShow m
 
 data GasEnv = GasEnv
-  { _geGasLimit :: !GasLimit
+  { _geGasLimit :: !MilliGasLimit
   , _geGasPrice :: !GasPrice
   , _geGasModel :: !GasModel
   }

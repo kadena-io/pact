@@ -44,11 +44,6 @@ import Pact.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 
-#if defined(ghcjs_HOST_OS)
-import qualified Pact.Analyze.Remote.Client as RemoteClient
-import Data.Maybe
-#else
-
 import Criterion
 import Criterion.Types
 
@@ -59,7 +54,6 @@ import qualified Pact.Analyze.Check as Check
 import System.Directory
 # endif
 import qualified Pact.Types.Crypto as Crypto
-#endif
 
 import Pact.Typechecker
 import qualified Pact.Types.Typecheck as TC
@@ -99,15 +93,12 @@ initLibState' ldb@(LibDb db') verifyUri = do
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
 
-zeroGas :: Eval e a -> Eval e (Gas,a)
-zeroGas = fmap (0,)
-
 defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
-defZNative name fun = Native.defNative name $ \fi as -> zeroGas $ fun fi as
+defZNative name fun = Native.defNative name $ \fi as -> fun fi as
 
 defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defZRNative name fun = Native.defNative name (reduced fun)
-    where reduced f fi as = mapM reduce as >>= zeroGas . f fi
+    where reduced f fi as = mapM reduce as >>= f fi
 
 replDefs :: NativeModule
 replDefs = ("Repl",
@@ -345,7 +336,6 @@ mockSPV i as = case as of
   _ -> argsError i as
 
 formatAddr :: RNativeFun LibState
-#if !defined(ghcjs_HOST_OS)
 formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
   let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
       eitherEvalErr res effectStr transformFunc =
@@ -363,10 +353,6 @@ formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
            toB16Text
   return (tStr addr)
 formatAddr i as = argsError i as
-#else
-formatAddr i _ = evalError' i "Address formatting not supported in GHCJS"
-#endif
-
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
@@ -498,7 +484,7 @@ tx t fi as = do
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
   where
-    resetGas = views eeGas (`writeIORef` 0) >>= liftIO
+    resetGas = views eeGas (`writeIORef` mempty) >>= liftIO
     i = getInfo fi
     doBegin tname = do
       tid <- evalBeginTx i
@@ -602,7 +588,6 @@ expectThat i as = argsError' i as
 
 
 bench' :: ZNativeFun LibState
-#if !defined(ghcjs_HOST_OS)
 bench' i as = do
   e <- ask
   s <- get
@@ -625,9 +610,6 @@ bench' i as = do
                tperr = (1/(val - (sd/2))) - (1/(val + (sd/2)))
            liftIO $ putStrLn $ show (round tps :: Integer) ++ "/s, +-" ++ show (round tperr :: Integer) ++ "/s"
            return (tStr "Done")
-#else
-bench' i _ = evalError' i "Benchmarking not supported in GHCJS"
-#endif
 
 tc :: RNativeFun LibState
 tc i as = case as of
@@ -655,16 +637,7 @@ verify i = \case
   other -> argsError i other
   where
     go modName d = do
-#if defined(ghcjs_HOST_OS)
-      -- ghcjs: use remote server
-      (md,modules) <- _loadModules modName
-
-      uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
-      renderedLines <- liftIO $
-                       RemoteClient.verifyModule modules md uri
-      setop $ Output renderedLines
-      return (_failureMessage modName)
-#elif defined(BUILD_TOOL)
+#if defined(BUILD_TOOL)
     -- ghc + build-tool: run verify
       (md,modules) <- _loadModules modName
       de <- viewLibState _rlsDynEnv
@@ -710,15 +683,15 @@ envHash i as = argsError i as
 
 setGasLimit :: RNativeFun LibState
 setGasLimit _ [TLitInteger l] = do
-  setenv (eeGasEnv . geGasLimit) (fromIntegral l)
+  setenv (eeGasEnv . geGasLimit) (gasLimitToMilliGasLimit (fromIntegral l))
   return $ tStr $ "Set gas limit to " <> tShow l
 setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
 envGas _ [] = do
-  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral (milliGasToGas g))
 envGas _ [TLitInteger g] = do
-  putGas $ fromIntegral g
+  putGas $ gasToMilliGas (fromIntegral g)
   return $ tStr $ "Set gas to " <> tShow g
 envGas i as = argsError i as
 

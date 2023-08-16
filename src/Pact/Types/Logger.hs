@@ -21,10 +21,8 @@ import Control.Monad.Reader
 import Prelude hiding (log)
 import Control.Arrow
 import Data.Maybe
-#if !defined(ghcjs_HOST_OS)
 import Data.List
 import Data.Yaml as Y
-#endif
 import qualified Data.Text as T
 
 import Pact.Types.Util
@@ -117,7 +115,6 @@ instance Logging LogIO where
 runLogIO :: Logger -> LogIO a -> IO a
 runLogIO logger a = runReaderT (logIO a) logger
 
-#if !defined(ghcjs_HOST_OS)
 _test :: IO ()
 _test = do
   let config = "Default: {}       \n" <>
@@ -133,7 +130,6 @@ _test = do
       loggers = initLoggers putStrLn doLog rules
   forM_ (sort $ HM.keys (logRules rules)) $ \ln -> runLogIO (newLogger loggers ln) _stuff
   runLogIO (newLogger loggers "Unconfigured") _stuff
-#endif
 
 _stuff :: LogIO ()
 _stuff = ask >>= liftIO . print >> logInfo "hello" >> logError "buhbye"

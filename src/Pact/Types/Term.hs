@@ -90,7 +90,8 @@ module Pact.Types.Term
    prettyTypeTerm,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,termEq1,termRefEq,canEq,refEq,
-   Gas(..),
+   Gas(..), MilliGas(..),
+   gasToMilliGas, milliGasToGas, millisPerGas,
    module Pact.Types.Names
    ) where
 
@@ -213,7 +214,7 @@ instance (SizeOf d) => SizeOf (Ref' d)
 
 data NativeDFun = NativeDFun
   { _nativeName :: !NativeDefName
-  , _nativeFun :: !(forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name))
+  , _nativeFun :: !(forall m . Monad m => FunApp -> [Term Ref] -> m (Term Name))
   }
 
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b

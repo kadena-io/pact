@@ -3,25 +3,26 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Pact.Gas.Table where
 
-import Data.Ratio
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
-#if !defined(ghcjs_HOST_OS)
 import qualified GHC.Integer.Logarithms as IntLog
 import GHC.Int(Int(..))
-#endif
 
 import Pact.Types.Continuation
 import Pact.Types.Gas
 import Pact.Types.RowData
 import Pact.Types.SizeOf
 import Pact.Types.Term
+
+import Pact.Gas.Table.Format
 
 -- NB: If pact ends up not having any variadic primitives (currently, I didn't spot any thus far, but also the types don't rule it out)
 -- then the primTable here could lose the [Term Ref] function parameter, and simply be Map Text Gas.
@@ -38,6 +39,9 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_sortFactor :: Gas
   , _gasCostConfig_distinctFactor :: Gas
   , _gasCostConfig_concatenationFactor :: Gas
+  , _gasCostConfig_textConcatenationFactorOffset :: MilliGas -- up-front cost of text concatenation
+  , _gasCostConfig_textConcatenationFactorStringLen :: MilliGas -- additional cost of concatenation per character in the average string
+  , _gasCostConfig_textConcatenationFactorStrings :: MilliGas -- additional cost of concatenation per list item
   , _gasCostConfig_moduleCost :: Gas
   , _gasCostConfig_moduleMemberCost :: Gas
   , _gasCostConfig_useModuleCost :: Gas
@@ -47,6 +51,8 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_defPactCost :: Gas
   , _gasCostConfig_foldDBCost :: Gas
   , _gasCostConfig_principalCost :: Gas
+  , _gasCostConfig_reverseElemsPerGas :: Gas
+  , _gasCostConfig_formatBytesPerGas :: Gas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -57,6 +63,9 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_sortFactor = 1
   , _gasCostConfig_distinctFactor = 1
   , _gasCostConfig_concatenationFactor = 1  -- TODO benchmark
+  , _gasCostConfig_textConcatenationFactorOffset = MilliGas 50000
+  , _gasCostConfig_textConcatenationFactorStringLen = MilliGas 20
+  , _gasCostConfig_textConcatenationFactorStrings = MilliGas 40
   , _gasCostConfig_moduleCost = 1        -- TODO benchmark
   , _gasCostConfig_moduleMemberCost = 1
   , _gasCostConfig_useModuleCost = 1     -- TODO benchmark
@@ -66,6 +75,8 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_defPactCost = 1   -- TODO benchmark
   , _gasCostConfig_foldDBCost = 1
   , _gasCostConfig_principalCost = 5 -- matches 'hash' cost
+  , _gasCostConfig_reverseElemsPerGas = 100
+  , _gasCostConfig_formatBytesPerGas = 10
   }
 
 defaultGasTable :: Map Text Gas
@@ -230,36 +241,48 @@ tableGasModel :: GasCostConfig -> GasModel
 tableGasModel gasConfig =
   let run name ga = case ga of
         GUnreduced _ts -> case Map.lookup name (_gasCostConfig_primTable gasConfig) of
-          Just g -> g
+          Just g -> gasToMilliGas g
           Nothing -> error $ "Unknown primitive \"" <> T.unpack name <> "\" in determining cost of GUnreduced"
         GUserApp t -> case t of
-          Defpact -> (_gasCostConfig_defPactCost gasConfig) * _gasCostConfig_functionApplicationCost gasConfig
-          _ -> _gasCostConfig_functionApplicationCost gasConfig
-        GIntegerOpCost i j ->
-          intCost (fst i) + intCost (fst j)
-        GDecimalOpCost _ _ -> 0
-        GMakeList v -> expLengthPenalty v
-        GSort len -> expLengthPenalty len
-        GDistinct len -> expLengthPenalty len
-        GSelect mColumns -> case mColumns of
+          Defpact -> gasToMilliGas $ _gasCostConfig_defPactCost gasConfig * _gasCostConfig_functionApplicationCost gasConfig
+          _ -> gasToMilliGas $ _gasCostConfig_functionApplicationCost gasConfig
+        GIntegerOpCost i j ts ->
+          gasToMilliGas $ intCost ts (fst i) + intCost ts (fst j)
+        GDecimalOpCost _ _ -> mempty
+        GMakeList v -> gasToMilliGas $ expLengthPenalty v
+        GSort len -> gasToMilliGas $ expLengthPenalty len
+        GDistinct len -> gasToMilliGas $ expLengthPenalty len
+        GSelect mColumns -> gasToMilliGas $ case mColumns of
           Nothing -> 1
           Just [] -> 1
-          Just cs -> _gasCostConfig_selectColumnCost gasConfig * (fromIntegral (length cs))
+          Just cs -> _gasCostConfig_selectColumnCost gasConfig * fromIntegral (length cs)
         GSortFieldLookup n ->
-          fromIntegral n * _gasCostConfig_sortFactor gasConfig
-        GConcatenation i j ->
+          gasToMilliGas $ fromIntegral n * _gasCostConfig_sortFactor gasConfig
+        GConcatenation i j -> gasToMilliGas $
           fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
-        GFoldDB -> _gasCostConfig_foldDBCost gasConfig
-        GPostRead r -> case r of
+        GTextConcatenation nChars nStrings ->
+          let
+            MilliGas offsetCost = _gasCostConfig_textConcatenationFactorOffset gasConfig
+            MilliGas charCost = _gasCostConfig_textConcatenationFactorStringLen gasConfig
+            MilliGas stringCost = _gasCostConfig_textConcatenationFactorStrings gasConfig
+
+            costForAverageStringLength =
+              (fromIntegral nChars  * charCost) `div` fromIntegral nStrings
+            costForNumberOfStrings =
+              fromIntegral nStrings * stringCost
+          in
+           MilliGas $ offsetCost + costForAverageStringLength + costForNumberOfStrings
+        GFoldDB -> gasToMilliGas $ _gasCostConfig_foldDBCost gasConfig
+        GPostRead r -> gasToMilliGas $ case r of
           ReadData cols -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap $ _rdData cols))
           ReadKey _rowKey -> _gasCostConfig_readColumnCost gasConfig
           ReadTxId -> _gasCostConfig_readColumnCost gasConfig
-          ReadModule _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
-          ReadInterface _moduleName _mCode ->  _gasCostConfig_readColumnCost gasConfig
-          ReadNamespace _ns ->  _gasCostConfig_readColumnCost gasConfig
-          ReadKeySet _ksName _ks ->  _gasCostConfig_readColumnCost gasConfig
+          ReadModule _moduleName _mCode -> _gasCostConfig_readColumnCost gasConfig
+          ReadInterface _moduleName _mCode -> _gasCostConfig_readColumnCost gasConfig
+          ReadNamespace _ns -> _gasCostConfig_readColumnCost gasConfig
+          ReadKeySet _ksName _ks -> _gasCostConfig_readColumnCost gasConfig
           ReadYield (Yield _obj _ _) -> _gasCostConfig_readColumnCost gasConfig * fromIntegral (Map.size (_objectMap _obj))
-        GPreWrite w szVer -> case w of
+        GPreWrite w szVer -> gasToMilliGas $ case w of
           WriteData _type key obj ->
             (memoryCost szVer key (_gasCostConfig_writeBytesCost gasConfig))
             + (memoryCost szVer obj (_gasCostConfig_writeBytesCost gasConfig))
@@ -278,20 +301,25 @@ tableGasModel gasConfig =
             + (memoryCost szVer ks (_gasCostConfig_writeBytesCost gasConfig))
           WriteYield obj ->
             (memoryCost szVer (_yData obj) (_gasCostConfig_writeBytesCost gasConfig))
-        GModuleMember _module -> _gasCostConfig_moduleMemberCost gasConfig
-        GModuleDecl _moduleName _mCode -> (_gasCostConfig_moduleCost gasConfig)
-        GUse _moduleName _mHash -> (_gasCostConfig_useModuleCost gasConfig)
+        GModuleMember _module -> gasToMilliGas $ _gasCostConfig_moduleMemberCost gasConfig
+        GModuleDecl _moduleName _mCode -> gasToMilliGas (_gasCostConfig_moduleCost gasConfig)
+        GUse _moduleName _mHash -> gasToMilliGas (_gasCostConfig_useModuleCost gasConfig)
           -- The above seems somewhat suspect (perhaps cost should scale with the module?)
-        GInterfaceDecl _interfaceName _iCode -> (_gasCostConfig_interfaceCost gasConfig)
-        GModuleMemory i -> moduleMemoryCost i
-        GPrincipal g -> fromIntegral g * _gasCostConfig_principalCost gasConfig
-        GMakeList2 len msz ->
+        GInterfaceDecl _interfaceName _iCode -> gasToMilliGas (_gasCostConfig_interfaceCost gasConfig)
+        GModuleMemory i -> gasToMilliGas $ moduleMemoryCost i
+        GPrincipal g -> gasToMilliGas $ fromIntegral g * _gasCostConfig_principalCost gasConfig
+        GMakeList2 len msz ts ->
           let glen = fromIntegral len
-          in glen + maybe 0 ((* glen) . intCost) msz
-        GZKArgs arg -> case arg of
+          in gasToMilliGas $ glen + maybe 0 ((* glen) . intCost ts) msz
+        GZKArgs arg -> gasToMilliGas $ case arg of
           PointAdd g -> pointAddGas g
           ScalarMult g -> scalarMulGas g
           Pairing np -> pairingGas np
+        GReverse len -> gasToMilliGas $ fromIntegral len `quot` _gasCostConfig_reverseElemsPerGas gasConfig
+        GFormatValues s args ->
+          let totalBytesEstimate = estimateFormatText s + estimateFormatValues args
+          in gasToMilliGas $ fromIntegral totalBytesEstimate `quot` _gasCostConfig_formatBytesPerGas gasConfig
+
   in GasModel
       { gasModelName = "table"
       , gasModelDesc = "table-based cost model"
@@ -342,34 +370,22 @@ moduleMemoryCost sz = ceiling (moduleMemFeePerByte * fromIntegral sz) + 60000
 defaultGasModel :: GasModel
 defaultGasModel = tableGasModel defaultGasConfig
 
-#if !defined(ghcjs_HOST_OS)
 -- | Costing function for binary integer ops
-intCost :: Integer -> Gas
-intCost !a
-  | (abs a) < threshold = 0
+intCost :: IntOpThreshold -> Integer -> Gas
+intCost ts !a
+  | (abs a) < threshold ts = 0
   | otherwise =
     let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
     in fromIntegral (nbytes * nbytes `quot` 100)
   where
-  threshold :: Integer
-  threshold = (10 :: Integer) ^ (30 :: Integer)
-
+  threshold :: IntOpThreshold -> Integer
+  threshold Pact43IntThreshold = (10 :: Integer) ^ (30 :: Integer)
+  threshold Pact48IntThreshold = (10 :: Integer) ^ (80 :: Integer)
 
 _intCost :: Integer -> Int
 _intCost !a =
     let !nbytes = (I# (IntLog.integerLog2# (abs a)) + 1) `quot` 8
     in nbytes
-#else
-intCost :: Integer -> Gas
-intCost !a
-  | (abs a) < threshold = 0
-  | otherwise =
-    let !nbytes = (ceiling (logBase @Double 2 (fromIntegral (abs a))) + 1) `quot` 8
-    in (nbytes * nbytes) `quot` 100
-  where
-  threshold :: Integer
-  threshold = (10 :: Integer) ^ (30 :: Integer)
-#endif
 
 pact421GasModel :: GasModel
 pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
@@ -377,8 +393,8 @@ pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
   gasModel = tableGasModel gasConfig
   gasConfig = defaultGasConfig { _gasCostConfig_primTable = updTable }
   updTable = Map.union upd defaultGasTable
-  unknownOperationPenalty = 1000000
-  multiRowOperation = 40000
+  unknownOperationPenalty = gasToMilliGas (Gas 1_000_000)
+  multiRowOperation = Gas 40_000
   upd = Map.fromList
     [("keys",    multiRowOperation)
     ,("select",  multiRowOperation)
@@ -386,6 +402,6 @@ pact421GasModel = gasModel { runGasModel = modifiedRunFunction }
     ]
   modifiedRunFunction name ga = case ga of
     GUnreduced _ts -> case Map.lookup name updTable of
-      Just g -> g
+      Just g -> gasToMilliGas g
       Nothing -> unknownOperationPenalty
     _ -> runGasModel defaultGasModel name ga

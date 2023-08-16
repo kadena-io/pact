@@ -183,9 +183,8 @@ instance Arbitrary d => Arbitrary (Ref' d) where
 instance Arbitrary NativeDFun where
   arbitrary = do
     n <- arbitrary
-    g <- arbitrary
     t <- arbitrary
-    return $ NativeDFun n $ \_ _ -> return (g,t)
+    return $ NativeDFun n $ \_ _ -> return t
 
 instance Arbitrary n => Arbitrary (Def n) where
   arbitrary = Def

@@ -28,6 +28,7 @@ import Pact.Types.Capability
 import Pact.Types.KeySet
 import Pact.Types.Pretty
 import Pact.Types.Principal
+import Pact.Types.PactValue
 import Pact.Types.Runtime
 
 
@@ -179,7 +180,8 @@ createPrincipalDef =
 
 createPrincipal :: Info -> Guard (Term Name) -> Eval e Text
 createPrincipal i g = do
-  g' <- traverse enforcePactValue g
+  f <- ifExecutionFlagSet' FlagDisablePact48 id elideModRefInfo
+  g' <- traverse (fmap f . enforcePactValue) g
   mkPrincipalIdent <$> guardToPrincipal chargeGas g'
   where
     chargeGas amt =

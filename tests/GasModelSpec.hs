@@ -155,10 +155,10 @@ runTest t = runGasUnitTests t run run
   where
     run expr dbSetup = do
       (res, (gas, st)) <- bracket (setupEnv' dbSetup) (gasSetupCleanup dbSetup) $ \(e,s) -> do
-        writeIORef (_eeGas e) 0
+        writeIORef (_eeGas e) mempty
         res <- mockRun expr (e,s)
         gas <- readIORef (_eeGas e)
-        return ((gas,) <$> res)
+        return ((milliGasToGas gas,) <$> res)
       res' <- eitherDie (getDescription expr dbSetup) res
       return (res', st, gas)
     setupEnv' dbs = do
@@ -166,7 +166,8 @@ runTest t = runGasUnitTests t run run
       let
         flags = mkExecutionConfig
                [ FlagDisableInlineMemCheck, FlagDisablePactEvents
-               , FlagDisablePact43, FlagDisablePact44, FlagDisablePact45]
+               , FlagDisablePact43, FlagDisablePact44, FlagDisablePact45, FlagDisablePact48
+               ]
         r' = set eeExecutionConfig flags r
       pure (r', s)
 

@@ -270,7 +270,7 @@ data EvalEnv e = EvalEnv {
       -- | Gas Environment
     , _eeGasEnv :: !GasEnv
       -- | Tallied gas
-    , _eeGas :: !(IORef Gas)
+    , _eeGas :: !(IORef MilliGas)
       -- | Namespace Policy
     , _eeNamespacePolicy :: !NamespacePolicy
       -- | SPV backend
@@ -403,10 +403,10 @@ unlessExecutionFlagSet f onFalse =
   ifExecutionFlagSet f (return ()) (void onFalse)
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
-call :: StackFrame -> Eval e (Gas,a) -> Eval e a
+call :: StackFrame -> Eval e a -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act
+  r <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
@@ -494,7 +494,7 @@ throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = do
   s <- use evalCallStack
-  offChainOrPreFork <- isOffChainForkedError'
+  offChainOrPreFork <- isOffChainForkedError' FlagDisablePact47
   throwM (PactError ctor i (if offChainOrPreFork then s else []) err)
 
 evalError :: Info -> Doc -> Eval e a
@@ -510,12 +510,12 @@ data OnChainErrorState
 
 -- | Function to determine whether we are either pre-errors fork
 -- or in a repl environment.
-isOffChainForkedError :: Eval e OnChainErrorState
-isOffChainForkedError = isOffChainForkedError' <&> \p -> if p then OffChainError else OnChainError
+isOffChainForkedError :: ExecutionFlag -> Eval e OnChainErrorState
+isOffChainForkedError flag = isOffChainForkedError' flag <&> \p -> if p then OffChainError else OnChainError
 
-isOffChainForkedError' :: Eval e Bool
-isOffChainForkedError' =
-  isExecutionFlagSet FlagDisablePact47 >>= \case
+isOffChainForkedError' :: ExecutionFlag -> Eval e Bool
+isOffChainForkedError' flag =
+  isExecutionFlagSet flag >>= \case
     True -> pure True
     False -> view eeInRepl
 
@@ -538,13 +538,13 @@ throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) r
 
 argsError :: FunApp -> [Term Name] -> Eval e a
 argsError i as =
-  isOffChainForkedError >>= \case
+  isOffChainForkedError FlagDisablePact47 >>= \case
     OffChainError -> throwArgsError i as "Invalid arguments"
     OnChainError -> throwOnChainArgsError i as
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as =
-  isOffChainForkedError >>= \case
+  isOffChainForkedError FlagDisablePact47 >>= \case
     OffChainError -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
     OnChainError -> throwOnChainArgsError i as
 
