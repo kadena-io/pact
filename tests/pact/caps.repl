@@ -850,3 +850,92 @@
  "cap pact guard fails on wrong pact id"
  "Invalid Pact ID"
  (continue-pact 1))
+
+(begin-tx)
+(env-exec-config ["DisablePact48"])
+
+ ; pact 48 caps
+ (interface ops
+  (defun op1:bool (a:string b:integer))
+  (defun op2:bool (c:string d:bool))
+  )
+
+
+(module caller G
+  (defcap G () true)
+  (defschema dep
+      callee:module{ops})
+  (deftable deps:{dep})
+  (defcap OP1 (a:string b:integer m:module{ops})
+    @managed
+    true)
+  (defcap OP2 (c:string d:bool m:module{ops})
+    @managed
+    true)
+  (defun op1-guard (a:string b:integer m:module{ops})
+    (create-capability-guard (OP1 a b m)))
+  (defun op2-guard (c:string d:bool m:module{ops})
+    (create-capability-guard (OP2 c d m)))
+  (defun callees:[module{ops}] ()
+     (map (compose (read deps) (at "callee")) (keys deps)))
+  (defun call-op1 (a:string b:integer)
+    (map (lambda (m:module{ops})
+           (install-capability (OP1 a b m))
+           (with-capability (OP1 a b m)
+             (m::op1 a b)))
+         (callees)))
+  (defun call-op2 (c:string d:bool)
+    (map (lambda (m:module{ops})
+           (install-capability (OP2 c d m))
+           (with-capability (OP2 c d m)
+             (m::op2 c d)))
+         (callees)))
+)
+(create-table deps)
+
+(module callee-A G
+  (defcap G () true)
+  (implements ops)
+  (defun op1:bool (a:string b:integer)
+    (enforce-guard (op1-guard a b callee-A))
+    true)
+  (defun op2:bool (c:string d:bool)
+    (enforce-guard (op2-guard c d callee-A))
+    false)
+
+  )
+
+(module callee-B G
+  (defcap G () true)
+  (implements ops)
+  (defun op1:bool (a:string b:integer)
+    ;; out-of-band call to callee-A
+    (callee-A.op1 a b)
+    false)
+  (defun op2:bool (c:string d:bool)
+    (enforce-guard (op2-guard c d callee-B))
+    true)
+  )
+
+(insert deps "callee-A" { 'callee: callee-A })
+(insert deps "callee-B" { 'callee: callee-B })
+(expect-failure
+   "out-of-band call fails pre-fork"
+   "Capability not acquired"
+   (call-op1 "hello" 2))
+(expect-failure
+   "normal case fails pre-fork"
+   (call-op2 "goodbye" false))
+
+(env-exec-config [])
+
+(expect-failure
+  "out-of-band call fails post-fork"
+  "Capability not acquired"
+  (call-op1 "hello" 2))
+(expect
+   "normal case succeeds for both callees post-fork"
+   [false true]
+   (call-op2 "goodbye" false))
+
+(commit-tx)

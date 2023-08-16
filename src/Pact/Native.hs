@@ -315,7 +315,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ T.encodeUtf8 s
-      [a'] -> enforcePactValue a' >>= \pv -> go $ J.encodeStrict pv
+      [a'] -> enforcePactValue a' >>= go . J.encodeStrict
       _ -> argsError i as
       where go = return . tStr . asString . pactHash
 
@@ -1149,7 +1149,7 @@ yield i as = case as of
       case eym of
         Nothing -> evalError' i "Yield not in defpact context"
         Just pe -> do
-          o' <- fmap elideModRefInfo <$> enforcePactValue' o
+          o' <- fmap elideModRefInfo <$> traverse enforcePactValue o
           y <- case tid of
             Nothing -> return $ Yield o' Nothing Nothing
             Just t -> do
@@ -1419,7 +1419,7 @@ continueNested i as = gasUnreduced i as $ case as of
   [TApp (App t args _) _] -> lookup' t >>= \d ->
     (,) <$> view eePactStep <*> use evalPactExec >>= \case
       (Just ps, Just pe) -> do
-        contArgs <- traverse reduce args >>= enforcePactValue'
+        contArgs <- traverse reduce args >>= traverse enforcePactValue
         let childName = QName (QualifiedName (_dModule d) (asString (_dDefName d)) def)
             cont = PactContinuation childName (stripPactValueInfo <$> contArgs)
         newPactId <- createNestedPactId i cont (_psPactId ps)
