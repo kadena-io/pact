@@ -33,6 +33,7 @@ module Pact.Types.PactValue
   , _PObject
   , _PModRef
   , stripPactValueInfo
+  , stripAllPactValueInfo
   ) where
 
 import Control.Applicative ((<|>))
@@ -127,6 +128,14 @@ stripPactValueInfo = \case
   PList vec -> PList (stripPactValueInfo <$> vec)
   PObject om -> PObject (stripPactValueInfo <$> om)
   PGuard gu -> PGuard gu
+  PModRef mr -> PModRef mr{_modRefInfo = def }
+
+stripAllPactValueInfo :: PactValue -> PactValue
+stripAllPactValueInfo = \case
+  PLiteral lit -> PLiteral lit
+  PList vec -> PList (stripAllPactValueInfo <$> vec)
+  PObject om -> PObject (stripAllPactValueInfo <$> om)
+  PGuard gu -> PGuard (stripAllPactValueInfo <$> gu)
   PModRef mr -> PModRef mr{_modRefInfo = def }
 
 -- | Lenient conversion, implying that conversion back won't necc. succeed.

@@ -4,15 +4,21 @@
 
 (begin-tx)
 (env-exec-config ["DisablePact48"])
+(interface iface
+  (defun f:bool (a:module{iface}))
+  )
 
 (module my-mod G
   (defcap G() true)
 
   (defschema hashes h:string)
   (deftable hashes-table:{hashes})
+  (implements iface)
 
   (defun get-hash (k:string)
     (at "h" (read hashes-table k)))
+
+  (defun f:bool (a:module{iface}) true)
 
   (defun insert-hash (k:string h:string)
     (write hashes-table k {"h":h})
@@ -25,13 +31,20 @@
 ; pre fork module hashing
 (insert-hash "a" (hash my-mod))
 (insert-hash "b" (hash my-mod))
+(insert-hash "c" (hash [my-mod, {'a:my-mod}, (create-user-guard (f my-mod))]))
+(insert-hash "d" (hash [my-mod, {'a:my-mod}, (create-user-guard (f my-mod))]))
 (let*
   ( (h1 (get-hash "a"))
     (h2 (get-hash "b"))
+    (h3 (get-hash "c"))
+    (h4 (get-hash "d"))
   )
-  (enforce (= h1 "eU1QsrHzLyYN9620ongvIlpxzzX1KiVGbTDBT6zbh14") "h1 does not match expected value")
-  (enforce (= h2 "q9JZXDohMARxsVUtQWCiK7APdaiYpvqfJyq-aF3LhAA") "h2 does not match expected value")
-  (expect-failure "hashes do not match pre-fork" (enforce (= h1 h2) "boom"))
+  (enforce (= h1 "orgMn9G2BN4Mvq4IX7XbF016YdAhoLLtEIpUPglM3-c") "h1 does not match expected value")
+  (enforce (= h2 "A7RKCqSxlJMPSoZshF2Rviny30yVUXK6CDnjfwKc-dU") "h2 does not match expected value")
+  (enforce (= h3 "2Hic2Iy60yTYtCn1Ih6J7X359KAjPjdOkyEUGbR9pa8") "h3 does not match expected value")
+  (enforce (= h4 "ltxrif1Y_w9qg2pM-V93lMjU15HIA48WBqp3RzlZ0cU") "h4 does not match expected value")
+  (expect-failure "hashes do not match pre-fork - simple case" (enforce (= h1 h2) "boom"))
+  (expect-failure "hashes do not match pre-fork - recursive case" (enforce (= h3 h4) "boom"))
   )
 
 
@@ -39,13 +52,18 @@
 ; post fork module hashing
 (insert-hash "a" (hash my-mod))
 (insert-hash "b" (hash my-mod))
-
+(insert-hash "c" (hash [my-mod, {'a:my-mod}, (create-user-guard (f my-mod))]))
+(insert-hash "d" (hash [my-mod, {'a:my-mod}, (create-user-guard (f my-mod))]))
 
 (let*
   ( (h1 (get-hash "a"))
     (h2 (get-hash "b"))
+    (h3 (get-hash "c"))
+    (h4 (get-hash "d"))
   )
-  (enforce (= h1 "0j95GFheG-uAWbGAjvTqV4QSGE74ZY38jxnNuHJ2p8A") "h1 does not match expected value")
-  (expect "hashes match post-fork" true (enforce (= h1 h2) "boom"))
+  (enforce (= h1 "vediBPdnKkzahPDZY2UF_hkS8i7pIXqwsCj925gLng8") "h1 does not match expected value")
+  (enforce (= h3 "_c98nMfdnxKUdjoE7EQR9RUHfqJDJjlljL2JGGwUqiA") "h3 does not match expected value")
+  (expect "hashes match post-fork - simple case" true (enforce (= h1 h2) "boom"))
+  (expect "hashes match post-fork - recursive case" true (enforce (= h1 h2) "boom"))
   )
 (commit-tx)

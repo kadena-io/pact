@@ -2,7 +2,7 @@
 ---
 ### Bugfixes
 - Fix name resolution within module redeploy (#1235)
-- Fixed issue with the hash of cap guards, `hash` native and principals (#1273) (#1278)
+- Fixed issue with the hash of cap guards, `hash` native and principals (#1273) (#1278) (#1287)
 - Fixed error message for calling a non-function value (#1268)
 
 ### Eval
