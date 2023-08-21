@@ -2333,7 +2333,7 @@ spec = describe "analyze" $ do
               ))
           |]
     in expectPass code $ Valid $ sNot Abort'
-  describe "regression time representatin (int64/integer)" $
+  describe "regression time representation (int64/integer)" $
     let code =
           [text|
             (defun test: bool(a: time)
