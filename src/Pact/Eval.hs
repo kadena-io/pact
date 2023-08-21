@@ -1134,7 +1134,7 @@ enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
 enforcePactValue t = case toPactValue t of
   Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
   Right v -> do
-    elide <- ifExecutionFlagSet' FlagDisablePact48 id elideModRefInfo
+    elide <- ifExecutionFlagSet' FlagDisablePact48 id stripAllPactValueInfo
     return (elide v)
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
