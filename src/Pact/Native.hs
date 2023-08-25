@@ -76,6 +76,7 @@ import qualified Data.List as L (nubBy)
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as T
 import Pact.Time
 import qualified Data.Vector as V
@@ -1342,7 +1343,7 @@ strToInt i as =
     doBase64 si txt = case parseB64UrlUnpaddedText' txt of
       Left e | "non-canonical" `T.isInfixOf` T.pack e ->
                return $ toTerm $ bsToInteger $ B64.decodeLenient (T.encodeUtf8 txt)
-      Left e -> evalError' si (pretty e)
+      Left e -> evalError' si (pretty (base64DowngradeErrorMessage2 (Text.pack e)))
       Right bs -> return $ toTerm $ bsToInteger bs
 
 bsToInteger :: BS.ByteString -> Integer
@@ -1415,7 +1416,7 @@ base64decode = defRNative "base64-decode" go
             if False
             then "Could not base64-decode string"
             else "Could not decode string: "
-              <> pretty (base64DowngradeErrorMessage e)
+              <> pretty (base64DowngradeErrorMessage2 (T.pack e))
           Right t -> return $ tStr t
       _ -> argsError i as
 
@@ -1453,3 +1454,40 @@ continueNested i as = gasUnreduced i as $ case as of
   unTVar = \case
     TVar (Ref d) _ -> unTVar d
     d -> d
+
+-- | Converts the error message format of base64-bytestring-1.2
+--   into that of base64-bytestring-0.1, for the error messages
+--   that have made it onto the chain.
+--   This allows us to upgrade to base64-bytestring-1.2 without
+--   breaking compatibility.
+base64DowngradeErrorMessage2 :: Text -> Text
+base64DowngradeErrorMessage2
+   "Base64-encoded bytestring has invalid size" =
+       "invalid base64 encoding near offset 0"
+base64DowngradeErrorMessage2
+  t@(Text.stripPrefix "invalid character at offset: " -> Just suffix) =
+  let
+    finalThreeChars = do
+      (rest,z) <- Text.unsnoc t
+      (rest2,y) <- Text.unsnoc rest
+      (_,x) <- Text.unsnoc rest2
+      return (x,y,z)
+    paddingAdjustment =
+      maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
+    offset :: Int = read $ Text.unpack suffix
+    adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
+  in Text.pack $ "invalid base64 encoding near offset " ++ show adjustedOffset
+base64DowngradeErrorMessage2
+  t@(Text.stripPrefix "invalid padding at offset: " -> Just suffix) =
+  let
+    finalThreeChars = do
+      (rest,z) <- Text.unsnoc t
+      (rest2,y) <- Text.unsnoc rest
+      (_,x) <- Text.unsnoc rest2
+      return (x,y,z)
+    paddingAdjustment =
+      maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
+    offset :: Int = read $ Text.unpack suffix
+    adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
+  in Text.pack $ "invalid padding near offset " ++ show adjustedOffset
+base64DowngradeErrorMessage2 e = e
