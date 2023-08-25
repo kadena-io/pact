@@ -1462,10 +1462,10 @@ continueNested i as = gasUnreduced i as $ case as of
 --   breaking compatibility.
 base64DowngradeErrorMessage2 :: Text -> Text
 base64DowngradeErrorMessage2
-   "Base64-encoded bytestring has invalid size" =
-       "invalid base64 encoding near offset 0"
+   "Base64URL decode failed: Base64-encoded bytestring has invalid size" =
+       "Base64URL decode failed: invalid base64 encoding near offset 0"
 base64DowngradeErrorMessage2
-  t@(Text.stripPrefix "invalid character at offset: " -> Just suffix) =
+  t@(Text.stripPrefix "Base64URL decode failed: invalid character at offset: " -> Just suffix) =
   let
     finalThreeChars = do
       (rest,z) <- Text.unsnoc t
@@ -1476,9 +1476,9 @@ base64DowngradeErrorMessage2
       maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
     offset :: Int = read $ Text.unpack suffix
     adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
-  in Text.pack $ "invalid base64 encoding near offset " ++ show adjustedOffset
+  in Text.pack $ "Base64URL decode failed: invalid base64 encoding near offset " ++ show adjustedOffset
 base64DowngradeErrorMessage2
-  t@(Text.stripPrefix "invalid padding at offset: " -> Just suffix) =
+  t@(Text.stripPrefix "Base64URL decode failed: invalid padding at offset: " -> Just suffix) =
   let
     finalThreeChars = do
       (rest,z) <- Text.unsnoc t
@@ -1489,5 +1489,5 @@ base64DowngradeErrorMessage2
       maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
     offset :: Int = read $ Text.unpack suffix
     adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
-  in Text.pack $ "invalid padding near offset " ++ show adjustedOffset
+  in Text.pack $ "Base64URL decode failed: invalid padding near offset " ++ show adjustedOffset
 base64DowngradeErrorMessage2 e = e
