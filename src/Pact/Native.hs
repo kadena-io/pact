@@ -64,6 +64,7 @@ import Control.Monad.IO.Class
 import qualified Data.Attoparsec.Text as AP
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base64 as B64
 import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
@@ -1404,10 +1405,12 @@ base64decode = defRNative "base64-decode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] -> do
-        simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
+        -- simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
         case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
+          Left e | T.pack e `T.isInfixOf` "non-canonical" ->
+            return $ tStr $ T.decodeUtf8 $ B64.decodeLenient (T.encodeUtf8 s)
           Left e -> evalError' i $
-            if simplifiedErrorMessage
+            if False
             then "Could not base64-decode string"
             else "Could not decode string: "
               <> pretty (base64DowngradeErrorMessage e)

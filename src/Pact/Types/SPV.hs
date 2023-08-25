@@ -27,7 +27,6 @@ import Control.Lens
 
 import Data.Aeson hiding (Object)
 import Data.ByteString
-import Data.Default (def)
 import Data.Text
 import Data.Text.Encoding
 
@@ -35,9 +34,9 @@ import GHC.Generics hiding (to)
 
 import Test.QuickCheck
 
-import Pact.Types.Continuation (PactExec(PactExec), PactContinuation(PactContinuation))
+import Pact.Types.Continuation (PactExec(..))
 import Pact.Types.Pretty (Pretty(..), prettyString)
-import Pact.Types.Term (Object, Name(Name), PactId(PactId), BareName(BareName))
+import Pact.Types.Term (Object, Name)
 
 import qualified Pact.JSON.Encode as J
 

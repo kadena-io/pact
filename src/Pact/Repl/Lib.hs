@@ -53,7 +53,6 @@ import Statistics.Types (Estimate(..))
 import qualified Pact.Analyze.Check as Check
 import System.Directory
 # endif
-import qualified Pact.Types.Crypto as Crypto
 
 import Pact.Typechecker
 import qualified Pact.Types.Typecheck as TC
