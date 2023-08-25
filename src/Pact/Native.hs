@@ -1340,6 +1340,8 @@ strToInt i as =
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
     doBase64 si txt = case parseB64UrlUnpaddedText' txt of
+      Left e | T.pack e `T.isInfixOf` "non-canonical" ->
+               return $ toTerm $ bsToInteger $ B64.decodeLenient (T.encodeUtf8 txt)
       Left e -> evalError' si (pretty e)
       Right bs -> return $ toTerm $ bsToInteger bs
 
