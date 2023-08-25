@@ -1340,7 +1340,7 @@ strToInt i as =
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
     doBase64 si txt = case parseB64UrlUnpaddedText' txt of
-      Left e | T.pack e `T.isInfixOf` "non-canonical" ->
+      Left e | "non-canonical" `T.isInfixOf` T.pack e ->
                return $ toTerm $ bsToInteger $ B64.decodeLenient (T.encodeUtf8 txt)
       Left e -> evalError' si (pretty e)
       Right bs -> return $ toTerm $ bsToInteger bs
@@ -1409,7 +1409,7 @@ base64decode = defRNative "base64-decode" go
       [TLitString s] -> do
         -- simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
         case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
-          Left e | T.pack e `T.isInfixOf` "non-canonical" ->
+          Left e | "non-canonical" `T.isInfixOf` T.pack e ->
             return $ tStr $ T.decodeUtf8 $ B64.decodeLenient (T.encodeUtf8 s)
           Left e -> evalError' i $
             if False
