@@ -1343,9 +1343,13 @@ strToInt i as =
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
     doBase64 si txt = do
+      simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
       parseResult <- base64DecodeWithShimmedErrors (getInfo si) txt
       case parseResult of
-        Left e -> evalError' si (pretty e)
+        Left e -> evalError' si $
+          if simplifiedErrorMessage
+          then "Could not base64-decode string"
+          else (pretty e)
         Right bs -> return $ toTerm $ bsToInteger bs
 
 bsToInteger :: BS.ByteString -> Integer
@@ -1415,12 +1419,12 @@ base64decode = defRNative "base64-decode" go
         case parseResult of
           Right bs -> case T.decodeUtf8' bs of
             Right t -> return $ tStr t
-            Left e -> evalError' i $ "Could not decode string: " <> pretty e
-          Left errMsg -> evalError' i $
+            Left _unicodeError -> evalError' i $ "Base64URL decode failed: invalid unicode"
+          Left base64Error -> evalError' i $
             if simplifiedErrorMessage
-            then  "Could not base64-decode string"
-            else  "Could not decode string: "
-              <> pretty (T.pack errMsg)
+            then  "Base64URL decode failed: Could not base64-decode string"
+            else  "Base64URL decode failed: Could not decode string: "
+              <> pretty (T.pack base64Error)
 
       _ -> argsError i as
 
@@ -1487,20 +1491,20 @@ base64DecodeWithShimmedErrors i txt =
 
     -- This particular error message is reported differently between the
     -- two versions.
-    Left "Base64URL decode failed: Base64-encoded bytestring has invalid size" ->
-       return $ Left "Base64URL decode failed: invalid base64 encoding near offset 0"
+    Left "Base64-encoded bytestring has invalid size" ->
+       return $ Left "invalid base64 encoding near offset 0"
 
     -- The "invalid character at offset: $n" message is spelled as
     -- "invalid base64 encoding near offset $n" in the old base64-bytestring.
-    Left (Text.stripPrefix "Base64URL decode failed: invalid character at offset: " -> Just suffix) ->
+    Left (Text.stripPrefix "invalid character at offset: " -> Just suffix) ->
         adjustedOffset suffix >>= \offset ->
           return
             (Left
-            ("Base64URL decode failed: invalid base64 encoding near offset " ++ show offset))
+            ("invalid base64 encoding near offset " ++ show offset))
 
-    Left (Text.stripPrefix "Base64URL decode failed: invalid padding at offset: " -> Just suffix) ->
+    Left (Text.stripPrefix "invalid padding at offset: " -> Just suffix) ->
           adjustedOffset suffix >>= \offset ->
-                                      return (Left $ "Base64URL decode failed: invalid padding near offset " ++ show offset)
+                                      return (Left $ "invalid padding near offset " ++ show offset)
 
     -- All other error messages should be the same between old and
     -- new versions of base64-bytestring.
