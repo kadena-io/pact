@@ -1413,9 +1413,9 @@ base64decode = defRNative "base64-decode" go
         simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
         parseResult <- base64DecodeWithShimmedErrors (getInfo i) s
         case parseResult of
-          Right bs -> case decodeUtf8 bs of
+          Right bs -> case T.decodeUtf8' bs of
             Right t -> return $ tStr t
-            Left e ->
+            Left e -> evalError' i $ "Could not decode string: " <> pretty e
           Left errMsg -> evalError' i $
             if simplifiedErrorMessage
             then  "Could not base64-decode string"
