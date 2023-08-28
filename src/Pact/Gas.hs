@@ -19,6 +19,7 @@ import Control.Monad(when)
 import Control.Monad.State.Strict
 import Data.Text
 import Data.IORef
+import qualified Data.Time
 import Pact.Types.Gas
 import Pact.Types.Runtime
 import Control.Lens
@@ -36,7 +37,7 @@ computeGas i args = do
     g1 = runGasModel _geGasModel name args
   let gMillisUsed = g0 <> g1
       gUsed = milliGasToGas gMillisUsed
-  evalLogGas %= fmap ((gasLogMsg name args gUsed, milliGasToGas g1):)
+  evalLogGas %= fmap ((gasLogMsg name args gUsed Nothing, milliGasToGas g1):)
   putGas gMillisUsed
   let (MilliGasLimit gasLimit) = _geGasLimit
   when (gMillisUsed > gasLimit) $ do
@@ -45,13 +46,37 @@ computeGas i args = do
     -- else return gUsed
 {-# INLINABLE computeGas #-}
 
+-- | Compute gas for some application or evaluation.
+computeGasTimed :: Either (Info,Text) FunApp -> GasArgs -> Eval e r -> Eval e r
+computeGasTimed i args gassed = do
+  GasEnv {..} <- view eeGasEnv
+  g0 <- getGas
+  let
+    (info,name) = either id (_faInfo &&& _faName) i
+    g1 = runGasModel _geGasModel name args
+  let gMillisUsed = g0 <> g1
+      gUsed = milliGasToGas gMillisUsed
+  putGas gMillisUsed
+  let (MilliGasLimit gasLimit) = _geGasLimit
+  when (gMillisUsed > gasLimit) $ do
+    let oldGasLimit = milliGasToGas gasLimit
+    throwErr GasError info $ "Gas limit (" <> pretty oldGasLimit <> ") exceeded: " <> pretty gUsed
+  start <- liftIO Data.Time.getCurrentTime
+  r <- gassed
+  end <- liftIO Data.Time.getCurrentTime
+  evalLogGas %= fmap ((gasLogMsg name args gUsed (Just (end `Data.Time.diffUTCTime` start)), milliGasToGas g1):)
+  return r
+    -- else return gUsed
+{-# INLINABLE computeGasTimed #-}
+
 gasLogMsg
   :: Text
   -> GasArgs
   -> Gas
+  -> Maybe Data.Time.NominalDiffTime
   -> Text
-gasLogMsg name args used =
-  renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used)
+gasLogMsg name args used timeTaken =
+  renderCompactText' (pretty name <> ":" <> pretty args <> ":currTotalGas=" <> pretty used <> ":timeTaken=" <> viaShow timeTaken)
 
 -- | Performs gas calculation for incremental computations with some caveats:
 --   - Checks the gas calculations against the gas limit
@@ -90,7 +115,7 @@ computeGasCommit info name args = do
   let !g1 = runGasModel _geGasModel name args
       !gMillisUsed = g0 <> g1
       gUsed = milliGasToGas gMillisUsed
-  evalLogGas %= fmap ((gasLogMsg name args gUsed,milliGasToGas g1):)
+  evalLogGas %= fmap ((gasLogMsg name args gUsed Nothing,milliGasToGas g1):)
   putGas gMillisUsed
   let (MilliGasLimit milliGasLimit) = _geGasLimit
   when (gMillisUsed > milliGasLimit) $ do
@@ -101,7 +126,7 @@ computeGasCommit info name args = do
 
 -- | Pre-compute gas for some application before some action.
 computeGas' :: FunApp -> GasArgs -> Eval e a -> Eval e a
-computeGas' i gs action = computeGas (Right i) gs *> action
+computeGas' i gs action = computeGasTimed (Right i) gs action
 
 -- | Pre-compute gas for some application with unreduced args before some action.
 gasUnreduced :: FunApp -> [Term Ref] -> Eval e a -> Eval e a
