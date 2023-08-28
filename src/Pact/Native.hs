@@ -1343,11 +1343,11 @@ strToInt i as =
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
     doBase64 si txt = do
-      simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
+      _simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
       parseResult <- base64DecodeWithShimmedErrors (getInfo si) txt
       case parseResult of
         Left e -> evalError' si $
-          if simplifiedErrorMessage
+          if False
           then "Could not base64-decode string"
           else (pretty e)
         Right bs -> return $ toTerm $ bsToInteger bs
