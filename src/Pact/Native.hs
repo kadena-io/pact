@@ -57,6 +57,7 @@ module Pact.Native
     ) where
 
 import Control.Arrow hiding (app)
+import Control.Exception(evaluate)
 import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
@@ -448,7 +449,7 @@ describeNamespaceDef = setTopLevelOnly $ defGasRNative
             let guardTermOf g = TGuard (fromPactValue <$> g) def
 
             computeGas' i (GPostRead (ReadNamespace ns)) $
-              pure $ toTObject dnTy def
+              liftIO $ evaluate $ toTObject dnTy def
                 [ (dnUserGuard, guardTermOf user)
                 , (dnAdminGuard, guardTermOf admin)
                 , (dnNamespaceName, toTerm $ renderCompactText nsn')
@@ -914,7 +915,7 @@ makeList i [TLitInteger len,value] = case typeof value of
   Right ty -> do
     ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
     ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing ts)
-    computeGas' i ga $ return $
+    computeGas' i ga $ liftIO $ evaluate $
       toTListV ty def $ V.replicate (fromIntegral len) value
   Left ty -> evalError' i $ "make-list: invalid value type: " <> pretty ty
 makeList i as = argsError i as
@@ -959,8 +960,10 @@ enumerate i = \case
 
 reverse' :: RNativeFun e
 reverse' i [l@TList{}] = do
-  unlessExecutionFlagSet FlagDisablePact48 $ computeGas (Right i) (GReverse listLen)
-  pure $ over tList V.reverse l
+  gasser <- ifExecutionFlagSet' FlagDisablePact48
+    (computeGas' i (GReverse listLen) . liftIO . evaluate)
+    return
+  gasser (over tList V.reverse l)
   where
     listLen = V.length $ view tList l
 reverse' i args = argsError i args
@@ -1302,7 +1305,7 @@ concat' i [TList ls _ _] = do
     let
       ls' = V.toList ls
       concatTextList = flip TLiteral def . LString . T.concat
-    in fmap concatTextList $ forM ls' $ \case
+    in (liftIO . evaluate =<<) $ fmap concatTextList $ forM ls' $ \case
       TLitString s -> return s
       t -> isOffChainForkedError FlagDisablePact47 >>= \case
         OffChainError -> evalError' i $ "concat: expecting list of strings: " <> pretty t
@@ -1319,7 +1322,7 @@ strToList i [TLitString s] = do
   let len = fromIntegral $ T.length s
   ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
   ga <- ifExecutionFlagSet' FlagDisablePact45 (GMakeList len) (GMakeList2 len Nothing ts)
-  computeGas' i ga $ return $ toTListV tTyString def $ stringToCharList s
+  computeGas' i ga $ liftIO $ evaluate $ toTListV tTyString def $ stringToCharList s
 strToList i as = argsError i as
 
 strToInt :: RNativeFun e
