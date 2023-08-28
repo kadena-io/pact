@@ -56,12 +56,13 @@ module Pact.Native
     , cdPrevBlockHash
     ) where
 
-import Control.Arrow hiding (app)
+import Control.Arrow hiding (app, first)
 import Control.Exception.Safe
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Attoparsec.Text as AP
+import Data.Bifunctor (first)
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as B64
@@ -82,6 +83,7 @@ import Pact.Time
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import Numeric
+import Text.Read (readMaybe)
 
 import Pact.Eval
 import Pact.Native.Capabilities
@@ -1340,11 +1342,11 @@ strToInt i as =
     doBase si base txt = case baseStrToInt base txt of
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
-    doBase64 si txt = case parseB64UrlUnpaddedText' txt of
-      Left e | "non-canonical" `T.isInfixOf` T.pack e ->
-               return $ toTerm $ bsToInteger $ B64.decodeLenient (T.encodeUtf8 txt)
-      Left e -> evalError' si (pretty (base64DowngradeErrorMessage2 (Text.pack e)))
-      Right bs -> return $ toTerm $ bsToInteger bs
+    doBase64 si txt = do
+      parseResult <- base64DecodeWithShimmedErrors (getInfo si) txt
+      case parseResult of
+        Left e -> evalError' si (pretty e)
+        Right bs -> return $ toTerm $ bsToInteger bs
 
 bsToInteger :: BS.ByteString -> Integer
 bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
@@ -1408,16 +1410,16 @@ base64decode = defRNative "base64-decode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] -> do
-        -- simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
-        case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
-          Left e | "non-canonical" `T.isInfixOf` T.pack e ->
-            return $ tStr $ T.decodeUtf8 $ B64.decodeLenient (T.encodeUtf8 s)
-          Left e -> evalError' i $
-            if False
-            then "Could not base64-decode string"
-            else "Could not decode string: "
-              <> pretty (base64DowngradeErrorMessage2 (T.pack e))
-          Right t -> return $ tStr t
+        simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
+        parseResult <- base64DecodeWithShimmedErrors (getInfo i) s
+        case parseResult of
+          Right bs -> return $ tStr (T.decodeUtf8 bs)
+          Left errMsg -> evalError' i $
+            if simplifiedErrorMessage
+            then  "Could not base64-decode string"
+            else  "Could not decode string: "
+              <> pretty (T.pack errMsg)
+
       _ -> argsError i as
 
 -- | Continue a nested defpact.
@@ -1455,39 +1457,60 @@ continueNested i as = gasUnreduced i as $ case as of
     TVar (Ref d) _ -> unTVar d
     d -> d
 
--- | Converts the error message format of base64-bytestring-1.2
---   into that of base64-bytestring-0.1, for the error messages
---   that have made it onto the chain.
---   This allows us to upgrade to base64-bytestring-1.2 without
---   breaking compatibility.
-base64DowngradeErrorMessage2 :: Text -> Text
-base64DowngradeErrorMessage2
-   "Base64URL decode failed: Base64-encoded bytestring has invalid size" =
-       "Base64URL decode failed: invalid base64 encoding near offset 0"
-base64DowngradeErrorMessage2
-  t@(Text.stripPrefix "Base64URL decode failed: invalid character at offset: " -> Just suffix) =
-  let
-    finalThreeChars = do
-      (rest,z) <- Text.unsnoc t
-      (rest2,y) <- Text.unsnoc rest
-      (_,x) <- Text.unsnoc rest2
-      return (x,y,z)
-    paddingAdjustment =
-      maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
-    offset :: Int = read $ Text.unpack suffix
-    adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
-  in Text.pack $ "Base64URL decode failed: invalid base64 encoding near offset " ++ show adjustedOffset
-base64DowngradeErrorMessage2
-  t@(Text.stripPrefix "Base64URL decode failed: invalid padding at offset: " -> Just suffix) =
-  let
-    finalThreeChars = do
-      (rest,z) <- Text.unsnoc t
-      (rest2,y) <- Text.unsnoc rest
-      (_,x) <- Text.unsnoc rest2
-      return (x,y,z)
-    paddingAdjustment =
-      maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
-    offset :: Int = read $ Text.unpack suffix
-    adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
-  in Text.pack $ "Base64URL decode failed: invalid padding near offset " ++ show adjustedOffset
-base64DowngradeErrorMessage2 e = e
+-- | Convert from base64-bytestring-1.0 behavior to
+-- base64-bytestring-0.1 behavior. This is needed in order
+-- to preserve hash equality with old versions of pact (which
+-- used base64-bytestring-0.1).
+--
+-- Throws a Pact `evalError` if it fails to parse an encountered
+-- base64-decoding error message.
+base64DecodeWithShimmedErrors
+  :: Info
+  -> Text
+  -> Eval e (Either String BS.ByteString)
+base64DecodeWithShimmedErrors i txt =
+
+  -- Attempt to decode the bytestring, and convert error messages to Text.
+  case first Text.pack $ parseB64UrlUnpaddedText' txt of
+
+    -- base64-bytestring-0.1 is more strict than base64-bytestring-0.1,
+    -- so all new successful decodings succeeded on the old version, too.
+    Right e -> return $ Right e
+
+    -- base64-bytestring-1.0 fails with a "non-canonical encoding" error
+    -- for a subset of encoded messages that decode to some bytestring
+    -- that would subsequently encode to something other than the original.
+    Left e | "non-canonical" `T.isInfixOf` e ->
+             return $ Right (B64.decodeLenient (T.encodeUtf8 txt))
+
+    -- This particular error message is reported differently between the
+    -- two versions.
+    Left "Base64URL decode failed: Base64-encoded bytestring has invalid size" ->
+       return $ Left "Base64URL decode failed: invalid base64 encoding near offset 0"
+
+    -- The "invalid character at offset: $n" message is spelled as
+    -- "invalid base64 encoding near offset $n" in the old base64-bytestring.
+    Left (Text.stripPrefix "Base64URL decode failed: invalid character at offset: " -> Just suffix) ->
+        adjustedOffset suffix >>= \offset ->
+          return
+            (Left
+            ("Base64URL decode failed: invalid base64 encoding near offset " ++ show offset))
+
+    Left (Text.stripPrefix "Base64URL decode failed: invalid padding at offset: " -> Just suffix) ->
+          adjustedOffset suffix >>= \offset ->
+                                      return (Left $ "Base64URL decode failed: invalid padding near offset " ++ show offset)
+
+    -- All other error messages should be the same between old and
+    -- new versions of base64-bytestring.
+    Left e -> return $ Left (Text.unpack e)
+  where
+    endsInThreeEquals =
+      T.drop (T.length txt - 3) txt == "==="
+    paddingAdjustment = if endsInThreeEquals then -1 else 0
+
+    adjustedOffset :: Text -> Eval e Int
+    adjustedOffset suffix = case readMaybe (Text.unpack suffix) of
+      Just (offsetI :: Int) ->
+        return $ (offsetI `rem` 4) + paddingAdjustment
+      Nothing ->
+        evalError i "Could not parse error message"
