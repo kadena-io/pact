@@ -1517,6 +1517,6 @@ base64DecodeWithShimmedErrors i txt =
     adjustedOffset :: Text -> Eval e Int
     adjustedOffset suffix = case readMaybe (Text.unpack suffix) of
       Just (offsetI :: Int) ->
-        return $ (offsetI `rem` 4) + paddingAdjustment
+        return $ offsetI - (offsetI `rem` 4) + paddingAdjustment
       Nothing ->
         evalError i "Could not parse error message"
