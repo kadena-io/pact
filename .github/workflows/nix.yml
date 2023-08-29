@@ -3,17 +3,15 @@ name: Build and cache with Nix
 on:
   workflow_dispatch:
   push:
-    paths-ignore:
-    - '.github/**'
-
 
 jobs:
   build-and-cache:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 740
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, mac-m1]
+        os: [ubuntu-latest, macos-latest, mac-m1]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
@@ -33,9 +31,8 @@ jobs:
 
     - name: Give root user AWS credentials
       uses: kadena-io/setup-nix-with-cache/copy-root-aws-credentials@v3
-
+      
     - name: Build and cache artifacts
-      timeout-minutes: 740
       run: |
         echo Building the project and its devShell
         nix build .#check --log-lines 500 --show-trace
