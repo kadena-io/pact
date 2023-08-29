@@ -3,6 +3,10 @@ name: Build and cache with Nix
 on:
   workflow_dispatch:
   push:
+    paths:
+    - '**'
+    - '!.github/**'
+    - '.github/workflows/nix.yml'
 
 jobs:
   build-and-cache:
@@ -11,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, mac-m1]
+        os: [ubuntu-latest, macos-latest, macos-m1]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
