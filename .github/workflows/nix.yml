@@ -39,4 +39,4 @@ jobs:
     - name: Build and cache artifacts
       run: |
         echo Building the project and its devShell
-        nix build .#check --log-lines 500 --show-trace --print-build-logs -vvvvv
+        nix build .#check --log-lines 500 --show-trace --print-build-logs -vvv
