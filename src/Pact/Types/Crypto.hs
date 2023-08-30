@@ -193,6 +193,7 @@ instance Scheme (SPPKScheme 'WebAuthn) where
           { authenticatorData
           , signature
           , clientDataJSON } <- A.eitherDecode (BSL.fromStrict sigBS)
+
         -- Decode the signer's public key.
         publicKeyBytes <- return pubBS -- Base16.decode (T.encodeUtf8 pubBS)
         publicKey <- first show $
@@ -200,14 +201,9 @@ instance Scheme (SPPKScheme 'WebAuthn) where
           (BSL.fromStrict publicKeyBytes)
 
         -- Recover the signature, clientData, and authData bytestrings.
-        -- Lenient decoding is not a security risk because security comes
-        -- from valitating the signature against the payload. Invalid
-        -- bytestring encodings (ones that pass lenient decoding but fail
-        -- strict decoding) will parse, but fail signature validation.
-        let
-          sig = Base64.decodeLenient (T.encodeUtf8 signature)
-          clientData = Base64URL.decodeLenient (T.encodeUtf8 clientDataJSON)
-          authData = Base64.decodeLenient (T.encodeUtf8 authenticatorData)
+        sig <- Base64.decode (T.encodeUtf8 signature)
+        clientData <- Base64URL.decode (T.encodeUtf8 clientDataJSON)
+        authData <- Base64.decode (T.encodeUtf8 authenticatorData)
 
         -- Reconstitute the payload signed by the WebAuthn client.
         clientDataDigest <- Base16.decode $ BS.pack (show (H.hashWith H.SHA256 clientData))
