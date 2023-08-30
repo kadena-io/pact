@@ -106,8 +106,8 @@ installed on your machine to use it.
 
 ##### Dependencies
 
-- `ghc >= 8.4` (Haskell compiler) and `cabal >= 2.2` (Haskell build-tool)
-  - The easiest way to get this is to install it using (Linux/Mac) [ghcup](https://www.haskell.org/ghcup/) and issue `ghcup install 8.6.5`, followed by `ghcup install-cabal`.
+- `ghc >= 9.6` (Haskell compiler) and `cabal >= 2.2` (Haskell build-tool)
+  - The easiest way to get this is to install it using (Linux/Mac) [ghcup](https://www.haskell.org/ghcup/) and issue `ghcup install 9.6.2`, followed by `ghcup install-cabal`.
   - ghc may also be installed via brew, issuing `brew install ghc` and `brew install cabal-install`.
 
 (You may also need to install `zlib`, `z3`, and `sqlite`)
@@ -125,7 +125,7 @@ cabal v2-build
 On some systems the default build might fail with linker errors complaining about cryptonite and ed25519, try:
 
 ```bash
-# configure cabal 
+# configure cabal
 cabal v2-configure -f cryptonite-ed25519
 
 # Build the project.
@@ -146,13 +146,19 @@ you may need to add to your path. Then, you can call `pact` as-is.
 
 The fastest way to build and run Pact is to use the Nix package manager
 which has binary caching capabilities that allow you to download pre-built
-binaries for everything needed by Pact. For detailed instructions see [our
-wiki](https://github.com/kadena-io/pact/wiki/Building-Kadena-Projects).
+binaries for everything needed by Pact.
+We use nix flakes (which requires users to set `--experimental-features "nix-command flakes"`)
+to build pact and its dependencies. For detailed instructions see [our
+￼wiki](https://github.com/kadena-io/pact/wiki/Building-Kadena-Projects).
 
+To build the Pact executable:
+```bash
+nix build
+```
 When the build is finished, you can run Pact with the following command:
 
 ```bash
-./result/ghc/pact/bin/pact
+./result/bin/pact
 ```
 
 ### Verifying Installation

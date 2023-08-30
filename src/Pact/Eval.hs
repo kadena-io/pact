@@ -43,7 +43,7 @@ module Pact.Eval
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,evalByName
     ,resumePact
-    ,enforcePactValue,enforcePactValue'
+    ,enforcePactValue
     ,toPersistDirect
     ,reduceDynamic
     ,instantiate'
@@ -162,7 +162,7 @@ enforceGuard i g = case g of
     void $ runSysOnly $ evalByName _ugFun _ugArgs (getInfo i)
   GCapability CapabilityGuard{..} -> do
     traverse_ (enforcePactId True) _cgPactId
-    args <- enforcePactValue' _cgArgs
+    args <- traverse enforcePactValue _cgArgs
     acquired <- capabilityAcquired $ SigCapability _cgName args
     unless acquired $ failTx' i "Capability not acquired"
   where
@@ -1133,10 +1133,9 @@ appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
 enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
 enforcePactValue t = case toPactValue t of
   Left s -> evalError' t $ "Only value-level terms permitted: " <> pretty s
-  Right v -> return v
-
-enforcePactValue' :: (Pretty n, Traversable f) => f (Term n) -> Eval e (f PactValue)
-enforcePactValue' = traverse enforcePactValue
+  Right v -> do
+    elide <- ifExecutionFlagSet' FlagDisablePact48 id stripAllPactValueInfo
+    return (elide v)
 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
@@ -1155,7 +1154,7 @@ reduceApp (App (TDef d@Def{..} _) as ai) = do
         continuation <-
           PactContinuation (QName (QualifiedName _dModule (asString _dDefName) def))
           . map elideModRefInfo
-          <$> enforcePactValue' (fst af)
+          <$> traverse enforcePactValue (fst af)
         initPact ai continuation bod'
     Defcap -> computeUserAppGas d ai *> evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLam (Lam lamName funTy body _) _) as ai) =

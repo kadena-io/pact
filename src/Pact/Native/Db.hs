@@ -355,7 +355,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
       guardTable fi table GtWithDefaultRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> bindToRow ps bd b =<< enforcePactValue' defaultRow
+        Nothing -> bindToRow ps bd b =<< traverse enforcePactValue defaultRow
         (Just row) -> gasPostRead' fi row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
@@ -439,7 +439,7 @@ write wt partial i as = do
   ts <- mapM reduce as
   case ts of
     [table@TTable {..},TLitString key, TObject (Object ps _ _ _) _] -> do
-      ps' <- enforcePactValue' ps
+      ps' <- traverse enforcePactValue ps
       computeGas (Right i) (GUnreduced [])
       szVer <- getSizeOfVersion
       computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps') szVer)

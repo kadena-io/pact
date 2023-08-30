@@ -45,7 +45,7 @@ import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (isJust)
 import           Data.Monoid                  (First (..))
-import           Data.SBV                     (EqSymbolic, HasKind, Int64,
+import           Data.SBV                     (EqSymbolic, HasKind,
                                                Mergeable (symbolicMerge),
                                                OrdSymbolic, SBV,
                                                SDivisible (sDivMod, sQuotRem),
@@ -242,7 +242,7 @@ instance Pretty Str where
 
 type RowKey = Str
 
-type Time = Int64
+type Time = Integer
 
 -- | Convert between 'UTCTime' and 'Time'.
 --
@@ -254,10 +254,10 @@ timeIso :: PactIso UTCTime Time
 timeIso = PactIso $ iso mkTime unMkTime
   where
     mkTime :: UTCTime -> Time
-    mkTime utct = toMicroseconds (utct .-. mjdEpoch)
+    mkTime utct = fromIntegral $ toMicroseconds (utct .-. mjdEpoch)
 
     unMkTime :: Time -> UTCTime
-    unMkTime time = mjdEpoch .+^ fromMicroseconds time
+    unMkTime time = mjdEpoch .+^ fromMicroseconds (fromIntegral time)
 
 isGuardTy :: Pact.Type v -> Bool
 isGuardTy (Pact.TyPrim (Pact.TyGuard _)) = True

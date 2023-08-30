@@ -4,6 +4,11 @@ name: Build and publish application binaries
 on:
   workflow_dispatch:
   push:
+    paths:
+    - '**'
+    - '!.github/**'
+    - '.github/workflows/applications.yml'
+    
   pull_request_target:
     types: [ opened ]
 

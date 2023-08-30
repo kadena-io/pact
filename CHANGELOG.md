@@ -1,4 +1,31 @@
-- Support lambdas in static TC (#1232)
+4.8.0
+---
+### Bugfixes
+- Fix name resolution within module redeploy (#1235)
+- Fixed issue with the hash of cap guards, `hash` native and principals (#1273) (#1278) (#1287)
+- Fixed error message for calling a non-function value (#1268)
+
+### Eval
+- Tweaked the gas of concat (#1269), reverse and format (#1271)
+- Allow computation on integers less than 10^80 without gas penalty (#1272)
+
+### Internal changes
+- More granular gas units (#1245)
+- Remove GHCJS support (#1280)
+- GHC 9.6+ version support (#1242)
+- Package docs in nix flake (#1258)
+- Vendor sources of prettyprinter-1.6.0 (#1263)
+- Use MTL 2.3+ (#1261)
+- replace cryptonite by crypton (#1240)
+
+### Formal Verification
+- Support lambdas in static typechecker (#1232)
+- Fix swapped type assignment in fold symeval (#1253)
+
+### Other
+- Improve modref docs (#1256)
+
+Thanks to @thomashoneyman for the contribution!
 
 4.7.1
 ---

@@ -1433,6 +1433,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     tsStaticCapsInScope %= Set.insert capName
     return app
 
+  AST_DiffTime a b -> translateNode a >>= \case
+    Some STime a' -> translateNode b >>= \case
+      Some STime b' -> pure $ Some SDecimal $ CoreTerm $ DiffTime a' b'
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
+
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
       seconds ^. aNode . aTy == TyPrim Pact.TyDecimal -> translateNode time >>= \case

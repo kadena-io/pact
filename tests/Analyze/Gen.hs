@@ -306,7 +306,7 @@ genCore BoundedBool = Gen.recursive Gen.choice [
       mkBool $ Logical NotOp [extract x]
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
-    Some STime . Lit' <$> Gen.enumBounded -- Gen.int64
+    Some STime . Lit' <$> genInteger 1e9
   ] $ scale 4 <$>
     [ Gen.subtermM (genCore BoundedTime) $ \x -> do
         y <- genCore (BoundedInt 1e9)

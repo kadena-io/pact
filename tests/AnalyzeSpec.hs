@@ -2334,6 +2334,32 @@ spec = describe "analyze" $ do
           |]
     in expectPass code $ Valid $ sNot Abort'
 
+  describe "diff-time implementation (#1291)" $
+    let code =
+          [text|
+            (defun test:decimal ()
+              @model[(property (= result -60.0))]
+              (diff-time (time "2021-01-01T00:00:00Z") (time "2021-01-01T00:01:00Z")))
+
+            (defun test1:decimal ()
+              @model[(property (= result -61.0))]
+              (diff-time (time "2021-01-01T00:00:00Z") (time "2021-01-01T00:01:01Z")))
+
+            (defun test2:decimal ()
+              @model[(property (= result 1.0))]
+              (diff-time (time "2021-01-01T00:00:01Z") (time "2021-01-01T00:00:00Z")))
+          |]
+    in expectVerified code
+
+  describe "regression time representation (int64/integer)" $
+    let code =
+          [text|
+            (defun test: bool(a: time)
+              @model[ (property (= result true ))]
+              (<= a  (add-time a 100)))
+          |]
+    in expectPass code $ Valid Success'
+
   describe "str-to-int" $ do
     describe "without specified base" $ do
       describe "concrete string" $ do

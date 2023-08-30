@@ -984,7 +984,7 @@ fold
 -  takes ``f``: *a* -> *b* -> *a*
 -  takes ``a``: *a*
 -  takes ``bs``: [*b*]
--  produces [*a*]
+-  produces *a*
 
 reduce a list by applying ``f`` to each element and the previous result
 
