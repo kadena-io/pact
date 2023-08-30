@@ -112,6 +112,7 @@ singFloat ty p = case p of
   -- time
   CoreProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
   CoreProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec
+  CoreProp (DiffTime a b) -> CoreProp ... DiffTime <$> float a <*> float b
 
   -- bool
   -- - quantification

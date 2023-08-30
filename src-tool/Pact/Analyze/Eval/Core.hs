@@ -103,6 +103,16 @@ evalDecAddTime timeT secsT = do
   else throwErrorNoLoc $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
+evalDiffTime
+  :: Analyzer m
+  => TermOf m 'TyTime
+  -> TermOf m 'TyTime
+  -> m (S Decimal)
+evalDiffTime a b = do
+  a' <- eval a
+  b' <- eval b
+  pure $  (fromInteger' (fromIntegralS a' - fromIntegralS b')) / 1000000
+
 evalComparisonOp
   :: forall m a.
      Analyzer m
@@ -211,6 +221,7 @@ evalCore (StrDrop n s)                     = evalStrDrop n s
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
+evalCore (DiffTime a b)                    = evalDiffTime a b
 evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
