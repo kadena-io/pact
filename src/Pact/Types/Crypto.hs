@@ -155,9 +155,6 @@ instance Scheme (SPPKScheme 'ED25519) where
       (Right pubKey, Right sig) -> Ed25519.verify pubKey (fromShort msg) sig
       _ -> False
 
-
-
-
 instance ConvertBS (Ed25519.PublicKey) where
   toBS = Ed25519.exportPublic
   fromBS s = maybeToEither ("Invalid ED25519 Public Key: " ++ show (toB16Text s))
@@ -195,10 +192,9 @@ instance Scheme (SPPKScheme 'WebAuthn) where
           , clientDataJSON } <- A.eitherDecode (BSL.fromStrict sigBS)
 
         -- Decode the signer's public key.
-        publicKeyBytes <- return pubBS -- Base16.decode (T.encodeUtf8 pubBS)
         publicKey <- first show $
           Serialise.deserialiseOrFail @WA.CosePublicKey
-          (BSL.fromStrict publicKeyBytes)
+          (BSL.fromStrict pubBS)
 
         -- Recover the signature, clientData, and authData bytestrings.
         sig <- Base64.decode (T.encodeUtf8 signature)
@@ -382,34 +378,6 @@ ed25519GenKeyPair = do
 
 ed25519GetPublicKey :: Ed25519.PrivateKey -> Ed25519.PublicKey
 ed25519GetPublicKey = Ed25519.generatePublic
-
-
-
--- | This type specifies the format of a WebAuthn signature.
-data WebAuthnSignature = WebAuthnSignature
-  { clientDataJSON :: Text
-  , authenticatorData :: Text
-  , signature :: Text
-  } deriving (Show, Generic)
-
-instance A.FromJSON WebAuthnSignature where
-  parseJSON = A.withObject "WebAuthnSignature" $ \o -> do
-    clientDataJSON <- o .: "clientDataJSON"
-    authenticatorData <- o .: "authenticatorData"
-    signature <- o .: "signature"
-    pure $ WebAuthnSignature { clientDataJSON, authenticatorData, signature }
-
--- | This type represents a challenge that was used during
--- a WebAuthn "assertion" flow. For signing Pact payloads, this
--- is the PactHash of a transaction.
-data ClientDataJSON = ClientDataJSON {
-  challenge :: Text
-  } deriving (Show, Generic)
-
-instance A.FromJSON ClientDataJSON where
-  parseJSON = A.withObject "ClientDataJSON" $ \o -> do
-    challenge <- o .: "challenge"
-    pure $ ClientDataJSON { challenge }
 
 
 instance Eq Ed25519.PublicKey where
