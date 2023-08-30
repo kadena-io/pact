@@ -1325,7 +1325,7 @@ doc FTemporalDiff = Doc
   "diff-time"
   CTemporal
   PropOnly
-  "Time difference in seconds"
+  "Time difference in seconds of `a` - `b`"
   [Usage
     "(diff-time a b)"
     Map.empty

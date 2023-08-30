@@ -954,7 +954,7 @@ Supported in either invariants or properties.
 * takes `b`: `time`
 * produces `decimal`
 
-Time difference in seconds
+Time difference in seconds of `a` - `b`
 
 Supported in properties only.
 
