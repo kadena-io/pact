@@ -1343,13 +1343,10 @@ strToInt i as =
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
     doBase64 si txt = do
-      _simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
-      parseResult <- base64DecodeWithShimmedErrors (getInfo si) txt
+      base64Behavior <- (\legacy -> if legacy then Legacy else Simplified) <$> isExecutionFlagSet FlagDisablePact49
+      parseResult <- base64DecodeWithShimmedErrors (getInfo si) base64Behavior txt
       case parseResult of
-        Left e -> evalError' si $
-          if False
-          then "Could not base64-decode string"
-          else (pretty e)
+        Left e -> evalError' si (pretty e)
         Right bs -> return $ toTerm $ bsToInteger bs
 
 bsToInteger :: BS.ByteString -> Integer
@@ -1414,18 +1411,13 @@ base64decode = defRNative "base64-decode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] -> do
-        simplifiedErrorMessage <- not <$> isExecutionFlagSet FlagDisablePact49
-        parseResult <- base64DecodeWithShimmedErrors (getInfo i) s
+        base64Behavior <- (\legacy -> if legacy then Legacy else Simplified) <$> isExecutionFlagSet FlagDisablePact49
+        parseResult <- base64DecodeWithShimmedErrors (getInfo i) base64Behavior s
         case parseResult of
           Right bs -> case T.decodeUtf8' bs of
             Right t -> return $ tStr t
             Left _unicodeError -> evalError' i $ "invalid unicode"
-          Left base64Error -> evalError' i $
-            if simplifiedErrorMessage
-            then  "Could not base64-decode string"
-            else  "Could not decode string: "
-              <> pretty (T.pack base64Error)
-
+          Left base64Error -> evalError' i (pretty (T.pack base64Error))
       _ -> argsError i as
 
 -- | Continue a nested defpact.
@@ -1463,6 +1455,29 @@ continueNested i as = gasUnreduced i as $ case as of
     TVar (Ref d) _ -> unTVar d
     d -> d
 
+-- | A tag for determining how to proceed when encountering an invalid
+-- base64-encoded message.
+--
+-- Legacy:
+--   Although we are using base64-bytestring > 1.0, emulate the behavior of
+--   base64-bytestring-0.1, for hash compatibility with historical blocks.
+--   Messages that continue to fail with new error messages will have those
+--   error messages parsed and reformatted into the older form. And messages
+--   that now fail due to "non-canonical encoding" will be parsed again
+--   leniently, because the legacy base64 parser accepted these messages.
+--
+--  Simplified:
+--    Only base64-encoded messages that pass strict parsing will be accepted
+--    (no second lenient pass for non-canonical encodings). All failures to
+--    parse will result in the same single error message. This makes the error
+--    messages less informative, but makes it easier to maintain compatibility
+--    as the base64 parsing algorithm evolves, for failures encountered after
+--    the fork that enables Simplified error messages..
+data Base64DecodingBehavior
+  = Legacy
+  | Simplified
+  deriving (Eq, Show)
+
 -- | Convert from base64-bytestring-1.0 behavior to
 -- base64-bytestring-0.1 behavior. This is needed in order
 -- to preserve hash equality with old versions of pact (which
@@ -1472,9 +1487,10 @@ continueNested i as = gasUnreduced i as $ case as of
 -- base64-decoding error message.
 base64DecodeWithShimmedErrors
   :: Info
+  -> Base64DecodingBehavior
   -> Text
   -> Eval e (Either String BS.ByteString)
-base64DecodeWithShimmedErrors i txt =
+base64DecodeWithShimmedErrors i behavior txt =
 
   -- Attempt to decode the bytestring, and convert error messages to Text.
   case first Text.pack $ parseB64UrlUnpaddedText' txt of
@@ -1482,6 +1498,12 @@ base64DecodeWithShimmedErrors i txt =
     -- base64-bytestring-0.1 is more strict than base64-bytestring-0.1,
     -- so all new successful decodings succeeded on the old version, too.
     Right e -> return $ Right e
+
+    -- With Simplified error messages, map every error to a single string.
+    Left _ | behavior == Simplified ->
+             return $ Left "Could not base64-decode string"
+
+    -- All cases beyond this point are errors and the behavior context is Legacy.
 
     -- base64-bytestring-1.0 fails with a "non-canonical encoding" error
     -- for a subset of encoded messages that decode to some bytestring
