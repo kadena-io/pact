@@ -1385,6 +1385,16 @@ spec = describe "analyze" $ do
 
     expectVerified code
 
+  describe "authorized-by inlines definitions (regression #1294)" $ do
+    let code =
+          [text|
+               (defconst testname: string 'ks)
+               (defun test:bool ()
+                 @model[(property (authorized-by testname))]
+                 (enforce-guard (create-module-guard "governance")))
+          |]
+    expectVerified code
+
   describe "enforce-one.1" $ do
     let code =
           [text|
