@@ -600,8 +600,11 @@ inferPreProp preProp = case preProp of
     (Some SBool . PropSpecific) ... RowExists tn'
       <$> checkPreProp SStr rk
       <*> parseBeforeAfter beforeAfter
-  PreApp s [PreStringLit rn] | s == SAuthorizedBy ->
-    pure $ Some SBool (PropSpecific (GuardPassed (RegistryName rn)))
+  PreApp s [rn] | s == SAuthorizedBy -> do
+    rn' <- inferPreProp rn
+    case rn' of
+      Some SStr (TextLit str) -> pure $ Some SBool (PropSpecific (GuardPassed (RegistryName str)))
+      _ -> throwErrorIn preProp "expected string literal"
   PreApp s [tn, cn, rk] | s == SRowEnforced -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
