@@ -202,8 +202,7 @@ instance Scheme (SPPKScheme 'WebAuthn) where
 
         -- Reconstitute the payload signed by the WebAuthn client.
         clientDataDigest <- Base16.decode $ BS.pack (show (H.hashWith H.SHA256 clientData))
-        let
-          payload = authData <> clientDataDigest
+        let payload = authData <> clientDataDigest
 
         -- Check the signature's validity.
         first T.unpack $ WAVerify.verify publicKey payload sig
