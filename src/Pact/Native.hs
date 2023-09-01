@@ -1347,7 +1347,7 @@ strToInt i as =
       base64Behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
       parseResult <- base64DecodeWithShimmedErrors (getInfo si) base64Behavior txt
       case parseResult of
-        Left e -> evalError' si (pretty e)
+        Left e -> evalError' si (pretty (T.pack e))
         Right bs -> return $ toTerm $ bsToInteger bs
 
 bsToInteger :: BS.ByteString -> Integer
