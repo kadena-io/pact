@@ -1343,7 +1343,8 @@ strToInt i as =
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
     doBase64 si txt = do
-      base64Behavior <- (\legacy -> if legacy then Legacy else Simplified) <$> isExecutionFlagSet FlagDisablePact49
+      -- Use Legacy error behavior when 4.9 is disabled.
+      base64Behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
       parseResult <- base64DecodeWithShimmedErrors (getInfo si) base64Behavior txt
       case parseResult of
         Left e -> evalError' si (pretty e)
@@ -1411,7 +1412,8 @@ base64decode = defRNative "base64-decode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] -> do
-        base64Behavior <- (\legacy -> if legacy then Legacy else Simplified) <$> isExecutionFlagSet FlagDisablePact49
+        -- Use Legacy error behavior when 4.9 is disabled.
+        base64Behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
         parseResult <- base64DecodeWithShimmedErrors (getInfo i) base64Behavior s
         case parseResult of
           Right bs -> case T.decodeUtf8' bs of
@@ -1466,7 +1468,7 @@ continueNested i as = gasUnreduced i as $ case as of
 --   that now fail due to "non-canonical encoding" will be parsed again
 --   leniently, because the legacy base64 parser accepted these messages.
 --
---  Simplified:
+-- Simplified:
 --    Only base64-encoded messages that pass strict parsing will be accepted
 --    (no second lenient pass for non-canonical encodings). All failures to
 --    parse will result in the same single error message. This makes the error
