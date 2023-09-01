@@ -1503,7 +1503,7 @@ base64DecodeWithShimmedErrors i behavior txt =
 
     -- With Simplified error messages, map every error to a single string.
     Left _ | behavior == Simplified ->
-             return $ Left "Could not base64-decode string"
+      return $ Left "Could not base64-decode string"
 
     -- All cases beyond this point are errors and the behavior context is Legacy.
 
@@ -1511,24 +1511,23 @@ base64DecodeWithShimmedErrors i behavior txt =
     -- for a subset of encoded messages that decode to some bytestring
     -- that would subsequently encode to something other than the original.
     Left e | "non-canonical" `T.isInfixOf` e ->
-             return $ Right (B64.decodeLenient (T.encodeUtf8 txt))
+      return $ Right (B64.decodeLenient (T.encodeUtf8 txt))
 
     -- This particular error message is reported differently between the
     -- two versions.
     Left "Base64URL decode failed: Base64-encoded bytestring has invalid size" ->
-       return $ Left "Base64URL decode failed: invalid base64 encoding near offset 0"
+      return $ Left "Base64URL decode failed: invalid base64 encoding near offset 0"
 
     -- The "invalid character at offset: $n" message is spelled as
     -- "invalid base64 encoding near offset $n" in the old base64-bytestring.
-    Left (Text.stripPrefix "Base64URL decode failed: invalid character at offset: " -> Just suffix) ->
-        adjustedOffset suffix >>= \offset ->
-          return
-            (Left
-            ("Base64URL decode failed: invalid base64 encoding near offset " ++ show offset))
+    Left (Text.stripPrefix "Base64URL decode failed: invalid character at offset: " -> Just suffix) -> do
+      offset <- adjustedOffset suffix
+      return . Left $
+        "Base64URL decode failed: invalid base64 encoding near offset " ++ show offset
 
-    Left (Text.stripPrefix "Base64URL decode failed: invalid padding at offset: " -> Just suffix) ->
-          adjustedOffset suffix >>= \offset ->
-            return (Left $ "Base64URL decode failed: invalid padding near offset " ++ show offset)
+    Left (Text.stripPrefix "Base64URL decode failed: invalid padding at offset: " -> Just suffix) -> do
+      offset <- adjustedOffset suffix
+      return . Left $ "Base64URL decode failed: invalid padding near offset " ++ show offset
 
     -- All other error messages should be the same between old and
     -- new versions of base64-bytestring.
