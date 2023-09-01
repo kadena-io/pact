@@ -147,7 +147,7 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
 keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
-        scheme = Just ED25519
+        scheme = Nothing
         pub = toB16Text $ toBS $ fst cred
         addr = Just pub
 

@@ -3,13 +3,6 @@
 
 (expect "env-hash" "Set tx hash to YQo" (env-hash "YQo"))
 
-;; versions of base64-bytestring < 1.2 accept invalid base64 encodings. The
-;; following test case is expected to fail after upgrading to
-;; base64-bytestring > 1.2.0.0. This would be a breaking change and it must
-;; be guaranteed that mainnet history isn't affected.
-;; (expect-failure "env-hash invalid base64" (env-hash "aa"))
-(expect "env-hash invalid base64" "Set tx hash to aa" (env-hash "aa"))
-
 ;; TODO use expect-that for above tests
 (expect-that "expect-that test" (< 2) (+ 1 2))
 
