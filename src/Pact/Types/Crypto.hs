@@ -193,7 +193,7 @@ instance Scheme (SPPKScheme 'WebAuthn) where
         -- Decode the signer's public key.
         publicKey <- first show $
           Serialise.deserialiseOrFail @WA.CosePublicKey
-          (BSL.fromStrict pubBS)
+            (BSL.fromStrict pubBS)
 
         -- Recover the signature, clientData, and authData bytestrings.
         sig <- Base64.decode (T.encodeUtf8 signature)
