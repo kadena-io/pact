@@ -52,7 +52,6 @@ module Pact.Types.Command
   , RequestKey(..)
   , cmdToRequestKey
   , requestKeyToB16Text
-  -- , verifyWebAuthnSig
   ) where
 
 import Control.Applicative

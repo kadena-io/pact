@@ -154,7 +154,6 @@ testPublicKeyImport = do
 
 
 
-  -- TODO doublecheck the logic.
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
     let hsh = hash "(somePactFunction)"
     [signer] <- toSigners [someED25519Pair]

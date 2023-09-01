@@ -149,7 +149,6 @@ instance Scheme (SPPKScheme 'ED25519) where
   type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
   type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
 
-  -- TODO: Check this with the right compiler flags.
   _valid _ (Hash msg) pub sig =
     case (fromBS pubBS, fromBS sigBS) of
       (Right pubKey, Right sig) -> Ed25519.verify pubKey (fromShort msg) sig
