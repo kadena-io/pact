@@ -217,7 +217,7 @@ instance Scheme (SPPKScheme 'WebAuthn) where
         let pactHashText :: T.Text = PactHash.hashToText msg
         if pactHashText == challenge
           then return ()
-          else Left $ "Hash mismatch"
+          else Left "Hash mismatch"
 
 --------- SCHEME HELPER DATA TYPES ---------
 
@@ -422,12 +422,12 @@ instance A.FromJSON WebAuthnSignature where
     clientDataJSON <- o .: "clientDataJSON"
     authenticatorData <- o .: "authenticatorData"
     signature <- o .: "signature"
-    pure $ WebAuthnSignature { clientDataJSON, authenticatorData, signature }
+    pure $ WebAuthnSignature {..}
 
 -- | This type represents a challenge that was used during
 -- a WebAuthn "assertion" flow. For signing Pact payloads, this
 -- is the PactHash of a transaction.
-data ClientDataJSON = ClientDataJSON {
+newtype ClientDataJSON = ClientDataJSON {
   challenge :: T.Text
   } deriving (Show, Generic)
 
