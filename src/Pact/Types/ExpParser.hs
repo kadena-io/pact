@@ -107,10 +107,13 @@ data ParseState a = ParseState
   }
 makeLenses ''ParseState
 
--- | Current env has flag for try-narrow fix.
-newtype ParseEnv = ParseEnv
-    { _peNarrowTry :: Bool }
-instance Default ParseEnv where def = ParseEnv True
+data ParseEnv = ParseEnv
+    { _peNarrowTry :: Bool
+    -- ^ Enable try-narrow fix.
+    , _peCondGenParsing :: Bool
+    -- ^ Enable more general `cond` parsing.
+    }
+instance Default ParseEnv where def = ParseEnv True True
 
 type MkInfo = Parsed -> Info
 

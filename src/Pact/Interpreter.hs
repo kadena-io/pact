@@ -148,10 +148,12 @@ data EvalResult = EvalResult
 -- | Execute pact statements.
 evalExec :: Interpreter e -> EvalEnv e -> ParsedCode -> IO EvalResult
 evalExec runner evalEnv ParsedCode {..} = do
-  terms <- throwEither $ compileExps (ParseEnv isNarrowTry) (mkTextInfo _pcCode) _pcExps
+  terms <- throwEither $ compileExps (ParseEnv isNarrowTry condGenParsing) (mkTextInfo _pcCode) _pcExps
   interpret runner evalEnv (Right terms)
   where
-    isNarrowTry = not $ S.member FlagDisablePact44 $ _ecFlags $ _eeExecutionConfig evalEnv
+    evalFlags = _ecFlags $ _eeExecutionConfig evalEnv
+    isNarrowTry = not $ S.member FlagDisablePact44 evalFlags
+    condGenParsing = not $ S.member FlagDisablePact49 evalFlags
 
 -- | For pre-installing modules into state.
 initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState

@@ -35,6 +35,7 @@ import Control.Arrow ((&&&),first)
 import Control.Exception hiding (try)
 import Control.Lens hiding (prism)
 import Control.Monad
+import Control.Monad.Reader (asks)
 import Control.Monad.State
 
 import qualified Data.ByteString as BS
@@ -613,13 +614,24 @@ abstractBody' args body =
 
 condForm :: Compile (Term Name)
 condForm = do
-  conds <- conds'
-  elseCond <- valueLevel
+  generalized <- asks _peCondGenParsing
+  (conds, elseCond) <-
+    if generalized
+       then partitionCond =<< some (Right <$> valueLevel `notFollowedBy'` cond' <|> Left <$> cond')
+       else (,) <$> some cond' <*> valueLevel
   i <- contextInfo
   let if' = TVar (Name (BareName "if" i)) i
   pure $ foldr (\(cond, act) e -> TApp (App if' [cond, act, e] i) i) elseCond conds
   where
-  conds' = some $ withList' Parens $ (,) <$> valueLevel <*> valueLevel
+  cond' = withList' Parens $ (,) <$> valueLevel <*> valueLevel
+
+  partitionCond [Right elseCond] = pure ([], elseCond)
+  partitionCond (Left cond : rest@(_:_)) = first (cond :) <$> partitionCond rest
+  partitionCond [Left _] = error "condForm: impossible: Left _ cannot be the last element"
+  partitionCond (Right _ : _ : _) = expected "a single fallback clause"
+  partitionCond [] = expected "condition clauses"
+
+  p `notFollowedBy'` q = try $ p <* notFollowedBy q
 
 letForm :: Compile (Term Name)
 letForm = do
