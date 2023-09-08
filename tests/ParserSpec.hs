@@ -97,7 +97,7 @@ narrowTryBackCompat :: Spec
 narrowTryBackCompat = do
   -- code from bad-term-in-list.repl
   it "preserves old try bug" $
-    parseCompile (ParseEnv False) "[(module m g (defcap g () 1))]" `shouldSatisfy` rightRight
+    parseCompile (ParseEnv False False) "[(module m g (defcap g () 1))]" `shouldSatisfy` rightRight
   where
     rightRight (Right Right {}) = True
     rightRight _ = False
