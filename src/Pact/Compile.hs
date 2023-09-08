@@ -612,26 +612,30 @@ abstractBody' args body =
       return $ ModuleName mn (Just $ NamespaceName ns)
     ifVarName _ = expected "interface reference"
 
+-- | Parses a list of `p`s followed by a single `q`, allowing `p` ⊆ `q`.
+-- Hence the need for lookahead, as `some p >> q`-like parsing won't work.
+somePthenQ :: (String, Compile p) -> (String, Compile q) -> Compile ([p], q)
+somePthenQ (pName, p) (qName, q) = partitionPQ =<< some (Right <$> q `notFollowedBy'` p <|> Left <$> p)
+  where
+  p1 `notFollowedBy'` p2 = try $ p1 <* notFollowedBy p2
+  partitionPQ [Right q'] = pure ([], q')
+  partitionPQ (Left p' : rest@(_:_)) = first (p' :) <$> partitionPQ rest
+  partitionPQ [Left _] = error "somePthenQ: impossible: Left _ cannot be the last element"
+  partitionPQ (Right _ : _ : _) = expected $ "a single " <> qName <> " clause"
+  partitionPQ [] = expected $ "some " <> pName <> " clauses"
+
 condForm :: Compile (Term Name)
 condForm = do
   generalized <- asks _peCondGenParsing
   (conds, elseCond) <-
     if generalized
-       then partitionCond =<< some (Right <$> valueLevel `notFollowedBy'` cond' <|> Left <$> cond')
+       then somePthenQ ("condition", cond') ("fallback", valueLevel)
        else (,) <$> some cond' <*> valueLevel
   i <- contextInfo
   let if' = TVar (Name (BareName "if" i)) i
   pure $ foldr (\(cond, act) e -> TApp (App if' [cond, act, e] i) i) elseCond conds
   where
   cond' = withList' Parens $ (,) <$> valueLevel <*> valueLevel
-
-  partitionCond [Right elseCond] = pure ([], elseCond)
-  partitionCond (Left cond : rest@(_:_)) = first (cond :) <$> partitionCond rest
-  partitionCond [Left _] = error "condForm: impossible: Left _ cannot be the last element"
-  partitionCond (Right _ : _ : _) = expected "a single fallback clause"
-  partitionCond [] = expected "condition clauses"
-
-  p `notFollowedBy'` q = try $ p <* notFollowedBy q
 
 letForm :: Compile (Term Name)
 letForm = do
