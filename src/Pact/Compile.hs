@@ -619,9 +619,9 @@ somePthenQ (pName, p) (qName, q) = partitionPQ =<< some (Right <$> q `notFollowe
   where
   p1 `notFollowedBy'` p2 = try $ p1 <* notFollowedBy p2
   partitionPQ [Right q'] = pure ([], q')
-  partitionPQ (Left p' : rest@(_:_)) = first (p' :) <$> partitionPQ rest
+  partitionPQ (Right _ : _) = expected $ "a single " <> qName <> " clause"
   partitionPQ [Left _] = expected $ qName <> " to be the last element"
-  partitionPQ (Right _ : _ : _) = expected $ "a single " <> qName <> " clause"
+  partitionPQ (Left p' : rest) = first (p' :) <$> partitionPQ rest
   partitionPQ [] = expected $ "some " <> pName <> " clauses"
 
 condForm :: Compile (Term Name)
