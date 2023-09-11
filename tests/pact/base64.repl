@@ -24,7 +24,7 @@
 
 (expect-failure
   "base64 decoding fails on non base64-encoded input"
-  "invalid padding near offset 16"
+  "Could not decode string"
   (base64-decode "aGVsbG8gd29ybGQh%"))
 
 (expect-failure

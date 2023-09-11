@@ -1415,7 +1415,9 @@ base64decode = defRNative "base64-decode" go
         -- Use Legacy error behavior when 4.9 is disabled.
         base64Behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
         parseResult <- base64DecodeWithShimmedErrors (getInfo i) base64Behavior s
-        case parseResult of
+        let
+          parseResultErrorContext = first ("Could not decode string: " <>) $ parseResult
+        case parseResultErrorContext of
           Right bs -> case T.decodeUtf8' bs of
             Right t -> return $ tStr t
             Left _unicodeError -> evalError' i $ "invalid unicode"
