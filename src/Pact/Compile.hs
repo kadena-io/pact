@@ -615,7 +615,7 @@ abstractBody' args body =
 -- | Parses a list of `p`s followed by a single `q`, allowing `p` ⊆ `q`.
 -- Hence the need for lookahead, as `some p >> q`-like parsing won't work.
 somePthenQ :: (String, Compile p) -> (String, Compile q) -> Compile ([p], q)
-somePthenQ (pName, p) (qName, q) = partitionPQ =<< some (Right <$> q `notFollowedBy'` p <|> Left <$> p)
+somePthenQ (pName, p) (qName, q) = partitionPQ =<< some (Right <$> q `notFollowedBy'` q <|> Left <$> p)
   where
   p1 `notFollowedBy'` p2 = try $ p1 <* notFollowedBy p2
   partitionPQ [Right q'] = pure ([], q')
