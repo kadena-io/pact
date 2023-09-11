@@ -620,7 +620,7 @@ somePthenQ (pName, p) (qName, q) = partitionPQ =<< some (Right <$> q `notFollowe
   p1 `notFollowedBy'` p2 = try $ p1 <* notFollowedBy p2
   partitionPQ [Right q'] = pure ([], q')
   partitionPQ (Left p' : rest@(_:_)) = first (p' :) <$> partitionPQ rest
-  partitionPQ [Left _] = error "somePthenQ: impossible: Left _ cannot be the last element"
+  partitionPQ [Left _] = expected $ qName <> " to be the last element"
   partitionPQ (Right _ : _ : _) = expected $ "a single " <> qName <> " clause"
   partitionPQ [] = expected $ "some " <> pName <> " clauses"
 
