@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module ParserSpec (spec) where
 
 import Data.Default
+import NeatInterpolation (text)
 import Test.Hspec
 import Pact.Repl
 import Pact.Repl.Types
@@ -24,6 +26,7 @@ spec = do
   describe "runBadTests" runBadTests
   describe "prettyLit" prettyLit
   describe "narrowTryBackCompat" narrowTryBackCompat
+  describe "condParsing" condParsing
   parseNames
 
 evalString' :: String -> IO (Either String (Term Name), ReplState)
@@ -91,13 +94,101 @@ parseNames = do
     negative "four components" $ parseQualifiedName def "a.b.c.d"
 
 parseCompile :: ParseEnv -> Text -> Either String (Either PactError [Term Name])
-parseCompile pe m = compileExps pe mkEmptyInfo <$> (parseExprs m)
+parseCompile pe m = compileExps pe mkEmptyInfo <$> parseExprs m
+
+rightRight :: Either l1 (Either l2 r) -> Bool
+rightRight (Right Right {}) = True
+rightRight _ = False
 
 narrowTryBackCompat :: Spec
 narrowTryBackCompat = do
   -- code from bad-term-in-list.repl
   it "preserves old try bug" $
     parseCompile (ParseEnv False False) "[(module m g (defcap g () 1))]" `shouldSatisfy` rightRight
+
+condParsing :: Spec
+condParsing = do
+  it "parses single-token fallbacks" $
+    parses [text|
+      (module m g (defcap g() true)
+        (defun is-boy-or-girl:string (name:string)
+          (cond
+            ((= name "alice") "Girl")
+            ((= name "bob")   "Boy")
+            name
+          )
+        )
+      )
+      |]
+  it "parses S-expr fallbacks" $
+    parses [text|
+      (module m g (defcap g() true)
+        (defun unknown:string (name:string param:string) (format "I don't know {}" [name]))
+        (defun is-boy-or-girl:string (name:string)
+          (cond
+            ((= name "alice") "Girl")
+            ((= name "bob")   "Boy")
+            (unknown name name)
+          )
+        )
+      )
+      |]
+  it "doesn't parse single-token branches in the middle" $
+    doesn'tParse [text|
+      (module m g (defcap g() true)
+        (defun is-boy-or-girl:string (name:string)
+          (cond
+            ((= name "alice") "Girl")
+            name
+            ((= name "bob")   "Boy")
+            name
+          )
+        )
+      )
+      |]
+  it "doesn't parse single-token branches in the middle followed by another single-token" $
+    doesn'tParse [text|
+      (module m g (defcap g() true)
+        (defun is-boy-or-girl:string (name:string)
+          (cond
+            ((= name "alice") "Girl")
+            name
+            name
+            ((= name "bob")   "Boy")
+            name
+          )
+        )
+      )
+      |]
+  it "doesn't parse S-exprs in the middle" $
+    doesn'tParse [text|
+      (module m g (defcap g() true)
+        (defun unknown:string (name:string param:string) (format "I don't know {}" [name]))
+        (defun is-boy-or-girl:string (name:string)
+          (cond
+            ((= name "alice") "Girl")
+            (unknown name name)
+            ((= name "bob")   "Boy")
+            name
+          )
+        )
+      )
+      |]
+  it "doesn't parse S-exprs in the middle followed by another S-expr" $
+    doesn'tParse [text|
+      (module m g (defcap g() true)
+        (defun unknown:string (name:string param:string) (format "I don't know {}" [name]))
+        (defun is-boy-or-girl:string (name:string)
+          (cond
+            ((= name "alice") "Girl")
+            (unknown name name)
+            (unknown name name)
+            ((= name "bob")   "Boy")
+            name
+          )
+        )
+      )
+      |]
   where
-    rightRight (Right Right {}) = True
-    rightRight _ = False
+  parses txt = parseCompile (ParseEnv False True) txt `shouldSatisfy` rightRight
+  doesn'tParse txt = parseCompile (ParseEnv False True) txt `shouldNotSatisfy` rightRight
