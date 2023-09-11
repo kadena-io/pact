@@ -1420,7 +1420,7 @@ base64decode = defRNative "base64-decode" go
         case parseResultErrorContext of
           Right bs -> case T.decodeUtf8' bs of
             Right t -> return $ tStr t
-            Left _unicodeError -> evalError' i $ "invalid unicode"
+            Left _unicodeError -> evalError' i $ "Could not decode string: Base64URL decode failed: invalid unicode"
           Left base64Error -> evalError' i (pretty (T.pack base64Error))
       _ -> argsError i as
 

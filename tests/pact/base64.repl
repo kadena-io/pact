@@ -24,32 +24,32 @@
 
 (expect-failure
   "base64 decoding fails on non base64-encoded input"
-  "Could not decode string"
+  "Could not decode string: Base64URL decode failed: invalid padding near offset 16"
   (base64-decode "aGVsbG8gd29ybGQh%"))
 
 (expect-failure
   "base64 decoding fails on garbage input 1"
-  "invalid unicode"
+  "Could not decode string: Base64URL decode failed: invalid unicode"
   (base64-decode "aaa"))
 
 (expect-failure
   "base64 decoding fails on garbage input 2"
-  "invalid unicode"
+  "Could not decode string: Base64URL decode failed: invalid unicode"
   (base64-decode "asdflk"))
 
 (expect-failure
   "base64 decoding fails on garbage input 3"
-  "invalid base64 encoding near offset 0"
+  "Could not decode string: Base64URL decode failed: invalid base64 encoding near offset 0"
   (base64-decode "!@#$%&"))
 
 (expect-failure
   "base64 decoding fails on garbage input 4"
-  "invalid base64 encoding near offset 0"
+  "Could not decode string: Base64URL decode failed: invalid base64 encoding near offset 0"
   (base64-decode "\x0237"))
 
 (expect-failure
   "base64 decoding fails on garbage input 5"
-  "invalid base64 encoding near offset 0"
+  "Could not decode string: Base64URL decode failed: invalid base64 encoding near offset 0"
   (base64-decode "+\x0000"))
 
 (expect
