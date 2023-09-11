@@ -34,7 +34,7 @@ import GHC.Generics hiding (to)
 
 import Test.QuickCheck
 
-import Pact.Types.Continuation (PactExec(..))
+import Pact.Types.Continuation (PactExec)
 import Pact.Types.Pretty (Pretty(..), prettyString)
 import Pact.Types.Term (Object, Name)
 
