@@ -415,6 +415,7 @@ test-suite hspec
     , lens
     , mod
     , mtl
+    , neat-interpolation
     , pact
     , pact-json >= 0.1
     , semirings
@@ -476,7 +477,6 @@ test-suite hspec
       , hw-hspec-hedgehog >=0.1
       , intervals
       , mmorph
-      , neat-interpolation
       , sbv
       , servant-client >=0.16
       , temporary >=1.3
