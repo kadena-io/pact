@@ -133,6 +133,19 @@ condParsing = do
         )
       )
       |]
+  it "parses S-expr fallbacks of two terms" $
+    parses [text|
+      (module m g (defcap g() true)
+        (defun unknown:string (name:string) (format "I don't know {}" [name]))
+        (defun is-boy-or-girl:string (name:string)
+          (cond
+            ((= name "alice") "Girl")
+            ((= name "bob")   "Boy")
+            (unknown name)
+          )
+        )
+      )
+      |]
   it "doesn't parse single-token branches in the middle" $
     doesn'tParse [text|
       (module m g (defcap g() true)
