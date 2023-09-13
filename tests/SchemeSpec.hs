@@ -1,5 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module SchemeSpec (spec) where
 
@@ -234,3 +236,46 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siCapList = []
         }
     verifyUserSig cmdHash' webAuthnSig signer `shouldBe` True
+  it "should require a matching pubkey" $ do
+    let
+      (webAuthnSig, _) = someWebAuthnSignature
+      (PubBS otherPubKey, _, _, _) = someED25519Pair
+      pubKeyBase16 = T.decodeUtf8 $ Base16.encode otherPubKey
+      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
+        Right h -> h
+        Left _ -> error "Hash is valid"
+      signer = Signer
+        { _siScheme = Just WebAuthn
+        , _siPubKey = pubKeyBase16
+        , _siAddress = Nothing
+        , _siCapList = []
+        }
+    verifyUserSig cmdHash' webAuthnSig signer `shouldBe` False
+  it "should require a matching cmdHash" $ do
+    let
+      (webAuthnSig, PubBS pubKey) = someWebAuthnSignature
+      pubKeyBase16 = T.decodeUtf8 $ Base16.encode pubKey
+      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "3fbc092db9350757e2ab4f7ee9792bfcd2f5220ada5a4bc684487f60c6034369" of
+        Right h -> h
+        Left _ -> error "Hash is valid"
+      signer = Signer
+        { _siScheme = Just WebAuthn
+        , _siPubKey = pubKeyBase16
+        , _siAddress = Nothing
+        , _siCapList = []
+        }
+    verifyUserSig cmdHash' webAuthnSig signer `shouldBe` False
+  it "should require webauthn scheme" $ do
+    let
+      (webAuthnSig, PubBS pubKey) = someWebAuthnSignature
+      pubKeyBase16 = T.decodeUtf8 $ Base16.encode pubKey
+      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
+        Right h -> h
+        Left _ -> error "Hash is valid"
+      signer = Signer
+        { _siScheme = Nothing
+        , _siPubKey = pubKeyBase16
+        , _siAddress = Nothing
+        , _siCapList = []
+        }
+    verifyUserSig cmdHash' webAuthnSig signer `shouldBe` False
