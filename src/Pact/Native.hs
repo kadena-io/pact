@@ -1344,8 +1344,7 @@ strToInt i as =
       Right n -> return (toTerm n)
     doBase64 si txt = do
       -- Use Legacy error behavior when 4.9 is disabled.
-      base64Behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
-      parseResult <- base64DecodeWithShimmedErrors (getInfo si) base64Behavior txt
+      parseResult <- base64DecodeWithShimmedErrors (getInfo si) txt
       case parseResult of
         Left e -> evalError' si (pretty (T.pack e))
         Right bs -> return $ toTerm $ bsToInteger bs
@@ -1413,8 +1412,7 @@ base64decode = defRNative "base64-decode" go
     go i as = case as of
       [TLitString s] -> do
         -- Use Legacy error behavior when 4.9 is disabled.
-        base64Behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
-        parseResult <- base64DecodeWithShimmedErrors (getInfo i) base64Behavior s
+        parseResult <- base64DecodeWithShimmedErrors (getInfo i) s
         let
           parseResultErrorContext = first ("Could not decode string: " <>) $ parseResult
         case parseResultErrorContext of
@@ -1491,10 +1489,11 @@ data Base64DecodingBehavior
 -- base64-decoding error message.
 base64DecodeWithShimmedErrors
   :: Info
-  -> Base64DecodingBehavior
   -> Text
   -> Eval e (Either String BS.ByteString)
-base64DecodeWithShimmedErrors i behavior txt =
+base64DecodeWithShimmedErrors i txt = do
+
+  behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
 
   -- Attempt to decode the bytestring, and convert error messages to Text.
   case first Text.pack $ parseB64UrlUnpaddedText' txt of
