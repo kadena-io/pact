@@ -1343,7 +1343,6 @@ strToInt i as =
       Left e -> evalError' si (pretty e)
       Right n -> return (toTerm n)
     doBase64 si txt = do
-      -- Use Legacy error behavior when 4.9 is disabled.
       parseResult <- base64DecodeWithShimmedErrors (getInfo si) txt
       case parseResult of
         Left e -> evalError' si (pretty (T.pack e))
@@ -1411,7 +1410,6 @@ base64decode = defRNative "base64-decode" go
     go :: RNativeFun e
     go i as = case as of
       [TLitString s] -> do
-        -- Use Legacy error behavior when 4.9 is disabled.
         parseResult <- base64DecodeWithShimmedErrors (getInfo i) s
         let
           parseResultErrorContext = first ("Could not decode string: " <>) $ parseResult
@@ -1493,6 +1491,7 @@ base64DecodeWithShimmedErrors
   -> Eval e (Either String BS.ByteString)
 base64DecodeWithShimmedErrors i txt = do
 
+  -- Use Legacy error behavior when 4.9 is disabled.
   behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
 
   -- Attempt to decode the bytestring, and convert error messages to Text.
