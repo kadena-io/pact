@@ -148,8 +148,7 @@ keyPairToSigner cred caps = Signer scheme pub addr caps
       where
         scheme = Nothing
         pub = toB16Text $ toBS $ fst cred
-        addr = Just pub
-
+        addr = Nothing
 
 keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer]
 keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
