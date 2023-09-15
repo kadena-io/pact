@@ -1492,7 +1492,7 @@ base64DecodeWithShimmedErrors
 base64DecodeWithShimmedErrors i txt = do
 
   -- Use Legacy error behavior when 4.9 is disabled.
-  behavior <- bool Simplified Legacy <$> isExecutionFlagSet FlagDisablePact49
+  behavior <- ifExecutionFlagSet' FlagDisablePact49 Legacy Simplified
 
   -- Attempt to decode the bytestring, and convert error messages to Text.
   case first Text.pack $ parseB64UrlUnpaddedText' txt of
