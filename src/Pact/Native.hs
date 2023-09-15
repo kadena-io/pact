@@ -1472,7 +1472,7 @@ continueNested i as = gasUnreduced i as $ case as of
 --    parse will result in the same single error message. This makes the error
 --    messages less informative, but makes it easier to maintain compatibility
 --    as the base64 parsing algorithm evolves, for failures encountered after
---    the fork that enables Simplified error messages..
+--    the fork that enables simplified error messages.
 data Base64DecodingBehavior
   = Legacy
   | Simplified
