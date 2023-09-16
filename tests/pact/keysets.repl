@@ -467,3 +467,41 @@
   "Subsequent keyset rotations succeed without user guard - proof"
   "KeySet {keys: [rotated],pred: keys-all}"
   (format "{}" [(describe-keyset "ns.a")]))
+
+(commit-tx)
+
+;;
+;; ========= test define-keyset magic cap ===========
+;;
+
+(begin-tx)
+
+;; ugly: have to make fake root module to use repl tests for magic cap
+;; need additional coverage to prove we don't need this
+(module pact GOV
+  (defcap GOV () true)
+  (defcap DEFINE_KEYSET (name:string)
+    (enforce false "Must never be called")))
+
+(namespace 'ns)
+(env-data { "ks": ["signer"] })
+(env-keys ["u"])
+(define-keyset "ns.magic-1" (read-keyset 'ks))
+(define-keyset "ns.magic-2" (read-keyset 'ks))
+
+(commit-tx)
+
+(begin-tx)
+(env-sigs
+ [ { "key": "signer"
+   , "caps": [(pact.DEFINE_KEYSET "ns.magic-1")]
+   } ] )
+(expect
+ "success for rotate with ns.magic-1 scoped"
+ "Keyset defined"
+ (define-keyset "ns.magic-1" (read-keyset 'ks)))
+(expect-failure
+ "failure for rotate without ns.magic-2 scoped"
+ "Keyset failure"
+ (define-keyset "ns.magic-2" (read-keyset 'ks)))
+(commit-tx)

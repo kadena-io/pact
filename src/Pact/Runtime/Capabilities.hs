@@ -29,6 +29,7 @@ module Pact.Runtime.Capabilities
     ,InstallMgd
     ,checkSigCaps
     ,emitCapability
+    ,withMagicCapability
     ) where
 
 import Control.Monad
@@ -71,6 +72,17 @@ popCapStack act = do
     (c:cs) -> do
       evalCapabilities . capStack .= cs
       act c
+
+-- | Run action with magic non-managed capability in scope. Fails if cap already installed.
+withMagicCapability :: HasInfo i => i -> UserCapability -> Eval e a -> Eval e a
+withMagicCapability i cap action = do
+  inscope <- capabilityAcquired cap
+  when inscope $ evalError' i "Internal error, magic capability already acquired"
+  evalCapabilities . capStack %= (slot:)
+  r <- action
+  popCapStack (const (return r))
+  where
+    slot = CapSlot CapCallStack cap []
 
 acquireModuleAdminCapability
   :: ModuleName -> Eval e () -> Eval e CapEvalResult

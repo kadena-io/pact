@@ -17,11 +17,15 @@ where
 
 import Control.Lens
 
+import Data.Default
 import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Runtime.Capabilities
+import Pact.Types.Capability
 import Pact.Types.KeySet
+import Pact.Types.PactValue
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Namespace
@@ -118,8 +122,18 @@ defineKeyset fi as = case as of
         Just oldKs -> do
           computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
           computeGas' fi (GPreWrite (WriteKeySet ksn ks) szVer) $ do
-            runSysOnly $ enforceKeySet i (Just ksn) oldKs
+            runSysOnly $
+                withMagicCapability i (defineKeysetMagicCap ksn) $
+                     enforceKeySet i (Just ksn) oldKs
             writeRow i Write KeySets ksn ks & success "Keyset defined"
+
+-- | Magic capability for rotating keysets: @(pact.DEFINE_KEYSET [keyset name])@.
+-- "pact" is a reserved root pseudo-module, needed because 'SigCapability' requires
+-- qualified capability names.
+defineKeysetMagicCap :: KeySetName -> SigCapability
+defineKeysetMagicCap ksn =
+  SigCapability (QualifiedName "pact" "DEFINE_KEYSET" def)
+    [PLiteral (LString (asString ksn))]
 
 keyPred :: (Integer -> Integer -> Bool) -> RNativeFun e
 keyPred predfun _ [TLitInteger count,TLitInteger matched] =
