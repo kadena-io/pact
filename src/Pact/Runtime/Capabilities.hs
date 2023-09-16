@@ -30,6 +30,7 @@ module Pact.Runtime.Capabilities
     ,checkSigCaps
     ,emitCapability
     ,withMagicCapability
+    ,mkMagicCapability
     ) where
 
 import Control.Monad
@@ -83,6 +84,13 @@ withMagicCapability i cap action = do
   popCapStack (const (return r))
   where
     slot = CapSlot CapCallStack cap []
+
+-- | Magic capabilities are defined as part of the reserved root "pact"
+-- pseudomodule.
+mkMagicCapability :: Text -> [PactValue] -> UserCapability
+mkMagicCapability name args =
+  SigCapability (QualifiedName "pact" names def) args
+
 
 acquireModuleAdminCapability
   :: ModuleName -> Eval e () -> Eval e CapEvalResult

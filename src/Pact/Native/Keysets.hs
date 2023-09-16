@@ -82,6 +82,8 @@ defineKeyset fi as = case as of
   [TLitString name] -> readKeySet' fi name >>= go name
   _ -> argsError fi as
   where
+    magicCap ksn = mkMagicCapability "DEFINE_KEYSET"
+      [PLiteral (LString (asString ksn))]
     go name ks = do
       let i = _faInfo fi
 
@@ -123,17 +125,11 @@ defineKeyset fi as = case as of
           computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
           computeGas' fi (GPreWrite (WriteKeySet ksn ks) szVer) $ do
             runSysOnly $
-                withMagicCapability i (defineKeysetMagicCap ksn) $
+                withMagicCapability i (magicCap ksn) $
                      enforceKeySet i (Just ksn) oldKs
             writeRow i Write KeySets ksn ks & success "Keyset defined"
 
--- | Magic capability for rotating keysets: @(pact.DEFINE_KEYSET [keyset name])@.
--- "pact" is a reserved root pseudo-module, needed because 'SigCapability' requires
--- qualified capability names.
-defineKeysetMagicCap :: KeySetName -> SigCapability
-defineKeysetMagicCap ksn =
-  SigCapability (QualifiedName "pact" "DEFINE_KEYSET" def)
-    [PLiteral (LString (asString ksn))]
+
 
 keyPred :: (Integer -> Integer -> Bool) -> RNativeFun e
 keyPred predfun _ [TLitInteger count,TLitInteger matched] =
