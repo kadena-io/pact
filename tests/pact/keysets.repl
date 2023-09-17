@@ -471,11 +471,11 @@
 (commit-tx)
 
 ;;
-;; ========= test define-keyset magic cap ===========
+;; ========= test keyset magic caps ===========
 ;;
 
 (env-exec-config [])
-(begin-tx)
+(begin-tx "setup magic")
 
 ;; repl tests need pseudomodule for 'env-sigs'
 (module pact GOV
@@ -483,6 +483,8 @@
   (defcap DEFINE_KEYSET (name:string)
     (enforce false "Never called"))
   (defcap NAMESPACE (name:string)
+    (enforce false "Never called"))
+  (defcap MODULE_KEYSET (name:string)
     (enforce false "Never called"))
 )
 
@@ -509,7 +511,7 @@
 
 (commit-tx)
 
-(begin-tx)
+(begin-tx "test magic keyset cap")
 (env-sigs
  [ { "key": "signer"
    , "caps": [(pact.DEFINE_KEYSET "ns.magic-1")]
@@ -523,3 +525,16 @@
  "Keyset failure"
  (define-keyset "ns.magic-2" (read-keyset 'ks)))
 (commit-tx)
+
+(begin-tx "test module keyset cap success")
+;; failure tested in bad tests
+(env-sigs
+ [ { "key": "signer"
+   , "caps": [(pact.MODULE_KEYSET "magic-module")]
+   } ] )
+;; keyset enforced on install
+(module magic-module "ns.magic-1"
+  (defun f () 1))
+;; old keyset enforced on upgrade
+(module magic-module GOV
+  (defcap GOV () true))
