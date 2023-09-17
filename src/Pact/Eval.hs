@@ -374,8 +374,9 @@ enforceNamespaceInstall i Nothing =
   unlessExecutionFlagSet FlagDisablePact44 $
     enforceRootNamespacePolicy i
 enforceNamespaceInstall i (Just ns) =
-  unlessExecutionFlagSet FlagDisablePact44 $ do
-    enforceGuard i $ _nsUser ns
+  unlessExecutionFlagSet FlagDisablePact44 $
+    withNamespaceMagicCapability i (_nsName ns) $
+      enforceGuard i $ _nsUser ns
 
 
 checkAllowModule :: Info -> Eval e ()

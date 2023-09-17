@@ -1,0 +1,20 @@
+(begin-tx "setup magic")
+;; repl tests need pseudomodule for 'env-sigs'
+(module pact GOV
+  (defcap GOV () true)
+  (defcap NAMESPACE (name:string)
+    (enforce false "Never called"))
+)
+(env-data { 'k: ['magic] })
+(env-keys ['magic])
+(define-namespace 'magic (read-keyset 'k) (read-keyset 'k))
+(commit-tx)
+
+(begin-tx)
+(namespace 'magic)
+(env-sigs
+ [ { 'key: 'magic
+   , 'caps: [(pact.NAMESPACE 'other)]
+   } ] )
+(interface boom
+  (defun f ()))

@@ -336,7 +336,10 @@
 (module pact GOV
   (defcap GOV () true)
   (defcap DEFINE_NAMESPACE (name:string)
-    (enforce false "Never called")))
+    (enforce false "Never called"))
+  (defcap NAMESPACE (name:string)
+    (enforce false "Never called"))
+)
 
 (env-data { 'k: ['magic] })
 (env-keys ['magic])
@@ -357,3 +360,16 @@
   "Keyset failure"
   (define-namespace 'magic2 (read-keyset 'k) (read-keyset 'k)))
 (commit-tx)
+
+;;failures in bad tests
+(begin-tx "test namespace entry success")
+(namespace 'magic1)
+(env-sigs
+ [ { 'key: 'magic
+   , 'caps: [(pact.NAMESPACE 'magic1)]
+   } ] )
+(module mod-ns-entry-success GOV
+  (defcap GOV () true))
+(interface iface-ns-entry-success
+  (defun f ()))
+(rollback-tx)
