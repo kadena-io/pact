@@ -89,7 +89,7 @@ withMagicCapability i cap action = do
 -- pseudomodule.
 mkMagicCapability :: Text -> [PactValue] -> UserCapability
 mkMagicCapability name args =
-  SigCapability (QualifiedName "pact" names def) args
+  SigCapability (QualifiedName "pact" name def) args
 
 
 acquireModuleAdminCapability

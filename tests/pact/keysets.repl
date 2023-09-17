@@ -476,12 +476,11 @@
 
 (begin-tx)
 
-;; ugly: have to make fake root module to use repl tests for magic cap
-;; need additional coverage to prove we don't need this
+;; repl tests need pseudomodule for 'env-sigs'
 (module pact GOV
   (defcap GOV () true)
   (defcap DEFINE_KEYSET (name:string)
-    (enforce false "Must never be called")))
+    (enforce false "Never called")))
 
 (namespace 'ns)
 (env-data { "ks": ["signer"] })

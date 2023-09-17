@@ -17,13 +17,11 @@ where
 
 import Control.Lens
 
-import Data.Default
 import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Runtime.Capabilities
-import Pact.Types.Capability
 import Pact.Types.KeySet
 import Pact.Types.PactValue
 import Pact.Types.Purity

@@ -93,6 +93,7 @@ import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Native.Pairing(zkDefs)
 import Pact.Parse
+import Pact.Runtime.Capabilities
 import Pact.Runtime.Utils(lookupFreeVar)
 import Pact.Types.Hash
 import Pact.Types.Names
@@ -483,17 +484,16 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
           -- if namespace is defined, enforce old guard
           nsPactValue <- toNamespacePactValue info ns
           computeGas (Right fi) (GPostRead (ReadNamespace nsPactValue))
-          withMagicNsCap name $ enforceGuard fi oldg
+          withMagicNsCap fi name $ enforceGuard fi oldg
           computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
         Nothing -> do
-          withMagicNsCap name $ enforcePolicy info name newNs
+          withMagicNsCap fi name $ enforcePolicy info name newNs
           computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
 
-    withMagicNsCap (NamespaceName name) = withMagicCapability i $
-        mkMagicCapability "DEFINE_NAMESPACE"
-        [PLiteral (LString name)]
+    withMagicNsCap i (NamespaceName name) = withMagicCapability i $
+        mkMagicCapability "DEFINE_NAMESPACE" [PLiteral (LString name)]
 
     enforcePolicy info nn ns = do
       policy <- view eeNamespacePolicy
