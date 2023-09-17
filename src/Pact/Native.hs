@@ -483,13 +483,17 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
           -- if namespace is defined, enforce old guard
           nsPactValue <- toNamespacePactValue info ns
           computeGas (Right fi) (GPostRead (ReadNamespace nsPactValue))
-          enforceGuard fi oldg
+          withMagicNsCap name $ enforceGuard fi oldg
           computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
         Nothing -> do
-          enforcePolicy info name newNs
+          withMagicNsCap name $ enforcePolicy info name newNs
           computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
+
+    withMagicNsCap (NamespaceName name) = withMagicCapability i $
+        mkMagicCapability "DEFINE_NAMESPACE"
+        [PLiteral (LString name)]
 
     enforcePolicy info nn ns = do
       policy <- view eeNamespacePolicy
