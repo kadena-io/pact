@@ -80,8 +80,10 @@ defineKeyset fi as = case as of
   [TLitString name] -> readKeySet' fi name >>= go name
   _ -> argsError fi as
   where
-    magicCap ksn = mkMagicCapability "DEFINE_KEYSET"
-      [PLiteral (LString (asString ksn))]
+
+    withDefineKeysetMagicCap ksn =
+      withMagicCapability fi "DEFINE_KEYSET" [PLiteral (LString (asString ksn))]
+
     go name ks = do
       let i = _faInfo fi
 
@@ -109,7 +111,8 @@ defineKeyset fi as = case as of
             ksn' <- ifExecutionFlagSet FlagDisablePact44
               (pure ksn)
               (do
-                enforceGuard i ug
+                withNamespaceMagicCapability i nsn $
+                    enforceGuard i ug
                 if Just nsn == _ksnNamespace ksn
                   -- if namespaces match, leave the keyset name alone
                   then pure ksn
@@ -123,7 +126,7 @@ defineKeyset fi as = case as of
           computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
           computeGas' fi (GPreWrite (WriteKeySet ksn ks) szVer) $ do
             runSysOnly $
-                withMagicCapability i (magicCap ksn) $
+                withDefineKeysetMagicCap ksn $
                      enforceKeySet i (Just ksn) oldKs
             writeRow i Write KeySets ksn ks & success "Keyset defined"
 
