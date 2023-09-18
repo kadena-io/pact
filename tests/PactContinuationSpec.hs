@@ -1377,12 +1377,18 @@ makeContCmd = makeContCmd' Nothing
 
 makeContCmd'
   :: Maybe ContProof
-  -> Ed25519KeyPair -- signing pair
-  -> Bool           -- isRollback
-  -> Value          -- data
-  -> Command Text   -- cmd to get pact Id from
-  -> Int            -- step
-  -> Text           -- nonce
+  -> Ed25519KeyPair
+      -- ^ signing pair
+  -> Bool
+      -- ^ isRollback
+  -> Value
+      -- ^ data
+  -> Command Text
+      -- ^ cmd to get pact Id from
+  -> Int
+      -- ^ step
+  -> Text
+      -- ^ nonce
   -> IO (Command Text)
 makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
   mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM Nothing
