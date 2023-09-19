@@ -1,0 +1,22 @@
+;; ======== test governance cap acquire ========
+
+(begin-tx)
+(env-data { 'k: ['ns], 'gov: ['gov] })
+(define-namespace 'ns (read-keyset 'k) (read-keyset 'k))
+(namespace 'ns)
+(env-keys ['ns])
+(module govcap-acquire GOV
+  (defcap GOV ()
+    (enforce-guard (read-keyset 'gov)))
+  (defcap OTHER () true))
+(commit-tx)
+
+(begin-tx)
+(env-sigs
+ [ { 'key: 'gov
+   , 'caps: [ (ns.govcap-acquire.OTHER) ] } ])
+(namespace 'ns)
+;; failure because wrong cap scoped
+(module govcap-acquire GOV
+  (defcap GOV () true))
+(rollback-tx)

@@ -83,12 +83,13 @@ popCapStack act = do
 -- Magic caps are not managed and do not allow nested acquisition.
 --
 withMagicCapability :: HasInfo i => i -> Text -> [PactValue] -> Eval e a -> Eval e a
-withMagicCapability i name args action = do
-  inscope <- capabilityAcquired cap
-  when inscope $ evalError' i "Internal error, magic capability already acquired"
-  evalCapabilities . capStack %= (slot:)
-  r <- action
-  popCapStack (const (return r))
+withMagicCapability i name args action =
+  ifExecutionFlagSet FlagDisablePact49 action $ do
+    inscope <- capabilityAcquired cap
+    when inscope $ evalError' i "Internal error, magic capability already acquired"
+    evalCapabilities . capStack %= (slot:)
+    r <- action
+    popCapStack (const (return r))
   where
     slot = CapSlot CapCallStack cap []
     cap = SigCapability (QualifiedName "pact" name def) args

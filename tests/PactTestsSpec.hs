@@ -151,6 +151,8 @@ badErrors = M.fromList
    ,"Keyset failure (keys-all): 'ns.magic")
   ,(pfx "bad-magic-module-keyset-upgrade.repl"
    ,"Keyset failure (keys-all): 'ns.magic")
+  ,(pfx "bad-gov-cap-acquire.repl"
+   ,"Keyset failure (keys-all): [gov]")
 
   ]
   where

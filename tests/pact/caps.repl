@@ -939,3 +939,27 @@
    (call-op2 "goodbye" false))
 
 (commit-tx)
+
+
+
+;; ======== test governance cap acquire ========
+
+(begin-tx)
+(env-data { 'k: ['ns], 'gov: ['gov] })
+(define-namespace 'ns (read-keyset 'k) (read-keyset 'k))
+(namespace 'ns)
+(env-keys ['ns])
+(module govcap-acquire GOV
+  (defcap GOV ()
+    (enforce-guard (read-keyset 'gov))))
+(commit-tx)
+
+(begin-tx)
+(env-sigs
+ [ { 'key: 'gov
+   , 'caps: [ (ns.govcap-acquire.GOV) ] } ])
+(namespace 'ns)
+;; upgrade succeeds, failure in bad tests
+(module govcap-acquire GOV
+  (defcap GOV () true))
+(rollback-tx)

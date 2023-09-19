@@ -233,9 +233,24 @@ enforceModuleAdmin i mn modGov =
       Right d@Def{..} -> case _dDefType of
         Defcap -> do
           af <- prepareUserAppArgs d [] _dInfo
-          computeUserAppGas d _dInfo
-          void $ evalUserAppBody d af _dInfo reduceBody
+          ifExecutionFlagSet FlagDisablePact49 (runCapBody d af _dInfo) $ do
+            -- Properly acquire gov cap to allow scoping.
+            -- Note that nerfed manager functions mean that a gov cap with
+            -- @managed will fail, which is a good thing as management of a gov
+            -- cap is meaningless. However we should probably enforce this in
+            -- module load.
+            let cap = SigCapability (QualifiedName _dModule (asString _dDefName) i) []
+            void $ evalUserCapability i nerfedFuns CapCallStack cap d $
+                runCapBody d af i
         _ -> evalError i "enforceModuleAdmin: module governance must be defcap"
+  where
+    runCapBody d af di = do
+      computeUserAppGas d di
+      void $ evalUserAppBody d af di reduceBody
+    nerfedFuns =
+      (\_ _ _ -> evalError i "Illegal managed function application in governance defcap"
+      ,\_ _ -> evalError i "Illegal managed function install in governance defcap"
+      )
 
 withModuleKeysetMagicCap :: HasInfo i => i -> ModuleName -> Eval e a -> Eval e a
 withModuleKeysetMagicCap i mn =
