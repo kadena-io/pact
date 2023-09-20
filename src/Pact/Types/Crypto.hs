@@ -222,10 +222,12 @@ instance Scheme (SPPKScheme 'WebAuthn) where
 
         -- Check that the input `PactHash` matches the hash of the transaction
         -- that was signed by WebAuthn keys.
-        let pactHashText :: T.Text = PactHash.hashToText msg
-        if pactHashText == challenge
-          then return ()
-          else Left "Hash mismatch"
+        let pactHashText = PactHash.hashToText msg
+        unless (pactHashText == challenge) $
+          Left "Hash mismatch"
+
+        -- If all of the above conditions are met, the signature is valid.
+        return ()
 
 --------- SCHEME HELPER DATA TYPES ---------
 
