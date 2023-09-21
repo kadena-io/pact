@@ -8,7 +8,6 @@ module Utils
 , testFlags
 , backCompatFlags
 , nestedDefPactFlags
-, genKeys
 , testDir
 ) where
 
@@ -30,7 +29,6 @@ import System.IO.Unsafe
 
 import Pact.Server.API
 import Pact.Server.Server
-import Pact.Types.Crypto as Crypto
 import Pact.Types.Runtime
 import Pact.Types.SPV
 
@@ -45,9 +43,6 @@ testMgr = unsafePerformIO $ HTTP.newManager HTTP.defaultManagerSettings
 
 -- -------------------------------------------------------------------------- --
 -- Constants
-
-genKeys :: IO SomeKeyPair
-genKeys = genKeyPair defaultScheme
 
 testDir :: FilePath
 testDir = "tests/"
