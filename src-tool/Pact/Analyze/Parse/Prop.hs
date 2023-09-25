@@ -693,9 +693,6 @@ inferPreProp preProp = case preProp of
     Some ty a' <- inferPreProp a
     pure $ Some (SList ty) $ CoreProp $ MakeList ty i' a'
 
-  PreApp s [str] | s == SStringToInteger -> do
-    str' <- checkPreProp SStr str
-    pure $ Some SInteger $ CoreProp $ StrToInt str'
 
   PreApp s [str] | s == SStringHash -> do
     Some ty str' <- inferPreProp str
@@ -707,7 +704,11 @@ inferPreProp preProp = case preProp of
       SList ty' -> pure $ Some SStr $ CoreProp $ ListHash ty' str'
       _ -> throwErrorIn preProp "`hash` works only with integer, decimals, strings, bools, and list of those"
 
-  PreApp s [str, base] | s == SStringToInteger -> do
+  PreApp s [str] | s == SStringToInteger -> do
+    str' <- checkPreProp SStr str
+    pure $ Some SInteger $ CoreProp $ StrToInt str'
+
+  PreApp s [base, str] | s == SStringToInteger -> do
     str'  <- checkPreProp SStr str
     base' <- checkPreProp SInteger base
     pure $ Some SInteger $ CoreProp $ StrToIntBase base' str'
