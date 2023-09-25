@@ -2412,6 +2412,15 @@ spec = describe "analyze" $ do
 
     describe "with specified base" $ do
       describe "concrete string and base" $ do
+        describe "as property" $
+          let code =
+                [text|
+                     (defun test:integer ()
+                     @model[(property (= result (str-to-int 10 "123")))]
+                     (str-to-int 10 "123"))
+                |]
+           in expectVerified code
+
         describe "valid inputs" $
           let code =
                 [text|
