@@ -2372,6 +2372,14 @@ spec = describe "analyze" $ do
 
   describe "str-to-int" $ do
     describe "without specified base" $ do
+      describe "as property" $
+        let code =
+              [text|
+                (defun test:integer ()
+                  @model[(property (= result (str-to-int "123")))]
+                  (str-to-int "123"))
+              |]
+        in expectVerified code
       describe "concrete string" $ do
         describe "valid inputs" $
           let code =
