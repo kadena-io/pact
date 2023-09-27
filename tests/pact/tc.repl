@@ -329,6 +329,37 @@
     "test anon lambdas"
     (map (lambda (i) (> i 1)) [1 2 3]))
 
+  (defun unknown-cond-helper:string (name:string) (format "I don't know {}" [name]))
+  (defun unknown-cond-helper2:string (name:string param:string) (format "I don't know {}" [name]))
+  (defun tc-cond-fallback-atom:string (name:string)
+    (cond
+      ((= name "alice") "Girl")
+      ((= name "bob")   "Boy")
+      name
+    )
+  )
+  (defun tc-cond-fallback-call:string (name:string)
+    (cond
+      ((= name "alice") "Girl")
+      ((= name "bob")   "Boy")
+      (unknown-cond-helper name)
+    )
+  )
+  (defun tc-cond-fallback-call-multiparam:string (name:string)
+    (cond
+      ((= name "alice") "Girl")
+      ((= name "bob")   "Boy")
+      (unknown-cond-helper2 name name)
+    )
+  )
+
+  (defun fails-cond-fallback-call-unsatisfied:string (name:string)
+    (cond
+      ((= name "alice") "Girl")
+      ((= name "bob")   "Boy")
+      unknown-cond-helper
+    )
+  )
 )
 
 (create-table persons)
