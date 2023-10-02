@@ -3,7 +3,7 @@
 (expect "hash roundtrip" (hash "hello") (tx-hash))
 
 (begin-tx)
-(env-exec-config ["DisablePact48"])
+(env-exec-config ["DisablePact49"])
 (interface iface
   (defun f:bool (a:module{iface}))
   )
