@@ -852,7 +852,7 @@
  (continue-pact 1))
 
 (begin-tx)
-(env-exec-config ["DisablePact48"])
+(env-exec-config ["DisablePact49"])
 
  ; pact 48 caps
  (interface ops

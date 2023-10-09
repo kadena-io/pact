@@ -53,7 +53,6 @@ import Statistics.Types (Estimate(..))
 import qualified Pact.Analyze.Check as Check
 import System.Directory
 # endif
-import qualified Pact.Types.Crypto as Crypto
 
 import Pact.Typechecker
 import qualified Pact.Types.Typecheck as TC
@@ -107,9 +106,6 @@ replDefs = ("Repl",
                               funType tTyString [("file",tTyString),("reset",tTyBool)])
       [LitExample "(load \"accounts.repl\")"]
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
-     ,defZRNative "format-address" formatAddr (funType tTyString [("scheme", tTyString), ("public-key", tTyString)])
-      []
-      "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
       ("DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. "<>
@@ -335,24 +331,6 @@ mockSPV i as = case as of
     return $ tStr $ "Added mock SPV for " <> spvType
   _ -> argsError i as
 
-formatAddr :: RNativeFun LibState
-formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
-  let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
-      eitherEvalErr res effectStr transformFunc =
-        case res of
-          Left e  -> evalError' i $ prettyString effectStr <> ": " <> prettyString e
-          Right v -> return (transformFunc v)
-  sppk  <- eitherEvalErr (fromText' scheme)
-           "Invalid PPKScheme"
-           Crypto.toScheme
-  pubBS <- eitherEvalErr (parseB16TextOnly cryptoPubKey)
-           "Invalid Public Key format"
-           Crypto.PubBS
-  addr  <- eitherEvalErr (Crypto.formatPublicKeyBS sppk pubBS)
-           "Unable to convert Public Key to Address"
-           toB16Text
-  return (tStr addr)
-formatAddr i as = argsError i as
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do

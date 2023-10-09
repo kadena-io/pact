@@ -1,3 +1,12 @@
+4.9.0
+---
+### Bugfixes
+- Pact value infos fixed (#1287)
+
+### Features
+- Webauthn support (#1193)
+
+
 4.8.0
 ---
 ### Bugfixes

@@ -626,7 +626,7 @@
 (create-table mstbl)
 
 ; Test principal caps created pre-info eliding
-(env-exec-config ["DisablePact48"])
+(env-exec-config ["DisablePact49"])
 (write-principal 'a (create-principal (create-capability-guard (test-cap m))))
 
 (write-principal 'b (create-principal (create-capability-guard (test-cap m))))

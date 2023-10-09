@@ -198,6 +198,8 @@ data ExecutionFlag
   | FlagDisableRuntimeReturnTypeChecking
   -- | Disable Pact 4.8 Features
   | FlagDisablePact48
+  -- | Disable Pact 4.9 Features
+  | FlagDisablePact49
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
