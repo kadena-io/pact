@@ -8,9 +8,9 @@ constraints: hspec-golden <0.2,
 
 source-repository-package
   type: git
-  tag: e43073d0b8d89d9b300980913b842f4be339846d
   location: https://github.com/kadena-io/pact-json
-  --sha256: sha256-ZWbAId0JBaxDsYhwcYUyw04sjYstXyosSCenzOvUxsQ=
+  tag: 2d75e5d9ee4ae6484f1f16218dd5e767ef97f593
+  --sha256: 0fzq4mzaszj5clvixx9mn1x6r4dcrnwvbl2znd0p5mmy5h2jr0hh
 
 -- These packages are tightly bundled with GHC. The rules ensure that
 -- our builds use the version that ships with the GHC version that is
@@ -19,13 +19,19 @@ source-repository-package
 allow-newer: *:template-haskell
 allow-newer: *:base
 allow-newer: *:ghc-prim
+allow-newer: *:deepseq
+allow-newer: *:pretty
+allow-newer: *:text
+allow-newer: *:bytestring
 
 -- Patch merged into master (upcoming verison 10.0). We are currently using 9.2
+-- Also contains a patch for 9.8.1 related to -Wx-partial
+--
 source-repository-package
   type: git
-  tag: 3946a0e94470d7403a855dd60f8e54687ecc2b1d
   location: https://github.com/larskuhtz/sbv
-  --sha256: 1msbz6525nmsywpm910jh23siil4qgn3rpsm52m8j6877r7v5zw3
+  tag: e42acfb5058cde37e0213a95af9f6732fac78f3d
+  --sha256: 0ajr196qp1vqdlscp65myjjs95pimmdsq07w0z83d89xild1bl85
 
 -- Servant is notoriously forcing outdated upper bounds onto its users.
 -- It is usually safe to just ignore those.
@@ -38,6 +44,5 @@ allow-newer: servant:*
 -- Required by trifecta (e.g. to allow mtl >=2.3)
 allow-newer: trifecta:*
 
--- servant-0.20 does not yet support aeson-2.2
---
-constraints: aeson <2.2
+-- disable webauthn's overly restrictive upper bounds
+allow-newer: webauthn:*
