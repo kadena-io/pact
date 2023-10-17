@@ -46,3 +46,9 @@ allow-newer: trifecta:*
 
 -- disable webauthn's overly restrictive upper bounds
 allow-newer: webauthn:*
+
+-- head and tail are marked deprecated in recent base. We'll
+-- yet have to fix that in the code base.
+if impl(ghc >= 9.8.1)
+    package chainweb
+        ghc-options: -Wno-x-partial
