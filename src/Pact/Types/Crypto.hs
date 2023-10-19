@@ -216,7 +216,7 @@ instance Scheme (SPPKScheme 'WebAuthn) where
         let payload = authData <> clientDataDigest
 
         -- Check the signature's validity.
-        first T.unpack $ WAVerify.verify publicKey (WAVerify.Message payload) (WAVerify.Signature sig)
+        first T.unpack $ WAVerify.verify publicKey payload sig
 
         -- Extract the original challenge from client data.
         ClientDataJSON { challenge } <- A.eitherDecode (BSL.fromStrict clientData)
