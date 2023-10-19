@@ -275,7 +275,9 @@ combineSigDatas sds outputLocal = do
   when (S.size hashes /= 1 || S.size cmds /= 1) $ do
     error "SigData files must contain exactly one unique hash and command.  Aborting..."
   let sigs = foldl1 f $ map _sigDataSigs sds
-  returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
+  case (S.toList cmds, S.toList hashes) of
+    (cmd:_, hash':_) -> returnCommandIfDone outputLocal $ SigData hash' sigs (Just cmd)
+    _ -> error "Expected nonempty lists of commands and hashes"
   where
     f accum sigs
       | length accum /= length sigs = error "Sig lists have different lengths"

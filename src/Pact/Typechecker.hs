@@ -1005,10 +1005,11 @@ toAST (TApp Term.App{..} _) = do
               return app'
             Resume -> do
               app' <- specialBind
-              case head args' of -- 'specialBind' ensures non-empty args
-                (Binding _ _ _ (AstBindSchema sty)) ->
+              case Data.List.uncons args' of -- 'specialBind' ensures non-empty args
+                Just (Binding _ _ _ (AstBindSchema sty), _) ->
                   setOrAssocYR yrResume sty
-                a -> die'' a "Expected binding"
+                Just (a,_) -> die'' a "Expected binding"
+                Nothing -> error "Impossible case"
               return app'
             _ -> mkApp fun' args'
 
@@ -1204,7 +1205,10 @@ showFails = do
 
 -- | unsafe lens for using `typecheckBody` with const
 singLens :: Iso' a [a]
-singLens = iso pure head
+singLens = iso pure (\case
+                        x:_ -> x
+                        [] -> error "Expected nonempty list"
+                    )
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)

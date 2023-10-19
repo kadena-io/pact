@@ -148,8 +148,8 @@ selectCompletedCommands e v = foldM f HashMap.empty v
       rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText,RInt,RInt]
       if null rs
       then return m
-      else case head rs of
-          [SText (Utf8 cr),SInt _, SInt _] ->
+      else case rs of
+          [SText (Utf8 cr),SInt _, SInt _]:_ ->
             return $ HashMap.insert rk (crFromField cr) m
           r -> dbError $ "Invalid result from query: " ++ show r
 

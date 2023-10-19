@@ -31,7 +31,6 @@
                 # haskell-language-server = {};
                 # hlint = {};
               };
-              modules = [{ghcOptions = ["-Wno-error=x-partial"];}];
               shell.buildInputs = with pkgs; [
                 zlib
                 z3

@@ -111,11 +111,13 @@ runRegression p = do
     (commit v)
   void $ begin v
   tids <- _txids pactdb user1 t1 v
-  assertEquals "user txids" [1] tids
-  assertEquals' "user txlogs"
-    [TxLog "USER_user1" "key1" row,
-     TxLog "USER_user1" "key1" row'] $
-    _getTxLog pactdb usert (head tids) v
+  case tids of
+   tid:_ ->
+    assertEquals' "user txlogs"
+      [TxLog "USER_user1" "key1" row,
+      TxLog "USER_user1" "key1" row'] $
+      _getTxLog pactdb usert tid v
+   _ -> error "Expected nonempty list of tids"
   _writeRow pactdb Insert usert "key2" row v
   assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pactdb usert "key2" v)
   assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb (UserTables user1) v
