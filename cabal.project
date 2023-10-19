@@ -50,5 +50,5 @@ allow-newer: webauthn:*
 -- head and tail are marked deprecated in recent base. We'll
 -- yet have to fix that in the code base.
 if impl(ghc >= 9.8.1)
-    package chainweb
+    package pact
         ghc-options: -Wno-x-partial
