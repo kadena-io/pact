@@ -183,6 +183,13 @@ library
     Pact.Types.Version
     Pact.Utils.Servant
 
+  other-modules:
+    Pact.Crypto.WebAuthn.Cose.PublicKey
+    Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
+    Pact.Crypto.WebAuthn.Cose.Registry
+    Pact.Crypto.WebAuthn.Cose.SignAlg
+    Pact.Crypto.WebAuthn.Cose.Verify
+
   build-depends:
     -- internal
     , pact-prettyprinter
@@ -192,12 +199,15 @@ library
     , QuickCheck >=2.12.6.1
     , aeson >=2
     , attoparsec >=0.13.0.2
+    , asn1-encoding >=0.9.6
+    , asn1-types >=0.3.4
     , base >= 4.18.0.0
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.0.0.1
         -- base64-bytestring >=1.2.0.0 is less lenient then previous versions, which can cause pact failures (e.g. (env-hash "aa"))
     , bound >=2
     , bytestring >=0.10.8.1
+    , cborg >= 0.2.9
     , cereal >=0.5.4.0
     , containers >=0.5.7
     , criterion >=1.1.4
@@ -242,7 +252,6 @@ library
     , vector-algorithms >=0.7
     , vector-space >=0.10.4
     , yaml
-    , webauthn >= 0.7
 
   if flag(build-tool)
     cpp-options: -DBUILD_TOOL

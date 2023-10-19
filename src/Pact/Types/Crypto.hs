@@ -51,8 +51,9 @@ import GHC.Generics
 import qualified Codec.Serialise as Serialise
 import Control.Monad (unless)
 import qualified Crypto.Hash as H
-import qualified Crypto.WebAuthn as WA
-import qualified Crypto.WebAuthn.Cose.Internal.Verify as WAVerify
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.Verify as WAVerify
 import Data.Bifunctor (first)
 import Data.ByteString    (ByteString)
 import Data.ByteString.Short (fromShort)
