@@ -29,6 +29,8 @@ module Pact.Runtime.Capabilities
     ,InstallMgd
     ,checkSigCaps
     ,emitCapability
+    ,withMagicCapability
+    ,withNamespaceMagicCapability
     ) where
 
 import Control.Monad
@@ -71,6 +73,32 @@ popCapStack act = do
     (c:cs) -> do
       evalCapabilities . capStack .= cs
       act c
+
+-- | Magic capabilities allow scoping signatures for natives that enforce guards.
+--
+-- Magic caps are defined in the reserved root @pact@ pseudomodule, such that
+-- @withMagicCapability "FOO" [PLiteral (LBool True)] action@ acquires the magic
+-- capability @(pact.FOO true)@ and executes @action@ with the cap in scope.
+--
+-- Magic caps are not managed and do not allow nested acquisition.
+--
+withMagicCapability :: HasInfo i => i -> Text -> [PactValue] -> Eval e a -> Eval e a
+withMagicCapability i name args action =
+  ifExecutionFlagSet FlagDisablePact49 action $ do
+    inscope <- capabilityAcquired cap
+    when inscope $ evalError' i "Internal error, magic capability already acquired"
+    evalCapabilities . capStack %= (slot:)
+    r <- action
+    popCapStack (const (return r))
+  where
+    slot = CapSlot CapCallStack cap []
+    cap = SigCapability (QualifiedName "pact" name def) args
+
+-- | Magic capability for enforcing namespace entry.
+withNamespaceMagicCapability :: HasInfo i => i -> NamespaceName -> Eval e a -> Eval e a
+withNamespaceMagicCapability i (NamespaceName name) =
+  withMagicCapability i "NAMESPACE" [PLiteral (LString name)]
+
 
 acquireModuleAdminCapability
   :: ModuleName -> Eval e () -> Eval e CapEvalResult

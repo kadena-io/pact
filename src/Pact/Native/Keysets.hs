@@ -21,7 +21,9 @@ import Data.Text (Text)
 
 import Pact.Eval
 import Pact.Native.Internal
+import Pact.Runtime.Capabilities
 import Pact.Types.KeySet
+import Pact.Types.PactValue
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Namespace
@@ -78,6 +80,10 @@ defineKeyset fi as = case as of
   [TLitString name] -> readKeySet' fi name >>= go name
   _ -> argsError fi as
   where
+
+    withDefineKeysetMagicCap ksn =
+      withMagicCapability fi "DEFINE_KEYSET" [PLiteral (LString (asString ksn))]
+
     go name ks = do
       let i = _faInfo fi
 
@@ -105,7 +111,8 @@ defineKeyset fi as = case as of
             ksn' <- ifExecutionFlagSet FlagDisablePact44
               (pure ksn)
               (do
-                enforceGuard i ug
+                withNamespaceMagicCapability i nsn $
+                    enforceGuard i ug
                 if Just nsn == _ksnNamespace ksn
                   -- if namespaces match, leave the keyset name alone
                   then pure ksn
@@ -118,8 +125,12 @@ defineKeyset fi as = case as of
         Just oldKs -> do
           computeGas (Right fi) (GPostRead (ReadKeySet ksn oldKs))
           computeGas' fi (GPreWrite (WriteKeySet ksn ks) szVer) $ do
-            runSysOnly $ enforceKeySet i (Just ksn) oldKs
+            runSysOnly $
+                withDefineKeysetMagicCap ksn $
+                     enforceKeySet i (Just ksn) oldKs
             writeRow i Write KeySets ksn ks & success "Keyset defined"
+
+
 
 keyPred :: (Integer -> Integer -> Bool) -> RNativeFun e
 keyPred predfun _ [TLitInteger count,TLitInteger matched] =

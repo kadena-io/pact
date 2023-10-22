@@ -223,21 +223,38 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 -- | Acquire module admin with enforce.
 acquireModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e CapEvalResult
 acquireModuleAdmin i modName modGov =
-  acquireModuleAdminCapability modName $ enforceModuleAdmin i modGov
+  acquireModuleAdminCapability modName $ enforceModuleAdmin i modName modGov
 
 
-enforceModuleAdmin :: Info -> Governance (Def Ref) -> Eval e ()
-enforceModuleAdmin i modGov =
+enforceModuleAdmin :: Info -> ModuleName -> Governance (Def Ref) -> Eval e ()
+enforceModuleAdmin i mn modGov =
     case _gGovernance modGov of
-      Left ks -> enforceKeySetName i ks
+      Left ks -> withModuleKeysetMagicCap i mn $ enforceKeySetName i ks
       Right d@Def{..} -> case _dDefType of
         Defcap -> do
           af <- prepareUserAppArgs d [] _dInfo
-          computeUserAppGas d _dInfo
-          void $ evalUserAppBody d af _dInfo reduceBody
+          ifExecutionFlagSet FlagDisablePact49 (runCapBody d af _dInfo) $ do
+            -- Properly acquire gov cap to allow scoping.
+            -- Note that nerfed manager functions mean that a gov cap with
+            -- @managed will fail, which is a good thing as management of a gov
+            -- cap is meaningless. However we should probably enforce this in
+            -- module load.
+            let cap = SigCapability (QualifiedName _dModule (asString _dDefName) i) []
+            void $ evalUserCapability i nerfedFuns CapCallStack cap d $
+                runCapBody d af i
         _ -> evalError i "enforceModuleAdmin: module governance must be defcap"
+  where
+    runCapBody d af di = do
+      computeUserAppGas d di
+      void $ evalUserAppBody d af di reduceBody
+    nerfedFuns =
+      (\_ _ _ -> evalError i "Illegal managed function application in governance defcap"
+      ,\_ _ -> evalError i "Illegal managed function install in governance defcap"
+      )
 
-
+withModuleKeysetMagicCap :: HasInfo i => i -> ModuleName -> Eval e a -> Eval e a
+withModuleKeysetMagicCap i mn =
+  withMagicCapability i "MODULE_KEYSET" [PLiteral (LString (asString mn))]
 
 -- | Evaluate current namespace and prepend namespace to the
 -- module name. This should be done before any lookups, as
@@ -309,7 +326,8 @@ eval' (TModule _tm@(MDModule m) bod i) =
             " overlaps with interface  " <> pretty _interfaceName
     case _gGovernance $ _mGovernance mangledM of
       -- enforce new module keyset on install
-      Left ks -> enforceKeySetName i ks
+      Left ks -> withModuleKeysetMagicCap i (_mName mangledM) $
+                 enforceKeySetName i ks
       -- governance is granted on install without testing the cap.
       -- rationale is governance might be some vote or something
       -- that doesn't exist yet. Of course, if governance is
@@ -374,8 +392,9 @@ enforceNamespaceInstall i Nothing =
   unlessExecutionFlagSet FlagDisablePact44 $
     enforceRootNamespacePolicy i
 enforceNamespaceInstall i (Just ns) =
-  unlessExecutionFlagSet FlagDisablePact44 $ do
-    enforceGuard i $ _nsUser ns
+  unlessExecutionFlagSet FlagDisablePact44 $
+    withNamespaceMagicCapability i (_nsName ns) $
+      enforceGuard i $ _nsUser ns
 
 
 checkAllowModule :: Info -> Eval e ()

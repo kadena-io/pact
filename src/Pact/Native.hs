@@ -97,6 +97,7 @@ import Pact.Native.SPV
 import Pact.Native.Time
 import Pact.Native.Pairing(zkDefs)
 import Pact.Parse
+import Pact.Runtime.Capabilities
 import Pact.Runtime.Utils(lookupFreeVar)
 import Pact.Types.Hash
 import Pact.Types.Names
@@ -487,13 +488,16 @@ defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNa
           -- if namespace is defined, enforce old guard
           nsPactValue <- toNamespacePactValue info ns
           computeGas (Right fi) (GPostRead (ReadNamespace nsPactValue))
-          enforceGuard fi oldg
+          withMagicNsCap fi name $ enforceGuard fi oldg
           computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
         Nothing -> do
-          enforcePolicy info name newNs
+          withMagicNsCap fi name $ enforcePolicy info name newNs
           computeGas' fi (GPreWrite (WriteNamespace newNsPactValue) szVer) $
             writeNamespace info name newNsPactValue
+
+    withMagicNsCap i (NamespaceName name) =
+      withMagicCapability i "DEFINE_NAMESPACE" [PLiteral (LString name)]
 
     enforcePolicy info nn ns = do
       policy <- view eeNamespacePolicy
@@ -560,6 +564,7 @@ namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
           nsPactValue <- toNamespacePactValue info n
           computeGas' fa (GPostRead (ReadNamespace nsPactValue)) $ do
             -- Old behavior enforces ns at declaration.
+            -- Old behavior does not offer magic cap.
             -- New behavior enforces at ns-related action:
             -- 1. Module install (NOT at module upgrade)
             -- 2. Interface install (Interfaces non-upgradeable)

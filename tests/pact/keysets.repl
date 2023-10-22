@@ -467,3 +467,74 @@
   "Subsequent keyset rotations succeed without user guard - proof"
   "KeySet {keys: [rotated],pred: keys-all}"
   (format "{}" [(describe-keyset "ns.a")]))
+
+(commit-tx)
+
+;;
+;; ========= test keyset magic caps ===========
+;;
+
+(env-exec-config [])
+(begin-tx "setup magic")
+
+;; repl tests need pseudomodule for 'env-sigs'
+(module pact GOV
+  (defcap GOV () true)
+  (defcap DEFINE_KEYSET (name:string)
+    (enforce false "Never called"))
+  (defcap NAMESPACE (name:string)
+    (enforce false "Never called"))
+  (defcap MODULE_KEYSET (name:string)
+    (enforce false "Never called"))
+)
+
+(env-data { "ks": ["signer"] })
+(env-sigs
+ [ { 'key: "u"
+   , 'caps: [(pact.NAMESPACE "other")]
+   } ] )
+(namespace 'ns)
+
+(expect-failure "namespace not scoped for definining keyset"
+ "Keyset failure"
+ (define-keyset "ns.magic-1" (read-keyset 'ks)))
+
+(env-sigs
+ [ { 'key: "u"
+   , 'caps: [(pact.NAMESPACE "ns")]
+   } ] )
+
+(expect "namespace scoped, success for defining keysets"
+ ["Keyset defined","Keyset defined"]
+ [(define-keyset "ns.magic-1" (read-keyset 'ks))
+ ,(define-keyset "ns.magic-2" (read-keyset 'ks))])
+
+(commit-tx)
+
+(begin-tx "test magic keyset cap")
+(env-sigs
+ [ { "key": "signer"
+   , "caps": [(pact.DEFINE_KEYSET "ns.magic-1")]
+   } ] )
+(expect
+ "success for rotate with ns.magic-1 scoped"
+ "Keyset defined"
+ (define-keyset "ns.magic-1" (read-keyset 'ks)))
+(expect-failure
+ "failure for rotate without ns.magic-2 scoped"
+ "Keyset failure"
+ (define-keyset "ns.magic-2" (read-keyset 'ks)))
+(commit-tx)
+
+(begin-tx "test module keyset cap success")
+;; failure tested in bad tests
+(env-sigs
+ [ { "key": "signer"
+   , "caps": [(pact.MODULE_KEYSET "magic-module")]
+   } ] )
+;; keyset enforced on install
+(module magic-module "ns.magic-1"
+  (defun f () 1))
+;; old keyset enforced on upgrade
+(module magic-module GOV
+  (defcap GOV () true))

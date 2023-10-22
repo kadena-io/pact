@@ -52,6 +52,7 @@ spec = describe "pacts in dev server" $ do
   describe "testTwoPartyEscrow" $ sequential testTwoPartyEscrow
   describe "testOldNestedPacts" testOldNestedPacts
   describe "testManagedCaps" testManagedCaps
+  describe "testMagicCapRotateKeyset" testMagicCapRotateKeyset
   describe "testElideModRefEvents" testElideModRefEvents
   describe "testNestedPactContinuation" testNestedPactContinuation
   describe "testNestedPactYield" testNestedPactYield
@@ -157,6 +158,19 @@ testManagedCaps = do
           mhash]))
       managedPayFails `failsWith` (`shouldBe` "insufficient balance")
 
+testMagicCapRotateKeyset :: Spec
+testMagicCapRotateKeyset = it "exercises keyset rotates with magic cap" $ do
+    let testPath t = testDir ++ "cont-scripts/magic/" ++ t ++ ".yaml"
+        mkTest f = snd <$> mkApiReq (testPath f)
+    setup <- mkTest "setup"
+    ksSuccess <- mkTest "ks-success"
+    ksFail <- mkTest "ks-fail"
+    allResults <- runAll [setup,ksSuccess,ksFail]
+
+    runResults allResults $ do
+      setup `succeedsWith` (`shouldBe` textVal "Keyset defined")
+      ksSuccess `succeedsWith` (`shouldBe` textVal "Keyset defined")
+      ksFail `failsWith` (`shouldSatisfy` (isInfixOf "Keyset failure"))
 
 -- | allows passing e.g. "-m CrossChain" to match only `testCrossChainYield` in ghci
 _runArgs :: String -> IO ()

@@ -317,3 +317,59 @@
   "Carl contract fqn required for member access - with ns"
   true
   (carl.carl-module.f))
+
+(rollback-tx)
+
+;; =============== test ns magic cap ==================
+
+(begin-tx "reset ns policy")
+(env-keys ['carl])
+(namespace 'carl)
+(module magic-policy GOV
+  (defcap GOV () true)
+  (defun manage (ns guard) true))
+(env-namespace-policy true (manage))
+(commit-tx)
+
+(begin-tx "setup magic")
+;; repl tests need pseudomodule for 'env-sigs'
+(module pact GOV
+  (defcap GOV () true)
+  (defcap DEFINE_NAMESPACE (name:string)
+    (enforce false "Never called"))
+  (defcap NAMESPACE (name:string)
+    (enforce false "Never called"))
+)
+
+(env-data { 'k: ['magic] })
+(env-keys ['magic])
+(define-namespace 'magic1 (read-keyset 'k) (read-keyset 'k))
+(define-namespace 'magic2 (read-keyset 'k) (read-keyset 'k))
+(commit-tx)
+
+(begin-tx "test magic")
+(env-data { 'k: ['magic] })
+(env-sigs
+ [ { 'key: 'magic
+   , 'caps: [(pact.DEFINE_NAMESPACE 'magic1)]
+   } ] )
+(expect "define magic1 succeeds with cap"
+  "Namespace defined: magic1"
+  (define-namespace 'magic1 (read-keyset 'k) (read-keyset 'k)))
+(expect-failure "define magic1 fails without cap"
+  "Keyset failure"
+  (define-namespace 'magic2 (read-keyset 'k) (read-keyset 'k)))
+(commit-tx)
+
+;;failures in bad tests
+(begin-tx "test namespace entry success")
+(namespace 'magic1)
+(env-sigs
+ [ { 'key: 'magic
+   , 'caps: [(pact.NAMESPACE 'magic1)]
+   } ] )
+(module mod-ns-entry-success GOV
+  (defcap GOV () true))
+(interface iface-ns-entry-success
+  (defun f ()))
+(rollback-tx)

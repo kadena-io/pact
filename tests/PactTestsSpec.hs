@@ -143,6 +143,16 @@ badErrors = M.fromList
    ,"Keyset failure")
   ,(pfx "bad-term-in-list.repl"
    ,"Expected: value level form")
+  ,(pfx "bad-ns-entry-module.repl"
+   ,"Keyset failure")
+  ,(pfx "bad-ns-entry-iface.repl"
+   ,"Keyset failure")
+  ,(pfx "bad-magic-module-keyset-install.repl"
+   ,"Keyset failure (keys-all): 'ns.magic")
+  ,(pfx "bad-magic-module-keyset-upgrade.repl"
+   ,"Keyset failure (keys-all): 'ns.magic")
+  ,(pfx "bad-gov-cap-acquire.repl"
+   ,"Keyset failure (keys-all): [gov]")
 
   ]
   where
