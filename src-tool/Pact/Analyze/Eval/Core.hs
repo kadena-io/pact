@@ -45,13 +45,13 @@ import Pact.Types.Info (Info(..))
 import Pact.Types.Hash (pactHash)
 import Pact.Types.Util (AsString(asString))
 import Data.Text.Encoding (encodeUtf8)
-import qualified Data.Aeson as Aeson
 import qualified Pact.Types.Lang as Pact
 import qualified Pact.Types.PactValue as Pact
-import Data.ByteString.Lazy.Char8 (toStrict)
 import qualified Data.ByteString as BS
 import Data.Functor ((<&>))
 import qualified Data.Vector as V
+
+import qualified Pact.JSON.Encode as J
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
 -- future.
@@ -102,6 +102,16 @@ evalDecAddTime timeT secsT = do
   then pure $ time + fromIntegralS (banker'sMethodS (secs * fromInteger' 1000000))
   else throwErrorNoLoc $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
+
+evalDiffTime
+  :: Analyzer m
+  => TermOf m 'TyTime
+  -> TermOf m 'TyTime
+  -> m (S Decimal)
+evalDiffTime a b = do
+  a' <- eval a
+  b' <- eval b
+  pure $  (fromInteger' (fromIntegralS a' - fromIntegralS b')) / 1000000
 
 evalComparisonOp
   :: forall m a.
@@ -211,6 +221,7 @@ evalCore (StrDrop n s)                     = evalStrDrop n s
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
+evalCore (DiffTime a b)                    = evalDiffTime a b
 evalCore (Comparison ty op x y)            = evalComparisonOp ty op x y
 evalCore (Logical op props)                = evalLogicalOp op props
 evalCore (ObjAt schema colNameT objT)
@@ -264,14 +275,14 @@ evalCore (IntHash iT) = eval iT <&> unliteralS >>= \case
     let h = "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"
     emitWarning (notStaticErrHash ("of type 'integer', substitute '" <> h <> "')"))
     pure (literalS (Str h))
-  Just i  -> pure (symHash (toStrict (Aeson.encode (Pact.PLiteral ( Pact.LInteger i)))))
+  Just i  -> pure (symHash (J.encodeStrict (Pact.PLiteral ( Pact.LInteger i))))
 
 evalCore (BoolHash bT) = eval bT <&> unliteralS >>= \case
   Nothing -> do
     let h = "LCgKNFtF9rwWL0OuXGJUvt0vjzlTR1uOu-1mlTRsmag"
     emitWarning (notStaticErrHash ("of type 'bool', substitute '" <> h <> "'"))
     pure (literalS (Str h)) -- (hash true)
-  Just b  -> pure (symHash (toStrict ( Aeson.encode b)))
+  Just b  -> pure (symHash (J.encodeStrict b))
 
 evalCore (DecHash d) = eval d <&> unliteralS >>= \case
   Nothing -> do
@@ -280,7 +291,7 @@ evalCore (DecHash d) = eval d <&> unliteralS >>= \case
     emitWarning (notStaticErrHash ("of type 'decimal', subsitute '" <> h <> "'"))
     pure (literalS (Str h))
   Just d' ->
-    pure (symHash (toStrict (Aeson.encode (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d'))))))
+    pure (symHash (J.encodeStrict (Pact.PLiteral (Pact.LDecimal (toPact decimalIso d')))))
 
 evalCore (ListHash ty' xs) = do
   result <-  withSymVal ty' $ withSing ty' $ eval xs <&> unliteralS >>= \case
@@ -290,7 +301,7 @@ evalCore (ListHash ty' xs) = do
         emitWarning (notStaticErrHash ("of type 'list', substitute '" <> h <> "'"))
         pure ([Pact.PLiteral (Pact.LString (T.pack h))])
       Just xs'' -> traverse (reify ty') xs''
-  pure (symHash (toStrict (Aeson.encode (Pact.PList (V.fromList result)))))
+  pure (symHash (J.encodeStrict (Pact.PList (V.fromList result))))
   where
     reify :: forall b. Sing b -> Concrete b -> m Pact.PactValue
     reify t c = case t of
@@ -402,8 +413,8 @@ evalCore (ListFold tya tyb (Open vid1 _ (Open vid2 _ f)) a bs)
   S _ bs' <- eval bs
   result <- bfoldrM listBound
     (\sbvb sbva -> fmap _sSbv $
-      withVar vid1 (mkAVal' sbvb) $
-        withVar vid2 (mkAVal' sbva) $
+      withVar vid1 (mkAVal' sbva) $
+        withVar vid2 (mkAVal' sbvb) $
           eval f)
     a' bs'
   pure $ sansProv result

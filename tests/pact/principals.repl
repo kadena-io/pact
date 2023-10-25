@@ -595,3 +595,50 @@
  "validating principal pact guards roundtrips with create-principal"
  true
  (continue-pact 1))
+
+(commit-tx)
+
+; Pact 4.8 principals test
+(begin-tx)
+(interface iface1
+  (defun f:integer (a:integer)))
+
+(module m g
+  (defcap g () true)
+
+  (implements iface1)
+
+  (defschema ms g:string)
+
+  (deftable mstbl:{ms})
+
+  (defun f:integer (a:integer) 1)
+
+  (defcap test-cap (m:module{iface1}) 1)
+
+  (defun write-principal(key:string p:string)
+    (write mstbl key {"g":p}))
+
+  (defun get-principal (key:string)
+    (at "g" (read mstbl key)))
+  )
+
+(create-table mstbl)
+
+; Test principal caps created pre-info eliding
+(env-exec-config ["DisablePact49"])
+(write-principal 'a (create-principal (create-capability-guard (test-cap m))))
+
+(write-principal 'b (create-principal (create-capability-guard (test-cap m))))
+
+(expect "cap guard principals are different" false (= (get-principal "a") (get-principal "b")))
+
+; Test Principals post-info eliding
+(env-exec-config [])
+
+(write-principal 'a (create-principal (create-capability-guard (test-cap m))))
+
+(write-principal 'b (create-principal (create-capability-guard (test-cap m))))
+
+(expect "cap guard principals are equal" (get-principal "a") (get-principal "b"))
+(commit-tx)

@@ -923,10 +923,10 @@ new `env-sigs` REPL function as follows:
   ...
 )
 
-(set-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
+(env-sigs [{'key: "alice", 'caps: ["(accounts.PAY \"alice\" \"bob\" 10.0)"]}])
 (accounts.pay "alice" "bob" 10.0) ;; works as the cap match the signature caps
 
-(set-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
+(env-sigs [('key: "alice", 'caps: ["(accounts.PAY \"alice\" "\carol\" 10.0)"]}])
 (expect-failure "payment to bob will no longer be able to enforce alice's keyset"
   (accounts.pay "alice" "bob" 10.0))
 ```
@@ -1277,9 +1277,208 @@ Declaring models shares the same syntax with modules:
 Module References {#modrefs}
 ---
 
-Pact 3.7 gains a form of _genericism_ with _module references_. This is motivated by the desire to interoperate between
-modules that implement a common interface, and to be able to treat the indicated module as a data value to gain
-_polymorphism_ across modules.
+Pact 3.7 introduces module references (also called "modrefs"), a new language
+feature that enables important use-cases that require polymorphism. For example,
+a Uniswap-like DEX allows users to specify pairs of tokens to allow trading
+between them. The `fungible-v2` interface allows tokens to offer identical
+operations such as `transfer-create`, but without a way to abstract over
+different `fungible-v2` implementations, a DEX smart contract would have to be
+upgraded for each pair with custom code for every operation.
+
+```lisp
+;;; simplified DEX example with hardcoded dispatching on token symbols
+(defun swap
+  ( a-token:string a-amount:decimal a-account:string
+    b-token:string b-amount:decimal b-account:string
+  )
+  (with-read pair-accounts (format "{}:{}" [a-token b-token])
+    { 'pair-a-account := pair-a-account
+    , 'pair-b-account := pair-b-account
+    }
+    (cond
+      ((= "KDA" a-token)
+       (coin.transfer a-account pair-a-account a-amount))
+      ((= "KBTC" a-token)
+       (kbtc.ledger.transfer a-account pair-a-account a-amount))
+      ((= "KUSD" a-token)
+       (kusd.ledger.transfer a-account pair-a-account a-amount))
+      "Unrecognized a-token value")
+    (cond
+      ((= "KDA" b-token)
+       (coin.transfer b-pair-account b-account b-amount))
+      ((= "KBTC" b-token)
+       (kbtc.ledger.transfer b-pair-account b-account b-amount))
+      ((= "KUSD" b-token)
+       (kusd.ledger.transfer b-pair-account b-account b-amount))
+      "Unrecognized b-token value"))
+)
+```
+
+With module references, the DEX can now accept pairs of modref values where each
+value references a concrete module that implements the `fungible-v2` interface,
+giving it the ability to call `fungible-v2` operations using those values.
+
+```
+;;; simplified DEX example with modref dynamic dispatch
+(defun swap
+  ( a-token:module{fungible-v2} a-amount:decimal a-account:string
+    b-token:module{fungible-v2} b-amount:decimal b-account:string
+  )
+  (with-read pair-accounts (format "{}:{}" [a-token b-token])
+    { 'pair-a-account := pair-a-account
+    , 'pair-b-account := pair-b-account
+    }
+    (a-token::transfer a-account pair-a-account a-amount)
+    (b-token::transfer pair-b-account b-account b-amount))
+)
+```
+
+To invoke the above function, the module names are directly referenced in code.
+
+```lisp
+
+(swap coin a-amount a-account
+      kbtc.ledger b-amount b-account)
+
+```
+
+
+Module reference values are "normal Pact values" that can be stored in the database,
+referenced in events and returned from functions.
+
+```
+;;; simplified DEX example with stored pair modrefs
+(defun swap
+  ( pair-symbol:string
+    a-amount:decimal a-account:string
+    b-amount:decimal b-account:string
+  )
+  (with-read pair-accounts pair-symbol
+    { 'pair-a-account := pair-a-account:string
+    , 'a-token := a-token:module{fungible-v2}
+    , 'pair-b-account := pair-b-account:string
+    , 'b-token := b-token:module{fungible-v2}
+    }
+    (a-token::transfer a-account pair-a-account a-amount)
+    (b-token::transfer pair-b-account b-account b-amount))
+)
+```
+
+
+### Modrefs and Polymorphism
+
+Modrefs provide polymorphism for use cases like the example above with an emphasis on
+interoperability. A modref is specified with one or more interfaces, allowing
+for values of that modref to reference modules that implement those
+interfaces.
+
+In the calling example above, the modref `a-token:module{fungible-v2}` accepts a
+reference to the Kadena `coin` KDA token module, because `coin` implements
+`fungible-v2`. Of course there is nothing special about `fungible-v2`: modrefs
+can specify any defined interface and accept any module that implements said
+interface.
+
+The polymorphism offered by modrefs resembles generics in Java or traits in Rust,
+and should not be confused with more object-oriented polymorphism like that found
+with Java classes or TypeScript types. Modules cannot "extend" one another, they
+can only offer operations that match some interface specification, and interfaces
+themselves cannot extend some other interface.
+
+Modrefs introduce indirection which increases overall complexity, making the system harder
+to understand and reason about. Reach for modrefs when your code wants to offer
+flexible interoperation to other smart contracts, but if it's just your code, strive to
+use direct references whenever possible.
+
+### Important concerns when using modrefs.
+
+#### Late Binding
+
+Modrefs are "late-binding", which means that the latest
+upgraded version of a module will be used when a module operation is invoked.
+
+Consider a modref to a module stored in the database when the module is
+at version 1. Sometime later the module is upgraded to version 2. The modref
+in the database will refer to the upgraded version 2 of the module when read
+back in and used.
+
+As described in the [Dependency Management](#dependency-management) section,
+Pact direct references are not late-binding, so this modref behavior might
+be surprising.
+
+#### Modrefs can introduce untrusted code
+
+In the common case of employing modrefs to allow foreign modules to operate
+with your code, this of course means that you should not assume that this
+code is safe: indeed, **any modref call should be treated as untrusted code**.
+
+Specifically, modref invocation in the context of capability acquisition can
+result in unintended privilege escalation, in the common case of using
+`require-capability` to protect functions from being called directly.
+
+Consider a module with a public function `collect-data` that is intended to
+allow foreign modules to provide some data, resulting in the one-time payment
+of a fee. The foreign modules implement `data-collector` which offers `collect`
+to get the data, and `get-fee-recipient` to identify the receiving account.
+The module code acquires the `COLLECT` capability, and uses this to prevent
+two delegate functions from being called directly. Unfortunately, with
+the wrong code, this seemingly benign code can be exploited by a malicious modref
+implementor.
+
+
+```lisp
+(module data-market GOVERNANCE
+  ...
+
+  (defun collect-data (collector:module{data-collector})
+    "Provide data, get paid!"
+    ;; BAD: capability acquired before modref calls
+    (with-capability (COLLECT)
+      ;; BAD: modref invoked with capability in scope!
+      (store-data (collector::collect))
+      (pay-fee (collector::get-fee-recipient)))
+
+  (defun pay-fee (account:string)
+    "Private function to pay one-time fee for collection"
+    (require-capability (COLLECT))
+    (coin.transfer FEE_BANK account FEE))
+
+  (defun store-data (data:object{data-schema})
+    "Private function to update database with data collection results"
+    (require-capability (COLLECT))
+    ...)
+
+```
+
+The problem with the above code is that the `with-capability` call happens
+_before_ the calls to the modref operations, such that while the foreign module
+code is executing, the `COLLECT` capability is in scope. While this is true,
+`pay-fee` (and `store-data` as well) can be called from anywhere.
+
+As such, a malicious coder could provide a modref
+whose code directly calls `data-market.pay-fee` as many times as they like in the
+seemingly innocent calls to `collect` or `get-fee-recipient`. They could also
+call `data-market.store-data` and wreak havoc that way. Once a capability is
+in scope, the protections provided by `require-capability` are not available.
+
+Fortunately, this is easily avoided by keeping modref calls out of scope of the
+sensitive capability.
+
+```lisp
+(defun collect-data (collector:module{data-collector})
+  "Provide data, get paid!"
+  ;; GOOD: modref invoked before with-capability call
+  (let ((data (collector::collect))
+        (account (collector::get-fee-recipient)))
+    (with-capability (COLLECT)
+      (store-data data)
+      (pay-fee account))))
+```
+
+Now, the modref calls have safely returned before the capability is acquired.
+A malicious implementation has no way to invoke the sensitive code.
+
+
+### Coding with modrefs
 
 Modules and interfaces thus need to be referenced directly, which is simply accomplished by issuing their name in code.
 
@@ -1327,7 +1526,6 @@ and using the [dereference operator](#deref) `::` to invoke a member function of
 (foo impl) ;; 'impl' references the module defined above, of type 'module{baz}'
 ```
 
-Module references can be used as normal pact values, which includes storage in the database.
 
 
 

@@ -135,6 +135,7 @@ data Feature
   | FListHash
   -- Temporal operators
   | FTemporalAddition
+  | FTemporalDiff
   -- Quantification forms
   | FUniversalQuantification
   | FExistentialQuantification
@@ -1142,7 +1143,7 @@ doc FFold = Doc
         , ("a", a)
         , ("bs", TyList' b)
         ]
-      (TyList' a)
+      a
   ]
 
 
@@ -1320,7 +1321,16 @@ doc FTemporalAddition = Doc
         ]
         (TyCon time)
   ]
-
+doc FTemporalDiff = Doc
+  "diff-time"
+  CTemporal
+  PropOnly
+  "Time difference in seconds of `a` - `b`"
+  [Usage
+    "(diff-time a b)"
+    Map.empty
+    $ Fun Nothing [("a", TyCon time), ("b", TyCon time)] (TyCon dec)
+  ]
 --
 -- Property-specific features
 --
@@ -1885,6 +1895,7 @@ PAT(SNumericalHash, FNumericalHash)
 PAT(SBoolHash, FBoolHash)
 PAT(SListHash, FListHash)
 PAT(STemporalAddition, FTemporalAddition)
+PAT(STemporalDiff, FTemporalDiff)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
 PAT(SColumnOf, FColumnOf)

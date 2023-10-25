@@ -517,7 +517,7 @@ Obtain current pact build version.
 .. code:: lisp
 
    pact> (pact-version)
-   "4.7.0"
+   "4.8"
 
 Top level only: this function will fail if used in module code.
 
@@ -2222,7 +2222,7 @@ env-exec-config
 *→* ``[string]``
 
 Queries, or with arguments, sets execution config flags. Valid flags:
-[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisableNewTrans”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePact45”,“DisablePact46”,“DisablePact47”,“DisablePactEvents”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
+[“AllowReadInLocal”,“DisableHistoryInTransactionalMode”,“DisableInlineMemCheck”,“DisableModuleInstall”,“DisableNewTrans”,“DisablePact40”,“DisablePact420”,“DisablePact43”,“DisablePact431”,“DisablePact44”,“DisablePact45”,“DisablePact46”,“DisablePact47”,“DisablePact48”,“DisablePactEvents”,“DisableRuntimeReturnTypeChecking”,“EnforceKeyFormats”,“OldReadOnlyBehavior”,“PreserveModuleIfacesBug”,“PreserveModuleNameBug”,“PreserveNsModuleInstallBug”,“PreserveShowDefs”]
 
 .. code:: lisp
 
@@ -2263,7 +2263,7 @@ you want to inspect.
 .. code:: lisp
 
    pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)
-   ["TOTAL: 7" "map:GUnreduced:currTotalGas=4: 4" "+:GUnreduced:currTotalGas=5: 1" ":GIntegerOpCost:(1, ):(1, ):currTotalGas=5: 0" "+:GUnreduced:currTotalGas=6: 1" ":GIntegerOpCost:(1, ):(2, ):currTotalGas=6: 0" "+:GUnreduced:currTotalGas=7: 1" ":GIntegerOpCost:(1, ):(3, ):currTotalGas=7: 0"]
+   ["TOTAL: 7" "map:GUnreduced:currTotalGas=4: 4" "+:GUnreduced:currTotalGas=5: 1" ":GIntegerOpCost:(1, ):(1, ):Pact48IntThreshold:currTotalGas=5: 0" "+:GUnreduced:currTotalGas=6: 1" ":GIntegerOpCost:(1, ):(2, ):Pact48IntThreshold:currTotalGas=6: 0" "+:GUnreduced:currTotalGas=7: 1" ":GIntegerOpCost:(1, ):(3, ):Pact48IntThreshold:currTotalGas=7: 0"]
 
 env-gasmodel
 ~~~~~~~~~~~~
@@ -2319,7 +2319,7 @@ env-keys
 
 *keys* ``[string]`` *→* ``string``
 
-DEPRECATED in favor of ‘set-sigs’. Set transaction signer KEYS. See
+DEPRECATED in favor of ‘env-sigs’. Set transaction signer KEYS. See
 ‘env-sigs’ for setting keys with associated capabilities.
 
 .. code:: lisp

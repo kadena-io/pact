@@ -1,8 +1,9 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Pact.Types.Logger where
 
@@ -14,21 +15,21 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Default
 import GHC.Generics
+import Control.Monad (forM_, when)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Prelude hiding (log)
 import Control.Arrow
 import Data.Maybe
-#if !defined(ghcjs_HOST_OS)
 import Data.List
 import Data.Yaml as Y
-#endif
 import qualified Data.Text as T
 
 import Pact.Types.Util
 
 newtype LogName = LogName String
-  deriving (Eq,Show,Ord,Hashable,IsString,AsString,ToJSON,FromJSON)
+  deriving (Eq,Show,Ord)
+  deriving newtype (FromJSON,Hashable,IsString,AsString)
 
 data Logger = Logger {
   logName :: LogName,
@@ -56,7 +57,7 @@ data LogRule = LogRule {
   include :: Maybe (HS.HashSet String),
   exclude :: Maybe (HS.HashSet String)
   } deriving (Eq,Generic)
-instance ToJSON LogRule
+
 instance FromJSON LogRule
 instance Default LogRule where def = LogRule def def def
 instance Show LogRule where
@@ -66,8 +67,7 @@ instance Show LogRule where
 
 newtype LogRules = LogRules { logRules :: HM.HashMap LogName LogRule }
   deriving (Eq,Show,Generic)
-instance ToJSON LogRules where
-  toJSON = toJSON . M.fromList . map (first asString) . HM.toList . logRules
+
 instance FromJSON LogRules where
   parseJSON = fmap (LogRules . HM.fromList . map (first (LogName . T.unpack)) . M.toList) . parseJSON
 instance Default LogRules where def = LogRules HM.empty
@@ -115,7 +115,6 @@ instance Logging LogIO where
 runLogIO :: Logger -> LogIO a -> IO a
 runLogIO logger a = runReaderT (logIO a) logger
 
-#if !defined(ghcjs_HOST_OS)
 _test :: IO ()
 _test = do
   let config = "Default: {}       \n" <>
@@ -131,7 +130,6 @@ _test = do
       loggers = initLoggers putStrLn doLog rules
   forM_ (sort $ HM.keys (logRules rules)) $ \ln -> runLogIO (newLogger loggers ln) _stuff
   runLogIO (newLogger loggers "Unconfigured") _stuff
-#endif
 
 _stuff :: LogIO ()
 _stuff = ask >>= liftIO . print >> logInfo "hello" >> logError "buhbye"

@@ -1,3 +1,64 @@
+4.9.0
+---
+### Bugfixes
+- Pact value infos fixed (#1287)
+
+### Features
+- Webauthn support (#1193)
+
+
+4.8.0
+---
+### Bugfixes
+- Fix name resolution within module redeploy (#1235)
+- Fixed issue with the hash of cap guards, `hash` native and principals (#1273) (#1278) (#1287)
+- Fixed error message for calling a non-function value (#1268)
+
+### Eval
+- Tweaked the gas of concat (#1269), reverse and format (#1271)
+- Allow computation on integers less than 10^80 without gas penalty (#1272)
+
+### Internal changes
+- More granular gas units (#1245)
+- Remove GHCJS support (#1280)
+- GHC 9.6+ version support (#1242)
+- Package docs in nix flake (#1258)
+- Vendor sources of prettyprinter-1.6.0 (#1263)
+- Use MTL 2.3+ (#1261)
+- replace cryptonite by crypton (#1240)
+
+### Formal Verification
+- Support lambdas in static typechecker (#1232)
+- Fix swapped type assignment in fold symeval (#1253)
+
+### Other
+- Improve modref docs (#1256)
+
+Thanks to @thomashoneyman for the contribution!
+
+4.7.1
+---
+
+- Add feature flag `FlagDisableRuntimeTypeChecking` for disabling runtime typechecking
+  introduced in Pact 4.7 (#1231)
+
+### Formal Verification
+
+- Fixed empty list type defaulting to any (#1224)
+- Fixed partial biniding (#1127)
+
+### Tests
+
+- Refactored test to avoid `runIO` within tests (#1129)
+- Add `CoverageSpec` (#1228)
+- Fix `ReplSpec` tests (#1216)
+- Cleanup `PactContinuationSpec` (#1222)
+
+### Others
+
+- Cleanup [README.md](README.md) (#1225)
+- Bump Z3 versions in GH actions (#1126)
+
 4.7.0
 ---
 

@@ -4,8 +4,8 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE TypeOperators     #-}
 
--- | HTTP Server for GHCJS to use verification from the browser (where we can't
--- run sbv).
+-- | HTTP Server to use for remote verification
+--
 module Pact.Analyze.Remote.Server
   ( verifyHandler
   , runServantServer
@@ -37,7 +37,9 @@ import           Pact.Repl                 (initReplState, evalRepl', replGetMod
 import           Pact.Repl.Types
 import           Pact.Types.Runtime
 
-type VerifyAPI = "verify" :> ReqBody '[JSON] Request :> Post '[JSON] Response
+import           Pact.Utils.Servant
+
+type VerifyAPI = "verify" :> ReqBody '[PactJson] Request :> Post '[PactJson] Response
 
 verifyAPI :: Proxy VerifyAPI
 verifyAPI = Proxy

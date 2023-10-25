@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 module Pact.Persist.MockPersist where
 
+import Data.Aeson (FromJSON)
 import Pact.Persist
 import Data.Default
 import Pact.PersistPactDb
@@ -15,11 +16,11 @@ newtype MockQueryKeys =
 instance Default MockQueryKeys where def = MockQueryKeys (\_t _q -> rcp [])
 
 newtype MockQuery =
-  MockQuery (forall k v . (PactDbKey k, PactDbValue v) => Table k -> Maybe (KeyQuery k) -> Persist () [(k,v)])
+  MockQuery (forall k v . (PactDbKey k, FromJSON v) => Table k -> Maybe (KeyQuery k) -> Persist () [(k,v)])
 instance Default MockQuery where def = MockQuery (\_t _q -> rcp [])
 
 newtype MockReadValue =
-  MockReadValue (forall k v . (PactDbKey k, PactDbValue v) => Table k -> k -> Persist () (Maybe v))
+  MockReadValue (forall k v . (PactDbKey k, FromJSON v) => Table k -> k -> Persist () (Maybe v))
 instance Default MockReadValue where def = MockReadValue (\_t _k -> rcp Nothing)
 
 data MockPersist = MockPersist {

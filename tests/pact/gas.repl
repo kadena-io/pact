@@ -744,7 +744,7 @@ d.G3
 
 ; Gas change to enforce
 (begin-tx)
-(env-exec-config ["DisablePact45"])
+(env-exec-config ["DisablePact45", "DisablePact48"])
 (env-gas 0)
 (enforce true (format "{} {} {} {} {}" [1, 2, 3, 4, 5]))
 (expect "gas of enforce pre-fork" 24 (env-gas))
@@ -797,4 +797,82 @@ d.G3
 (env-gas 0)
 (str-to-list "0123456789")
 (expect "gas of str-to-list post-fork" 11 (env-gas))
+(commit-tx)
+
+; Test that `concat` is gassed by the number of characters
+; at pact-4.8.
+(begin-tx)
+(env-gaslimit 1000000)
+(module m G
+  (defcap G () true)
+  (defun ten_x_string (n)
+      (fold (lambda (acc unused) (+ acc "aaaaaaaaaa")) "" (enumerate 1 n)))
+  (defconst strings_1000_1000:[string] (make-list 1000 (ten_x_string 100)))
+  (defconst strings_1000_2000:[string] (make-list 2000 (ten_x_string 100)))
+  (defconst strings_2000_1000:[string] (make-list 1000 (ten_x_string 200)))
+  )
+
+; ============================================================ ;
+;; TEST: cost of running concat on large strings.
+;;
+(env-gas 0)
+(concat strings_1000_1000)
+(expect "calling (concat strings_1000_1000)" 111 (env-gas))
+
+(env-gas 0)
+(concat strings_2000_1000)
+(expect "calling (concat strings_2000_1000)" 131 (env-gas))
+
+(env-gas 0)
+(concat strings_1000_2000)
+(expect "calling (concat strings_1000_2000)" 151 (env-gas))
+(commit-tx)
+
+(begin-tx)
+(module m G (defcap G () true)
+  (defconst list-rev-small (make-list 1000 0))
+  (defconst list-rev-large (make-list 10000 0))
+  (defconst list-fmt (make-list 100 list-rev-small))
+  )
+
+(env-gas 0)
+(reverse list-rev-small)
+(expect "gas of reversing smaller list" 12 (env-gas))
+
+(env-gas 0)
+(reverse list-rev-large)
+(expect "gas of reversing larger list" 102 (env-gas))
+
+(env-gas 0)
+(format "{}" list-fmt)
+(expect "gas of formatting a sample list" 10014 (env-gas))
+
+(commit-tx)
+
+; tests for pre/post integer ops
+(begin-tx)
+(module m G (defcap G () true)
+  (defconst i79:integer (+ (^ 10 79) 1))
+  (defconst i80:integer (+ (^ 10 80) 1))
+)
+(env-exec-config ["DisablePact48"])
+(env-gas 0)
+(+ i79 i79)
+(expect "gas of + pre-fork 10^79" (env-gas) 21)
+
+(env-gas 0)
+(+ i80 i80)
+(expect "gas of + pre-fork 10^80" (env-gas) 21)
+
+; post-fork
+(env-gas 0)
+(env-exec-config [])
+(env-gas 0)
+(+ i79 i79)
+(expect "gas of + post-fork 10^79" (env-gas) 1)
+
+(env-gas 0)
+(+ i80 i80)
+(expect "gas of + post-fork 10^80" (env-gas) 21)
+
 (commit-tx)

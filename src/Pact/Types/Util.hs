@@ -1,11 +1,13 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -24,13 +26,16 @@ module Pact.Types.Util
   , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
+  , enableToJSON
   -- | Base 16 helpers
   , parseB16JSON, parseB16Text, parseB16TextOnly
-  , toB16JSON, toB16Text
+  , toB16Text
+  , B16JsonBytes(..)
   -- | Base64Url helpers
   , encodeBase64UrlUnpadded, decodeBase64UrlUnpadded
   , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText'
   , toB64UrlUnpaddedText, fromB64UrlUnpaddedText
+  , B64JsonBytes(..)
   -- | AsString
   , AsString(..), asString'
   -- | MVar-as-state utils
@@ -42,6 +47,7 @@ module Pact.Types.Util
   , rewrap, rewrapping, wrap, unwrap
   -- | Arbitrary generator utils
   , genBareText
+  , arbitraryIdent
   ) where
 
 import Data.Aeson
@@ -57,18 +63,20 @@ import qualified Data.ByteString.Short as SB
 import qualified Text.Trifecta as Trifecta
 import Data.Char
 import Data.Either (isRight)
+import Data.Hashable (Hashable)
 import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Applicative ((<|>))
 import Control.Concurrent
-import Control.Lens hiding (Empty)
+import Control.Lens hiding (Empty, elements, (.=))
 import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
 
+import GHC.Stack (HasCallStack)
 
-
+import qualified Pact.JSON.Encode as J
 
 class ParseText a where
   parseText :: Text -> Parser a
@@ -86,13 +94,13 @@ resultToEither (Error s) = Left s
 fromText' :: ParseText a => Text -> Either String a
 fromText' = resultToEither . fromText
 
-satisfiesRoundtripJSON :: (Eq a, FromJSON a, ToJSON a) => a -> Bool
-satisfiesRoundtripJSON i = case (roundtripJSONToEither i) of
+satisfiesRoundtripJSON :: (Eq a, FromJSON a, J.Encode a) => a -> Bool
+satisfiesRoundtripJSON i = case roundtripJSONToEither i of
   Left _ -> False
   Right j -> i == j
 
-roundtripJSONToEither :: (FromJSON a, ToJSON a) => a -> Either String a
-roundtripJSONToEither = resultToEither . fromJSON . toJSON
+roundtripJSONToEither :: (FromJSON a, J.Encode a) => a -> Either String a
+roundtripJSONToEither = eitherDecode . J.encode
 
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
@@ -108,7 +116,7 @@ lensyParseJSON n = genericParseJSON (lensyOptions n)
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 
-lensyConstructorToNiceJson :: Int -> String -> String
+lensyConstructorToNiceJson :: HasCallStack => Int -> String -> String
 lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
   where
     firstToLower (c:cs) = toLower c : cs
@@ -139,7 +147,7 @@ toB64UrlUnpaddedText s = decodeUtf8 $ encodeBase64UrlUnpadded s
 fromB64UrlUnpaddedText :: ByteString -> Either String Text
 fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
   Right bs' -> case decodeUtf8' bs' of
-    Left _ -> Left $ "Base64URL decode failed: invalid unicode"
+    Left _ -> Left "Base64URL decode failed: invalid unicode"
     Right t -> Right t
   Left e -> Left $ "Base64URL decode failed: " ++ e
 
@@ -149,15 +157,12 @@ parseB16JSON = withText "Base16" parseB16Text
 
 parseB16Text :: Text -> Parser ByteString
 parseB16Text t = case B16.decode (encodeUtf8 t) of
-                 (s,leftovers) | leftovers == B.empty -> return s
-                               | otherwise -> fail $ "Base16 decode failed: " ++ show t
+  Right bs -> return bs
+  Left _ -> fail $ "Base16 decode failed: " ++ show t
 {-# INLINE parseB16Text #-}
 
 parseB16TextOnly :: Text -> Either String ByteString
 parseB16TextOnly t = resultToEither $ parse parseB16Text t
-
-toB16JSON :: ByteString -> Value
-toB16JSON s = String $ toB16Text s
 
 toB16Text :: ByteString -> Text
 toB16Text s = decodeUtf8 $ B16.encode s
@@ -167,13 +172,62 @@ maybeToEither err Nothing = Left err
 maybeToEither _ (Just a)  = Right a
 
 
+-- | Support for 'toJSON' is required for YAML encodings, which is required by
+-- most Pact data types.
+--
+-- From verison 1.4 of the hashable package onward, 'toJSON' will result in
+-- encodings that are not backward compatible. Similarly, for aeson >= 2
+-- encodings will change.
+--
+-- The only option to keep the ordering of properties stable with aeson-2 would
+-- be to define a custom type for property names, which would allow to define
+-- backward compatile 'Ord' instances.
+--
+enableToJSON
+    :: HasCallStack
+    => String
+    -> Value
+    -> Value
+enableToJSON t _ = error $ t <> ": encoding to Data.Aeson.Value is unstable and therefore not supported"
+{-# INLINE enableToJSON #-}
+
 -- | Utility for unsafe parse of JSON
-unsafeFromJSON :: FromJSON a => Value -> a
+unsafeFromJSON :: HasCallStack => FromJSON a => Value -> a
 unsafeFromJSON v = case fromJSON v of Success a -> a; Error e -> error ("JSON parse failed: " ++ show e)
 
 -- | Utility for GHCI output of JSON
-outputJSON :: ToJSON a => a -> IO ()
-outputJSON a = BSL8.putStrLn $ encode a
+outputJSON :: J.Encode a => a -> IO ()
+outputJSON a = BSL8.putStrLn $ J.encode a
+
+-- | Tagging ByteStrings (and isomorphic types) that are JSON encoded as
+-- Hex strings
+newtype B16JsonBytes = B16JsonBytes { _b16JsonBytes :: B.ByteString }
+    deriving (Show, Eq, Ord, Hashable, Generic)
+
+instance FromJSON B16JsonBytes where
+    parseJSON = fmap B16JsonBytes . parseB16JSON
+    {-# INLINE parseJSON #-}
+instance FromJSONKey B16JsonBytes where
+    fromJSONKey = FromJSONKeyTextParser (fmap B16JsonBytes . parseB16Text)
+    {-# INLINE fromJSONKey #-}
+instance AsString B16JsonBytes where
+    asString = toB16Text . _b16JsonBytes
+    {-# INLINE asString #-}
+
+-- | Tagging ByteStrings (and isomorphic types) that are JSON encoded as
+-- Base64Url (without padding) strings
+newtype B64JsonBytes = B64JsonBytes { _b64JsonBytes :: B.ByteString }
+    deriving (Show, Eq, Ord, Hashable, Generic)
+
+instance FromJSON B64JsonBytes where
+    parseJSON = fmap B64JsonBytes . withText "Base64" parseB64UrlUnpaddedText
+    {-# INLINE parseJSON #-}
+instance FromJSONKey B64JsonBytes where
+    fromJSONKey = FromJSONKeyTextParser (fmap B64JsonBytes . parseB64UrlUnpaddedText)
+    {-# INLINE fromJSONKey #-}
+instance AsString B64JsonBytes where
+    asString = toB64UrlUnpaddedText . _b64JsonBytes
+    {-# INLINE asString #-}
 
 -- | Provide unquoted string representation.
 class AsString a where asString :: a -> Text
@@ -256,14 +310,25 @@ genBareText = genText
         -- Similar parser used with BareName.
         bareStartCharParser :: Text -> Either String Text
         bareStartCharParser = AP.parseOnly $
-          (Trifecta.ident style) <* Trifecta.eof
+          Trifecta.ident style <* Trifecta.eof
 
         -- Checks that Text provided starts with letter,
         -- set of approved symbols, or digits.
         bareRestCharParser :: Text -> Either String Text
         bareRestCharParser = AP.parseOnly $
-          (Trifecta.ident style') <* Trifecta.eof
+          Trifecta.ident style' <* Trifecta.eof
 
         -- Uses same character set for start of text as for rest of it.
         -- Useful when randomly generating texts character by character.
-        style' = style { Trifecta._styleStart = (Trifecta.letter <|> Trifecta.digit <|> symbols) }
+        style' = style { Trifecta._styleStart = Trifecta.letter <|> Trifecta.digit <|> symbols }
+
+-- | Less general than 'genBarText', but probably faster
+--
+arbitraryIdent :: Gen Text
+arbitraryIdent = cons
+  <$> elements (syms <> letters)
+  <*> (pack <$> listOf (elements (syms <> letters <> digits)))
+ where
+  syms = "%#+-_&$@<>=^?*!|/~"
+  letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZñûüùúūÛÜÙÚŪß"
+  digits = "0123456789"

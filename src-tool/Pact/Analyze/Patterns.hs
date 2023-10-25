@@ -192,6 +192,9 @@ pattern AST_Hash val <- App _node (NativeFunc "hash") [val]
 pattern AST_AddTime :: forall a. AST a -> AST a -> AST a
 pattern AST_AddTime time seconds <- App _ (NativeFunc STemporalAddition) [time, seconds]
 
+pattern AST_DiffTime :: forall a. AST a -> AST a -> AST a
+pattern AST_DiffTime a b <- App _ (NativeFunc STemporalDiff) [a, b]
+
 pattern AST_Days :: forall a. AST a -> AST a
 pattern AST_Days days <- App _ (NativeFunc "days") [days]
 

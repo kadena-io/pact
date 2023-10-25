@@ -13,9 +13,7 @@
 
 module Pact.Native.Decrypt
   ( decryptDefs
-#if !defined(ghcjs_HOST_OS)
   , doEncrypt
-#endif
   ) where
 
 import Control.Monad
@@ -28,16 +26,11 @@ import Data.Text.Encoding
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-#if !defined(ghcjs_HOST_OS)
 import qualified Data.ByteArray as BA
 import Crypto.PubKey.Curve25519
 import Crypto.Error
 import Crypto.Cipher.ChaChaPoly1305
 import Crypto.MAC.Poly1305 (Auth(..),authTag)
-#else
-
-#endif
-
 
 decryptDefs :: NativeModule
 decryptDefs = ("Commitments",
@@ -64,18 +57,11 @@ validateKeypairDef =
     validateKeypair i as = argsError i as
 
 doValidate :: HasInfo i => i -> ByteString -> ByteString -> Eval e Bool
-#if defined(ghcjs_HOST_OS)
-doValidate i _ _ = evalError' i "'validate-keypair' unsupported in javascript-backed Pact"
-#else
 
 doValidate i public secret = do
   pk <- importPublic i public
   sk <- importSecret i secret
   return $ toPublic sk == pk
-
-#endif
-
-
 
 decryptDef :: NativeDef
 decryptDef =
@@ -128,10 +114,6 @@ doDecrypt ::
   -> ByteString
   -- ^ Curve25519 secretKey DH input
   -> Eval e ByteString
-#if defined(ghcjs_HOST_OS)
-doDecrypt i _ _ _ _ _ _ = evalError' i "'decrypt' unsupported in javascript-backed Pact"
-#else
-
 doDecrypt i ciphertext nonce aad auth public secret = do
   at <- liftCrypto i "auth prefix" $ authTag auth
   n <- liftCrypto i "nonce" $ nonce12 nonce
@@ -145,10 +127,6 @@ doDecrypt i ciphertext nonce aad auth public secret = do
   unless (outtag == at) $
     evalError' i $ "AEAD Authentication failed: " <> pretty (toB16Text $ authToBS outtag)
   return out
-
-#endif
-
-
 
 doPublic :: HasInfo i => i -> Text -> Eval e ByteString
 doPublic p p' = ofLength p "public key" 32 =<< doBase16 p p'
@@ -167,11 +145,6 @@ doBase16 i = either (evalError' i . prettyString) return .
 ofLength :: HasInfo i => i -> Text -> Int -> ByteString -> Eval e ByteString
 ofLength i m n b | BS.length b == n = return b
                  | otherwise = evalError' i $ pretty m <> " must be bytestring of length " <> pretty n
-
-
-
-
-#if !defined(ghcjs_HOST_OS)
 
 liftCrypto
   :: HasInfo i => i -> [Char] -> CryptoFailable a -> Eval e a
@@ -292,4 +265,3 @@ _roundtrip
 _roundtrip p s = do
   r <- _encrypt p s >>= _decrypt p s >>= _jankyRunEval . doBase64Url _i
   return (_plaintext,r)
-#endif

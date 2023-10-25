@@ -6,11 +6,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE CPP #-}
-#if defined(ghcjs_HOST_OS)
-{-# LANGUAGE TypeApplications #-}
-#endif
-
-
 
 -- |
 -- Module      :  Pact.Types.SizeOf
@@ -51,10 +46,8 @@ import qualified Data.HashSet as HS
 import Pact.Types.Orphans()
 import Pact.Types.Pretty
 
-#if !defined(ghcjs_HOST_OS)
 import qualified GHC.Integer.Logarithms as IntLog
 import GHC.Int(Int(..))
-#endif
 
 
 -- |  Estimate of number of bytes needed to represent data type
@@ -162,12 +155,7 @@ instance SizeOf Integer where
     SizeOfV0 ->
       if i <= 0 then 0 else ceiling ((logBase 100000 (realToFrac i)) :: Double)
     SizeOfV1 ->
-#if !defined(ghcjs_HOST_OS)
       fromIntegral (max 64 (I# (IntLog.integerLog2# (abs i)) + 1))  `quot` 8
-#else
-      (max 64 (ceiling (logBase @Double 2 (fromIntegral (abs i))) + 1)) `quot` 8
-#endif
-
 
 instance SizeOf Int where
   sizeOf _ _ = 2 * wordSize

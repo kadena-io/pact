@@ -461,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.7.0"
+"4.9"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1928,7 +1928,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePactEvents","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
@@ -1965,7 +1965,7 @@ Set environment gas limit to LIMIT.
 Enable and obtain gas logging. Bracket around the code whose gas logs you want to inspect.
 ```lisp
 pact> (env-gasmodel "table") (env-gaslimit 10) (env-gaslog) (map (+ 1) [1 2 3]) (env-gaslog)
-["TOTAL: 7" "map:GUnreduced:currTotalGas=4: 4" "+:GUnreduced:currTotalGas=5: 1" ":GIntegerOpCost:(1, ):(1, ):currTotalGas=5: 0" "+:GUnreduced:currTotalGas=6: 1" ":GIntegerOpCost:(1, ):(2, ):currTotalGas=6: 0" "+:GUnreduced:currTotalGas=7: 1" ":GIntegerOpCost:(1, ):(3, ):currTotalGas=7: 0"]
+["TOTAL: 7" "map:GUnreduced:currTotalGas=4: 4" "+:GUnreduced:currTotalGas=5: 1" ":GIntegerOpCost:(1, ):(1, ):Pact48IntThreshold:currTotalGas=5: 0" "+:GUnreduced:currTotalGas=6: 1" ":GIntegerOpCost:(1, ):(2, ):Pact48IntThreshold:currTotalGas=6: 0" "+:GUnreduced:currTotalGas=7: 1" ":GIntegerOpCost:(1, ):(3, ):Pact48IntThreshold:currTotalGas=7: 0"]
 ```
 
 
@@ -2022,7 +2022,7 @@ pact> (env-hash (hash "hello"))
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
+DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. See 'env-sigs' for setting keys with associated capabilities.
 ```lisp
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
@@ -2102,14 +2102,6 @@ pact> (expect-that "addition" (< 2) (+ 1 2))
 pact> (expect-that "addition" (> 2) (+ 1 2))
 "FAILURE: addition: did not satisfy (> 2) : 3:integer"
 ```
-
-
-### format-address {#format-address}
-
-*scheme*&nbsp;`string` *public-key*&nbsp;`string` *&rarr;*&nbsp;`string`
-
-
-Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME.
 
 
 ### load {#load}
