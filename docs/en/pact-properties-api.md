@@ -794,7 +794,7 @@ Supported in either invariants or properties.
 * takes `f`: _a_ -> _b_ -> _a_
 * takes `a`: _a_
 * takes `bs`: [_b_]
-* produces [_a_]
+* produces _a_
 
 reduce a list by applying `f` to each element and the previous result
 
@@ -943,6 +943,20 @@ Supported in properties only.
 Add seconds to a time
 
 Supported in either invariants or properties.
+
+### diff-time {#FTemporalDiff}
+
+```lisp
+(diff-time a b)
+```
+
+* takes `a`: `time`
+* takes `b`: `time`
+* produces `decimal`
+
+Time difference in seconds of `a` - `b`
+
+Supported in properties only.
 
 ## Quantification operators {#Quantification}
 

@@ -152,3 +152,32 @@
   (fold-db tbl (lambda (x y) 1) (lambda (x) x)))
 
 (commit-tx)
+
+(begin-tx)
+(env-exec-config ['DisablePact48])
+; reducing direct ref pre fork
+(expect-failure
+    "Native direct ref pre fork"
+    "Unexpected non-native direct ref: 1"
+    (let ((x 1)) (x x)))
+(expect-failure
+    "Native direct ref pre fork"
+    "h"
+    (let ((x "h")) (x x)))
+
+(commit-tx)
+
+
+(begin-tx)
+(env-exec-config [])
+; reducing direct ref post fork
+(expect-failure
+    "Native direct ref post fork"
+    "Tried to call a value which is not a function, but a(n) integer"
+    (let ((x 1)) (x x)))
+(expect-failure
+    "Native direct ref post fork"
+    "Tried to call a value which is not a function, but a(n) string"
+    (let ((x "h")) (x x)))
+
+(commit-tx)

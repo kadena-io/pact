@@ -223,6 +223,8 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   IntAddTime :: t 'TyTime -> t 'TyInteger -> Core t 'TyTime
   -- | Adds a 'Decimal' expression to a 'Time' expression
   DecAddTime :: t 'TyTime -> t 'TyDecimal -> Core t 'TyTime
+  -- | Diff two times
+  DiffTime :: t 'TyTime -> t 'TyTime -> Core t 'TyDecimal
 
   -- comparison. Note that while it's cumbersome to define five different
   -- monomorphized comparisons, the alternative is implementing Eq by hand
@@ -767,6 +769,7 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
   DecAddTime a b   -> showString "DecAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
+  DiffTime a b     -> showString "DiffTime "     . showsTm 11 a . showChar ' ' . showsTm 11 b
   Comparison ty' op a b ->
       showString "Comparison "
     . showsPrec 11 ty'
@@ -1015,7 +1018,7 @@ prettyCore ty = \case
   StrToIntBase b s         -> parensSep [pretty SStringToInteger, prettyTm b, prettyTm s]
   StrContains needle haystack
     -> parensSep [pretty SContains, prettyTm needle, prettyTm haystack]
-    
+
   StrHash x                -> parensSep [pretty SStringHash, prettyTm x]
   IntHash x                -> parensSep [pretty SNumericalHash, prettyTm x]
   BoolHash x               -> parensSep [pretty SBoolHash, prettyTm x]
@@ -1026,6 +1029,7 @@ prettyCore ty = \case
   Numerical tm             -> prettyNumerical ty tm
   IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
   DecAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
+  DiffTime a b             -> parensSep [pretty STemporalDiff, prettyTm a, prettyTm b]
   Comparison ty' op x y    -> parensSep [pretty op, singPrettyTm ty' x, singPrettyTm ty' y]
   GuardEqNeq op x y        -> parensSep [pretty op, prettyTm x, prettyTm y]
   ObjectEqNeq ty1 ty2 op x y
@@ -1915,6 +1919,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     IntAddTime <$> f tm1 <*> f tm2
   DecAddTime tm1 tm2 ->
     DecAddTime <$> f tm1 <*> f tm2
+  DiffTime tm1 tm2 ->
+    DiffTime <$> f tm1 <*> f tm2
   Comparison ty op tm1 tm2 ->
     Comparison ty op <$> f tm1 <*> f tm2
   GuardEqNeq op tm1 tm2 ->

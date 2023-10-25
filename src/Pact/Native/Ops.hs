@@ -43,9 +43,7 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-#if !defined(ghcjs_HOST_OS)
 import Pact.Native.Trans.TOps
-#endif
 
 
 modDef :: NativeDef
@@ -67,25 +65,24 @@ addDef = defGasRNative "+" plus plusTy
   "Add numbers, concatenate strings/lists, or merge objects."
   where
     plus :: GasRNativeFun e
-    plus g fi [TLitString a,TLitString b] = gasConcat g fi (T.length a) (T.length b) $
+    plus fi [TLitString a,TLitString b] = gasConcat fi (T.length a) (T.length b) $
       (return (tStr $ a <> b))
-    plus g fi [TList a aty _,TList b bty _] = gasConcat g fi (length a) (length b) $
+    plus fi [TList a aty _,TList b bty _] = gasConcat fi (length a) (length b) $
       return (TList
       (a <> b)
       (if aty == bty then aty else TyAny)
       def)
-    plus g fi [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
-      gasConcat g fi (M.size as) (M.size bs) $
+    plus fi [TObject (Object (ObjectMap as) aty _ _) _,TObject (Object (ObjectMap bs) bty _ _) _] =
+      gasConcat fi (M.size as) (M.size bs) $
       return ((`TObject` def) $ Object
            (ObjectMap $ M.union as bs)
            (if aty == bty then aty else TyAny)
            def
            def)
-    plus g i as =
-      (g,) <$> binop' "+" (+) (+) i as
+    plus i as = binop' "+" (+) (+) i as
     {-# INLINE plus #-}
 
-    gasConcat g fi aLength bLength = computeGas' g fi (GConcatenation aLength bLength)
+    gasConcat fi aLength bLength = computeGas' fi (GConcatenation aLength bLength)
 
     plusTy :: FunTypes n
     plusTy = coerceBinNum <> binTy plusA plusA plusA
@@ -131,12 +128,8 @@ powDef = defRNative "^" powImpl coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 
 powImpl :: RNativeFun e
 powImpl i as@[TLiteral a _,TLiteral b _] = do
-#if defined(ghcjs_HOST_OS)
-  binop "^" (\a' b' -> liftDecF i (**) a' b') intPow i as
-#else
   decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecPowF i (**)) (liftDecPowF i trans_pow)
   binop "^" decimalPow intPow i as
-#endif
   where
   liftDecPowF fi f lop rop = do
     _ <- computeGasCommit def "" (GDecimalOpCost lop rop)
@@ -162,16 +155,19 @@ powImpl i as@[TLiteral a _,TLiteral b _] = do
     | otherwise = twoArgIntOpGas x x *> odds (x * x) (y `quot` 2) (x * z)
 powImpl i as = argsError i as
 
-twoArgIntOpGas :: Integer -> Integer -> Eval e Gas
-twoArgIntOpGas loperand roperand =
-  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing))
+twoArgIntOpGas :: Integer -> Integer -> Eval e ()
+twoArgIntOpGas loperand roperand = do
+  ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
+  computeGasCommit def "" (GIntegerOpCost (loperand, Nothing) (roperand, Nothing) ts)
 
-twoArgDecOpGas :: Decimal -> Decimal -> Eval e Gas
-twoArgDecOpGas loperand roperand =
+twoArgDecOpGas :: Decimal -> Decimal -> Eval e ()
+twoArgDecOpGas loperand roperand = do
+  ts <- ifExecutionFlagSet' FlagDisablePact48 Pact43IntThreshold Pact48IntThreshold
   computeGasCommit def ""
-  (GIntegerOpCost
-    (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
-    (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand))))
+    (GIntegerOpCost
+      (decimalMantissa loperand, Just (fromIntegral (decimalPlaces loperand)))
+      (decimalMantissa roperand, Just (fromIntegral (decimalPlaces roperand)))
+      ts)
 
 legalLogArg :: Literal -> Bool
 legalLogArg = \case
@@ -195,19 +191,11 @@ logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
-#if defined(ghcjs_HOST_OS)
-    binop "log"
-          (\a b -> liftDecF fi logBase a b)
-          (\a b -> liftIntF fi logBase a b)
-          fi
-          as
-#else
     decimalLogBase <-
       ifExecutionFlagSet' FlagDisableNewTrans (liftLogDec fi logBase) (liftLogDec fi trans_log)
     integerLogBase <-
       ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntF fi trans_log)
     binop "log" decimalLogBase integerLogBase fi as
-#endif
   log' fi as = argsError fi as
 
 sqrtDef :: NativeDef
@@ -216,12 +204,8 @@ sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   sqrt' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
-#if defined(ghcjs_HOST_OS)
-    unopd sqrt fi as
-#else
     decimalSqrt <- ifExecutionFlagSet' FlagDisableNewTrans (unopd sqrt) (unopd trans_sqrt)
     decimalSqrt fi as
-#endif
   sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
@@ -230,25 +214,17 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   ln' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
-#if defined(ghcjs_HOST_OS)
-    unopd log fi as
-#else
     decimalLog <- ifExecutionFlagSet' FlagDisableNewTrans (unopd log) (unopd trans_ln)
     decimalLog fi as
-#endif
   ln' fi as = argsError fi as
 
 expDef :: NativeDef
 expDef = defRNative "exp" go
   unopTy ["(round (exp 3) 6)"] "Exp of X."
   where
-#if defined(ghcjs_HOST_OS)
-  go = unopd exp
-#else
   go fi as = do
     decimalExp <- ifExecutionFlagSet' FlagDisableNewTrans (unopd exp) (unopd trans_exp)
     decimalExp fi as
-#endif
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)

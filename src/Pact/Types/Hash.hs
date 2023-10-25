@@ -42,24 +42,17 @@ import Data.Proxy
 import Test.QuickCheck
 import Test.QuickCheck.Instances()
 
-#if !defined(ghcjs_HOST_OS)
+import qualified Pact.JSON.Encode as J
+import Pact.JSON.Legacy.Hashable (LegacyHashable)
 
 import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
-
-#else
-
-import Crypto.Hash.Blake2Native
-
-#endif
-
-
 
 -- | Untyped hash value, encoded with unpadded base64url.
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ShortByteString }
-  deriving (Eq, Ord, Generic, Hashable, Serialize,SizeOf)
+  deriving (Eq, Ord, Generic, Hashable, Serialize, SizeOf, LegacyHashable)
 
 instance Arbitrary Hash where
   -- TODO: add generators for other hash types
@@ -72,29 +65,31 @@ instance Pretty Hash where
   pretty = pretty . asString
 
 instance AsString Hash where
-  asString (Hash h) = decodeUtf8 (encodeBase64UrlUnpadded $ fromShort h)
+  asString = hashToText
+
+hashToText :: Hash -> Text
+hashToText (Hash h) = toB64UrlUnpaddedText $ fromShort h
 
 instance NFData Hash
 
-instance ToJSON Hash where
-  toJSON = String . hashToText
-
-instance ToJSONKey Hash
+instance J.Encode Hash where
+  build = J.build . hashToText
+  {-# INLINABLE build #-}
 
 instance FromJSON Hash where
   parseJSON = withText "Hash" parseText
   {-# INLINE parseJSON #-}
+
+instance FromJSONKey Hash where
+    fromJSONKey = FromJSONKeyTextParser parseText
+    {-# INLINABLE fromJSONKey #-}
 
 instance ParseText Hash where
   parseText s = Hash . toShort <$> parseB64UrlUnpaddedText s
   {-# INLINE parseText #-}
 
 
-hashToText :: Hash -> Text
-hashToText (Hash h) = toB64UrlUnpaddedText $ fromShort h
-
-
--- | All supported hashes in Pact (although not necessarily GHCJS pact).
+-- | All supported hashes in Pact
 data HashAlgo =
   Blake2b_256 |
   SHA3_256
@@ -111,7 +106,7 @@ hashLength SHA3_256 = 32
 
 -- | Typed hash, to indicate algorithm
 data TypedHash (h :: HashAlgo) where
-  TypedHash :: ShortByteString -> TypedHash h
+  TypedHash :: !ShortByteString -> TypedHash h
   deriving (Eq, Ord, Generic)
 
 instance Hashable (TypedHash h) where
@@ -132,8 +127,9 @@ instance AsString (TypedHash h) where
 
 instance NFData (TypedHash h)
 
-instance ToJSON (TypedHash h) where
-  toJSON = String . typedHashToText
+instance J.Encode (TypedHash h) where
+  build = J.build . typedHashToText
+  {-# INLINABLE build #-}
 
 instance FromJSON (TypedHash h) where
   parseJSON = withText "Hash" parseText
@@ -142,6 +138,9 @@ instance FromJSON (TypedHash h) where
 instance ParseText (TypedHash h) where
   parseText s = TypedHash . toShort <$> parseB64UrlUnpaddedText s
   {-# INLINE parseText #-}
+
+instance Arbitrary (TypedHash a) where
+  arbitrary = fromUntypedHash <$> arbitrary
 
 typedHashToText :: TypedHash h -> Text
 typedHashToText (TypedHash h) = toB64UrlUnpaddedText $ fromShort h
@@ -164,8 +163,6 @@ pactHashLength :: Int
 pactHashLength = hashLength Blake2b_256
 
 
-#if !defined(ghcjs_HOST_OS)
-
 hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
 hash = TypedHash . toShort . go
   where
@@ -175,19 +172,6 @@ hash = TypedHash . toShort . go
       SHA3_256 -> ByteArray.convert . Crypto.hashWith Crypto.SHA3_256
 {-# INLINE hash #-}
 
-#else
-
-hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
-hash bs = TypedHash (toShort go)
-  where
-    algo = reflect (Proxy :: Proxy h)
-    go = case algo of
-      Blake2b_256 -> case blake2b (hashLength algo) mempty bs of
-        Left _ -> error "hashing failed"
-        Right h -> h
-      _ -> error $ "Unsupported hash algo: " ++ show algo
-
-#endif
 verifyHash :: Reifies h HashAlgo => TypedHash h -> ByteString -> Either String Hash
 verifyHash h b = if hashed == h
   then Right (toUntypedHash h)

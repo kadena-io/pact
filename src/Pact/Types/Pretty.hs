@@ -1,8 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 module Pact.Types.Pretty
   ( (<+>)
@@ -61,7 +62,6 @@ import           GHC.Generics         (Generic(..))
 import           Bound.Var
 import           Data.Aeson           (Value(..))
 import           Data.Foldable        (toList)
-import qualified Data.HashMap.Strict  as HM
 import           Data.Int
 import           Data.Text            (Text, pack, unpack)
 import qualified Data.Text            as Text
@@ -73,13 +73,16 @@ import           Data.Text.Prettyprint.Doc
   encloseSep, space, nest, align, hardline, tupled, indent, equals, reAnnotate,
   reAnnotateS, fillSep)
 import qualified Data.Text.Prettyprint.Doc as PP
-import qualified Data.Text.Prettyprint.Doc.Internal.Type as PP
+import qualified Data.Text.Prettyprint.Doc.Internal as PP
 import qualified Data.Text.Prettyprint.Doc.Render.String as PP
 import           Data.Text.Prettyprint.Doc.Render.Terminal
   (color, Color(..), AnsiStyle)
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal as Term
 import           Data.Text.Prettyprint.Doc.Render.Text as RText
 import           Text.Trifecta.Delta hiding (prettyDelta)
+
+import qualified Pact.JSON.Legacy.HashMap as LH
+import qualified Pact.JSON.Legacy.Utils as JL
 
 data RenderColor = RColor | RPlain
 
@@ -204,8 +207,8 @@ renderPrettyString' = renderString' $ layoutPretty defaultLayoutOptions
 instance Pretty Value where
   pretty = \case
     Object hm -> commaBraces
-      $ fmap (\(k, v) -> dquotes (pretty k) <> ": " <> pretty v)
-      $ HM.toList hm
+      $ (\(k, v) -> dquotes (pretty k) <> ": " <> pretty v)
+      <$> LH.toList (JL.legacyKeyMap hm)
     Array values -> bracketsSep $ pretty <$> toList values
     String str -> dquotes $ pretty str
     Number scientific -> viaShow scientific
@@ -256,8 +259,8 @@ instance Pretty SomeDoc where
 
 -- | Type to allow for special-casing rendering of a type
 data SpecialPretty n
-  = SPSpecial Text
-  | SPNormal n
+  = SPSpecial !Text
+  | SPNormal !n
 
 instance Pretty n => Pretty (SpecialPretty n) where
   pretty (SPSpecial t) = pretty t

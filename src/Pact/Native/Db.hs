@@ -24,14 +24,13 @@ module Pact.Native.Db
     where
 
 import Bound
-import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Control.Monad
 import Control.Monad.Reader (ask)
 import Data.Default
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
-import Data.Foldable (foldlM)
+import Data.Foldable (foldlM, traverse_)
 import qualified Data.Vector as V
 import Data.Text (pack)
 
@@ -178,7 +177,7 @@ descTable _ [TTable {..}] = return $ toTObject TyAny def [
 descTable i as = argsError i as
 
 descKeySet :: GasRNativeFun e
-descKeySet g i [TLitString t] = do
+descKeySet i [TLitString t] = do
   k <- ifExecutionFlagSet FlagDisablePact44
     (pure $ KeySetName t Nothing)
     (case parseAnyKeysetName t of
@@ -187,10 +186,10 @@ descKeySet g i [TLitString t] = do
 
   r <- readRow (_faInfo i) KeySets k
   case r of
-    Just v -> computeGas' g i (GPostRead (ReadKeySet k v)) $
+    Just v -> computeGas' i (GPostRead (ReadKeySet k v)) $
               return $ toTerm v
     Nothing -> evalError' i $ "Keyset not found: " <> pretty t
-descKeySet _ i as = argsError i as
+descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
@@ -227,7 +226,7 @@ userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
 
 read' :: GasRNativeFun e
-read' g0 i as@(table@TTable {}:TLitString key:rest) = do
+read' i as@(table@TTable {}:TLitString key:rest) = do
   cols <- case rest of
     [] -> return []
     [l] -> colsToList (argsError i as) l
@@ -237,61 +236,62 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
   case mrow of
     Nothing -> failTx (_faInfo i) $ "read: row not found: " <> pretty key
     Just cs -> do
-      g <- gasPostRead i g0 cs
-      fmap (g,) $ case cols of
+      gasPostRead i cs
+      case cols of
         [] -> return $ columnsToObject (_tTableType table) cs
         _ -> columnsToObject' (_tTableType table) cols cs
 
-read' _ i as = argsError i as
+read' i as = argsError i as
 
 
 foldDB' :: NativeFun e
 foldDB' i [tbl, tLamToApp -> TApp qry _, tLamToApp -> TApp consumer _] = do
   table <- reduce tbl >>= \case
     t@TTable{} -> return t
-    t -> isOffChainForkedError >>= \case
+    t -> isOffChainForkedError FlagDisablePact47 >>= \case
       OffChainError -> evalError' i $ "Expected table as first argument to foldDB, got: " <> pretty t
       OnChainError -> evalError' i $ "Expected table as first argument to foldDB, got argument of type: " <> pretty (typeof' t)
-  !g0 <- computeGas (Right i) (GUnreduced [])
-  !g1 <- computeGas (Right i) GFoldDB
+  computeGas (Right i) (GUnreduced [])
+  computeGas (Right i) GFoldDB
   ks <- getKeys table
-  (!g2, xs) <- foldlM (fdb table) (g0+g1, []) ks
-  pure (g2, TList (V.fromList (reverse xs)) TyAny def)
+  xs <- foldlM (fdb table) [] ks
+  pure (TList (V.fromList (reverse xs)) TyAny def)
   where
   asBool (TLiteral (LBool satisfies) _) = return satisfies
-  asBool t = isOffChainForkedError >>= \case
+  asBool t = isOffChainForkedError FlagDisablePact47 >>= \case
     OffChainError -> evalError' i $ "Unexpected return value from fold-db query condition " <> pretty t
     OnChainError -> evalError' i $ "Unexpected return value from fold-db query condition, received value of type: " <> pretty (typeof' t)
   getKeys table = do
     guardTable i table GtKeys
     keys (_faInfo i) (userTable table)
-  fdb table (!g0, acc) key = do
+  fdb table acc key = do
     mrow <- readRow (_faInfo i) (userTable table) key
     case mrow of
       Just row -> do
-        g1 <- gasPostRead i g0 row
+        gasPostRead i row
         let obj = columnsToObject (_tTableType table) row
         let key' = toTerm key
         cond <- asBool =<< apply qry [key', obj]
         if cond then do
           r' <- apply consumer [key', obj]
-          pure (g1, r':acc)
-        else pure (g1, acc)
+          pure (r':acc)
+        else pure acc
       Nothing -> evalError (_faInfo i) $ "foldDb: unexpected error, key: "
                  <> pretty key <> " not found in table: " <> pretty table
 foldDB' i as = argsError' i as
 
-gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas
-gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
+gasPostRead :: Readable r => FunApp -> r -> Eval e ()
+gasPostRead i row = computeGas (Right i) (GPostRead $ readable row)
 
-gasPostRead' :: Readable r => FunApp -> Gas -> r -> Eval e a -> Eval e (Gas,a)
-gasPostRead' i g0 row action = gasPostRead i g0 row >>= \g -> (g,) <$> action
+gasPostRead' :: Readable r => FunApp -> r -> Eval e a -> Eval e a
+gasPostRead' i row action = gasPostRead i row *> action
 
 -- | TODO improve post-streaming
-gasPostReads :: Readable r => FunApp -> Gas -> ([r] -> a) -> Eval e [r] -> Eval e (Gas,a)
-gasPostReads i g0 postProcess action = do
+gasPostReads :: Readable r => FunApp -> ([r] -> a) -> Eval e [r] -> Eval e a
+gasPostReads i postProcess action = do
   rs <- action
-  (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
+  traverse_ (gasPostRead i) rs
+  pure $ postProcess rs
 
 columnsToObject :: Type (Term Name) -> RowData -> Term Name
 columnsToObject ty m = TObject (Object (fmap (fromPactValue . rowDataToPactValue) (_rdData m)) ty def def) def
@@ -315,32 +315,32 @@ select i as@[tbl',app] = reduce tbl' >>= select' i as Nothing app
 select i as = argsError' i as
 
 select' :: FunApp -> [Term Ref] -> Maybe [(Info,FieldKey)] ->
-           Term Ref -> Term Name -> Eval e (Gas,Term Name)
+           Term Ref -> Term Name -> Eval e (Term Name)
 select' i _ cols' app@TApp{} tbl@TTable{} = do
-    g0 <- computeGas (Right i) (GUnreduced [])
-    g1 <- computeGas (Right i) $ GSelect cols'
+    computeGas (Right i) (GUnreduced [])
+    computeGas (Right i) $ GSelect cols'
     guardTable i tbl GtSelect
     let fi = _faInfo i
         tblTy = _tTableType tbl
     ks <- keys fi (userTable tbl)
-    fmap (second (\b -> TList (V.fromList (reverse b)) tblTy def)) $
-      (\f -> foldM f (g0 + g1, []) ks) $ \(gPrev,rs) k -> do
+    fmap (\b -> TList (V.fromList (reverse b)) tblTy def) $
+      (\f -> foldM f [] ks) $ \rs k -> do
 
       mrow <- readRow fi (userTable tbl) k
       case mrow of
         Nothing -> evalError fi $ "select: unexpected error, key not found in select: "
                    <> pretty k <> ", table: " <> pretty tbl
         Just row -> do
-          g <- gasPostRead i gPrev row
+          gasPostRead i row
           let obj = columnsToObject tblTy row
           result <- apply (_tApp app) [obj]
-          fmap (g,) $ case result of
+          case result of
             (TLiteral (LBool include) _)
               | include -> case cols' of
                   Nothing -> return (obj:rs)
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
               | otherwise -> return rs
-            t -> isOffChainForkedError >>= \case
+            t -> isOffChainForkedError FlagDisablePact47 >>= \case
               OffChainError -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " <> pretty t
               OnChainError -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " <> pretty (typeof' t)
 select' i as _ _ _ = argsError' i as
@@ -349,28 +349,28 @@ select' i as _ _ _ = argsError' i as
 withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
   let argsToReduce = [table',key',defaultRow']
-  (!g0,!tkd) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
+  !tkd <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tkd of
     [table@TTable {}, TLitString key, TObject (Object defaultRow _ _ _) _] -> do
       guardTable fi table GtWithDefaultRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> (g0,) <$> (bindToRow ps bd b =<< enforcePactValue' defaultRow)
-        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
+        Nothing -> bindToRow ps bd b =<< traverse enforcePactValue defaultRow
+        (Just row) -> gasPostRead' fi row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
 withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   let argsToReduce = [table',key']
-  (!g0,!tk) <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
+  !tk <- gasUnreduced fi argsToReduce (mapM reduce argsToReduce)
   case tk of
     [table@TTable {},TLitString key] -> do
       guardTable fi table GtWithRead
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " <> pretty key
-        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
+        (Just row) -> gasPostRead' fi row $ bindToRow ps bd b (rowDataToPactValue <$> _rdData row)
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
@@ -380,30 +380,30 @@ bindToRow ps bd b (ObjectMap row) =
   bindReduce ps bd (_tInfo b) (\s -> fromPactValue <$> M.lookup (FieldKey s) row)
 
 keys' :: GasRNativeFun e
-keys' g i [table@TTable {}] = do
-  gasPostReads i g
+keys' i [table@TTable {}] = do
+  gasPostReads i
     ((\b -> TList (V.fromList b) tTyString def) . map toTerm) $ do
       guardTable i table GtKeys
       keys (_faInfo i) (userTable table)
-keys' _ i as = argsError i as
+keys' i as = argsError i as
 
 
 txids' :: GasRNativeFun e
-txids' g i [table@TTable {},TLitInteger key] = do
+txids' i [table@TTable {},TLitInteger key] = do
   checkNonLocalAllowed i
-  gasPostReads i g
+  gasPostReads i
     ((\b -> TList (V.fromList b) tTyInteger def) . map toTerm) $ do
       guardTable i table GtTxIds
       txids (_faInfo i) (userTable' table) (fromIntegral key)
-txids' _ i as = argsError i as
+txids' i as = argsError i as
 
 txlog :: GasRNativeFun e
-txlog g i [table@TTable {},TLitInteger tid] = do
+txlog i [table@TTable {},TLitInteger tid] = do
   checkNonLocalAllowed i
-  gasPostReads i g (toTList TyAny def . map txlogToObj) $ do
+  gasPostReads i (toTList TyAny def . map txlogToObj) $ do
       guardTable i table GtTxLog
       getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
-txlog _ i as = argsError i as
+txlog i as = argsError i as
 
 txlogToObj :: TxLog RowData -> Term Name
 txlogToObj TxLog{..} = toTObject TyAny def
@@ -421,48 +421,47 @@ checkNonLocalAllowed i = do
     "Operation only permitted in local execution mode"
 
 keylog :: GasRNativeFun e
-keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
+keylog i [table@TTable {..},TLitString key,TLitInteger utid] = do
   checkNonLocalAllowed i
   let postProc = toTList TyAny def . map toTxidObj
         where toTxidObj (t,r) =
                 toTObject TyAny def [("txid", toTerm t),("value",columnsToObject _tTableType (_txValue r))]
-  gasPostReads i g postProc $ do
+  gasPostReads i postProc $ do
     guardTable i table GtKeyLog
     tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
     logs <- fmap concat $ forM tids $ \tid -> map (tid,) <$> getTxLog (_faInfo i) (userTable table) tid
     return $ filter (\(_,TxLog {..}) -> _txKey == key) logs
 
-keylog _ i as = argsError i as
+keylog i as = argsError i as
 
 write :: WriteType -> SchemaPartial -> NativeFun e
 write wt partial i as = do
   ts <- mapM reduce as
   case ts of
-    [table@TTable {..},TLitString key,(TObject (Object ps _ _ _) _)] -> do
-      ps' <- enforcePactValue' ps
-      cost0 <- computeGas (Right i) (GUnreduced [])
+    [table@TTable {..},TLitString key, TObject (Object ps _ _ _) _] -> do
+      ps' <- traverse enforcePactValue ps
+      computeGas (Right i) (GUnreduced [])
       szVer <- getSizeOfVersion
-      cost1 <- computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps') szVer)
+      computeGas (Right i) (GPreWrite (WriteData wt (asString key) ps') szVer)
       guardTable i table GtWrite
       case _tTableType of
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
       rdv <- ifExecutionFlagSet' FlagDisablePact420 RDV0 RDV1
-      r <- success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) $
+      success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) $
           RowData rdv (pactValueToRowData <$> ps')
-      return (cost0 + cost1, r)
     _ -> argsError i ts
 
 
 createTable' :: GasRNativeFun e
-createTable' g i [t@TTable {..}] = do
+createTable' i [t@TTable {..}] = do
   guardTable i t GtCreateTable
   let (UserTables tn) = userTable t
   szVer <- getSizeOfVersion
-  computeGas' g i (GPreWrite (WriteTable (asString tn)) szVer) $
+  computeGas' i (GPreWrite (WriteTable (asString tn)) szVer) $
     success "TableCreated" $ createUserTable (_faInfo i) tn _tModuleName
-createTable' _ i as = argsError i as
+createTable' i as = argsError i as
 
 guardTable :: Pretty n => FunApp -> Term n -> GuardTableOp -> Eval e ()
 guardTable i TTable {..} dbop =
@@ -477,12 +476,12 @@ guardTable i TTable {..} dbop =
             _ | localBypassEnabled -> return ()
               | otherwise -> notBypassed
 
-guardTable i t _ = isOffChainForkedError >>= \case
+guardTable i t _ = isOffChainForkedError FlagDisablePact47 >>= \case
   OffChainError -> evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty t
   OnChainError -> evalError' i $ "Internal error: guardTable called with non-table term: " <> pretty (typeof' t)
 
 enforceBlessedHashes :: FunApp -> ModuleName -> ModuleHash -> Eval e ()
-enforceBlessedHashes i mn h = getModule i mn >>= \m -> case (_mdModule m) of
+enforceBlessedHashes i mn h = getModule i mn >>= \m -> case _mdModule m of
         MDModule Module{..}
           | h == _mHash -> return () -- current version ok
           | h `HS.member` _mBlessed -> return () -- hash is blessed

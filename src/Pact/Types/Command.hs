@@ -1,18 +1,22 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.Command
@@ -25,7 +29,6 @@
 
 module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
-#if !defined(ghcjs_HOST_OS)
   , mkCommand
   , mkCommand'
   , mkUnsignedCommand
@@ -34,10 +37,8 @@ module Pact.Types.Command
   , keyPairsToSigners
   , verifyUserSig
   , verifyCommand
-  , SomeKeyPairCaps
-#else
   , PPKScheme(..)
-#endif
+  , Ed25519KeyPairCaps
   , ProcessedCommand(..),_ProcSucc,_ProcFail
   , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
@@ -49,12 +50,12 @@ module Pact.Types.Command
   , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
   , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
-  , cmdToRequestKey, requestKeyToB16Text
+  , cmdToRequestKey
+  , requestKeyToB16Text
   ) where
 
-
 import Control.Applicative
-import Control.Lens hiding ((.=))
+import Control.Lens hiding ((.=), elements)
 import Control.DeepSeq
 
 import Data.ByteString (ByteString)
@@ -62,10 +63,12 @@ import Data.Serialize as SZ
 import Data.Hashable (Hashable)
 import Data.Aeson as A
 import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
 
 import GHC.Generics
 
+import Test.QuickCheck
 
 import Pact.Parse (parsePact)
 import Pact.Types.Capability
@@ -75,14 +78,11 @@ import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
 import Pact.Types.Runtime
 
+import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Encode as J
 
-#if !defined(ghcjs_HOST_OS)
-import qualified Data.ByteString.Lazy as BSL
+
 import Pact.Types.Crypto              as Base
-#else
-import Pact.Types.Scheme (PPKScheme(..), defPPKScheme)
-#endif
-
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -96,21 +96,26 @@ data Command a = Command
   , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
-instance (ToJSON a) => ToJSON (Command a) where
-    toJSON (Command payload uSigs hsh) =
-        object [ "cmd" .= payload
-               , "sigs" .= toJSON uSigs
-               , "hash" .= hsh
-               ]
+
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
                 Command <$> (o .: "cmd")
-                        <*> (o .: "sigs" >>= parseJSON)
+                        <*> (o .: "sigs")
                         <*> (o .: "hash")
     {-# INLINE parseJSON #-}
 
+instance J.Encode a => J.Encode (Command a) where
+  build o = J.object
+    [ "hash" J..= _cmdHash o
+    , "sigs" J..= J.Array (_cmdSigs o)
+    , "cmd" J..= _cmdPayload o
+    ]
+  {-# INLINABLE build #-}
+
 instance NFData a => NFData (Command a)
 
+instance Arbitrary a => Arbitrary (Command a) where
+  arbitrary = Command <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- | Strict Either thing for attempting to deserialize a Command.
 data ProcessedCommand m a =
@@ -119,41 +124,37 @@ data ProcessedCommand m a =
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
-#if !defined(ghcjs_HOST_OS)
 
-type SomeKeyPairCaps = (SomeKeyPair,[SigCapability])
+type Ed25519KeyPairCaps = (Ed25519KeyPair ,[SigCapability])
 
 -- CREATING AND SIGNING TRANSACTIONS
 
 mkCommand
-  :: ToJSON m
-  => ToJSON c
-  => [SomeKeyPairCaps]
+  :: J.Encode c
+  => J.Encode m
+  => [(Ed25519KeyPair, [SigCapability])]
   -> m
   -> Text
   -> Maybe NetworkId
   -> PactRPC c
   -> IO (Command ByteString)
 mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
-  where encodedPayload = BSL.toStrict $ A.encode payload
-        payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
+  where
+    encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
+    payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
-keyPairToSigner :: SomeKeyPair -> [SigCapability] -> Signer
+keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
-      where scheme = case kpToPPKScheme cred of
-              ED25519 -> Nothing
-              s -> Just s
-            pub = toB16Text $ getPublic cred
-            addr = case scheme of
-              Nothing -> Nothing
-              Just {} -> Just $ toB16Text $ formatPublicKey cred
+      where
+        scheme = Nothing
+        pub = toB16Text $ toBS $ fst cred
+        addr = Nothing
 
-
-keyPairsToSigners :: [SomeKeyPairCaps] -> [Signer]
+keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer]
 keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 
 
-mkCommand' :: [(SomeKeyPair,a)] -> ByteString -> IO (Command ByteString)
+mkCommand' :: [(Ed25519KeyPair ,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
       toUserSig (cred,_) = signHash hsh cred
@@ -161,8 +162,8 @@ mkCommand' creds env = do
   return $ Command env sigs hsh
 
 mkUnsignedCommand
-  :: ToJSON m
-  => ToJSON c
+  :: J.Encode m
+  => J.Encode c
   => [Signer]
   -> m
   -> Text
@@ -170,11 +171,11 @@ mkUnsignedCommand
   -> PactRPC c
   -> IO (Command ByteString)
 mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
-  where encodedPayload = BSL.toStrict $ A.encode payload
+  where encodedPayload = J.encodeStrict payload
         payload = Payload rpc nonce meta signers nid
 
-signHash :: TypedHash h -> SomeKeyPair -> IO UserSig
-signHash hsh cred = UserSig . toB16Text <$> sign cred (toUntypedHash hsh)
+signHash :: TypedHash h -> Ed25519KeyPair -> IO UserSig
+signHash hsh (pub,priv) = UserSig . toB16Text <$> sign pub priv (toUntypedHash hsh)
 
 -- VALIDATING TRANSACTIONS
 
@@ -203,34 +204,37 @@ hasInvalidSigs hsh sigs signers
   | otherwise                            = if (length failedSigs == 0)
                                            then Nothing else formatIssues
   where verifyFailed (sig, signer) = not $ verifyUserSig hsh sig signer
+
         -- assumes nth Signer is responsible for the nth UserSig
         failedSigs = filter verifyFailed (zip sigs signers)
-        formatIssues = Just $ "Invalid sig(s) found: " ++ show (A.encode <$> failedSigs)
+        formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
 
 
 verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
 verifyUserSig msg UserSig{..} Signer{..} =
   case (pubT, sigT, addrT) of
-    (Right p, Right sig, addr) ->
+    (Right p, sig, addr) ->
       (isValidAddr addr p) &&
       verify (toScheme $ fromMaybe defPPKScheme _siScheme)
-             (toUntypedHash msg) (PubBS p) (SigBS sig)
+             (toUntypedHash msg) (PubBS p) sig
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
-        sigT = parseB16TextOnly _usSig
+        sigT = case parseB16TextOnly _usSig of
+          Left _ -> SigBS (Text.encodeUtf8 _usSig)
+          Right bs -> SigBS bs
         addrT = parseB16TextOnly <$> _siAddress
-        toScheme' = toScheme . fromMaybe ED25519
         isValidAddr addrM pubBS = case addrM of
           Nothing -> True
           Just (Left _) -> False
-          Just (Right givenAddr) ->
-            case formatPublicKeyBS (toScheme' _siScheme) (PubBS pubBS) of
-              Right expectAddr -> givenAddr == expectAddr
-              Left _           -> False
-
-#endif
-
-
+          -- All current cases of `_siScheme` require the same relationship
+          -- between `pubBS` and `givenAddr`. But we enumerate them anyway,
+          -- so that if another scheme is added in the future, this use site
+          -- will warn us that we need to consider the `pubBS`/`givenAddr`
+          -- relationship for that scheme, since it may be different.
+          Just (Right givenAddr) -> case _siScheme of
+            Nothing -> pubBS == givenAddr
+            Just ED25519 -> pubBS == givenAddr
+            Just WebAuthn -> pubBS == givenAddr
 
 -- | Signer combines PPKScheme, PublicKey, and the Address (aka the
 --   formatted PublicKey).
@@ -246,18 +250,15 @@ data Signer = Signer
  } deriving (Eq, Ord, Show, Generic)
 
 instance NFData Signer
-instance ToJSON Signer where
-  toJSON Signer{..} = object $
-    consMay "scheme" _siScheme $
-    consMay "addr" _siAddress $
-    consListMay "clist" _siCapList $
-    [ "pubKey" .= _siPubKey ]
-    where
-      consMay f mv ol = maybe ol (consPair f ol) mv
-      consPair f ol v = (f .= v):ol
-      consListMay f cl ol
-        | null cl = ol
-        | otherwise = consPair f ol cl
+
+instance J.Encode Signer where
+  build o = J.object
+    [ "addr" J..?= _siAddress o
+    , "scheme" J..?= _siScheme o
+    , "pubKey" J..= _siPubKey o
+    , "clist" J..??= J.Array (_siCapList o)
+    ]
+
 instance FromJSON Signer where
   parseJSON = withObject "Signer" $ \o -> Signer
     <$> o .:? "scheme"
@@ -267,7 +268,8 @@ instance FromJSON Signer where
     where
       listMay = fromMaybe []
 
-
+instance Arbitrary Signer where
+  arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> scale (min 5) arbitrary
 
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
@@ -278,39 +280,69 @@ data Payload m c = Payload
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
-instance (ToJSON a,ToJSON m) => ToJSON (Payload m a) where toJSON = lensyToJSON 2
+
+instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
+  build o = J.object
+    [ "networkId" J..= _pNetworkId o
+    , "payload" J..= _pPayload o
+    , "signers" J..= J.Array (_pSigners o)
+    , "meta" J..= _pMeta o
+    , "nonce" J..= _pNonce o
+    ]
+  {-# INLINE build #-}
+
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
-
+instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
+  arbitrary = Payload
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> scale (min 10) arbitrary
+    <*> arbitrary
 
 newtype UserSig = UserSig { _usSig :: Text }
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData UserSig
 instance Serialize UserSig
-instance ToJSON UserSig where
-  toJSON UserSig {..} = object [ "sig" .= _usSig ]
+
+instance J.Encode UserSig where
+  build s = J.object [ "sig" J..= _usSig s ]
+  {-# INLINE build #-}
+
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o -> do
     UserSig <$> o .: "sig"
+
+instance Arbitrary UserSig where
+  arbitrary = UserSig <$> arbitrary
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue
   } deriving (Eq, Show, Generic,NFData)
 
-instance ToJSON PactResult where
-  toJSON (PactResult (Right s)) =
-    object [ "status" .= ("success" :: String)
-           , "data" .= s ]
-  toJSON (PactResult (Left f)) =
-    object [ "status" .= ("failure" :: String)
-           , "error" .= f ]
+instance J.Encode PactResult where
+  build (PactResult (Right s)) = J.object
+    [ "status" J..= J.text "success"
+    , "data" J..= s
+    ]
+  build (PactResult (Left f)) = J.object
+    [ "status" J..= J.text "failure"
+    , "error" J..= f
+    ]
+  {-# INLINE build #-}
 
 instance FromJSON PactResult where
-  parseJSON (A.Object o) = PactResult <$>
-                           ((Left <$> o .: "error") <|>
-                            (Right <$> o .: "data"))
+  parseJSON (A.Object o) =
+    PactResult <$> ((Left . _getUxPactError <$> o .: "error") <|> (Right <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
+
+instance Arbitrary PactResult where
+  arbitrary = PactResult <$> oneof
+    [ Left . _getUxPactError <$> arbitrary
+    , Right <$> arbitrary
+    ]
 
 -- | API result of attempting to execute a pact command, parametrized over level of logging type
 data CommandResult l = CommandResult {
@@ -329,19 +361,22 @@ data CommandResult l = CommandResult {
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
   -- | Events
-  , _crEvents :: [PactEvent]
-  } deriving (Eq,Show,Generic)
+  , _crEvents :: ![PactEvent]
+  } deriving (Eq,Show,Generic,Functor)
 
-instance (ToJSON l) => ToJSON (CommandResult l) where
-  toJSON CommandResult{..} = object $
-      [ "reqKey" .= _crReqKey
-      , "txId" .= _crTxId
-      , "result" .= _crResult
-      , "gas" .= _crGas
-      , "logs" .= _crLogs
-      , "continuation" .= _crContinuation
-      , "metaData" .= _crMetaData ] ++
-      [ "events" .= _crEvents | not (null _crEvents) ]
+instance J.Encode l => J.Encode (CommandResult l) where
+  build o = J.object
+    [ "gas" J..= _crGas o
+    , "result" J..= _crResult o
+    , "reqKey" J..= _crReqKey o
+    , "logs" J..= _crLogs o
+    , "events" J..??= J.Array (_crEvents o)
+    , "metaData" J..= fmap toLegacyJson (_crMetaData o)
+    , "continuation" J..= _crContinuation o
+    , "txId" J..= _crTxId o
+    ]
+  {-# INLINE build #-}
+
 instance (FromJSON l) => FromJSON (CommandResult l) where
   parseJSON = withObject "CommandResult" $ \o -> CommandResult
       <$> o .: "reqKey"
@@ -357,11 +392,19 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
       events (Just es) = es
 instance NFData a => NFData (CommandResult a)
 
+instance Arbitrary l => Arbitrary (CommandResult l) where
+  arbitrary = CommandResult
+    <$> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> arbitrary
+    <*> elements [Nothing, Just (String "JSON VALUE")]
+    <*> scale (min 10) arbitrary
+
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
-
-
-
 
 type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
 type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
@@ -377,12 +420,14 @@ requestKeyToB16Text (RequestKey h) = hashToText h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON, ToJSONKey, NFData)
+  deriving (Eq, Ord, Generic)
+  deriving newtype (Serialize, Hashable, ParseText, FromJSON, FromJSONKey, NFData, J.Encode, AsString)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk
 
-
+instance Arbitrary RequestKey where
+  arbitrary = RequestKey <$> arbitrary
 
 makeLenses ''UserSig
 makeLenses ''Signer

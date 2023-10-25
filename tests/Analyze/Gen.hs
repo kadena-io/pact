@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -19,9 +18,6 @@ import           Control.Monad.State.Strict (MonadState, StateT (runStateT))
 import qualified Data.Decimal               as Decimal
 import qualified Data.Map.Strict            as Map
 import qualified Data.Text                  as T
-#if !MIN_VERSION_base(4,13,0)
-import           Data.Type.Equality         ((:~:) (Refl))
-#endif
 import           GHC.Natural                (Natural)
 import           GHC.Stack                  (HasCallStack)
 import           Hedgehog                   hiding (Update, Var)
@@ -310,7 +306,7 @@ genCore BoundedBool = Gen.recursive Gen.choice [
       mkBool $ Logical NotOp [extract x]
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
-    Some STime . Lit' <$> Gen.enumBounded -- Gen.int64
+    Some STime . Lit' <$> genInteger 1e9
   ] $ scale 4 <$>
     [ Gen.subtermM (genCore BoundedTime) $ \x -> do
         y <- genCore (BoundedInt 1e9)
@@ -494,7 +490,7 @@ genTermSpecific size@(BoundedString len) = scale 2 $ Gen.choice
          _ -> error "impossible (we only generated `STime`s)"
   , genTerm intSize >>= mkStr . IntHash . extract
   , genTerm strSize >>= mkStr . StrHash . extract
-  
+
   , genTermSpecific' size
   , Some SStr . ReadString . StrLit <$> genStringName len
   ]

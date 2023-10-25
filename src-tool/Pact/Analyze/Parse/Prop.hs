@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
@@ -43,10 +44,12 @@ import           Control.Lens                 (at, toListOf, view, (%~), (&),
                                                (.~), (?~))
 import qualified Control.Lens                 as Lens
 import           Control.Monad                (unless, when)
-import           Control.Monad.Except         (MonadError (throwError))
+import           Control.Monad.Except         (runExcept, MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
 import           Control.Monad.State.Strict   (evalStateT)
+#if !MIN_VERSION_base(4,16,0)
 import           Data.Foldable                (asum)
+#endif
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
@@ -517,6 +520,12 @@ inferPreProp preProp = case preProp of
       _               -> throwErrorIn preProp $
         pretty op' <> " applied to wrong number of arguments"
 
+  PreApp s [PreApp a p1, PreApp b p2 , c] | s == SOrQ ->
+    inferPreProp (PreApp SLogicalDisjunction [PreApp a (p1 ++ [c]), PreApp b (p2 ++ [c])])
+
+  PreApp s [PreApp a p1, PreApp b p2 , c] | s == SAndQ ->
+    inferPreProp (PreApp SLogicalConjunction [PreApp a (p1 ++ [c]), PreApp b (p2 ++ [c])])
+
   PreApp s [a, b] | s == SLogicalImplication -> do
     propNotA <- PNot <$> checkPreProp SBool a
     Some SBool . POr propNotA <$> checkPreProp SBool b
@@ -591,8 +600,11 @@ inferPreProp preProp = case preProp of
     (Some SBool . PropSpecific) ... RowExists tn'
       <$> checkPreProp SStr rk
       <*> parseBeforeAfter beforeAfter
-  PreApp s [PreStringLit rn] | s == SAuthorizedBy ->
-    pure $ Some SBool (PropSpecific (GuardPassed (RegistryName rn)))
+  PreApp s [rn] | s == SAuthorizedBy -> do
+    rn' <- inferPreProp rn
+    case rn' of
+      Some SStr (TextLit str) -> pure $ Some SBool (PropSpecific (GuardPassed (RegistryName str)))
+      _ -> throwErrorIn preProp "expected string literal"
   PreApp s [tn, cn, rk] | s == SRowEnforced -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
@@ -681,9 +693,6 @@ inferPreProp preProp = case preProp of
     Some ty a' <- inferPreProp a
     pure $ Some (SList ty) $ CoreProp $ MakeList ty i' a'
 
-  PreApp s [str] | s == SStringToInteger -> do
-    str' <- checkPreProp SStr str
-    pure $ Some SInteger $ CoreProp $ StrToInt str'
 
   PreApp s [str] | s == SStringHash -> do
     Some ty str' <- inferPreProp str
@@ -695,7 +704,11 @@ inferPreProp preProp = case preProp of
       SList ty' -> pure $ Some SStr $ CoreProp $ ListHash ty' str'
       _ -> throwErrorIn preProp "`hash` works only with integer, decimals, strings, bools, and list of those"
 
-  PreApp s [str, base] | s == SStringToInteger -> do
+  PreApp s [str] | s == SStringToInteger -> do
+    str' <- checkPreProp SStr str
+    pure $ Some SInteger $ CoreProp $ StrToInt str'
+
+  PreApp s [base, str] | s == SStringToInteger -> do
     str'  <- checkPreProp SStr str
     base' <- checkPreProp SInteger base
     pure $ Some SInteger $ CoreProp $ StrToIntBase base' str'
@@ -866,7 +879,7 @@ expToProp tableEnv' genStart nameEnv idEnv consts propDefs ty body = do
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs consts
-  _getEither $ runReaderT (checkPreProp ty preTypedBody) env
+  runExcept $ _getEither $ runReaderT (checkPreProp ty preTypedBody) env
 
 inferProp
   :: TableEnv
@@ -889,7 +902,7 @@ inferProp tableEnv' genStart nameEnv idEnv consts propDefs body = do
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs consts
-  _getEither $ runReaderT (inferPreProp preTypedBody) env
+  runExcept $ _getEither $ runReaderT (inferPreProp preTypedBody) env
 
 -- | Parse both a property body and defined properties from `Exp` to `PreProp`.
 parseToPreProp

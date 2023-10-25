@@ -30,7 +30,6 @@ module Pact.Repl
   , evalPact
   , evalRepl
   , evalRepl'
-  , evalString
   , handleCompile
   , handleParse
   , initPureEvalEnv
@@ -60,9 +59,9 @@ import System.FilePath
 import Control.Concurrent
 import Control.Exception.Safe
 import Control.Lens hiding (op)
+import Control.Monad (foldM, forever, forM, forM_, when, void)
 import Control.Monad.State.Strict
 
-import Data.Aeson hiding ((.=),Object)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
 import Data.Char
@@ -74,6 +73,7 @@ import qualified Data.Map.Strict as M
 import Data.Monoid (appEndo)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Text.Prettyprint.Doc.Compat (docToInternal)
 import Data.Foldable(traverse_)
 
 import Text.Trifecta as TF hiding (line,err,try,newline)
@@ -90,6 +90,7 @@ import Pact.Types.Logger
 import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
+import Pact.JSON.Legacy.Value
 
 -- | for use in GHCI
 repl :: IO (Either () (Term Name))
@@ -131,12 +132,12 @@ initPureEvalEnv verifyUri = do
 initEvalEnv :: LibState -> IO (EvalEnv LibState)
 initEvalEnv ls = do
   mv <- newMVar ls
-  gasRef <- newIORef 0
+  gasRef <- newIORef mempty
   warnRef <- newIORef mempty
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
-    , _eeMsgBody = A.Object HM.empty 
+    , _eeMsgBody = toLegacyJson (A.Object mempty)
     , _eeMode = Transactional
     , _eeEntity = Nothing
     , _eePactStep = Nothing
@@ -201,7 +202,7 @@ getDelta = do
 handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)) -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
   mode <- use rMode
-  let errDoc = _errDoc e
+  let errDoc = docToInternal (_errDoc e)
   outStrLn HErr $ renderPrettyString' (colors mode) $ unAnnotate errDoc
   return $ Left $ renderCompactString' $ unAnnotate $ errDoc
 handleParse (TF.Success es) a = a es
@@ -457,17 +458,6 @@ evalRepl' cmd = useReplLib >> evalPact cmd
 
 evalRepl :: ReplMode -> String -> IO (Either String (Term Name))
 evalRepl m cmd = initReplState m Nothing >>= evalStateT (evalRepl' cmd)
-
-evalString :: Bool -> String -> IO Value
-evalString showLog cmd = do
-  (er,s) <- initReplState StringEval Nothing >>= runStateT (evalRepl' cmd)
-  return $ object $ case (showLog,er) of
-    (False,Right v) -> [ "success" A..= v]
-    (True,Right _) -> ["success" A..= trim (_rOut s) ]
-    (False,Left e) -> ["failure" A..= e ]
-    (True,Left e) -> ["failure" A..= (_rOut s ++ e) ]
-
-
 
 _eval :: String -> IO (Term Name)
 _eval cmd = evalRepl (Script True "_eval") cmd >>= \r ->

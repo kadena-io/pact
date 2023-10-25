@@ -25,10 +25,11 @@ import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
 import Control.Exception.Safe
+import Control.Monad (foldM, forM, when)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 
-import Data.Aeson (eitherDecode,toJSON)
+import Data.Aeson (eitherDecode)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
 import Data.Foldable
@@ -43,12 +44,6 @@ import Pact.Time
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 
-
-#if defined(ghcjs_HOST_OS)
-import qualified Pact.Analyze.Remote.Client as RemoteClient
-import Data.Maybe
-#else
-
 import Criterion
 import Criterion.Types
 
@@ -58,8 +53,6 @@ import Statistics.Types (Estimate(..))
 import qualified Pact.Analyze.Check as Check
 import System.Directory
 # endif
-import qualified Pact.Types.Crypto as Crypto
-#endif
 
 import Pact.Typechecker
 import qualified Pact.Types.Typecheck as TC
@@ -80,6 +73,7 @@ import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Interpreter
 import Pact.Runtime.Utils
+import Pact.JSON.Legacy.Value
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState
@@ -98,15 +92,12 @@ initLibState' ldb@(LibDb db') verifyUri = do
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
 
-zeroGas :: Eval e a -> Eval e (Gas,a)
-zeroGas = fmap (0,)
-
 defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
-defZNative name fun = Native.defNative name $ \fi as -> zeroGas $ fun fi as
+defZNative name fun = Native.defNative name $ \fi as -> fun fi as
 
 defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> [Example] -> Text -> NativeDef
 defZRNative name fun = Native.defNative name (reduced fun)
-    where reduced f fi as = mapM reduce as >>= zeroGas . f fi
+    where reduced f fi as = mapM reduce as >>= f fi
 
 replDefs :: NativeModule
 replDefs = ("Repl",
@@ -115,12 +106,9 @@ replDefs = ("Repl",
                               funType tTyString [("file",tTyString),("reset",tTyBool)])
       [LitExample "(load \"accounts.repl\")"]
       "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true."
-     ,defZRNative "format-address" formatAddr (funType tTyString [("scheme", tTyString), ("public-key", tTyString)])
-      []
-      "Transform PUBLIC-KEY into an address (i.e. a Pact Runtime Public Key) depending on its SCHEME."
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       ["(env-keys [\"my-key\" \"admin-key\"])"]
-      ("DEPRECATED in favor of 'set-sigs'. Set transaction signer KEYS. "<>
+      ("DEPRECATED in favor of 'env-sigs'. Set transaction signer KEYS. "<>
        "See 'env-sigs' for setting keys with associated capabilities.")
      ,defZNative "env-sigs" setsigs' (funType tTyString [("sigs",TyList (tTyObject TyAny))])
       [LitExample $ "(env-sigs [{'key: \"my-key\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>
@@ -343,29 +331,6 @@ mockSPV i as = case as of
     return $ tStr $ "Added mock SPV for " <> spvType
   _ -> argsError i as
 
-formatAddr :: RNativeFun LibState
-#if !defined(ghcjs_HOST_OS)
-formatAddr i [TLitString scheme, TLitString cryptoPubKey] = do
-  let eitherEvalErr :: Either String a -> String -> (a -> b) -> Eval LibState b
-      eitherEvalErr res effectStr transformFunc =
-        case res of
-          Left e  -> evalError' i $ prettyString effectStr <> ": " <> prettyString e
-          Right v -> return (transformFunc v)
-  sppk  <- eitherEvalErr (fromText' scheme)
-           "Invalid PPKScheme"
-           Crypto.toScheme
-  pubBS <- eitherEvalErr (parseB16TextOnly cryptoPubKey)
-           "Invalid Public Key format"
-           Crypto.PubBS
-  addr  <- eitherEvalErr (Crypto.formatPublicKeyBS sppk pubBS)
-           "Unable to convert Public Key to Address"
-           toB16Text
-  return (tStr addr)
-formatAddr i as = argsError i as
-#else
-formatAddr i _ = evalError' i "Address formatting not supported in GHCJS"
-#endif
-
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
@@ -402,8 +367,8 @@ setmsg i as = case as of
     case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
       Left f -> evalError' i ("Invalid JSON: " <> prettyString f)
       Right v -> go v
-  [TObject (Object om _ _ _) _] -> go (toJSON (fmap toPactValueLenient om))
-  [a] -> go (toJSON a)
+  [TObject (Object om _ _ _) _] -> go (toLegacyJsonViaEncode (fmap toPactValueLenient om))
+  [a] -> go (toLegacyJsonViaEncode a)
   _ -> argsError i as
   where go v = setenv eeMsgBody v >> return (tStr "Setting transaction data")
 
@@ -450,7 +415,7 @@ mkSimpleYield
   -> ObjectMap (Term n)
   -> Eval e (Maybe Yield)
 mkSimpleYield p om =
-  Just . (\yieldData -> Yield yieldData p Nothing) <$> enforcePactValue' om
+  Just . (\yieldData -> Yield yieldData p Nothing) <$> traverse enforcePactValue om
 
 setentity :: RNativeFun LibState
 setentity i as = case as of
@@ -497,7 +462,7 @@ tx t fi as = do
       <> maybeDelim " " tid <> maybeDelim ": " tname
 
   where
-    resetGas = views eeGas (`writeIORef` 0) >>= liftIO
+    resetGas = views eeGas (`writeIORef` mempty) >>= liftIO
     i = getInfo fi
     doBegin tname = do
       tid <- evalBeginTx i
@@ -601,7 +566,6 @@ expectThat i as = argsError' i as
 
 
 bench' :: ZNativeFun LibState
-#if !defined(ghcjs_HOST_OS)
 bench' i as = do
   e <- ask
   s <- get
@@ -624,9 +588,6 @@ bench' i as = do
                tperr = (1/(val - (sd/2))) - (1/(val + (sd/2)))
            liftIO $ putStrLn $ show (round tps :: Integer) ++ "/s, +-" ++ show (round tperr :: Integer) ++ "/s"
            return (tStr "Done")
-#else
-bench' i _ = evalError' i "Benchmarking not supported in GHCJS"
-#endif
 
 tc :: RNativeFun LibState
 tc i as = case as of
@@ -654,16 +615,7 @@ verify i = \case
   other -> argsError i other
   where
     go modName d = do
-#if defined(ghcjs_HOST_OS)
-      -- ghcjs: use remote server
-      (md,modules) <- _loadModules modName
-
-      uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
-      renderedLines <- liftIO $
-                       RemoteClient.verifyModule modules md uri
-      setop $ Output renderedLines
-      return (_failureMessage modName)
-#elif defined(BUILD_TOOL)
+#if defined(BUILD_TOOL)
     -- ghc + build-tool: run verify
       (md,modules) <- _loadModules modName
       de <- viewLibState _rlsDynEnv
@@ -709,15 +661,15 @@ envHash i as = argsError i as
 
 setGasLimit :: RNativeFun LibState
 setGasLimit _ [TLitInteger l] = do
-  setenv (eeGasEnv . geGasLimit) (fromIntegral l)
+  setenv (eeGasEnv . geGasLimit) (gasLimitToMilliGasLimit (fromIntegral l))
   return $ tStr $ "Set gas limit to " <> tShow l
 setGasLimit i as = argsError i as
 
 envGas :: RNativeFun LibState
 envGas _ [] = do
-  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+  getGas >>= \g -> return (tLit $ LInteger $ fromIntegral (milliGasToGas g))
 envGas _ [TLitInteger g] = do
-  putGas $ fromIntegral g
+  putGas $ gasToMilliGas (fromIntegral g)
   return $ tStr $ "Set gas to " <> tShow g
 envGas i as = argsError i as
 

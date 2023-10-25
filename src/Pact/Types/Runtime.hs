@@ -1,14 +1,16 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Types.Runtime
@@ -63,7 +65,8 @@ module Pact.Types.Runtime
 
 import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
-import Control.Lens hiding ((.=),DefName)
+import Control.Lens hiding ((.=),DefName, elements)
+import Control.Monad (void)
 import Control.Exception.Safe
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -78,6 +81,7 @@ import Data.String
 import Data.Text (Text,pack)
 import Data.Set(Set)
 import GHC.Generics (Generic)
+import Test.QuickCheck
 
 import Pact.Types.Term
 import Pact.Types.Capability
@@ -91,10 +95,14 @@ import Pact.Types.PactValue
 import Pact.Types.Advice
 import Pact.Types.Persistence
 import Pact.Types.Pretty
+import Pact.Types.RowData
 import Pact.Types.SPV
 import Pact.Types.Util
 import Pact.Types.Namespace
 
+import Pact.JSON.Legacy.Value (LegacyValue(..))
+
+import qualified Pact.JSON.Encode as J
 
 data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
 instance AsString KeyPredBuiltins where
@@ -106,7 +114,7 @@ keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [minBound .. maxBound]
 
 -- | Storage for natives.
-data RefStore = RefStore {
+newtype RefStore = RefStore {
       _rsNatives :: HM.HashMap Text Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
@@ -126,12 +134,11 @@ instance Default Purity where def = PImpure
 -- All warnings pact emits at runtime
 data PactWarning
   -- | Deprecated native, with help message
-  = DeprecatedNative NativeDefName Text
+  = DeprecatedNative !NativeDefName !Text
   -- | Deprecated overload with help message
-  | DeprecatedOverload NativeDefName Text
+  | DeprecatedOverload !NativeDefName !Text
   deriving (Show, Eq, Ord, Generic)
 
-instance ToJSON PactWarning
 instance FromJSON PactWarning
 
 instance Pretty PactWarning where
@@ -187,6 +194,12 @@ data ExecutionFlag
   | FlagDisablePact46
   -- | Disable Pact 4.7 Features
   | FlagDisablePact47
+  -- | Disable runtime return type checking.
+  | FlagDisableRuntimeReturnTypeChecking
+  -- | Disable Pact 4.8 Features
+  | FlagDisablePact48
+  -- | Disable Pact 4.9 Features
+  | FlagDisablePact49
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -200,20 +213,36 @@ flagReps = M.fromList $ map go [minBound .. maxBound]
 
 instance Pretty ExecutionFlag where
   pretty = pretty . flagRep
-instance ToJSON ExecutionFlag where toJSON = String . flagRep
+
+instance J.Encode ExecutionFlag where
+  build = J.build . flagRep
+  {-# INLINE build #-}
+
 instance FromJSON ExecutionFlag where
   parseJSON = withText "ExecutionFlag" $ \t -> case M.lookup t flagReps of
     Nothing -> fail "Invalid ExecutionFlag value"
     Just f -> return f
 
+instance Arbitrary ExecutionFlag where
+  arbitrary = elements [minBound .. maxBound]
+
 -- | Execution configuration flags, where empty is the "default".
 newtype ExecutionConfig = ExecutionConfig
   { _ecFlags :: S.Set ExecutionFlag }
-  deriving (Eq,Show,ToJSON,FromJSON)
+  deriving (Eq,Show)
+  deriving (FromJSON)
+
 makeLenses ''ExecutionConfig
 instance Default ExecutionConfig where def = ExecutionConfig def
 instance Pretty ExecutionConfig where
   pretty = pretty . S.toList . _ecFlags
+
+instance Arbitrary ExecutionConfig where
+  arbitrary = ExecutionConfig <$> arbitrary
+
+instance J.Encode ExecutionConfig where
+  build o = J.build $ J.Array (_ecFlags o)
+  {-# INLINE build #-}
 
 mkExecutionConfig :: [ExecutionFlag] -> ExecutionConfig
 mkExecutionConfig = ExecutionConfig . S.fromList
@@ -225,39 +254,39 @@ data EvalEnv e = EvalEnv {
       -- | Verified keys from message.
     , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
       -- | JSON body accompanying message.
-    , _eeMsgBody :: !Value
+    , _eeMsgBody :: !LegacyValue
       -- | Execution mode
-    , _eeMode :: ExecutionMode
+    , _eeMode :: !ExecutionMode
       -- | Entity governing private/encrypted 'pact' executions.
     , _eeEntity :: !(Maybe EntityName)
       -- | Step value for 'pact' executions.
     , _eePactStep :: !(Maybe PactStep)
       -- | Back-end state MVar.
-    , _eePactDbVar :: MVar e
+    , _eePactDbVar :: !(MVar e)
       -- | Back-end function record.
-    , _eePactDb :: PactDb e
+    , _eePactDb :: !(PactDb e)
       -- | Pure indicator
-    , _eePurity :: Purity
+    , _eePurity :: !Purity
       -- | Transaction hash
-    , _eeHash :: Hash
+    , _eeHash :: !Hash
       -- | Gas Environment
-    , _eeGasEnv :: GasEnv
+    , _eeGasEnv :: !GasEnv
       -- | Tallied gas
-    , _eeGas :: IORef Gas
+    , _eeGas :: !(IORef MilliGas)
       -- | Namespace Policy
-    , _eeNamespacePolicy :: NamespacePolicy
+    , _eeNamespacePolicy :: !NamespacePolicy
       -- | SPV backend
-    , _eeSPVSupport :: SPVSupport
+    , _eeSPVSupport :: !SPVSupport
       -- | Env public data
-    , _eePublicData :: PublicData
+    , _eePublicData :: !PublicData
       -- | Execution configuration flags
-    , _eeExecutionConfig :: ExecutionConfig
+    , _eeExecutionConfig :: !ExecutionConfig
       -- | Advice bracketer
     , _eeAdvice :: !Advice
       -- | Are we in the repl? If not, ignore info
-    , _eeInRepl :: Bool
+    , _eeInRepl :: !Bool
       -- | Warnings ref
-    , _eeWarnings :: IORef (Set PactWarning)
+    , _eeWarnings :: !(IORef (Set PactWarning))
     }
 makeLenses ''EvalEnv
 
@@ -268,13 +297,13 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: HM.HashMap Text (Ref, Maybe (ModuleHash))
+      _rsLoaded :: !(HM.HashMap Text (Ref, Maybe ModuleHash))
       -- | Modules that were loaded, and flag if updated.
-    , _rsLoadedModules :: HM.HashMap ModuleName (ModuleData Ref, Bool)
+    , _rsLoadedModules :: !(HM.HashMap ModuleName (ModuleData Ref, Bool))
       -- | Current Namespace
-    , _rsNamespace :: Maybe (Namespace (Term Name))
+    , _rsNamespace :: !(Maybe (Namespace (Term Name)))
       -- | Map of all fully qualified names in scope, including transitive dependencies.
-    , _rsQualifiedDeps :: HM.HashMap FullyQualifiedName Ref
+    , _rsQualifiedDeps :: !(HM.HashMap FullyQualifiedName Ref)
     } deriving (Eq,Show,Generic)
 
 makeLenses ''RefState
@@ -288,8 +317,25 @@ data PactEvent = PactEvent
   , _eventModuleHash :: !ModuleHash
   } deriving (Eq, Show, Generic)
 instance NFData PactEvent
-instance ToJSON PactEvent where toJSON = lensyToJSON 6
+
+instance J.Encode PactEvent where
+  build o = J.object
+    [ "params" J..= J.Array (_eventParams o)
+    , "name" J..= _eventName o
+    , "module" J..= _eventModule o
+    , "moduleHash" J..= _eventModuleHash o
+    ]
+  {-# INLINE build #-}
+
 instance FromJSON PactEvent where parseJSON = lensyParseJSON 6
+
+instance Arbitrary PactEvent where
+  arbitrary = PactEvent
+    <$> arbitrary
+    <*> scale (min 20) arbitrary
+    <*> arbitrary
+    <*> arbitrary
+
 makeLenses ''PactEvent
 
 
@@ -302,9 +348,9 @@ data EvalState = EvalState {
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
       -- | Capability list
-    , _evalCapabilities :: Capabilities
+    , _evalCapabilities :: !Capabilities
       -- | Tracks gas logs if enabled (i.e. Just)
-    , _evalLogGas :: Maybe [(Text,Gas)]
+    , _evalLogGas :: !(Maybe [(Text,Gas)])
       -- | Accumulate events
     , _evalEvents :: ![PactEvent]
     } deriving (Show, Generic)
@@ -359,10 +405,10 @@ unlessExecutionFlagSet f onFalse =
   ifExecutionFlagSet f (return ()) (void onFalse)
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
-call :: StackFrame -> Eval e (Gas,a) -> Eval e a
+call :: StackFrame -> Eval e a -> Eval e a
 call s act = do
   evalCallStack %= (s:)
-  (_gas,r) <- act
+  r <- act
   evalCallStack %= drop 1
   return r
 {-# INLINE call #-}
@@ -385,7 +431,7 @@ readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v
 readRow i d k = method i $ \db -> _readRow db d k
 
 -- | Invoke '_writeRow'
-writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
+writeRow :: (AsString k,J.Encode v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
 writeRow i w d k v = method i $ \db -> _writeRow db w d k v
 
 -- | Invoke '_keys'
@@ -409,7 +455,7 @@ beginTx :: Info -> ExecutionMode -> Eval e (Maybe TxId)
 beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx
-commitTx :: Info -> Eval e [TxLog Value]
+commitTx :: Info -> Eval e [TxLogJson]
 commitTx i = method i $ \db -> _commitTx db
 
 -- | Invoke _rollbackTx
@@ -417,7 +463,7 @@ rollbackTx :: Info -> Eval e ()
 rollbackTx i = method i $ \db -> _rollbackTx db
 
 -- | Invoke _getTxLog
-getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog v]
+getTxLog :: IsString k => Info -> Domain k RowData -> TxId -> Eval e [TxLog RowData]
 getTxLog i d t = method i $ \db -> _getTxLog db d t
 
 
@@ -450,7 +496,7 @@ throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = do
   s <- use evalCallStack
-  offChainOrPreFork <- isOffChainForkedError'
+  offChainOrPreFork <- isOffChainForkedError' FlagDisablePact47
   throwM (PactError ctor i (if offChainOrPreFork then s else []) err)
 
 evalError :: Info -> Doc -> Eval e a
@@ -466,12 +512,12 @@ data OnChainErrorState
 
 -- | Function to determine whether we are either pre-errors fork
 -- or in a repl environment.
-isOffChainForkedError :: Eval e OnChainErrorState
-isOffChainForkedError = isOffChainForkedError' <&> \p -> if p then OffChainError else OnChainError
+isOffChainForkedError :: ExecutionFlag -> Eval e OnChainErrorState
+isOffChainForkedError flag = isOffChainForkedError' flag <&> \p -> if p then OffChainError else OnChainError
 
-isOffChainForkedError' :: Eval e Bool
-isOffChainForkedError' =
-  isExecutionFlagSet FlagDisablePact47 >>= \case
+isOffChainForkedError' :: ExecutionFlag -> Eval e Bool
+isOffChainForkedError' flag =
+  isExecutionFlagSet flag >>= \case
     True -> pure True
     False -> view eeInRepl
 
@@ -494,13 +540,13 @@ throwEitherText typ i d = either (\e -> throwErr typ i (d <> ":" <> pretty e)) r
 
 argsError :: FunApp -> [Term Name] -> Eval e a
 argsError i as =
-  isOffChainForkedError >>= \case
+  isOffChainForkedError FlagDisablePact47 >>= \case
     OffChainError -> throwArgsError i as "Invalid arguments"
     OnChainError -> throwOnChainArgsError i as
 
 argsError' :: FunApp -> [Term Ref] -> Eval e a
 argsError' i as =
-  isOffChainForkedError >>= \case
+  isOffChainForkedError FlagDisablePact47 >>= \case
     OffChainError -> throwArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
     OnChainError -> throwOnChainArgsError i as
 

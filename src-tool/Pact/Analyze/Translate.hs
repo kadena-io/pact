@@ -44,8 +44,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-import           GHC.Natural                (Natural)
-import           GHC.TypeLits
+import           GHC.TypeLits hiding (SSymbol)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
@@ -1395,12 +1394,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     _ -> unexpectedNode astNode
 
   AST_Bind node objectA bindings schemaNode body -> translateType schemaNode >>= \case
-    EType objTy@SObject{} -> typeOfPartialBind objTy bindings >>= \case
-      EType partialReadTy@SObject{} -> do
+    EType objTy@SObject{} -> do
         objectT <- translateNode objectA
         withNodeContext node $
-          translateObjBinding bindings partialReadTy body objectT
-      _ -> unexpectedNode astNode
+          translateObjBinding bindings objTy body objectT
     _ -> unexpectedNode astNode
 
   AST_WithCapability (AST_InlinedApp modName funName _ bindings appBodyA) withBodyA -> do
@@ -1435,6 +1432,12 @@ translateNode astNode = withAstContext astNode $ case astNode of
     app <- translateCapabilityApp modName (mkCapName modName funName) bindings appBodyA
     tsStaticCapsInScope %= Set.insert capName
     return app
+
+  AST_DiffTime a b -> translateNode a >>= \case
+    Some STime a' -> translateNode b >>= \case
+      Some STime b' -> pure $ Some SDecimal $ CoreTerm $ DiffTime a' b'
+      _ -> unexpectedNode astNode
+    _ -> unexpectedNode astNode
 
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim Pact.TyInteger ||
@@ -1515,6 +1518,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> unexpectedNode astNode
 
   AST_NFun node "list" _ -> throwError' $ DeprecatedList node
+
+  -- rs (2023-05-10): Note, we handle the empty list as a special case (see #1182)
+  -- as the element type is otherwise inferred as `Any`.
+  AST_List node [] -> translateType node >>= \case
+    EType listTy -> case listTy of
+      SList _ -> pure $ Some listTy $ CoreTerm $ Lit []
+      _ -> throwError' $ TypeError node
 
   AST_List node elems -> do
     elems' <- traverse translateNode elems
@@ -1599,10 +1609,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     tsFoundVars .= []
 
     Some tyb f'  <- translateNode f
-    (avid, _, _) <- captureOneFreeVar
+    (avid, _, _) <- captureFreeVar
 
     Some tyc g'  <- translateNode g
-    (bvid, _, _) <- captureOneFreeVar
+    (bvid, _, _) <- captureFreeVar
 
     -- important: we captured a, so we need to leave it free (by restoring
     -- tsFoundVars)
@@ -1612,9 +1622,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Compose tya tyb tyc a' (Open avid "a" f') (Open bvid "b" g')
 
   AST_NFun node SMap [ fun, l ] -> do
-    expectNoFreeVars
     Some bTy fun' <- translateNode fun
-    captureOneFreeVar >>= \case
+    captureFreeVar >>= \case
       (vid, varName, EType aType) -> translateNode l >>= \case
         Some (SList listTy) l' -> do
           Refl <- singEq listTy aType ?? TypeError node
@@ -1623,9 +1632,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
         _ -> unexpectedNode astNode
 
   AST_NFun node SFilter [ fun, l ] -> do
-    expectNoFreeVars
     translateNode fun >>= \case
-      Some SBool fun' -> captureOneFreeVar >>= \case
+      Some SBool fun' -> captureFreeVar >>= \case
         (vid, varName, EType aType) -> translateNode l >>= \case
           Some (SList listTy) l' -> do
             Refl <- singEq listTy aType ?? TypeError node
@@ -1635,7 +1643,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       _ -> unexpectedNode astNode
 
   AST_NFun node SFold [ fun, a, l ] -> do
-    expectNoFreeVars
     Some funTy fun' <- translateNode fun
 
     -- Note: The order of these variables is important. `a` should be the first
@@ -1646,8 +1653,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
     --
     -- `a` encountered first, `b` will be consed on top of it, resulting in the
     -- variables coming out backwards.
-    captureTwoFreeVars >>= \case
-      [ (vidb, varNameb, EType tyb), (vida, varNamea, EType tya) ] -> do
+    liftM2 (,) captureFreeVar captureFreeVar >>= \case
+      ((vidb, varNameb, EType tyb), (vida, varNamea, EType tya)) -> do
         Some aTy' a' <- translateNode a
         translateNode l >>= \case
           Some (SList listTy) l' -> do
@@ -1657,17 +1664,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
             pure $ Some tya $ CoreTerm $
               ListFold tya tyb (Open vida varNamea (Open vidb varNameb fun')) a' l'
           _ -> unexpectedNode astNode
-      _ -> unexpectedNode astNode
 
   AST_NFun _ name [ f, g, a ]
     | name == SAndQ || name == SOrQ -> do
-    expectNoFreeVars
     translateNode f >>= \case
       Some SBool f' -> do
-        (fvid, fvarName, _) <- captureOneFreeVar
+        (fvid, fvarName, _) <- captureFreeVar
         translateNode g >>= \case
           Some SBool g' -> do
-            (gvid, gvarName, _) <- captureOneFreeVar
+            (gvid, gvarName, _) <- captureFreeVar
             Some aTy' a' <- translateNode a
             pure $ Some SBool $ CoreTerm $ (if name == "and?" then AndQ else OrQ)
               aTy' (Open fvid fvarName f') (Open gvid gvarName g') a'
@@ -1676,9 +1681,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun _ SWhere [ field, fun, obj ] -> translateNode field >>= \case
     Some SStr field' -> do
-      expectNoFreeVars
       translateNode fun >>= \case
-        Some SBool fun' -> captureOneFreeVar >>= \case
+        Some SBool fun' -> captureFreeVar >>= \case
           (vid, varName, EType freeTy) -> translateNode obj >>= \case
             Some objTy@SObject{} obj' -> pure $ Some SBool $ CoreTerm $
               Where objTy freeTy field' (Open vid varName fun') obj'
@@ -1843,23 +1847,14 @@ trackCapScope capName act = do
   tsStaticCapsInScope .= current
   return r
 
-captureOneFreeVar :: TranslateM (VarId, Text, EType)
-captureOneFreeVar = do
+captureFreeVar :: TranslateM (VarId, Text, EType)
+captureFreeVar = do
   vs <- use tsFoundVars
-  tsFoundVars .= []
   case vs of
-    [v] -> pure v
-    _   -> throwError' $ FreeVarInvariantViolation $
-      "unexpected vars found: " <> tShow vs
-
-captureTwoFreeVars :: TranslateM [(VarId, Text, EType)]
-captureTwoFreeVars = do
-  vs <- use tsFoundVars
-  tsFoundVars .= []
-  case vs of
-    [_, _] -> pure vs
-    _      -> throwError' $ FreeVarInvariantViolation $
-      "unexpected vars found: " <> tShow vs
+    v:vs' -> do
+      tsFoundVars .= vs'
+      pure v
+    _ -> throwError' $ FreeVarInvariantViolation "expected var"
 
 expectNoFreeVars :: TranslateM ()
 expectNoFreeVars = do
@@ -1933,6 +1928,7 @@ runTranslation modName funName info caps pactArgs body checkType = do
               CheckDefconst
                 -> error "invariant violation: this cannot be a constant"
             _ <- extendPath -- form final edge for any remaining events
+            expectNoFreeVars
             pure res
 
           handleState translateState =
