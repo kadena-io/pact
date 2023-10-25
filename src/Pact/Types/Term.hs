@@ -88,6 +88,7 @@ module Pact.Types.Term
    typeof,typeof',guardTypeOf,
    canUnifyWith,
    prettyTypeTerm,
+   _TLitString,_TLitInteger,_TLitBool,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,termEq1,termRefEq,canEq,refEq,
    Gas(..), MilliGas(..),
@@ -1026,7 +1027,6 @@ pattern TLitInteger i <- TLiteral (LInteger i) _
 pattern TLitBool :: Bool -> Term t
 pattern TLitBool b <- TLiteral (LBool b) _
 
-
 -- | Equality dictionary for term-level equality
 --
 canEq :: Term n -> Term n -> Bool
@@ -1084,11 +1084,12 @@ makeLenses ''Object
 makeLenses ''Term
 makePrisms ''Term
 
--- This noop TH splice is required to ensure that all types that are defined
--- above in this module are available in the type environment of the following
--- TH splices.
---
-return []
+_TLitString :: Traversal' (Term t) Text
+_TLitString = _TLiteral . _1 . _LString
+_TLitInteger :: Traversal' (Term t) Integer
+_TLitInteger = _TLiteral . _1 . _LInteger
+_TLitBool :: Traversal' (Term t) Bool
+_TLitBool = _TLiteral . _1 . _LBool
 
 -- -------------------------------------------------------------------------- --
 -- Eq1 Instances
@@ -1113,4 +1114,3 @@ instance Show1 Object where
   liftShowsPrec = $(makeLiftShowsPrec ''Object)
 instance Show1 Term where
   liftShowsPrec = $(makeLiftShowsPrec ''Term)
-
