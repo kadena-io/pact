@@ -7,6 +7,7 @@
 
 module Crypto.Hash.PoseidonNative (poseidonDefs, poseidon) where
 
+import Control.Lens
 import Data.List(foldl')
 import qualified Data.Primitive.Array as Array
 import qualified Data.Primitive.SmallArray as SmallArray
@@ -189,15 +190,11 @@ poseidonWithRounds nRoundsF nRoundsP inputs =
                   else sigIfIShould (ca ti t rings n roundNumber)
 
 poseidon' :: RNativeFun e
-poseidon' _ [TLitInteger i, TLitInteger j, TLitInteger k, TLitInteger l, TLitInteger m, TLitInteger n, TLitInteger o, TLitInteger p] = return $ toTerm $ poseidon [i, j, k, l, m, n, o, p]
-poseidon' _ [TLitInteger i, TLitInteger j, TLitInteger k, TLitInteger l, TLitInteger m, TLitInteger n, TLitInteger o] = return $ toTerm $ poseidon [i, j, k, l, m, n, o]
-poseidon' _ [TLitInteger i, TLitInteger j, TLitInteger k, TLitInteger l, TLitInteger m, TLitInteger n] = return $ toTerm $ poseidon [i, j, k, l, m, n]
-poseidon' _ [TLitInteger i, TLitInteger j, TLitInteger k, TLitInteger l, TLitInteger m] = return $ toTerm $ poseidon [i, j, k, l, m]
-poseidon' _ [TLitInteger i, TLitInteger j, TLitInteger k, TLitInteger l] = return $ toTerm $ poseidon [i, j, k, l]
-poseidon' _ [TLitInteger i, TLitInteger j, TLitInteger k] = return $ toTerm $ poseidon [i, j, k]
-poseidon' _ [TLitInteger i, TLitInteger j] = return $ toTerm $ poseidon [i, j]
-poseidon' _ [TLitInteger i] = return $ toTerm $ poseidon [i]
-poseidon' i as = argsError i as
+poseidon' i as
+  | not (null as) && length as < 8,
+    Just intArgs <- traverse (preview _TLitInteger) as
+    = return $ toTerm $ poseidon intArgs
+   | otherwise = argsError i as
 
 poseidonDef :: NativeDef
 poseidonDef = defGasRNative

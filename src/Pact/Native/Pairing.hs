@@ -700,8 +700,8 @@ pairingCheckDef =
 toG1 :: HasInfo i => i -> Object Name -> Eval e G1
 toG1 i obj = maybe (evalError' i "unable to decode point in g1") pure $ do
   let om = _objectMap (_oObject obj)
-  px <- fromIntegral <$> preview (ix "x" . _TLiteral . _1 . _LInteger) om
-  py <- fromIntegral <$> preview (ix "y" . _TLiteral . _1 . _LInteger) om
+  px <- fromIntegral <$> preview (ix "x" . _TLitInteger) om
+  py <- fromIntegral <$> preview (ix "y" . _TLitInteger) om
   if px == 0 && py == 0 then pure CurveInf
   else pure (Point px py)
 
@@ -723,9 +723,9 @@ toG2 ::  HasInfo i => i -> Object Name -> Eval e G2
 toG2 i obj = maybe (evalError' i "unable to decode point in g2") pure $ do
   let om = _objectMap (_oObject obj)
   pxl <- preview (ix "x" . _TList . _1 ) om
-  px <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pxl
+  px <- traverse (preview (_TLitInteger . to fromIntegral)) pxl
   pyl <- preview (ix "y" . _TList . _1) om
-  py <- traverse (preview (_TLiteral . _1 . _LInteger . to fromIntegral)) pyl
+  py <- traverse (preview (_TLitInteger . to fromIntegral)) pyl
   let px' = fromList (G.toList px)
       py' = fromList (G.toList py)
   if px' == 0 && py' == 0 then pure CurveInf
