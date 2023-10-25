@@ -134,6 +134,7 @@ tabulateRingsTo n f =
     ifGTE k = if n >= k then f k else 0
 {-# inline conlike tabulateRingsTo #-}
 
+-- without inlining this and `ca`, NineRings is never unpacked into arguments
 mix :: Int -> NineRings -> Int -> Integer
 mix ti (NineRings in1 in2 in3 in4 in5 in6 in7 in8 in9) i =
   foldl'
