@@ -106,7 +106,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
-import Crypto.Hash.PoseidonNative (poseidonDefs)
+import Crypto.Hash.PoseidonNative (poseidon)
 
 import qualified Pact.JSON.Encode as J
 
@@ -1545,3 +1545,31 @@ base64DecodeWithShimmedErrors i txt = do
         return $ offsetI - (offsetI `rem` 4) + paddingAdjustment
       Nothing ->
         evalError i "Could not parse error message"
+
+poseidonDefs :: NativeModule
+poseidonDefs = ("PoseidonHash", [ poseidonDef ])
+
+poseidonDef :: NativeDef
+poseidonDef = defGasRNative
+  "poseidon-hash"
+  poseidon'
+  (funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger), ("o", tTyInteger), ("p", tTyInteger)])
+    [ "Poseidon Hash Function."
+    , "The Poseidon hash function is a cryptographic hash function specifically designed"
+    , "to work efficiently with elliptic curve cryptography."
+    , "It's particularly optimized for zero-knowledge proofs and various privacy protocols."
+    , " "
+    , "Usage:"
+    , "> (poseidon-hash integer1 [integer2] [integer3] [integer4] [integer5] [integer6] [integer7] [integer8])"
+    , "The input consists of 1 to 8 integers."
+    , "The output is the hash result as an integer."
+    , "Note: This is a reference version of the Poseidon hash function."
+    ]
+  "Poseidon hash function."
+  where
+  poseidon' :: RNativeFun e
+  poseidon' i as
+    | not (null as) && length as < 8,
+      Just intArgs <- traverse (preview _TLitInteger) as
+      = return $ toTerm $ poseidon intArgs
+     | otherwise = argsError i as
