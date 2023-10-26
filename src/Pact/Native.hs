@@ -1571,5 +1571,6 @@ poseidonHackAChainDef = defGasRNative
   poseidon' i as
     | not (null as) && length as <= 8,
       Just intArgs <- traverse (preview _TLitInteger) as
-      = return $ toTerm $ poseidon intArgs
+      = computeGas' i (GPoseidonHashHackAChain $ length as) $
+        return $ toTerm $ poseidon intArgs
      | otherwise = argsError i as

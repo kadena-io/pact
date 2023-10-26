@@ -95,11 +95,15 @@ poseidonWithRounds nRoundsF nRoundsP inputs =
                   else sigIfIShould (ca nInputs t rings n roundNumber)
 
 poseidon :: [Integer] -> Integer
-poseidon inputs = poseidonWithRounds nRoundsF nRoundsP inputs
+poseidon inputs =
+  if nInputs > 8 || nInputs == 0
+  then error $ "poseidon: number of inputs not between 0 and 8: " <> show nInputs
+  else poseidonWithRounds nRoundsF nRoundsP inputs
   where
+    nInputs = length inputs
     nRoundsF = 8
     aRoundsP = [56, 57, 56, 60, 60, 63, 64, 63, 60, 66, 60, 65, 70, 60, 64, 68]
-    nRoundsP = aRoundsP !! (length inputs - 1)
+    nRoundsP = aRoundsP !! (nInputs - 1)
 
 getMatrix :: Int -> Int -> Int -> Integer
 getMatrix = \ti i j ->
