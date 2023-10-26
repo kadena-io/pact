@@ -1547,25 +1547,29 @@ base64DecodeWithShimmedErrors i txt = do
         evalError i "Could not parse error message"
 
 poseidonHackAChainDefs :: NativeModule
-poseidonHackAChainDefs = ("PoseidonHackAChainHash", [ poseidonHackAChainDef ])
+poseidonHackAChainDefs = ("Poseidon Hash", [ poseidonHackAChainDef ])
 
 poseidonHackAChainDef :: NativeDef
 poseidonHackAChainDef = defGasRNative
   "poseidon-hash-hack-a-chain"
   poseidon'
   (funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger), ("o", tTyInteger), ("p", tTyInteger)])
-    [ "Poseidon Hash Function."
-    , "The Poseidon hash function is a cryptographic hash function specifically designed"
-    , "to work efficiently with elliptic curve cryptography."
-    , "It's particularly optimized for zero-knowledge proofs and various privacy protocols."
-    , " "
-    , "Usage:"
-    , "> (poseidon-hash integer1 [integer2] [integer3] [integer4] [integer5] [integer6] [integer7] [integer8])"
+    ["(poseidon-hash-hack-a-chain 1)"
+    ,"(poseidon-hash-hack-a-chain 1 2)"
+    ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6)"
+    ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)"
+    ]
+    (T.unlines
+    [ "Poseidon Hash Function.\n"
+    , T.unwords
+      [ "The Poseidon hash function is a cryptographic hash function specifically designed"
+      , "to work efficiently with elliptic curve cryptography."
+      , "It's particularly optimized for zero-knowledge proofs and various privacy protocols."
+      ]
     , "The input consists of 1 to 8 integers."
     , "The output is the hash result as an integer."
-    , "Note: This is a reference version of the Poseidon hash function."
-    ]
-  "Poseidon hash function."
+    , "Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain."
+    ])
   where
   poseidon' :: RNativeFun e
   poseidon' i as

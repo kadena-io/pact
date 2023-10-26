@@ -234,7 +234,7 @@ defaultGasTable =
   ,("point-add", 1)
   ,("pairing-check", 1)
 
-  ,("poseidon-hash", 124)
+  ,("poseidon-hash-hack-a-chain", 124)
   ]
 
 {-# NOINLINE defaultGasTable #-}

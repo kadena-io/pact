@@ -1785,6 +1785,31 @@ pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 {"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
 ```
 
+## Poseidon Hash {#Poseidon Hash}
+
+### poseidon-hash-hack-a-chain {#poseidon-hash-hack-a-chain}
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *o*&nbsp;`integer` *p*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Poseidon Hash Function.
+
+The Poseidon hash function is a cryptographic hash function specifically designed to work efficiently with elliptic curve cryptography. It's particularly optimized for zero-knowledge proofs and various privacy protocols.
+The input consists of 1 to 8 integers.
+The output is the hash result as an integer.
+Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain.
+
+```lisp
+pact> (poseidon-hash-hack-a-chain 1)
+18586133768512220936620570745912940619677854269274689475585506675881198879027
+pact> (poseidon-hash-hack-a-chain 1 2)
+7853200120776062878684798364095072458815029376092732009249414926327459813530
+pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6)
+20400040500897583745843009878988256314335038853985262692600694741116813247201
+pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)
+18604317144381847857886385684060986177838410221561136253933256952257712543953
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
