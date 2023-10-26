@@ -123,7 +123,7 @@ natives =
   , decryptDefs
   , guardDefs
   , zkDefs
-  , poseidonDefs
+  , poseidonHackAChainDefs
   ]
 
 
@@ -1546,12 +1546,12 @@ base64DecodeWithShimmedErrors i txt = do
       Nothing ->
         evalError i "Could not parse error message"
 
-poseidonDefs :: NativeModule
-poseidonDefs = ("PoseidonHash", [ poseidonDef ])
+poseidonHackAChainDefs :: NativeModule
+poseidonHackAChainDefs = ("PoseidonHackAChainHash", [ poseidonHackAChainDef ])
 
-poseidonDef :: NativeDef
-poseidonDef = defGasRNative
-  "poseidon-hash"
+poseidonHackAChainDef :: NativeDef
+poseidonHackAChainDef = defGasRNative
+  "poseidon-hash-hack-a-chain"
   poseidon'
   (funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger), ("o", tTyInteger), ("p", tTyInteger)])
     [ "Poseidon Hash Function."
@@ -1569,7 +1569,7 @@ poseidonDef = defGasRNative
   where
   poseidon' :: RNativeFun e
   poseidon' i as
-    | not (null as) && length as < 8,
+    | not (null as) && length as <= 8,
       Just intArgs <- traverse (preview _TLitInteger) as
       = return $ toTerm $ poseidon intArgs
      | otherwise = argsError i as

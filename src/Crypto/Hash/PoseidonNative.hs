@@ -51,23 +51,16 @@ tabulateRingsTo n f =
 
 -- without inlining this and `ca`, NineRings is never unpacked into arguments
 mix :: Int -> NineRings -> Int -> Integer
-mix ti (NineRings in1 in2 in3 in4 in5 in6 in7 in8 in9) i =
+mix nInputs (NineRings in1 in2 in3 in4 in5 in6 in7 in8 in9) i =
   foldl'
-    (\acc (k, ring) -> summod acc (mulmod ring (getMatrix ti i k)))
+    (\acc (k, ring) -> summod acc (mulmod ring (getMatrix (nInputs - 1) i k)))
     0
-    ([0..ti+1] `zip` [in1,in2,in3,in4,in5,in6,in7,in8,in9])
+    ([0..nInputs] `zip` [in1,in2,in3,in4,in5,in6,in7,in8,in9])
 {-# inline mix #-}
 
 ca :: Int -> Int -> NineRings -> Int -> Int -> Integer
-ca ti t nr j i = ark (mix ti nr j) (getC ti (j + (t * i)))
+ca nInputs t nr j i = ark (mix nInputs nr j) (getC (nInputs - 1) (j + (t * i)))
 {-# inline ca #-}
-
-poseidon :: [Integer] -> Integer
-poseidon inputs = poseidonWithRounds nRoundsF nRoundsP inputs
-  where
-    nRoundsF = 8
-    aRoundsP = [56, 57, 56, 60, 60, 63, 64, 63, 60, 66, 60, 65, 70, 60, 64, 68]
-    nRoundsP = aRoundsP !! (length inputs - 1)
 
 poseidonWithRounds :: Int -> Int -> [Integer] -> Integer
 poseidonWithRounds nRoundsF nRoundsP inputs =
@@ -75,8 +68,8 @@ poseidonWithRounds nRoundsF nRoundsP inputs =
         -- initial state
         ms = tabulateRingsTo nInputs $ \n ->
           sig $
-            if n == 0 then ark 0 (getC ti 0)
-            else ark (inputs !! (n - 1)) (getC ti n)
+            if n == 0 then ark 0 (getC (nInputs - 1) 0)
+            else ark (inputs !! (n - 1)) (getC (nInputs - 1) n)
 
         -- TODO: gas each round
         rounds = (nRoundsF + nRoundsP) - 1
@@ -86,12 +79,11 @@ poseidonWithRounds nRoundsF nRoundsP inputs =
           foldl' applyRound ms [1..rounds]
 
         -- return
-        out = mix ti outRings 0
+        out = mix nInputs outRings 0
     in
         out
     where
         nInputs = length inputs
-        ti = nInputs - 1
         shouldApplySig roundNumber =
           (roundNumber < nRoundsF `div` 2) || (roundNumber >= nRoundsP + nRoundsF `div` 2)
         applyRound :: NineRings -> Int -> NineRings
@@ -99,8 +91,15 @@ poseidonWithRounds nRoundsF nRoundsP inputs =
             let t = nInputs + 1
                 sigIfIShould = if shouldApplySig roundNumber then sig else id
             in tabulateRingsTo nInputs $ \n ->
-                  if n == 0 then sig (ca ti t rings 0 roundNumber)
-                  else sigIfIShould (ca ti t rings n roundNumber)
+                  if n == 0 then sig (ca nInputs t rings 0 roundNumber)
+                  else sigIfIShould (ca nInputs t rings n roundNumber)
+
+poseidon :: [Integer] -> Integer
+poseidon inputs = poseidonWithRounds nRoundsF nRoundsP inputs
+  where
+    nRoundsF = 8
+    aRoundsP = [56, 57, 56, 60, 60, 63, 64, 63, 60, 66, 60, 65, 70, 60, 64, 68]
+    nRoundsP = aRoundsP !! (length inputs - 1)
 
 getMatrix :: Int -> Int -> Int -> Integer
 getMatrix = \ti i j ->
