@@ -71,7 +71,6 @@ poseidonWithRounds nRoundsF nRoundsP inputs =
             if n == 0 then ark 0 (getC (nInputs - 1) 0)
             else ark (inputs !! (n - 1)) (getC (nInputs - 1) n)
 
-        -- TODO: gas each round
         rounds = (nRoundsF + nRoundsP) - 1
 
         -- iterative rounds
