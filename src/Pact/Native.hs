@@ -1559,17 +1559,7 @@ poseidonHackAChainDef = defGasRNative
     ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6)"
     ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)"
     ]
-    (T.unlines
-    [ "Poseidon Hash Function.\n"
-    , T.unwords
-      [ "The Poseidon hash function is a cryptographic hash function specifically designed"
-      , "to work efficiently with elliptic curve cryptography."
-      , "It's particularly optimized for zero-knowledge proofs and various privacy protocols."
-      ]
-    , "The input consists of 1 to 8 integers."
-    , "The output is the hash result as an integer."
-    , "Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain."
-    ])
+    "Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain."
   where
   poseidon' :: RNativeFun e
   poseidon' i as

@@ -33,7 +33,7 @@ import qualified ZkSpec
 import qualified ReplSpec
 import qualified PoseidonSpec
 import qualified CoverageSpec
-# endif
+#endif
 
 main :: IO ()
 main = hspec $ parallel $ do

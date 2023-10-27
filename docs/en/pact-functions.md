@@ -1792,13 +1792,7 @@ pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 *i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *o*&nbsp;`integer` *p*&nbsp;`integer` *&rarr;*&nbsp;`integer`
 
 
-Poseidon Hash Function.
-
-The Poseidon hash function is a cryptographic hash function specifically designed to work efficiently with elliptic curve cryptography. It's particularly optimized for zero-knowledge proofs and various privacy protocols.
-The input consists of 1 to 8 integers.
-The output is the hash result as an integer.
-Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain.
-
+Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain.
 ```lisp
 pact> (poseidon-hash-hack-a-chain 1)
 18586133768512220936620570745912940619677854269274689475585506675881198879027
@@ -1953,7 +1947,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact410","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
