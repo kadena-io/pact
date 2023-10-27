@@ -91,12 +91,13 @@ data MsgData = MsgData {
   mdData :: !LegacyValue,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
-  mdSigners :: [Signer]
+  mdSigners :: [Signer],
+  mdVerifiers :: [Verifier]
   }
 
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData (toLegacyJson Null) def h def
+initMsgData h = MsgData (toLegacyJson Null) def h def def
 
 -- | Describes either a ContMsg or ExecMsg.
 -- ContMsg is represented as a 'Maybe PactExec'
@@ -192,6 +193,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
+  , _eeMsgVerifiers = mkVerifiers $ mdVerifiers msgData
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent
@@ -216,6 +218,9 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
+    mkVerifiers m = M.fromListWith S.union $ map toPair m
+      where
+        toPair Verifier{..} = (ExternalVerifierName _veType, S.fromList _veCapList)
 
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore

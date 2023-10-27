@@ -152,7 +152,7 @@ applyExec rk hsh signers (ExecMsg parsedCode edata) = do
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   evalEnv
     <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-        (MsgData edata Nothing (toUntypedHash hsh) signers)
+        (MsgData edata Nothing (toUntypedHash hsh) signers [])
         initRefStore _ceGasEnv permissiveNamespacePolicy
         _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalExec defaultInterpreter evalEnv parsedCode
@@ -165,7 +165,7 @@ applyContinuation rk hsh signers cm = do
   CommandEnv{..} <- ask
   -- Setup environment and get result
   evalEnv <- liftIO $ setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData (toLegacyJson (_cmData cm)) Nothing (toUntypedHash hsh) signers) (versionedNativesRefStore _ceExecutionConfig)
+                (MsgData (toLegacyJson (_cmData cm)) Nothing (toUntypedHash hsh) signers []) (versionedNativesRefStore _ceExecutionConfig)
                 _ceGasEnv permissiveNamespacePolicy _ceSPVSupport _cePublicData _ceExecutionConfig
   EvalResult{..} <- liftIO $ evalContinuation defaultInterpreter evalEnv cm
   return $ resultSuccess _erTxId rk _erGas (last _erOutput) _erExec _erLogs _erEvents

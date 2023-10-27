@@ -281,7 +281,7 @@ appToCap
   -> Eval e (UserCapability, Def Ref, ([Term Name], FunType (Term Name)))
 appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
   prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-  cap <- SigCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
+  cap <- MsgCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
   return (cap,d,prep)
 
 -- | Function intended for use as a View pattern

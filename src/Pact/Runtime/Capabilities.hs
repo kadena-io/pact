@@ -171,7 +171,7 @@ emitCapability :: HasInfo i => i -> UserCapability -> Eval e ()
 emitCapability i cap = emitEvent i (_scName cap) (_scArgs cap)
 
 defCapMetaParts :: UserCapability -> Text -> Def Ref
-                -> Either Doc (Int, SigCapability, PactValue)
+                -> Either Doc (Int, MsgCapability, PactValue)
 defCapMetaParts cap argName cdef = case findArg argName of
   Nothing -> Left $ "Invalid managed argument name: " <> pretty argName
   Just idx -> case decomposeManaged' idx cap of
@@ -181,7 +181,7 @@ defCapMetaParts cap argName cdef = case findArg argName of
     findArg an = findIndex ((==) an . _aName) $ _ftArgs (_dFunType cdef)
 
 -- Check managed state, if any, to approve acquisition.
--- Handles lazy installation of sig + auto caps, as a fallback
+-- Handles lazy installation of sig + verifier + auto caps, as a fallback
 -- case if no matching installed managed caps are found.
 -- Once found/matched, compute installed logic to approve acquisition.
 -- Upon success return composed caps that were assembled during install
@@ -193,7 +193,7 @@ checkManaged
   -> UserCapability
   -> Def Ref
   -> Eval e (Maybe [UserCapability])
-checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef of
+checkManaged i (applyF,installF) cap@MsgCapability{} cdef = case _dDefMeta cdef of
   -- managed: go
   Just (DMDefcap dcm@DefcapManaged {}) ->
     use (evalCapabilities . capManaged) >>= go dcm . S.toList
@@ -204,7 +204,7 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
     -- go: main loop over installed managed caps set
     -- empty case: attempt lazy install and test
     go dcm [] = do
-      checkSigs dcm >>= \r -> case r of
+      checkMsgCaps dcm >>= \r -> case r of
         Nothing -> die
         Just mc -> testMC mc die
     -- test installed from set
@@ -241,19 +241,21 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
       Just (argName,_) -> view _2 <$> defCapMetaParts c argName cdef
     getStatic DefcapEvent c = return c
 
-    -- check sig and autonomous caps for match
-    -- to install.
-    checkSigs dcm = case getStatic dcm cap of
+    -- check sig, verifier and autonomous caps for match to install.
+    checkMsgCaps dcm = case getStatic dcm cap of
       Left e -> evalError' cdef e
       Right capStatic -> do
         autos <- use $ evalCapabilities . capAutonomous
-        sigCaps <- (S.union autos . S.unions) <$> view eeMsgSigs
-        foldM (matchSig dcm capStatic) Nothing sigCaps
+        sigCaps <- S.unions <$> view eeMsgSigs
+        verifierCaps <- S.unions <$> view eeMsgVerifiers
+        let msgCaps =
+              S.unions [autos, sigCaps, verifierCaps]
+        foldM (matchMsgCap dcm capStatic) Nothing msgCaps
 
-    matchSig _ _ r@Just{} _ = return r
-    matchSig dcm capStatic Nothing sigCap = case getStatic dcm sigCap of
+    matchMsgCap _ _ r@Just{} _ = return r
+    matchMsgCap dcm capStatic Nothing msgCap = case getStatic dcm msgCap of
       Left _ -> return Nothing
-      Right sigStatic | sigStatic == capStatic -> Just <$> doMgdInstall sigCap
+      Right sigStatic | sigStatic == capStatic -> Just <$> doMgdInstall msgCap
                       | otherwise -> return Nothing
 
     doMgdInstall sigCap = installF sigCap cdef

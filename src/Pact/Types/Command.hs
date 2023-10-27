@@ -43,6 +43,7 @@ module Pact.Types.Command
   , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
+  , Verifier(..),veType, veCapList
   , UserSig(..),usSig
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
@@ -125,14 +126,14 @@ data ProcessedCommand m a =
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 
-type Ed25519KeyPairCaps = (Ed25519KeyPair ,[SigCapability])
+type Ed25519KeyPairCaps = (Ed25519KeyPair ,[MsgCapability])
 
 -- CREATING AND SIGNING TRANSACTIONS
 
 mkCommand
   :: J.Encode c
   => J.Encode m
-  => [(Ed25519KeyPair, [SigCapability])]
+  => [(Ed25519KeyPair, [MsgCapability])]
   -> m
   -> Text
   -> Maybe NetworkId
@@ -143,7 +144,7 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
-keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
+keyPairToSigner :: Ed25519KeyPair -> [MsgCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
         scheme = Nothing
@@ -245,7 +246,7 @@ data Signer = Signer
  -- ^ pub key value
  , _siAddress :: !(Maybe Text)
  -- ^ optional "address", for different pub key formats like ETH
- , _siCapList :: [SigCapability]
+ , _siCapList :: [MsgCapability]
  -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 
@@ -270,6 +271,29 @@ instance FromJSON Signer where
 
 instance Arbitrary Signer where
   arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> scale (min 5) arbitrary
+
+data Verifier = Verifier
+  { _veType :: !Text
+  , _veCapList :: [MsgCapability]
+  } deriving (Eq, Ord, Show, Generic)
+
+instance NFData Verifier
+
+instance J.Encode Verifier where
+  build o = J.object
+    [ "type" J..= _veType o
+    , "clist" J..??= J.Array (_veCapList o)
+    ]
+
+instance FromJSON Verifier where
+  parseJSON = withObject "Verifier" $ \o -> Verifier
+    <$> o .: "type"
+    <*> (listMay <$> (o .:? "clist"))
+    where
+      listMay = fromMaybe []
+
+instance Arbitrary Verifier where
+  arbitrary = Verifier <$> arbitrary <*> scale (min 5) arbitrary
 
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
@@ -431,6 +455,7 @@ instance Arbitrary RequestKey where
 
 makeLenses ''UserSig
 makeLenses ''Signer
+makeLenses ''Verifier
 makeLenses ''CommandExecInterface
 makeLenses ''ExecutionMode
 makeLenses ''Command

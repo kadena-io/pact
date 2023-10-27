@@ -90,7 +90,7 @@ data ApiKeyPair = ApiKeyPair {
   _akpPublic :: Maybe PublicKeyBS,
   _akpAddress :: Maybe Text,
   _akpScheme :: Maybe PPKScheme,
-  _akpCaps :: Maybe [SigCapability]
+  _akpCaps :: Maybe [MsgCapability]
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
@@ -121,7 +121,7 @@ data ApiSigner = ApiSigner {
   _asPublic :: Text,
   _asAddress :: Maybe Text,
   _asScheme :: Maybe PPKScheme,
-  _asCaps :: Maybe [SigCapability]
+  _asCaps :: Maybe [MsgCapability]
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3

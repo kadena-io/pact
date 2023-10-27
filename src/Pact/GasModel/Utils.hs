@@ -73,7 +73,7 @@ import qualified Data.Text as T
 
 
 import Pact.Compile (compileExps, mkTextInfo)
-import Pact.Types.Capability (SigCapability)
+import Pact.Types.Capability (MsgCapability)
 import Pact.Types.Command
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
@@ -386,7 +386,7 @@ sampleMultiPubKeys =
   , PublicKeyText "key2"
   ]
 
-samplePubKeysWithCaps :: [(PublicKeyText, S.Set SigCapability)]
+samplePubKeysWithCaps :: [(PublicKeyText, S.Set MsgCapability)]
 samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
 
 sampleKeyset :: KeySet
