@@ -21,7 +21,6 @@ module Pact.Types.Capability
   , CapEvalResult(..)
   , MsgCapability(..)
   , UserCapability
-  , mkVerifierCapability
   , ManagedCapability(..), mcInstalled, mcStatic, mcManaged
   , UserManagedCap(..), umcManagedValue, umcManageParamIndex, umcManageParamName, umcMgrFun
   , AutoManagedCap(..), amcActive
@@ -59,9 +58,6 @@ instance NFData Capability
 instance Pretty Capability where
   pretty (CapModuleAdmin mn) = pretty mn
   pretty (CapUser s) = pretty s
-
-mkVerifierCapability :: Text -> [PactValue] -> UserCapability
-mkVerifierCapability n args = MsgCapability (QualifiedName ["$verifier", n]) args
 
 -- | Both UX type (thus the name) and "UserCapability".
 -- TODO rename when downstream deps are more stable.

@@ -24,6 +24,7 @@ module Pact.Types.Term.Internal
 , ModuleGuard(..)
 , CapabilityGuard(..)
 , Guard(..)
+, VerifierName(..)
 , _GPact
 , _GKeySet
 , _GKeySetRef
@@ -799,6 +800,10 @@ instance FromJSON a => FromJSON (CapabilityGuard a) where
 -- -------------------------------------------------------------------------- --
 -- Guard
 
+newtype VerifierName = VerifierName Text
+  deriving (Eq, Show, Generic, Ord)
+instance NFData VerifierName
+
 data Guard a
   = GPact !PactGuard
   | GKeySet !KeySet
@@ -806,6 +811,7 @@ data Guard a
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
   | GCapability !(CapabilityGuard a)
+  | GVerifier !VerifierName
   deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (Guard a)
@@ -1087,4 +1093,3 @@ instance Show1 Governance where
   liftShowsPrec = $(makeLiftShowsPrec ''Governance)
 instance Show1 Step where
   liftShowsPrec = $(makeLiftShowsPrec ''Step)
-
