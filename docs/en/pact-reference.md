@@ -248,16 +248,16 @@ type: exec
 The Pact REST API can accept transactions signed by the WebAuthn protocol.
 
 A web client can make use of this scheme to allow users to authenticate and
-sign pact transactions without managing thing own private keys. The client must:
+sign pact transactions without manually managing private keys. The client must:
 
- - Modify the `Signer`, it must have `scheme` set to `WebAuthn`.
- - Construct the challenge: base64( blake2b ( CommandPayload ))
+ - Modify the `Signer`, it must have `scheme` set to `"WebAuthn"`.
+ - Construct the challenge as: `base64( blake2b ( CommandPayload ))`
  - Issue a JavaScript `navigator.credentials.get` with this challenge.
  - Construct a `Signature` from the credentials response.
 
-The signature we pass to Pact (in the `sigs` field) is a sringified JSON object
-composed of pieces taken from the browser's credential response. Some of them must
-be converted from the Base64URL alphabet to Base64:
+The "signature" to pass to Pact (in the `sigs` field) is a sringified JSON
+object composed of pieces taken from the browser's credential response. Some of
+the response fields must be converted from the Base64URL alphabet to Base64:
 
 ```
 {
