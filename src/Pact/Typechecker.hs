@@ -905,7 +905,8 @@ hoistValueTerm t = die (getInfo t) $ "Unexpected term in value context: " <> sho
 -- | Build ASTs from terms.
 toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
-toAST TDef {..} = die _tInfo "Def in value position"
+toAST t@TDef {} =
+  toAST $ TApp (Term.App t [] (getInfo t)) (getInfo t)
 toAST TSchema {..} = die _tInfo "User type in value position"
 toAST t@TLam{} =
   -- Lambda values are converted to Apps
