@@ -208,7 +208,7 @@
 ;; keyset formats
 ;;
 
-(env-exec-config ["EnforceKeyFormats"])
+(env-exec-config ["EnforceKeyFormats", "DisablePact410"])
 (env-data
  { 'bad: ['foo]
  , 'short: ["12440d374865bdf0a3349634a70d1317fc279e7e13db98f2199ac5e7378975"]
@@ -245,6 +245,42 @@
 (expect-failure
  "enforce kadena key format with flag: fail one bad one good"
  "Invalid keyset"
+ (read-keyset 'mixed))
+(expect-that
+ "enforce kadena key format with flag: success single"
+ (constantly true)
+ (read-keyset 'good))
+(expect-that
+ "enforce kadena key format with flag: success 2"
+ (constantly true)
+ (read-keyset 'good2))
+
+(env-exec-config ["EnforceKeyFormats"])
+
+(expect-that
+ "does not enforce kadena key format with flag in Pact 4.10 which'd otherwise fail single"
+ (constantly true)
+ (read-keyset 'bad))
+(expect-that
+ "does not enforce kadena key format with flag in Pact 4.10 which'd otherwise fail short"
+ (constantly true)
+ (read-keyset 'short))
+(expect-that
+ "does not enforce kadena key format with flag in Pact 4.10 which'd otherwise fail long"
+ (constantly true)
+ (read-keyset 'long))
+(expect-that
+ "does not enforce kadena key format with flag in Pact 4.10 which'd otherwise fail badchars"
+ (constantly true)
+ (read-keyset 'badchars))
+(expect-that
+ "does not enforce kadena key format with flag in Pact 4.10 which'd otherwise fail uppercase"
+ (constantly true)
+ (read-keyset 'ucase))
+
+(expect-that
+ "does not enforce kadena key format with flag in Pact 4.10 which'd otherwise fail one bad one good"
+ (constantly true)
  (read-keyset 'mixed))
 (expect-that
  "enforce kadena key format with flag: success single"
