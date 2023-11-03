@@ -32,6 +32,7 @@ module Pact.Native.Internal
   ,module Pact.Gas
   ,(<>)
   ,getPactId,enforceGuardDef,guardForModuleCall
+  ,enforceVerifierDef
   ,provenanceOf
   ,enforceYield
   ,appToCap
@@ -51,6 +52,7 @@ import qualified Data.Aeson.KeyMap as AKM
 import Data.Default
 import Data.Foldable
 import Data.Functor (($>))
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Vector as V
 
@@ -65,6 +67,7 @@ import Pact.Types.Native
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Runtime.Capabilities
 
 import Unsafe.Coerce
 
@@ -197,6 +200,26 @@ enforceGuardDef dn =
              Right ksn -> f ksn)
       _ -> argsError i as
 
+
+enforceVerifierDef :: NativeDef
+enforceVerifierDef = defRNative
+  "enforce-verifier"
+  enforceVerifier
+  (funType tTyBool [("verifiername", tTyString)])
+  [ LitExample $ "(enforce-verifier 'COOLZK)"
+  ]
+  "Enforce that a verifier is in scope."
+  where
+  enforceVerifier :: RNativeFun e
+  enforceVerifier i as = case as of
+    [TLitString verifierName] -> do
+      views eeMsgVerifiers (Map.lookup (ExternalVerifierName verifierName)) >>= \case
+        Just verifierCaps -> do
+          verifierInScope <- verifierIsInScope verifierCaps
+          if verifierInScope then return (toTerm True)
+          else failTx (getInfo i) $ "Verifier failure " <> pretty verifierName <> ": not in scope"
+        Nothing -> failTx (getInfo i) $ "Verifier failure " <> pretty verifierName <> ": not in transaction"
+    _ -> argsError i as
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.

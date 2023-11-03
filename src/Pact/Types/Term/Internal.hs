@@ -811,7 +811,6 @@ data Guard a
   | GModule !ModuleGuard
   | GUser !(UserGuard a)
   | GCapability !(CapabilityGuard a)
-  | GVerifier !VerifierName
   deriving (Eq,Show,Generic,Functor,Foldable,Traversable,Ord)
 
 instance NFData a => NFData (Guard a)

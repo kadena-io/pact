@@ -112,7 +112,6 @@ enforceKeySetName mi ksn = do
       Just ks -> pure ks
   _ <- computeGas (Left (mi,"enforce keyset name")) (GPostRead (ReadKeySet ksn ks))
   runSysOnly $ enforceKeySet mi (Just ksn) ks
-{-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment.
 enforceKeySet :: PureSysOnly e => Info -> Maybe KeySetName -> KeySet -> Eval e ()
@@ -142,7 +141,6 @@ enforceKeySet i ksn KeySet{..} = do
       where
         runBuiltIn p | p count matched = return ()
                      | otherwise = failed
-{-# INLINE enforceKeySet #-}
 
 enforceGuard :: HasInfo i => i -> Guard (Term Name) -> Eval e ()
 enforceGuard i g = case g of

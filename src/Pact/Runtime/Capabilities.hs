@@ -28,6 +28,7 @@ module Pact.Runtime.Capabilities
     ,ApplyMgrFun
     ,InstallMgd
     ,checkSigCaps
+    ,verifierIsInScope
     ,emitCapability
     ) where
 
@@ -278,3 +279,8 @@ checkSigCaps sigs = go
     match allowEmpty granted sigCaps =
       (S.null sigCaps && allowEmpty) ||
       not (S.null (S.intersection granted sigCaps))
+
+verifierIsInScope :: S.Set UserCapability -> Eval e Bool
+verifierIsInScope verCaps = do
+  granted <- getAllStackCaps
+  return $ not (S.null (S.intersection granted verCaps))

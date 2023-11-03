@@ -228,6 +228,11 @@ disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
   if S.member flag ec then over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
   else id
 
+enablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
+enablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
+  if S.member flag ec then id
+  else over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
+
 disablePact40Natives :: ExecutionConfig -> Endo RefStore
 disablePact40Natives =
   disablePactNatives pact40Natives FlagDisablePact40
@@ -247,6 +252,9 @@ disablePact46Natives = disablePactNatives pact46Natives FlagDisablePact46
 disablePact47Natives :: ExecutionConfig -> Endo RefStore
 disablePact47Natives = disablePactNatives pact47Natives FlagDisablePact47
 
+enableVerifierNatives :: ExecutionConfig -> Endo RefStore
+enableVerifierNatives = enablePactNatives verifierNatives FlagEnableVerifiers
+
 pact40Natives :: [Text]
 pact40Natives = ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
 
@@ -265,6 +273,9 @@ pact46Natives = ["point-add", "scalar-mult", "pairing-check"]
 pact47Natives :: [Text]
 pact47Natives = ["dec"]
 
+verifierNatives :: [Text]
+verifierNatives = ["enforce-verifier"]
+
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
 
@@ -277,7 +288,9 @@ versionedNativesRefStore ec = versionNatives initRefStore
     , disablePact43Natives ec
     , disablePact431Natives ec
     , disablePact46Natives ec
-    , disablePact47Natives ec]
+    , disablePact47Natives ec
+    , enableVerifierNatives ec
+    ]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
