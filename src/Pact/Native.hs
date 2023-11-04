@@ -1285,6 +1285,7 @@ concat' :: GasRNativeFun e
 concat' i [TList ls _ _] = do
 
   disablePact48 <- isExecutionFlagSet FlagDisablePact48
+  fixupDivByZero <- not <$> isExecutionFlagSet FlagDisablePact410
   let concatGasCost =
         if disablePact48
         then
@@ -1301,7 +1302,7 @@ concat' i [TList ls _ _] = do
                     _ -> 0
               nStrings = V.length ls
           in
-          GTextConcatenation nChars nStrings
+          GTextConcatenation nChars nStrings fixupDivByZero
   computeGas' i concatGasCost $
     let
       ls' = V.toList ls

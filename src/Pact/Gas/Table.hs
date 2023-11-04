@@ -260,14 +260,17 @@ tableGasModel gasConfig =
           gasToMilliGas $ fromIntegral n * _gasCostConfig_sortFactor gasConfig
         GConcatenation i j -> gasToMilliGas $
           fromIntegral (i + j) * _gasCostConfig_concatenationFactor gasConfig
-        GTextConcatenation nChars nStrings ->
+        GTextConcatenation nChars nStrings fixupDivByZero ->
           let
             MilliGas offsetCost = _gasCostConfig_textConcatenationFactorOffset gasConfig
             MilliGas charCost = _gasCostConfig_textConcatenationFactorStringLen gasConfig
             MilliGas stringCost = _gasCostConfig_textConcatenationFactorStrings gasConfig
 
+            avgDenom | fixupDivByZero = max (fromIntegral nStrings) 1
+                     | otherwise = fromIntegral nStrings
+
             costForAverageStringLength =
-              (fromIntegral nChars  * charCost) `div` fromIntegral nStrings
+              (fromIntegral nChars  * charCost) `div` avgDenom
             costForNumberOfStrings =
               fromIntegral nStrings * stringCost
           in
