@@ -23,13 +23,13 @@ import Utils
 simpleServerCmd :: IO (Command Text)
 simpleServerCmd = do
   simpleKeys <- genKeyPair
-  mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] Nothing (Just "test1")
+  mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] [] Nothing (Just "test1")
 
 
 simpleServerCmdWithPactErr :: IO (Command Text)
 simpleServerCmdWithPactErr = do
   simpleKeys <- genKeyPair
-  mkExec  "(+ 1 2 3)" Null def [(simpleKeys,[])] Nothing (Just "test1")
+  mkExec  "(+ 1 2 3)" Null def [(simpleKeys,[])] [] Nothing (Just "test1")
 
 spec :: Spec
 spec = describe "Servant API client tests" $ do

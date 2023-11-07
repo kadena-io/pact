@@ -239,7 +239,7 @@ mkBenchCmd :: [Ed25519KeyPairCaps] -> (String, Text) -> IO (String, Command Byte
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
     $ J.encodeStrict
-    $ Payload payload "nonce" (J.Aeson ()) ss Nothing
+    $ Payload payload "nonce" (J.Aeson ()) ss [] Nothing
   return (str, cmd)
   where
     payload = Exec $ ExecMsg t (toLegacyJson Null)

@@ -220,7 +220,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
     mkVerifiers m = M.fromListWith S.union $ map toPair m
       where
-        toPair Verifier{..} = (ExternalVerifierName _veType, S.fromList _veCapList)
+        toPair Verifier{..} = (_veName, S.fromList _veCapList)
 
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore

@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Types.Term.Internal
@@ -118,6 +119,7 @@ import Data.Vector (Vector)
 import GHC.Generics (Generic)
 import Prelude
 import Text.Show.Deriving
+import Test.QuickCheck(Arbitrary(..))
 
 -- internal modules
 
@@ -803,6 +805,12 @@ instance FromJSON a => FromJSON (CapabilityGuard a) where
 newtype VerifierName = VerifierName Text
   deriving (Eq, Show, Generic, Ord)
 instance NFData VerifierName
+deriving newtype instance Arbitrary VerifierName
+instance J.Encode VerifierName where
+  build (VerifierName t) = J.text t
+
+instance FromJSON VerifierName where
+  parseJSON = withText "VerifierName" (return . VerifierName)
 
 data Guard a
   = GPact !PactGuard

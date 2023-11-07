@@ -30,7 +30,6 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   ExternalVerifierName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgVerifiers,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice, eeWarnings,
@@ -249,16 +248,13 @@ instance J.Encode ExecutionConfig where
 mkExecutionConfig :: [ExecutionFlag] -> ExecutionConfig
 mkExecutionConfig = ExecutionConfig . S.fromList
 
-newtype ExternalVerifierName = ExternalVerifierName Text
-  deriving (Eq, Ord, Show)
-
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
     , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
       -- | Verifiers other than signatures
-    , _eeMsgVerifiers :: !(M.Map ExternalVerifierName (S.Set UserCapability))
+    , _eeMsgVerifiers :: !(M.Map VerifierName (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !LegacyValue
       -- | Execution mode

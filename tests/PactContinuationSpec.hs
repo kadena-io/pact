@@ -59,7 +59,7 @@ spec = describe "pacts in dev server" $ do
 testElideModRefEvents :: Spec
 testElideModRefEvents = do
   it "elides modref infos" $ do
-    cmd <- mkExec code Null def [] Nothing Nothing
+    cmd <- mkExec code Null def [] [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport testFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
@@ -67,7 +67,7 @@ testElideModRefEvents = do
           (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
 
   it "doesn't elide on backcompat" $ do
-    cmd <- mkExec codePreFork Null def [] Nothing Nothing
+    cmd <- mkExec codePreFork Null def [] [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport backCompatFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
@@ -236,7 +236,7 @@ testNestedPactContinuation = do
 testSimpleServerCmd :: IO (Maybe (CommandResult Hash))
 testSimpleServerCmd = do
   simpleKeys <- genKeyPair
-  cmd <- mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] Nothing (Just "test1")
+  cmd <- mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] [] Nothing (Just "test1")
   allResults <- runAll [cmd]
   return $ HM.lookup (cmdToRequestKey cmd) allResults
 
@@ -1356,7 +1356,7 @@ makeExecCmd keyPairs code = makeExecCmd' Nothing keyPairs code
 
 makeExecCmd' :: Maybe Text -> Ed25519KeyPair -> Text -> IO (Command Text)
 makeExecCmd' nonce keyPairs code = mkExec code
-  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing nonce
+  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] [] Nothing nonce
 
 
 formatPubKeyForCmd :: Ed25519KeyPair -> Value
@@ -1391,7 +1391,7 @@ makeContCmd'
       -- ^ nonce
   -> IO (Command Text)
 makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
-  mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM Nothing
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] [] (Just nonce) contProofM Nothing
 
 textVal :: Text -> PactValue
 textVal = PLiteral . LString

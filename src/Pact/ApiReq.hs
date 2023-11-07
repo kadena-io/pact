@@ -143,6 +143,28 @@ instance Arbitrary ApiSigner where
     <*> scale (min 10) arbitrary
 
 -- -------------------------------------------------------------------------- --
+-- ApiVerifier
+
+data ApiVerifier = ApiVerifier {
+  _avName :: Text,
+  _avCaps :: [MsgCapability]
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON ApiVerifier where parseJSON = lensyParseJSON 3
+
+instance J.Encode ApiVerifier where
+  build o = J.object
+    [ "name" J..= _avName o
+    , "caps" J..= J.Array (_avCaps o)
+    ]
+  {-# INLINE build #-}
+
+instance Arbitrary ApiVerifier where
+  arbitrary = ApiVerifier
+    <$> arbitrary
+    <*> scale (min 10) arbitrary
+
+-- -------------------------------------------------------------------------- --
 -- ApiPublicMeta
 
 data ApiPublicMeta = ApiPublicMeta
@@ -194,6 +216,7 @@ data ApiReq = ApiReq {
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: Maybe [ApiKeyPair],
   _ylSigners :: Maybe [ApiSigner],
+  _ylVerifiers :: Maybe [ApiVerifier],
   _ylNonce :: Maybe Text,
   _ylPublicMeta :: Maybe ApiPublicMeta,
   _ylNetworkId :: Maybe NetworkId
@@ -209,6 +232,7 @@ instance J.Encode ApiReq where
     , "networkId" J..= _ylNetworkId o
     , "rollback" J..= _ylRollback o
     , "signers" J..= fmap J.Array (_ylSigners o)
+    , "verifiers" J..= fmap J.Array (_ylVerifiers o)
     , "step" J..= fmap J.Aeson (_ylStep o)
     , "code" J..= _ylCode o
     , "pactTxHash" J..= _ylPactTxHash o
@@ -226,7 +250,7 @@ instance Arbitrary ApiReq where
     <*> arbitrary <*> arbitraryValue <*> arbitrary
     <*> arbitrary <*> arbitrary <*> arbitrary
     <*> arbitrary <*> arbitrary <*> arbitrary
-    <*> arbitrary <*> arbitrary
+    <*> arbitrary <*> arbitrary <*> arbitrary
    where
     arbitraryValue = suchThat arbitrary (/= Just Null)
 
@@ -512,9 +536,10 @@ mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
     return (code,cdata)
   pubMeta <- mkPubMeta _ylPublicMeta
+  let verifiers = (\ApiVerifier {..} -> Verifier (VerifierName _avName) _avCaps) <$> fromMaybe [] _ylVerifiers
   cmd <- withKeypairsOrSigner unsignedReq ar
-    (\ks -> mkExec code cdata pubMeta ks _ylNetworkId _ylNonce)
-    (\ss -> mkUnsignedExec code cdata pubMeta ss _ylNetworkId _ylNonce)
+    (\ks -> mkExec code cdata pubMeta ks verifiers _ylNetworkId _ylNonce)
+    (\ss -> mkUnsignedExec code cdata pubMeta ss verifiers _ylNetworkId _ylNonce)
   return ((ar,code,cdata,pubMeta), cmd)
 
 mkPubMeta :: Maybe ApiPublicMeta -> IO PublicMeta
@@ -550,15 +575,18 @@ mkExec
     -- ^ public metadata
   -> [Ed25519KeyPairCaps]
     -- ^ signing keypairs + caplists
+  -> [Verifier]
+    -- ^ verifiers
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
   -> Maybe Text
     -- ^ optional nonce
   -> IO (Command Text)
-mkExec code mdata pubMeta kps nid ridm = do
+mkExec code mdata pubMeta kps ves nid ridm = do
   rid <- mkNonce ridm
   cmd <- mkCommand
          kps
+         ves
          pubMeta
          rid
          nid
@@ -576,15 +604,18 @@ mkUnsignedExec
     -- ^ public metadata
   -> [Signer]
     -- ^ payload signers
+  -> [Verifier]
+    -- ^ payload verifiers
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
   -> Maybe Text
     -- ^ optional nonce
   -> IO (Command Text)
-mkUnsignedExec code mdata pubMeta kps nid ridm = do
+mkUnsignedExec code mdata pubMeta kps ves nid ridm = do
   rid <- mkNonce ridm
   cmd <- mkUnsignedCommand
          kps
+         ves
          pubMeta
          rid
          nid
@@ -617,9 +648,10 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pactId = toPactId apiPactId
   pubMeta <- mkPubMeta _ylPublicMeta
+  let verifiers = (\ApiVerifier {..} -> Verifier (VerifierName _avName) _avCaps) <$> fromMaybe [] _ylVerifiers
   cmd <- withKeypairsOrSigner unsignedReq ar
-    (\ks -> mkCont pactId step rollback cdata pubMeta ks _ylNonce _ylProof _ylNetworkId)
-    (\ss -> mkUnsignedCont pactId step rollback cdata pubMeta ss _ylNonce _ylProof _ylNetworkId)
+    (\ks -> mkCont pactId step rollback cdata pubMeta ks verifiers _ylNonce _ylProof _ylNetworkId)
+    (\ss -> mkUnsignedCont pactId step rollback cdata pubMeta ss verifiers _ylNonce _ylProof _ylNetworkId)
   return ((ar,"",cdata,pubMeta), cmd)
 
 -- | Construct a Cont request message
@@ -637,6 +669,8 @@ mkCont
     -- ^ command public metadata
   -> [Ed25519KeyPairCaps]
     -- ^ signing keypairs
+  -> [Verifier]
+    -- ^ signing keypairs
   -> Maybe Text
     -- ^ optional nonce
   -> Maybe ContProof
@@ -644,10 +678,11 @@ mkCont
   -> Maybe NetworkId
     -- ^ optional network id
   -> IO (Command Text)
-mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
+mkCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
   rid <- mkNonce ridm
   cmd <- mkCommand
          kps
+         ves
          pubMeta
          rid
          nid
@@ -670,6 +705,8 @@ mkUnsignedCont
     -- ^ command public metadata
   -> [Signer]
     -- ^ payload signers
+  -> [Verifier]
+    -- ^ verifiers
   -> Maybe Text
     -- ^ optional nonce
   -> Maybe ContProof
@@ -677,10 +714,11 @@ mkUnsignedCont
   -> Maybe NetworkId
     -- ^ optional network id
   -> IO (Command Text)
-mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
+mkUnsignedCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
   rid <- mkNonce ridm
   cmd <- mkUnsignedCommand
          kps
+         ves
          pubMeta
          (pack $ show rid)
          nid

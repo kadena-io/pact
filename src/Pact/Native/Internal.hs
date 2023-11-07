@@ -213,7 +213,7 @@ enforceVerifierDef = defRNative
   enforceVerifier :: RNativeFun e
   enforceVerifier i as = case as of
     [TLitString verifierName] -> do
-      views eeMsgVerifiers (Map.lookup (ExternalVerifierName verifierName)) >>= \case
+      views eeMsgVerifiers (Map.lookup (VerifierName verifierName)) >>= \case
         Just verifierCaps -> do
           verifierInScope <- verifierIsInScope verifierCaps
           if verifierInScope then return (toTerm True)
