@@ -1,8 +1,11 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE InstanceSigs #-}
 -- |
 -- Module      :  Pact.Types.Keyset
 -- Copyright   :  (C) 2022 Stuart Popejoy
@@ -23,12 +26,15 @@
 --
 
 module Pact.Types.KeySet
-  ( PublicKeyText(..)
+  ( PublicKeyScheme(..)
+  , PublicKeyText(..)
+  , KeysetPublicKey(..)
   , KeySet(..)
   , KeySetName(..)
   , mkKeySet
-  , KeyFormat
-  , ed25519Hex
+  , mkKeySetText
+  , ed25519HexFormat
+  , webauthnFormat
   , isHexDigitLower
   , keyFormats
   , validateKeyFormat
@@ -45,8 +51,12 @@ import Control.Applicative ( Alternative((<|>)) )
 import Control.DeepSeq
 import Control.Monad
 import Control.Lens hiding ((.=))
+
+import qualified Codec.Serialise as Serialise
+
 import Data.Aeson
 import Data.Attoparsec.Text (parseOnly, takeText, Parser)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Char
 import Data.Default
 import Data.Foldable
@@ -60,6 +70,9 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import GHC.Generics
 import Test.QuickCheck
+
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
 
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
@@ -75,9 +88,37 @@ import qualified Pact.JSON.Encode as J
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
+-- | Supported Keyset public key schema
+data PublicKeyScheme
+  = ED25519
+  | WebauthN
+  deriving (Eq, Generic, Enum, Bounded, Show, Ord)
+
+instance Arbitrary PublicKeyScheme where
+  arbitrary = arbitraryBoundedEnum
+
+instance J.Encode PublicKeyScheme where
+  build = \case
+    ED25519 -> J.string "ed25519"
+    WebauthN -> J.string "webauthn"
+
+instance Pretty PublicKeyScheme where
+  pretty = \case
+    ED25519 -> "ed25519"
+    WebauthN -> "webauthn"
+
+instance SizeOf PublicKeyScheme
+instance Serialize PublicKeyScheme
+instance NFData PublicKeyScheme
+instance FromJSON PublicKeyScheme where
+  parseJSON = withText "PublicKeyScheme" go
+    where
+      go t
+        | t == "ed25519" = pure ED25519
+        | t == "webauthn" = pure WebauthN
+        | otherwise = fail "Unsupported Public Key schema"
+
 -- | Public key in UTF8 encoded textual format
---
--- TODO: what exactly is the format?
 --
 newtype PublicKeyText = PublicKeyText { _pubKey :: T.Text }
   deriving (Eq,Ord,Generic,IsString,AsString,Show)
@@ -100,12 +141,51 @@ instance J.Encode PublicKeyText where
 instance Pretty PublicKeyText where
   pretty (PublicKeyText s) = pretty s
 
+-- | Define the Public Key data for public keys in a keyset
+--
+-- TODO/NOTE: Ideally, we want the json structure to look something like
+-- publicKey: { 'public:..., 'scheme:... }
+data KeysetPublicKey = KeysetPublicKey
+    { _pkPublicKey :: PublicKeyText
+    , _pkCryptoScheme :: PublicKeyScheme
+    }
+    deriving (Eq, Generic, Show, Ord)
+
+instance SizeOf KeysetPublicKey where
+  sizeOf ver (KeysetPublicKey pktxts pkschemes) =
+    sizeOf ver pktxts + sizeOf ver pkschemes
+
+instance Arbitrary KeysetPublicKey where
+  arbitrary = KeysetPublicKey
+    <$> arbitrary
+    <*> arbitrary
+
+-- TODO: j.encode, pretty, fromjson
+instance Serialize KeysetPublicKey
+instance NFData KeysetPublicKey
+instance FromJSON KeysetPublicKey where
+  parseJSON = withObject "KeysetPublicKey" $ \o -> KeysetPublicKey
+    <$> o .: "public"
+    <*> o .: "scheme"
+
+instance J.Encode KeysetPublicKey where
+  build (KeysetPublicKey ks sch) = J.object
+    [ "public" J..= ks
+    , "scheme" J..= sch
+    ]
+
+instance Pretty KeysetPublicKey where
+  pretty (KeysetPublicKey k sch) = commaBraces
+    [ "public: " <> pretty k
+    , "scheme: " <> pretty sch
+    ]
+
 -- -------------------------------------------------------------------------- --
 -- KeySet
 
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet
-  { _ksKeys :: !(Set PublicKeyText)
+  { _ksKeys :: !(Set KeysetPublicKey)
   , _ksPredFun :: !Name
   } deriving (Eq,Generic,Show,Ord)
 makeLenses ''KeySet
@@ -238,17 +318,40 @@ parseQualifiedKeySetName
   = parseOnly qualifiedKeysetNameParser
 
 -- | Smart constructor for a simple list and barename predicate.
-mkKeySet :: [PublicKeyText] -> Text -> KeySet
+mkKeySet :: [KeysetPublicKey] -> Text -> KeySet
 mkKeySet pks p = KeySet
   (S.fromList pks)
   (Name $ BareName p def)
 
--- | A predicate for public key format validation.
-type KeyFormat = PublicKeyText -> Bool
+-- | Append the default keyset public key format with default ed25519 schema
+-- and build a keyset
+--
+mkKeySetText :: [PublicKeyText] -> Text -> KeySet
+mkKeySetText = mkKeySet . fmap (`KeysetPublicKey` ED25519)
 
 -- | Current "Kadena" ED-25519 key format: 64-length hex.
-ed25519Hex :: KeyFormat
-ed25519Hex (PublicKeyText k) = T.length k == 64 && T.all isHexDigitLower k
+ed25519HexFormat :: KeysetPublicKey -> Bool
+ed25519HexFormat (KeysetPublicKey (PublicKeyText k) sch) = sch == ED25519
+  && T.length k == 64
+  && T.all isHexDigitLower k
+
+webauthnFormat :: KeysetPublicKey -> Bool
+webauthnFormat (KeysetPublicKey k sch) = case sch of
+  WebauthN -> case Serialise.deserialiseOrFail @WA.CosePublicKey kbs of
+    Right pk ->
+      let
+        WA.PublicKeyWithSignAlg _ signAlg = pk
+      in
+        WA.fromCoseSignAlg signAlg `elem`
+          [-7 :: Int -- ECDSA with SHA-256, the most common webauthn signing algorithm.
+          ,-8        -- EdDSA, which is also supported by YubiKey.
+          ]
+    Left{} -> False
+  _ -> False
+  where
+    kbs = LBS.fromStrict
+      $ T.encodeUtf8
+      $ _pubKey k
 
 -- | Lower-case hex numbers.
 isHexDigitLower :: Char -> Bool
@@ -257,15 +360,15 @@ isHexDigitLower c =
   isDigit c || (fromIntegral (ord c - ord 'a')::Word) <= 5
 
 -- | Supported key formats.
-keyFormats :: [KeyFormat]
-keyFormats = [ed25519Hex]
+keyFormats :: [KeysetPublicKey -> Bool]
+keyFormats = [ed25519HexFormat, webauthnFormat]
 
 -- | Validate 'PublicKeyText' against 'keyFormats'.
-validateKeyFormat :: PublicKeyText -> Bool
+validateKeyFormat :: KeysetPublicKey -> Bool
 validateKeyFormat k = any ($ k) keyFormats
 
 -- | Enforce valid 'KeySet' keys, evaluating error action on failure.
-enforceKeyFormats :: Monad m => (PublicKeyText -> m ()) -> KeySet -> m ()
+enforceKeyFormats :: Monad m => (KeysetPublicKey -> m ()) -> KeySet -> m ()
 enforceKeyFormats err (KeySet ks _p) = traverse_ go ks
   where
     go k = unless (validateKeyFormat k) $ err k

@@ -17,6 +17,7 @@ import GHC.Int(Int(..))
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.PactValue
+import Pact.Types.KeySet
 import Pact.Types.Term
 
 class ToPactStringGas ty where
@@ -54,7 +55,7 @@ instance ToPactStringGas PactId where
 
 instance ToPactStringGas (Guard PactValue) where
   estimate (GPact (PactGuard (PactId t1) t2)) = estimate t1 <> estimate t2
-  estimate (GKeySet (KeySet ks predFun)) = estimateList (_pubKey <$> toList ks) <> estimate predFun
+  estimate (GKeySet (KeySet ks predFun)) = estimateList (_pubKey . _pkPublicKey <$> toList ks) <> estimate predFun
   estimate (GKeySetRef (KeySetName txt mn)) = estimate txt <> estimate mn
   estimate (GModule (ModuleGuard mn t)) = estimate mn <> estimate t
   estimate (GUser (UserGuard name args)) = estimate name <> estimateList args
