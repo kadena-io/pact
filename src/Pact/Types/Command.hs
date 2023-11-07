@@ -143,7 +143,7 @@ mkCommand
 mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
   where
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
-    payload = Payload rpc nonce meta (keyPairsToSigners creds) (Just vers) nid
+    payload = Payload rpc nonce meta (keyPairsToSigners creds) (if null vers then Nothing else Just vers) nid
 
 keyPairToSigner :: Ed25519KeyPair -> [MsgCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
@@ -175,7 +175,7 @@ mkUnsignedCommand
   -> IO (Command ByteString)
 mkUnsignedCommand signers vers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = J.encodeStrict payload
-        payload = Payload rpc nonce meta signers (Just vers) nid
+        payload = Payload rpc nonce meta signers (if null vers then Nothing else Just vers) nid
 
 signHash :: TypedHash h -> Ed25519KeyPair -> IO UserSig
 signHash hsh (pub,priv) = UserSig . toB16Text <$> sign pub priv (toUntypedHash hsh)
