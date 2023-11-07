@@ -69,6 +69,7 @@ import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
+import Pact.Types.KeySet (KeysetPublicKey(KeysetPublicKey, _pkPublicKey, _pkCryptoScheme))
 import Pact.Types.Command
 import Pact.Types.ExpParser
 import Pact.Types.Logger
@@ -215,7 +216,11 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
-            pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
+            pk :: KeysetPublicKey
+            pk = KeysetPublicKey
+              { _pkPublicKey = maybe (PublicKeyText _siPubKey) PublicKeyText _siAddress
+              , _pkCryptoScheme =  fromMaybe ED25519 _siScheme
+              }
 
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore

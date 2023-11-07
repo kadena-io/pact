@@ -26,8 +26,7 @@
 --
 
 module Pact.Types.KeySet
-  ( PublicKeyScheme(..)
-  , PublicKeyText(..)
+  ( PublicKeyText(..)
   , KeysetPublicKey(..)
   , KeySet(..)
   , KeySetName(..)
@@ -76,6 +75,7 @@ import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
 
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
+import Pact.Types.Scheme (PPKScheme(ED25519,WebAuthn))
 import Pact.Types.SizeOf
 import Pact.Types.Util
 import Pact.Types.Parser (style)
@@ -88,35 +88,6 @@ import qualified Pact.JSON.Encode as J
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
--- | Supported Keyset public key schema
-data PublicKeyScheme
-  = ED25519
-  | WebauthN
-  deriving (Eq, Generic, Enum, Bounded, Show, Ord)
-
-instance Arbitrary PublicKeyScheme where
-  arbitrary = arbitraryBoundedEnum
-
-instance J.Encode PublicKeyScheme where
-  build = \case
-    ED25519 -> J.string "ed25519"
-    WebauthN -> J.string "webauthn"
-
-instance Pretty PublicKeyScheme where
-  pretty = \case
-    ED25519 -> "ed25519"
-    WebauthN -> "webauthn"
-
-instance SizeOf PublicKeyScheme
-instance Serialize PublicKeyScheme
-instance NFData PublicKeyScheme
-instance FromJSON PublicKeyScheme where
-  parseJSON = withText "PublicKeyScheme" go
-    where
-      go t
-        | t == "ed25519" = pure ED25519
-        | t == "webauthn" = pure WebauthN
-        | otherwise = fail "Unsupported Public Key schema"
 
 -- | Public key in UTF8 encoded textual format
 --
@@ -147,7 +118,7 @@ instance Pretty PublicKeyText where
 -- publicKey: { 'public:..., 'scheme:... }
 data KeysetPublicKey = KeysetPublicKey
     { _pkPublicKey :: PublicKeyText
-    , _pkCryptoScheme :: PublicKeyScheme
+    , _pkCryptoScheme :: PPKScheme
     }
     deriving (Eq, Generic, Show, Ord)
 
@@ -337,7 +308,7 @@ ed25519HexFormat (KeysetPublicKey (PublicKeyText k) sch) = sch == ED25519
 
 webauthnFormat :: KeysetPublicKey -> Bool
 webauthnFormat (KeysetPublicKey k sch) = case sch of
-  WebauthN -> case Serialise.deserialiseOrFail @WA.CosePublicKey kbs of
+  WebAuthn -> case Serialise.deserialiseOrFail @WA.CosePublicKey kbs of
     Right pk ->
       let
         WA.PublicKeyWithSignAlg _ signAlg = pk

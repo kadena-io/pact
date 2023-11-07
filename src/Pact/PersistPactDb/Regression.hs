@@ -23,6 +23,8 @@ import Pact.Types.Runtime
 import Pact.Persist.Pure (initPureDb,persister,PureDb)
 import Data.Aeson
 import Pact.Types.Logger
+import Pact.Types.KeySet (KeysetPublicKey(KeysetPublicKey))
+import Pact.Types.Scheme (PPKScheme(ED25519))
 import Pact.Types.PactValue
 import Pact.Repl
 import Pact.Repl.Types
@@ -79,7 +81,7 @@ runRegression p = do
   let row' = RowData RDV1 $ ObjectMap $ fmap pactValueToRowData $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
   _writeRow pactdb Update usert "key1" row' v
   assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
-  let ks = mkKeySet [PublicKeyText "skdjhfskj"] "predfun"
+  let ks = mkKeySet [KeysetPublicKey (PublicKeyText "skdjhfskj") ED25519] "predfun"
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
   (modName,modRef,mod') <- loadModule

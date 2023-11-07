@@ -24,8 +24,9 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Pact.Types.Hash
+import Pact.Types.Scheme (PPKScheme(ED25519))
 import Pact.Types.Info
-import Pact.Types.KeySet (keysetNameParser, KeysetPublicKey(..), PublicKeyScheme(..))
+import Pact.Types.KeySet (keysetNameParser, KeysetPublicKey(..))
 import Pact.Types.Names
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.Term
