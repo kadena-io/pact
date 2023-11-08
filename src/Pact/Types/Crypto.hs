@@ -51,6 +51,7 @@ import Prelude
 import GHC.Generics
 
 import qualified Codec.Serialise as Serialise
+import Control.Applicative ((<|>))
 import Control.Monad (unless)
 import qualified Crypto.Hash as H
 import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
@@ -96,46 +97,68 @@ import qualified Test.QuickCheck.Gen as Gen
 
 data UserSig = ED25519Sig T.Text
                -- ^ The hex-encoding of an Ed25519 signature bytestring.
-             | WebAuthnSig WebAuthnSignature
+             | WebAuthnSig WebAuthnSignature WebAuthnSigProvenance
   deriving (Eq, Ord, Show, Generic)
+
+-- | A type for tracking whether a WebAuthn signature was parsed
+--   from a string, or an JSON object. This is tracked so that
+--   we can fork on the allowed provenance. (Before Pact 4.TODO,
+--   only stringified WebAuthn signatures were allowed).
+data WebAuthnSigProvenance
+  = WebAuthnStringified
+  | WebAuthnObject
+  deriving (Eq, Ord, Show, Generic)
+
+instance NFData WebAuthnSigProvenance
+instance Serialize WebAuthnSigProvenance
+instance Arbitrary WebAuthnSigProvenance where
+  arbitrary = oneof [pure WebAuthnStringified, pure WebAuthnObject]
 
 instance NFData UserSig
 instance Serialize UserSig
 
 -- TODO: fix
-instance J.Encode UserSig where
-  build (ED25519Sig s) = J.object
-    [ "type" J..= ("ed25519" :: T.Text)
-    , "sig"  J..= s
-    ]
+instance J.Encode (UserSig) where
+  build (ED25519Sig s) = J.text s
   build (WebAuthnSig (WebAuthnSignature
                       { authenticatorData
                       , signature
-                      , clientDataJSON })) = J.object
-    [ "type" J..= ("webauthn" :: T.Text)
-    , "authenticatorData" J..= authenticatorData
+                      , clientDataJSON }) WebAuthnObject) = J.object
+    [ "authenticatorData" J..= authenticatorData
     , "signature" J..= signature
     , "clientDataJSON" J..= clientDataJSON
     ]
+  build (WebAuthnSig sig WebAuthnStringified) = J.text
+    (T.decodeUtf8 $ BSL.toStrict $ J.encode sig)
   {-# INLINE build #-}
 
 instance FromJSON UserSig where
-  parseJSON = withObject "UserSig" $ \o -> do
-    type_ :: T.Text <- o .: "type"
-    case type_ of
-      "ed25519" ->
-        fmap ED25519Sig $ o .: "sig"
-      "webauthn" -> do
-        authenticatorData <- o .: "authenticatorData"
-        signature <- o .: "signature"
-        clientDataJSON <- o .: "clientDataJSON"
-        pure $ WebAuthnSig $ WebAuthnSignature { authenticatorData, signature, clientDataJSON }
-      _ -> fail "'type' must be 'ed25519' or 'webauthn'"
+  parseJSON x =
+    parseWebAuthnObject x <|>
+    parseWebAuthnStringified x <|>
+    parseEd25519 x
+    where
+      parseWebAuthnStringified = withText "UserSig" $ \t ->
+        case A.decode (BSL.fromStrict $ T.encodeUtf8 t) of
+          Nothing -> fail "Could not decode signature"
+          Just webauthnSig -> return $ WebAuthnSig webauthnSig WebAuthnStringified
+      parseEd25519 = withText "UserSig" $ \t -> return $ ED25519Sig t
+      parseWebAuthnObject = withObject "UserSig" $ \o -> do
+        type_ :: T.Text <- o .: "type"
+        case type_ of
+          "ed25519" ->
+            fmap ED25519Sig $ o .: "sig"
+          "webauthn" -> do
+            authenticatorData <- o .: "authenticatorData"
+            signature <- o .: "signature"
+            clientDataJSON <- o .: "clientDataJSON"
+            pure $ WebAuthnSig WebAuthnSignature { authenticatorData, signature, clientDataJSON } WebAuthnObject
+          _ -> fail "'type' must be 'ed25519' or 'webauthn'"
 
 instance Arbitrary UserSig where
   arbitrary = Gen.oneof
     [ ED25519Sig <$> arbitrary
-    , fmap WebAuthnSig (WebAuthnSignature <$> arbitrary <*> arbitrary <*> arbitrary)
+    , WebAuthnSig <$> (WebAuthnSignature  <$> arbitrary <*> arbitrary <*> arbitrary) <*> arbitrary
     ]
 
 --------- INTERNAL SCHEME CLASS ---------
@@ -487,6 +510,13 @@ instance A.FromJSON WebAuthnSignature where
     authenticatorData <- o .: "authenticatorData"
     signature <- o .: "signature"
     pure $ WebAuthnSignature {..}
+
+instance J.Encode WebAuthnSignature where
+  build (WebAuthnSignature { clientDataJSON, authenticatorData, signature }) = J.object
+    [ "authenticatorData" J..=  authenticatorData
+    , "clientDataJSON" J..= clientDataJSON
+    , "signature" J..= signature
+    ]
 
 -- | This type represents a challenge that was used during
 -- a WebAuthn "assertion" flow. For signing Pact payloads, this

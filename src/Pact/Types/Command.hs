@@ -222,7 +222,7 @@ verifyUserSig msg sig Signer{..} =
           verify (toScheme $ fromMaybe defPPKScheme _siScheme)
                 (toUntypedHash msg) (PubBS p) (undefined)
 
-    (Right p, WebAuthnSig _edSig, addr) ->
+    (Right p, WebAuthnSig _edSig _, addr) ->
       (isValidAddr addr p) &&
       verify (toScheme $ fromMaybe defPPKScheme _siScheme)
              (toUntypedHash msg) (PubBS p) (sigT)
