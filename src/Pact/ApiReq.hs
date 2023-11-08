@@ -360,11 +360,11 @@ returnSigDataOrCommand  outputLocal sd
     when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
     pure ()
     where
-    toVerifPair (PublicKeyHex pktext, Just UserSig{..}) m = do
+    toVerifPair (PublicKeyHex pktext, Just (ED25519Sig _usSig) ) m = do
       pk <- PubBS <$> parseB16TextOnly pktext
       sig <- SigBS <$> parseB16TextOnly _usSig
       pure $ (pk, sig):m
-    toVerifPair (_, Nothing) m = pure m
+    toVerifPair (_, _) m = pure m
 
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
 returnCommandIfDone outputLocal sd =
@@ -474,8 +474,8 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       fmap (encodeYaml . J.Object) $ forM kps $ \kp -> do
-            sig <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
-            return (asString (B16JsonBytes (getPublic kp)), _usSig sig)
+            ED25519Sig sig  <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
+            return (asString (B16JsonBytes (getPublic kp)), sig)
 
 withKeypairsOrSigner
   :: Bool

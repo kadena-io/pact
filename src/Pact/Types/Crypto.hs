@@ -42,6 +42,7 @@ module Pact.Types.Crypto
   , Scheme(..)
   , ConvertBS(..)
   , Ed25519KeyPair
+  , UserSig(..)
   , WebAuthnSignature(..)
   ) where
 
@@ -68,6 +69,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Data.Aeson                        as A
+import Control.DeepSeq (NFData)
 import Data.Hashable
 import Data.Serialize                    as SZ
 import qualified Data.Serialize          as S
@@ -89,6 +91,52 @@ import qualified Crypto.Ed25519.Pure as Ed25519
 import qualified Pact.JSON.Encode as J
 
 import Test.QuickCheck
+import qualified Test.QuickCheck.Gen as Gen
+
+
+data UserSig = ED25519Sig T.Text
+               -- ^ The hex-encoding of an Ed25519 signature bytestring.
+             | WebAuthnSig WebAuthnSignature
+  deriving (Eq, Ord, Show, Generic)
+
+instance NFData UserSig
+instance Serialize UserSig
+
+-- TODO: fix
+instance J.Encode UserSig where
+  build (ED25519Sig s) = J.object
+    [ "type" J..= ("ed25519" :: T.Text)
+    , "sig"  J..= s
+    ]
+  build (WebAuthnSig (WebAuthnSignature
+                      { authenticatorData
+                      , signature
+                      , clientDataJSON })) = J.object
+    [ "type" J..= ("webauthn" :: T.Text)
+    , "authenticatorData" J..= authenticatorData
+    , "signature" J..= signature
+    , "clientDataJSON" J..= clientDataJSON
+    ]
+  {-# INLINE build #-}
+
+instance FromJSON UserSig where
+  parseJSON = withObject "UserSig" $ \o -> do
+    type_ :: T.Text <- o .: "type"
+    case type_ of
+      "ed25519" ->
+        fmap ED25519Sig $ o .: "sig"
+      "webauthn" -> do
+        authenticatorData <- o .: "authenticatorData"
+        signature <- o .: "signature"
+        clientDataJSON <- o .: "clientDataJSON"
+        pure $ WebAuthnSig $ WebAuthnSignature { authenticatorData, signature, clientDataJSON }
+      _ -> fail "'type' must be 'ed25519' or 'webauthn'"
+
+instance Arbitrary UserSig where
+  arbitrary = Gen.oneof
+    [ ED25519Sig <$> arbitrary
+    , fmap WebAuthnSig (WebAuthnSignature <$> arbitrary <*> arbitrary <*> arbitrary)
+    ]
 
 --------- INTERNAL SCHEME CLASS ---------
 
@@ -429,6 +477,9 @@ data WebAuthnSignature = WebAuthnSignature
   , authenticatorData :: T.Text
   , signature :: T.Text
   } deriving (Show, Generic, Eq, Ord)
+
+instance NFData WebAuthnSignature
+instance Serialize WebAuthnSignature
 
 instance A.FromJSON WebAuthnSignature where
   parseJSON = A.withObject "WebAuthnSignature" $ \o -> do

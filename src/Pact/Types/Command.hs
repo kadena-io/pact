@@ -43,7 +43,7 @@ module Pact.Types.Command
   , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
-  , UserSig(..),usSig
+  , UserSig(..)
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
@@ -73,7 +73,6 @@ import Test.QuickCheck
 import Pact.Parse (parsePact)
 import Pact.Types.Capability
 import Pact.Types.ChainId
-import Pact.Types.Crypto (WebAuthnSignature)
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
@@ -214,14 +213,24 @@ hasInvalidSigs hsh sigs signers
 verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
 verifyUserSig msg sig Signer{..} =
   case (pubT, sig, addrT) of
+
     (Right p, ED25519Sig edSig, addr) ->
+      case parseB16TextOnly edSig of
+        Left {} -> error "TODO"
+        Right _sigT ->
+          (isValidAddr addr p) &&
+          verify (toScheme $ fromMaybe defPPKScheme _siScheme)
+                (toUntypedHash msg) (PubBS p) (undefined)
+
+    (Right p, WebAuthnSig _edSig, addr) ->
       (isValidAddr addr p) &&
       verify (toScheme $ fromMaybe defPPKScheme _siScheme)
              (toUntypedHash msg) (PubBS p) (sigT)
+
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
-        sigT = case parseB16TextOnly edSig of
-          Left _ -> SigBS (Text.encodeUtf8 _usSig)
+        sigT = case parseB16TextOnly undefined of
+          Left _ -> SigBS (Text.encodeUtf8 undefined)
           Right bs -> SigBS bs
         addrT = parseB16TextOnly <$> _siAddress
         isValidAddr addrM pubBS = case addrM of
@@ -301,25 +310,6 @@ instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
     <*> arbitrary
     <*> scale (min 10) arbitrary
     <*> arbitrary
-
-data UserSig = ED25519Sig Text
-             | WebAuthnSig WebAuthnSignature
-  deriving (Eq, Ord, Show, Generic)
-
-instance NFData UserSig
-instance Serialize UserSig
-
--- TODO: fix
-instance J.Encode UserSig where
-  build s = J.object [ "sig" J..= _usSig s ]
-  {-# INLINE build #-}
-
-instance FromJSON UserSig where
-  parseJSON = withObject "UserSig" $ \o -> do
-    UserSig <$> o .: "sig"
-
-instance Arbitrary UserSig where
-  arbitrary = UserSig <$> arbitrary
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue

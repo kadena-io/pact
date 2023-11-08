@@ -79,6 +79,8 @@ data SigData a = SigData
   , _sigDataCmd :: !(Maybe a)
   } deriving (Eq,Show,Generic)
 
+-- TODO: This is wrong: It will only parse ED25519 signatures, and
+-- it looks for a format that we don't write.
 instance FromJSON a => FromJSON (SigData a) where
   parseJSON = withObject "SigData" $ \o -> do
     h <- o .: "hash"
@@ -87,12 +89,13 @@ instance FromJSON a => FromJSON (SigData a) where
     pure $ SigData h s c
     where
       f v = flip (withObject "SigData Pairs") v $ \_ ->
-        fmap (bimap PublicKeyHex (fmap UserSig)) . LHM.sortByKey . HM.toList <$> parseJSON v
+        fmap (bimap PublicKeyHex (fmap ED25519Sig)) . LHM.sortByKey . HM.toList <$> parseJSON v
 
+-- TODO: THIS IS WRONG.
 instance J.Encode a => J.Encode (SigData a) where
   build o = J.object
     [ "hash" J..= _sigDataHash o
-    , "sigs" J..= LHM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
+    -- , "sigs" J..= LHM.fromList (bimap unPublicKeyHex (fmap _usSig) <$> _sigDataSigs o)
       -- FIXME: this instance seems to violate the comment on the respective
       -- constructor field. Is that fine? Is it required for backward compat?
       -- This instance also does not roundtrip.
