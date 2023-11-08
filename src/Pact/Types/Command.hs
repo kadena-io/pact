@@ -73,6 +73,7 @@ import Test.QuickCheck
 import Pact.Parse (parsePact)
 import Pact.Types.Capability
 import Pact.Types.ChainId
+import Pact.Types.Crypto (WebAuthnSignature)
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
@@ -175,7 +176,7 @@ mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
         payload = Payload rpc nonce meta signers nid
 
 signHash :: TypedHash h -> Ed25519KeyPair -> IO UserSig
-signHash hsh (pub,priv) = UserSig . toB16Text <$> sign pub priv (toUntypedHash hsh)
+signHash hsh (pub,priv) = ED25519Sig . toB16Text <$> sign pub priv (toUntypedHash hsh)
 
 -- VALIDATING TRANSACTIONS
 
@@ -211,15 +212,15 @@ hasInvalidSigs hsh sigs signers
 
 
 verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
-verifyUserSig msg UserSig{..} Signer{..} =
-  case (pubT, sigT, addrT) of
-    (Right p, sig, addr) ->
+verifyUserSig msg sig Signer{..} =
+  case (pubT, sig, addrT) of
+    (Right p, ED25519Sig edSig, addr) ->
       (isValidAddr addr p) &&
       verify (toScheme $ fromMaybe defPPKScheme _siScheme)
-             (toUntypedHash msg) (PubBS p) sig
+             (toUntypedHash msg) (PubBS p) (sigT)
     _ -> False
   where pubT = parseB16TextOnly _siPubKey
-        sigT = case parseB16TextOnly _usSig of
+        sigT = case parseB16TextOnly edSig of
           Left _ -> SigBS (Text.encodeUtf8 _usSig)
           Right bs -> SigBS bs
         addrT = parseB16TextOnly <$> _siAddress
@@ -301,12 +302,14 @@ instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
     <*> scale (min 10) arbitrary
     <*> arbitrary
 
-newtype UserSig = UserSig { _usSig :: Text }
+data UserSig = ED25519Sig Text
+             | WebAuthnSig WebAuthnSignature
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData UserSig
 instance Serialize UserSig
 
+-- TODO: fix
 instance J.Encode UserSig where
   build s = J.object [ "sig" J..= _usSig s ]
   {-# INLINE build #-}

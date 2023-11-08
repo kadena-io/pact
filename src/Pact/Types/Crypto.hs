@@ -42,6 +42,7 @@ module Pact.Types.Crypto
   , Scheme(..)
   , ConvertBS(..)
   , Ed25519KeyPair
+  , WebAuthnSignature(..)
   ) where
 
 
@@ -96,6 +97,7 @@ class ConvertBS a where
   fromBS :: ByteString -> Either String a
 
 
+-- TODO: Replace SignatureBS argument with Command.UserSig.
 class Scheme a where
   _valid :: a -> Hash -> PublicKeyBS -> SignatureBS -> Bool
   -- ^ Validate a signature given a public key and hash
@@ -426,7 +428,7 @@ data WebAuthnSignature = WebAuthnSignature
   { clientDataJSON :: T.Text
   , authenticatorData :: T.Text
   , signature :: T.Text
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Eq, Ord)
 
 instance A.FromJSON WebAuthnSignature where
   parseJSON = A.withObject "WebAuthnSignature" $ \o -> do
