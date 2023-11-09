@@ -44,7 +44,6 @@ import Pact.Persist.MockPersist
 import Pact.Types.Command
 import Pact.Types.Crypto
 import Pact.Types.Lang
-import Pact.Types.KeySet (KeysetPublicKey(KeysetPublicKey))
 import Pact.Types.Logger
 import Pact.Types.PactValue
 import Pact.Types.RowData
@@ -212,12 +211,12 @@ benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
   \p -> benchNFIO (fst p) $ execPure pt dbEnv p
 
 benchKeySet :: KeySet
-benchKeySet = mkKeySet [KeysetPublicKey (PublicKeyText "benchadmin") ED25519] ">"
+benchKeySet = mkKeySet [PublicKeyText "benchadmin"] ">"
 
 acctRow :: RowData
 acctRow = RowData RDV1 $ fmap pactValueToRowData $ ObjectMap $ M.fromList
   [("balance",PLiteral (LDecimal 100.0))
-  ,("guard",PGuard $ GKeySet (mkKeySet [KeysetPublicKey (PublicKeyText pk) ED25519] "keys-all"))
+  ,("guard",PGuard $ GKeySet (mkKeySet [PublicKeyText pk] "keys-all"))
   ]
 
 benchRead :: PersistModuleData -> Domain k v -> k -> Method () (Maybe v)

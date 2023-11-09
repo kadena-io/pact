@@ -123,7 +123,7 @@ enforceKeySet i ksn KeySet{..} = do
   where
     matchKey k _ = k `elem` _ksKeys
     failed = failTx i $ "Keyset failure " <> parens (pretty _ksPredFun) <> ": " <>
-      maybe (pretty $ map (elide . asString . _pkPublicKey) $ toList _ksKeys) pretty ksn
+      maybe (pretty $ map (elide . asString) $ toList _ksKeys) pretty ksn
     atLeast t m = m >= t
     elide pk | T.length pk < 8 = pk
              | otherwise = T.take 8 pk <> "..."
@@ -173,7 +173,12 @@ enforceGuard i g = case g of
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
 getSizeOfVersion :: Eval e SizeOfVersion
-getSizeOfVersion = ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
+getSizeOfVersion = do
+  pact410 <- isExecutionFlagSet FlagDisablePact410
+  pact45 <- isExecutionFlagSet FlagDisablePact45
+  if pact45 then return SizeOfV0
+  else if pact410 then return SizeOfV1
+  else return SizeOfV2
 {-# INLINABLE getSizeOfVersion #-}
 
 -- | Hoist Name back to ref

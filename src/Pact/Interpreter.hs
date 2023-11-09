@@ -37,7 +37,7 @@ module Pact.Interpreter
   , versionedNativesRefStore
   , ExecutionConfig (..)
   , pact40Natives
-  , pact420Natives
+  , pact42Natives
   , pact43Natives
   , pact431Natives
   , pact46Natives
@@ -69,7 +69,6 @@ import Pact.Native (nativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
-import Pact.Types.KeySet (KeysetPublicKey(KeysetPublicKey, _pkPublicKey, _pkCryptoScheme))
 import Pact.Types.Command
 import Pact.Types.ExpParser
 import Pact.Types.Logger
@@ -216,11 +215,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
       where
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
-            pk :: KeysetPublicKey
-            pk = KeysetPublicKey
-              { _pkPublicKey = maybe (PublicKeyText _siPubKey) PublicKeyText _siAddress
-              , _pkCryptoScheme =  fromMaybe ED25519 _siScheme
-              }
+            pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
 
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
@@ -232,8 +227,8 @@ disablePact40Natives :: ExecutionConfig -> Endo RefStore
 disablePact40Natives =
   disablePactNatives pact40Natives FlagDisablePact40
 
-disablePact420Natives :: ExecutionConfig -> Endo RefStore
-disablePact420Natives = disablePactNatives pact420Natives FlagDisablePact420
+disablePact42Natives :: ExecutionConfig -> Endo RefStore
+disablePact42Natives = disablePactNatives pact42Natives FlagDisablePact42
 
 disablePact43Natives :: ExecutionConfig -> Endo RefStore
 disablePact43Natives = disablePactNatives pact43Natives FlagDisablePact43
@@ -250,8 +245,8 @@ disablePact47Natives = disablePactNatives pact47Natives FlagDisablePact47
 pact40Natives :: [Text]
 pact40Natives = ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
 
-pact420Natives :: [Text]
-pact420Natives = ["zip", "fold-db"]
+pact42Natives :: [Text]
+pact42Natives = ["zip", "fold-db"]
 
 pact43Natives :: [Text]
 pact43Natives = ["create-principal", "validate-principal", "continue"]
@@ -273,7 +268,7 @@ versionedNativesRefStore ec = versionNatives initRefStore
   where
   versionNatives = appEndo $ mconcat
     [ disablePact40Natives ec
-    , disablePact420Natives ec
+    , disablePact42Natives ec
     , disablePact43Natives ec
     , disablePact431Natives ec
     , disablePact46Natives ec

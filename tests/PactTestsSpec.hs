@@ -210,7 +210,7 @@ versionedNativesTest flag natives = do
 versionedNativesTests :: SpecWith ()
 versionedNativesTests = describe "versionedNativesTests" $ do
   versionedNativesTest FlagDisablePact40 pact40Natives
-  versionedNativesTest FlagDisablePact420 pact420Natives
+  versionedNativesTest FlagDisablePact42 pact42Natives
   versionedNativesTest FlagDisablePact43 pact43Natives
   versionedNativesTest FlagDisablePact431 pact431Natives
   versionedNativesTest FlagDisablePact46 pact46Natives

@@ -40,7 +40,6 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
-import Pact.Types.KeySet (KeysetPublicKey)
 import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
@@ -265,8 +264,8 @@ revokeAllCapabilities = evalCapabilities .= def
 
 -- | Check signature caps against current granted set.
 checkSigCaps
-  :: M.Map KeysetPublicKey (S.Set UserCapability)
-     -> Eval e (M.Map KeysetPublicKey (S.Set UserCapability))
+  :: M.Map PublicKeyText (S.Set UserCapability)
+     -> Eval e (M.Map PublicKeyText (S.Set UserCapability))
 checkSigCaps sigs = go
   where
     go = do

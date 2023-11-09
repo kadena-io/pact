@@ -66,8 +66,6 @@ import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Types.Pretty
-import Pact.Types.KeySet (KeysetPublicKey(KeysetPublicKey, _pkPublicKey, _pkCryptoScheme))
-import Pact.Types.Scheme (PPKScheme(ED25519))
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
@@ -334,17 +332,12 @@ mockSPV i as = case as of
   _ -> argsError i as
 
 
--- TOOD: Support webauthn keys with a different set of arguments.
--- A list of objects [{"public": KEY, "scheme": "ED25519"|"WebAuthn"}]
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
-          (TLitString s) -> return (KeysetPublicKey
-                                    { _pkPublicKey = PublicKeyText s
-                                    , _pkCryptoScheme = ED25519
-                                    })
+          (TLitString s) -> return s
           _ -> argsError i (V.toList ts)
-  setenv eeMsgSigs $ M.fromList $ (,mempty) <$> V.toList ks
+  setenv eeMsgSigs $ M.fromList ((,mempty) . PublicKeyText <$> V.toList ks)
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
@@ -356,14 +349,10 @@ setsigs' _ [TList ts _ _] = do
         (Just k'',Just (TList clist _ _)) -> do
           reduce k'' >>= \k' -> case k' of
             TLitString k -> do
-              let pk = KeysetPublicKey
-                        { _pkPublicKey = PublicKeyText k
-                        , _pkCryptoScheme = ED25519
-                        }
               caps <- forM clist $ \cap -> case cap of
                 (TApp a _) -> view _1 <$> appToCap a
                 o -> evalError' o $ "Expected capability invocation"
-              return (pk, S.fromList (V.toList caps))
+              return (PublicKeyText k,S.fromList (V.toList caps))
             _ -> evalError' k' "Expected string value"
         _ -> evalError' t "Expected object with 'key': string, 'caps': [capability]"
     _ -> evalError' t $ "Expected object"

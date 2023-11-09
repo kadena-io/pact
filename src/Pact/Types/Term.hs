@@ -36,7 +36,7 @@
 module Pact.Types.Term
  ( Meta(..),mDocs,mModel,
    PublicKeyText(..),
-   KeySet(..), mkKeySet, mkKeySetText,
+   KeySet(..), mkKeySet,
    KeySetName(..),
    PactGuard(..),
    PactId(..),
@@ -1113,4 +1113,3 @@ instance Show1 Object where
   liftShowsPrec = $(makeLiftShowsPrec ''Object)
 instance Show1 Term where
   liftShowsPrec = $(makeLiftShowsPrec ''Term)
-

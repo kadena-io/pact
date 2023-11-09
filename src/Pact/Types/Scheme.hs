@@ -51,11 +51,8 @@ instance Pretty PPKScheme where
     ED25519 -> "ed25519"
     WebAuthn -> "webauthn"
 
--- TODO: No idea
 instance SizeOf PPKScheme where
-  sizeOf _ver s = 1 + (case s of
-    ED25519 -> 32
-    WebAuthn -> 64)
+  sizeOf _ _ = 1
 
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" parseText

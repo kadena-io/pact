@@ -88,7 +88,6 @@ import Pact.Types.Capability
 import Pact.Types.ChainMeta
 import Pact.Types.Continuation
 import Pact.Types.Gas
-import Pact.Types.KeySet (KeysetPublicKey)
 import Pact.Types.Lang
 import Pact.Types.Orphans ()
 import Pact.Types.PactError
@@ -177,8 +176,8 @@ data ExecutionFlag
   | FlagDisablePact40
   -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
   | FlagEnforceKeyFormats
-  -- | Disable Pact 4.2.0 db sorted key guarantees, and row persistence
-  | FlagDisablePact420
+  -- | Disable Pact 4.2 db sorted key guarantees, and row persistence
+  | FlagDisablePact42
   -- | Disable memory limit check
   | FlagDisableInlineMemCheck
   -- | Disable new non-inlined modules
@@ -201,6 +200,8 @@ data ExecutionFlag
   | FlagDisablePact48
   -- | Disable Pact 4.9 Features
   | FlagDisablePact49
+  -- | Disable Pact 4.10 Features
+  | FlagDisablePact410
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -253,7 +254,7 @@ data EvalEnv e = EvalEnv {
       -- | Environment references.
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
-    , _eeMsgSigs :: !(M.Map KeysetPublicKey (S.Set UserCapability))
+    , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !LegacyValue
       -- | Execution mode

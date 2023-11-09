@@ -51,13 +51,13 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Short as SBS
 import Data.Default (def)
+import Data.Foldable
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Set as S
 import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 import Data.Text.Encoding
-import Data.Foldable(foldrM)
 import Pact.Time
 import qualified Data.Yaml as Y
 import GHC.Generics
@@ -298,7 +298,7 @@ loadSigData fp = do
 
 addSigToSigData :: Ed25519KeyPair -> SigData a -> IO (SigData a)
 addSigToSigData kp sd = do
-  sig <- signHash (_sigDataHash sd) kp
+  let sig = signHash (_sigDataHash sd) kp
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = addSigToList k sig $ _sigDataSigs sd }
 
@@ -341,29 +341,22 @@ returnSigDataOrCommand  outputLocal sd
     when (length (_pSigners payload) /= length sigs) $
       Left "Number of signers in the payload does not match number of signers in the sigData"
     usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
-    let failedSigs = filter (not . verifySig h) usrSigs
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
+    traverse_ Left $ verifyUserSigs h [ (signer, sig) | (Just signer, sig) <- usrSigs ]
     _ <- verifyHash h (encodeUtf8 cmd)
     pure ()
     where
-    verifySig hsh (signer, usrSig) = case usrSig of
-      Nothing -> True
-      Just sig -> verifyUserSig hsh sig signer
     toSignerPair sigMap signer =
       case Map.lookup (PublicKeyHex $ _siPubKey signer) sigMap of
         Nothing -> Left $ "Signer in payload does not show up in signatures" <> show (_siPubKey signer)
-        Just v -> pure (signer, v)
+        Just v -> pure (v, signer)
   verifyPartialSigData (SigData h sigs Nothing) = do
     sigs' <- foldrM toVerifPair [] sigs
-    let scheme = toScheme ED25519
-        failedSigs = filter (\(pk, sig) -> not $ verify scheme (toUntypedHash h) pk sig) sigs'
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
-    pure ()
+    traverse_ Left $ verifyUserSigs h sigs'
     where
     toVerifPair (PublicKeyHex pktext, Just (ED25519Sig _usSig) ) m = do
-      pk <- PubBS <$> parseB16TextOnly pktext
-      sig <- SigBS <$> parseB16TextOnly _usSig
-      pure $ (pk, sig):m
+      let sig = ED25519Sig _usSig
+      let signer = Signer (Just ED25519) pktext Nothing []
+      pure $ (sig, signer):m
     toVerifPair (_, _) m = pure m
 
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
@@ -474,7 +467,7 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       fmap (encodeYaml . J.Object) $ forM kps $ \kp -> do
-            ED25519Sig sig  <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
+            let sig = signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
             return (asString (B16JsonBytes (getPublic kp)), sig)
 
 withKeypairsOrSigner

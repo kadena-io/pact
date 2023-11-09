@@ -75,7 +75,6 @@ import qualified Data.Text as T
 import Pact.Compile (compileExps, mkTextInfo)
 import Pact.Types.Capability (SigCapability)
 import Pact.Types.Command
-import Pact.Types.KeySet (KeysetPublicKey(KeysetPublicKey))
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RowData
@@ -378,16 +377,16 @@ sampleLoadedKeysetName = "some-loaded-keyset"
 sampleLoadedMultisigKeysetName :: T.Text
 sampleLoadedMultisigKeysetName = "some-loaded-multisig-keyset"
 
-samplePubKeys :: [KeysetPublicKey]
-samplePubKeys = [KeysetPublicKey (PublicKeyText "something") ED25519]
+samplePubKeys :: [PublicKeyText]
+samplePubKeys = [PublicKeyText "something"]
 
-sampleMultiPubKeys :: [KeysetPublicKey]
+sampleMultiPubKeys :: [PublicKeyText]
 sampleMultiPubKeys =
-  [ KeysetPublicKey (PublicKeyText "key1") ED25519
-  , KeysetPublicKey (PublicKeyText "key2") ED25519
+  [ PublicKeyText "key1"
+  , PublicKeyText "key2"
   ]
 
-samplePubKeysWithCaps :: [(KeysetPublicKey, S.Set SigCapability)]
+samplePubKeysWithCaps :: [(PublicKeyText, S.Set SigCapability)]
 samplePubKeysWithCaps = map (\p -> (p,S.empty)) samplePubKeys
 
 sampleKeyset :: KeySet

@@ -448,7 +448,7 @@ write wt partial i as = do
         TyAny -> return ()
         TyVar {} -> return ()
         tty -> void $ checkUserType partial (_faInfo i) ps tty
-      rdv <- ifExecutionFlagSet' FlagDisablePact420 RDV0 RDV1
+      rdv <- ifExecutionFlagSet' FlagDisablePact42 RDV0 RDV1
       success "Write succeeded" $ writeRow (_faInfo i) wt (userTable table) (RowKey key) $
           RowData rdv (pactValueToRowData <$> ps')
     _ -> argsError i ts

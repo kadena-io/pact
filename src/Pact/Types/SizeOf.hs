@@ -64,6 +64,7 @@ import GHC.Int(Int(..))
 data SizeOfVersion
   = SizeOfV0
   | SizeOfV1
+  | SizeOfV2
   deriving Show
 
 instance Pretty SizeOfVersion where
@@ -155,6 +156,8 @@ instance SizeOf Integer where
     SizeOfV0 ->
       if i <= 0 then 0 else ceiling ((logBase 100000 (realToFrac i)) :: Double)
     SizeOfV1 ->
+      fromIntegral (max 64 (I# (IntLog.integerLog2# (abs i)) + 1))  `quot` 8
+    SizeOfV2 ->
       fromIntegral (max 64 (I# (IntLog.integerLog2# (abs i)) + 1))  `quot` 8
 
 instance SizeOf Int where

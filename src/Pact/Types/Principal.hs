@@ -24,9 +24,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
 import Pact.Types.Hash
-import Pact.Types.Scheme (PPKScheme(ED25519))
 import Pact.Types.Info
-import Pact.Types.KeySet (keysetNameParser, KeysetPublicKey(..))
+import Pact.Types.KeySet (keysetNameParser)
 import Pact.Types.Names
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.Term
@@ -38,7 +37,7 @@ import Data.Char (isHexDigit)
 import qualified Pact.JSON.Encode as J
 
 data Principal
-  = K !KeysetPublicKey
+  = K !PublicKeyText
     -- ^ format: `k:public key`, where hex public key
     -- is the text public key of the underlying keyset
   | W !Text !Text
@@ -70,7 +69,7 @@ instance Show Principal where
 mkPrincipalIdent :: Principal -> Text
 mkPrincipalIdent = \case
   P pid n -> "p:" <> asString pid <> ":" <> n
-  K pk -> "k:" <> asString (_pkPublicKey pk)
+  K pk -> "k:" <> asString pk
   W ph n -> "w:" <> ph <> ":" <> n
   R n -> "r:" <> asString n
   U n ph -> "u:" <> n <> ":" <> ph
@@ -107,14 +106,8 @@ principalParser (getInfo -> i) = kParser
     base64UrlHashParser = T.pack <$> count 43 (satisfy f) where
       f c = c `elem` base64UrlUnpaddedAlphabet
 
-    -- TODO: question for andy: do we want to support a k: account for
-    -- webauthn? We could expand this parser.
-    hexKeyFormat = do
-      t <- count 64 (satisfy isHexDigit)
-      let
-        pk = PublicKeyText $ T.pack t
-      pure $ KeysetPublicKey pk ED25519
-
+    hexKeyFormat =
+      PublicKeyText . T.pack <$> count 64 (satisfy isHexDigit)
 
     char' = void . char
     eof' = void eof
@@ -177,7 +170,6 @@ principalParser (getInfo -> i) = kParser
       eof'
       pure $ C h
 
-
 -- | Given a pact guard, convert to a principal type.
 -- Parameterized for use with non-Eval contexts.
 guardToPrincipal
@@ -190,9 +182,9 @@ guardToPrincipal chargeGas = \case
   GPact (PactGuard pid n) -> chargeGas 1 >> pure (P pid n)
   -- TODO later: revisit structure of principal k and w accounts in light of namespaces
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
-    ([k], "keys-all") -> chargeGas 1 >> pure (K k)
+    ([k],"keys-all") -> chargeGas 1 >> pure (K k)
     (l,fun) -> do
-      h <- mkHash $ map (T.encodeUtf8 . _pubKey . _pkPublicKey) l
+      h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
       pure $ W (asString h) fun
   GKeySetRef ksn -> chargeGas 1 >> pure (R ksn)
   GModule (ModuleGuard mn n) -> chargeGas 1 >> pure (M mn n)
