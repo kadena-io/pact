@@ -235,8 +235,11 @@ verifyUserSig msg sig Signer{..} = do
       verifyEd25519Sig (toUntypedHash msg) pk edSig
 
     (WebAuthnSig waSig _, WebAuthn) -> do
+      let
+        strippedPrefix =
+          fromMaybe _siPubKey (Text.stripPrefix "WEBAUTHN-" _siPubKey)
       pk <- over _Left ("failed to parse webauthn pubkey: " <>) $
-        parseWebAuthnPublicKey =<< B16.decode (Text.encodeUtf8 _siPubKey)
+        parseWebAuthnPublicKey =<< B16.decode (Text.encodeUtf8 strippedPrefix)
       verifyWebAuthnSig (toUntypedHash msg) pk waSig
 
     _ ->

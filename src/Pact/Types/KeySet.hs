@@ -33,8 +33,7 @@ module Pact.Types.KeySet
   , ed25519HexFormat
   , webauthnFormat
   , isHexDigitLower
-  , keyFormats
-  , validateKeyFormat
+  , allKeyFormats
   , enforceKeyFormats
   , keysetNameParser
   , qualifiedKeysetNameParser
@@ -271,15 +270,11 @@ isHexDigitLower c =
   isDigit c || (fromIntegral (ord c - ord 'a')::Word) <= 5
 
 -- | Supported key formats.
-keyFormats :: [PublicKeyText -> Bool]
-keyFormats = [ed25519HexFormat, webauthnFormat]
-
--- | Validate 'PublicKeyText' against 'keyFormats'.
-validateKeyFormat :: PublicKeyText -> Bool
-validateKeyFormat k = any ($ k) keyFormats
+allKeyFormats :: [PublicKeyText -> Bool]
+allKeyFormats = [ed25519HexFormat, webauthnFormat]
 
 -- | Enforce valid 'KeySet' keys, evaluating error action on failure.
-enforceKeyFormats :: Monad m => (PublicKeyText -> m ()) -> KeySet -> m ()
-enforceKeyFormats err (KeySet ks _p) = traverse_ go ks
+enforceKeyFormats :: Monad m => (PublicKeyText -> m ()) -> [PublicKeyText -> Bool] -> KeySet -> m ()
+enforceKeyFormats err formats (KeySet ks _p) = traverse_ go ks
   where
-    go k = unless (validateKeyFormat k) $ err k
+    go k = unless (any ($ k) formats) $ err k
