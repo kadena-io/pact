@@ -14,7 +14,7 @@
 -- limited to what is needed for Webauthn, and in a structured way.
 module Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
   ( -- * COSE public Key
-    PublicKeyWithSignAlg (PublicKeyWithSignAlg, Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg.publicKey, signAlg),
+    PublicKeyWithSignAlg (PublicKeyWithSignAlgInternal, PublicKeyWithSignAlg, Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg.publicKey, signAlg),
     CosePublicKey
   )
 where

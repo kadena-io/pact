@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -30,7 +31,11 @@ module Pact.Types.Crypto
   , PublicKeyBS(..)
   , PrivateKeyBS(..)
   , SignatureBS(..)
-  , sign
+  , signEd25519
+  , signWebauthn
+  , generateEd25519KeyPair
+  , generateWebAuthnEd25519KeyPair
+  , generateWebAuthnP256KeyPair
   , verifyWebAuthnSig
   , verifyEd25519Sig
   , parseEd25519PubKey
@@ -54,6 +59,7 @@ module Pact.Types.Crypto
   , UserSig(..)
   , WebAuthnSigProvenance(..)
   , WebAuthnPublicKey
+  , WebauthnPrivateKey(..)
   , WebAuthnSignature(..)
   ) where
 
@@ -65,40 +71,51 @@ import qualified Codec.Serialise as Serialise
 import Control.Applicative
 import Control.Lens
 import Control.Monad (unless)
+import Control.Monad.Except
+import Control.Monad.IO.Class
 import qualified Crypto.Hash as H
-import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
-import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
-import qualified Pact.Crypto.WebAuthn.Cose.Verify as WAVerify
-import Data.ByteString    (ByteString)
+import qualified Data.ASN1.BinaryEncoding as ASN1
+import qualified Data.ASN1.Encoding as ASN1
+import qualified Data.ASN1.Types as ASN1
+import Data.ByteString (ByteString)
 import Data.ByteString.Short (fromShort)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
--- import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Base64.URL as Base64URL
-import Data.String        (IsString(..))
+import Data.Proxy
+import Data.String (IsString(..))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
-import Data.Aeson                        as A
+import qualified Data.Aeson as A
 import Control.DeepSeq (NFData)
 import Data.Hashable
-import Data.Serialize                    as SZ
-import qualified Data.Serialize          as S
+import Data.Serialize as SZ
+import qualified Data.Serialize as S
+
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKey as WA
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.Verify as WAVerify
 
 import Pact.Types.Util
 import Pact.Types.Hash
 import qualified Pact.Types.Hash as PactHash
-import Pact.Types.Scheme               as ST
+import Pact.Types.Scheme as ST
 
 #ifdef CRYPTONITE_ED25519
-import qualified Crypto.Error          as E
+import qualified Crypto.Error as E
 import qualified Crypto.PubKey.Ed25519 as Ed25519
-import qualified Data.ByteArray        as B
+import qualified Data.ByteArray as B
 #else
 import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519
 #endif
+import qualified Crypto.PubKey.ECDSA as ECDSA
+import qualified Crypto.ECC as ECC
+import qualified Crypto.PubKey.ECC.P256 as ECC hiding (scalarToInteger)
+import Crypto.Random.Types
 
 import qualified Pact.JSON.Encode as J
 
@@ -139,21 +156,21 @@ instance J.Encode UserSig where
     (T.decodeUtf8 $ BSL.toStrict $ J.encode sig)
   {-# INLINE build #-}
 
-instance FromJSON UserSig where
+instance A.FromJSON UserSig where
   parseJSON x =
     parseWebAuthnObject x <|>
     parseWebAuthnStringified x <|>
     parseEd25519 x
     where
-      parseWebAuthnStringified = withText "UserSig" $ \t ->
+      parseWebAuthnStringified = A.withText "UserSig" $ \t ->
         case A.decode (BSL.fromStrict $ T.encodeUtf8 t) of
           Nothing -> fail "Could not decode signature"
           Just webauthnSig -> return $ WebAuthnSig webauthnSig WebAuthnStringified
-      parseEd25519 = withText "UserSig" $ \t -> do
+      parseEd25519 = A.withText "UserSig" $ \t -> do
         dehex <- parseB16Text t
         fmap ED25519Sig $ either fail return $ parseEd25519Signature dehex
       parseWebAuthnObject o = do
-        waSig <- parseJSON o
+        waSig <- A.parseJSON o
         pure $ WebAuthnSig waSig WebAuthnObject
 
 instance Arbitrary UserSig where
@@ -286,6 +303,53 @@ parseWebAuthnSignature = A.eitherDecode . BSL.fromStrict
 exportWebAuthnSignature :: WebAuthnSignature -> ByteString
 exportWebAuthnSignature = J.encodeStrict
 
+data WebauthnPrivateKey = WebAuthnEdDSAPrivateKey Ed25519.SecretKey | WebAuthnP256PrivateKey (ECDSA.PrivateKey ECC.Curve_P256R1)
+
+signWebauthn :: WebAuthnPublicKey -> WebauthnPrivateKey -> ByteString -> Hash -> ExceptT String IO WebAuthnSignature
+signWebauthn pubkey privkey authData hsh = do
+  let clientData = J.encodeStrict $ ClientDataJSON {challenge = PactHash.hashToText hsh}
+  let clientDataDigest = B.convert (H.hashWith H.SHA256 clientData)
+  let payload = authData <> clientDataDigest
+  !signature <- case (pubkey, privkey) of
+        (WA.PublicKeyWithSignAlg (WA.PublicKey (WA.PublicKeyEdDSA WA.CoseCurveEd25519 pubkeyBytes)) WA.CoseSignAlgEdDSA, WebAuthnEdDSAPrivateKey privateKey) -> do
+          pubKeyParsed <- liftEither $ parseEd25519PubKey pubkeyBytes
+          return $ exportEd25519Signature $ Ed25519.sign privateKey pubKeyParsed payload
+        (WA.PublicKeyWithSignAlg (WA.PublicKey (WA.PublicKeyECDSA WA.CoseCurveP256 _ _)) (WA.CoseSignAlgECDSA WA.CoseHashAlgECDSASHA256), WebAuthnP256PrivateKey privateKey) -> do
+          let p256 = Proxy :: Proxy ECC.Curve_P256R1
+          ECDSA.Signature r s <- liftIO $ ECDSA.sign p256 privateKey H.SHA256 payload
+          -- this format is in Pact.Crypto.WebAuthn.Cose.Verify
+          return $ ASN1.encodeASN1' ASN1.DER
+            [ ASN1.Start ASN1.Sequence
+            , ASN1.IntVal (ECC.scalarToInteger p256 r)
+            , ASN1.IntVal (ECC.scalarToInteger p256 s)
+            , ASN1.End ASN1.Sequence
+            ]
+        _ -> throwError "invalid pubkey/privkey pair or invalid key type"
+  return WebAuthnSignature
+    { signature = T.decodeUtf8 $ Base64.encode signature
+    , clientDataJSON = T.decodeUtf8 $ Base64URL.encode clientData
+    , authenticatorData = T.decodeUtf8 $ Base64.encode authData
+    }
+
+generateEd25519KeyPair :: MonadRandom m => m Ed25519KeyPair
+generateEd25519KeyPair = do
+  privkey <- Ed25519.generateSecretKey
+  return (Ed25519.toPublic privkey, privkey)
+
+generateWebAuthnEd25519KeyPair :: MonadRandom m => m (WebAuthnPublicKey, WebauthnPrivateKey)
+generateWebAuthnEd25519KeyPair = do
+  (pub, priv) <- generateEd25519KeyPair
+  let checked = either (error . T.unpack) id $ WA.checkPublicKey (WA.PublicKeyEdDSA WA.CoseCurveEd25519 (exportEd25519PubKey pub))
+  return (WA.PublicKeyWithSignAlgInternal checked WA.CoseSignAlgEdDSA, WebAuthnEdDSAPrivateKey priv)
+
+generateWebAuthnP256KeyPair :: MonadRandom m => m (WebAuthnPublicKey, WebauthnPrivateKey)
+generateWebAuthnP256KeyPair = do
+  ECC.KeyPair public private <- ECC.curveGenerateKeyPair (Proxy :: Proxy ECC.Curve_P256R1)
+  let (ecdsaX, ecdsaY) = ECC.pointToIntegers public
+  let checked = either (error . T.unpack) id $ WA.checkPublicKey (WA.PublicKeyECDSA WA.CoseCurveP256 ecdsaX ecdsaY)
+  return (WA.PublicKeyWithSignAlgInternal checked (WA.CoseSignAlgECDSA WA.CoseHashAlgECDSASHA256), WebAuthnP256PrivateKey private)
+
+
 --------- SCHEME HELPER DATA TYPES ---------
 
 type Ed25519KeyPair = (Ed25519.PublicKey, Ed25519PrivateKey)
@@ -293,8 +357,8 @@ type Ed25519KeyPair = (Ed25519.PublicKey, Ed25519PrivateKey)
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
   deriving (Eq, Generic, Hashable)
 
-instance FromJSON PublicKeyBS where
-  parseJSON = withText "PublicKeyBS" $ \s -> do
+instance A.FromJSON PublicKeyBS where
+  parseJSON = A.withText "PublicKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PubBS s'
 instance J.Encode PublicKeyBS where
@@ -307,8 +371,8 @@ instance IsString PublicKeyBS where
 instance Show PublicKeyBS where
   show (PubBS b) = T.unpack $ toB16Text b
 
-instance FromJSONKey PublicKeyBS where
-    fromJSONKey = FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
+instance A.FromJSONKey PublicKeyBS where
+    fromJSONKey = A.FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
     {-# INLINE fromJSONKey #-}
 instance Arbitrary PublicKeyBS where
   arbitrary = PubBS . BS.pack <$> vector 32
@@ -317,8 +381,8 @@ instance Arbitrary PublicKeyBS where
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
   deriving (Eq, Generic, Hashable)
 
-instance FromJSON PrivateKeyBS where
-  parseJSON = withText "PrivateKeyBS" $ \s -> do
+instance A.FromJSON PrivateKeyBS where
+  parseJSON = A.withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PrivBS s'
 instance J.Encode PrivateKeyBS where
@@ -336,8 +400,8 @@ instance Arbitrary PrivateKeyBS where
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic, Hashable)
 
-instance FromJSON SignatureBS where
-  parseJSON = withText "SignatureBS" $ \s -> do
+instance A.FromJSON SignatureBS where
+  parseJSON = A.withText "SignatureBS" $ \s -> do
     s' <- parseB16Text s
     return $ SigBS s'
 instance J.Encode SignatureBS where
@@ -348,11 +412,11 @@ instance Arbitrary SignatureBS where
 
 --------- SCHEME HELPER FUNCTIONS ---------
 
-sign :: Ed25519.PublicKey -> Ed25519PrivateKey -> Hash -> Ed25519.Signature
+signEd25519 :: Ed25519.PublicKey -> Ed25519PrivateKey -> Hash -> Ed25519.Signature
 #ifdef CRYPTONITE_ED25519
-sign pub priv (Hash msg) = Ed25519.sign priv pub (fromShort msg)
+signEd25519 pub priv (Hash msg) = Ed25519.sign priv pub (fromShort msg)
 #else
-sign pub priv (Hash msg) = Ed25519.sign (fromShort msg) priv pub
+signEd25519 pub priv (Hash msg) = Ed25519.sign (fromShort msg) priv pub
 #endif
 
 getPublic :: Ed25519KeyPair -> ByteString
@@ -361,12 +425,10 @@ getPublic = exportEd25519PubKey . fst
 getPrivate :: Ed25519KeyPair -> ByteString
 getPrivate = exportEd25519SecretKey . snd
 
-
 -- Key Pair setter functions
 
 genKeyPair :: IO (Ed25519.PublicKey, Ed25519PrivateKey)
 genKeyPair = ed25519GenKeyPair
-
 
 -- | Parse a pair of keys (where the public key is optional) into an Ed25519 keypair.
 -- Derives Public Key from Private Key if none provided. Trivial in some
@@ -475,9 +537,9 @@ instance NFData WebAuthnSignature
 
 instance A.FromJSON WebAuthnSignature where
   parseJSON = A.withObject "WebAuthnSignature" $ \o -> do
-    clientDataJSON <- o .: "clientDataJSON"
-    authenticatorData <- o .: "authenticatorData"
-    signature <- o .: "signature"
+    clientDataJSON <- o A..: "clientDataJSON"
+    authenticatorData <- o A..: "authenticatorData"
+    signature <- o A..: "signature"
     pure $ WebAuthnSignature {..}
 
 instance J.Encode WebAuthnSignature where
@@ -496,5 +558,9 @@ newtype ClientDataJSON = ClientDataJSON {
 
 instance A.FromJSON ClientDataJSON where
   parseJSON = A.withObject "ClientDataJSON" $ \o -> do
-    challenge <- o .: "challenge"
+    challenge <- o A..: "challenge"
     pure $ ClientDataJSON { challenge }
+
+instance J.Encode ClientDataJSON where
+  build ClientDataJSON { challenge } =
+    J.object ["challenge" J..= challenge]

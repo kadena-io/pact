@@ -185,7 +185,7 @@ mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
 
 signHash :: TypedHash h -> Ed25519KeyPair -> UserSig
 signHash hsh (pub,priv) =
-  ED25519Sig $ sign pub priv (toUntypedHash hsh)
+  ED25519Sig $ signEd25519 pub priv (toUntypedHash hsh)
 
 -- VALIDATING TRANSACTIONS
 
