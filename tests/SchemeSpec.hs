@@ -2,11 +2,13 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SchemeSpec (spec) where
 
 import Test.Hspec
 import System.IO.Error
+import Control.Monad.Except (runExceptT)
 import qualified Data.ByteString.Base16 as Base16
 import Data.Either
 import Data.Text (Text)
@@ -24,7 +26,7 @@ import Pact.Types.Crypto
 import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromText')
 import Pact.Types.RPC
-import Pact.Types.Hash
+import qualified Pact.Types.Hash as PactHash
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
 
@@ -107,6 +109,7 @@ spec = describe "working with crypto schemes" $ do
   describe "test signature non-malleability" testSigNonMalleability
   describe "testSigsRoundtrip" testSigsRoundtrip
   describe "test webauthn signature verification" verifyWebAuthnSignature
+  describe "test webauthn signature generation and verification" signAndVerifyWebAuthn
 
 testKeyPairImport :: Spec
 testKeyPairImport = do
@@ -143,20 +146,20 @@ testPublicKeyImport = do
     mkKeyPairs [apiKP] `shouldThrow` isUserError
 
   it "fails UserSig validation when UserSig has unexpected Address" $ do
-    let hsh = hash "(somePactFunction)"
+    let hsh = PactHash.hash "(somePactFunction)"
         (_,_,wrongAddr,_) = anotherED25519Pair
     [signer] <- toSigners [someED25519Pair]
     [((pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
-    let sig = signEd25519 pubKey privKey (toUntypedHash hsh)
+    let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
         myUserSig = ED25519Sig sig
         wrongSigner = Lens.set siAddress wrongAddr signer
     isLeft (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` True
 
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
-    let hsh = hash "(somePactFunction)"
+    let hsh = PactHash.hash "(somePactFunction)"
     [signer] <- toSigners [someED25519Pair]
     [((pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
-    let sig = signEd25519 pubKey privKey (toUntypedHash hsh)
+    let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
         myUserSig = ED25519Sig sig
         wrongScheme = WebAuthn
         wrongSigner = Lens.set siScheme (Just wrongScheme) signer
@@ -220,7 +223,7 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
       (webAuthnSig, _) = someWebAuthnSignature
       (PubBS otherPubKey, _, _, _) = someED25519Pair
       pubKeyBase16 = T.decodeUtf8 $ Base16.encode otherPubKey
-      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
+      cmdHash' :: PactHash.TypedHash PactHash.Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
         Right h -> h
         Left _ -> error "Hash is valid"
       signer = Signer
@@ -234,7 +237,7 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
     let
       (webAuthnSig, webAuthnPubKey) = someWebAuthnSignature
       pubKeyBase16 = T.decodeUtf8 $ Base16.encode $ exportWebAuthnPublicKey webAuthnPubKey
-      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "3fbc092db9350757e2ab4f7ee9792bfcd2f5220ada5a4bc684487f60c6034369" of
+      cmdHash' :: PactHash.TypedHash PactHash.Blake2b_256 = case fromText' $ T.pack "3fbc092db9350757e2ab4f7ee9792bfcd2f5220ada5a4bc684487f60c6034369" of
         Right h -> h
         Left _ -> error "Hash is valid"
       signer = Signer
@@ -248,7 +251,7 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
     let
       (webAuthnSig, webAuthnPubKey) = someWebAuthnSignature
       pubKeyBase16 = T.decodeUtf8 $ Base16.encode $ exportWebAuthnPublicKey webAuthnPubKey
-      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
+      cmdHash' :: PactHash.TypedHash PactHash.Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
         Right h -> h
         Left _ -> error "Hash is valid"
       signer = Signer
@@ -258,3 +261,25 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siCapList = []
         }
     isLeft (verifyUserSig cmdHash' (WebAuthnSig webAuthnSig WebAuthnStringified) signer) `shouldBe` True
+
+signAndVerifyWebAuthn :: Spec
+signAndVerifyWebAuthn = describe "Signing and verification of WebAuthn signatures" $ do
+  it "should be able to sign a pact hash" $ do
+    (pub, priv) <- generateWebAuthnEd25519KeyPair
+    let authData = "fake-authdata"
+    let pactData = PactHash.pactHash "fake-data"
+    sig <- runExceptT $ signWebauthn pub priv authData pactData
+    isRight sig `shouldBe` True
+  it "should be able to verify the genarated signature" $ do
+    (pub, priv) <- generateWebAuthnEd25519KeyPair
+    let authData = "fake-authdata"
+    let Right (pactData :: PactHash.TypedHash PactHash.Blake2b_256) =
+          fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc"
+    Right sig <- runExceptT (signWebauthn pub priv authData (PactHash.toUntypedHash pactData))
+    let signer = Signer
+          { _siScheme = Just WebAuthn
+          , _siPubKey = T.decodeUtf8 $ B16.encode (exportWebAuthnPublicKey pub)
+          , _siAddress = Nothing
+          , _siCapList = []
+          }
+    isRight (verifyUserSig pactData (WebAuthnSig sig WebAuthnObject) signer) `shouldBe` True
