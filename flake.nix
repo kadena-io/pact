@@ -2,8 +2,8 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    # nixpkgs.follows = "haskellNix/nixpkgs";
-    nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
+    nixpkgs.follows = "haskellNix/nixpkgs";
+    # nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
     haskellNix.url = "github:input-output-hk/haskell.nix";
     flake-utils.url = "github:numtide/flake-utils";
   };
@@ -25,16 +25,16 @@
           pact =
             final.haskell-nix.project' {
               src = ./.;
-              compiler-nix-name = "ghc962";
+              compiler-nix-name = "ghc981";
               shell.tools = {
-                cabal = {};
-                haskell-language-server = {};
+                # cabal = {};
+                # haskell-language-server = {};
                 # hlint = {};
               };
               shell.buildInputs = with pkgs; [
                 zlib
                 z3
-                pkgconfig
+                pkg-config
                 (python3.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme]))
                 pandoc perl
               ];
@@ -70,8 +70,7 @@
 
       devShell = pkgs.haskellPackages.shellFor {
         buildInputs = with pkgs.haskellPackages; [
-          cabal-install
-          haskell-language-server
+          # haskell-language-server
           # hlint
         ];
 

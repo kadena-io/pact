@@ -904,7 +904,10 @@ format s tms = do
   then Right (literalS (Str s))
   else if plen - length tms > 1
        then Left (AnalyzeFailure dummyInfo "format: not enough arguments for template")
-       else Right $ foldl'
-              (\r (e, t) -> r .++ rep e .++ t)
-              (head parts)
-              (zip tms (tail parts))
+       else case parts of
+              partsHead:partsTail ->
+                Right $ foldl'
+                (\r (e, t) -> r .++ rep e .++ t)
+                partsHead
+                (zip tms partsTail)
+              [] -> error "Impossible case: We checked that this list is nonempty"

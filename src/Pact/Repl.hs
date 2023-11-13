@@ -434,7 +434,8 @@ replLookupModule rs mn = do
     Right (modules,_) ->
       case HM.lookup mn modules of
         Nothing         -> Left $ "module not found: " ++ show mn ++ ", modules=" ++ show (HM.keys modules)
-        Just moduleData -> Right moduleData
+        Just moduleData ->
+          Right moduleData
 
 -- | install repl lib functions into monad state
 useReplLib :: Repl ()

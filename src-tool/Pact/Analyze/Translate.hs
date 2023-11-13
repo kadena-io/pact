@@ -754,7 +754,12 @@ translatePact nodes = do
     -- The proper fix is recognizing the nested defpact dyn invoke and replacing it with
     -- the default value of what the invocation would return.
     -- For now, this unblocks the problem.
-    (if null protoSteps then [] else tail $ reverse protoSteps)
+    (if null protoSteps
+     then []
+     else (\case
+              _:xs -> xs
+              [] -> error "Expected nonempty list"
+          ) $ reverse protoSteps)
 
   let steps = zipWith3
         (\(Step exec p e _ _) mCancel mRb -> Step exec p e mCancel mRb)

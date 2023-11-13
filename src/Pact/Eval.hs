@@ -659,8 +659,9 @@ enforceAcyclic
   -> Eval e [(Term (Either l r), key, [key])]
 enforceAcyclic info cs = forM cs $ \c -> case c of
   AcyclicSCC v -> return v
-  CyclicSCC vs -> do
-    let i = if null vs then info else _tInfo $ view _1 $ head vs
+  CyclicSCC [] -> error "Expected nonempty list"
+  CyclicSCC vs@(v:_) -> do
+    let i = if null vs then info else _tInfo $ view _1 $ v
         pl = over (traverse . _3) (SomeDoc . prettyList)
           $ over (traverse . _1) (fmap mkSomeDoc)
           $ vs
