@@ -178,6 +178,8 @@ data GasArgs
   -- ^ Cost of reversing a list of a given length
   | GFormatValues !Text !(V.Vector PactValue)
   -- ^ Cost of formatting with the given format string and args
+  | GPoseidonHashHackAChain !Int
+  -- ^ Cost of the hack-a-chain poseidon hash on this given number of inputs
 
 data IntOpThreshold
   = Pact43IntThreshold
@@ -245,6 +247,7 @@ instance Pretty GasArgs where
     GZKArgs arg -> "GZKArgs:" <> pretty arg
     GReverse len -> "GReverse:" <> pretty len
     GFormatValues s args -> "GFormatValues:" <> pretty s <> pretty (V.toList args)
+    GPoseidonHashHackAChain len -> "GPoseidonHashHackAChain:" <> pretty len
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Generic)

@@ -53,6 +53,8 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_principalCost :: Gas
   , _gasCostConfig_reverseElemsPerGas :: Gas
   , _gasCostConfig_formatBytesPerGas :: Gas
+  , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor :: Gas
+  , _gasCostConfig_poseidonHashHackAChainLinearGasFactor :: Gas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -77,6 +79,8 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_principalCost = 5 -- matches 'hash' cost
   , _gasCostConfig_reverseElemsPerGas = 100
   , _gasCostConfig_formatBytesPerGas = 10
+  , _gasCostConfig_poseidonHashHackAChainLinearGasFactor = 50
+  , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor = 38
   }
 
 defaultGasTable :: Map Text Gas
@@ -229,6 +233,8 @@ defaultGasTable =
   ,("scalar-mult", 1)
   ,("point-add", 1)
   ,("pairing-check", 1)
+
+  ,("poseidon-hash-hack-a-chain", 124)
   ]
 
 {-# NOINLINE defaultGasTable #-}
@@ -319,6 +325,10 @@ tableGasModel gasConfig =
         GFormatValues s args ->
           let totalBytesEstimate = estimateFormatText s + estimateFormatValues args
           in gasToMilliGas $ fromIntegral totalBytesEstimate `quot` _gasCostConfig_formatBytesPerGas gasConfig
+        GPoseidonHashHackAChain len ->
+          gasToMilliGas $
+            _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor gasConfig * fromIntegral (len * len) +
+            _gasCostConfig_poseidonHashHackAChainLinearGasFactor gasConfig * fromIntegral len
 
   in GasModel
       { gasModelName = "table"

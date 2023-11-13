@@ -1785,6 +1785,25 @@ pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 {"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
 ```
 
+## Poseidon Hash {#Poseidon Hash}
+
+### poseidon-hash-hack-a-chain {#poseidon-hash-hack-a-chain}
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *o*&nbsp;`integer` *p*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain.
+```lisp
+pact> (poseidon-hash-hack-a-chain 1)
+18586133768512220936620570745912940619677854269274689475585506675881198879027
+pact> (poseidon-hash-hack-a-chain 1 2)
+7853200120776062878684798364095072458815029376092732009249414926327459813530
+pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6)
+20400040500897583745843009878988256314335038853985262692600694741116813247201
+pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)
+18604317144381847857886385684060986177838410221561136253933256952257712543953
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -1928,7 +1947,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact410","DisablePact420","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]

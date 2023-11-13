@@ -242,6 +242,9 @@ disablePact46Natives = disablePactNatives pact46Natives FlagDisablePact46
 disablePact47Natives :: ExecutionConfig -> Endo RefStore
 disablePact47Natives = disablePactNatives pact47Natives FlagDisablePact47
 
+disablePact410Natives :: ExecutionConfig -> Endo RefStore
+disablePact410Natives = disablePactNatives pact410Natives FlagDisablePact410
+
 pact40Natives :: [Text]
 pact40Natives = ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
 
@@ -260,6 +263,9 @@ pact46Natives = ["point-add", "scalar-mult", "pairing-check"]
 pact47Natives :: [Text]
 pact47Natives = ["dec"]
 
+pact410Natives :: [Text]
+pact410Natives = ["poseidon-hash-hack-a-chain"]
+
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
 
@@ -272,7 +278,9 @@ versionedNativesRefStore ec = versionNatives initRefStore
     , disablePact43Natives ec
     , disablePact431Natives ec
     , disablePact46Natives ec
-    , disablePact47Natives ec]
+    , disablePact47Natives ec
+    , disablePact410Natives ec
+    ]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
