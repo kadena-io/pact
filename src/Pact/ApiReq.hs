@@ -298,7 +298,7 @@ loadSigData fp = do
 
 addSigToSigData :: Ed25519KeyPair -> SigData a -> IO (SigData a)
 addSigToSigData kp sd = do
-  let sig = signHash (_sigDataHash sd) kp
+  let sig = ED25519Sig $ signHash (_sigDataHash sd) kp
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = addSigToList k sig $ _sigDataSigs sd }
 

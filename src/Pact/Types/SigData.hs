@@ -88,17 +88,20 @@ instance FromJSON a => FromJSON (SigData a) where
     pure $ SigData h s c
     where
       f v = flip (withObject "SigData Pairs") v $ \_ ->
-        fmap (first PublicKeyHex) . LHM.sortByKey . HM.toList <$> parseJSON v
+        fmap (bimap PublicKeyHex (fmap ED25519Sig)) . LHM.sortByKey . HM.toList <$> parseJSON v
 
 instance J.Encode a => J.Encode (SigData a) where
   build o = J.object
     [ "hash" J..= _sigDataHash o
-    , "sigs" J..= LHM.fromList (first unPublicKeyHex <$> _sigDataSigs o)
+    , "sigs" J..= LHM.fromList (bimap unPublicKeyHex (fmap extractEd25519Sig) <$> _sigDataSigs o)
       -- FIXME: this instance seems to violate the comment on the respective
       -- constructor field. Is that fine? Is it required for backward compat?
       -- This instance also does not roundtrip.
     , "cmd" J..?= _sigDataCmd o
     ]
+    where
+    extractEd25519Sig (ED25519Sig s) = s
+    extractEd25519Sig _ = error "SigData cannot contain non-ED25519 signature"
   {-# INLINE build #-}
 
 instance Arbitrary a => Arbitrary (SigData a) where
@@ -110,7 +113,7 @@ instance Arbitrary a => Arbitrary (SigData a) where
 arbitraryRoundtripableSigData :: Arbitrary a => Gen (SigData a)
 arbitraryRoundtripableSigData = SigData
   <$> arbitrary
-  <*> fmap (fmap (first PublicKeyHex) . LHM.sortByKey . fmap (first unPublicKeyHex)) arbitrary
+  <*> fmap (fmap (bimap PublicKeyHex (fmap ED25519Sig)) . LHM.sortByKey . fmap (first unPublicKeyHex)) arbitrary
   <*> arbitrary
 
 commandToSigData :: Command Text -> Either String (SigData Text)

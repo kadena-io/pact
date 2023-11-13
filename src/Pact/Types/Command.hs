@@ -79,6 +79,7 @@ import Test.QuickCheck
 import Pact.Parse (parsePact)
 import Pact.Types.Capability
 import Pact.Types.ChainId
+import Pact.Types.KeySet
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
@@ -106,17 +107,14 @@ data Command a = Command
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
                 Command <$> (o .: "cmd")
-                        <*> (parseSigs =<< (o .: "sigs"))
+                        <*> (o .: "sigs")
                         <*> (o .: "hash")
-      where
-      parseSigs = withArray "sigs" $ \arr -> do
-        fmap toList $ forM arr $ withObject "sig" $ \o -> o .: "sig"
     {-# INLINE parseJSON #-}
 
 instance J.Encode a => J.Encode (Command a) where
   build o = J.object
     [ "hash" J..= _cmdHash o
-    , "sigs" J..= J.Array [ J.Object [("sig" :: Text, sig)] | sig <- _cmdSigs o ]
+    , "sigs" J..= J.Array (_cmdSigs o)
     , "cmd" J..= _cmdPayload o
     ]
   {-# INLINABLE build #-}
@@ -166,7 +164,7 @@ keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 mkCommand' :: [(Ed25519KeyPair ,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
-      toUserSig (cred,_) = signHash hsh cred
+      toUserSig (cred,_) = ED25519Sig $ signHash hsh cred
   let sigs = toUserSig <$> creds
   return $ Command env sigs hsh
 
@@ -183,9 +181,9 @@ mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = J.encodeStrict payload
         payload = Payload rpc nonce meta signers nid
 
-signHash :: TypedHash h -> Ed25519KeyPair -> UserSig
+signHash :: TypedHash h -> Ed25519KeyPair -> Text
 signHash hsh (pub,priv) =
-  ED25519Sig $ signEd25519 pub priv (toUntypedHash hsh)
+  toB16Text $ exportEd25519Signature $ signEd25519 pub priv (toUntypedHash hsh)
 
 -- VALIDATING TRANSACTIONS
 
@@ -232,12 +230,16 @@ verifyUserSig msg sig Signer{..} = do
         unless (_siPubKey == addr) $ Left "address does not match pubkey"
       pk <- over _Left ("failed to parse ed25519 pubkey: " <>) $
         parseEd25519PubKey =<< B16.decode (Text.encodeUtf8 _siPubKey)
-      verifyEd25519Sig (toUntypedHash msg) pk edSig
+      edSigParsed <- over _Left ("failed to parse ed25519 signature: " <>) $
+        parseEd25519Signature =<< B16.decode (Text.encodeUtf8 edSig)
+      verifyEd25519Sig (toUntypedHash msg) pk edSigParsed
 
     (WebAuthnSig waSig _, WebAuthn) -> do
       let
         strippedPrefix =
-          fromMaybe _siPubKey (Text.stripPrefix "WEBAUTHN-" _siPubKey)
+          fromMaybe _siPubKey (Text.stripPrefix webAuthnPrefix _siPubKey)
+      -- we can't use parseWebAuthnPublicKeyText here because keys in the
+      -- signers list might be unprefixed due to old webauthn.
       pk <- over _Left ("failed to parse webauthn pubkey: " <>) $
         parseWebAuthnPublicKey =<< B16.decode (Text.encodeUtf8 strippedPrefix)
       verifyWebAuthnSig (toUntypedHash msg) pk waSig

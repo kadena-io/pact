@@ -31,7 +31,10 @@ module Pact.Types.KeySet
   , KeySetName(..)
   , mkKeySet
   , ed25519HexFormat
-  , webauthnFormat
+  , webAuthnPrefix
+  , parseWebAuthnPublicKeyText
+  , exportWebAuthnPublicKeyText
+  , webAuthnFormat
   , isHexDigitLower
   , allKeyFormats
   , enforceKeyFormats
@@ -53,7 +56,6 @@ import Data.Attoparsec.Text (parseOnly, takeText, Parser)
 import qualified Data.ByteString.Base16 as B16
 import Data.Char
 import Data.Default
-import Data.Either
 import Data.Foldable
 import Data.Maybe
 import Data.Serialize (Serialize)
@@ -254,14 +256,25 @@ ed25519HexFormat (PublicKeyText k) =
   T.length k == 64
   && T.all isHexDigitLower k
 
-webauthnFormat :: PublicKeyText -> Bool
-webauthnFormat (PublicKeyText k)
-  | Just pk <- T.stripPrefix "WEBAUTHN-" k
-  , T.all isHexDigitLower pk
-  , Right kbs <- B16.decode (T.encodeUtf8 pk)
-  , isRight (parseWebAuthnPublicKey kbs)
-  = True
-  | otherwise = False
+-- | Prefix for any webauthn keys.
+webAuthnPrefix :: Text
+webAuthnPrefix = "WEBAUTHN-"
+
+parseWebAuthnPublicKeyText :: PublicKeyText -> Maybe WebAuthnPublicKey
+parseWebAuthnPublicKeyText (PublicKeyText k)
+  | Just pkText <- T.stripPrefix webAuthnPrefix k
+  , T.all isHexDigitLower pkText
+  , Right kbs <- B16.decode (T.encodeUtf8 pkText)
+  , Right pk <- parseWebAuthnPublicKey kbs
+  = Just pk
+  | otherwise = Nothing
+
+exportWebAuthnPublicKeyText :: WebAuthnPublicKey -> PublicKeyText
+exportWebAuthnPublicKeyText pk =
+  PublicKeyText $ webAuthnPrefix <> toB16Text (exportWebAuthnPublicKey pk)
+
+webAuthnFormat :: PublicKeyText -> Bool
+webAuthnFormat = isJust . parseWebAuthnPublicKeyText
 
 -- | Lower-case hex numbers.
 isHexDigitLower :: Char -> Bool
@@ -271,7 +284,7 @@ isHexDigitLower c =
 
 -- | Supported key formats.
 allKeyFormats :: [PublicKeyText -> Bool]
-allKeyFormats = [ed25519HexFormat, webauthnFormat]
+allKeyFormats = [ed25519HexFormat, webAuthnFormat]
 
 -- | Enforce valid 'KeySet' keys, evaluating error action on failure.
 enforceKeyFormats :: Monad m => (PublicKeyText -> m ()) -> [PublicKeyText -> Bool] -> KeySet -> m ()

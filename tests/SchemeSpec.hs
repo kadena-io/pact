@@ -151,7 +151,7 @@ testPublicKeyImport = do
     [signer] <- toSigners [someED25519Pair]
     [((pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
-        myUserSig = ED25519Sig sig
+        myUserSig = ED25519Sig $ toB16Text $ exportEd25519Signature sig
         wrongSigner = Lens.set siAddress wrongAddr signer
     isLeft (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` True
 
@@ -160,7 +160,7 @@ testPublicKeyImport = do
     [signer] <- toSigners [someED25519Pair]
     [((pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
-        myUserSig = ED25519Sig sig
+        myUserSig = ED25519Sig $ toB16Text $ exportEd25519Signature sig
         wrongScheme = WebAuthn
         wrongSigner = Lens.set siScheme (Just wrongScheme) signer
     isLeft (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` True

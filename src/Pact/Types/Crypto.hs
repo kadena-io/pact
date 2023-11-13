@@ -124,7 +124,7 @@ import Test.QuickCheck
 import qualified Test.QuickCheck.Gen as Gen
 
 -- | The type of parsed signatures
-data UserSig = ED25519Sig Ed25519.Signature
+data UserSig = ED25519Sig T.Text
              | WebAuthnSig WebAuthnSignature WebAuthnSigProvenance
   deriving (Eq, Ord, Show, Generic)
 
@@ -144,7 +144,8 @@ instance Arbitrary WebAuthnSigProvenance where
 instance NFData UserSig
 
 instance J.Encode UserSig where
-  build (ED25519Sig s) = J.text $ toB16Text $ exportEd25519Signature s
+  build (ED25519Sig s) =
+    J.object [ "sig" J..= s ]
   build (WebAuthnSig (WebAuthnSignature
                       { authenticatorData
                       , signature
@@ -153,8 +154,8 @@ instance J.Encode UserSig where
     , "signature" J..= signature
     , "clientDataJSON" J..= clientDataJSON
     ]
-  build (WebAuthnSig sig WebAuthnStringified) = J.text
-    (T.decodeUtf8 $ BSL.toStrict $ J.encode sig)
+  build (WebAuthnSig sig WebAuthnStringified) = J.object
+    [ "sig" J..= T.decodeUtf8 (BSL.toStrict $ J.encode sig) ]
   {-# INLINE build #-}
 
 instance A.FromJSON UserSig where
@@ -163,13 +164,14 @@ instance A.FromJSON UserSig where
     parseWebAuthnStringified x <|>
     parseEd25519 x
     where
-      parseWebAuthnStringified = A.withText "UserSig" $ \t ->
+      parseWebAuthnStringified = A.withObject "UserSig" $ \o -> do
+        t <- o A..: "sig"
         case A.decode (BSL.fromStrict $ T.encodeUtf8 t) of
           Nothing -> fail "Could not decode signature"
           Just webauthnSig -> return $ WebAuthnSig webauthnSig WebAuthnStringified
-      parseEd25519 = A.withText "UserSig" $ \t -> do
-        dehex <- parseB16Text t
-        fmap ED25519Sig $ either fail return $ parseEd25519Signature dehex
+      parseEd25519 = A.withObject "UserSig" $ \o -> do
+        t <- o A..: "sig"
+        return $ ED25519Sig t
       parseWebAuthnObject o = do
         waSig <- A.parseJSON o
         pure $ WebAuthnSig waSig WebAuthnObject
@@ -179,7 +181,7 @@ instance Arbitrary UserSig where
     [ do
       sig <- BS.pack <$> vectorOf 64 arbitrary
       case parseEd25519Signature sig of
-        Right parsedSig -> return $ ED25519Sig parsedSig
+        Right parsedSig -> return $ ED25519Sig $ toB16Text $ exportEd25519Signature parsedSig
         Left _ -> error "invalid ed25519 signature"
     , WebAuthnSig <$> (WebAuthnSignature <$> arbitrary <*> arbitrary <*> arbitrary) <*> arbitrary
     ]
@@ -557,14 +559,14 @@ instance A.FromJSON WebAuthnSignature where
   parseJSON = A.withObject "WebAuthnSignature" $ \o -> do
     clientDataJSON <- o A..: "clientDataJSON"
     authenticatorData <- o A..: "authenticatorData"
-    signature <- o A..: "signature"
+    signature <- (o A..: "signature") <|> (o A..: "sig")
     pure $ WebAuthnSignature {..}
 
 instance J.Encode WebAuthnSignature where
   build (WebAuthnSignature { clientDataJSON, authenticatorData, signature }) = J.object
     [ "authenticatorData" J..=  authenticatorData
     , "clientDataJSON" J..= clientDataJSON
-    , "signature" J..= signature
+    , "sig" J..= signature
     ]
 
 -- | This type represents a challenge that was used during

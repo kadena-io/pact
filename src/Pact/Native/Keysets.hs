@@ -71,7 +71,7 @@ readKeySet' i key = do
   whenExecutionFlagSet FlagEnforceKeyFormats $ do
       ifExecutionFlagSet FlagDisablePact410
         (enforceKeyFormats (const $ evalError' i "Invalid keyset") [ed25519HexFormat] ks)
-        (enforceKeyFormats (const $ evalError' i "Invalid keyset") [ed25519HexFormat, webauthnFormat] ks)
+        (enforceKeyFormats (const $ evalError' i "Invalid keyset") [ed25519HexFormat, webAuthnFormat] ks)
 
   pure ks
 
