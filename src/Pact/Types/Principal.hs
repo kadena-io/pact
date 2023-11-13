@@ -25,7 +25,7 @@ import qualified Data.Text.Encoding as T
 
 import Pact.Types.Hash
 import Pact.Types.Info
-import Pact.Types.KeySet (keysetNameParser)
+import Pact.Types.KeySet (keysetNameParser, ed25519HexFormat)
 import Pact.Types.Names
 import Pact.Types.PactValue (PactValue)
 import Pact.Types.Term
@@ -182,7 +182,10 @@ guardToPrincipal chargeGas = \case
   GPact (PactGuard pid n) -> chargeGas 1 >> pure (P pid n)
   -- TODO later: revisit structure of principal k and w accounts in light of namespaces
   GKeySet (KeySet ks pf) -> case (toList ks,asString pf) of
-    ([k],"keys-all") -> chargeGas 1 >> pure (K k)
+    -- this relies on the key formats being disjoint, so that k: accounts can
+    -- be reserved for ed25519 keys.
+    ([k],"keys-all")
+      | ed25519HexFormat k -> chargeGas 1 >> pure (K k)
     (l,fun) -> do
       h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
       pure $ W (asString h) fun
