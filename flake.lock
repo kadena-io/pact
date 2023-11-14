@@ -226,16 +226,15 @@
         "nixpkgs-rec": "nixpkgs-rec"
       },
       "locked": {
-        "lastModified": 1699956738,
+        "lastModified": 1699959816,
         "narHash": "sha256-OurMcrf07sCDHBumWm8lorsA9hhiKX5KnVogsxx7bJs=",
         "owner": "kadena-io",
         "repo": "hs-nix-infra",
-        "rev": "8c1053765b265a8f13885687f00e094a7a5b76e5",
+        "rev": "a38e0b9c37cc67ef27241d33fcc30d01125f12b5",
         "type": "github"
       },
       "original": {
         "owner": "kadena-io",
-        "ref": "enis/metadata-experiments",
         "repo": "hs-nix-infra",
         "type": "github"
       }
