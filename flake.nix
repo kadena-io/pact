@@ -2,7 +2,7 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
+    hs-nix-infra.url = "github:kadena-io/hs-nix-infra/enis/metadata-experiments";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -16,7 +16,8 @@
         inherit system overlays;
         inherit (haskellNix) config;
       };
-      flake = pkgs.pact.flake {
+      project = pkgs.pact;
+      flake = project.flake {
         # crossPlatforms = p: [ p.ghcjs ];
       };
       overlays = [ haskellNix.overlay
@@ -48,8 +49,10 @@
         echo ${name}: ${package}
         echo works > $out
       '';
-    in flake // rec {
+    in rec {
       packages.default = flake.packages."pact:exe:pact";
+      packages.recursive = with hs-nix-infra.lib.recursive system;
+        wrapRecursiveWithMeta "pact" "${wrapFlake self}.default";
       packages.docs = pkgs.stdenv.mkDerivation {
         name = "pact-docs";
         src = ./docs;
@@ -82,5 +85,8 @@
         echo works > $out
       '';
 
+      # Other flake outputs provided by haskellNix can be accessed through
+      # this project output
+      inherit project;
     });
 }
