@@ -25,6 +25,7 @@ jobs:
       with:
         cache_url: s3://nixcache.chainweb.com?region=us-east-1
         signing_private_key: ${{ secrets.NIX_CACHE_PRIVATE_KEY }}
+        additional_experimental_features: recursive-nix
 
     - name: Set up AWS credentials
       uses: aws-actions/configure-aws-credentials@v2
