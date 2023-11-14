@@ -35,8 +35,11 @@ jobs:
 
     - name: Give root user AWS credentials
       uses: kadena-io/setup-nix-with-cache/copy-root-aws-credentials@v3
-      
+
     - name: Build and cache artifacts
       run: |
         echo Building the project and its devShell
         nix build .#check --log-lines 500 --show-trace
+
+        echo Build the recursive output
+        nix build .#recursive.allDerivations --log-lines 500 --show-trace
