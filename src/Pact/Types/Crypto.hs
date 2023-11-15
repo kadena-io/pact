@@ -5,6 +5,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -42,6 +43,7 @@ module Pact.Types.Crypto
   , exportEd25519SecretKey
   , exportEd25519Signature
   , parseWebAuthnPublicKey
+  , parseWebAuthnPrivateKey
   , exportWebAuthnPublicKey
   , parseWebAuthnSignature
   , exportWebAuthnSignature
@@ -50,7 +52,7 @@ module Pact.Types.Crypto
   , getPublic
   , getPrivate
   , genKeyPair
-  , importKeyPair
+  , importEd25519KeyPair
 
   , Ed25519KeyPair
   , UserSig(..)
@@ -61,6 +63,7 @@ module Pact.Types.Crypto
   -- * WebAuthn mocking. These are only used for testing WebAuthn signatures.
   , generateWebAuthnEd25519KeyPair
   , generateWebAuthnP256KeyPair
+  , exportWebAuthnPrivateKey
   , WebauthnPrivateKey(..)
   , signWebauthn
   ) where
@@ -130,7 +133,7 @@ data UserSig = ED25519Sig T.Text
 
 -- | A type for tracking whether a WebAuthn signature was parsed
 --   from a string, or an JSON object. This is tracked so that
---   we can fork on the allowed provenance. (Before Pact 4.TODO,
+--   we can fork on the allowed provenance. (Before Pact 4.10,
 --   only stringified WebAuthn signatures were allowed).
 data WebAuthnSigProvenance
   = WebAuthnStringified
@@ -244,6 +247,11 @@ parseEd25519Signature = Right . Ed25519.Sig
 
 -- webauthn
 
+exportWebAuthnPrivateKey :: WebauthnPrivateKey -> ByteString
+exportWebAuthnPrivateKey = \case
+  WebAuthnEdDSAPrivateKey k -> exportEd25519SecretKey k
+  WebAuthnP256PrivateKey k -> B.convert k
+
 verifyWebAuthnSig :: PactHash.Hash -> WA.CosePublicKey -> WebAuthnSignature -> Either String ()
 verifyWebAuthnSig
   hsh
@@ -285,6 +293,19 @@ parseWebAuthnPublicKey rawPk = do
     Serialise.deserialiseOrFail @WA.CosePublicKey (BSL.fromStrict rawPk)
   webAuthnPubKeyHasValidAlg pk
   return pk
+
+parseWebAuthnPrivateKey :: ByteString -> Either String WebauthnPrivateKey
+parseWebAuthnPrivateKey rawPk = case parseEd25519SecretKey rawPk of
+  Right k -> Right $ WebAuthnEdDSAPrivateKey k
+  Left _ -> case parseECDSAP256PrivateKey rawPk of
+    Right k -> Right $ WebAuthnP256PrivateKey k
+    Left _ -> Left "Could not parse WebAuthn private key"
+
+parseECDSAP256PrivateKey :: ByteString -> Either String (ECDSA.PrivateKey ECC.Curve_P256R1)
+parseECDSAP256PrivateKey bs =
+  case ECDSA.decodePrivate (Proxy :: Proxy ECC.Curve_P256R1) bs of
+    E.CryptoFailed _ -> Left "Could not parse as ECDSA-P256 private key"
+    E.CryptoPassed a -> Right a
 
 webAuthnPubKeyHasValidAlg :: WebAuthnPublicKey -> Either String ()
 webAuthnPubKeyHasValidAlg (WA.PublicKeyWithSignAlg _ signAlg) =
@@ -455,8 +476,8 @@ genKeyPair = ed25519GenKeyPair
 -- Derives Public Key from Private Key if none provided. Trivial in some
 -- Crypto schemes (i.e. Elliptic curve ones).
 -- Checks that Public Key provided matches the Public Key derived from the Private Key.
-importKeyPair :: Maybe PublicKeyBS -> PrivateKeyBS -> Either String Ed25519KeyPair
-importKeyPair maybePubBS (PrivBS privBS) = do
+importEd25519KeyPair :: Maybe PublicKeyBS -> PrivateKeyBS -> Either String Ed25519KeyPair
+importEd25519KeyPair maybePubBS (PrivBS privBS) = do
   priv <- parseEd25519SecretKey privBS
   let derivedPub = ed25519GetPublicKey priv
   suppliedPub <- case maybePubBS of

@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -32,6 +33,8 @@ module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
   , mkCommand
   , mkCommand'
+  , mkCommandWithDynKeys
+  , mkCommandWithDynKeys'
   , mkUnsignedCommand
   , signHash
   , keyPairToSigner
@@ -54,11 +57,14 @@ module Pact.Types.Command
   , RequestKey(..)
   , cmdToRequestKey
   , requestKeyToB16Text
+
+  , DynKeyPair (DynEd25519KeyPair, DynWebAuthnKeyPair)
   ) where
 
 import Control.Applicative
 import Control.Lens hiding ((.=), elements)
 import Control.Monad
+import Control.Monad.Except (runExceptT)
 import Control.DeepSeq
 
 import Data.Aeson as A
@@ -150,6 +156,42 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
+
+data DynKeyPair
+  = DynEd25519KeyPair Ed25519KeyPair
+  | DynWebAuthnKeyPair WebAuthnPublicKey WebauthnPrivateKey
+  deriving (Eq, Show, Generic)
+
+mkCommandWithDynKeys
+  :: J.Encode c
+  => J.Encode m
+  => [(DynKeyPair, [SigCapability])]
+  -> m
+  -> Text
+  -> Maybe NetworkId
+  -> PactRPC c
+  -> IO (Command ByteString)
+mkCommandWithDynKeys creds meta nonce nid rpc = mkCommandWithDynKeys' creds encodedPayload
+  where
+    encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
+    payload = Payload rpc nonce meta (map credToSigner creds) nid
+    credToSigner cred =
+      case cred of
+       (DynEd25519KeyPair (pubEd25519, _), caps) ->
+         Signer
+           { _siScheme = Nothing
+           , _siPubKey = toB16Text (exportEd25519PubKey pubEd25519)
+           , _siAddress = Nothing
+           , _siCapList = caps
+           }
+       (DynWebAuthnKeyPair pubWebAuthn _, caps) ->
+         Signer
+           { _siScheme = Just WebAuthn
+           , _siPubKey = toB16Text (exportWebAuthnPublicKey pubWebAuthn)
+           , _siAddress = Nothing
+           , _siCapList = caps
+           }
+
 keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
@@ -167,6 +209,23 @@ mkCommand' creds env = do
       toUserSig (cred,_) = ED25519Sig $ signHash hsh cred
   let sigs = toUserSig <$> creds
   return $ Command env sigs hsh
+
+mkCommandWithDynKeys' :: [(DynKeyPair, a)] -> ByteString -> IO (Command ByteString)
+mkCommandWithDynKeys' creds env = do
+  let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
+  sigs <- traverse (toUserSig hsh) creds
+  return $ Command env sigs hsh
+  where
+    foo = ""
+    toUserSig :: PactHash -> (DynKeyPair, a) -> IO UserSig
+    toUserSig hsh = \case
+      (DynEd25519KeyPair (pub, priv), _) ->
+        pure $ ED25519Sig $ signHash hsh (pub, priv)
+      (DynWebAuthnKeyPair pubWebAuthn privWebAuthn, _) -> do
+        signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn foo (toUntypedHash hsh)
+        case signResult of
+          Left _e -> error "TODO"
+          Right sig -> return $ WebAuthnSig sig WebAuthnObject
 
 mkUnsignedCommand
   :: J.Encode m
@@ -441,3 +500,5 @@ makeLenses ''Payload
 makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode
+
+

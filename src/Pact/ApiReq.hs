@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -46,6 +47,7 @@ import Control.Monad.State.Strict
 import Data.Aeson
 import qualified Data.Aeson.Key as AK
 import qualified Data.Aeson.KeyMap as AKM
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
@@ -386,7 +388,7 @@ importKeyFile keyFile = do
         pub <- getKey "public" v
         sec <- getKey "secret" v
 
-        importKeyPair (Just $ PubBS pub) (PrivBS sec)
+        importEd25519KeyPair (Just $ PubBS pub) (PrivBS sec)
   case ekp of
     Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
     Right kp -> return kp
@@ -473,7 +475,7 @@ signCmd keyFiles bs = do
 withKeypairsOrSigner
   :: Bool
   -> ApiReq
-  -> ([Ed25519KeyPairCaps] -> IO a)
+  -> ([(DynKeyPair, [SigCapability])] -> IO a)
   -> ([Signer] -> IO a)
   -> IO a
 withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
@@ -541,7 +543,7 @@ mkExec
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
-  -> [Ed25519KeyPairCaps]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs + caplists
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
@@ -550,7 +552,7 @@ mkExec
   -> IO (Command Text)
 mkExec code mdata pubMeta kps nid ridm = do
   rid <- mkNonce ridm
-  cmd <- mkCommand
+  cmd <- mkCommandWithDynKeys
          kps
          pubMeta
          rid
@@ -628,7 +630,7 @@ mkCont
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
-  -> [Ed25519KeyPairCaps]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs
   -> Maybe Text
     -- ^ optional nonce
@@ -639,7 +641,7 @@ mkCont
   -> IO (Command Text)
 mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
   rid <- mkNonce ridm
-  cmd <- mkCommand
+  cmd <- mkCommandWithDynKeys
          kps
          pubMeta
          rid
@@ -680,27 +682,47 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
--- Parse `APIKeyPair`s into Ed25519 keypairs.
-mkKeyPairs :: [ApiKeyPair] -> IO [Ed25519KeyPairCaps]
+-- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
+mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
-  where importValidKeyPair ApiKeyPair{..} = fmap (,maybe [] id _akpCaps) $
-          importKeyPair _akpPublic _akpSecret
+  where
 
-        mkPair akp = case _akpAddress akp of
-          Nothing -> either dieAR return (importValidKeyPair akp)
-          Just addrT -> do
+        importValidKeyPair
+          :: Maybe PublicKeyBS
+          -> PrivateKeyBS
+          -> Maybe [SigCapability]
+          -> Either String (Ed25519KeyPair, [SigCapability])
+        importValidKeyPair pubEd25519 privEd25519 caps = fmap (,maybe [] id caps) $
+          importEd25519KeyPair pubEd25519 privEd25519
+
+        isEd25519 :: Maybe PPKScheme -> Bool
+        isEd25519 = \case
+          Nothing -> True
+          Just ED25519 -> True
+          _ -> False
+
+        mkPair :: ApiKeyPair -> IO (DynKeyPair, [SigCapability])
+        mkPair akp = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
+          (scheme, pub, priv, Nothing) | isEd25519 scheme ->
+            either dieAR (return . first DynEd25519KeyPair) (importValidKeyPair pub priv (_akpCaps akp))
+          (scheme, pub, priv, Just addrT) | isEd25519 scheme -> do
             addrBS <- either dieAR return (parseB16TextOnly addrT)
-            kp     <- either dieAR return (importValidKeyPair akp)
+            kp     <- either dieAR return (importValidKeyPair pub priv (_akpCaps akp))
 
             -- Enforces that user provided address matches the address derived from the Public Key
             -- for transparency and a better user experience. User provided address not used except
             -- for this purpose.
             if addrBS == getPublic (fst kp)
-              then return kp
+              then (return . first DynEd25519KeyPair) kp
               else dieAR $ "Address provided "
                           ++ show (toB16Text addrBS)
                           ++ " does not match actual Address "
                           ++ show (toB16Text $ getPublic $ fst kp)
+          (Just WebAuthn, Just (PubBS pub), PrivBS priv, Nothing) -> do
+            pubWebAuthn <- either dieAR return (parseWebAuthnPublicKey pub)
+            privWebAuthn <- either dieAR return (parseWebAuthnPrivateKey priv)
+            return $ (DynWebAuthnKeyPair pubWebAuthn privWebAuthn, fromMaybe [] (_akpCaps akp))
+          _ -> dieAR $ "Attempted to mix Ed25519 and WebAuthn keys."
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ intercalate "\n" $

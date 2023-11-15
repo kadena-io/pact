@@ -291,7 +291,7 @@ main = do
   !priv <- eitherDie "priv" $
     parseB16TextOnly "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
   !keyPair <- eitherDie "keyPair" $
-    importKeyPair (Just $ PubBS pub) (PrivBS priv)
+    importEd25519KeyPair (Just $ PubBS pub) (PrivBS priv)
   !parsedExps <- force <$> mapM (mapM (eitherDie "parseExps" . parseExprs)) exps
   !pureDb <- perfEnv dbPerf <$> mkPureEnv neverLog
   initSchema pureDb
