@@ -56,7 +56,7 @@ module Pact.Types.Crypto
 
   , Ed25519KeyPair
   , UserSig(..)
-  , WebAuthnSigProvenance(..)
+  , WebAuthnSigEncoding(..)
   , WebAuthnPublicKey
   , WebAuthnSignature(..)
 
@@ -128,20 +128,20 @@ import qualified Test.QuickCheck.Gen as Gen
 
 -- | The type of parsed signatures
 data UserSig = ED25519Sig T.Text
-             | WebAuthnSig WebAuthnSignature WebAuthnSigProvenance
+             | WebAuthnSig WebAuthnSignature WebAuthnSigEncoding
   deriving (Eq, Ord, Show, Generic)
 
 -- | A type for tracking whether a WebAuthn signature was parsed
 --   from a string, or an JSON object. This is tracked so that
 --   we can fork on the allowed provenance. (Before Pact 4.10,
 --   only stringified WebAuthn signatures were allowed).
-data WebAuthnSigProvenance
+data WebAuthnSigEncoding
   = WebAuthnStringified
   | WebAuthnObject
   deriving (Eq, Ord, Show, Generic)
 
-instance NFData WebAuthnSigProvenance
-instance Arbitrary WebAuthnSigProvenance where
+instance NFData WebAuthnSigEncoding
+instance Arbitrary WebAuthnSigEncoding where
   arbitrary = oneof [pure WebAuthnStringified, pure WebAuthnObject]
 
 instance NFData UserSig

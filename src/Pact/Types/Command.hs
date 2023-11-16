@@ -159,7 +159,7 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
 
 data DynKeyPair
   = DynEd25519KeyPair Ed25519KeyPair
-  | DynWebAuthnKeyPair WebAuthnPublicKey WebauthnPrivateKey
+  | DynWebAuthnKeyPair WebAuthnPublicKey WebauthnPrivateKey WebAuthnSigEncoding
   deriving (Eq, Show, Generic)
 
 mkCommandWithDynKeys
@@ -184,7 +184,7 @@ mkCommandWithDynKeys creds meta nonce nid rpc = mkCommandWithDynKeys' creds enco
            , _siAddress = Nothing
            , _siCapList = caps
            }
-       (DynWebAuthnKeyPair pubWebAuthn _, caps) ->
+       (DynWebAuthnKeyPair pubWebAuthn _ _, caps) ->
          Signer
            { _siScheme = Just WebAuthn
            , _siPubKey = toB16Text (exportWebAuthnPublicKey pubWebAuthn)
@@ -221,11 +221,11 @@ mkCommandWithDynKeys' creds env = do
     toUserSig hsh = \case
       (DynEd25519KeyPair (pub, priv), _) ->
         pure $ ED25519Sig $ signHash hsh (pub, priv)
-      (DynWebAuthnKeyPair pubWebAuthn privWebAuthn, _) -> do
+      (DynWebAuthnKeyPair pubWebAuthn privWebAuthn webAuthnSigEncoding, _) -> do
         signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn foo (toUntypedHash hsh)
         case signResult of
           Left _e -> error "TODO"
-          Right sig -> return $ WebAuthnSig sig WebAuthnObject
+          Right sig -> return $ WebAuthnSig sig webAuthnSigEncoding
 
 mkUnsignedCommand
   :: J.Encode m
