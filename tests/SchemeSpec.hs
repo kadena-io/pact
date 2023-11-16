@@ -26,6 +26,7 @@ import Pact.Types.Crypto
 import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromText')
 import Pact.Types.RPC
+import Pact.Types.Capability (SigCapability)
 import qualified Pact.Types.Hash as PactHash
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
@@ -75,8 +76,8 @@ toApiKeyPairs kps = map makeAKP kps
           ApiKeyPair priv (Just pub) add (Just scheme) Nothing
 
 
-mkCommandTest :: [Ed25519KeyPairCaps] -> [Signer] -> Text -> IO (Command ByteString)
-mkCommandTest kps signers code = mkCommand' kps $ toExecPayload signers code
+mkCommandTest :: [(DynKeyPair, [SigCapability])] -> [Signer] -> Text -> IO (Command ByteString)
+mkCommandTest kps signers code = mkCommandWithDynKeys' kps $ toExecPayload signers code
 
 
 toSigners :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> IO [Signer]
@@ -114,8 +115,8 @@ spec = describe "working with crypto schemes" $ do
 testKeyPairImport :: Spec
 testKeyPairImport = do
   it "imports ED25519 Key Pair" $ do
-    kp <- mkKeyPairs (toApiKeyPairs [someED25519Pair])
-    (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
+    [(DynEd25519KeyPair kp, caps)] <- mkKeyPairs (toApiKeyPairs [someED25519Pair])
+    (map getKeyPairComponents [(kp, caps)]) `shouldBe` [someED25519Pair]
 
 
 testDefSchemeApiKeyPair :: Spec
@@ -124,8 +125,8 @@ testDefSchemeApiKeyPair =
     it "makes the scheme the default PPKScheme" $ do
       let (pub, priv, addr, _) = someED25519Pair
           apiKP = ApiKeyPair priv (Just pub) addr Nothing Nothing
-      kp <- mkKeyPairs [apiKP]
-      (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
+      [(DynEd25519KeyPair kp, caps)] <- mkKeyPairs [apiKP]
+      (map getKeyPairComponents [(kp, caps)]) `shouldBe` [someED25519Pair]
 
 
 
@@ -134,8 +135,8 @@ testPublicKeyImport = do
   it "derives PublicKey from the PrivateKey when PublicKey not provided" $ do
     let (_, priv, addr, scheme) = someED25519Pair
         apiKP = ApiKeyPair priv Nothing addr (Just scheme) Nothing
-    kp <- mkKeyPairs [apiKP]
-    (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
+    [(DynEd25519KeyPair kp, caps)] <- mkKeyPairs [apiKP]
+    (map getKeyPairComponents [(kp,caps)]) `shouldBe` [someED25519Pair]
 
 
   it "throws error when PublicKey provided does not match derived PublicKey" $ do
@@ -149,7 +150,7 @@ testPublicKeyImport = do
     let hsh = PactHash.hash "(somePactFunction)"
         (_,_,wrongAddr,_) = anotherED25519Pair
     [signer] <- toSigners [someED25519Pair]
-    [((pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    [(DynEd25519KeyPair (pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
         myUserSig = ED25519Sig $ toB16Text $ exportEd25519Signature sig
         wrongSigner = Lens.set siAddress wrongAddr signer
@@ -158,7 +159,7 @@ testPublicKeyImport = do
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
     let hsh = PactHash.hash "(somePactFunction)"
     [signer] <- toSigners [someED25519Pair]
-    [((pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    [(DynEd25519KeyPair (pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
     let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
         myUserSig = ED25519Sig $ toB16Text $ exportEd25519Signature sig
         wrongScheme = WebAuthn
@@ -272,6 +273,9 @@ signAndVerifyWebAuthn = describe "Signing and verification of WebAuthn signature
     isRight sig `shouldBe` True
   it "should be able to verify the genarated signature" $ do
     (pub, priv) <- generateWebAuthnEd25519KeyPair
+    let encodedPub = T.decodeUtf8 $ B16.encode (exportWebAuthnPublicKey pub)
+    let encodedPriv = T.decodeUtf8 $ B16.encode (exportWebAuthnPrivateKey priv)
+    error (unlines [show encodedPub, show encodedPriv])
     let authData = "fake-authdata"
     let Right (pactData :: PactHash.TypedHash PactHash.Blake2b_256) =
           fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc"
