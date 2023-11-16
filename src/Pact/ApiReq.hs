@@ -684,11 +684,11 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
   return $ decodeUtf8 <$> cmd
 
 mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
-mkKeyPairs keyPairs = mkKeyPairsWithWebAuthnSigEncoding WebAuthnObject keyPairs
+mkKeyPairs keyPairs = mkKeyPairsWithWebAuthnSigEncoding (map (, WebAuthnObject) keyPairs)
 
 -- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
-mkKeyPairsWithWebAuthnSigEncoding :: WebAuthnSigEncoding -> [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
-mkKeyPairsWithWebAuthnSigEncoding webAuthnSigEncoding keyPairs = traverse mkPair keyPairs
+mkKeyPairsWithWebAuthnSigEncoding :: [(ApiKeyPair, WebAuthnSigEncoding)] -> IO [(DynKeyPair, [SigCapability])]
+mkKeyPairsWithWebAuthnSigEncoding keyPairs = traverse mkPair keyPairs
   where
 
         importValidKeyPair
@@ -705,8 +705,8 @@ mkKeyPairsWithWebAuthnSigEncoding webAuthnSigEncoding keyPairs = traverse mkPair
           Just ED25519 -> True
           _ -> False
 
-        mkPair :: ApiKeyPair -> IO (DynKeyPair, [SigCapability])
-        mkPair akp = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
+        mkPair :: (ApiKeyPair, WebAuthnSigEncoding) -> IO (DynKeyPair, [SigCapability])
+        mkPair (akp, webAuthnSigEncoding) = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
           (scheme, pub, priv, Nothing) | isEd25519 scheme ->
             either dieAR (return . first DynEd25519KeyPair) (importValidKeyPair pub priv (_akpCaps akp))
           (scheme, pub, priv, Just addrT) | isEd25519 scheme -> do
