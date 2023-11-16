@@ -28,6 +28,7 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
+    ,mkKeyPairsWithWebAuthnSigEncoding
     ,AddSigsReq(..)
     ,addSigsReq
     ,combineSigs
@@ -682,9 +683,12 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
--- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
 mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
-mkKeyPairs keyPairs = traverse mkPair keyPairs
+mkKeyPairs keyPairs = mkKeyPairsWithWebAuthnSigEncoding WebAuthnObject keyPairs
+
+-- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
+mkKeyPairsWithWebAuthnSigEncoding :: WebAuthnSigEncoding -> [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
+mkKeyPairsWithWebAuthnSigEncoding webAuthnSigEncoding keyPairs = traverse mkPair keyPairs
   where
 
         importValidKeyPair
@@ -721,7 +725,7 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
           (Just WebAuthn, Just (PubBS pub), PrivBS priv, Nothing) -> do
             pubWebAuthn <- either dieAR return (parseWebAuthnPublicKey pub)
             privWebAuthn <- either dieAR return (parseWebAuthnPrivateKey priv)
-            return $ (DynWebAuthnKeyPair pubWebAuthn privWebAuthn WebAuthnObject, fromMaybe [] (_akpCaps akp)) -- TODO: undefined!
+            return $ (DynWebAuthnKeyPair pubWebAuthn privWebAuthn webAuthnSigEncoding, fromMaybe [] (_akpCaps akp))
           _ -> dieAR $ "Attempted to mix Ed25519 and WebAuthn keys."
 
 dieAR :: String -> IO a
