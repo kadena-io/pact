@@ -1361,7 +1361,7 @@ makeExecCmd' nonce keyPairs code = mkExec code
 
 formatPubKeyForCmd :: DynKeyPair -> Value
 formatPubKeyForCmd (DynEd25519KeyPair kp) = toJSON $ toB16Text $ getPublic kp
-formatPubKeyForCmd (DynWebAuthnKeyPair pub _priv) = toJSON $ toB16Text $ exportWebAuthnPublicKey pub
+formatPubKeyForCmd (DynWebAuthnKeyPair pub _priv _encoding) = toJSON $ toB16Text $ exportWebAuthnPublicKey pub
 
 
 
