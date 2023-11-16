@@ -31,7 +31,7 @@ module Pact.Native.Ops
     ) where
 
 
-import Control.Monad (when)
+import Control.Monad (when, unless)
 import Data.Bits
 import Data.Decimal
 import Data.Default
@@ -43,7 +43,9 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Pretty
 import Pact.Types.Runtime
-import Pact.Native.Trans.TOps
+import Pact.Native.Trans
+
+import qualified Pact.Trans.Dec as Dec
 
 
 modDef :: NativeDef
@@ -128,12 +130,12 @@ powDef = defRNative "^" powImpl coerceBinNum ["(^ 2 3)"] "Raise X to Y power."
 
 powImpl :: RNativeFun e
 powImpl i as@[TLiteral a _,TLiteral b _] = do
-  decimalPow <- ifExecutionFlagSet' FlagDisableNewTrans (liftDecPowF i (**)) (liftDecPowF i trans_pow)
-  binop "^" decimalPow intPow i as
+  binop "^" (liftDecPowF i trans_pow) intPow i as
   where
+
   liftDecPowF fi f lop rop = do
     _ <- computeGasCommit def "" (GDecimalOpCost lop rop)
-    liftDecF fi f lop rop
+    f fi lop rop
   oldIntPow  b' e = do
     when (b' < 0) $ evalError' i $ "Integral power must be >= 0" <> ": " <> pretty (a,b)
     liftIntegerOp (^) b' e
@@ -184,18 +186,15 @@ litGt0 = \case
 logDef :: NativeDef
 logDef = defRNative "log" log' coerceBinNum ["(log 2 256)"] "Log of Y base X."
   where
+
   liftLogDec fi f a b = do
     _ <- computeGasCommit def "" (GDecimalOpCost a b)
-    liftDecF fi f a b
+    f fi a b
   log' :: RNativeFun e
   log' fi as@[TLiteral base _,TLiteral v _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
       when (not (litGt0 base) || not (legalLogArg v)) $ evalError' fi "Illegal base or argument in log"
-    decimalLogBase <-
-      ifExecutionFlagSet' FlagDisableNewTrans (liftLogDec fi logBase) (liftLogDec fi trans_log)
-    integerLogBase <-
-      ifExecutionFlagSet' FlagDisableNewTrans (liftIntF fi logBase) (liftIntF fi trans_log)
-    binop "log" decimalLogBase integerLogBase fi as
+    binop "log" (liftLogDec fi trans_log) (trans_logInt fi) fi as
   log' fi as = argsError fi as
 
 sqrtDef :: NativeDef
@@ -203,9 +202,8 @@ sqrtDef = defRNative "sqrt" sqrt' unopTy ["(sqrt 25)"] "Square root of X."
   where
   sqrt' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
-      when (not (litGt0 a)) $ evalError' fi "Sqrt must be non-negative"
-    decimalSqrt <- ifExecutionFlagSet' FlagDisableNewTrans (unopd sqrt) (unopd trans_sqrt)
-    decimalSqrt fi as
+      unless (litGt0 a) $ evalError' fi "Sqrt must be non-negative"
+    unopd trans_sqrt fi as
   sqrt' fi as = argsError fi as
 
 lnDef :: NativeDef
@@ -213,18 +211,19 @@ lnDef = defRNative "ln" ln' unopTy ["(round (ln 60) 6)"] "Natural log of X."
   where
   ln' fi as@[TLiteral a _] = do
     unlessExecutionFlagSet FlagDisablePact43 $
-      when (not (legalLogArg a)) $ evalError' fi "Illegal argument for ln: must be greater than zero"
-    decimalLog <- ifExecutionFlagSet' FlagDisableNewTrans (unopd log) (unopd trans_ln)
-    decimalLog fi as
+      unless (legalLogArg a) $ evalError' fi "Illegal argument for ln: must be greater than zero"
+    unopd trans_ln fi as
+    -- decimalLog <- ifExecutionFlagSet' FlagDisableNewTrans (unopd log) (unopd trans_ln)
+    -- decimalLog fi as
   ln' fi as = argsError fi as
 
 expDef :: NativeDef
-expDef = defRNative "exp" go
+expDef = defRNative "exp" (unopd trans_exp)
   unopTy ["(round (exp 3) 6)"] "Exp of X."
-  where
-  go fi as = do
-    decimalExp <- ifExecutionFlagSet' FlagDisableNewTrans (unopd exp) (unopd trans_exp)
-    decimalExp fi as
+  -- where
+  -- go fi as = do
+  --   decimalExp <- ifExecutionFlagSet' FlagDisableNewTrans (unopd exp) (unopd trans_exp)
+  --   decimalExp fi as
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
@@ -460,7 +459,7 @@ liftIntegerOp f a b = do
 liftDecimalOp :: (Decimal -> Decimal -> Decimal) -> Decimal -> Decimal -> Eval e Decimal
 liftDecimalOp f a b = do
   unlessExecutionFlagSet FlagDisablePact43 $ twoArgDecOpGas a b
-  pure (f a b)
+  pure (Dec.dec_reduce $ f a b)
 
 
 binop'
@@ -480,44 +479,43 @@ binop ndef dop iop fi as@[TLiteral a _,TLiteral b _] = do
   case (a,b) of
     (LInteger i,LInteger j) -> toTerm <$> (i `iop` j)
     (LDecimal i,LDecimal j) ->
-      toTerm <$> (i `dop` j)
+      toTerm . Dec.dec_reduce <$> (i `dop` j)
     (LInteger i,LDecimal j) -> do
       emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
-      toTerm <$> (fromIntegral i `dop` j)
+      toTerm . Dec.dec_reduce <$> (fromIntegral i `dop` j)
     (LDecimal i,LInteger j) -> do
       emitPactWarning $ DeprecatedOverload ndef "decimal/integer operator overload is deprecated"
-      toTerm <$> (i `dop` fromIntegral j)
+      toTerm . Dec.dec_reduce <$> (i `dop` fromIntegral j)
     _ -> argsError fi as
 binop _ _ _ fi as = argsError fi as
 {-# INLINE binop #-}
 
-dec2F :: Decimal -> Double
-dec2F = fromRational . toRational
-f2Dec :: Double -> Decimal
-f2Dec = fromRational . toRational
-int2F :: Integer -> Double
-int2F = fromIntegral
-f2Int :: Double -> Integer
-f2Int = round
+-- dec2F :: Decimal -> Double
+-- dec2F = fromRational . toRational
+-- f2Dec :: Double -> Decimal
+-- f2Dec = fromRational . toRational
+-- int2F :: Integer -> Double
+-- int2F = fromIntegral
+-- f2Int :: Double -> Integer
+-- f2Int = round
 
-liftDecF :: HasInfo i => i -> (Double -> Double -> Double) -> Decimal -> Decimal -> Eval e Decimal
-liftDecF i f a b = do
-  let !out = (dec2F a `f` dec2F b)
-  unlessExecutionFlagSet FlagDisablePact43 $
-    when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
-  pure $ f2Dec out
+-- liftDecF :: HasInfo i => i -> (Double -> Double -> Double) -> Decimal -> Decimal -> Eval e Decimal
+-- liftDecF i f a b = do
+--   let !out = (dec2F a `f` dec2F b)
+--   unlessExecutionFlagSet FlagDisablePact43 $
+--     when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
+--   pure $ f2Dec out
 
-  -- Right $ f2Dec (dec2F a `f` dec2F b)
-liftIntF :: HasInfo i => i -> (Double -> Double -> Double) -> Integer -> Integer -> Eval e Integer
-liftIntF i f a b = do
-  let !out = (int2F a `f` int2F b)
-  unlessExecutionFlagSet FlagDisablePact43 $
-    when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
-  pure $ f2Int out
+-- liftIntF :: HasInfo i => i -> (Double -> Double -> Double) -> Integer -> Integer -> Eval e Integer
+-- liftIntF i f a b = do
+--   let !out = (int2F a `f` int2F b)
+--   unlessExecutionFlagSet FlagDisablePact43 $
+--     when (isNaN out || isInfinite out) $ evalError' i "Operation resulted in +- infinity or NaN"
+--   pure $ f2Int out
 
-unopd :: (Double -> Double) -> RNativeFun e
-unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i
-unopd op _ [TLiteral (LDecimal n) _] = return $ toTerm $ f2Dec $ op $ dec2F n
+unopd :: (forall i. HasInfo i => i -> Decimal -> Eval e Decimal) -> RNativeFun e
+unopd op fi [TLitInteger i] = toTerm . Dec.dec_reduce <$> op fi (fromIntegral i)
+unopd op fi [TLiteral (LDecimal n) _] = toTerm . Dec.dec_reduce <$> op fi n
 unopd _ i as = argsError i as
 
 

@@ -34,6 +34,7 @@ module Pact.Types.Gas
   , geGasLimit
   , geGasPrice
   , geGasModel
+  , GasModelType(..)
   ) where
 
 import Control.DeepSeq (NFData)
@@ -278,8 +279,14 @@ newtype MilliGasLimit
 instance Show MilliGasLimit where
   show (MilliGasLimit (MilliGas i)) = show i
 
+data GasModelType
+  = ConstantGasModel Gas
+  | TableGasModel
+  deriving Show
+
 data GasModel = GasModel
   { gasModelName :: !Text
+  , gasModelType :: GasModelType
   , gasModelDesc :: !Text
   , runGasModel :: Text -> GasArgs -> MilliGas
   }

@@ -20,12 +20,12 @@ build-type:          Simple
 extra-source-files:
     README.md
     CHANGELOG.md
-    cbits/musl/libm.h
-    cbits/musl/endian.h
-    cbits/musl/exp_data.h
-    cbits/musl/log_data.h
-    cbits/musl/pow_data.h
-    cbits/musl/sqrt_data.h
+    trans/cbits/musl/libm.h
+    trans/cbits/musl/endian.h
+    trans/cbits/musl/exp_data.h
+    trans/cbits/musl/log_data.h
+    trans/cbits/musl/pow_data.h
+    trans/cbits/musl/sqrt_data.h
 
 flag cryptonite-ed25519
   description: use crypton instead of ed25519-donna
@@ -81,19 +81,19 @@ library
     -Wincomplete-uni-patterns
     -Wredundant-constraints
   c-sources:
-    cbits/musl/__math_invalid.c
-    cbits/musl/__math_divzero.c
-    cbits/musl/__math_oflow.c
-    cbits/musl/__math_uflow.c
-    cbits/musl/__math_xflow.c
-    cbits/musl/exp.c
-    cbits/musl/exp_data.c
-    cbits/musl/log.c
-    cbits/musl/log_data.c
-    cbits/musl/pow.c
-    cbits/musl/pow_data.c
-    cbits/musl/sqrt.c
-    cbits/musl/sqrt_data.c
+    trans/cbits/musl/__math_invalid.c
+    trans/cbits/musl/__math_divzero.c
+    trans/cbits/musl/__math_oflow.c
+    trans/cbits/musl/__math_uflow.c
+    trans/cbits/musl/__math_xflow.c
+    trans/cbits/musl/exp.c
+    trans/cbits/musl/exp_data.c
+    trans/cbits/musl/log.c
+    trans/cbits/musl/log_data.c
+    trans/cbits/musl/pow.c
+    trans/cbits/musl/pow_data.c
+    trans/cbits/musl/sqrt.c
+    trans/cbits/musl/sqrt_data.c
   exposed-modules:
     Crypto.Hash.Blake2Native
     Crypto.Hash.PoseidonNative
@@ -120,6 +120,7 @@ library
     Pact.Native.Pairing.GaloisField
     Pact.Native.SPV
     Pact.Native.Time
+    Pact.Native.Trans
     Pact.Native.Trans.TOps
     Pact.Parse
     Pact.Persist
@@ -194,6 +195,8 @@ library
   build-depends:
     -- internal
     , pact-prettyprinter
+    , pact-trans
+    , decimal-arithmetic
 
     -- external
     , Decimal >=0.4.2
@@ -350,7 +353,7 @@ executable pact
   build-depends:       base
                      , pact
   hs-source-dirs:      executables
-  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-options:         -Wwarn -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
@@ -379,6 +382,38 @@ executable gasmodel
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
+
+-- Support for transcendental functions on decimal values
+
+library pact-trans
+  hs-source-dirs: trans/src
+  default-language: Haskell2010
+  ghc-options: -Wwarn -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  build-depends:
+    , base >= 4.18.0.0
+    , Decimal >=0.4.2
+    , decimal-arithmetic >=0.5.1.1
+    , mtl
+  c-sources:
+    trans/cbits/musl/__math_invalid.c
+    trans/cbits/musl/__math_divzero.c
+    trans/cbits/musl/__math_oflow.c
+    trans/cbits/musl/__math_uflow.c
+    trans/cbits/musl/__math_xflow.c
+    trans/cbits/musl/exp.c
+    trans/cbits/musl/exp_data.c
+    trans/cbits/musl/log.c
+    trans/cbits/musl/log_data.c
+    trans/cbits/musl/pow.c
+    trans/cbits/musl/pow_data.c
+    trans/cbits/musl/sqrt.c
+    trans/cbits/musl/sqrt_data.c
+  exposed-modules:
+    Pact.Trans.Musl
+    Pact.Trans.Types
+    Pact.Trans.Dec
+    Pact.Trans.Dbl
 
 benchmark bench-json
   if !flag(build-tool)
@@ -496,3 +531,21 @@ test-suite hspec
       , yaml
       , process
       , posix-pty
+      , decimal-arithmetic
+      , pact-trans
+
+-- test-suite trans-spec
+--   main-is:          TransSpec.hs
+--   type:             exitcode-stdio-1.0
+--   hs-source-dirs:   trans/tests
+--   default-language: Haskell2010
+--   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+--   build-depends:
+--     , base
+--     , Decimal >=0.4.2
+--     , decimal-arithmetic >=0.5.1.1
+--     , QuickCheck >=2.12.6.1
+--     , quickcheck-instances
+--     , hspec
+--     , hspec-core
+--     , pact-trans
