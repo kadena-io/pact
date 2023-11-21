@@ -273,9 +273,6 @@ signAndVerifyWebAuthn = describe "Signing and verification of WebAuthn signature
     isRight sig `shouldBe` True
   it "should be able to verify the genarated signature" $ do
     (pub, priv) <- generateWebAuthnEd25519KeyPair
-    let encodedPub = T.decodeUtf8 $ B16.encode (exportWebAuthnPublicKey pub)
-    let encodedPriv = T.decodeUtf8 $ B16.encode (exportWebAuthnPrivateKey priv)
-    error (unlines [show encodedPub, show encodedPriv])
     let authData = "fake-authdata"
     let Right (pactData :: PactHash.TypedHash PactHash.Blake2b_256) =
           fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc"
