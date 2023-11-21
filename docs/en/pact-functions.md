@@ -5,14 +5,14 @@
 
 Constant denoting the ASCII charset
 
-Constant: 
+Constant:
 &nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
 
 ### CHARSET_LATIN1 {#CHARSET_LATIN1}
 
 Constant denoting the Latin-1 charset ISO-8859-1
 
-Constant: 
+Constant:
 &nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
 
 ### at {#at}
@@ -765,7 +765,7 @@ Top level only: this function will fail if used in module code.
 
 Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER. Output is sorted by the ordering of keys.
 ```lisp
-(let* 
+(let*
  ((qry (lambda (k obj) true)) ;; select all rows
   (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
  )
@@ -924,7 +924,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") 15)
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N days, for use with 'add-time' 
+N days, for use with 'add-time'
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 "2016-07-23T12:00:00Z"
@@ -962,7 +962,7 @@ pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N hours, for use with 'add-time' 
+N hours, for use with 'add-time'
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 "2016-07-22T13:00:00Z"
@@ -976,7 +976,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N minutes, for use with 'add-time'. 
+N minutes, for use with 'add-time'.
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 "2016-07-22T12:01:00Z"
@@ -1000,7 +1000,7 @@ pact> (parse-time "%F" "2016-09-12")
 *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ). 
+Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
 ```lisp
 pact> (time "2016-07-22T11:26:35Z")
 "2016-07-22T11:26:35Z"
@@ -1783,6 +1783,25 @@ Multiply a point that lies on the curve BN254 by an integer value
 ```lisp
 pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 {"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
+```
+
+## Poseidon Hash {#Poseidon Hash}
+
+### poseidon-hash-hack-a-chain {#poseidon-hash-hack-a-chain}
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *o*&nbsp;`integer` *p*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain.
+```lisp
+pact> (poseidon-hash-hack-a-chain 1)
+18586133768512220936620570745912940619677854269274689475585506675881198879027
+pact> (poseidon-hash-hack-a-chain 1 2)
+7853200120776062878684798364095072458815029376092732009249414926327459813530
+pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6)
+20400040500897583745843009878988256314335038853985262692600694741116813247201
+pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)
+18604317144381847857886385684060986177838410221561136253933256952257712543953
 ```
 
 ## REPL-only functions {#repl-lib}

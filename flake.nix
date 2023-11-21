@@ -2,22 +2,22 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    # nixpkgs.follows = "haskellNix/nixpkgs";
-    nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
-    haskellNix.url = "github:input-output-hk/haskell.nix";
+    hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, haskellNix }:
+  outputs = { self, hs-nix-infra, flake-utils }:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
         "aarch64-linux" "aarch64-darwin" ] (system:
     let
+      inherit (hs-nix-infra) nixpkgs haskellNix;
       pkgs = import nixpkgs {
         inherit system overlays;
         inherit (haskellNix) config;
       };
-      flake = pkgs.pact.flake {
+      project = pkgs.pact;
+      flake = project.flake {
         # crossPlatforms = p: [ p.ghcjs ];
       };
       overlays = [ haskellNix.overlay
@@ -49,8 +49,10 @@
         echo ${name}: ${package}
         echo works > $out
       '';
-    in flake // rec {
+    in rec {
       packages.default = flake.packages."pact:exe:pact";
+      packages.recursive = with hs-nix-infra.lib.recursive system;
+        wrapRecursiveWithMeta "pact" "${wrapFlake self}.default";
       packages.docs = pkgs.stdenv.mkDerivation {
         name = "pact-docs";
         src = ./docs;
@@ -68,20 +70,16 @@
         '';
       };
 
-      devShell = pkgs.haskellPackages.shellFor {
-        buildInputs = with pkgs.haskellPackages; [
-          cabal-install
-          haskell-language-server
-          # hlint
-        ];
+      inherit (flake) devShell;
 
-        withHoogle = true;
-      };
       packages.check = pkgs.runCommand "check" {} ''
         echo ${mkCheck "pact" packages.default}
-        echo ${mkCheck "devShell" flake.devShell}
+        echo ${mkCheck "devShell" devShell}
         echo works > $out
       '';
 
+      # Other flake outputs provided by haskellNix can be accessed through
+      # this project output
+      inherit project;
     });
 }

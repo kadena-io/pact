@@ -31,6 +31,7 @@ import qualified TypecheckSpec
 import qualified PactCLISpec
 import qualified ZkSpec
 import qualified ReplSpec
+import qualified PoseidonSpec
 import qualified CoverageSpec
 #endif
 
@@ -66,6 +67,7 @@ main = hspec $ parallel $ do
   describe "PactCLISpec" PactCLISpec.spec
   describe "ZkSpec" ZkSpec.spec
   describe "ReplSpec" ReplSpec.spec
+  describe "PoseidonSpec" PoseidonSpec.spec
   describe "CoverageSpec" CoverageSpec.spec
 
 #endif

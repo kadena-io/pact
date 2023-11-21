@@ -140,9 +140,11 @@ data GasArgs
   -- ^ Cost of sorting by lookup fields
   | GConcatenation !Int !Int
   -- ^ Cost of concatenating two strings before pact 4.8, lists, and objects
-  | GTextConcatenation !Int !Int
-  -- ^ Cost of concatenating a list of strings with the given total character
-  -- count and list length after pact 4.8
+  | GTextConcatenation !Int !Int !Bool
+  -- ^ Cost of concatenating a list of strings in pact ≥4.8, given
+  -- 1. total character count,
+  -- 2. list length, and
+  -- 3. whether to fixup division by zero (pact ≥4.10).
   | GUnreduced ![Term Ref]
   -- ^ Cost of using a native function
   | GPostRead !ReadValue
@@ -178,6 +180,8 @@ data GasArgs
   -- ^ Cost of reversing a list of a given length
   | GFormatValues !Text !(V.Vector PactValue)
   -- ^ Cost of formatting with the given format string and args
+  | GPoseidonHashHackAChain !Int
+  -- ^ Cost of the hack-a-chain poseidon hash on this given number of inputs
 
 data IntOpThreshold
   = Pact43IntThreshold
@@ -224,7 +228,7 @@ instance Pretty GasArgs where
     GSelect {} -> "GSelect"
     GSortFieldLookup i -> "GSortFieldLookup:" <> pretty i
     GConcatenation i j -> "GConcatenation:" <> pretty i <> colon <> pretty j
-    GTextConcatenation nChars nStrings -> "GTextConcatenation:" <> pretty nChars <> colon <> pretty nStrings
+    GTextConcatenation nChars nStrings fixupDiv -> "GTextConcatenation:" <> pretty nChars <> colon <> pretty nStrings <> colon <> pretty fixupDiv
     GUnreduced {} -> "GUnreduced"
     GPostRead rv -> "GPostRead:" <> pretty rv
     GPreWrite wv szVer -> "GWrite:" <> pretty wv <> colon <> pretty szVer
@@ -245,6 +249,7 @@ instance Pretty GasArgs where
     GZKArgs arg -> "GZKArgs:" <> pretty arg
     GReverse len -> "GReverse:" <> pretty len
     GFormatValues s args -> "GFormatValues:" <> pretty s <> pretty (V.toList args)
+    GPoseidonHashHackAChain len -> "GPoseidonHashHackAChain:" <> pretty len
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Generic)

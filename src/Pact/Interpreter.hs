@@ -279,7 +279,7 @@ versionedNativesRefStore ec = versionNatives initRefStore
     , disablePact431Natives ec
     , disablePact46Natives ec
     , disablePact47Natives ec
-    , disablePact410Natives ec]
+    , disablePact410Natives ec ]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do
