@@ -725,7 +725,7 @@ mkKeyPairsWithWebAuthnSigEncoding keyPairs = traverse mkPair keyPairs
           (Just WebAuthn, Just (PubBS pub), PrivBS priv, Nothing) -> do
             pubWebAuthn <- either dieAR return (parseWebAuthnPublicKey pub)
             privWebAuthn <- either dieAR return (parseWebAuthnPrivateKey priv)
-            return $ (DynWebAuthnKeyPair pubWebAuthn privWebAuthn, fromMaybe [] (_akpCaps akp))
+            return $ (DynWebAuthnKeyPair WebAuthnPubKeyBare pubWebAuthn privWebAuthn, fromMaybe [] (_akpCaps akp))
           _ -> dieAR $ "Attempted to mix Ed25519 and WebAuthn keys."
 
 dieAR :: String -> IO a

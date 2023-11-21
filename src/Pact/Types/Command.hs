@@ -59,6 +59,7 @@ module Pact.Types.Command
   , requestKeyToB16Text
 
   , DynKeyPair (DynEd25519KeyPair, DynWebAuthnKeyPair)
+  , WebAuthnPubKeyPrefixed(..)
   ) where
 
 import Control.Applicative
@@ -156,10 +157,13 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
-
+data WebAuthnPubKeyPrefixed
+  = WebAuthnPubKeyPrefixed
+  | WebAuthnPubKeyBare
+  deriving (Eq, Show, Generic)
 data DynKeyPair
   = DynEd25519KeyPair Ed25519KeyPair
-  | DynWebAuthnKeyPair WebAuthnPublicKey WebauthnPrivateKey
+  | DynWebAuthnKeyPair WebAuthnPubKeyPrefixed WebAuthnPublicKey WebauthnPrivateKey
   deriving (Eq, Show, Generic)
 
 mkCommandWithDynKeys
@@ -177,20 +181,24 @@ mkCommandWithDynKeys creds meta nonce nid rpc = mkCommandWithDynKeys' creds enco
     payload = Payload rpc nonce meta (map credToSigner creds) nid
     credToSigner cred =
       case cred of
-       (DynEd25519KeyPair (pubEd25519, _), caps) ->
-         Signer
-           { _siScheme = Nothing
-           , _siPubKey = toB16Text (exportEd25519PubKey pubEd25519)
-           , _siAddress = Nothing
-           , _siCapList = caps
-           }
-       (DynWebAuthnKeyPair pubWebAuthn _, caps) ->
-         Signer
-           { _siScheme = Just WebAuthn
-           , _siPubKey = toB16Text (exportWebAuthnPublicKey pubWebAuthn)
-           , _siAddress = Nothing
-           , _siCapList = caps
-           }
+        (DynEd25519KeyPair (pubEd25519, _), caps) ->
+          Signer
+            { _siScheme = Nothing
+            , _siPubKey = toB16Text (exportEd25519PubKey pubEd25519)
+            , _siAddress = Nothing
+            , _siCapList = caps
+            }
+        (DynWebAuthnKeyPair isPrefixed pubWebAuthn _, caps) ->
+          let
+            prefix = case isPrefixed of
+              WebAuthnPubKeyBare -> ""
+              WebAuthnPubKeyPrefixed -> webAuthnPrefix
+          in Signer
+            { _siScheme = Just WebAuthn
+            , _siPubKey = prefix <> toB16Text (exportWebAuthnPublicKey pubWebAuthn)
+            , _siAddress = Nothing
+            , _siCapList = caps
+            }
 
 keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
@@ -221,7 +229,7 @@ mkCommandWithDynKeys' creds env = do
     toUserSig hsh = \case
       (DynEd25519KeyPair (pub, priv), _) ->
         pure $ ED25519Sig $ signHash hsh (pub, priv)
-      (DynWebAuthnKeyPair pubWebAuthn privWebAuthn, _) -> do
+      (DynWebAuthnKeyPair _ pubWebAuthn privWebAuthn, _) -> do
         signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn foo (toUntypedHash hsh)
         case signResult of
           Left _e -> error "TODO"
@@ -500,5 +508,3 @@ makeLenses ''Payload
 makeLenses ''CommandResult
 makePrisms ''ProcessedCommand
 makePrisms ''ExecutionMode
-
-
