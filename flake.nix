@@ -70,18 +70,11 @@
         '';
       };
 
-      devShell = pkgs.haskellPackages.shellFor {
-        buildInputs = with pkgs.haskellPackages; [
-          cabal-install
-          haskell-language-server
-          # hlint
-        ];
+      inherit (flake) devShell;
 
-        withHoogle = true;
-      };
       packages.check = pkgs.runCommand "check" {} ''
         echo ${mkCheck "pact" packages.default}
-        echo ${mkCheck "devShell" flake.devShell}
+        echo ${mkCheck "devShell" devShell}
         echo works > $out
       '';
 
