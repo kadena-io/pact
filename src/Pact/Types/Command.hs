@@ -224,15 +224,14 @@ mkCommandWithDynKeys' creds env = do
   sigs <- traverse (toUserSig hsh) creds
   return $ Command env sigs hsh
   where
-    foo = ""
     toUserSig :: PactHash -> (DynKeyPair, a) -> IO UserSig
     toUserSig hsh = \case
       (DynEd25519KeyPair (pub, priv), _) ->
         pure $ ED25519Sig $ signHash hsh (pub, priv)
       (DynWebAuthnKeyPair _ pubWebAuthn privWebAuthn, _) -> do
-        signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn foo (toUntypedHash hsh)
+        signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn "" (toUntypedHash hsh)
         case signResult of
-          Left _e -> error "TODO"
+          Left e -> error e
           Right sig -> return $ WebAuthnSig sig
 
 mkUnsignedCommand
