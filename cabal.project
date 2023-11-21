@@ -7,6 +7,11 @@ constraints: sbv <10
 constraints: hspec-golden <0.2,
 
 source-repository-package
+    type: git
+    location: https://github.com/kadena-io/decimal-arithmetic.git
+    tag: e89acd49f03678b82fbe7df411c29550838555d0
+
+source-repository-package
   type: git
   tag: e43073d0b8d89d9b300980913b842f4be339846d
   location: https://github.com/kadena-io/pact-json

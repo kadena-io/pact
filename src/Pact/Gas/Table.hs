@@ -335,6 +335,7 @@ tableGasModel gasConfig =
 
   in GasModel
       { gasModelName = "table"
+      , gasModelType = TableGasModel
       , gasModelDesc = "table-based cost model"
       , runGasModel = run
       }
