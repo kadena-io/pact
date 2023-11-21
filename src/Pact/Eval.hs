@@ -173,12 +173,8 @@ enforceGuard i g = case g of
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
 getSizeOfVersion :: Eval e SizeOfVersion
-getSizeOfVersion = do
-  pact410 <- isExecutionFlagSet FlagDisablePact410
-  pact45 <- isExecutionFlagSet FlagDisablePact45
-  if pact45 then return SizeOfV0
-  else if pact410 then return SizeOfV1
-  else return SizeOfV2
+getSizeOfVersion = 
+  ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
 {-# INLINABLE getSizeOfVersion #-}
 
 -- | Hoist Name back to ref
