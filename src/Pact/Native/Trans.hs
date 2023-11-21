@@ -27,8 +27,8 @@ import Control.Lens
 import Control.Monad(when)
 import Data.Decimal
 import Data.Word(Word64)
-import GHC.Int(Int(..))
-import Numeric.Decimal.Arithmetic
+import GHC.Integer(smallInteger)
+import qualified Numeric.Decimal.Arithmetic as NDec
 import qualified Numeric.Decimal.Number as NDec
 
 
@@ -69,8 +69,8 @@ getTransGasParams = do
       MilliGasLimit (MilliGas gLim) = view geGasLimit gEnv
   pure (Dec.TransGasParams (fromIntegral gUsedMillis) (fromIntegral gLim) chargeFn)
   where
-  getCharge (ConstantGasModel g) = const (chargeArithGas (fromIntegral g))
-  getCharge _ = chargePactArith
+  getCharge (ConstantGasModel g) = const (NDec.chargeArithGas (fromIntegral g))
+  getCharge TableGasModel = chargePactArith
 
 trans_exp :: HasInfo i => i -> Decimal -> Eval e Decimal
 trans_exp i x = go
@@ -156,23 +156,76 @@ liftBinInt i f a b = do
   gc <- getTransGasParams
   d2Int <$> checkGasTransResult i (f gc (int2D a) (int2D b))
 
-chargePactArith :: GasArithOp a b c d -> Arith p r ()
-chargePactArith (GasArithOp _ l r) =
-  chargeArithGas (fromIntegral (decimalCost l + decimalCost r + 1))
+chargePactArith :: NDec.GasArithOp a b c d -> NDec.Arith p r ()
+chargePactArith (NDec.GasArithOp o l r) = NDec.chargeArithGas $ case o of
+  NDec.ArithAdd -> decimalAddCost l r
+  NDec.ArithMult -> decimalMulCost l r
+  NDec.ArithDiv -> decimalDivCost l r
 
-decimalCost :: NDec.Decimal a b -> Gas
-decimalCost (NDec.Num _sign coeff _exp)
-  | intValue < threshold = 0
-  | otherwise =
-    let !nbytes = (I# (IntLog.integerLog2# intValue) + 1) `quot` 8
-    in fromIntegral (nbytes * nbytes `quot` 100)
+-- Below 512 bits: we charge a f(x) = 0.2x+10
+-- Above 512 bits: f(x) = 0.01x^2
+-- The addition operation is realistically dominated in the decimal-arithmetic implementation
+-- by the 10^expdiff calculation, then the addition. It's still quite cheap to do
+-- basic integer arithmetic, so we add a scaling cost based on the bits of the largest coefficient.
+-- Thus we will base the cost off of integer decimal addition which is O(n).
+decimalAddCost :: NDec.Decimal a b -> NDec.Decimal c d -> Word64
+decimalAddCost (NDec.Num _xs xc xe) (NDec.Num _ys yc ye) =
+    fromInteger $ if nbits <= threshold then (nbits `div` 5) + 20 else (nbits*nbits) `div` 100
+  where
+  nbits :: Integer
+  nbits = smallInteger (IntLog.integerLog2# (toInteger (max xac yac)))
+  threshold :: Integer
+  threshold = 512
+  expdiff = abs (xe - ye)
+  (xac, yac)
+    | xe == ye = (xc, yc)
+    | xe > ye = (xc * 10^expdiff, yc)
+    | otherwise = (xc, yc * 10^expdiff)
+-- MilliGas $ fromIntegral $ (I# (IntLog.integerLog2# coeff))
+-- Should there be a penalty on `NaN` or `Inf`? it might cause a problem when used in intermediate calcs
+-- so probably not
+decimalAddCost _ _ = 1
+
+-- Below 512 bits: we charge a f(x) = 0.2x+20. We can reuse the addition
+-- cost.
+-- Above 512 bits: f(x) = x^2
+-- The addition operation is realistically dominated in the decimal-arithmetic implementation
+-- by the 10^expdiff calculation, then the addition. It's still quite cheap to do
+-- basic integer arithmetic, so we add a scaling cost based on the bits of the largest coefficient.
+-- Thus we will base the cost off of integer decimal addition which is O(n).
+decimalMulCost :: NDec.Decimal a b -> NDec.Decimal c d -> Word64
+decimalMulCost (NDec.Num _xs xc _xe) (NDec.Num _ys yc _ye) =
+  fromInteger $
+    if nbits <= threshold then (nbits `div` 5) + 20 else (nbits*nbits) `div` 1000
   where
   threshold :: Integer
-  threshold = (10 :: Integer) ^ (80 :: Integer)
-  intValue :: Integer
-  intValue = fromIntegral coeff
--- Todo: should there be a penalty on `NaN` or `Inf`?
-decimalCost _ = 0
+  threshold = 512
+  nbits :: Integer
+  nbits = smallInteger (IntLog.integerLog2# (toInteger (max xc yc)))
+-- MilliGas $ fromIntegral $ (I# (IntLog.integerLog2# coeff))
+-- Should there be a penalty on `NaN` or `Inf`? it might cause a problem when used in intermediate calcs
+-- so probably not
+decimalMulCost _ _ = 1
+
+decimalDivCost :: NDec.Decimal a b -> NDec.Decimal c d -> Word64
+decimalDivCost (NDec.Num _xs xc xe) (NDec.Num _ys yc ye) =
+  fromInteger $
+    if nbits <= threshold then (nbits * nbits) `div` 1000 else (nbits*nbits) `div` 100
+  where
+  nbits :: Integer
+  nbits = smallInteger (IntLog.integerLog2# (toInteger (max xac yac)))
+  threshold :: Integer
+  threshold = 512
+  expdiff = abs (xe - ye)
+  (xac, yac)
+    | xe == ye = (xc, yc)
+    | xe > ye = (xc * 10^expdiff, yc)
+    | otherwise = (xc, yc * 10^expdiff)
+-- MilliGas $ fromIntegral $ (I# (IntLog.integerLog2# coeff))
+-- Should there be a penalty on `NaN` or `Inf`? it might cause a problem when used in intermediate calcs
+-- so probably not
+decimalDivCost _ _ = 1
+
 
 int2D :: Integer -> Decimal
 int2D = fromIntegral

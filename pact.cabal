@@ -509,6 +509,7 @@ test-suite hspec
       ZkSpec
       ReplSpec
       PairingSpec
+      TransSpec
       Utils
 
     build-depends:
@@ -533,19 +534,3 @@ test-suite hspec
       , posix-pty
       , decimal-arithmetic
       , pact-trans
-
--- test-suite trans-spec
---   main-is:          TransSpec.hs
---   type:             exitcode-stdio-1.0
---   hs-source-dirs:   trans/tests
---   default-language: Haskell2010
---   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
---   build-depends:
---     , base
---     , Decimal >=0.4.2
---     , decimal-arithmetic >=0.5.1.1
---     , QuickCheck >=2.12.6.1
---     , quickcheck-instances
---     , hspec
---     , hspec-core
---     , pact-trans

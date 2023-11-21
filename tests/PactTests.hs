@@ -33,6 +33,7 @@ import qualified ZkSpec
 import qualified ReplSpec
 import qualified PoseidonSpec
 import qualified CoverageSpec
+import qualified TransSpec
 #endif
 
 main :: IO ()
@@ -69,5 +70,6 @@ main = hspec $ parallel $ do
   describe "ReplSpec" ReplSpec.spec
   describe "PoseidonSpec" PoseidonSpec.spec
   describe "CoverageSpec" CoverageSpec.spec
+  describe "TransSpec" TransSpec.spec
 
 #endif
