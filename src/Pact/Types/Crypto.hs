@@ -56,7 +56,6 @@ module Pact.Types.Crypto
 
   , Ed25519KeyPair
   , UserSig(..)
-  , WebAuthnSigEncoding(..)
   , WebAuthnPublicKey
   , WebAuthnSignature(..)
 
@@ -128,42 +127,21 @@ import qualified Test.QuickCheck.Gen as Gen
 
 -- | The type of parsed signatures
 data UserSig = ED25519Sig T.Text
-             | WebAuthnSig WebAuthnSignature WebAuthnSigEncoding
+             | WebAuthnSig WebAuthnSignature
   deriving (Eq, Ord, Show, Generic)
 
--- | A type for tracking whether a WebAuthn signature was parsed
---   from a string, or an JSON object. This is tracked so that
---   we can fork on the allowed provenance. (Before Pact 4.10,
---   only stringified WebAuthn signatures were allowed).
-data WebAuthnSigEncoding
-  = WebAuthnStringified
-  | WebAuthnObject
-  deriving (Eq, Ord, Show, Generic)
-
-instance NFData WebAuthnSigEncoding
-instance Arbitrary WebAuthnSigEncoding where
-  arbitrary = oneof [pure WebAuthnStringified, pure WebAuthnObject]
 
 instance NFData UserSig
 
 instance J.Encode UserSig where
   build (ED25519Sig s) =
     J.object [ "sig" J..= s ]
-  build (WebAuthnSig (WebAuthnSignature
-                      { authenticatorData
-                      , signature
-                      , clientDataJSON }) WebAuthnObject) = J.object
-    [ "authenticatorData" J..= authenticatorData
-    , "signature" J..= signature
-    , "clientDataJSON" J..= clientDataJSON
-    ]
-  build (WebAuthnSig sig WebAuthnStringified) = J.object
+  build (WebAuthnSig sig) = J.object
     [ "sig" J..= T.decodeUtf8 (BSL.toStrict $ J.encode sig) ]
   {-# INLINE build #-}
 
 instance A.FromJSON UserSig where
   parseJSON x =
-    parseWebAuthnObject x <|>
     parseWebAuthnStringified x <|>
     parseEd25519 x
     where
@@ -171,13 +149,10 @@ instance A.FromJSON UserSig where
         t <- o A..: "sig"
         case A.decode (BSL.fromStrict $ T.encodeUtf8 t) of
           Nothing -> fail "Could not decode signature"
-          Just webauthnSig -> return $ WebAuthnSig webauthnSig WebAuthnStringified
+          Just webauthnSig -> return $ WebAuthnSig webauthnSig
       parseEd25519 = A.withObject "UserSig" $ \o -> do
         t <- o A..: "sig"
         return $ ED25519Sig t
-      parseWebAuthnObject o = do
-        waSig <- A.parseJSON o
-        pure $ WebAuthnSig waSig WebAuthnObject
 
 instance Arbitrary UserSig where
   arbitrary = Gen.oneof
@@ -186,7 +161,7 @@ instance Arbitrary UserSig where
       case parseEd25519Signature sig of
         Right parsedSig -> return $ ED25519Sig $ toB16Text $ exportEd25519Signature parsedSig
         Left _ -> error "invalid ed25519 signature"
-    , WebAuthnSig <$> (WebAuthnSignature <$> arbitrary <*> arbitrary <*> arbitrary) <*> arbitrary
+    , WebAuthnSig <$> (WebAuthnSignature <$> arbitrary <*> arbitrary <*> arbitrary)
     ]
 
 -- ed25519
@@ -581,14 +556,14 @@ instance A.FromJSON WebAuthnSignature where
   parseJSON = A.withObject "WebAuthnSignature" $ \o -> do
     clientDataJSON <- o A..: "clientDataJSON"
     authenticatorData <- o A..: "authenticatorData"
-    signature <- (o A..: "signature") <|> (o A..: "sig")
+    signature <- (o A..: "signature")
     pure $ WebAuthnSignature {..}
 
 instance J.Encode WebAuthnSignature where
   build (WebAuthnSignature { clientDataJSON, authenticatorData, signature }) = J.object
     [ "authenticatorData" J..=  authenticatorData
     , "clientDataJSON" J..= clientDataJSON
-    , "sig" J..= signature
+    , "signature" J..= signature
     ]
 
 -- | This type represents a challenge that was used during

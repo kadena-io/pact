@@ -218,7 +218,7 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    verifyUserSig cmdHash' (WebAuthnSig webAuthnSig WebAuthnStringified) signer `shouldBe` Right ()
+    verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer `shouldBe` Right ()
   it "should require a matching pubkey" $ do
     let
       (webAuthnSig, _) = someWebAuthnSignature
@@ -233,7 +233,7 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    isLeft (verifyUserSig cmdHash' (WebAuthnSig webAuthnSig WebAuthnStringified) signer) `shouldBe` True
+    isLeft (verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer) `shouldBe` True
   it "should require a matching cmdHash" $ do
     let
       (webAuthnSig, webAuthnPubKey) = someWebAuthnSignature
@@ -247,7 +247,7 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    isLeft (verifyUserSig cmdHash' (WebAuthnSig webAuthnSig WebAuthnStringified) signer) `shouldBe` True
+    isLeft (verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer) `shouldBe` True
   it "should require webauthn scheme" $ do
     let
       (webAuthnSig, webAuthnPubKey) = someWebAuthnSignature
@@ -261,7 +261,7 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    isLeft (verifyUserSig cmdHash' (WebAuthnSig webAuthnSig WebAuthnStringified) signer) `shouldBe` True
+    isLeft (verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer) `shouldBe` True
 
 signAndVerifyWebAuthn :: Spec
 signAndVerifyWebAuthn = describe "Signing and verification of WebAuthn signatures" $ do
@@ -283,4 +283,4 @@ signAndVerifyWebAuthn = describe "Signing and verification of WebAuthn signature
           , _siAddress = Nothing
           , _siCapList = []
           }
-    isRight (verifyUserSig pactData (WebAuthnSig sig WebAuthnObject) signer) `shouldBe` True
+    isRight (verifyUserSig pactData (WebAuthnSig sig) signer) `shouldBe` True

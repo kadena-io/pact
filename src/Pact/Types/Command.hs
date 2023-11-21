@@ -159,7 +159,7 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
 
 data DynKeyPair
   = DynEd25519KeyPair Ed25519KeyPair
-  | DynWebAuthnKeyPair WebAuthnPublicKey WebauthnPrivateKey WebAuthnSigEncoding
+  | DynWebAuthnKeyPair WebAuthnPublicKey WebauthnPrivateKey
   deriving (Eq, Show, Generic)
 
 mkCommandWithDynKeys
@@ -184,7 +184,7 @@ mkCommandWithDynKeys creds meta nonce nid rpc = mkCommandWithDynKeys' creds enco
            , _siAddress = Nothing
            , _siCapList = caps
            }
-       (DynWebAuthnKeyPair pubWebAuthn _ _, caps) ->
+       (DynWebAuthnKeyPair pubWebAuthn _, caps) ->
          Signer
            { _siScheme = Just WebAuthn
            , _siPubKey = toB16Text (exportWebAuthnPublicKey pubWebAuthn)
@@ -221,11 +221,11 @@ mkCommandWithDynKeys' creds env = do
     toUserSig hsh = \case
       (DynEd25519KeyPair (pub, priv), _) ->
         pure $ ED25519Sig $ signHash hsh (pub, priv)
-      (DynWebAuthnKeyPair pubWebAuthn privWebAuthn webAuthnSigEncoding, _) -> do
+      (DynWebAuthnKeyPair pubWebAuthn privWebAuthn, _) -> do
         signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn foo (toUntypedHash hsh)
         case signResult of
           Left _e -> error "TODO"
-          Right sig -> return $ WebAuthnSig sig webAuthnSigEncoding
+          Right sig -> return $ WebAuthnSig sig
 
 mkUnsignedCommand
   :: J.Encode m
@@ -293,7 +293,7 @@ verifyUserSig msg sig Signer{..} = do
         parseEd25519Signature =<< B16.decode (Text.encodeUtf8 edSig)
       verifyEd25519Sig (toUntypedHash msg) pk edSigParsed
 
-    (WebAuthnSig waSig _, WebAuthn) -> do
+    (WebAuthnSig waSig, WebAuthn) -> do
       let
         strippedPrefix =
           fromMaybe _siPubKey (Text.stripPrefix webAuthnPrefix _siPubKey)
@@ -310,7 +310,7 @@ verifyUserSig msg sig Signer{..} = do
         , "does not match signature type"
         , case sig of
           ED25519Sig _ -> "ED25519"
-          WebAuthnSig _ _ -> "WebAuthn"
+          WebAuthnSig _ -> "WebAuthn"
         ]
   where scheme = fromMaybe defPPKScheme _siScheme
 

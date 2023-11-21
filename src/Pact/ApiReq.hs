@@ -684,10 +684,10 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
   return $ decodeUtf8 <$> cmd
 
 mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
-mkKeyPairs keyPairs = mkKeyPairsWithWebAuthnSigEncoding (map (, WebAuthnObject) keyPairs)
+mkKeyPairs keyPairs = mkKeyPairsWithWebAuthnSigEncoding keyPairs
 
 -- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
-mkKeyPairsWithWebAuthnSigEncoding :: [(ApiKeyPair, WebAuthnSigEncoding)] -> IO [(DynKeyPair, [SigCapability])]
+mkKeyPairsWithWebAuthnSigEncoding :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
 mkKeyPairsWithWebAuthnSigEncoding keyPairs = traverse mkPair keyPairs
   where
 
@@ -705,8 +705,8 @@ mkKeyPairsWithWebAuthnSigEncoding keyPairs = traverse mkPair keyPairs
           Just ED25519 -> True
           _ -> False
 
-        mkPair :: (ApiKeyPair, WebAuthnSigEncoding) -> IO (DynKeyPair, [SigCapability])
-        mkPair (akp, webAuthnSigEncoding) = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
+        mkPair :: ApiKeyPair -> IO (DynKeyPair, [SigCapability])
+        mkPair akp = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
           (scheme, pub, priv, Nothing) | isEd25519 scheme ->
             either dieAR (return . first DynEd25519KeyPair) (importValidKeyPair pub priv (_akpCaps akp))
           (scheme, pub, priv, Just addrT) | isEd25519 scheme -> do
@@ -725,7 +725,7 @@ mkKeyPairsWithWebAuthnSigEncoding keyPairs = traverse mkPair keyPairs
           (Just WebAuthn, Just (PubBS pub), PrivBS priv, Nothing) -> do
             pubWebAuthn <- either dieAR return (parseWebAuthnPublicKey pub)
             privWebAuthn <- either dieAR return (parseWebAuthnPrivateKey priv)
-            return $ (DynWebAuthnKeyPair pubWebAuthn privWebAuthn webAuthnSigEncoding, fromMaybe [] (_akpCaps akp))
+            return $ (DynWebAuthnKeyPair pubWebAuthn privWebAuthn, fromMaybe [] (_akpCaps akp))
           _ -> dieAR $ "Attempted to mix Ed25519 and WebAuthn keys."
 
 dieAR :: String -> IO a
