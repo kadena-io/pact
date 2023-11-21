@@ -69,9 +69,8 @@ readKeySet' :: FunApp -> Text -> Eval e KeySet
 readKeySet' i key = do
   ks <- parseMsgKey i "read-keyset" key
   whenExecutionFlagSet FlagEnforceKeyFormats $ do
-      ifExecutionFlagSet FlagDisablePact410
-        (enforceKeyFormats (const $ evalError' i "Invalid keyset") [ed25519HexFormat] ks)
-        (enforceKeyFormats (const $ evalError' i "Invalid keyset") [ed25519HexFormat, webAuthnFormat] ks)
+      formats <- ifExecutionFlagSet' FlagDisablePact410 [ed25510HexFormat] [ed25519HexFormat, webAuthnFormat]
+      (enforceKeyFormats (const $ evalError' i "Invalid keyset") formats ks)
 
   pure ks
 
