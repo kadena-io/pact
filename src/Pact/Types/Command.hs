@@ -235,7 +235,7 @@ mkCommandWithDynKeys' creds env = do
       (DynWebAuthnKeyPair _ pubWebAuthn privWebAuthn, _) -> do
         signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn "" (toUntypedHash hsh)
         case signResult of
-          Left e -> error e
+          Left e -> error $ "Failed to sign with mock WebAuthn keypair: " ++ e
           Right sig -> return $ WebAuthnSig sig
 
 mkUnsignedCommand
