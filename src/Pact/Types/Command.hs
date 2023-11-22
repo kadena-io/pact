@@ -218,6 +218,10 @@ mkCommand' creds env = do
   let sigs = toUserSig <$> creds
   return $ Command env sigs hsh
 
+-- | A utility function used for testing.
+-- It generalizes `mkCommand` by taking a `DynKeyPair`, which could contain mock
+-- WebAuthn keys. If WebAuthn keys are encountered, this function does mock WebAuthn
+-- signature generation when constructing the `Command`.
 mkCommandWithDynKeys' :: [(DynKeyPair, a)] -> ByteString -> IO (Command ByteString)
 mkCommandWithDynKeys' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
@@ -282,7 +286,7 @@ verifyUserSigs hsh sigsAndSigners
   | otherwise = formatIssues
   where
   getFailedVerify (sig, signer) =
-    [ over each Text.pack (show signer, err) | Left err <- [verifyUserSig hsh sig signer] ]
+    [ (Text.pack $ show signer, Text.pack err) | Left err <- [verifyUserSig hsh sig signer] ]
   -- assumes nth Signer is responsible for the nth UserSig
   failedSigs = concatMap getFailedVerify sigsAndSigners
   formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Object $ failedSigs)

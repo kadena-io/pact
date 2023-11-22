@@ -79,7 +79,6 @@ data SigData a = SigData
   , _sigDataCmd :: !(Maybe a)
   } deriving (Eq,Show,Generic)
 
--- TODO: This is wrong: It will only parse ED25519 signatures.
 instance FromJSON a => FromJSON (SigData a) where
   parseJSON = withObject "SigData" $ \o -> do
     h <- o .: "hash"
