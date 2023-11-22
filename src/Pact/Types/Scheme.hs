@@ -21,7 +21,6 @@ import qualified Data.Text as T
 import Data.Aeson
 import Test.QuickCheck
 
-import Pact.Types.SizeOf (SizeOf(sizeOf))
 import Pact.Types.Pretty (Pretty(pretty))
 import Pact.Types.Util (ParseText(..))
 
@@ -50,9 +49,6 @@ instance Pretty PPKScheme where
   pretty = \case
     ED25519 -> "ed25519"
     WebAuthn -> "webauthn"
-
-instance SizeOf PPKScheme where
-  sizeOf _ _ = 1
 
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" parseText

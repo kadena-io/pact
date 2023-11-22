@@ -130,6 +130,7 @@ data UserSig = ED25519Sig T.Text
              | WebAuthnSig WebAuthnSignature
   deriving (Eq, Ord, Show, Generic)
 
+instance Serialize UserSig
 
 instance NFData UserSig
 
@@ -549,6 +550,8 @@ data WebAuthnSignature = WebAuthnSignature
   , authenticatorData :: T.Text
   , signature :: T.Text
   } deriving (Show, Generic, Eq, Ord)
+
+instance Serialize WebAuthnSignature
 
 instance NFData WebAuthnSignature
 

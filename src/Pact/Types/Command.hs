@@ -109,7 +109,7 @@ data Command a = Command
   , _cmdSigs :: ![UserSig]
   , _cmdHash :: !PactHash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
--- instance (Serialize a) => Serialize (Command a)
+instance (Serialize a) => Serialize (Command a)
 
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->

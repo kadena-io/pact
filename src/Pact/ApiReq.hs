@@ -28,7 +28,6 @@ module Pact.ApiReq
     ,mkExec
     ,mkCont
     ,mkKeyPairs
-    ,mkKeyPairsWithWebAuthnSigEncoding
     ,AddSigsReq(..)
     ,addSigsReq
     ,combineSigs
@@ -683,12 +682,11 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
-mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
-mkKeyPairs keyPairs = mkKeyPairsWithWebAuthnSigEncoding keyPairs
-
 -- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
-mkKeyPairsWithWebAuthnSigEncoding :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
-mkKeyPairsWithWebAuthnSigEncoding keyPairs = traverse mkPair keyPairs
+-- The keypairs must not be prefixed with "WEBAUTHN-", it accepts
+-- only the raw (unprefixed) keys.
+mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
+mkKeyPairs keyPairs = traverse mkPair keyPairs
   where
 
         importValidKeyPair
