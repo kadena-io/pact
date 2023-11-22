@@ -1,9 +1,11 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -26,22 +28,43 @@
 module Pact.Types.Crypto
   ( ST.PPKScheme(..)
   , ST.defPPKScheme
-  , SomeScheme
   , SPPKScheme(..)
-  , defaultScheme
-  , toScheme
   , PublicKeyBS(..)
   , PrivateKeyBS(..)
   , SignatureBS(..)
-  , sign
-  , verify
+  , signEd25519
+  , generateEd25519KeyPair
+  , verifyWebAuthnSig
+  , verifyEd25519Sig
+  , parseEd25519PubKey
+  , parseEd25519SecretKey
+  , parseEd25519Signature
+  , exportEd25519PubKey
+  , exportEd25519SecretKey
+  , exportEd25519Signature
+  , parseWebAuthnPublicKey
+  , parseWebAuthnPrivateKey
+  , exportWebAuthnPublicKey
+  , parseWebAuthnSignature
+  , exportWebAuthnSignature
+  , validCoseSignAlgorithms
+  , webAuthnPubKeyHasValidAlg
   , getPublic
   , getPrivate
   , genKeyPair
-  , importKeyPair
-  , Scheme(..)
-  , ConvertBS(..)
+  , importEd25519KeyPair
+
   , Ed25519KeyPair
+  , UserSig(..)
+  , WebAuthnPublicKey
+  , WebAuthnSignature(..)
+
+  -- * WebAuthn mocking. These are only used for testing WebAuthn signatures.
+  , generateWebAuthnEd25519KeyPair
+  , generateWebAuthnP256KeyPair
+  , exportWebAuthnPrivateKey
+  , WebauthnPrivateKey(..)
+  , signWebauthn
   ) where
 
 
@@ -49,197 +72,311 @@ import Prelude
 import GHC.Generics
 
 import qualified Codec.Serialise as Serialise
+import Control.Applicative
+import Control.Lens
 import Control.Monad (unless)
+import Control.Monad.Except
+import Control.Monad.IO.Class
 import qualified Crypto.Hash as H
-import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
-import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
-import qualified Pact.Crypto.WebAuthn.Cose.Verify as WAVerify
-import Data.Bifunctor (first)
-import Data.ByteString    (ByteString)
+import qualified Data.ASN1.BinaryEncoding as ASN1
+import qualified Data.ASN1.Encoding as ASN1
+import qualified Data.ASN1.Types as ASN1
+import Data.ByteString (ByteString)
 import Data.ByteString.Short (fromShort)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Base64.URL as Base64URL
-import Data.String        (IsString(..))
+import Data.Proxy
+import Data.String (IsString(..))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
-import Data.Aeson                        as A
+import qualified Data.Aeson as A
+import Control.DeepSeq (NFData)
 import Data.Hashable
-import Data.Serialize                    as SZ
-import qualified Data.Serialize          as S
+import Data.Serialize as SZ
+import qualified Data.Serialize as S
+
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKey as WA
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.Verify as WAVerify
 
 import Pact.Types.Util
-import Pact.Types.Hash
 import qualified Pact.Types.Hash as PactHash
-import Pact.Types.Scheme               as ST
+import Pact.Types.Scheme as ST
 
 #ifdef CRYPTONITE_ED25519
-import qualified Crypto.Error          as E
+import qualified Crypto.Error as E
 import qualified Crypto.PubKey.Ed25519 as Ed25519
-import qualified Data.ByteArray        as B
+import qualified Data.ByteArray as B
 #else
 import "crypto-api" Crypto.Random
 import qualified Crypto.Ed25519.Pure as Ed25519
 #endif
+import qualified Crypto.PubKey.ECDSA as ECDSA
+import qualified Crypto.ECC as ECC
+import qualified Crypto.PubKey.ECC.P256 as ECC hiding (scalarToInteger)
+import Crypto.Random.Types
 
 import qualified Pact.JSON.Encode as J
 
 import Test.QuickCheck
+import qualified Test.QuickCheck.Gen as Gen
 
---------- INTERNAL SCHEME CLASS ---------
+-- | The type of parsed signatures
+data UserSig = ED25519Sig T.Text
+             | WebAuthnSig WebAuthnSignature
+  deriving (Eq, Ord, Show, Generic)
 
-class ConvertBS a where
-  toBS :: a -> ByteString
-  fromBS :: ByteString -> Either String a
+instance Serialize UserSig
 
+instance NFData UserSig
 
-class Scheme a where
-  _valid :: a -> Hash -> PublicKeyBS -> SignatureBS -> Bool
-  -- ^ Validate a signature given a public key and hash
+instance J.Encode UserSig where
+  build (ED25519Sig s) =
+    J.object [ "sig" J..= s ]
+  build (WebAuthnSig sig) = J.object
+    [ "sig" J..= T.decodeUtf8 (BSL.toStrict $ J.encode sig) ]
+  {-# INLINE build #-}
 
+instance A.FromJSON UserSig where
+  parseJSON x =
+    parseWebAuthnStringified x <|>
+    parseEd25519 x
+    where
+      parseWebAuthnStringified = A.withObject "UserSig" $ \o -> do
+        t <- o A..: "sig"
+        case A.decode (BSL.fromStrict $ T.encodeUtf8 t) of
+          Nothing -> fail "Could not decode signature"
+          Just webauthnSig -> return $ WebAuthnSig webauthnSig
+      parseEd25519 = A.withObject "UserSig" $ \o -> do
+        t <- o A..: "sig"
+        return $ ED25519Sig t
 
---------- CONNECTS PPKSCHEME TO SPPKSCHEME ---------
+instance Arbitrary UserSig where
+  arbitrary = Gen.oneof
+    [ do
+      sig <- BS.pack <$> vectorOf 64 arbitrary
+      case parseEd25519Signature sig of
+        Right parsedSig -> return $ ED25519Sig $ toB16Text $ exportEd25519Signature parsedSig
+        Left _ -> error "invalid ed25519 signature"
+    , WebAuthnSig <$> (WebAuthnSignature <$> arbitrary <*> arbitrary <*> arbitrary)
+    ]
 
-data SomeScheme = forall a. Scheme (SPPKScheme a) => SomeScheme (SPPKScheme a)
-
-defaultScheme :: SomeScheme
-defaultScheme = toScheme defPPKScheme
-
-
--- Connects each PPKScheme to some SPPKScheme a
-
-toScheme :: PPKScheme -> SomeScheme
-toScheme ED25519 = SomeScheme SED25519
-toScheme WebAuthn = SomeScheme SWebAuthn
-
-
---------- SCHEME ED25519 INSTANCES --------
+-- ed25519
 
 #ifdef CRYPTONITE_ED25519
-instance Scheme (SPPKScheme 'ED25519) where
-
-  _valid _ (Hash msg) (PubBS pubBS) (SigBS sigBS) =
-    case (fromBS pubBS, fromBS sigBS) of
-      (Right pubKey, Right sig) -> Ed25519.verify pubKey (fromShort msg) sig
-      _ -> False
-
-
-instance ConvertBS (Ed25519.PublicKey) where
-  toBS = B.convert
-  fromBS s = E.onCryptoFailure
-             (const $ Left ("Invalid ED25519 Public Key: " ++ show (toB16Text s)))
-             Right
-             (Ed25519.publicKey s)
-instance ConvertBS (Ed25519.SecretKey) where
-  toBS = B.convert
-  fromBS s = E.onCryptoFailure
-             (const $ Left ("Invalid ED25519 Private Key: " ++ show (toB16Text s)))
-             Right
-             (Ed25519.secretKey s)
-instance ConvertBS Ed25519.Signature where
-  toBS = B.convert
-  fromBS s = E.onCryptoFailure
-             (const $ Left ("Invalid ED25519 Signature: " ++ show (toB16Text s)))
-             Right
-             (Ed25519.signature s)
+type Ed25519PrivateKey = Ed25519.SecretKey
 #else
-instance Scheme (SPPKScheme 'ED25519) where
-  type PublicKey (SPPKScheme 'ED25519) = Ed25519.PublicKey
-  type PrivateKey (SPPKScheme 'ED25519) = Ed25519.PrivateKey
-  type Signature (SPPKScheme 'ED25519) = Ed25519.Signature
-
-  _valid _ (Hash msg) pub sig =
-    case (fromBS pubBS, fromBS sigBS) of
-      (Right pubKey, Right sig) -> Ed25519.verify pubKey (fromShort msg) sig
-      _ -> False
-
-instance ConvertBS (Ed25519.PublicKey) where
-  toBS = Ed25519.exportPublic
-  fromBS s = maybeToEither ("Invalid ED25519 Public Key: " ++ show (toB16Text s))
-             (Ed25519.importPublic s)
-instance ConvertBS (Ed25519.PrivateKey) where
-  toBS = Ed25519.exportPrivate
-  fromBS s = maybeToEither ("Invalid ED25519 Private Key: " ++ show (toB16Text s))
-             (Ed25519.importPrivate s)
-instance ConvertBS Ed25519.Signature where
-  toBS (Ed25519.Sig bs) = bs
-  fromBS = Right . Ed25519.Sig
+type Ed25519PrivateKey = Ed25519.PrivateKey
 #endif
 
-instance Scheme (SPPKScheme 'WebAuthn) where
+verifyEd25519Sig :: PactHash.Hash -> Ed25519.PublicKey -> Ed25519.Signature -> Either String ()
+exportEd25519PubKey :: Ed25519.PublicKey -> ByteString
+exportEd25519SecretKey :: Ed25519PrivateKey -> ByteString
+exportEd25519Signature :: Ed25519.Signature -> ByteString
+parseEd25519PubKey :: ByteString -> Either String Ed25519.PublicKey
+parseEd25519SecretKey :: ByteString -> Either String Ed25519PrivateKey
+parseEd25519Signature :: ByteString -> Either String Ed25519.Signature
 
-  _valid _ msg (PubBS pubBS) (SigBS sigBS) =
-    case runVerification of
-      Left _ -> False
-      Right () -> True
-    where
-      -- Verifying a WebAuthn signature requires that we know the payload
-      -- signed by the WebAuthn keys on the client device. This payload is
-      -- a combination of the Challenge (in our case, the PactHash of a
-      -- transaction), a JSON object of "client metadata", and data about
-      -- the authenticator hardware.
-      -- We require this data to be part of our WebAuthn signature so that
-      -- we can reconstitute the payload that was signed on the browser.
-      runVerification :: Either String ()
-      runVerification = do
+#ifdef CRYPTONITE_ED25519
+verifyEd25519Sig (PactHash.Hash msg) pubKey sig =
+  unless (Ed25519.verify pubKey (fromShort msg) sig) $
+    Left "invalid ed25519 signature"
 
-        -- Decode our WebAuthn signature object from a `UserSig` string.
-        WebAuthnSignature
-          { authenticatorData
-          , signature
-          , clientDataJSON } <- A.eitherDecode (BSL.fromStrict sigBS)
+exportEd25519PubKey = B.convert
+parseEd25519PubKey s = E.onCryptoFailure
+  (const $ Left ("Invalid ED25519 Public Key: " ++ show (toB16Text s)))
+  Right
+  (Ed25519.publicKey s)
 
-        -- Decode the signer's public key.
-        publicKey <- first show $
-          Serialise.deserialiseOrFail @WA.CosePublicKey
-            (BSL.fromStrict pubBS)
+exportEd25519SecretKey = B.convert
+parseEd25519SecretKey s = E.onCryptoFailure
+  (const $ Left ("Invalid ED25519 Private Key: " ++ show (toB16Text s)))
+  Right
+  (Ed25519.secretKey s)
 
-        -- Enforce that the public key was generated by one of the two most
-        -- common signing algorithms. This lowers our susceptibility to
-        -- algorithm confusion attacks.
-        let WA.PublicKeyWithSignAlg _ signAlg = publicKey
-        unless (WA.fromCoseSignAlg signAlg `elem`
-          [-7 :: Int -- ECDSA with SHA-256, the most common webauthn signing algorithm.
-          ,-8        -- EdDSA, which is also supported by YubiKey.
-          ]) $ Left "Signing algorithm must be EdDSA"
+exportEd25519Signature = B.convert
+parseEd25519Signature s = E.onCryptoFailure
+  (const $ Left ("Invalid ED25519 Signature: " ++ show (toB16Text s)))
+  Right
+  (Ed25519.signature s)
+#else
+type Ed25519PrivateKey = Ed25519.PrivateKey
+verifyEd25519Sig (Hash msg) pubKey sig =
+  unless (Ed25519.valid (fromShort msg) pubKey sig) $
+    Left "invalid ed25519 signature"
 
-        -- Recover the signature, clientData, and authData bytestrings.
-        sig <- Base64.decode (T.encodeUtf8 signature)
-        clientData <- Base64URL.decode (T.encodeUtf8 clientDataJSON)
-        authData <- Base64.decode (T.encodeUtf8 authenticatorData)
+exportEd25519PubKey = Ed25519.exportPublic
+parseEd25519PubKey s = maybeToEither ("Invalid ED25519 Public Key: " ++ show (toB16Text s))
+           (Ed25519.importPublic s)
 
-        -- Reconstitute the payload signed by the WebAuthn client.
-        clientDataDigest <- Base16.decode $ BS.pack (show (H.hashWith H.SHA256 clientData))
-        let payload = authData <> clientDataDigest
+exportEd25519SecretKey = Ed25519.exportPrivate
+parseEd25519SecretKey s = maybeToEither ("Invalid ED25519 Private Key: " ++ show (toB16Text s))
+           (Ed25519.importPrivate s)
 
-        -- Check the signature's validity.
-        first T.unpack $ WAVerify.verify publicKey payload sig
+exportEd25519Signature (Ed25519.Sig bs) = bs
+parseEd25519Signature = Right . Ed25519.Sig
+#endif
 
-        -- Extract the original challenge from client data.
-        ClientDataJSON { challenge } <- A.eitherDecode (BSL.fromStrict clientData)
+-- webauthn
 
-        -- Check that the input `PactHash` matches the hash of the transaction
-        -- that was signed by WebAuthn keys.
-        let pactHashText = PactHash.hashToText msg
-        unless (pactHashText == challenge) $
-          Left "Hash mismatch"
+exportWebAuthnPrivateKey :: WebauthnPrivateKey -> ByteString
+exportWebAuthnPrivateKey = \case
+  WebAuthnEdDSAPrivateKey k -> exportEd25519SecretKey k
+  WebAuthnP256PrivateKey k -> B.convert k
 
-        -- If all of the above conditions are met, the signature is valid.
-        return ()
+verifyWebAuthnSig :: PactHash.Hash -> WA.CosePublicKey -> WebAuthnSignature -> Either String ()
+verifyWebAuthnSig
+  hsh
+  publicKey
+  WebAuthnSignature { authenticatorData, signature, clientDataJSON } = do
+    -- Enforce that the public key was generated by one of the two most
+    -- common signing algorithms. This lowers our susceptibility to
+    -- algorithm confusion attacks.
+    webAuthnPubKeyHasValidAlg publicKey
+
+    -- Recover the signature, clientData, and authData bytestrings.
+    sig <- over _Left ("signature: " <>) $
+      Base64.decode (T.encodeUtf8 signature)
+    clientData <- over _Left ("clientData: " <>) $
+      Base64URL.decode (T.encodeUtf8 clientDataJSON)
+    authData <- over _Left ("authData: " <>) $
+      Base64.decode (T.encodeUtf8 authenticatorData)
+
+    -- Reconstitute the payload signed by the WebAuthn client.
+    let clientDataDigest = B.convert (H.hashWith H.SHA256 clientData)
+    let payload = authData <> clientDataDigest
+
+    -- Check the signature's validity.
+    over _Left (("webauthn signature check: " <>) . T.unpack) $
+      WAVerify.verify publicKey payload sig
+
+    -- Extract the original challenge from client data.
+    ClientDataJSON { challenge } <- over _Left ("challenge: " <>) $ A.eitherDecode (BSL.fromStrict clientData)
+
+    -- Check that the input `PactHash` matches the hash of the transaction
+    -- that was signed by WebAuthn keys.
+    let pactHashText = PactHash.hashToText hsh
+    unless (pactHashText == challenge) $
+      Left "Hash mismatch, signature signs for the wrong transaction"
+
+parseWebAuthnPublicKey :: ByteString -> Either String WebAuthnPublicKey
+parseWebAuthnPublicKey rawPk = do
+  pk <- over _Left (\e -> "WebAuthn public key parsing: " <> show e) $
+    Serialise.deserialiseOrFail @WA.CosePublicKey (BSL.fromStrict rawPk)
+  webAuthnPubKeyHasValidAlg pk
+  return pk
+
+parseWebAuthnPrivateKey :: ByteString -> Either String WebauthnPrivateKey
+parseWebAuthnPrivateKey rawPk = case parseEd25519SecretKey rawPk of
+  Right k -> Right $ WebAuthnEdDSAPrivateKey k
+  Left _ -> case parseECDSAP256PrivateKey rawPk of
+    Right k -> Right $ WebAuthnP256PrivateKey k
+    Left _ -> Left "Could not parse WebAuthn private key"
+
+parseECDSAP256PrivateKey :: ByteString -> Either String (ECDSA.PrivateKey ECC.Curve_P256R1)
+parseECDSAP256PrivateKey bs =
+  case ECDSA.decodePrivate (Proxy :: Proxy ECC.Curve_P256R1) bs of
+    E.CryptoFailed _ -> Left "Could not parse as ECDSA-P256 private key"
+    E.CryptoPassed a -> Right a
+
+webAuthnPubKeyHasValidAlg :: WebAuthnPublicKey -> Either String ()
+webAuthnPubKeyHasValidAlg (WA.PublicKeyWithSignAlg _ signAlg) =
+  unless (WA.fromCoseSignAlg signAlg `elem` validCoseSignAlgorithms)
+    $ Left "Signing algorithm must be EdDSA or P256"
+
+validCoseSignAlgorithms :: [Int]
+validCoseSignAlgorithms =
+  [ -7 -- ECDSA with SHA-256, the most common WebAuthn signing algorithm.
+  , -8 -- EdDSA, which is also supported by YubiKey.
+  ]
+
+exportWebAuthnPublicKey :: WebAuthnPublicKey -> ByteString
+exportWebAuthnPublicKey = BSL.toStrict . Serialise.serialise
+
+parseWebAuthnSignature :: ByteString -> Either String WebAuthnSignature
+parseWebAuthnSignature = A.eitherDecode . BSL.fromStrict
+
+exportWebAuthnSignature :: WebAuthnSignature -> ByteString
+exportWebAuthnSignature = J.encodeStrict
+
+-- | Newtype wrapper around a private key generated by a mock WebAuthn
+-- attestation ceremony.
+-- This is only used for testing WebAuthn signature verifiers. Normally
+-- keypairs are generated by an authenticator device and are not shared
+-- with the user or the relying service.
+data WebauthnPrivateKey = WebAuthnEdDSAPrivateKey Ed25519.SecretKey | WebAuthnP256PrivateKey (ECDSA.PrivateKey ECC.Curve_P256R1)
+  deriving(Eq, Show, Generic)
+
+-- | Mock WebAuthn signing algorithm.
+-- This is only used for testing WebAuthn signature verifiers. Normally
+-- keypairs are generated by an authenticator device and are not shared
+-- with the user or the relying service.
+signWebauthn :: WebAuthnPublicKey -> WebauthnPrivateKey -> ByteString -> PactHash.Hash -> ExceptT String IO WebAuthnSignature
+signWebauthn pubkey privkey authData hsh = do
+  let clientData = J.encodeStrict $ ClientDataJSON {challenge = PactHash.hashToText hsh}
+  let clientDataDigest = B.convert (H.hashWith H.SHA256 clientData)
+  let payload = authData <> clientDataDigest
+  !signature <- case (pubkey, privkey) of
+        (WA.PublicKeyWithSignAlg (WA.PublicKey (WA.PublicKeyEdDSA WA.CoseCurveEd25519 pubkeyBytes)) WA.CoseSignAlgEdDSA, WebAuthnEdDSAPrivateKey privateKey) -> do
+          pubKeyParsed <- liftEither $ parseEd25519PubKey pubkeyBytes
+          return $ exportEd25519Signature $ Ed25519.sign privateKey pubKeyParsed payload
+        (WA.PublicKeyWithSignAlg (WA.PublicKey (WA.PublicKeyECDSA WA.CoseCurveP256 _ _)) (WA.CoseSignAlgECDSA WA.CoseHashAlgECDSASHA256), WebAuthnP256PrivateKey privateKey) -> do
+          let p256 = Proxy :: Proxy ECC.Curve_P256R1
+          ECDSA.Signature r s <- liftIO $ ECDSA.sign p256 privateKey H.SHA256 payload
+          -- this format is in Pact.Crypto.WebAuthn.Cose.Verify
+          return $ ASN1.encodeASN1' ASN1.DER
+            [ ASN1.Start ASN1.Sequence
+            , ASN1.IntVal (ECC.scalarToInteger p256 r)
+            , ASN1.IntVal (ECC.scalarToInteger p256 s)
+            , ASN1.End ASN1.Sequence
+            ]
+        _ -> throwError "invalid pubkey/privkey pair or invalid key type"
+  return WebAuthnSignature
+    { signature = T.decodeUtf8 $ Base64.encode signature
+    , clientDataJSON = T.decodeUtf8 $ Base64URL.encode clientData
+    , authenticatorData = T.decodeUtf8 $ Base64.encode authData
+    }
+
+generateEd25519KeyPair :: MonadRandom m => m Ed25519KeyPair
+generateEd25519KeyPair = do
+  privkey <- Ed25519.generateSecretKey
+  return (Ed25519.toPublic privkey, privkey)
+
+-- | Generate a keypair in the same way as an authenticator using Ed25519.
+-- This is only used for testing WebAuthn signature verifiers. Normally
+-- keypairs are generated by an authenticator device and are not shared
+-- with the user or the relying service.
+generateWebAuthnEd25519KeyPair :: MonadRandom m => m (WebAuthnPublicKey, WebauthnPrivateKey)
+generateWebAuthnEd25519KeyPair = do
+  (pub, priv) <- generateEd25519KeyPair
+  let checked = either (error . T.unpack) id $ WA.checkPublicKey (WA.PublicKeyEdDSA WA.CoseCurveEd25519 (exportEd25519PubKey pub))
+  return (WA.PublicKeyWithSignAlgInternal checked WA.CoseSignAlgEdDSA, WebAuthnEdDSAPrivateKey priv)
+
+-- | Generate a keypair in the same way as an authenticator using ECDSA P-256.
+-- This is only used for testing WebAuthn signature verifiers. Normally
+-- keypairs are generated by an authenticator device and are not shared
+-- with the user or the relying service.
+generateWebAuthnP256KeyPair :: MonadRandom m => m (WebAuthnPublicKey, WebauthnPrivateKey)
+generateWebAuthnP256KeyPair = do
+  ECC.KeyPair public private <- ECC.curveGenerateKeyPair (Proxy :: Proxy ECC.Curve_P256R1)
+  let (ecdsaX, ecdsaY) = ECC.pointToIntegers public
+  let checked = either (error . T.unpack) id $ WA.checkPublicKey (WA.PublicKeyECDSA WA.CoseCurveP256 ecdsaX ecdsaY)
+  return (WA.PublicKeyWithSignAlgInternal checked (WA.CoseSignAlgECDSA WA.CoseHashAlgECDSASHA256), WebAuthnP256PrivateKey private)
+
 
 --------- SCHEME HELPER DATA TYPES ---------
 
-type Ed25519KeyPair = (Ed25519.PublicKey, Ed25519.SecretKey)
-
+type Ed25519KeyPair = (Ed25519.PublicKey, Ed25519PrivateKey)
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
   deriving (Eq, Generic, Hashable)
 
-instance FromJSON PublicKeyBS where
-  parseJSON = withText "PublicKeyBS" $ \s -> do
+instance A.FromJSON PublicKeyBS where
+  parseJSON = A.withText "PublicKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PubBS s'
 instance J.Encode PublicKeyBS where
@@ -252,18 +389,18 @@ instance IsString PublicKeyBS where
 instance Show PublicKeyBS where
   show (PubBS b) = T.unpack $ toB16Text b
 
-instance FromJSONKey PublicKeyBS where
-    fromJSONKey = FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
+instance A.FromJSONKey PublicKeyBS where
+    fromJSONKey = A.FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
     {-# INLINE fromJSONKey #-}
 instance Arbitrary PublicKeyBS where
-  arbitrary = PubBS . B.pack <$> vector 32
+  arbitrary = PubBS . BS.pack <$> vector 32
 
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
   deriving (Eq, Generic, Hashable)
 
-instance FromJSON PrivateKeyBS where
-  parseJSON = withText "PrivateKeyBS" $ \s -> do
+instance A.FromJSON PrivateKeyBS where
+  parseJSON = A.withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PrivBS s'
 instance J.Encode PrivateKeyBS where
@@ -276,56 +413,52 @@ instance IsString PrivateKeyBS where
 instance Show PrivateKeyBS where
   show (PrivBS b) = T.unpack $ toB16Text b
 instance Arbitrary PrivateKeyBS where
-  arbitrary = PrivBS . B.pack <$> vector 32
+  arbitrary = PrivBS . BS.pack <$> vector 32
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic, Hashable)
 
-instance FromJSON SignatureBS where
-  parseJSON = withText "SignatureBS" $ \s -> do
+instance A.FromJSON SignatureBS where
+  parseJSON = A.withText "SignatureBS" $ \s -> do
     s' <- parseB16Text s
     return $ SigBS s'
 instance J.Encode SignatureBS where
   build (SigBS p) = J.text $ toB16Text p
   {-# INLINE build #-}
 instance Arbitrary SignatureBS where
-  arbitrary = SigBS . B.pack <$> vector 64
+  arbitrary = SigBS . BS.pack <$> vector 64
 
 --------- SCHEME HELPER FUNCTIONS ---------
 
-sign :: Ed25519.PublicKey -> Ed25519.SecretKey -> Hash -> IO ByteString
-sign pub priv (Hash msg) = return $ toBS $ Ed25519.sign priv pub (fromShort msg)
-
-
-verify :: SomeScheme -> Hash -> PublicKeyBS -> SignatureBS -> Bool
-verify (SomeScheme scheme) msg pBS sigBS = _valid scheme msg pBS sigBS
-
-
+signEd25519 :: Ed25519.PublicKey -> Ed25519PrivateKey -> PactHash.Hash -> Ed25519.Signature
+#ifdef CRYPTONITE_ED25519
+signEd25519 pub priv (PactHash.Hash msg) = Ed25519.sign priv pub (fromShort msg)
+#else
+signEd25519 pub priv (Hash msg) = Ed25519.sign (fromShort msg) priv pub
+#endif
 
 getPublic :: Ed25519KeyPair -> ByteString
-getPublic = toBS . fst
+getPublic = exportEd25519PubKey . fst
 
 getPrivate :: Ed25519KeyPair -> ByteString
-getPrivate = toBS . snd
-
+getPrivate = exportEd25519SecretKey . snd
 
 -- Key Pair setter functions
 
-genKeyPair :: IO (Ed25519.PublicKey, Ed25519.SecretKey)
+genKeyPair :: IO (Ed25519.PublicKey, Ed25519PrivateKey)
 genKeyPair = ed25519GenKeyPair
-
 
 -- | Parse a pair of keys (where the public key is optional) into an Ed25519 keypair.
 -- Derives Public Key from Private Key if none provided. Trivial in some
 -- Crypto schemes (i.e. Elliptic curve ones).
 -- Checks that Public Key provided matches the Public Key derived from the Private Key.
-importKeyPair :: Maybe PublicKeyBS -> PrivateKeyBS -> Either String Ed25519KeyPair
-importKeyPair maybePubBS (PrivBS privBS) = do
-  priv <- fromBS privBS
+importEd25519KeyPair :: Maybe PublicKeyBS -> PrivateKeyBS -> Either String Ed25519KeyPair
+importEd25519KeyPair maybePubBS (PrivBS privBS) = do
+  priv <- parseEd25519SecretKey privBS
   let derivedPub = ed25519GetPublicKey priv
   suppliedPub <- case maybePubBS of
     Nothing -> Right Nothing
-    Just (PubBS pubBS) -> Just <$> fromBS pubBS
+    Just (PubBS pubBS) -> Just <$> parseEd25519PubKey pubBS
 
   case suppliedPub of
     Nothing -> return (derivedPub, priv)
@@ -333,10 +466,9 @@ importKeyPair maybePubBS (PrivBS privBS) = do
       if pub == derivedPub
       then return (derivedPub, priv)
       else Left $ "Expected PublicKey "
-                ++ show (toB16Text $ toBS pub)
+                ++ show (toB16Text $ exportEd25519PubKey pub)
                 ++ " but received "
-                ++ show (toB16Text $ toBS derivedPub)
-
+                ++ show (toB16Text $ exportEd25519PubKey derivedPub)
 
 
 --------- ED25519 FUNCTIONS AND ORPHANS ---------
@@ -348,12 +480,8 @@ ed25519GenKeyPair = do
     let public = Ed25519.toPublic secret
     return (public, secret)
 
-
 ed25519GetPublicKey :: Ed25519.SecretKey -> Ed25519.PublicKey
 ed25519GetPublicKey = Ed25519.toPublic
-
-
-
 
 instance Ord Ed25519.PublicKey where
   b <= b' = (B.convert b :: ByteString) <= (B.convert b' :: ByteString)
@@ -386,10 +514,8 @@ ed25519GenKeyPair = do
       Left _ -> error "Something went wrong in genKeyPairs"
       Right (s,p,_) -> return (p, s)
 
-
 ed25519GetPublicKey :: Ed25519.PrivateKey -> Ed25519.PublicKey
 ed25519GetPublicKey = Ed25519.generatePublic
-
 
 instance Eq Ed25519.PublicKey where
   b == b' = (Ed25519.exportPublic b) == (Ed25519.exportPublic b')
@@ -400,8 +526,6 @@ instance Serialize Ed25519.PublicKey where
   get = maybe (fail "Invalid ED25519 Public Key") return =<<
         (Ed25519.importPublic <$> S.getByteString 32)
 
-
-
 instance Eq Ed25519.PrivateKey where
   b == b' = (Ed25519.exportPrivate b) == (Ed25519.exportPrivate b')
 instance Ord Ed25519.PrivateKey where
@@ -411,8 +535,6 @@ instance Serialize Ed25519.PrivateKey where
   get = maybe (fail "Invalid ED25519 Private Key") return =<<
         (Ed25519.importPrivate <$> S.getByteString 32)
 
-
-
 deriving instance Eq Ed25519.Signature
 deriving instance Ord Ed25519.Signature
 instance Serialize Ed25519.Signature where
@@ -420,20 +542,32 @@ instance Serialize Ed25519.Signature where
   get = Ed25519.Sig <$> (S.get >>= S.getByteString)
 #endif
 
+type WebAuthnPublicKey = WA.CosePublicKey
 
 -- | This type specifies the format of a WebAuthn signature.
 data WebAuthnSignature = WebAuthnSignature
   { clientDataJSON :: T.Text
   , authenticatorData :: T.Text
   , signature :: T.Text
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Eq, Ord)
+
+instance Serialize WebAuthnSignature
+
+instance NFData WebAuthnSignature
 
 instance A.FromJSON WebAuthnSignature where
   parseJSON = A.withObject "WebAuthnSignature" $ \o -> do
-    clientDataJSON <- o .: "clientDataJSON"
-    authenticatorData <- o .: "authenticatorData"
-    signature <- o .: "signature"
+    clientDataJSON <- o A..: "clientDataJSON"
+    authenticatorData <- o A..: "authenticatorData"
+    signature <- (o A..: "signature")
     pure $ WebAuthnSignature {..}
+
+instance J.Encode WebAuthnSignature where
+  build (WebAuthnSignature { clientDataJSON, authenticatorData, signature }) = J.object
+    [ "authenticatorData" J..=  authenticatorData
+    , "clientDataJSON" J..= clientDataJSON
+    , "signature" J..= signature
+    ]
 
 -- | This type represents a challenge that was used during
 -- a WebAuthn "assertion" flow. For signing Pact payloads, this
@@ -444,5 +578,9 @@ newtype ClientDataJSON = ClientDataJSON {
 
 instance A.FromJSON ClientDataJSON where
   parseJSON = A.withObject "ClientDataJSON" $ \o -> do
-    challenge <- o .: "challenge"
+    challenge <- o A..: "challenge"
     pure $ ClientDataJSON { challenge }
+
+instance J.Encode ClientDataJSON where
+  build ClientDataJSON { challenge } =
+    J.object ["challenge" J..= challenge]

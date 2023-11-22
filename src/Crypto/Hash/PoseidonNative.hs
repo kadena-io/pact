@@ -180,7 +180,7 @@ getC :: Int -> Int -> Integer
 getC = \ti i ->
   cData `SmallArray.indexSmallArray` ti `Array.indexArray` i
   where
-  cData = SmallArray.smallArrayFromList $ map Array.fromList
+  cData = SmallArray.smallArrayFromList $ map Array.arrayFromList
     [
       [
         0x09c46e9ec68e9bd4fe1faaba294cba38a71aa177534cdd1b6c7dc0dbd0abd7a7,

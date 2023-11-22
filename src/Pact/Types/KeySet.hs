@@ -1,8 +1,11 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE InstanceSigs #-}
 -- |
 -- Module      :  Pact.Types.Keyset
 -- Copyright   :  (C) 2022 Stuart Popejoy
@@ -27,11 +30,13 @@ module Pact.Types.KeySet
   , KeySet(..)
   , KeySetName(..)
   , mkKeySet
-  , KeyFormat
-  , ed25519Hex
+  , ed25519HexFormat
+  , webAuthnPrefix
+  , parseWebAuthnPublicKeyText
+  , exportWebAuthnPublicKeyText
+  , webAuthnFormat
   , isHexDigitLower
-  , keyFormats
-  , validateKeyFormat
+  , allKeyFormats
   , enforceKeyFormats
   , keysetNameParser
   , qualifiedKeysetNameParser
@@ -45,8 +50,10 @@ import Control.Applicative ( Alternative((<|>)) )
 import Control.DeepSeq
 import Control.Monad
 import Control.Lens hiding ((.=))
+
 import Data.Aeson
 import Data.Attoparsec.Text (parseOnly, takeText, Parser)
+import qualified Data.ByteString.Base16 as B16
 import Data.Char
 import Data.Default
 import Data.Foldable
@@ -61,6 +68,7 @@ import qualified Data.Text.Encoding as T
 import GHC.Generics
 import Test.QuickCheck
 
+import Pact.Types.Crypto
 import Pact.Types.Names
 import Pact.Types.Pretty hiding (dot)
 import Pact.Types.SizeOf
@@ -75,9 +83,8 @@ import qualified Pact.JSON.Encode as J
 -- -------------------------------------------------------------------------- --
 -- PublicKey
 
+
 -- | Public key in UTF8 encoded textual format
---
--- TODO: what exactly is the format?
 --
 newtype PublicKeyText = PublicKeyText { _pubKey :: T.Text }
   deriving (Eq,Ord,Generic,IsString,AsString,Show)
@@ -243,12 +250,31 @@ mkKeySet pks p = KeySet
   (S.fromList pks)
   (Name $ BareName p def)
 
--- | A predicate for public key format validation.
-type KeyFormat = PublicKeyText -> Bool
-
 -- | Current "Kadena" ED-25519 key format: 64-length hex.
-ed25519Hex :: KeyFormat
-ed25519Hex (PublicKeyText k) = T.length k == 64 && T.all isHexDigitLower k
+ed25519HexFormat :: PublicKeyText -> Bool
+ed25519HexFormat (PublicKeyText k) =
+  T.length k == 64
+  && T.all isHexDigitLower k
+
+-- | Prefix for any webauthn keys.
+webAuthnPrefix :: Text
+webAuthnPrefix = "WEBAUTHN-"
+
+parseWebAuthnPublicKeyText :: PublicKeyText -> Maybe WebAuthnPublicKey
+parseWebAuthnPublicKeyText (PublicKeyText k)
+  | Just pkText <- T.stripPrefix webAuthnPrefix k
+  , T.all isHexDigitLower pkText
+  , Right kbs <- B16.decode (T.encodeUtf8 pkText)
+  , Right pk <- parseWebAuthnPublicKey kbs
+  = Just pk
+  | otherwise = Nothing
+
+exportWebAuthnPublicKeyText :: WebAuthnPublicKey -> PublicKeyText
+exportWebAuthnPublicKeyText pk =
+  PublicKeyText $ webAuthnPrefix <> toB16Text (exportWebAuthnPublicKey pk)
+
+webAuthnFormat :: PublicKeyText -> Bool
+webAuthnFormat = isJust . parseWebAuthnPublicKeyText
 
 -- | Lower-case hex numbers.
 isHexDigitLower :: Char -> Bool
@@ -257,15 +283,11 @@ isHexDigitLower c =
   isDigit c || (fromIntegral (ord c - ord 'a')::Word) <= 5
 
 -- | Supported key formats.
-keyFormats :: [KeyFormat]
-keyFormats = [ed25519Hex]
-
--- | Validate 'PublicKeyText' against 'keyFormats'.
-validateKeyFormat :: PublicKeyText -> Bool
-validateKeyFormat k = any ($ k) keyFormats
+allKeyFormats :: [PublicKeyText -> Bool]
+allKeyFormats = [ed25519HexFormat, webAuthnFormat]
 
 -- | Enforce valid 'KeySet' keys, evaluating error action on failure.
-enforceKeyFormats :: Monad m => (PublicKeyText -> m ()) -> KeySet -> m ()
-enforceKeyFormats err (KeySet ks _p) = traverse_ go ks
+enforceKeyFormats :: Monad m => (PublicKeyText -> m ()) -> [PublicKeyText -> Bool] -> KeySet -> m ()
+enforceKeyFormats err formats (KeySet ks _p) = traverse_ go ks
   where
-    go k = unless (validateKeyFormat k) $ err k
+    go k = unless (any ($ k) formats) $ err k

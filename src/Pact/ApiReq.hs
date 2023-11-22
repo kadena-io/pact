@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -46,18 +47,19 @@ import Control.Monad.State.Strict
 import Data.Aeson
 import qualified Data.Aeson.Key as AK
 import qualified Data.Aeson.KeyMap as AKM
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Short as SBS
 import Data.Default (def)
+import Data.Foldable
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Set as S
 import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 import Data.Text.Encoding
-import Data.Foldable(foldrM)
 import Pact.Time
 import qualified Data.Yaml as Y
 import GHC.Generics
@@ -298,7 +300,7 @@ loadSigData fp = do
 
 addSigToSigData :: Ed25519KeyPair -> SigData a -> IO (SigData a)
 addSigToSigData kp sd = do
-  sig <- signHash (_sigDataHash sd) kp
+  let sig = ED25519Sig $ signHash (_sigDataHash sd) kp
   let k = PublicKeyHex $ toB16Text $ getPublic kp
   return $ sd { _sigDataSigs = addSigToList k sig $ _sigDataSigs sd }
 
@@ -341,30 +343,23 @@ returnSigDataOrCommand  outputLocal sd
     when (length (_pSigners payload) /= length sigs) $
       Left "Number of signers in the payload does not match number of signers in the sigData"
     usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
-    let failedSigs = filter (not . verifySig h) usrSigs
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
+    traverse_ Left $ verifyUserSigs h [ (signer, sig) | (sig, Just signer) <- usrSigs ]
     _ <- verifyHash h (encodeUtf8 cmd)
     pure ()
     where
-    verifySig hsh (signer, usrSig) = case usrSig of
-      Nothing -> True
-      Just sig -> verifyUserSig hsh sig signer
     toSignerPair sigMap signer =
       case Map.lookup (PublicKeyHex $ _siPubKey signer) sigMap of
         Nothing -> Left $ "Signer in payload does not show up in signatures" <> show (_siPubKey signer)
         Just v -> pure (signer, v)
   verifyPartialSigData (SigData h sigs Nothing) = do
     sigs' <- foldrM toVerifPair [] sigs
-    let scheme = toScheme ED25519
-        failedSigs = filter (\(pk, sig) -> not $ verify scheme (toUntypedHash h) pk sig) sigs'
-    when (length failedSigs /= 0) $ Left $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
-    pure ()
+    traverse_ Left $ verifyUserSigs h sigs'
     where
-    toVerifPair (PublicKeyHex pktext, Just UserSig{..}) m = do
-      pk <- PubBS <$> parseB16TextOnly pktext
-      sig <- SigBS <$> parseB16TextOnly _usSig
-      pure $ (pk, sig):m
-    toVerifPair (_, Nothing) m = pure m
+    toVerifPair (PublicKeyHex pktext, Just (ED25519Sig _usSig) ) m = do
+      let sig = ED25519Sig _usSig
+      let signer = Signer (Just ED25519) pktext Nothing []
+      pure $ (sig, signer):m
+    toVerifPair (_, _) m = pure m
 
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
 returnCommandIfDone outputLocal sd =
@@ -393,7 +388,7 @@ importKeyFile keyFile = do
         pub <- getKey "public" v
         sec <- getKey "secret" v
 
-        importKeyPair (Just $ PubBS pub) (PrivBS sec)
+        importEd25519KeyPair (Just $ PubBS pub) (PrivBS sec)
   case ekp of
     Left e -> dieAR $ "Could not parse key file " <> keyFile <> ": " <> e
     Right kp -> return kp
@@ -474,13 +469,13 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       fmap (encodeYaml . J.Object) $ forM kps $ \kp -> do
-            sig <- signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
-            return (asString (B16JsonBytes (getPublic kp)), _usSig sig)
+            let sig = signHash (fromUntypedHash $ Hash $ SBS.toShort h) kp
+            return (asString (B16JsonBytes (getPublic kp)), sig)
 
 withKeypairsOrSigner
   :: Bool
   -> ApiReq
-  -> ([Ed25519KeyPairCaps] -> IO a)
+  -> ([(DynKeyPair, [SigCapability])] -> IO a)
   -> ([Signer] -> IO a)
   -> IO a
 withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
@@ -548,7 +543,7 @@ mkExec
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
-  -> [Ed25519KeyPairCaps]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs + caplists
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
@@ -557,7 +552,7 @@ mkExec
   -> IO (Command Text)
 mkExec code mdata pubMeta kps nid ridm = do
   rid <- mkNonce ridm
-  cmd <- mkCommand
+  cmd <- mkCommandWithDynKeys
          kps
          pubMeta
          rid
@@ -635,7 +630,7 @@ mkCont
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
-  -> [Ed25519KeyPairCaps]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs
   -> Maybe Text
     -- ^ optional nonce
@@ -646,7 +641,7 @@ mkCont
   -> IO (Command Text)
 mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
   rid <- mkNonce ridm
-  cmd <- mkCommand
+  cmd <- mkCommandWithDynKeys
          kps
          pubMeta
          rid
@@ -687,27 +682,49 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
          (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
   return $ decodeUtf8 <$> cmd
 
--- Parse `APIKeyPair`s into Ed25519 keypairs.
-mkKeyPairs :: [ApiKeyPair] -> IO [Ed25519KeyPairCaps]
+-- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
+-- The keypairs must not be prefixed with "WEBAUTHN-", it accepts
+-- only the raw (unprefixed) keys.
+mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
-  where importValidKeyPair ApiKeyPair{..} = fmap (,maybe [] id _akpCaps) $
-          importKeyPair _akpPublic _akpSecret
+  where
 
-        mkPair akp = case _akpAddress akp of
-          Nothing -> either dieAR return (importValidKeyPair akp)
-          Just addrT -> do
+        importValidKeyPair
+          :: Maybe PublicKeyBS
+          -> PrivateKeyBS
+          -> Maybe [SigCapability]
+          -> Either String (Ed25519KeyPair, [SigCapability])
+        importValidKeyPair pubEd25519 privEd25519 caps = fmap (,maybe [] id caps) $
+          importEd25519KeyPair pubEd25519 privEd25519
+
+        isEd25519 :: Maybe PPKScheme -> Bool
+        isEd25519 = \case
+          Nothing -> True
+          Just ED25519 -> True
+          _ -> False
+
+        mkPair :: ApiKeyPair -> IO (DynKeyPair, [SigCapability])
+        mkPair akp = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
+          (scheme, pub, priv, Nothing) | isEd25519 scheme ->
+            either dieAR (return . first DynEd25519KeyPair) (importValidKeyPair pub priv (_akpCaps akp))
+          (scheme, pub, priv, Just addrT) | isEd25519 scheme -> do
             addrBS <- either dieAR return (parseB16TextOnly addrT)
-            kp     <- either dieAR return (importValidKeyPair akp)
+            kp     <- either dieAR return (importValidKeyPair pub priv (_akpCaps akp))
 
             -- Enforces that user provided address matches the address derived from the Public Key
             -- for transparency and a better user experience. User provided address not used except
             -- for this purpose.
             if addrBS == getPublic (fst kp)
-              then return kp
+              then (return . first DynEd25519KeyPair) kp
               else dieAR $ "Address provided "
                           ++ show (toB16Text addrBS)
                           ++ " does not match actual Address "
                           ++ show (toB16Text $ getPublic $ fst kp)
+          (Just WebAuthn, Just (PubBS pub), PrivBS priv, Nothing) -> do
+            pubWebAuthn <- either dieAR return (parseWebAuthnPublicKey pub)
+            privWebAuthn <- either dieAR return (parseWebAuthnPrivateKey priv)
+            return $ (DynWebAuthnKeyPair WebAuthnPubKeyBare pubWebAuthn privWebAuthn, fromMaybe [] (_akpCaps akp))
+          _ -> dieAR $ "Attempted to mix Ed25519 and WebAuthn keys."
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ intercalate "\n" $

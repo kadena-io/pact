@@ -1019,7 +1019,7 @@ filter' i as@[tLamToApp -> app@TApp {},l] = gasUnreduced i as $ reduce l >>= \ca
     t <- apply (_tApp app) [a']
     case t of
       (TLiteral (LBool bo) _) -> return bo
-      _ -> ifExecutionFlagSet FlagDisablePact420
+      _ -> ifExecutionFlagSet FlagDisablePact42
              (return False)
              (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
   t -> isOffChainForkedError FlagDisablePact47 >>= \case

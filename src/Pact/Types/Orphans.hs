@@ -18,8 +18,10 @@
 --
 -- Various orphans.
 --
-module Pact.Types.Orphans where
+module Pact.Types.Orphans() where
 
+import Control.Monad
+import qualified Data.ByteArray as BA
 import Data.Serialize
 import Data.Decimal
 import qualified Data.Aeson as A
@@ -32,6 +34,8 @@ import Control.DeepSeq
 import Bound
 import Control.Applicative ((<|>))
 import Test.QuickCheck (Arbitrary(..))
+import Test.QuickCheck.Gen
+import Crypto.Random.Types
 
 import qualified Pact.JSON.Encode as J
 
@@ -81,3 +85,5 @@ instance (A.FromJSON b, Traversable f, A.FromJSON (f A.Value), A.FromJSON (f a))
 deriving newtype instance Arbitrary NominalDiffTime
 deriving newtype instance Arbitrary UTCTime
 
+instance MonadRandom Gen where
+    getRandomBytes n = BA.pack <$> replicateM n arbitrary

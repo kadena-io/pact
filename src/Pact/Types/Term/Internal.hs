@@ -1087,4 +1087,3 @@ instance Show1 Governance where
   liftShowsPrec = $(makeLiftShowsPrec ''Governance)
 instance Show1 Step where
   liftShowsPrec = $(makeLiftShowsPrec ''Step)
-
