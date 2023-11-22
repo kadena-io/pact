@@ -277,10 +277,9 @@ hasInvalidSigs hsh sigs signers
   | otherwise                            = verifyUserSigs hsh (zip sigs signers)
 
 verifyUserSigs :: PactHash -> [(UserSig, Signer)] -> Maybe String
-verifyUserSigs hsh sigsAndSigners =
-  if not (null failedSigs)
-  then formatIssues
-  else Nothing
+verifyUserSigs hsh sigsAndSigners 
+  | null failedSigs = Nothing
+  | otherwise = formatIssues
   where
   getFailedVerify (sig, signer) =
     [ over each Text.pack (show signer, err) | Left err <- [verifyUserSig hsh sig signer] ]
