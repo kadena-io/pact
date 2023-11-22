@@ -344,14 +344,14 @@ returnSigDataOrCommand  outputLocal sd
     when (length (_pSigners payload) /= length sigs) $
       Left "Number of signers in the payload does not match number of signers in the sigData"
     usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
-    traverse_ Left $ verifyUserSigs h [ (signer, sig) | (Just signer, sig) <- usrSigs ]
+    traverse_ Left $ verifyUserSigs h [ (signer, sig) | (sig, Just signer) <- usrSigs ]
     _ <- verifyHash h (encodeUtf8 cmd)
     pure ()
     where
     toSignerPair sigMap signer =
       case Map.lookup (PublicKeyHex $ _siPubKey signer) sigMap of
         Nothing -> Left $ "Signer in payload does not show up in signatures" <> show (_siPubKey signer)
-        Just v -> pure (v, signer)
+        Just v -> pure (signer, v)
   verifyPartialSigData (SigData h sigs Nothing) = do
     sigs' <- foldrM toVerifPair [] sigs
     traverse_ Left $ verifyUserSigs h sigs'
