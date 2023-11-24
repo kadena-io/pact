@@ -1,3 +1,16 @@
+4.10.0
+---
+### Features
+- Webauthn support in key formats (#1318)
+- New `poseidon-hack-a-chain` native for the "Poseidon" hashing function (#1313)
+
+### Bugfixes
+- Gas model fix for concat (#1317)
+- Fix FV `str-to-int` (#1304)
+
+### Misc
+- Vendor webauthn dependency
+
 4.9.0
 ---
 ### Bugfixes
