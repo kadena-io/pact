@@ -17,6 +17,7 @@ import GHC.Int(Int(..))
 import Pact.Types.Exp
 import Pact.Types.Hash
 import Pact.Types.PactValue
+import Pact.Types.KeySet
 import Pact.Types.Term
 
 class ToPactStringGas ty where

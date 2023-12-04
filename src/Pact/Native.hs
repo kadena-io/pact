@@ -106,6 +106,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
+import Crypto.Hash.PoseidonNative (poseidon)
 
 import qualified Pact.JSON.Encode as J
 
@@ -122,6 +123,7 @@ natives =
   , decryptDefs
   , guardDefs
   , zkDefs
+  , poseidonHackAChainDefs
   ]
 
 
@@ -1017,7 +1019,7 @@ filter' i as@[tLamToApp -> app@TApp {},l] = gasUnreduced i as $ reduce l >>= \ca
     t <- apply (_tApp app) [a']
     case t of
       (TLiteral (LBool bo) _) -> return bo
-      _ -> ifExecutionFlagSet FlagDisablePact420
+      _ -> ifExecutionFlagSet FlagDisablePact42
              (return False)
              (evalError' i $ "filter: expected closure to return bool: " <> pretty app)
   t -> isOffChainForkedError FlagDisablePact47 >>= \case
@@ -1285,6 +1287,7 @@ concat' :: GasRNativeFun e
 concat' i [TList ls _ _] = do
 
   disablePact48 <- isExecutionFlagSet FlagDisablePact48
+  fixupDivByZero <- not <$> isExecutionFlagSet FlagDisablePact410
   let concatGasCost =
         if disablePact48
         then
@@ -1301,7 +1304,7 @@ concat' i [TList ls _ _] = do
                     _ -> 0
               nStrings = V.length ls
           in
-          GTextConcatenation nChars nStrings
+          GTextConcatenation nChars nStrings fixupDivByZero
   computeGas' i concatGasCost $
     let
       ls' = V.toList ls
@@ -1543,3 +1546,26 @@ base64DecodeWithShimmedErrors i txt = do
         return $ offsetI - (offsetI `rem` 4) + paddingAdjustment
       Nothing ->
         evalError i "Could not parse error message"
+
+poseidonHackAChainDefs :: NativeModule
+poseidonHackAChainDefs = ("Poseidon Hash", [ poseidonHackAChainDef ])
+
+poseidonHackAChainDef :: NativeDef
+poseidonHackAChainDef = defGasRNative
+  "poseidon-hash-hack-a-chain"
+  poseidon'
+  (funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger), ("o", tTyInteger), ("p", tTyInteger)])
+    ["(poseidon-hash-hack-a-chain 1)"
+    ,"(poseidon-hash-hack-a-chain 1 2)"
+    ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6)"
+    ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)"
+    ]
+    "Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain."
+  where
+  poseidon' :: RNativeFun e
+  poseidon' i as
+    | not (null as) && length as <= 8,
+      Just intArgs <- traverse (preview _TLitInteger) as
+      = computeGas' i (GPoseidonHashHackAChain $ length as) $
+        return $ toTerm $ poseidon intArgs
+     | otherwise = argsError i as

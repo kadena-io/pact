@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies, GADTs, DataKinds #-}
@@ -12,8 +13,6 @@ module Pact.Types.Scheme
   , SPPKScheme(..)
   ) where
 
-
-
 import GHC.Generics
 import Control.DeepSeq
 import Data.Kind (Type)
@@ -22,6 +21,7 @@ import qualified Data.Text as T
 import Data.Aeson
 import Test.QuickCheck
 
+import Pact.Types.Pretty (Pretty(pretty))
 import Pact.Types.Util (ParseText(..))
 
 import qualified Pact.JSON.Encode as J
@@ -39,10 +39,16 @@ instance ToJSON PPKScheme where
   toJSON ED25519 = "ED25519"
   toJSON WebAuthn = "WebAuthn"
 
+
   toEncoding ED25519 = toEncoding @T.Text "ED25519"
   toEncoding WebAuthn = toEncoding @T.Text "WebAuthn"
   {-# INLINE toJSON #-}
   {-# INLINE toEncoding #-}
+
+instance Pretty PPKScheme where
+  pretty = \case
+    ED25519 -> "ed25519"
+    WebAuthn -> "webauthn"
 
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" parseText

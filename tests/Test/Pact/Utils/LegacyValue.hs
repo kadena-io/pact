@@ -137,6 +137,7 @@ spec_case
   => Eq a
   => Typeable a
   => Arbitrary a
+  => HasCallStack
   => [Case a]
   -> Spec
 spec_case props =

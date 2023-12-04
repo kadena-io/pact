@@ -2,13 +2,15 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SchemeSpec (spec) where
 
 import Test.Hspec
 import System.IO.Error
+import Control.Monad.Except (runExceptT)
 import qualified Data.ByteString.Base16 as Base16
-import Data.Either (fromRight)
+import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -22,9 +24,10 @@ import qualified Data.ByteString.Base16   as B16
 import Pact.ApiReq
 import Pact.Types.Crypto
 import Pact.Types.Command
-import Pact.Types.Util (toB16Text, fromJSON', fromText')
+import Pact.Types.Util (toB16Text, fromText')
 import Pact.Types.RPC
-import Pact.Types.Hash
+import Pact.Types.Capability (SigCapability)
+import qualified Pact.Types.Hash as PactHash
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
 
@@ -59,13 +62,13 @@ anotherED25519Pair = (PubBS $ getByteString
                       Just "6866b33e7935752bb972f363fe0567902616075878392ff7159f5fd4a2672827",
                       ED25519)
 
-someWebAuthnSignature :: (UserSig, PublicKeyBS)
+someWebAuthnSignature :: (WebAuthnSignature, WebAuthnPublicKey)
 someWebAuthnSignature = (sig, pubKey)
   where
-    sig = UserSig "{\"authenticatorData\":\"+cNxurbmvuKrkAKBTgIRX89NPS7FT5KydvqIN951zwoBAAAADQ==\",\"clientDataJSON\":\"eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiTkFDbG5makJiT2o3R2ZuRTg2YzJOZVZHaTBZUkRKcllidUF0cmhFUzJiYyIsIm9yaWdpbiI6Imh0dHBzOi8vZ3JlZy10ZXN0aW5nLTIwMjMtMDItMDcuZ2l0aHViLmlvIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ\",\"signature\":\"MEYCIQDwQF19+Wjxs0boANssWEKoUFKhwHgiaycIeU5kRlY+RwIhAIAfCOUDVHr5aCrVQ1pbvCEw1xkeF0s4yjD48sDe9uO7\"}"
-    pubKey = case Base16.decode "a5010203262001215820025b213619e0cbeadf7a4c62784f865d61c4da9268c724fa133efcf90ca7e00222582062ab25b410da272d9f2505b509bf599ac04f34888fad7cbb107d368add79edf1" of
-      Left _ -> error "Hex pubkey is valid."
-      Right k -> PubBS k
+    sig = fromRight (error "invalid webauthn signature") $
+      parseWebAuthnSignature "{\"authenticatorData\":\"+cNxurbmvuKrkAKBTgIRX89NPS7FT5KydvqIN951zwoBAAAADQ==\",\"clientDataJSON\":\"eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiTkFDbG5makJiT2o3R2ZuRTg2YzJOZVZHaTBZUkRKcllidUF0cmhFUzJiYyIsIm9yaWdpbiI6Imh0dHBzOi8vZ3JlZy10ZXN0aW5nLTIwMjMtMDItMDcuZ2l0aHViLmlvIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ\",\"signature\":\"MEYCIQDwQF19+Wjxs0boANssWEKoUFKhwHgiaycIeU5kRlY+RwIhAIAfCOUDVHr5aCrVQ1pbvCEw1xkeF0s4yjD48sDe9uO7\"}"
+    pubKey = fromRight (error "invalid webauthn pubkey") $
+      parseWebAuthnPublicKey =<< B16.decode "a5010203262001215820025b213619e0cbeadf7a4c62784f865d61c4da9268c724fa133efcf90ca7e00222582062ab25b410da272d9f2505b509bf599ac04f34888fad7cbb107d368add79edf1"
 
 toApiKeyPairs :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> [ApiKeyPair]
 toApiKeyPairs kps = map makeAKP kps
@@ -73,8 +76,8 @@ toApiKeyPairs kps = map makeAKP kps
           ApiKeyPair priv (Just pub) add (Just scheme) Nothing
 
 
-mkCommandTest :: [Ed25519KeyPairCaps] -> [Signer] -> Text -> IO (Command ByteString)
-mkCommandTest kps signers code = mkCommand' kps $ toExecPayload signers code
+mkCommandTest :: [(DynKeyPair, [SigCapability])] -> [Signer] -> Text -> IO (Command ByteString)
+mkCommandTest kps signers code = mkCommandWithDynKeys' kps $ toExecPayload signers code
 
 
 toSigners :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> IO [Signer]
@@ -107,12 +110,13 @@ spec = describe "working with crypto schemes" $ do
   describe "test signature non-malleability" testSigNonMalleability
   describe "testSigsRoundtrip" testSigsRoundtrip
   describe "test webauthn signature verification" verifyWebAuthnSignature
+  describe "test webauthn signature generation and verification" signAndVerifyWebAuthn
 
 testKeyPairImport :: Spec
 testKeyPairImport = do
   it "imports ED25519 Key Pair" $ do
-    kp <- mkKeyPairs (toApiKeyPairs [someED25519Pair])
-    (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
+    [(DynEd25519KeyPair kp, caps)] <- mkKeyPairs (toApiKeyPairs [someED25519Pair])
+    (map getKeyPairComponents [(kp, caps)]) `shouldBe` [someED25519Pair]
 
 
 testDefSchemeApiKeyPair :: Spec
@@ -121,8 +125,8 @@ testDefSchemeApiKeyPair =
     it "makes the scheme the default PPKScheme" $ do
       let (pub, priv, addr, _) = someED25519Pair
           apiKP = ApiKeyPair priv (Just pub) addr Nothing Nothing
-      kp <- mkKeyPairs [apiKP]
-      (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
+      [(DynEd25519KeyPair kp, caps)] <- mkKeyPairs [apiKP]
+      (map getKeyPairComponents [(kp, caps)]) `shouldBe` [someED25519Pair]
 
 
 
@@ -131,8 +135,8 @@ testPublicKeyImport = do
   it "derives PublicKey from the PrivateKey when PublicKey not provided" $ do
     let (_, priv, addr, scheme) = someED25519Pair
         apiKP = ApiKeyPair priv Nothing addr (Just scheme) Nothing
-    kp <- mkKeyPairs [apiKP]
-    (map getKeyPairComponents kp) `shouldBe` [someED25519Pair]
+    [(DynEd25519KeyPair kp, caps)] <- mkKeyPairs [apiKP]
+    (map getKeyPairComponents [(kp,caps)]) `shouldBe` [someED25519Pair]
 
 
   it "throws error when PublicKey provided does not match derived PublicKey" $ do
@@ -142,46 +146,25 @@ testPublicKeyImport = do
         apiKP   = ApiKeyPair priv (Just fakePub) addr (Just scheme) Nothing
     mkKeyPairs [apiKP] `shouldThrow` isUserError
 
-
-
   it "fails UserSig validation when UserSig has unexpected Address" $ do
-    let hsh = hash "(somePactFunction)"
+    let hsh = PactHash.hash "(somePactFunction)"
         (_,_,wrongAddr,_) = anotherED25519Pair
     [signer] <- toSigners [someED25519Pair]
-    [((pubKey, privKey),_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
-    sig      <- sign pubKey privKey (toUntypedHash hsh)
-    let myUserSig   = UserSig (toB16Text sig)
+    [(DynEd25519KeyPair (pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
+        myUserSig = ED25519Sig $ toB16Text $ exportEd25519Signature sig
         wrongSigner = Lens.set siAddress wrongAddr signer
-    (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` False
-
-
+    isLeft (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` True
 
   it "fails UserSig validation when UserSig has unexpected Scheme" $ do
-    let hsh = hash "(somePactFunction)"
+    let hsh = PactHash.hash "(somePactFunction)"
     [signer] <- toSigners [someED25519Pair]
-    [((pubKey, privKey),_)]     <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
-    sig      <- sign pubKey privKey (toUntypedHash hsh)
-    let myUserSig   = UserSig (toB16Text sig)
+    [(DynEd25519KeyPair (pubKey, privKey),_)] <- mkKeyPairs $ toApiKeyPairs [someED25519Pair]
+    let sig = signEd25519 pubKey privKey (PactHash.toUntypedHash hsh)
+        myUserSig = ED25519Sig $ toB16Text $ exportEd25519Signature sig
         wrongScheme = WebAuthn
         wrongSigner = Lens.set siScheme (Just wrongScheme) signer
-    (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` False
-
-
-
-  it "provides default ppkscheme when one not provided" $ do
-    let sigJSON = A.object ["addr" .= String "SomeAddr", "pubKey" .= String "SomePubKey",
-                            "sig" .= String "SomeSig"]
-        sig     = UserSig "SomeSig"
-    (fromJSON' sigJSON) `shouldBe` (Right sig)
-
-
-
-  it "makes address field the full public key when one not provided" $ do
-    let sigJSON = A.object ["pubKey" .= String "SomePubKey", "sig" .= String "SomeSig"]
-        sig     = UserSig "SomeSig"
-    (fromJSON' sigJSON) `shouldBe` (Right sig)
-
-
+    isLeft (verifyUserSig hsh myUserSig wrongSigner) `shouldBe` True
 
 testSigNonMalleability :: Spec
 testSigNonMalleability = do
@@ -224,8 +207,8 @@ verifyWebAuthnSignature :: Spec
 verifyWebAuthnSignature = describe "WebAuthn signature" $ do
   it "should verify a webauthn signature" $ do
     let
-      (webAuthnSig, PubBS pubKey) = someWebAuthnSignature
-      pubKeyBase16 = T.decodeUtf8 $ Base16.encode pubKey
+      (webAuthnSig, pubKey) = someWebAuthnSignature
+      pubKeyBase16 = T.decodeUtf8 $ Base16.encode $ exportWebAuthnPublicKey pubKey
       cmdHash' = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
         Right h -> h
         Left _ -> error "Hash is valid"
@@ -235,13 +218,13 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    verifyUserSig cmdHash' webAuthnSig signer `shouldBe` True
+    verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer `shouldBe` Right ()
   it "should require a matching pubkey" $ do
     let
       (webAuthnSig, _) = someWebAuthnSignature
       (PubBS otherPubKey, _, _, _) = someED25519Pair
       pubKeyBase16 = T.decodeUtf8 $ Base16.encode otherPubKey
-      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
+      cmdHash' :: PactHash.TypedHash PactHash.Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
         Right h -> h
         Left _ -> error "Hash is valid"
       signer = Signer
@@ -250,12 +233,12 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    verifyUserSig cmdHash' webAuthnSig signer `shouldBe` False
+    verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer `shouldSatisfy` isLeft
   it "should require a matching cmdHash" $ do
     let
-      (webAuthnSig, PubBS pubKey) = someWebAuthnSignature
-      pubKeyBase16 = T.decodeUtf8 $ Base16.encode pubKey
-      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "3fbc092db9350757e2ab4f7ee9792bfcd2f5220ada5a4bc684487f60c6034369" of
+      (webAuthnSig, webAuthnPubKey) = someWebAuthnSignature
+      pubKeyBase16 = T.decodeUtf8 $ Base16.encode $ exportWebAuthnPublicKey webAuthnPubKey
+      cmdHash' :: PactHash.TypedHash PactHash.Blake2b_256 = case fromText' $ T.pack "3fbc092db9350757e2ab4f7ee9792bfcd2f5220ada5a4bc684487f60c6034369" of
         Right h -> h
         Left _ -> error "Hash is valid"
       signer = Signer
@@ -264,12 +247,12 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    verifyUserSig cmdHash' webAuthnSig signer `shouldBe` False
+    verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer `shouldSatisfy` isLeft
   it "should require webauthn scheme" $ do
     let
-      (webAuthnSig, PubBS pubKey) = someWebAuthnSignature
-      pubKeyBase16 = T.decodeUtf8 $ Base16.encode pubKey
-      cmdHash' :: TypedHash Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
+      (webAuthnSig, webAuthnPubKey) = someWebAuthnSignature
+      pubKeyBase16 = T.decodeUtf8 $ Base16.encode $ exportWebAuthnPublicKey webAuthnPubKey
+      cmdHash' :: PactHash.TypedHash PactHash.Blake2b_256 = case fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc" of
         Right h -> h
         Left _ -> error "Hash is valid"
       signer = Signer
@@ -278,4 +261,26 @@ verifyWebAuthnSignature = describe "WebAuthn signature" $ do
         , _siAddress = Nothing
         , _siCapList = []
         }
-    verifyUserSig cmdHash' webAuthnSig signer `shouldBe` False
+    verifyUserSig cmdHash' (WebAuthnSig webAuthnSig) signer `shouldSatisfy` isLeft
+
+signAndVerifyWebAuthn :: Spec
+signAndVerifyWebAuthn = describe "Signing and verification of WebAuthn signatures" $ do
+  it "should be able to sign a pact hash" $ do
+    (pub, priv) <- generateWebAuthnEd25519KeyPair
+    let authData = "fake-authdata"
+    let pactData = PactHash.pactHash "fake-data"
+    sig <- runExceptT $ signWebauthn pub priv authData pactData
+    isRight sig `shouldBe` True
+  it "should be able to verify the genarated signature" $ do
+    (pub, priv) <- generateWebAuthnEd25519KeyPair
+    let authData = "fake-authdata"
+    let Right (pactData :: PactHash.TypedHash PactHash.Blake2b_256) =
+          fromText' $ T.pack "NAClnfjBbOj7GfnE86c2NeVGi0YRDJrYbuAtrhES2bc"
+    Right sig <- runExceptT (signWebauthn pub priv authData (PactHash.toUntypedHash pactData))
+    let signer = Signer
+          { _siScheme = Just WebAuthn
+          , _siPubKey = T.decodeUtf8 $ B16.encode (exportWebAuthnPublicKey pub)
+          , _siAddress = Nothing
+          , _siCapList = []
+          }
+    verifyUserSig pactData (WebAuthnSig sig) signer `shouldSatisfy` isRight

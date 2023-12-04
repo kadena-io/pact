@@ -3,6 +3,8 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -14,7 +16,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -31,11 +33,14 @@ module Pact.Types.Command
   ( Command(..),cmdPayload,cmdSigs,cmdHash
   , mkCommand
   , mkCommand'
+  , mkCommandWithDynKeys
+  , mkCommandWithDynKeys'
   , mkUnsignedCommand
   , signHash
   , keyPairToSigner
   , keyPairsToSigners
   , verifyUserSig
+  , verifyUserSigs
   , verifyCommand
   , PPKScheme(..)
   , Ed25519KeyPairCaps
@@ -43,7 +48,7 @@ module Pact.Types.Command
   , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
-  , UserSig(..),usSig
+  , UserSig(..)
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
@@ -52,17 +57,25 @@ module Pact.Types.Command
   , RequestKey(..)
   , cmdToRequestKey
   , requestKeyToB16Text
+
+  , DynKeyPair (DynEd25519KeyPair, DynWebAuthnKeyPair)
+  , WebAuthnPubKeyPrefixed(..)
   ) where
 
 import Control.Applicative
 import Control.Lens hiding ((.=), elements)
+import Control.Monad
+import Control.Monad.Except (runExceptT)
 import Control.DeepSeq
 
-import Data.ByteString (ByteString)
-import Data.Serialize as SZ
-import Data.Hashable (Hashable)
 import Data.Aeson as A
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Base16 as B16
+import Data.Foldable
+import Data.Hashable (Hashable)
+import Data.Serialize as SZ
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
 
@@ -73,6 +86,7 @@ import Test.QuickCheck
 import Pact.Parse (parsePact)
 import Pact.Types.Capability
 import Pact.Types.ChainId
+import Pact.Types.KeySet
 import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
@@ -143,11 +157,54 @@ mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
 
+data WebAuthnPubKeyPrefixed
+  = WebAuthnPubKeyPrefixed
+  | WebAuthnPubKeyBare
+  deriving (Eq, Show, Generic)
+data DynKeyPair
+  = DynEd25519KeyPair Ed25519KeyPair
+  | DynWebAuthnKeyPair WebAuthnPubKeyPrefixed WebAuthnPublicKey WebauthnPrivateKey
+  deriving (Eq, Show, Generic)
+
+mkCommandWithDynKeys
+  :: J.Encode c
+  => J.Encode m
+  => [(DynKeyPair, [SigCapability])]
+  -> m
+  -> Text
+  -> Maybe NetworkId
+  -> PactRPC c
+  -> IO (Command ByteString)
+mkCommandWithDynKeys creds meta nonce nid rpc = mkCommandWithDynKeys' creds encodedPayload
+  where
+    encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
+    payload = Payload rpc nonce meta (map credToSigner creds) nid
+    credToSigner cred =
+      case cred of
+        (DynEd25519KeyPair (pubEd25519, _), caps) ->
+          Signer
+            { _siScheme = Nothing
+            , _siPubKey = toB16Text (exportEd25519PubKey pubEd25519)
+            , _siAddress = Nothing
+            , _siCapList = caps
+            }
+        (DynWebAuthnKeyPair isPrefixed pubWebAuthn _, caps) ->
+          let
+            prefix = case isPrefixed of
+              WebAuthnPubKeyBare -> ""
+              WebAuthnPubKeyPrefixed -> webAuthnPrefix
+          in Signer
+            { _siScheme = Just WebAuthn
+            , _siPubKey = prefix <> toB16Text (exportWebAuthnPublicKey pubWebAuthn)
+            , _siAddress = Nothing
+            , _siCapList = caps
+            }
+
 keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
         scheme = Nothing
-        pub = toB16Text $ toBS $ fst cred
+        pub = toB16Text $ exportEd25519PubKey $ fst cred
         addr = Nothing
 
 keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer]
@@ -157,9 +214,29 @@ keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 mkCommand' :: [(Ed25519KeyPair ,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
-      toUserSig (cred,_) = signHash hsh cred
-  sigs <- traverse toUserSig creds
+      toUserSig (cred,_) = ED25519Sig $ signHash hsh cred
+  let sigs = toUserSig <$> creds
   return $ Command env sigs hsh
+
+-- | A utility function used for testing.
+-- It generalizes `mkCommand` by taking a `DynKeyPair`, which could contain mock
+-- WebAuthn keys. If WebAuthn keys are encountered, this function does mock WebAuthn
+-- signature generation when constructing the `Command`.
+mkCommandWithDynKeys' :: [(DynKeyPair, a)] -> ByteString -> IO (Command ByteString)
+mkCommandWithDynKeys' creds env = do
+  let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
+  sigs <- traverse (toUserSig hsh) creds
+  return $ Command env sigs hsh
+  where
+    toUserSig :: PactHash -> (DynKeyPair, a) -> IO UserSig
+    toUserSig hsh = \case
+      (DynEd25519KeyPair (pub, priv), _) ->
+        pure $ ED25519Sig $ signHash hsh (pub, priv)
+      (DynWebAuthnKeyPair _ pubWebAuthn privWebAuthn, _) -> do
+        signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn "" (toUntypedHash hsh)
+        case signResult of
+          Left e -> error $ "Failed to sign with mock WebAuthn keypair: " ++ e
+          Right sig -> return $ WebAuthnSig sig
 
 mkUnsignedCommand
   :: J.Encode m
@@ -174,8 +251,9 @@ mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = J.encodeStrict payload
         payload = Payload rpc nonce meta signers nid
 
-signHash :: TypedHash h -> Ed25519KeyPair -> IO UserSig
-signHash hsh (pub,priv) = UserSig . toB16Text <$> sign pub priv (toUntypedHash hsh)
+signHash :: TypedHash h -> Ed25519KeyPair -> Text
+signHash hsh (pub,priv) =
+  toB16Text $ exportEd25519Signature $ signEd25519 pub priv (toUntypedHash hsh)
 
 -- VALIDATING TRANSACTIONS
 
@@ -196,45 +274,55 @@ verifyCommand orig@Command{..} =
                     =<< A.eitherDecodeStrict' _cmdPayload
 
     verifiedHash = verifyHash _cmdHash _cmdPayload
-{-# INLINE verifyCommand #-}
 
 hasInvalidSigs :: PactHash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers
   | not (length sigs == length signers)  = Just "Number of sig(s) does not match number of signer(s)"
-  | otherwise                            = if (length failedSigs == 0)
-                                           then Nothing else formatIssues
-  where verifyFailed (sig, signer) = not $ verifyUserSig hsh sig signer
+  | otherwise                            = verifyUserSigs hsh (zip sigs signers)
 
-        -- assumes nth Signer is responsible for the nth UserSig
-        failedSigs = filter verifyFailed (zip sigs signers)
-        formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Array <$> failedSigs)
+verifyUserSigs :: PactHash -> [(UserSig, Signer)] -> Maybe String
+verifyUserSigs hsh sigsAndSigners 
+  | null failedSigs = Nothing
+  | otherwise = formatIssues
+  where
+  getFailedVerify (sig, signer) =
+    [ (Text.pack $ show signer, Text.pack err) | Left err <- [verifyUserSig hsh sig signer] ]
+  -- assumes nth Signer is responsible for the nth UserSig
+  failedSigs = concatMap getFailedVerify sigsAndSigners
+  formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Object $ failedSigs)
 
+verifyUserSig :: PactHash -> UserSig -> Signer -> Either String ()
+verifyUserSig msg sig Signer{..} = do
+  case (sig, scheme) of
+    (ED25519Sig edSig, ED25519) -> do
+      for_ _siAddress $ \addr -> do
+        unless (_siPubKey == addr) $ Left "address does not match pubkey"
+      pk <- over _Left ("failed to parse ed25519 pubkey: " <>) $
+        parseEd25519PubKey =<< B16.decode (Text.encodeUtf8 _siPubKey)
+      edSigParsed <- over _Left ("failed to parse ed25519 signature: " <>) $
+        parseEd25519Signature =<< B16.decode (Text.encodeUtf8 edSig)
+      verifyEd25519Sig (toUntypedHash msg) pk edSigParsed
 
-verifyUserSig :: PactHash -> UserSig -> Signer -> Bool
-verifyUserSig msg UserSig{..} Signer{..} =
-  case (pubT, sigT, addrT) of
-    (Right p, sig, addr) ->
-      (isValidAddr addr p) &&
-      verify (toScheme $ fromMaybe defPPKScheme _siScheme)
-             (toUntypedHash msg) (PubBS p) sig
-    _ -> False
-  where pubT = parseB16TextOnly _siPubKey
-        sigT = case parseB16TextOnly _usSig of
-          Left _ -> SigBS (Text.encodeUtf8 _usSig)
-          Right bs -> SigBS bs
-        addrT = parseB16TextOnly <$> _siAddress
-        isValidAddr addrM pubBS = case addrM of
-          Nothing -> True
-          Just (Left _) -> False
-          -- All current cases of `_siScheme` require the same relationship
-          -- between `pubBS` and `givenAddr`. But we enumerate them anyway,
-          -- so that if another scheme is added in the future, this use site
-          -- will warn us that we need to consider the `pubBS`/`givenAddr`
-          -- relationship for that scheme, since it may be different.
-          Just (Right givenAddr) -> case _siScheme of
-            Nothing -> pubBS == givenAddr
-            Just ED25519 -> pubBS == givenAddr
-            Just WebAuthn -> pubBS == givenAddr
+    (WebAuthnSig waSig, WebAuthn) -> do
+      let
+        strippedPrefix =
+          fromMaybe _siPubKey (Text.stripPrefix webAuthnPrefix _siPubKey)
+      -- we can't use parseWebAuthnPublicKeyText here because keys in the
+      -- signers list might be unprefixed due to old webauthn.
+      pk <- over _Left ("failed to parse webauthn pubkey: " <>) $
+        parseWebAuthnPublicKey =<< B16.decode (Text.encodeUtf8 strippedPrefix)
+      verifyWebAuthnSig (toUntypedHash msg) pk waSig
+
+    _ ->
+      Left $ unwords
+        [ "scheme of"
+        , show _siScheme
+        , "does not match signature type"
+        , case sig of
+          ED25519Sig _ -> "ED25519"
+          WebAuthnSig _ -> "WebAuthn"
+        ]
+  where scheme = fromMaybe defPPKScheme _siScheme
 
 -- | Signer combines PPKScheme, PublicKey, and the Address (aka the
 --   formatted PublicKey).
@@ -300,23 +388,6 @@ instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
     <*> arbitrary
     <*> scale (min 10) arbitrary
     <*> arbitrary
-
-newtype UserSig = UserSig { _usSig :: Text }
-  deriving (Eq, Ord, Show, Generic)
-
-instance NFData UserSig
-instance Serialize UserSig
-
-instance J.Encode UserSig where
-  build s = J.object [ "sig" J..= _usSig s ]
-  {-# INLINE build #-}
-
-instance FromJSON UserSig where
-  parseJSON = withObject "UserSig" $ \o -> do
-    UserSig <$> o .: "sig"
-
-instance Arbitrary UserSig where
-  arbitrary = UserSig <$> arbitrary
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue

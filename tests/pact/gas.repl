@@ -826,6 +826,12 @@ d.G3
 (env-gas 0)
 (concat strings_1000_2000)
 (expect "calling (concat strings_1000_2000)" 151 (env-gas))
+
+;; Test issue #1316
+(expect "concat gassing works on empty list" "" (concat []))
+
+(env-exec-config ["DisablePact410"])
+(expect-failure "concat gassing replicates 4.8 behaviour on empty list" "divide by zero" (concat []))
 (commit-tx)
 
 (begin-tx)

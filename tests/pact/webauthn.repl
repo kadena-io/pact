@@ -1,0 +1,12 @@
+(env-exec-config ["EnforceKeyFormats", "DisablePact410"])
+
+(env-data {"k":["WEBAUTHN-a4010103272006215820c18831c6f15306d6271e154842906b68f26c1af79b132dde6f6add79710303bf"]})
+(env-sigs [{"key":"WEBAUTHN-a4010103272006215820c18831c6f15306d6271e154842906b68f26c1af79b132dde6f6add79710303bf", "caps":[]}])
+
+(expect-failure "Enforcing a keyset with prefixed webauthn fails" (read-keyset "k"))
+
+(env-exec-config ["EnforceKeyFormats"])
+(expect "Enforcing a keyset with prefixed webauthn works" true (enforce-keyset (read-keyset "k")))
+
+(env-data {"k":["a4010103272006215820c18831c6f15306d6271e154842906b68f26c1af79b132dde6f6add79710303bf"]})
+(expect-failure "Reading an unprefixed key fails key format enforcement" (read-keyset "k"))
