@@ -53,6 +53,7 @@ module Pact.Eval
     ) where
 
 import Bound
+import Control.Applicative (liftA2)
 import Control.Lens hiding (DefName)
 import Control.DeepSeq
 import Control.Monad
