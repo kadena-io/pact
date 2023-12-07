@@ -281,7 +281,7 @@ hasInvalidSigs hsh sigs signers
   | otherwise                            = verifyUserSigs hsh (zip sigs signers)
 
 verifyUserSigs :: PactHash -> [(UserSig, Signer)] -> Maybe String
-verifyUserSigs hsh sigsAndSigners 
+verifyUserSigs hsh sigsAndSigners
   | null failedSigs = Nothing
   | otherwise = formatIssues
   where
@@ -391,7 +391,7 @@ instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactError PactValue
-  } deriving (Eq, Show, Generic,NFData)
+  } deriving (Eq, Show, Generic)
 
 instance J.Encode PactResult where
   build (PactResult (Right s)) = J.object
@@ -461,7 +461,7 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
     where
       events Nothing = []
       events (Just es) = es
-instance NFData a => NFData (CommandResult a)
+-- instance NFData a => NFData (CommandResult a)
 
 instance Arbitrary l => Arbitrary (CommandResult l) where
   arbitrary = CommandResult

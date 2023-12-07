@@ -141,7 +141,7 @@ data ModuleData r = ModuleData
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
 
-instance NFData r => NFData (ModuleData r)
+-- instance NFData r => NFData (ModuleData r)
 
 -- On chain this encoded as follows:
 -- * refMap: object

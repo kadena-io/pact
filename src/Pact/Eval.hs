@@ -54,7 +54,7 @@ module Pact.Eval
 
 import Bound
 import Control.Lens hiding (DefName)
-import Control.DeepSeq
+-- import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -276,12 +276,12 @@ enforceRootNamespacePolicy i = do
 
 eval :: Term Name -> Eval e (Term Name)
 eval t =
-  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $!! t) (strippedEval t)
+  ifExecutionFlagSet FlagDisableInlineMemCheck (eval' $! t) (strippedEval t)
   where
   strippedEval t' =
     view eeInRepl >>= \case
-      True -> eval' $!! t'
-      False -> ifExecutionFlagSet FlagDisablePact44 (eval' $!! stripOnlyModule t') (eval' $!! stripTermInfo t')
+      True -> eval' $! t'
+      False -> ifExecutionFlagSet FlagDisablePact44 (eval' $! stripOnlyModule t') (eval' $! stripTermInfo t')
   stripOnlyModule t' = case t' of
     TModule {} -> stripTermInfo t'
     _ -> t'
@@ -322,8 +322,8 @@ eval' (TModule _tm@(MDModule m) bod i) =
         void $ acquireModuleAdminCapability capMName $ return ()
 
         unlessExecutionFlagSet FlagDisablePact48 $ do
-          evalRefs.rsLoadedModules %= HM.delete (_mName mangledM)
-          evalRefs.rsQualifiedDeps %= HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM)
+          evalRefs.rsLoadedModules %=! HM.delete (_mName mangledM)
+          evalRefs.rsQualifiedDeps %=! HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM)
 
     -- build/install module from defs
     govM <- loadModule mangledM bod i
@@ -567,11 +567,11 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
   szVer <- getSizeOfVersion
   (!unified, (HeapMemState costMemoEnv' totalMem))
       <- runStateT (traverse (replaceMemo szVer allDefs) defTerm)
-                 (HeapMemState costMemoEnv (sizeOf szVer defTerm + currMem))
+                 $! HeapMemState costMemoEnv (sizeOf szVer defTerm + currMem)
   unified' <- case unified of
     t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
     _ -> pure (Ref unified)
-  pure (HeapFold (HM.insert defName unified' allDefs) costMemoEnv' totalMem)
+  pure $! HeapFold (HM.insert defName unified' allDefs) costMemoEnv' totalMem
   where
   -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
   -- We also calculate the cost per callsite, to fail faster.
@@ -609,7 +609,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
 
 removeFromLoaded :: Set.Set Text -> Eval e ()
 removeFromLoaded toRemove =
-  evalRefs . rsLoaded %= HM.filterWithKey (\k _ -> Set.notMember k toRemove)
+  evalRefs . rsLoaded %=! HM.filterWithKey (\k _ -> Set.notMember k toRemove)
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
@@ -632,7 +632,7 @@ evaluateDefs info mdef defs = do
       hf <- foldlM (dresolveMem info) (HeapFold HM.empty M.empty 0) sortedDefs
       -- Compute, commit and log the final gas after getting the final memory cost.
       _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
-      pure (_hfAllDefs hf)
+      pure $! _hfAllDefs hf
   where
   -- | traverse to find deps and form graph
   traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
@@ -732,7 +732,7 @@ fullyQualifyDefs info mdef defs = do
     mkAndEvalConsts m (term', dn, _) = do
       t <- Ref <$> (traverse (either (replaceL m) pure) term')
       t' <- runSysOnly $ evalConstsNonRec t
-      evalRefs . rsQualifiedDeps %= HM.insert dn t'
+      evalRefs . rsQualifiedDeps %=! HM.insert dn t'
       pure $! HM.insert (_fqName dn) t' m
 
     checkAddDep = \case
@@ -1645,18 +1645,18 @@ installModule updated md = go . maybe allDefs filteredDefs
       MDModule m -> do
         let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
         let hm = HM.map (\v -> (v, Just (_mHash m))) (_mdRefMap md)
-        evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty hm)
-        evalRefs . rsQualifiedDeps %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
+        evalRefs . rsLoaded %=! HM.union (HM.foldlWithKey' f mempty hm)
+        evalRefs . rsQualifiedDeps %=! HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
       MDInterface _ -> do
         let
           f' m k v = case v of
             Ref TDef{} -> m
             _ -> f m k (v, Nothing)
-        evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f' mempty $ _mdRefMap md)
+        evalRefs . rsLoaded %=! HM.union (HM.foldlWithKey' f' mempty $ _mdRefMap md)
     go f = do
       updateInternal f
       when updated $
-        evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
+        evalRefs . rsLoadedModules %=! HM.insert (moduleDefName $ _mdModule md) (md,updated)
 
     filteredDefs is m k v =
       if V.elem k is

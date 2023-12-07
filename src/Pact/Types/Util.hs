@@ -42,7 +42,7 @@ module Pact.Types.Util
   , modifyMVar', modifyingMVar, useMVar
   -- | Miscellany
   , tShow, maybeDelim
-  , maybeToEither
+  , maybeToEither, (%=!)
   -- | Wrapping utilities
   , rewrap, rewrapping, wrap, unwrap
   -- | Arbitrary generator utils
@@ -70,6 +70,7 @@ import Data.Text.Encoding
 import Control.Applicative ((<|>))
 import Control.Concurrent
 import Control.Lens hiding (Empty, elements, (.=))
+import Control.Monad.State.Strict
 import Test.QuickCheck hiding (Result, Success)
 
 import Pact.Types.Parser (style, symbols)
@@ -257,6 +258,10 @@ modifyingMVar mv l f = modifyMVar_ mv $ \ps -> (\b -> set l b ps) <$> f (view l 
 useMVar :: MVar s -> Getting a s a -> IO a
 useMVar e l = view l <$> readMVar e
 {-# INLINE useMVar #-}
+
+infix 4 %=!
+(%=!) :: MonadState s m => Setter' s a -> (a -> a) -> m ()
+s %=! f = modify' (over s f)
 
 -- | Text-y show
 tShow :: Show a => a -> Text

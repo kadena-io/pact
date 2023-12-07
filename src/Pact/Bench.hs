@@ -119,13 +119,13 @@ benchParse = bgroup "parse" $ (`map` exps) $
 
 benchCompile :: [(String,[Exp Parsed])] -> Benchmark
 benchCompile es = bgroup "compile" $ (`map` es) $
-  \(bname,exs) -> bench bname $ nf (map (either (error . show) force . compile def mkEmptyInfo)) exs
+  \(bname,exs) -> bench bname $ whnf (map (either (error . show) id . compile def mkEmptyInfo)) exs
 
 compileExp :: Text -> IO [Term Name]
 compileExp code = do
   pcs <- _pcExps <$> parseCode code
   forM pcs $ \pc -> do
-    either (\e -> die "compileExp" $ show code ++ ": " ++ show e) (return $!!) $
+    either (\e -> die "compileExp" $ show code ++ ": " ++ show e) (return $!) $
       compile def mkEmptyInfo pc
 
 
@@ -182,6 +182,9 @@ parseCode m = ParsedCode m <$> eitherDie "parseCode" (parseExprs m)
 benchNFIO :: NFData a => String -> IO a -> Benchmark
 benchNFIO bname = bench bname . nfIO
 
+benchWHNFIO :: String -> IO a -> Benchmark
+benchWHNFIO bname = bench bname . whnfIO
+
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
@@ -204,11 +207,11 @@ execPure pt dbEnv (n,ts) = do
   o <- try $ runEval def env $ mapM eval ts
   case o of
     Left (e :: SomeException) -> die "execPure" (n ++ ": " ++ show e)
-    Right rs -> return $!! fst rs
+    Right rs -> return $! fst rs
 
 benchPures :: Advice -> PactDbEnv e -> [(String,[Term Name])] -> Benchmark
 benchPures pt dbEnv es = bgroup "pures" $ (`map` es) $
-  \p -> benchNFIO (fst p) $ execPure pt dbEnv p
+  \p -> benchWHNFIO (fst p) $ execPure pt dbEnv p
 
 benchKeySet :: KeySet
 benchKeySet = mkKeySet [PublicKeyText "benchadmin"] ">"
@@ -323,7 +326,7 @@ main = do
   void $ runPactExec def "init-puredb-mbench" msigner Null Nothing pureDb mbenchCmd
   !round0 <- parseCode "(round 123.456789)"
   !round4 <- parseCode "(round 123.456789 4)"
-  !pures <- force <$> mapM (mapM compileExp) pureExps
+  !pures <- mapM (mapM compileExp) pureExps
   !timeTest <- loadCompile "tests/pact/time.repl"
   replS <- setReplLib <$> initReplState Quiet Nothing
   let tt = evalReplEval def replS (mapM eval timeTest)
@@ -400,7 +403,7 @@ main = do
       [ benchNFIO "round0" $ runPactExec def "round0" [] Null Nothing pureDb round0
       , benchNFIO "round4" $ runPactExec def "round4" [] Null Nothing pureDb round4
       ]
-    , benchNFIO "time" $ fmap fst <$> evalReplEval def replS (mapM eval timeTest)
+    , benchWHNFIO "time" $ fmap fst <$> evalReplEval def replS (mapM eval timeTest)
     , bgroup "defun"
       [ bgroup "return-type-tc"
         [ benchNFIO "wrap10" $ runPactExec def "wrap10" [] Null Nothing pureDb wrap10Cmd

@@ -166,7 +166,7 @@ data FunApp = FunApp
 
 deriving instance (Show1 Term) => Show FunApp
 deriving instance (Eq1 Term) => Eq FunApp
-instance NFData FunApp
+-- instance NFData FunApp
 
 instance J.Encode FunApp where
   build o = J.object
@@ -198,7 +198,7 @@ data Ref' d =
 deriving instance (Eq1 Term, Eq d) => Eq (Ref' d)
 deriving instance (Show1 Term, Show d) => Show (Ref' d)
 
-instance NFData d => NFData (Ref' d)
+-- instance NFData d => NFData (Ref' d)
 
 instance Pretty d => Pretty (Ref' d) where
   pretty (Direct tm) = pretty tm
@@ -242,7 +242,7 @@ data Def n = Def
 
 deriving instance (Show1 Term, Show n) => Show (Def n)
 deriving instance (Eq1 Term, Eq n) => Eq (Def n)
-instance NFData (Term n) => NFData (Def n)
+-- instance NFData (Term n) => NFData (Def n)
 instance (Eq1 Term, Eq n) => Ord (Def n) where
   a `compare` b = nm a `compare` nm b
     where nm d = (_dModule d, _dDefName d)
@@ -297,7 +297,7 @@ instance Pretty n => Pretty (Lam n) where
   pretty (Lam arg ty _ _) =
     pretty arg <> ":" <> pretty (_ftReturn ty) <+> "lambda" <> parensSep (pretty <$> _ftArgs ty) <+> "..."
 
-instance NFData n => NFData (Lam n)
+-- instance NFData n => NFData (Lam n)
 
 instance J.Encode n => J.Encode (Lam n) where
   build o = J.object
@@ -338,7 +338,7 @@ instance Pretty n => Pretty (Object n) where
     M.toList om
     where keyOrder f = elemIndex f ko
 
-instance NFData n => NFData (Object n)
+-- instance NFData n => NFData (Object n)
 
 instance J.Encode n => J.Encode (Object n) where
   build o = J.object
@@ -457,7 +457,7 @@ data Term n =
 
 deriving instance (Show1 Term, Show n) => Show (Term n)
 deriving instance (Eq1 Term, Eq n) => Eq (Term n)
-instance NFData n => NFData (Term n)
+-- instance NFData n => NFData (Term n)
 
 instance HasInfo (Term n) where
   getInfo t = case t of

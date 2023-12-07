@@ -309,7 +309,7 @@ data RefState = RefState {
     } deriving (Eq,Show,Generic)
 
 makeLenses ''RefState
-instance NFData RefState
+-- instance NFData RefState
 instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty
 
 data PactEvent = PactEvent
@@ -357,7 +357,7 @@ data EvalState = EvalState {
     , _evalEvents :: ![PactEvent]
     } deriving (Show, Generic)
 makeLenses ''EvalState
-instance NFData EvalState
+-- instance NFData EvalState
 instance Default EvalState where def = EvalState def def def def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.

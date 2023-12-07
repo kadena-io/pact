@@ -159,7 +159,7 @@ bench expr dbSetup = do
     teardown (NoopNFData env) = do
       (gasSetupCleanup dbSetup) env
     run terms ~(NoopNFData (env, state)) =
-          C.nfIO (exec state env terms)
+          C.whnfIO (exec state env terms)
 
 
 benchesOnce

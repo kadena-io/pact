@@ -126,7 +126,7 @@ data UserManagedCap = UserManagedCap
   , _umcMgrFun :: Def Ref
     -- ^ manager function
   } deriving (Show,Generic)
-instance NFData UserManagedCap
+-- instance NFData UserManagedCap
 
 -- | Model an auto-managed "one-shot" capability.
 newtype AutoManagedCap = AutoManagedCap
@@ -175,7 +175,7 @@ instance Pretty a => Pretty (ManagedCapability a) where
   pretty ManagedCapability {..} = pretty _mcStatic <> "~" <> mgd _mcManaged
     where mgd (Left b) = pretty b
           mgd (Right UserManagedCap{..}) = pretty _umcManagedValue
-instance NFData a => NFData (ManagedCapability a)
+-- instance NFData a => NFData (ManagedCapability a)
 
 
 -- | Runtime datastructure.
@@ -192,7 +192,7 @@ data Capabilities = Capabilities
   deriving (Eq,Show,Generic)
 
 instance Default Capabilities where def = Capabilities [] mempty mempty mempty
-instance NFData Capabilities
+-- instance NFData Capabilities
 
 makeLenses ''ManagedCapability
 makeLenses ''Capabilities

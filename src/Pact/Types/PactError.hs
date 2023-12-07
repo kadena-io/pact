@@ -113,7 +113,7 @@ data StackFrame = StackFrame {
     , _sfApp :: !(Maybe (FunApp,[Text]))
     } deriving (Eq,Generic)
 
-instance NFData StackFrame
+-- instance NFData StackFrame
 
 instance J.Encode StackFrame where
   build = J.string . show
@@ -218,7 +218,7 @@ data PactError = PactError
   , peDoc :: Doc }
   deriving (Eq,Generic)
 
-instance NFData PactError
+-- instance NFData PactError
 instance Exception PactError
 
 instance J.Encode PactError where

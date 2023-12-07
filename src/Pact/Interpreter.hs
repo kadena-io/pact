@@ -131,17 +131,17 @@ data EvalResult = EvalResult
     -- ^ Transaction logs
   , _erExec :: !(Maybe PactExec)
     -- ^ Result of defpact execution if any
-  , _erGas :: Gas
+  , _erGas :: !Gas
     -- ^ Gas consumed/charged
-  , _erLoadedModules :: HashMap ModuleName (ModuleData Ref,Bool)
+  , _erLoadedModules :: !(HashMap ModuleName (ModuleData Ref,Bool))
     -- ^ Modules loaded, with flag indicating "newly loaded"
   , _erTxId :: !(Maybe TxId)
     -- ^ Transaction id, if executed transactionally
-  , _erLogGas :: Maybe [(Text, Gas)]
+  , _erLogGas :: !(Maybe [(Text, Gas)])
     -- ^ Details on each gas consumed/charged
-  , _erEvents :: [PactEvent]
+  , _erEvents :: ![PactEvent]
     -- ^ emitted events
-  , _erWarnings :: S.Set PactWarning
+  , _erWarnings :: !(S.Set PactWarning)
     -- ^ emitted warning
   } deriving (Eq,Show)
 
