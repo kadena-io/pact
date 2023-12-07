@@ -15,6 +15,7 @@ module Pact.Gas
  , putGas)
  where
 
+import Control.Exception
 import Control.Monad(when)
 import Control.Monad.State.Strict
 import Data.Text
@@ -35,9 +36,10 @@ computeGas i args = do
     (info,name) = either id (_faInfo &&& _faName) i
     g1 = runGasModel _geGasModel name args
   let gMillisUsed = g0 <> g1
-      gUsed = milliGasToGas gMillisUsed
-  evalLogGas %= fmap ((gasLogMsg name args gUsed, milliGasToGas g1):)
+      !gUsed = milliGasToGas gMillisUsed
   putGas gMillisUsed
+  evalLogGas %= fmap ((gasLogMsg name args gUsed, milliGasToGas g1):)
+  _ <- evalLogGas (liftIO . traverse evaluate) =<< get
   let (MilliGasLimit gasLimit) = _geGasLimit
   when (gMillisUsed > gasLimit) $ do
     let oldGasLimit = milliGasToGas gasLimit

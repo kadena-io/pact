@@ -173,7 +173,7 @@ enforceGuard i g = case g of
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
 getSizeOfVersion :: Eval e SizeOfVersion
-getSizeOfVersion = 
+getSizeOfVersion =
   ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
 {-# INLINABLE getSizeOfVersion #-}
 
@@ -718,7 +718,7 @@ fullyQualifyDefs info mdef defs = do
   fDefs <- foldlM mkAndEvalConsts mempty sortedDefs
   deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
   szVer <- getSizeOfVersion
-  let (Sum totalMemory) = foldMap (Sum . sizeOf szVer) fDefs + foldMap (Sum . sizeOf szVer) deps
+  let !(Sum totalMemory) = foldMap' (Sum . sizeOf szVer) fDefs + foldMap' (Sum . sizeOf szVer) deps
   _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
   pure (fDefs, deps)
   where
@@ -733,7 +733,7 @@ fullyQualifyDefs info mdef defs = do
       t <- Ref <$> (traverse (either (replaceL m) pure) term')
       t' <- runSysOnly $ evalConstsNonRec t
       evalRefs . rsQualifiedDeps %= HM.insert dn t'
-      pure $ HM.insert(_fqName dn) t' m
+      pure $! HM.insert (_fqName dn) t' m
 
     checkAddDep = \case
       Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
