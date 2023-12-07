@@ -53,7 +53,6 @@ module Pact.Eval
     ) where
 
 import Bound
-import qualified Control.Applicative
 import Control.Lens hiding (DefName)
 import Control.DeepSeq
 import Control.Monad
@@ -756,7 +755,7 @@ fullyQualifyDefs info mdef defs = do
           && mn == _mnName (_mName mdef)
           && isNsMatch -> resolveBareName memo (BareName fn i)
           where
-            isNsMatch = fromMaybe True (Control.Applicative.liftA2 (==) modNs mNs)
+            isNsMatch = fromMaybe True ((==) <$> modNs <*> mNs)
             modNs = _mnNamespace (_mName mdef)
       f  -> do
         dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames
