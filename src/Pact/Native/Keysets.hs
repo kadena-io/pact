@@ -56,6 +56,7 @@ keyDefs =
      \similarly to 'read-keyset'. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value."
     ,enforceGuardDef "enforce-keyset"
+    ,enforceVerifierDef
     ,defKeyPred KeysAll (==)
      ["(keys-all 3 3)"] "Keyset predicate function to match all keys in keyset."
     ,defKeyPred KeysAny (keysN 1)

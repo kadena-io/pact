@@ -79,6 +79,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SigData
 import Pact.Types.SPV
+import Pact.Types.Verifier
 import qualified Pact.JSON.Encode as J
 import Pact.JSON.Legacy.Value
 import Pact.JSON.Yaml
@@ -92,7 +93,7 @@ data ApiKeyPair = ApiKeyPair {
   _akpPublic :: Maybe PublicKeyBS,
   _akpAddress :: Maybe Text,
   _akpScheme :: Maybe PPKScheme,
-  _akpCaps :: Maybe [SigCapability]
+  _akpCaps :: Maybe [UserCapability]
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
@@ -123,7 +124,7 @@ data ApiSigner = ApiSigner {
   _asPublic :: Text,
   _asAddress :: Maybe Text,
   _asScheme :: Maybe PPKScheme,
-  _asCaps :: Maybe [SigCapability]
+  _asCaps :: Maybe [UserCapability]
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
@@ -196,6 +197,7 @@ data ApiReq = ApiReq {
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: Maybe [ApiKeyPair],
   _ylSigners :: Maybe [ApiSigner],
+  _ylVerifiers :: Maybe [Verifier ParsedVerifierArgs],
   _ylNonce :: Maybe Text,
   _ylPublicMeta :: Maybe ApiPublicMeta,
   _ylNetworkId :: Maybe NetworkId
@@ -211,6 +213,7 @@ instance J.Encode ApiReq where
     , "networkId" J..= _ylNetworkId o
     , "rollback" J..= _ylRollback o
     , "signers" J..= fmap J.Array (_ylSigners o)
+    , "verifiers" J..= fmap J.Array (_ylVerifiers o)
     , "step" J..= fmap J.Aeson (_ylStep o)
     , "code" J..= _ylCode o
     , "pactTxHash" J..= _ylPactTxHash o
@@ -228,7 +231,7 @@ instance Arbitrary ApiReq where
     <*> arbitrary <*> arbitraryValue <*> arbitrary
     <*> arbitrary <*> arbitrary <*> arbitrary
     <*> arbitrary <*> arbitrary <*> arbitrary
-    <*> arbitrary <*> arbitrary
+    <*> arbitrary <*> arbitrary <*> arbitrary
    where
     arbitraryValue = suchThat arbitrary (/= Just Null)
 
@@ -475,7 +478,7 @@ signCmd keyFiles bs = do
 withKeypairsOrSigner
   :: Bool
   -> ApiReq
-  -> ([(DynKeyPair, [SigCapability])] -> IO a)
+  -> ([(DynKeyPair, [UserCapability])] -> IO a)
   -> ([Signer] -> IO a)
   -> IO a
 withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
@@ -508,8 +511,8 @@ mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
     return (code,cdata)
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
-    (\ks -> mkExec code cdata pubMeta ks _ylNetworkId _ylNonce)
-    (\ss -> mkUnsignedExec code cdata pubMeta ss _ylNetworkId _ylNonce)
+    (\ks -> mkExec code cdata pubMeta ks (fromMaybe [] _ylVerifiers) _ylNetworkId _ylNonce)
+    (\ss -> mkUnsignedExec code cdata pubMeta ss (fromMaybe [] _ylVerifiers) _ylNetworkId _ylNonce)
   return ((ar,code,cdata,pubMeta), cmd)
 
 mkPubMeta :: Maybe ApiPublicMeta -> IO PublicMeta
@@ -543,17 +546,20 @@ mkExec
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
-  -> [(DynKeyPair, [SigCapability])]
+  -> [(DynKeyPair, [UserCapability])]
     -- ^ signing keypairs + caplists
+  -> [Verifier ParsedVerifierArgs]
+    -- ^ verifiers
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
   -> Maybe Text
     -- ^ optional nonce
   -> IO (Command Text)
-mkExec code mdata pubMeta kps nid ridm = do
+mkExec code mdata pubMeta kps ves nid ridm = do
   rid <- mkNonce ridm
   cmd <- mkCommandWithDynKeys
          kps
+         ves
          pubMeta
          rid
          nid
@@ -571,15 +577,18 @@ mkUnsignedExec
     -- ^ public metadata
   -> [Signer]
     -- ^ payload signers
+  -> [Verifier ParsedVerifierArgs]
+    -- ^ payload verifiers
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
   -> Maybe Text
     -- ^ optional nonce
   -> IO (Command Text)
-mkUnsignedExec code mdata pubMeta kps nid ridm = do
+mkUnsignedExec code mdata pubMeta kps ves nid ridm = do
   rid <- mkNonce ridm
   cmd <- mkUnsignedCommand
          kps
+         ves
          pubMeta
          rid
          nid
@@ -613,8 +622,8 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
   let pactId = toPactId apiPactId
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
-    (\ks -> mkCont pactId step rollback cdata pubMeta ks _ylNonce _ylProof _ylNetworkId)
-    (\ss -> mkUnsignedCont pactId step rollback cdata pubMeta ss _ylNonce _ylProof _ylNetworkId)
+    (\ks -> mkCont pactId step rollback cdata pubMeta ks (fromMaybe [] _ylVerifiers) _ylNonce _ylProof _ylNetworkId)
+    (\ss -> mkUnsignedCont pactId step rollback cdata pubMeta ss (fromMaybe [] _ylVerifiers) _ylNonce _ylProof _ylNetworkId)
   return ((ar,"",cdata,pubMeta), cmd)
 
 -- | Construct a Cont request message
@@ -630,8 +639,10 @@ mkCont
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
-  -> [(DynKeyPair, [SigCapability])]
+  -> [(DynKeyPair, [UserCapability])]
     -- ^ signing keypairs
+  -> [Verifier ParsedVerifierArgs]
+    -- ^ verifiers
   -> Maybe Text
     -- ^ optional nonce
   -> Maybe ContProof
@@ -639,10 +650,11 @@ mkCont
   -> Maybe NetworkId
     -- ^ optional network id
   -> IO (Command Text)
-mkCont txid step rollback mdata pubMeta kps ridm proof nid = do
+mkCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
   rid <- mkNonce ridm
   cmd <- mkCommandWithDynKeys
          kps
+         ves
          pubMeta
          rid
          nid
@@ -665,6 +677,8 @@ mkUnsignedCont
     -- ^ command public metadata
   -> [Signer]
     -- ^ payload signers
+  -> [Verifier ParsedVerifierArgs]
+    -- ^ verifiers
   -> Maybe Text
     -- ^ optional nonce
   -> Maybe ContProof
@@ -672,10 +686,11 @@ mkUnsignedCont
   -> Maybe NetworkId
     -- ^ optional network id
   -> IO (Command Text)
-mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
+mkUnsignedCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
   rid <- mkNonce ridm
   cmd <- mkUnsignedCommand
          kps
+         ves
          pubMeta
          (pack $ show rid)
          nid
@@ -685,15 +700,15 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ridm proof nid = do
 -- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
 -- The keypairs must not be prefixed with "WEBAUTHN-", it accepts
 -- only the raw (unprefixed) keys.
-mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
+mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [UserCapability])]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where
 
         importValidKeyPair
           :: Maybe PublicKeyBS
           -> PrivateKeyBS
-          -> Maybe [SigCapability]
-          -> Either String (Ed25519KeyPair, [SigCapability])
+          -> Maybe [UserCapability]
+          -> Either String (Ed25519KeyPair, [UserCapability])
         importValidKeyPair pubEd25519 privEd25519 caps = fmap (,maybe [] id caps) $
           importEd25519KeyPair pubEd25519 privEd25519
 
@@ -703,7 +718,7 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
           Just ED25519 -> True
           _ -> False
 
-        mkPair :: ApiKeyPair -> IO (DynKeyPair, [SigCapability])
+        mkPair :: ApiKeyPair -> IO (DynKeyPair, [UserCapability])
         mkPair akp = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
           (scheme, pub, priv, Nothing) | isEd25519 scheme ->
             either dieAR (return . first DynEd25519KeyPair) (importValidKeyPair pub priv (_akpCaps akp))

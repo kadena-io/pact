@@ -19,8 +19,7 @@
 module Pact.Types.Capability
   ( Capability(..)
   , CapEvalResult(..)
-  , SigCapability(..)
-  , UserCapability
+  , UserCapability(..)
   , ManagedCapability(..), mcInstalled, mcStatic, mcManaged
   , UserManagedCap(..), umcManagedValue, umcManageParamIndex, umcManageParamName, umcMgrFun
   , AutoManagedCap(..), amcActive
@@ -61,30 +60,29 @@ instance Pretty Capability where
 
 -- | Both UX type (thus the name) and "UserCapability".
 -- TODO rename when downstream deps are more stable.
-type UserCapability = SigCapability
-data SigCapability = SigCapability
+data UserCapability = UserCapability
   { _scName :: !QualifiedName
   , _scArgs :: ![PactValue]
   } deriving (Eq,Show,Generic,Ord)
-instance NFData SigCapability
+instance NFData UserCapability
 
-instance Pretty SigCapability where
-  pretty SigCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
+instance Pretty UserCapability where
+  pretty UserCapability{..} = parens $ hsep (pretty _scName:map pretty _scArgs)
 
-instance J.Encode SigCapability where
+instance J.Encode UserCapability where
   build o = J.object
     [ "args" J..= J.Array (_scArgs o)
     , "name" J..= _scName o
     ]
   {-# INLINABLE build #-}
 
-instance FromJSON SigCapability where
-  parseJSON = withObject "SigCapability" $ \o -> SigCapability
+instance FromJSON UserCapability where
+  parseJSON = withObject "UserCapability" $ \o -> UserCapability
     <$> o .: "name"
     <*> o .: "args"
 
-instance Arbitrary SigCapability where
-  arbitrary = SigCapability <$> arbitrary <*> scale (min 10) arbitrary
+instance Arbitrary UserCapability where
+  arbitrary = UserCapability <$> arbitrary <*> scale (min 10) arbitrary
 
 -- | Various results of evaluating a capability.
 -- Note: dupe managed install is an error, thus no case here.
@@ -148,21 +146,21 @@ data ManagedCapability c = ManagedCapability
 
 -- | Given arg index, split capability args into (before,at,after)
 decomposeManaged :: Int -> UserCapability -> Maybe ([PactValue],PactValue,[PactValue])
-decomposeManaged idx SigCapability{..}
+decomposeManaged idx UserCapability{..}
   | idx < 0 || idx >= length _scArgs = Nothing
   | otherwise = Just (take idx _scArgs,_scArgs !! idx,drop (succ idx) _scArgs)
 {-# INLINABLE decomposeManaged #-}
 
 -- | Given arg index, get "static" capability and value
-decomposeManaged' :: Int -> UserCapability -> Maybe (SigCapability,PactValue)
-decomposeManaged' idx cap@SigCapability{..} = case decomposeManaged idx cap of
+decomposeManaged' :: Int -> UserCapability -> Maybe (UserCapability,PactValue)
+decomposeManaged' idx cap@UserCapability{..} = case decomposeManaged idx cap of
   Nothing -> Nothing
-  Just (h,v,t) -> Just (SigCapability _scName (h ++ t),v)
+  Just (h,v,t) -> Just (UserCapability _scName (h ++ t),v)
 {-# INLINABLE decomposeManaged' #-}
 
 -- | Match static value to managed.
 matchManaged :: ManagedCapability UserCapability -> UserCapability -> Bool
-matchManaged ManagedCapability{..} cap@SigCapability{} = case _mcManaged of
+matchManaged ManagedCapability{..} cap@UserCapability{} = case _mcManaged of
   Left {} -> _mcStatic == cap
   Right UserManagedCap{..} -> case decomposeManaged' _umcManageParamIndex cap of
     Nothing -> False

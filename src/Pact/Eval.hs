@@ -163,7 +163,7 @@ enforceGuard i g = case g of
   GCapability CapabilityGuard{..} -> do
     traverse_ (enforcePactId True) _cgPactId
     args <- traverse enforcePactValue _cgArgs
-    acquired <- capabilityAcquired $ SigCapability _cgName args
+    acquired <- capabilityAcquired $ UserCapability _cgName args
     unless acquired $ failTx' i "Capability not acquired"
   where
     enforcePactId doFail pid = do
@@ -173,7 +173,7 @@ enforceGuard i g = case g of
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
 getSizeOfVersion :: Eval e SizeOfVersion
-getSizeOfVersion = 
+getSizeOfVersion =
   ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
 {-# INLINABLE getSizeOfVersion #-}
 

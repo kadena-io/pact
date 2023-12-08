@@ -32,6 +32,7 @@ module Pact.Native.Internal
   ,module Pact.Gas
   ,(<>)
   ,getPactId,enforceGuardDef,guardForModuleCall
+  ,enforceVerifierDef
   ,provenanceOf
   ,enforceYield
   ,appToCap
@@ -51,6 +52,7 @@ import qualified Data.Aeson.KeyMap as AKM
 import Data.Default
 import Data.Foldable
 import Data.Functor (($>))
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Vector as V
 
@@ -58,6 +60,7 @@ import Pact.Eval
 import Pact.Gas
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import Pact.JSON.Legacy.Value
+import Pact.Runtime.Capabilities
 import Pact.Runtime.Utils
 import Pact.Types.Capability
 import Pact.Types.KeySet (parseAnyKeysetName)
@@ -65,6 +68,7 @@ import Pact.Types.Native
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Types.Verifier
 
 import Unsafe.Coerce
 
@@ -197,6 +201,27 @@ enforceGuardDef dn =
              Right ksn -> f ksn)
       _ -> argsError i as
 
+enforceVerifierDef :: NativeDef
+enforceVerifierDef = defRNative
+  "enforce-verifier"
+  enforceVerifier
+  (funType tTyBool [("verifiername", tTyString)])
+  [ LitExample $ "(enforce-verifier 'COOLZK)"
+  ]
+  "Enforce that a verifier is in scope."
+  where
+  enforceVerifier :: RNativeFun e
+  enforceVerifier i as = case as of
+    [TLitString verName] -> do
+      views eeMsgVerifiers (Map.lookup (VerifierName verName)) >>= \case
+        Just verCaps -> do
+          verifierInScope <- anyCapabilityAcquired verCaps
+          if verifierInScope then return (toTerm True)
+          else failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in scope"
+        Nothing ->
+          failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in transaction"
+    _ -> argsError i as
+
 
 -- | Test that first module app found in call stack is specified module,
 -- running 'onFound' if true, otherwise requesting module admin.
@@ -281,7 +306,7 @@ appToCap
   -> Eval e (UserCapability, Def Ref, ([Term Name], FunType (Term Name)))
 appToCap a@App{..} = requireDefApp Defcap a >>= \d@Def{..} -> do
   prep@(args,_) <- prepareUserAppArgs d _appArgs _appInfo
-  cap <- SigCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
+  cap <- UserCapability (QualifiedName _dModule (asString _dDefName) (getInfo a)) <$> argsToParams _appInfo args
   return (cap,d,prep)
 
 -- | Function intended for use as a View pattern
