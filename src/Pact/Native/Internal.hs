@@ -215,7 +215,7 @@ enforceVerifierDef = defRNative
     [TLitString verName] -> do
       views eeMsgVerifiers (Map.lookup (VerifierName verName)) >>= \case
         Just verCaps -> do
-          verifierInScope <- anyCapabilityAcquired verCaps
+          verifierInScope <- anyCapabilityBeingEvaluated verCaps
           if verifierInScope then return (toTerm True)
           else failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in scope"
         Nothing ->

@@ -24,7 +24,7 @@ module Pact.Runtime.Capabilities
     ,acquireModuleAdminCapability
     ,popCapStack
     ,revokeAllCapabilities
-    ,anyCapabilityAcquired
+    ,anyCapabilityBeingEvaluated
     ,capabilityAcquired
     ,ApplyMgrFun
     ,InstallMgd
@@ -54,8 +54,8 @@ type InstallMgd e = UserCapability -> Def Ref -> Eval e (ManagedCapability UserC
 
 
 -- | Check for any acquired/stack (or composed therein) capabilities.
-anyCapabilityAcquired :: S.Set UserCapability -> Eval e Bool
-anyCapabilityAcquired caps = any (`S.member` caps) <$> getAllStackCaps
+anyCapabilityBeingEvaluated :: S.Set UserCapability -> Eval e Bool
+anyCapabilityBeingEvaluated caps = any (`S.member` caps) <$> getAllCapsBeingEvaluated
 
 -- | Check for acquired/stack (or composed therein) capability.
 capabilityAcquired :: UserCapability -> Eval e Bool
@@ -67,6 +67,20 @@ capabilityInstalled cap = any (`matchManaged` cap) <$> use (evalCapabilities . c
 
 getAllStackCaps :: Eval e (S.Set UserCapability)
 getAllStackCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capStack)
+
+-- | The things we want in this list:
+-- if we're evaluating a capability, i.e. the C is on the top of the cap stack,
+-- i.e. we're evaluating `(with-capability C)` or `(install-capability C)` we want C.
+-- if we're in a `with-capability` body, we don't want that cap.
+-- if we've been composed with another capability, we want it.
+getAllCapsBeingEvaluated :: Eval e (S.Set UserCapability)
+getAllCapsBeingEvaluated = do
+  stack <- use (evalCapabilities . capStack)
+  case span (\slot -> _csScope slot == CapComposed) stack of
+    (composedCaps, topCap:_) ->
+      return $ S.fromList (_csCap <$> (topCap:composedCaps))
+    _ ->
+      return S.empty
 
 popCapStack :: (CapSlot UserCapability -> Eval e a) -> Eval e a
 popCapStack act = do
