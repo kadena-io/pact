@@ -53,7 +53,7 @@ type ApplyMgrFun e = Def Ref -> PactValue -> PactValue -> Eval e PactValue
 type InstallMgd e = UserCapability -> Def Ref -> Eval e (ManagedCapability UserCapability)
 
 
--- | Check for any acquired/stack (or composed therein) capabilities.
+-- | Check if any of these capabilities are being evaluated.
 anyCapabilityBeingEvaluated :: S.Set UserCapability -> Eval e Bool
 anyCapabilityBeingEvaluated caps = any (`S.member` caps) <$> getAllCapsBeingEvaluated
 

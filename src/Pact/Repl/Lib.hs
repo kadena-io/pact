@@ -69,8 +69,9 @@ import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
-import Pact.Types.PactValue
 import Pact.Types.Capability
+import Pact.Types.PactValue
+import Pact.Types.Verifier
 import Pact.Interpreter
 import Pact.Runtime.Utils
 import Pact.JSON.Legacy.Value
@@ -115,6 +116,9 @@ replDefs = ("Repl",
         "{'key: \"admin-key\", 'caps: []}"]
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
        "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
+      ,defZNative "env-verifiers" setverifiers (funType tTyString [("verifiers",TyList (tTyObject TyAny))])
+      []
+      ""
 
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
@@ -359,6 +363,25 @@ setsigs' _ [TList ts _ _] = do
   setenv eeMsgSigs $ M.fromList $ V.toList sigs
   return $ tStr "Setting transaction signatures/caps"
 setsigs' i as = argsError' i as
+
+setverifiers :: ZNativeFun LibState
+setverifiers _ [TList ts _ _] = do
+  vers <- forM ts $ \t -> case t of
+    TObject (Object (ObjectMap om) _ _ _) _ -> do
+      case (M.lookup "name" om, M.lookup "caps" om) of
+        (Just k'', Just (TList clist _ _)) -> do
+          reduce k'' >>= \k' -> case k' of
+            TLitString k -> do
+              caps <- forM clist $ \cap -> case cap of
+                TApp a _ -> view _1 <$> appToCap a
+                o -> evalError' o $ "Expected capability invocation"
+              return (VerifierName k, S.fromList (V.toList caps))
+            _ -> evalError' k' "Expected string value"
+        _ -> evalError' t "Expected object with 'name': string, 'caps': [capability]"
+    _ -> evalError' t $ "Expected object"
+  setenv eeMsgVerifiers $ M.fromList $ V.toList vers
+  return $ tStr "Setting transaction verifiers/caps"
+setverifiers i as = argsError' i as
 
 
 setmsg :: RNativeFun LibState
