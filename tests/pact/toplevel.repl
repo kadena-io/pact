@@ -9,7 +9,7 @@
 (begin-tx)
 
 ;; ease restrictions requiring namespaced keysets
-(env-exec-config ["DisablePact44"])
+(env-exec-config ["DisablePact44", "DisablePact410"])
 ;; define-keyset success case
 (define-keyset 'k (sig-keyset))
 

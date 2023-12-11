@@ -1141,6 +1141,7 @@ typeof'' i as = argsError i as
 
 listModules :: RNativeFun e
 listModules i _ = do
+  unlessExecutionFlagSet FlagDisablePact411 $ checkNonLocalAllowed i
   mods <- keys (_faInfo i) Modules
   return $ toTermList tTyString $ map asString mods
 

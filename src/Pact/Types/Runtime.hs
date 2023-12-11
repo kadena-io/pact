@@ -202,6 +202,8 @@ data ExecutionFlag
   | FlagDisablePact49
   -- | Disable Pact 4.10 Features
   | FlagDisablePact410
+  -- | Disable Pact 4.11 Features
+  | FlagDisablePact411
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
