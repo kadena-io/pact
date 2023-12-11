@@ -26,7 +26,7 @@ import Pact.Types.Crypto
 import Pact.Types.Command
 import Pact.Types.Util (toB16Text, fromText')
 import Pact.Types.RPC
-import Pact.Types.Capability (UserCapability)
+import Pact.Types.Capability (SigCapability)
 import qualified Pact.Types.Hash as PactHash
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
@@ -76,7 +76,7 @@ toApiKeyPairs kps = map makeAKP kps
           ApiKeyPair priv (Just pub) add (Just scheme) Nothing
 
 
-mkCommandTest :: [(DynKeyPair, [UserCapability])] -> [Signer] -> Text -> IO (Command ByteString)
+mkCommandTest :: [(DynKeyPair, [SigCapability])] -> [Signer] -> Text -> IO (Command ByteString)
 mkCommandTest kps signers code = mkCommandWithDynKeys' kps $ toExecPayload signers code
 
 

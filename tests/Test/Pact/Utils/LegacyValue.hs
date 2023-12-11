@@ -861,7 +861,7 @@ spec_pact_types_spv =
 spec_pact_types_capability :: Spec
 spec_pact_types_capability =
   describe "Pact.Types.Capability" $ do
-   spec_case @UserCapability
+   spec_case @SigCapability
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat

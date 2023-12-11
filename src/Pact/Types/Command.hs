@@ -140,14 +140,14 @@ data ProcessedCommand m a =
 instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 
-type Ed25519KeyPairCaps = (Ed25519KeyPair ,[UserCapability])
+type Ed25519KeyPairCaps = (Ed25519KeyPair ,[SigCapability])
 
 -- CREATING AND SIGNING TRANSACTIONS
 
 mkCommand
   :: J.Encode c
   => J.Encode m
-  => [(Ed25519KeyPair, [UserCapability])]
+  => [(Ed25519KeyPair, [SigCapability])]
   -> [Verifier ParsedVerifierArgs]
   -> m
   -> Text
@@ -337,7 +337,7 @@ data Signer = Signer
  -- ^ pub key value
  , _siAddress :: !(Maybe Text)
  -- ^ optional "address", for different pub key formats like ETH
- , _siCapList :: [UserCapability]
+ , _siCapList :: [SigCapability]
  -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 

@@ -93,7 +93,7 @@ data ApiKeyPair = ApiKeyPair {
   _akpPublic :: Maybe PublicKeyBS,
   _akpAddress :: Maybe Text,
   _akpScheme :: Maybe PPKScheme,
-  _akpCaps :: Maybe [UserCapability]
+  _akpCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiKeyPair where parseJSON = lensyParseJSON 4
@@ -124,7 +124,7 @@ data ApiSigner = ApiSigner {
   _asPublic :: Text,
   _asAddress :: Maybe Text,
   _asScheme :: Maybe PPKScheme,
-  _asCaps :: Maybe [UserCapability]
+  _asCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ApiSigner where parseJSON = lensyParseJSON 3
@@ -478,7 +478,7 @@ signCmd keyFiles bs = do
 withKeypairsOrSigner
   :: Bool
   -> ApiReq
-  -> ([(DynKeyPair, [UserCapability])] -> IO a)
+  -> ([(DynKeyPair, [SigCapability])] -> IO a)
   -> ([Signer] -> IO a)
   -> IO a
 withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
@@ -546,7 +546,7 @@ mkExec
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
-  -> [(DynKeyPair, [UserCapability])]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs + caplists
   -> [Verifier ParsedVerifierArgs]
     -- ^ verifiers
@@ -639,7 +639,7 @@ mkCont
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
-  -> [(DynKeyPair, [UserCapability])]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs
   -> [Verifier ParsedVerifierArgs]
     -- ^ verifiers
@@ -700,15 +700,15 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
 -- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
 -- The keypairs must not be prefixed with "WEBAUTHN-", it accepts
 -- only the raw (unprefixed) keys.
-mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [UserCapability])]
+mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where
 
         importValidKeyPair
           :: Maybe PublicKeyBS
           -> PrivateKeyBS
-          -> Maybe [UserCapability]
-          -> Either String (Ed25519KeyPair, [UserCapability])
+          -> Maybe [SigCapability]
+          -> Either String (Ed25519KeyPair, [SigCapability])
         importValidKeyPair pubEd25519 privEd25519 caps = fmap (,maybe [] id caps) $
           importEd25519KeyPair pubEd25519 privEd25519
 
@@ -718,7 +718,7 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
           Just ED25519 -> True
           _ -> False
 
-        mkPair :: ApiKeyPair -> IO (DynKeyPair, [UserCapability])
+        mkPair :: ApiKeyPair -> IO (DynKeyPair, [SigCapability])
         mkPair akp = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
           (scheme, pub, priv, Nothing) | isEd25519 scheme ->
             either dieAR (return . first DynEd25519KeyPair) (importValidKeyPair pub priv (_akpCaps akp))

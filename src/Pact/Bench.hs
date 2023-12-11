@@ -301,8 +301,8 @@ main = do
   !bench10Cmds <- parseCode (intercalate " " (replicate 10 "(bench.bench)"))
   let
     !params = [PLiteral $ LString "Acct1",PLiteral $ LString "Acct2", PLiteral $ LDecimal 1.0]
-    !mcaps = [UserCapability (QualifiedName "bench" "MTRANSFER" def) params
-             ,UserCapability (QualifiedName "bench" "TRANSFER" def) params]
+    !mcaps = [SigCapability (QualifiedName "bench" "MTRANSFER" def) params
+             ,SigCapability (QualifiedName "bench" "TRANSFER" def) params]
 
     !signer = [Signer Nothing pk Nothing []]
     !msigner = [Signer Nothing pk Nothing mcaps]

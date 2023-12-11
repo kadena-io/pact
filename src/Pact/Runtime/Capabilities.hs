@@ -189,7 +189,7 @@ evalUserCapability i af scope cap cdef test = go scope
 emitCapability :: HasInfo i => i -> UserCapability -> Eval e ()
 emitCapability i cap = emitEvent i (_scName cap) (_scArgs cap)
 
-defCapMetaParts :: UserCapability -> Text -> Def Ref
+defCapMetaParts :: SigCapability -> Text -> Def Ref
                 -> Either Doc (Int, UserCapability, PactValue)
 defCapMetaParts cap argName cdef = case findArg argName of
   Nothing -> Left $ "Invalid managed argument name: " <> pretty argName
@@ -212,7 +212,7 @@ checkManaged
   -> UserCapability
   -> Def Ref
   -> Eval e (Maybe [UserCapability])
-checkManaged i (applyF,installF) cap@UserCapability{} cdef = case _dDefMeta cdef of
+checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef of
   -- managed: go
   Just (DMDefcap dcm@DefcapManaged {}) ->
     use (evalCapabilities . capManaged) >>= go dcm . S.toList

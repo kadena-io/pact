@@ -157,7 +157,7 @@ capFuns :: (ApplyMgrFun e,InstallMgd e)
 capFuns = (applyMgrFun,installSigCap)
 
 installSigCap :: InstallMgd e
-installSigCap UserCapability{..} cdef = do
+installSigCap SigCapability{..} cdef = do
   r <- evalCap cdef CapManaged True $ mkApp cdef (map fromPactValue _scArgs)
   case r of
     NewlyInstalled mc -> return mc
