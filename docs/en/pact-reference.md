@@ -247,8 +247,8 @@ type: exec
 
 The Pact REST API can accept transactions signed by the WebAuthn protocol.
 
-A web client can make use of this scheme to allow users to authenticate and
-sign pact transactions without manually managing private keys. The client must:
+A web client can use this scheme for authenticating and
+signing pact transactions without manually managing private keys. The client must:
 
  - Modify the `Signer`, it must have `scheme` set to `"WebAuthn"`.
  - Construct the challenge as: `base64( blake2b ( CommandPayload ))`
