@@ -371,7 +371,7 @@ requireCapabilityTests = tests
       defPactExpression [text| (require-capability ($acctModuleNameText.GOV)) |]
 
     cap = SigCapability (QualifiedName acctModuleName "GOV" def) []
-    capSlot = CapSlot CapCallStack cap []
+    capSlot = CapSlot CapCallStack False cap []
     updateGrantedCap = setState (set (evalCapabilities . capStack) [capSlot])
 
     tests =

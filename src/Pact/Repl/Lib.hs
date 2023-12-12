@@ -117,9 +117,10 @@ replDefs = ("Repl",
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
        "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
       ,defZNative "env-verifiers" setverifiers (funType tTyString [("verifiers",TyList (tTyObject TyAny))])
-      []
-      ""
-
+      [LitExample $ "(env-verifiers [({'name: \"COOLZK\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>
+        "{'name: \"HYPERCHAIN-BRIDGE\", 'caps: [(bridge.MINT \"mycoin\" 20)]}])"]
+      ("Set transaction verifier names and capabilities. VERIFIERS is a list of objects with \"name\" " <>
+       "specifying the verifier name, and \"caps\" specifying a list of associated capabilities.")
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."

@@ -2092,6 +2092,17 @@ Set a flag to simulate on-chain behavior that differs from the repl, in particul
 ```
 
 
+### env-verifiers {#env-verifiers}
+
+*verifiers*&nbsp;`[object:*]` *&rarr;*&nbsp;`string`
+
+
+Set transaction verifier names and capabilities. VERIFIERS is a list of objects with "name" specifying the verifier name, and "caps" specifying a list of associated capabilities.
+```lisp
+(env-verifiers [({'name: "COOLZK", 'caps: [(accounts.USER_GUARD "my-account")]}, {'name: "HYPERCHAIN-BRIDGE", 'caps: [(bridge.MINT "mycoin" 20)]}])
+```
+
+
 ### expect {#expect}
 
 *doc*&nbsp;`string` *expected*&nbsp;`<a>` *actual*&nbsp;`<a>` *&rarr;*&nbsp;`string`
