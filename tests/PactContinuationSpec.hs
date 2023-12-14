@@ -32,12 +32,15 @@ import Test.Hspec
 import Pact.ApiReq
 import Pact.Server.API
 import Pact.Types.API
+import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
+import Pact.Types.Names
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.Verifier
 import qualified Pact.JSON.Encode as J
 
 import Utils
@@ -55,6 +58,7 @@ spec = describe "pacts in dev server" $ do
   describe "testElideModRefEvents" testElideModRefEvents
   describe "testNestedPactContinuation" testNestedPactContinuation
   describe "testNestedPactYield" testNestedPactYield
+  describe "testVerifiers" testVerifiers
 
 testElideModRefEvents :: Spec
 testElideModRefEvents = do
@@ -1303,6 +1307,21 @@ testPriceNegDownBadCaps = do
   (req, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont-badcaps.yaml")
   twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
     tryNegUpCmd `failsWith` (`shouldBe` "Keyset failure (keys-all): [7d0c9ba1...]")
+
+testVerifiers :: Spec
+testVerifiers = context "using a verifier" $ it "should parse and run" $ do
+    simpleKeys <- DynEd25519KeyPair <$> genKeyPair
+    cmd <- mkExec  "(+ 1 2)" Null def
+      [(simpleKeys,[])]
+      [Verifier
+        (VerifierName "TESTING-VERIFIER")
+        (ParsedVerifierArgs [PLiteral $ LDecimal 3])
+        [SigCapability (QualifiedName (ModuleName "coin" Nothing) "TRANSFER" def) [PLiteral (LString "jeff"), PLiteral (LDecimal 10)]]]
+      Nothing (Just "test1")
+    allResults <- runAll [cmd]
+    runResults allResults $
+      succeeds cmd
+
 
 
 
