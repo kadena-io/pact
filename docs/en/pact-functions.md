@@ -1498,17 +1498,6 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```
 
 
-### enforce-verifier {#enforce-verifier}
-
-*verifiername*&nbsp;`string` *&rarr;*&nbsp;`bool`
-
-
-Enforce that a verifier is in scope.
-```lisp
-(enforce-verifier 'COOLZK)
-```
-
-
 ### keys-2 {#keys-2}
 
 *count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
@@ -1590,6 +1579,17 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```lisp
 (enforce-guard 'admin-keyset)
 (enforce-guard row-guard)
+```
+
+
+### enforce-verifier {#enforce-verifier}
+
+*verifiername*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that a verifier is in scope.
+```lisp
+(enforce-verifier 'COOLZK)
 ```
 
 
