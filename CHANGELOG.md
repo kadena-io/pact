@@ -1,3 +1,9 @@
+Unreleased
+---
+### Features
+- Support for verifier plugins (#1324)
+
+
 4.10.0
 ---
 ### Features
