@@ -116,7 +116,7 @@ replDefs = ("Repl",
         "{'key: \"admin-key\", 'caps: []}"]
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
        "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
-      ,defZNative "env-verifiers" setverifiers (funType tTyString [("verifiers",TyList (tTyObject TyAny))])
+      ,defZNative "env-verifiers" envVerifiers (funType tTyString [("verifiers",TyList (tTyObject TyAny))])
       [LitExample $ "(env-verifiers [({'name: \"COOLZK\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>
         "{'name: \"HYPERCHAIN-BRIDGE\", 'caps: [(bridge.MINT \"mycoin\" 20)]}])"]
       ("Set transaction verifier names and capabilities. VERIFIERS is a list of objects with \"name\" " <>
@@ -365,8 +365,8 @@ setsigs' _ [TList ts _ _] = do
   return $ tStr "Setting transaction signatures/caps"
 setsigs' i as = argsError' i as
 
-setverifiers :: ZNativeFun LibState
-setverifiers _ [TList ts _ _] = do
+envVerifiers :: ZNativeFun LibState
+envVerifiers _ [TList ts _ _] = do
   vers <- forM ts $ \t -> case t of
     TObject (Object (ObjectMap om) _ _ _) _ -> do
       case (M.lookup "name" om, M.lookup "caps" om) of
@@ -382,7 +382,7 @@ setverifiers _ [TList ts _ _] = do
     _ -> evalError' t $ "Expected object"
   setenv eeMsgVerifiers $ M.fromList $ V.toList vers
   return $ tStr "Setting transaction verifiers/caps"
-setverifiers i as = argsError' i as
+envVerifiers i as = argsError' i as
 
 
 setmsg :: RNativeFun LibState
