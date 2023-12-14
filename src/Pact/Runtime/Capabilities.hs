@@ -72,15 +72,16 @@ getAllStackCaps :: Eval e (S.Set UserCapability)
 getAllStackCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capStack)
 
 -- | The things we want in this list:
--- if we're evaluating a capability, i.e. the C is on the top of the cap stack,
--- i.e. we're evaluating `(with-capability C)` or `(install-capability C)` we want C.
--- if we're in a `with-capability` body, we don't want that cap.
--- if we've been composed with another capability, we want it.
+-- if we're evaluating a capability, i.e. we're evaluating
+-- `(with-capability C)` or `(install-capability C)` we want C.
+-- if we've been composed with another capability, we want it too.
+-- to check that the top capability is actually being evaluated rather
+-- than having already granted, you probably want to use `defCapInStack`.
 getAllCapsBeingEvaluated :: Eval e (Maybe (S.Set UserCapability))
 getAllCapsBeingEvaluated = do
   stack <- use (evalCapabilities . capStack)
   case span (\slot -> _csScope slot == CapComposed) stack of
-    (composedCaps, topCap:_) | _csEvaluating topCap ->
+    (composedCaps, topCap:_) ->
       return $ Just $ S.fromList (_csCap <$> (topCap:composedCaps))
     _ -> return Nothing
 
@@ -167,21 +168,19 @@ evalUserCapability i af scope cap cdef test = go scope
     -- Callstack: check if managed, in which case push/emit,
     -- otherwise push and test.
     evalStack = checkManaged i af cap cdef >>= \r -> case r of
-      Nothing -> push >> test >> emitMaybe >> popCapStack installFinished
-      Just composed -> emitCap >> pushSlot (CapSlot scope False cap composed)
-
-    installFinished c = evalCapabilities . capStack %= (c { _csEvaluating = False} :)
+      Nothing -> push >> test >> emitMaybe
+      Just composed -> emitCap >> pushSlot (CapSlot scope cap composed)
 
     -- Composed: check if managed, in which case install onto head/emit,
     -- otherwise push, test, pop and install onto head
     evalComposed = checkManaged i af cap cdef >>= \r -> case r of
       Nothing -> push >> test >> emitMaybe >> popCapStack installComposed
-      Just composed -> emitCap >> installComposed (CapSlot scope False cap composed)
+      Just composed -> emitCap >> installComposed (CapSlot scope cap composed)
 
-    installComposed c = do
+    installComposed c =
       evalCapabilities . capStack . _head . csComposed <>= (_csCap c:_csComposed c)
 
-    push = pushSlot (CapSlot scope True cap [])
+    push = pushSlot (CapSlot scope cap [])
 
     emitCap = emitCapability i cap
 
@@ -193,8 +192,8 @@ evalUserCapability i af scope cap cdef test = go scope
 emitCapability :: HasInfo i => i -> UserCapability -> Eval e ()
 emitCapability i cap = emitEvent i (_scName cap) (_scArgs cap)
 
-defCapMetaParts :: SigCapability -> Text -> Def Ref
-                -> Either Doc (Int, UserCapability, PactValue)
+defCapMetaParts :: UserCapability -> Text -> Def Ref
+                -> Either Doc (Int, SigCapability, PactValue)
 defCapMetaParts cap argName cdef = case findArg argName of
   Nothing -> Left $ "Invalid managed argument name: " <> pretty argName
   Just idx -> case decomposeManaged' idx cap of

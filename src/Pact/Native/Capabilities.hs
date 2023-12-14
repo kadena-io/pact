@@ -22,6 +22,7 @@ module Pact.Native.Capabilities
 import Control.Lens
 import Control.Monad
 import Data.Default
+import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import qualified Data.Set as S
 
@@ -32,6 +33,7 @@ import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Types.Verifier
 
 capDefs :: NativeModule
 capDefs =
@@ -42,6 +44,7 @@ capDefs =
    , requireCapability
    , composeCapability
    , emitEventDef
+   , enforceVerifierDef
    ])
 
 tvA :: Type n
@@ -253,3 +256,27 @@ emitEventDef =
         DefcapManaged {} -> return ()
         DefcapEvent -> return ()
       _ -> evalError' i $ "emit-event: must be managed or event defcap"
+
+enforceVerifierDef :: NativeDef
+enforceVerifierDef = defRNative
+  "enforce-verifier"
+  enforceVerifier
+  (funType tTyBool [("verifiername", tTyString)])
+  [ LitExample $ "(enforce-verifier 'COOLZK)"
+  ]
+  "Enforce that a verifier is in scope."
+  where
+  enforceVerifier :: RNativeFun e
+  enforceVerifier i as = case as of
+    [TLitString verName] -> do
+      views eeMsgVerifiers (Map.lookup (VerifierName verName)) >>= \case
+        Just verCaps -> do
+          inCap <- defcapInStack Nothing
+          unless inCap $
+            failTx (getInfo i) $ "enforce-verifier must be run in a capability"
+          verifierInScope <- anyCapabilityBeingEvaluated verCaps
+          if verifierInScope then return (toTerm True)
+          else failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in scope"
+        Nothing ->
+          failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in transaction"
+    _ -> argsError i as

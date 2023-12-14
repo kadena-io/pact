@@ -27,7 +27,7 @@ module Pact.Types.Capability
   , decomposeManaged, decomposeManaged', matchManaged
   , Capabilities(..), capStack, capManaged, capModuleAdmin, capAutonomous
   , CapScope(..)
-  , CapSlot(..), csCap, csEvaluating, csComposed, csScope
+  , CapSlot(..), csCap, csComposed, csScope
   ) where
 
 import Control.DeepSeq (NFData)
@@ -109,7 +109,6 @@ instance Pretty CapScope where pretty = viaShow
 -- | Runtime storage of acquired or managed capability.
 data CapSlot c = CapSlot
   { _csScope :: CapScope
-  , _csEvaluating :: Bool
   , _csCap :: c
   , _csComposed :: [c]
   } deriving (Eq,Show,Ord,Functor,Foldable,Traversable,Generic)
