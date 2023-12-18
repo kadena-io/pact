@@ -624,7 +624,7 @@ Modules may be imported at a namespace, and interfaces my be implemented in a si
 
 #### Example: appending code to a namespace
 
-If one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be ommitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared. Continuing from the previous example:
+If one is simply appending code to an existing namespace, then the namespace prefix in the fully qualified name may be omitted, as using a namespace works in a similar way to importing a module: all toplevel definitions within a namespace are brought into scope when `(namespace 'my-namespace)` is declared. Continuing from the previous example:
 
 ```lisp
 pact> (my-other-namespace.my-other-module.more-hello 3)
