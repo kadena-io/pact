@@ -55,10 +55,9 @@ type InstallMgd e = UserCapability -> Def Ref -> Eval e (ManagedCapability UserC
 
 -- | Check if any of these capabilities are being evaluated.
 anyCapabilityBeingEvaluated :: S.Set UserCapability -> Eval e Bool
-anyCapabilityBeingEvaluated caps =
-  getAllCapsBeingEvaluated <&> \case
-    Just capsBeingEvaluated -> any (`S.member` caps) capsBeingEvaluated
-    Nothing -> False
+anyCapabilityBeingEvaluated caps = do
+  capsBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+  return $! any (`S.member` caps) capsBeingEvaluated
 
 -- | Check for acquired/stack (or composed therein) capability.
 capabilityAcquired :: UserCapability -> Eval e Bool
@@ -70,20 +69,6 @@ capabilityInstalled cap = any (`matchManaged` cap) <$> use (evalCapabilities . c
 
 getAllStackCaps :: Eval e (S.Set UserCapability)
 getAllStackCaps = S.fromList . concatMap toList <$> use (evalCapabilities . capStack)
-
--- | The things we want in this list:
--- if we're evaluating a capability, i.e. we're evaluating
--- `(with-capability C)` or `(install-capability C)` we want C.
--- if we've been composed with another capability, we want it too.
--- to check that the top capability is actually being evaluated rather
--- than having already granted, you probably want to use `defCapInStack`.
-getAllCapsBeingEvaluated :: Eval e (Maybe (S.Set UserCapability))
-getAllCapsBeingEvaluated = do
-  stack <- use (evalCapabilities . capStack)
-  case span (\slot -> _csScope slot == CapComposed) stack of
-    (composedCaps, topCap:_) ->
-      return $ Just $ S.fromList (_csCap <$> (topCap:composedCaps))
-    _ -> return Nothing
 
 popCapStack :: (CapSlot UserCapability -> Eval e a) -> Eval e a
 popCapStack act = do

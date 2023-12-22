@@ -14,9 +14,30 @@
     (compose-capability (GOOD))
   )
 
+  (defun outergood-mgr:integer (a:integer b:integer) (print a) (+ a b))
+
+  (defcap OUTERGOOD-MANAGED (param:integer)
+    ;  @managed param outergood-mgr
+    ;  (enforce-verifier 'HYPERLANE)
+    ;  (compose-capability (GOOD))
+    (compose-capability (INNERGOOD-MANAGED param))
+  )
+
+  (defcap INNERGOOD-MANAGED (param:integer)
+    @managed param outergood-mgr
+    (enforce-verifier 'HYPERLANE)
+    (compose-capability (GOOD))
+  )
+
   (defun good ()
     (with-capability (GOOD) 1)
    )
+
+  (defun outergood-managed ()
+    (with-capability (OUTERGOOD-MANAGED 1)
+      1
+    )
+  )
 
   (defun outergood ()
     (with-capability (OUTERGOOD) 1)
@@ -48,3 +69,7 @@
 (expect-failure "outergood acquisition fails: not in scope" (outergood))
 (expect "good succeeds" (good) 1)
 (expect-failure "bad acquisition fails: not in scope" (bad))
+
+(env-sigs [{"key":"jose", "caps":[(INNERGOOD-MANAGED 0)]}])
+(env-verifiers [{"name":"HYPERLANE", "caps":[(OUTERGOOD-MANAGED 1)]}])
+(expect "outergood-managed succeeds" (outergood-managed) 1)

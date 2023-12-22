@@ -37,7 +37,7 @@ module Pact.Types.Runtime
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
-   evalCapabilities,evalLogGas,evalEvents,
+   evalCapabilities,evalLogGas,evalEvents,evalUserCapabilitiesBeingEvaluated,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -354,8 +354,10 @@ data EvalState = EvalState {
     , _evalCallStack :: ![StackFrame]
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
-      -- | Capability list
+      -- | Granted capability list
     , _evalCapabilities :: !Capabilities
+      -- | Capabilities being evaluated
+    , _evalUserCapabilitiesBeingEvaluated :: !(Set UserCapability)
       -- | Tracks gas logs if enabled (i.e. Just)
     , _evalLogGas :: !(Maybe [(Text,Gas)])
       -- | Accumulate events
@@ -363,7 +365,7 @@ data EvalState = EvalState {
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def def def def
+instance Default EvalState where def = EvalState def def def def def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =

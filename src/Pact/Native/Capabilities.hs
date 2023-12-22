@@ -72,8 +72,13 @@ withCapability =
 
       enforceNotWithinDefcap i "with-capability"
 
+      (ucap,_,_) <- appToCap (_tApp c)
+      evalUserCapabilitiesBeingEvaluated %= S.insert ucap
+
       -- evaluate in-module cap
       acquireResult <- evalCap i CapCallStack True (_tApp c)
+
+      evalUserCapabilitiesBeingEvaluated %= S.delete ucap
 
       -- execute scoped code
       r <- reduceBody body
@@ -210,7 +215,10 @@ composeCapability =
       -- enforce in defcap
       defcapInStack (Just 1) >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
       -- evalCap as composed, which will install onto head of pending cap
+      (ucap,_,_) <- appToCap app
+      evalUserCapabilitiesBeingEvaluated %= S.insert ucap
       void $ evalCap i CapComposed True app
+      evalUserCapabilitiesBeingEvaluated %= S.delete ucap
       return $ toTerm True
     composeCapability' i as = argsError' i as
 
