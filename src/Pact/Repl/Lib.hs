@@ -762,9 +762,9 @@ setGasModel _ as = do
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability i [ (TApp app _) ] = do
-  (_,d,_) <- appToCap app
+  (cap,d,prep) <- appToCap app
   let scope = maybe CapCallStack (const CapManaged) (_dDefMeta d)
-  r <- evalCap i scope False $ app
+  r <- evalCap (getInfo i) scope False (cap,d,prep,getInfo app)
   return . tStr $ case r of
     AlreadyAcquired -> "Capability already acquired"
     NewlyAcquired -> "Capability acquired"
