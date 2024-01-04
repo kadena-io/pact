@@ -806,7 +806,7 @@ Example: appending code to a namespace
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If one is simply appending code to an existing namespace, then the
-namespace prefix in the fully qualified name may be ommitted, as using a
+namespace prefix in the fully qualified name may be omitted, as using a
 namespace works in a similar way to importing a module: all toplevel
 definitions within a namespace are brought into scope when
 ``(namespace 'my-namespace)`` is declared. Continuing from the previous
