@@ -8,9 +8,7 @@ on:
     - '**'
     - '!.github/**'
     - '.github/workflows/applications.yml'
-    
-  pull_request_target:
-    types: [ opened ]
+  pull_request:
 
 jobs:
   build:
