@@ -278,6 +278,8 @@ enforceVerifierDef = defRNative
   enforceVerifier :: RNativeFun e
   enforceVerifier i as = case as of
     [TLitString verName] -> do
+      vs <- view eeMsgVerifiers
+      liftIO $ print vs
       views eeMsgVerifiers (Map.lookup (VerifierName verName)) >>= \case
         Just verCaps -> do
           inCap <- defcapInStack Nothing
