@@ -3,6 +3,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Types.Verifier
@@ -36,7 +39,7 @@ data Verifier args = Verifier
   , _verifierArgs :: args
   , _verifierCaps :: [UserCapability]
   }
-  deriving (Eq, Show, Generic, Ord)
+  deriving (Eq, Show, Generic, Ord, Functor, Foldable, Traversable)
 
 makeLenses ''Verifier
 
