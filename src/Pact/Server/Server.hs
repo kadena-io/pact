@@ -90,7 +90,8 @@ usage = unlines
   , "entity     - Entity name for simulating privacy, defaults to \"entity\""
   , "gasLimit   - Gas limit for each transaction, defaults to 0"
   , "gasRate    - Gas price per action, defaults to 0"
-  , "flags      - Pact runtime execution flags"
+  , "execConfig - Pact runtime execution flags"
+  , "verbose    - Output additional information"
   , "\n"
   ]
 
