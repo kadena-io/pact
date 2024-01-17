@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://i.imgur.com/bAZFAGF.png" width="450" height="243" alt="Kadena" title="Kadena">
+<img src="https://raw.githubusercontent.com/kadena-community/kadena.js/main/common/images/Kadena.JS_logo-black.png" width="450" height="243" alt="Kadena" title="Kadena">
 </p>
 
 <p>&nbsp;</p>
