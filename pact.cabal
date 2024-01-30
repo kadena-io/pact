@@ -181,6 +181,7 @@ library
     Pact.Types.Type
     Pact.Types.Typecheck
     Pact.Types.Util
+    Pact.Types.Verifier
     Pact.Types.Version
     Pact.Utils.Servant
 

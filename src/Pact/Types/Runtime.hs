@@ -30,14 +30,14 @@ module Pact.Types.Runtime
    PactId(..),
    PactEvent(..), eventName, eventParams, eventModule, eventModuleHash,
    RefStore(..),rsNatives,
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgVerifiers,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
    eeAdvice, eeWarnings,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
-   evalCapabilities,evalLogGas,evalEvents,
+   evalCapabilities,evalLogGas,evalEvents,evalUserCapabilitiesBeingEvaluated,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -98,6 +98,7 @@ import Pact.Types.Pretty
 import Pact.Types.RowData
 import Pact.Types.SPV
 import Pact.Types.Util
+import Pact.Types.Verifier
 import Pact.Types.Namespace
 
 import Pact.JSON.Legacy.Value (LegacyValue(..))
@@ -202,6 +203,8 @@ data ExecutionFlag
   | FlagDisablePact49
   -- | Disable Pact 4.10 Features
   | FlagDisablePact410
+  -- | Disable verifiers
+  | FlagDisableVerifiers
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -255,6 +258,8 @@ data EvalEnv e = EvalEnv {
       _eeRefStore :: !RefStore
       -- | Verified keys from message.
     , _eeMsgSigs :: !(M.Map PublicKeyText (S.Set UserCapability))
+      -- | Verifiers other than signatures.
+    , _eeMsgVerifiers :: !(M.Map VerifierName (S.Set UserCapability))
       -- | JSON body accompanying message.
     , _eeMsgBody :: !LegacyValue
       -- | Execution mode
@@ -349,8 +354,10 @@ data EvalState = EvalState {
     , _evalCallStack :: ![StackFrame]
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
-      -- | Capability list
+      -- | Granted capability list
     , _evalCapabilities :: !Capabilities
+      -- | Capabilities being evaluated
+    , _evalUserCapabilitiesBeingEvaluated :: !(Set UserCapability)
       -- | Tracks gas logs if enabled (i.e. Just)
     , _evalLogGas :: !(Maybe [(Text,Gas)])
       -- | Accumulate events
@@ -358,7 +365,7 @@ data EvalState = EvalState {
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def def def def
+instance Default EvalState where def = EvalState def def def def def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =

@@ -137,6 +137,7 @@ initEvalEnv ls = do
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
+    , _eeMsgVerifiers = mempty
     , _eeMsgBody = toLegacyJson (A.Object mempty)
     , _eeMode = Transactional
     , _eeEntity = Nothing

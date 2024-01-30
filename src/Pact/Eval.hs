@@ -173,7 +173,7 @@ enforceGuard i g = case g of
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
 getSizeOfVersion :: Eval e SizeOfVersion
-getSizeOfVersion = 
+getSizeOfVersion =
   ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
 {-# INLINABLE getSizeOfVersion #-}
 

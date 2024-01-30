@@ -24,6 +24,7 @@ module Pact.Runtime.Capabilities
     ,acquireModuleAdminCapability
     ,popCapStack
     ,revokeAllCapabilities
+    ,anyCapabilityBeingEvaluated
     ,capabilityAcquired
     ,ApplyMgrFun
     ,InstallMgd
@@ -51,6 +52,12 @@ type ApplyMgrFun e = Def Ref -> PactValue -> PactValue -> Eval e PactValue
 -- | More knot tying to on-demand install a managed cap
 type InstallMgd e = UserCapability -> Def Ref -> Eval e (ManagedCapability UserCapability)
 
+
+-- | Check if any of these capabilities are being evaluated.
+anyCapabilityBeingEvaluated :: S.Set UserCapability -> Eval e Bool
+anyCapabilityBeingEvaluated caps = do
+  capsBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+  return $! any (`S.member` caps) capsBeingEvaluated
 
 -- | Check for acquired/stack (or composed therein) capability.
 capabilityAcquired :: UserCapability -> Eval e Bool
@@ -181,7 +188,7 @@ defCapMetaParts cap argName cdef = case findArg argName of
     findArg an = findIndex ((==) an . _aName) $ _ftArgs (_dFunType cdef)
 
 -- Check managed state, if any, to approve acquisition.
--- Handles lazy installation of sig + auto caps, as a fallback
+-- Handles lazy installation of sig + verifier + auto caps, as a fallback
 -- case if no matching installed managed caps are found.
 -- Once found/matched, compute installed logic to approve acquisition.
 -- Upon success return composed caps that were assembled during install
@@ -204,7 +211,7 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
     -- go: main loop over installed managed caps set
     -- empty case: attempt lazy install and test
     go dcm [] = do
-      checkSigs dcm >>= \r -> case r of
+      checkUserCaps dcm >>= \r -> case r of
         Nothing -> die
         Just mc -> testMC mc die
     -- test installed from set
@@ -241,22 +248,23 @@ checkManaged i (applyF,installF) cap@SigCapability{} cdef = case _dDefMeta cdef 
       Just (argName,_) -> view _2 <$> defCapMetaParts c argName cdef
     getStatic DefcapEvent c = return c
 
-    -- check sig and autonomous caps for match
-    -- to install.
-    checkSigs dcm = case getStatic dcm cap of
+    -- check sig, verifier, and autonomous caps for match to install.
+    checkUserCaps dcm = case getStatic dcm cap of
       Left e -> evalError' cdef e
       Right capStatic -> do
         autos <- use $ evalCapabilities . capAutonomous
-        sigCaps <- (S.union autos . S.unions) <$> view eeMsgSigs
-        foldM (matchSig dcm capStatic) Nothing sigCaps
+        sigCaps <- S.unions <$> view eeMsgSigs
+        verifierCaps <- S.unions <$> view eeMsgVerifiers
+        let msgCaps = S.unions [autos, sigCaps, verifierCaps]
+        foldM (matchUserCap dcm capStatic) Nothing msgCaps
 
-    matchSig _ _ r@Just{} _ = return r
-    matchSig dcm capStatic Nothing sigCap = case getStatic dcm sigCap of
+    matchUserCap _ _ r@Just{} _ = return r
+    matchUserCap dcm capStatic Nothing userCap = case getStatic dcm userCap of
       Left _ -> return Nothing
-      Right sigStatic | sigStatic == capStatic -> Just <$> doMgdInstall sigCap
+      Right sigStatic | sigStatic == capStatic -> Just <$> doMgdInstall userCap
                       | otherwise -> return Nothing
 
-    doMgdInstall sigCap = installF sigCap cdef
+    doMgdInstall userCap = installF userCap cdef
 
 
 revokeAllCapabilities :: Eval e ()
