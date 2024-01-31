@@ -750,7 +750,7 @@ Top level only: this function will fail if used in module code.
 *table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`object:*`
 
 
-Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields.
+Get metadata for TABLE. Returns an object with 'name', 'module', and 'type' fields.
 ```lisp
 (describe-table accounts)
 ```
@@ -1730,7 +1730,7 @@ Defines a custom guard CLOSURE whose arguments are strictly evaluated at definit
 
 Tell whether PRINCIPAL string conforms to the principal format without proving validity.
 ```lisp
-(enforce   (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)   "Invalid account structure: non-principal account")
+(enforce   (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")   "Invalid account structure: non-principal account")
 ```
 
 
@@ -1749,7 +1749,7 @@ Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Co
 
 Return the protocol type of a given PRINCIPAL value. If input value is not a principal type, then the empty string is returned.
 ```lisp
-(typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
+(typeof-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69")
 ```
 
 

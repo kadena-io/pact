@@ -160,7 +160,7 @@ dbDefs =
     ,setTopLevelOnly $ defRNative "describe-table" descTable
      (funType tTyObjectAny [("table",tableTy)])
      [LitExample "(describe-table accounts)"]
-     "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields."
+     "Get metadata for TABLE. Returns an object with 'name', 'module', and 'type' fields."
     ,setTopLevelOnly $ defGasRNative "describe-keyset" descKeySet
      (funType tTyObjectAny [("keyset",tTyString)]) [] "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
