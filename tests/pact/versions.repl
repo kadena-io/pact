@@ -15,6 +15,7 @@
   "pact version bounds fail for current version if wrong bounds"
   (enforce-pact-version "6.0.0" "100.0.0"))
 
+;; regression #1327 
 (expect
   "enforce-pact-version succeeds for current version if lower bound set"
   true
