@@ -1,0 +1,26 @@
+(begin-tx)
+
+
+(expect
+  "pact version bounds work for current pact version"
+  true
+  (enforce-pact-version "3.0.0" "6.0.0"))
+
+(expect
+  "enforce-pact-version works for current pact version"
+  true
+  (enforce-pact-version (pact-version)))
+
+(expect-failure
+  "pact version bounds fail for current version if wrong bounds"
+  (enforce-pact-version "6.0.0" "100.0.0"))
+
+(expect
+  "enforce-pact-version succeeds for current version if lower bound set"
+  true
+  (enforce-pact-version "1.0.0"))
+
+(expect
+  "enforce-pact-version succeeds (double digit regression)"
+  true
+  (enforce-pact-version "3.0000.0" "88.420.0"))

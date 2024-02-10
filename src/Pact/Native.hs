@@ -1238,21 +1238,23 @@ enforceVersion i as = do
   pactVersion'
     <- if cond then pure compatVersion else checkNonLocalAllowed i $> pactVersion
   case as of
-    [TLitString minVersion] -> doMin minVersion pactVersion' >> return (toTerm True)
+    [TLitString minVersion] -> doMin minVersion pactVersion' $> toTerm True
     [TLitString minVersion,TLitString maxVersion] ->
-      doMin minVersion pactVersion' >> doMax maxVersion pactVersion' >> return (toTerm True)
+      doMin minVersion pactVersion' >> doMax maxVersion pactVersion' $> toTerm True
     _ -> argsError i as
   where
     compatVersion :: Text
     compatVersion = "4.2.1"
     doMin = doMatch "minimum" (>) (<)
     doMax = doMatch "maximum" (<) (>)
-    doMatch msg failCmp succCmp fullV pactVersion' =
+    doMatch msg failCmp succCmp fullV pactVersion' = do
       foldM_ matchPart False $ zip (T.splitOn "." pactVersion') (T.splitOn "." fullV)
       where
-        parseNum orgV s = case AP.parseOnly (AP.many1 AP.digit) s of
+        parseNum :: Text -> Text -> Eval e Integer
+        parseNum orgV s = case AP.parseOnly AP.decimal s of
           Left _ -> evalError' i $ "Invalid version component: " <> pretty (orgV,s)
           Right v -> return v
+
         matchPart True _ = return True
         matchPart _ (pv,mv)  = do
           pv' <- parseNum pactVersion' pv
