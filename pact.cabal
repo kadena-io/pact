@@ -470,6 +470,7 @@ test-suite hspec
       GasModelSpec
       GoldenSpec
       HistoryServiceSpec
+      HyperlaneSpec
       PactContinuationSpec
       PersistSpec
       PoseidonSpec
