@@ -80,6 +80,7 @@ library
     -Wincomplete-record-updates
     -Wincomplete-uni-patterns
     -Wredundant-constraints
+    -Wno-missed-extra-shared-lib
   c-sources:
     cbits/musl/__math_invalid.c
     cbits/musl/__math_divzero.c
@@ -96,6 +97,7 @@ library
     cbits/musl/sqrt_data.c
   exposed-modules:
     Crypto.Hash.Blake2Native
+    Crypto.Hash.HyperlaneMessageId
     Crypto.Hash.PoseidonNative
     Pact.Analyze.Remote.Types
     Pact.ApiReq
@@ -224,6 +226,7 @@ library
     , filepath >=1.4.1.0
     , groups
     , hashable >=1.4
+    , ethereum >= 0.1
     , lens >=4.14
     , megaparsec >=9
     , memory
@@ -254,6 +257,7 @@ library
     , vector >=0.11.0.0
     , vector-algorithms >=0.7
     , vector-space >=0.10.4
+    , wide-word >= 0.1
     , yaml
 
   if flag(build-tool)

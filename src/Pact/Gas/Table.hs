@@ -55,6 +55,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_formatBytesPerGas :: Gas
   , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor :: Gas
   , _gasCostConfig_poseidonHashHackAChainLinearGasFactor :: Gas
+  , _gasCostConfig_hyperlaneMessageIdGasPerRecipientByte :: MilliGas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -81,6 +82,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_formatBytesPerGas = 10
   , _gasCostConfig_poseidonHashHackAChainLinearGasFactor = 50
   , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor = 38
+  , _gasCostConfig_hyperlaneMessageIdGasPerRecipientByte = MilliGas undefined
   }
 
 defaultGasTable :: Map Text Gas
@@ -236,6 +238,7 @@ defaultGasTable =
   ,("pairing-check", 1)
 
   ,("poseidon-hash-hack-a-chain", 124)
+  ,("hyperlane-message-id", error "sus")
   ]
 
 {-# NOINLINE defaultGasTable #-}
@@ -333,6 +336,9 @@ tableGasModel gasConfig =
           gasToMilliGas $
             _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor gasConfig * fromIntegral (len * len) +
             _gasCostConfig_poseidonHashHackAChainLinearGasFactor gasConfig * fromIntegral len
+        GHyperlaneMessageId len ->
+          let MilliGas costPerByte = _gasCostConfig_hyperlaneMessageIdGasPerRecipientByte gasConfig
+          in MilliGas (costPerByte * fromIntegral len)
 
   in GasModel
       { gasModelName = "table"
