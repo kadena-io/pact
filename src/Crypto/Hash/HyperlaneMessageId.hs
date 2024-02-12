@@ -8,7 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId, benchy) where
+module Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId) where
 
 import Control.Lens ((^?), at, _Just, _Right, _1, to)
 import Data.ByteString (ByteString)
@@ -19,62 +19,22 @@ import Data.ByteString.Builder qualified as BB
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Short qualified as BSS
 import Data.Decimal (Decimal)
-import Data.List qualified as List
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.WideWord.Word256 (Word256(..))
 import Data.Word (Word8, Word32)
 import Ethereum.Misc (keccak256, _getKeccak256Hash, _getBytesN)
-import Pact.Types.Runtime
+import Pact.Types.Runtime (Object(..), ObjectMap(..), Name, _TLiteral, _TObject, _LDecimal, _LInteger, _LString)
 
-import Gauge.Main
+----------------------------------------------
+--               Primitive                  --
+----------------------------------------------
 
 hyperlaneMessageId :: Object Name -> Text
 hyperlaneMessageId o = case decodeHyperlaneMessageObject o of
   Nothing -> error "Couldn't decode HyperlaneMessage"
   Just hm -> getHyperlaneMessageId hm
-
-benchy :: IO ()
-benchy = do
-  defaultMain
-    [ bgroup "hyperlane"
-        [ bench "0" $ whnf getHyperlaneMessageId hm0
-        , bench "10" $ whnf getHyperlaneMessageId hm10
-        , bench "20" $ whnf getHyperlaneMessageId hm20
-        , bench "50" $ whnf getHyperlaneMessageId hm50
-        , bench "100" $ whnf getHyperlaneMessageId hm100
-        , bench "500" $ whnf getHyperlaneMessageId hm500
-        , bench "1000" $ whnf getHyperlaneMessageId hm1000
-        , bench "10000" $ whnf getHyperlaneMessageId hm10000
-        ]
-    ]
-
-hm0, hm10, hm20, hm50, hm100, hm500, hm1000, hm10000 :: HyperlaneMessage
-hm0 = genHM 0
-hm10 = genHM 10
-hm20 = genHM 20
-hm50 = genHM 50
-hm100 = genHM 100
-hm500 = genHM 500
-hm1000 = genHM 1_000
-hm10000 = genHM 10_000
-
-genHM :: Int -> HyperlaneMessage
-genHM recipientSize = HyperlaneMessage
-  { hmVersion = 0
-  , hmNonce = 0
-  , hmOriginDomain = 0
-  , hmSender = BS.replicate 32 0
-  , hmDestinationDomain = 0
-  , hmRecipient = BS.replicate 32 0
-  , hmTokenMessage = TokenMessageERC20
-      { tmRecipient = Text.pack $ List.replicate recipientSize 'A'
-      , tmAmount = 0
-      , tmChainId = Nothing
-      }
-  }
-{-# noinline genHM #-}
 
 ----------------------------------------------
 --        Hyperlane Message Encoding        --
