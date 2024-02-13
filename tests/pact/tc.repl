@@ -329,6 +329,16 @@
     "test anon lambdas"
     (map (lambda (i) (> i 1)) [1 2 3]))
 
+  (defpact fail-steps-type-missmatch: integer ()
+    "test type missmatch of steps"
+    (step "missmatch")
+    (step 1))
+
+  (defpact tc-steps-type-pass: integer ()
+    "test type match of steps"
+    (step 1)
+    (step 1))
+
 )
 
 (create-table persons)

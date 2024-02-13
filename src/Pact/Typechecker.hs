@@ -839,20 +839,22 @@ withScopeBodyToFun fnname modname funTy body deftype info = do
   return $ FDefun info modname fnname deftype funType args tcs funId
 
 assocStepYieldReturns :: TopLevel Node -> [AST Node] -> TC ()
-assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
+assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ rty) _) steps =
   void $ toStepYRs >>= foldM go (Nothing,0::Int)
   where
     lastStep = pred $ length steps
     toStepYRs = forM steps $ \step -> case step of
-      Step{..} -> case (_aYieldResume, _aRollback) of
-
-        -- check that a cross-chain yield and rollback do not occur
-        -- in the same step, otherwise build the tuple
-        (Just y, Just{}) ->
-          if _yrCrossChain y
-          then die'' step "Illegal rollback with yield"
-          else return (_aNode, _aYieldResume)
-        _ -> return (_aNode, _aYieldResume)
+      Step{..} -> do
+        -- Associate the DefPact return type with each step
+        assocNode rty _aNode
+        case (_aYieldResume, _aRollback) of
+          -- check that a cross-chain yield and rollback do not occur
+          -- in the same step, otherwise build the tuple
+          (Just y, Just{}) ->
+            if _yrCrossChain y
+            then die'' step "Illegal rollback with yield"
+            else return (_aNode, _aYieldResume)
+          _ -> return (_aNode, _aYieldResume)
       _ -> die'' step "Non-step in defpact"
     yrMay l yr = preview (_Just . l . _Just) yr
     go :: (Maybe (YieldResume Node),Int) -> (Node, Maybe (YieldResume Node)) -> TC (Maybe (YieldResume Node),Int)
@@ -879,7 +881,6 @@ assocStepYieldReturns (TopFun (FDefun _ _ _ Defpact _ _ _ _) _) steps =
       b' <- lookupSchemaTy b
       debug $ "assocYRSchemas: " ++ showPretty ((a,a'),(b,b'))
       assocParams (_aId a) a' b'
-
 assocStepYieldReturns _ _ = return ()
 
 
