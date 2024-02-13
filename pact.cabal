@@ -80,7 +80,6 @@ library
     -Wincomplete-record-updates
     -Wincomplete-uni-patterns
     -Wredundant-constraints
-    -Wno-missed-extra-shared-lib
   c-sources:
     cbits/musl/__math_invalid.c
     cbits/musl/__math_divzero.c
