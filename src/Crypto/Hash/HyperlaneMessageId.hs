@@ -6,6 +6,11 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- | Implementation of the `hyperlane-message-id` pact native.
+--
+--   `hyperlane-message-id` takes as input a Pact object representing a
+--   'HyperlaneMessage', and returns a base16-encoded hash of the abi-encoding
+--   of the input.
 module Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId) where
 
 import Control.Error.Util (hush)
