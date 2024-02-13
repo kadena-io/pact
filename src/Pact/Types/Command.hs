@@ -45,7 +45,7 @@ module Pact.Types.Command
   , PPKScheme(..)
   , Ed25519KeyPairCaps
   , ProcessedCommand(..),_ProcSucc,_ProcFail
-  , Payload(..),pMeta,pNonce,pPayload,pSigners,pNetworkId
+  , Payload(..),pMeta,pNonce,pPayload,pSigners,pVerifiers,pNetworkId
   , ParsedCode(..),pcCode,pcExps
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..)
@@ -91,6 +91,7 @@ import Pact.Types.Orphans ()
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.RPC
 import Pact.Types.Runtime
+import Pact.Types.Verifier
 
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
@@ -147,15 +148,16 @@ mkCommand
   :: J.Encode c
   => J.Encode m
   => [(Ed25519KeyPair, [SigCapability])]
+  -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
   -> Maybe NetworkId
   -> PactRPC c
   -> IO (Command ByteString)
-mkCommand creds meta nonce nid rpc = mkCommand' creds encodedPayload
+mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
   where
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
-    payload = Payload rpc nonce meta (keyPairsToSigners creds) nid
+    payload = Payload rpc nonce meta (keyPairsToSigners creds) (vers <$ guard (not (null vers))) nid
 
 data WebAuthnPubKeyPrefixed
   = WebAuthnPubKeyPrefixed
@@ -169,16 +171,17 @@ data DynKeyPair
 mkCommandWithDynKeys
   :: J.Encode c
   => J.Encode m
-  => [(DynKeyPair, [SigCapability])]
+  => [(DynKeyPair, [UserCapability])]
+  -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
   -> Maybe NetworkId
   -> PactRPC c
   -> IO (Command ByteString)
-mkCommandWithDynKeys creds meta nonce nid rpc = mkCommandWithDynKeys' creds encodedPayload
+mkCommandWithDynKeys creds vers meta nonce nid rpc = mkCommandWithDynKeys' creds encodedPayload
   where
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
-    payload = Payload rpc nonce meta (map credToSigner creds) nid
+    payload = Payload rpc nonce meta (map credToSigner creds) (vers <$ guard (not (null vers))) nid
     credToSigner cred =
       case cred of
         (DynEd25519KeyPair (pubEd25519, _), caps) ->
@@ -200,7 +203,7 @@ mkCommandWithDynKeys creds meta nonce nid rpc = mkCommandWithDynKeys' creds enco
             , _siCapList = caps
             }
 
-keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
+keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
         scheme = Nothing
@@ -242,14 +245,15 @@ mkUnsignedCommand
   :: J.Encode m
   => J.Encode c
   => [Signer]
+  -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
   -> Maybe NetworkId
   -> PactRPC c
   -> IO (Command ByteString)
-mkUnsignedCommand signers meta nonce nid rpc = mkCommand' [] encodedPayload
+mkUnsignedCommand signers vers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = J.encodeStrict payload
-        payload = Payload rpc nonce meta signers nid
+        payload = Payload rpc nonce meta signers (vers <$ guard (not (null vers))) nid
 
 signHash :: TypedHash h -> Ed25519KeyPair -> Text
 signHash hsh (pub,priv) =
@@ -281,7 +285,7 @@ hasInvalidSigs hsh sigs signers
   | otherwise                            = verifyUserSigs hsh (zip sigs signers)
 
 verifyUserSigs :: PactHash -> [(UserSig, Signer)] -> Maybe String
-verifyUserSigs hsh sigsAndSigners 
+verifyUserSigs hsh sigsAndSigners
   | null failedSigs = Nothing
   | otherwise = formatIssues
   where
@@ -365,6 +369,7 @@ data Payload m c = Payload
   , _pNonce :: !Text
   , _pMeta :: !m
   , _pSigners :: ![Signer]
+  , _pVerifiers :: !(Maybe [Verifier ParsedVerifierProof])
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)
@@ -374,6 +379,7 @@ instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
     [ "networkId" J..= _pNetworkId o
     , "payload" J..= _pPayload o
     , "signers" J..= J.Array (_pSigners o)
+    , "verifiers" J..?= fmap J.Array (_pVerifiers o)
     , "meta" J..= _pMeta o
     , "nonce" J..= _pNonce o
     ]
@@ -387,6 +393,7 @@ instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
     <*> arbitrary
     <*> arbitrary
     <*> scale (min 10) arbitrary
+    <*> arbitrary
     <*> arbitrary
 
 newtype PactResult = PactResult

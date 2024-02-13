@@ -60,7 +60,7 @@
 
   (defpact test-pact-guards (id:string)
     (step (step1 id))
-    (step (step2 (read-msg "id"))))
+    (step (let ((s2 (step2 (read-msg "id")))) "step2")))
 
   (defun step1 (id:string)
     (insert guard-table id { "g": (create-pact-guard "test")}))
@@ -207,7 +207,7 @@
 
 (env-data { "id": "a"})
 
-(expect "pact enforce succeeds" 1 (at 'result (continue-pact 1 false (hash "pact-guards-a-id"))))
+(expect "pact enforce succeeds" "step2"  (continue-pact 1 false (hash "pact-guards-a-id")))
 
 (pact-state true)
 (env-hash (hash "pact-guards-b-id"))

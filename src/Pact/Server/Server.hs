@@ -84,13 +84,14 @@ usage = unlines
   [ "Config file is YAML format with the following properties:"
   , "port       - HTTP server port"
   , "persistDir - Directory for database files."
-  , "             If ommitted, runs in-memory only."
+  , "             If omitted, runs in-memory only."
   , "logDir     - Directory for HTTP logs"
   , "pragmas    - SQLite pragmas to use with persistence DBs"
   , "entity     - Entity name for simulating privacy, defaults to \"entity\""
   , "gasLimit   - Gas limit for each transaction, defaults to 0"
   , "gasRate    - Gas price per action, defaults to 0"
-  , "flags      - Pact runtime execution flags"
+  , "execConfig - Pact runtime execution flags"
+  , "verbose    - Output additional information"
   , "\n"
   ]
 

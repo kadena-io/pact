@@ -67,6 +67,7 @@ import Pact.Types.SigData
 import Pact.Types.SPV
 import Pact.Types.SQLite
 import Pact.Types.Term.Arbitrary ()
+import Pact.Types.Verifier
 import Pact.PersistPactDb
 
 import qualified Pact.JSON.Encode as J
@@ -1034,6 +1035,12 @@ spec_pact_types_command =
       , Case checkLegacyValueCompat
       ]
    spec_case @RequestKey
+      [ Case checkRoundtrip
+      , Case checkRoundtrip2
+      , Case checkAesonCompat
+      , Case checkLegacyValueCompat
+      ]
+   spec_case @(Verifier ParsedVerifierProof)
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat

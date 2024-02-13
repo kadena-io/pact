@@ -32,12 +32,15 @@ import Test.Hspec
 import Pact.ApiReq
 import Pact.Server.API
 import Pact.Types.API
+import Pact.Types.Capability
 import Pact.Types.Command
 import Pact.Types.Crypto as Crypto
+import Pact.Types.Names
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.Verifier
 import qualified Pact.JSON.Encode as J
 
 import Utils
@@ -55,11 +58,12 @@ spec = describe "pacts in dev server" $ do
   describe "testElideModRefEvents" testElideModRefEvents
   describe "testNestedPactContinuation" testNestedPactContinuation
   describe "testNestedPactYield" testNestedPactYield
+  describe "testVerifiers" testVerifiers
 
 testElideModRefEvents :: Spec
 testElideModRefEvents = do
   it "elides modref infos" $ do
-    cmd <- mkExec code Null def [] Nothing Nothing
+    cmd <- mkExec code Null def [] [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport testFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
@@ -67,7 +71,7 @@ testElideModRefEvents = do
           (not . ("refInfo" `isInfixOf`) . BSL8.unpack)
 
   it "doesn't elide on backcompat" $ do
-    cmd <- mkExec codePreFork Null def [] Nothing Nothing
+    cmd <- mkExec codePreFork Null def [] [] Nothing Nothing
     results <- runAll' [cmd] noSPVSupport backCompatFlags
     runResults results $ do
       shouldMatch cmd $ ExpectResult $ \cr ->
@@ -236,7 +240,7 @@ testNestedPactContinuation = do
 testSimpleServerCmd :: IO (Maybe (CommandResult Hash))
 testSimpleServerCmd = do
   simpleKeys <- DynEd25519KeyPair <$> genKeyPair
-  cmd <- mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] Nothing (Just "test1")
+  cmd <- mkExec  "(+ 1 2)" Null def [(simpleKeys,[])] [] Nothing (Just "test1")
   allResults <- runAll [cmd]
   return $ HM.lookup (cmdToRequestKey cmd) allResults
 
@@ -1304,6 +1308,21 @@ testPriceNegDownBadCaps = do
   twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
     tryNegUpCmd `failsWith` (`shouldBe` "Keyset failure (keys-all): [7d0c9ba1...]")
 
+testVerifiers :: Spec
+testVerifiers = context "using a verifier" $ it "should parse and run" $ do
+    simpleKeys <- DynEd25519KeyPair <$> genKeyPair
+    cmd <- mkExec  "(+ 1 2)" Null def
+      [(simpleKeys,[])]
+      [Verifier
+        (VerifierName "TESTING-VERIFIER")
+        (ParsedVerifierProof $ PLiteral (LDecimal 3))
+        [SigCapability (QualifiedName (ModuleName "coin" Nothing) "TRANSFER" def) [PLiteral (LString "jeff"), PLiteral (LDecimal 10)]]]
+      Nothing (Just "test1")
+    allResults <- runAll [cmd]
+    runResults allResults $
+      succeeds cmd
+
+
 
 
 
@@ -1356,7 +1375,7 @@ makeExecCmd keyPairs code = makeExecCmd' Nothing keyPairs code
 
 makeExecCmd' :: Maybe Text -> DynKeyPair -> Text -> IO (Command Text)
 makeExecCmd' nonce keyPairs code = mkExec code
-  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] Nothing nonce
+  (object ["admin-keyset" .= [formatPubKeyForCmd keyPairs]]) def [(keyPairs,[])] [] Nothing nonce
 
 
 formatPubKeyForCmd :: DynKeyPair -> Value
@@ -1392,7 +1411,7 @@ makeContCmd'
       -- ^ nonce
   -> IO (Command Text)
 makeContCmd' contProofM keyPairs isRollback cmdData pactExecCmd step nonce =
-  mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] (Just nonce) contProofM Nothing
+  mkCont (getPactId pactExecCmd) step isRollback cmdData def [(keyPairs,[])] [] (Just nonce) contProofM Nothing
 
 textVal :: Text -> PactValue
 textVal = PLiteral . LString

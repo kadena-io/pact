@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Native.Capabilities
@@ -22,6 +23,7 @@ module Pact.Native.Capabilities
 import Control.Lens
 import Control.Monad
 import Data.Default
+import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import qualified Data.Set as S
 
@@ -32,6 +34,7 @@ import Pact.Types.Capability
 import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
+import Pact.Types.Verifier
 
 capDefs :: NativeModule
 capDefs =
@@ -42,6 +45,7 @@ capDefs =
    , requireCapability
    , composeCapability
    , emitEventDef
+   , enforceVerifierDef
    ])
 
 tvA :: Type n
@@ -69,8 +73,13 @@ withCapability =
 
       enforceNotWithinDefcap i "with-capability"
 
+      (cap,d,prep) <- appToCap (_tApp c)
+      evalUserCapabilitiesBeingEvaluated %= S.insert cap
+
       -- evaluate in-module cap
-      acquireResult <- evalCap i CapCallStack True (_tApp c)
+      acquireResult <- evalCap (getInfo i) CapCallStack True (cap,d,prep,getInfo c)
+
+      evalUserCapabilitiesBeingEvaluated %= S.delete cap
 
       -- execute scoped code
       r <- reduceBody body
@@ -123,13 +132,16 @@ installCapability =
 -- | Given cap app, enforce in-module call, eval args to form capability,
 -- and attempt to acquire. Return capability if newly-granted. When
 -- 'inModule' is 'True', natives can only be invoked within module code.
-evalCap :: HasInfo i => i -> CapScope -> Bool -> App (Term Ref) -> Eval e CapEvalResult
-evalCap i scope inModule a@App{..} = do
-      (cap,d,prep) <- appToCap a
-      when inModule $ guardForModuleCall _appInfo (_dModule d) $ return ()
+evalCap
+  :: HasInfo i
+  => i -> CapScope -> Bool
+  -> (UserCapability, Def Ref, ([Term Name], FunType (Term Name)), i)
+  -> Eval e CapEvalResult
+evalCap i scope inModule (cap,d,prep,getInfo -> capInfo) = do
+      when inModule $ guardForModuleCall capInfo (_dModule d) $ return ()
       evalUserCapability i capFuns scope cap d $ do
-        computeUserAppGas d _appInfo
-        void $ evalUserAppBody d prep _appInfo reduceBody
+        computeUserAppGas d capInfo
+        void $ evalUserAppBody d prep capInfo reduceBody
 
 
 -- | Continuation to tie the knot with Pact.Eval (ie, 'apply') and also because the capDef is
@@ -157,15 +169,12 @@ capFuns :: (ApplyMgrFun e,InstallMgd e)
 capFuns = (applyMgrFun,installSigCap)
 
 installSigCap :: InstallMgd e
-installSigCap SigCapability{..} cdef = do
-  r <- evalCap cdef CapManaged True $ mkApp cdef (map fromPactValue _scArgs)
+installSigCap cap@SigCapability{..} cdef = do
+  ty <- traverse reduce (_dFunType cdef)
+  r <- evalCap (getInfo cdef) CapManaged True (cap,cdef,(fromPactValue <$> _scArgs,ty),getInfo cdef)
   case r of
     NewlyInstalled mc -> return mc
     _ -> evalError' cdef "Unexpected result from managed sig cap install"
-  where
-    mkApp d@Def{} as =
-      App (TVar (Ref (TDef d (getInfo d))) (getInfo d))
-          (map liftTerm as) (getInfo d)
 
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
@@ -207,7 +216,10 @@ composeCapability =
       -- enforce in defcap
       defcapInStack (Just 1) >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
       -- evalCap as composed, which will install onto head of pending cap
-      void $ evalCap i CapComposed True app
+      (cap,d,prep) <- appToCap app
+      evalUserCapabilitiesBeingEvaluated %= S.insert cap
+      void $ evalCap (getInfo i) CapComposed True (cap,d,prep,getInfo app)
+      evalUserCapabilitiesBeingEvaluated %= S.delete cap
       return $ toTerm True
     composeCapability' i as = argsError' i as
 
@@ -253,3 +265,27 @@ emitEventDef =
         DefcapManaged {} -> return ()
         DefcapEvent -> return ()
       _ -> evalError' i $ "emit-event: must be managed or event defcap"
+
+enforceVerifierDef :: NativeDef
+enforceVerifierDef = defRNative
+  "enforce-verifier"
+  enforceVerifier
+  (funType tTyBool [("verifiername", tTyString)])
+  [ LitExample $ "(enforce-verifier 'COOLZK)"
+  ]
+  "Enforce that a verifier is in scope."
+  where
+  enforceVerifier :: RNativeFun e
+  enforceVerifier i as = case as of
+    [TLitString verName] -> do
+      views eeMsgVerifiers (Map.lookup (VerifierName verName)) >>= \case
+        Just verCaps -> do
+          inCap <- defcapInStack Nothing
+          unless inCap $
+            failTx (getInfo i) $ "enforce-verifier must be run in a capability"
+          verifierInScope <- anyCapabilityBeingEvaluated verCaps
+          if verifierInScope then return (toTerm True)
+          else failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in scope"
+        Nothing ->
+          failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in transaction"
+    _ -> argsError i as

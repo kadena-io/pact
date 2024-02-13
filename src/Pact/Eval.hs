@@ -173,7 +173,7 @@ enforceGuard i g = case g of
           evalError' i $ "Pact guard failed, intended: " <> pretty pid <> ", active: " <> pretty currPid
 
 getSizeOfVersion :: Eval e SizeOfVersion
-getSizeOfVersion = 
+getSizeOfVersion =
   ifExecutionFlagSet' FlagDisablePact45 SizeOfV0 SizeOfV1
 {-# INLINABLE getSizeOfVersion #-}
 
@@ -755,7 +755,7 @@ fullyQualifyDefs info mdef defs = do
           && mn == _mnName (_mName mdef)
           && isNsMatch -> resolveBareName memo (BareName fn i)
           where
-            isNsMatch = fromMaybe True (liftA2 (==) modNs mNs)
+            isNsMatch = fromMaybe True ((==) <$> modNs <*> mNs)
             modNs = _mnNamespace (_mName mdef)
       f  -> do
         dm <- lift (resolveRefFQN f f) -- lookup ref, don't try modules for barenames

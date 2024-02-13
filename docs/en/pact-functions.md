@@ -5,14 +5,14 @@
 
 Constant denoting the ASCII charset
 
-Constant: 
+Constant:
 &nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
 
 ### CHARSET_LATIN1 {#CHARSET_LATIN1}
 
 Constant denoting the Latin-1 charset ISO-8859-1
 
-Constant: 
+Constant:
 &nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
 
 ### at {#at}
@@ -765,7 +765,7 @@ Top level only: this function will fail if used in module code.
 
 Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER. Output is sorted by the ordering of keys.
 ```lisp
-(let* 
+(let*
  ((qry (lambda (k obj) true)) ;; select all rows
   (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
  )
@@ -924,7 +924,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") 15)
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N days, for use with 'add-time' 
+N days, for use with 'add-time'
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 "2016-07-23T12:00:00Z"
@@ -962,7 +962,7 @@ pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N hours, for use with 'add-time' 
+N hours, for use with 'add-time'
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 "2016-07-22T13:00:00Z"
@@ -976,7 +976,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N minutes, for use with 'add-time'. 
+N minutes, for use with 'add-time'.
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 "2016-07-22T12:01:00Z"
@@ -1000,7 +1000,7 @@ pact> (parse-time "%F" "2016-09-12")
 *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ). 
+Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
 ```lisp
 pact> (time "2016-07-22T11:26:35Z")
 "2016-07-22T11:26:35Z"
@@ -1582,6 +1582,17 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```
 
 
+### enforce-verifier {#enforce-verifier}
+
+*verifiername*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce that a verifier is in scope.
+```lisp
+(enforce-verifier 'COOLZK)
+```
+
+
 ### install-capability {#install-capability}
 
 *capability*&nbsp;` -> bool` *&rarr;*&nbsp;`string`
@@ -1804,6 +1815,19 @@ pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)
 18604317144381847857886385684060986177838410221561136253933256952257712543953
 ```
 
+## Hyperlane {#Hyperlane}
+
+### hyperlane-message-id {#hyperlane-message-id}
+
+*x*&nbsp;`object:*` *&rarr;*&nbsp;`string`
+
+
+Get the Message Id of a Hyperlane Message object.
+```lisp
+pact> (hyperlane-message-id {"destinationDomain": 1,"nonce": 325,"originDomain": 626,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F","sender": "0x6b622d746f6b656e2d726f75746572","tokenMessage": {"amount": 10000000000000000000.0,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"},"version": 1})
+"0x97d98aa7fdb548f43c9be37aaea33fca79680247eb8396148f1df10e6e0adfb7"
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -1947,7 +1971,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact410","DisablePact411","DisablePact42","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact410","DisablePact42","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","DisableVerifiers","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
@@ -2078,6 +2102,17 @@ Set transaction signature keys and capabilities. SIGS is a list of objects with 
 Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces.
 ```lisp
 (env-simulate-onchain true)
+```
+
+
+### env-verifiers {#env-verifiers}
+
+*verifiers*&nbsp;`[object:*]` *&rarr;*&nbsp;`string`
+
+
+Set transaction verifier names and capabilities. VERIFIERS is a list of objects with "name" specifying the verifier name, and "caps" specifying a list of associated capabilities.
+```lisp
+(env-verifiers [({'name: "COOLZK", 'caps: [(accounts.USER_GUARD "my-account")]}, {'name: "HYPERCHAIN-BRIDGE", 'caps: [(bridge.MINT "mycoin" 20)]}])
 ```
 
 

@@ -158,6 +158,7 @@ loadBenchModule db = do
            Nothing
            pactInitialHash
            [Signer Nothing pk Nothing []]
+           []
   let ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- setupEvalEnv db entity Transactional md (versionedNativesRefStore ec)
           freeGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -185,7 +186,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: Advice -> String -> [Signer] -> Value -> Maybe (ModuleData Ref) ->
                PactDbEnv e -> ParsedCode -> IO [PactValue]
 runPactExec pt msg ss cdata benchMod dbEnv pc = do
-  let md = MsgData (toLegacyJson cdata) Nothing pactInitialHash ss
+  let md = MsgData (toLegacyJson cdata) Nothing pactInitialHash ss []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   e <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Transactional md (versionedNativesRefStore ec)
           prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -197,7 +198,7 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
 
 execPure :: Advice -> PactDbEnv e -> (String,[Term Name]) -> IO [Term Name]
 execPure pt dbEnv (n,ts) = do
-  let md = MsgData (toLegacyJson Null) Nothing pactInitialHash []
+  let md = MsgData (toLegacyJson Null) Nothing pactInitialHash [] []
       ec = ExecutionConfig $ S.fromList [FlagDisablePact44]
   env <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Local md (versionedNativesRefStore ec)
             prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
@@ -238,7 +239,7 @@ mkBenchCmd :: [Ed25519KeyPairCaps] -> (String, Text) -> IO (String, Command Byte
 mkBenchCmd kps (str, t) = do
   cmd <- mkCommand' kps
     $ J.encodeStrict
-    $ Payload payload "nonce" (J.Aeson ()) ss Nothing
+    $ Payload payload "nonce" (J.Aeson ()) ss Nothing Nothing
   return (str, cmd)
   where
     payload = Exec $ ExecMsg t (toLegacyJson Null)

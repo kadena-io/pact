@@ -288,4 +288,3 @@ _diffGoldens g1 g2 = do
   encodeYamlFile "diff.yaml" $ formatJson $ Map.unionWith merge y1 y2
  where
   formatJson = J.Object . fmap (J.Array. fmap J.Aeson)
-

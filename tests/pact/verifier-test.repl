@@ -1,0 +1,75 @@
+(module m GOV
+  (defcap GOV () true)
+
+  (defcap GOOD ()
+    (enforce-verifier 'HYPERLANE)
+    )
+
+  (defcap BAD ()
+    (enforce-verifier 'HYPERLANE)
+    )
+
+  (defcap OUTERGOOD ()
+    (enforce-verifier 'HYPERLANE)
+    (compose-capability (GOOD))
+  )
+
+  (defun outergood-mgr:integer (a:integer b:integer) (print a) (+ a b))
+
+  (defcap OUTERGOOD-MANAGED (param:integer)
+    ;  @managed param outergood-mgr
+    ;  (enforce-verifier 'HYPERLANE)
+    ;  (compose-capability (GOOD))
+    (compose-capability (INNERGOOD-MANAGED param))
+  )
+
+  (defcap INNERGOOD-MANAGED (param:integer)
+    @managed param outergood-mgr
+    (enforce-verifier 'HYPERLANE)
+    (compose-capability (GOOD))
+  )
+
+  (defun good ()
+    (with-capability (GOOD) 1)
+   )
+
+  (defun outergood-managed ()
+    (with-capability (OUTERGOOD-MANAGED 1)
+      1
+    )
+  )
+
+  (defun outergood ()
+    (with-capability (OUTERGOOD) 1)
+   )
+
+  (defun bad ()
+    (with-capability (GOOD)
+      (with-capability (BAD) 1)
+     )
+    )
+
+  (defun enforce-outside-cap ()
+    (with-capability (GOOD)
+      (enforce-verifier "HYPERLANE")
+    )
+  )
+)
+
+
+(env-verifiers [{"name":"HYPERLANE", "caps":[(OUTERGOOD)]}])
+
+(expect "outergood succeeds" (outergood) 1)
+(expect-failure "bad acquisition fails: not in scope" (bad))
+(expect-failure "good acquisition fails: not in scope" (good))
+
+(env-verifiers [{"name":"HYPERLANE", "caps":[(GOOD)]}])
+
+(expect-failure "enforce-outside-cap fails: cannot use enforce-verifier outside of cap evaluation" (enforce-outside-cap))
+(expect-failure "outergood acquisition fails: not in scope" (outergood))
+(expect "good succeeds" (good) 1)
+(expect-failure "bad acquisition fails: not in scope" (bad))
+
+(env-sigs [{"key":"jose", "caps":[(INNERGOOD-MANAGED 0)]}])
+(env-verifiers [{"name":"HYPERLANE", "caps":[(OUTERGOOD-MANAGED 1)]}])
+(expect "outergood-managed succeeds" (outergood-managed) 1)

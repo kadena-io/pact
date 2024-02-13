@@ -77,6 +77,7 @@ import Pact.Types.Pretty
 import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
+import Pact.Types.Verifier
 
 import Pact.JSON.Legacy.Value
 
@@ -91,12 +92,13 @@ data MsgData = MsgData {
   mdData :: !LegacyValue,
   mdStep :: !(Maybe PactStep),
   mdHash :: !Hash,
-  mdSigners :: [Signer]
+  mdSigners :: [Signer],
+  mdVerifiers :: [Verifier ()]
   }
 
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData (toLegacyJson Null) def h def
+initMsgData h = MsgData (toLegacyJson Null) def h def def
 
 -- | Describes either a ContMsg or ExecMsg.
 -- ContMsg is represented as a 'Maybe PactExec'
@@ -192,6 +194,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
+  , _eeMsgVerifiers = mkMsgVerifiers $ mdVerifiers msgData
   , _eeMsgBody = mdData msgData
   , _eeMode = mode
   , _eeEntity = ent
@@ -216,6 +219,9 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
         toPair Signer{..} = (pk,S.fromList _siCapList)
           where
             pk = PublicKeyText $ fromMaybe _siPubKey _siAddress
+    mkMsgVerifiers vs = M.fromListWith S.union $ map toPair vs
+      where
+        toPair Verifier{..} = (_verifierName, S.fromList _verifierCaps)
 
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
@@ -245,6 +251,9 @@ disablePact47Natives = disablePactNatives pact47Natives FlagDisablePact47
 disablePact410Natives :: ExecutionConfig -> Endo RefStore
 disablePact410Natives = disablePactNatives pact410Natives FlagDisablePact410
 
+disableVerifierNatives :: ExecutionConfig -> Endo RefStore
+disableVerifierNatives = disablePactNatives verifierNatives FlagDisableVerifiers
+
 pact40Natives :: [Text]
 pact40Natives = ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
 
@@ -266,6 +275,9 @@ pact47Natives = ["dec"]
 pact410Natives :: [Text]
 pact410Natives = ["poseidon-hash-hack-a-chain"]
 
+verifierNatives :: [Text]
+verifierNatives = ["enforce-verifier", "hyperlane-message-id"]
+
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
 
@@ -279,7 +291,8 @@ versionedNativesRefStore ec = versionNatives initRefStore
     , disablePact431Natives ec
     , disablePact46Natives ec
     , disablePact47Natives ec
-    , disablePact410Natives ec ]
+    , disablePact410Natives ec
+    , disableVerifierNatives ec ]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do

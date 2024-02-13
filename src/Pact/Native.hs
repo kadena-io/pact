@@ -5,6 +5,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 -- |
@@ -107,6 +108,7 @@ import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
 import Crypto.Hash.PoseidonNative (poseidon)
+import Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId)
 
 import qualified Pact.JSON.Encode as J
 
@@ -124,6 +126,7 @@ natives =
   , guardDefs
   , zkDefs
   , poseidonHackAChainDefs
+  , hyperlaneDefs
   ]
 
 
@@ -1239,21 +1242,23 @@ enforceVersion i as = do
   pactVersion'
     <- if cond then pure compatVersion else checkNonLocalAllowed i $> pactVersion
   case as of
-    [TLitString minVersion] -> doMin minVersion pactVersion' >> return (toTerm True)
+    [TLitString minVersion] -> doMin minVersion pactVersion' $> toTerm True
     [TLitString minVersion,TLitString maxVersion] ->
-      doMin minVersion pactVersion' >> doMax maxVersion pactVersion' >> return (toTerm True)
+      doMin minVersion pactVersion' >> doMax maxVersion pactVersion' $> toTerm True
     _ -> argsError i as
   where
     compatVersion :: Text
     compatVersion = "4.2.1"
     doMin = doMatch "minimum" (>) (<)
     doMax = doMatch "maximum" (<) (>)
-    doMatch msg failCmp succCmp fullV pactVersion' =
+    doMatch msg failCmp succCmp fullV pactVersion' = do
       foldM_ matchPart False $ zip (T.splitOn "." pactVersion') (T.splitOn "." fullV)
       where
-        parseNum orgV s = case AP.parseOnly (AP.many1 AP.digit) s of
+        parseNum :: Text -> Text -> Eval e Integer
+        parseNum orgV s = case AP.parseOnly AP.decimal s of
           Left _ -> evalError' i $ "Invalid version component: " <> pretty (orgV,s)
           Right v -> return v
+
         matchPart True _ = return True
         matchPart _ (pv,mv)  = do
           pv' <- parseNum pactVersion' pv
@@ -1570,3 +1575,37 @@ poseidonHackAChainDef = defGasRNative
       = computeGas' i (GPoseidonHashHackAChain $ length as) $
         return $ toTerm $ poseidon intArgs
      | otherwise = argsError i as
+
+hyperlaneDefs :: NativeModule
+hyperlaneDefs = ("Hyperlane",)
+  [ hyperlaneMessageIdDef
+  ]
+
+hyperlaneMessageIdDef :: NativeDef
+hyperlaneMessageIdDef = defGasRNative
+  "hyperlane-message-id"
+  hyperlaneMessageId'
+  (funType tTyString [("x", tTyObjectAny)])
+  [
+    "(hyperlane-message-id {\"destinationDomain\": 1,\"nonce\": 325,\"originDomain\": 626,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\",\"sender\": \"0x6b622d746f6b656e2d726f75746572\",\"tokenMessage\": {\"amount\": 10000000000000000000.0,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\"},\"version\": 1})"
+  ]
+  "Get the Message Id of a Hyperlane Message object."
+  where
+    hyperlaneMessageId' :: RNativeFun e
+    hyperlaneMessageId' i args = case args of
+      [TObject o _] ->
+        computeGas' i (GHyperlaneMessageId (BS.length (getTokenRecipient o)))
+        $ return $ toTerm $ hyperlaneMessageId o
+      _ -> argsError i args
+
+    getTokenRecipient :: Object n -> BS.ByteString
+    getTokenRecipient o =
+      let mRecipient = do
+            let om = _objectMap (_oObject o)
+            tokenObject <- om ^? at "tokenMessage" . _Just . _TObject . _1
+            let tm = _objectMap (_oObject tokenObject)
+            tm ^? at "recipient" . _Just . _TLiteral . _1 . _LString
+      in
+      case mRecipient of
+        Nothing -> error "couldn't decode token recipient"
+        Just t -> T.encodeUtf8 t

@@ -69,8 +69,9 @@ import Pact.Types.Pretty
 import Pact.Repl.Types
 import Pact.Native.Capabilities (evalCap)
 import Pact.Gas.Table
-import Pact.Types.PactValue
 import Pact.Types.Capability
+import Pact.Types.PactValue
+import Pact.Types.Verifier
 import Pact.Interpreter
 import Pact.Runtime.Utils
 import Pact.JSON.Legacy.Value
@@ -115,7 +116,11 @@ replDefs = ("Repl",
         "{'key: \"admin-key\", 'caps: []}"]
       ("Set transaction signature keys and capabilities. SIGS is a list of objects with \"key\" " <>
        "specifying the signer key, and \"caps\" specifying a list of associated capabilities.")
-
+      ,defZNative "env-verifiers" envVerifiers (funType tTyString [("verifiers",TyList (tTyObject TyAny))])
+      [LitExample $ "(env-verifiers [({'name: \"COOLZK\", 'caps: [(accounts.USER_GUARD \"my-account\")]}, " <>
+        "{'name: \"HYPERCHAIN-BRIDGE\", 'caps: [(bridge.MINT \"mycoin\" 20)]}])"]
+      ("Set transaction verifier names and capabilities. VERIFIERS is a list of objects with \"name\" " <>
+       "specifying the verifier name, and \"caps\" specifying a list of associated capabilities.")
      ,defZRNative "env-data" setmsg (funType tTyString [("json",json)])
       ["(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })"]
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON."
@@ -359,6 +364,25 @@ setsigs' _ [TList ts _ _] = do
   setenv eeMsgSigs $ M.fromList $ V.toList sigs
   return $ tStr "Setting transaction signatures/caps"
 setsigs' i as = argsError' i as
+
+envVerifiers :: ZNativeFun LibState
+envVerifiers _ [TList ts _ _] = do
+  vers <- forM ts $ \t -> case t of
+    TObject (Object (ObjectMap om) _ _ _) _ -> do
+      case (M.lookup "name" om, M.lookup "caps" om) of
+        (Just k'', Just (TList clist _ _)) -> do
+          reduce k'' >>= \k' -> case k' of
+            TLitString k -> do
+              caps <- forM clist $ \cap -> case cap of
+                TApp a _ -> view _1 <$> appToCap a
+                o -> evalError' o $ "Expected capability invocation"
+              return (VerifierName k, S.fromList (V.toList caps))
+            _ -> evalError' k' "Expected string value"
+        _ -> evalError' t "Expected object with 'name': string, 'caps': [capability]"
+    _ -> evalError' t $ "Expected object"
+  setenv eeMsgVerifiers $ M.fromList $ V.toList vers
+  return $ tStr "Setting transaction verifiers/caps"
+envVerifiers i as = argsError' i as
 
 
 setmsg :: RNativeFun LibState
@@ -738,9 +762,9 @@ setGasModel _ as = do
 -- using 'evalCap False'.
 testCapability :: ZNativeFun ReplState
 testCapability i [ (TApp app _) ] = do
-  (_,d,_) <- appToCap app
+  (cap,d,prep) <- appToCap app
   let scope = maybe CapCallStack (const CapManaged) (_dDefMeta d)
-  r <- evalCap i scope False $ app
+  r <- evalCap (getInfo i) scope False (cap,d,prep,getInfo app)
   return . tStr $ case r of
     AlreadyAcquired -> "Capability already acquired"
     NewlyAcquired -> "Capability acquired"
