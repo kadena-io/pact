@@ -1591,21 +1591,18 @@ hyperlaneMessageIdDef = defGasRNative
     hyperlaneMessageId' :: RNativeFun e
     hyperlaneMessageId' i args = case args of
       [TObject o _] ->
-        let
-          tokenRecipient :: BS.ByteString
-          tokenRecipient =
-            let
-              mRecipient :: Maybe Text
-              mRecipient = do
-                let om = _objectMap (_oObject o)
-                tokenObject <- om ^? at "tokenMessage" . _Just . _TObject . _1
-                let tm = _objectMap (_oObject tokenObject)
-                tm ^? at "recipient" . _Just . _TLiteral . _1 . _LString
-            in
-            case mRecipient of
-              Nothing -> error "couldn't decode token recipient"
-              Just t -> T.encodeUtf8 t
-        in
-        computeGas' i (GHyperlaneMessageId (BS.length tokenRecipient))
+        computeGas' i (GHyperlaneMessageId (BS.length (getTokenRecipient o)))
         $ return $ toTerm $ hyperlaneMessageId o
       _ -> argsError i args
+
+    getTokenRecipient :: Object n -> BS.ByteString
+    getTokenRecipient o =
+      let mRecipient = do
+            let om = _objectMap (_oObject o)
+            tokenObject <- om ^? at "tokenMessage" . _Just . _TObject . _1
+            let tm = _objectMap (_oObject tokenObject)
+            tm ^? at "recipient" . _Just . _TLiteral . _1 . _LString
+      in
+      case mRecipient of
+        Nothing -> error "couldn't decode token recipient"
+        Just t -> T.encodeUtf8 t
