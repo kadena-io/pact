@@ -1003,6 +1003,16 @@
   - 2
 - - (>= (time "2016-07-22T12:00:00Z") (time "2018-07-22T12:00:00Z"))
   - 6
+- - |-
+    (module m GOV
+      (defcap GOV () true)
+
+      (defcap GOOD () (enforce-verifier 'HYPERLANE))
+
+      (defun good () (with-capability (GOOD) 1))
+    )
+    (good)
+  - 59
 - - (take 1 longNumberList)
   - 3
 - - (take 1 medNumberList)

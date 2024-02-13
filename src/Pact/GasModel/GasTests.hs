@@ -23,6 +23,7 @@ import qualified Data.Aeson as A
 import qualified Data.Foldable as F
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
@@ -35,6 +36,7 @@ import Pact.Types.Capability
 import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
+import Pact.Types.Verifier (VerifierName(..))
 import Pact.JSON.Legacy.Value
 
 
@@ -223,7 +225,9 @@ allTests = HM.fromList
     , ("pairing-check", pairingCheckTests)
     , ("poseidon-hash-hack-a-chain", poseidonHashTests)
 
+      -- SPI/Hyperlane
     , ("hyperlane-message-id", hyperlaneMessageIdTests)
+    , ("enforce-verifier", enforceVerifierTests)
 
       -- Non-native concepts to benchmark
     , ("use", useTests)
@@ -2010,6 +2014,27 @@ poseidonHashTests = defGasUnitTest $ PactExpression poseidonHashExprText Nothing
     poseidonHashExprText = [text|
     (poseidon-hash-hack-a-chain 1 2)
     (poseidon-hash-hack-a-chain 999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999 88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888)
+    |]
+
+enforceVerifierTests :: NativeDefName -> GasUnitTests
+enforceVerifierTests = createGasUnitTests signEnvWithKeySet signEnvWithKeySet [PactExpression enforceVerifierExprText Nothing]
+  where
+    verifMap :: M.Map VerifierName (S.Set SigCapability)
+    verifMap = M.fromList
+      [ (VerifierName "HYPERLANE", S.fromList [SigCapability (QualifiedName "m" "GOOD" def) []])
+      ]
+
+    signEnvWithKeySet = setEnv (set eeMsgVerifiers verifMap)
+
+    enforceVerifierExprText = [text|
+    (module m GOV
+      (defcap GOV () true)
+
+      (defcap GOOD () (enforce-verifier 'HYPERLANE))
+
+      (defun good () (with-capability (GOOD) 1))
+    )
+    (good)
     |]
 
 hyperlaneMessageIdTests :: NativeDefName -> GasUnitTests
