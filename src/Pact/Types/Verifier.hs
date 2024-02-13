@@ -12,9 +12,9 @@ module Pact.Types.Verifier
   ( VerifierName(..)
   , Verifier(..)
   , verifierName
-  , verifierArgs
+  , verifierProof
   , verifierCaps
-  , ParsedVerifierArgs(..)
+  , ParsedVerifierProof(..)
   ) where
 
 import Control.DeepSeq
@@ -34,9 +34,9 @@ newtype VerifierName = VerifierName Text
   deriving newtype (J.Encode, Arbitrary, NFData, Eq, Show, Ord, FromJSON)
   deriving stock Generic
 
-data Verifier args = Verifier
+data Verifier prf = Verifier
   { _verifierName :: VerifierName
-  , _verifierArgs :: args
+  , _verifierProof :: prf
   , _verifierCaps :: [UserCapability]
   }
   deriving (Eq, Show, Generic, Ord, Functor, Foldable, Traversable)
@@ -53,22 +53,22 @@ instance Arbitrary a => Arbitrary (Verifier a) where
 instance J.Encode a => J.Encode (Verifier a) where
   build va = J.object
     [ "name" J..= _verifierName va
-    , "args" J..= _verifierArgs va
-    , "caps" J..= J.Array (_verifierCaps va)
+    , "proof" J..= _verifierProof va
+    , "clist" J..= J.Array (_verifierCaps va)
     ]
 instance FromJSON a => FromJSON (Verifier a) where
   parseJSON = withObject "Verifier" $ \o -> do
     name <- o .: "name"
-    args <- o .: "args"
-    caps <- o .: "caps"
-    return $ Verifier name args caps
+    proof <- o .: "proof"
+    caps <- o .: "clist"
+    return $ Verifier name proof caps
 
-newtype ParsedVerifierArgs = ParsedVerifierArgs [PactValue]
+newtype ParsedVerifierProof = ParsedVerifierProof PactValue
   deriving newtype (NFData, Eq, Show, Ord, FromJSON)
   deriving stock Generic
 
-instance J.Encode ParsedVerifierArgs where
-  build (ParsedVerifierArgs as) = J.build (J.Array as)
+instance J.Encode ParsedVerifierProof where
+  build (ParsedVerifierProof as) = J.build as
 
-instance Arbitrary ParsedVerifierArgs where
-  arbitrary = ParsedVerifierArgs <$> scale (min 10) arbitrary
+instance Arbitrary ParsedVerifierProof where
+  arbitrary = ParsedVerifierProof <$> arbitrary

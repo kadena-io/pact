@@ -1315,7 +1315,7 @@ testVerifiers = context "using a verifier" $ it "should parse and run" $ do
       [(simpleKeys,[])]
       [Verifier
         (VerifierName "TESTING-VERIFIER")
-        (ParsedVerifierArgs [PLiteral $ LDecimal 3])
+        (ParsedVerifierProof $ PLiteral (LDecimal 3))
         [SigCapability (QualifiedName (ModuleName "coin" Nothing) "TRANSFER" def) [PLiteral (LString "jeff"), PLiteral (LDecimal 10)]]]
       Nothing (Just "test1")
     allResults <- runAll [cmd]

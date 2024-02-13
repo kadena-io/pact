@@ -148,7 +148,7 @@ mkCommand
   :: J.Encode c
   => J.Encode m
   => [(Ed25519KeyPair, [SigCapability])]
-  -> [Verifier ParsedVerifierArgs]
+  -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
   -> Maybe NetworkId
@@ -172,7 +172,7 @@ mkCommandWithDynKeys
   :: J.Encode c
   => J.Encode m
   => [(DynKeyPair, [UserCapability])]
-  -> [Verifier ParsedVerifierArgs]
+  -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
   -> Maybe NetworkId
@@ -245,7 +245,7 @@ mkUnsignedCommand
   :: J.Encode m
   => J.Encode c
   => [Signer]
-  -> [Verifier ParsedVerifierArgs]
+  -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
   -> Maybe NetworkId
@@ -369,7 +369,7 @@ data Payload m c = Payload
   , _pNonce :: !Text
   , _pMeta :: !m
   , _pSigners :: ![Signer]
-  , _pVerifiers :: !(Maybe [Verifier ParsedVerifierArgs])
+  , _pVerifiers :: !(Maybe [Verifier ParsedVerifierProof])
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance (NFData a,NFData m) => NFData (Payload m a)

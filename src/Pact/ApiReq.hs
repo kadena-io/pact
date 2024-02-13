@@ -197,7 +197,7 @@ data ApiReq = ApiReq {
   _ylCodeFile :: Maybe FilePath,
   _ylKeyPairs :: Maybe [ApiKeyPair],
   _ylSigners :: Maybe [ApiSigner],
-  _ylVerifiers :: Maybe [Verifier ParsedVerifierArgs],
+  _ylVerifiers :: Maybe [Verifier ParsedVerifierProof],
   _ylNonce :: Maybe Text,
   _ylPublicMeta :: Maybe ApiPublicMeta,
   _ylNetworkId :: Maybe NetworkId
@@ -548,7 +548,7 @@ mkExec
     -- ^ public metadata
   -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs + caplists
-  -> [Verifier ParsedVerifierArgs]
+  -> [Verifier ParsedVerifierProof]
     -- ^ verifiers
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
@@ -577,7 +577,7 @@ mkUnsignedExec
     -- ^ public metadata
   -> [Signer]
     -- ^ payload signers
-  -> [Verifier ParsedVerifierArgs]
+  -> [Verifier ParsedVerifierProof]
     -- ^ payload verifiers
   -> Maybe NetworkId
     -- ^ optional 'NetworkId'
@@ -641,7 +641,7 @@ mkCont
     -- ^ command public metadata
   -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs
-  -> [Verifier ParsedVerifierArgs]
+  -> [Verifier ParsedVerifierProof]
     -- ^ verifiers
   -> Maybe Text
     -- ^ optional nonce
@@ -677,7 +677,7 @@ mkUnsignedCont
     -- ^ command public metadata
   -> [Signer]
     -- ^ payload signers
-  -> [Verifier ParsedVerifierArgs]
+  -> [Verifier ParsedVerifierProof]
     -- ^ verifiers
   -> Maybe Text
     -- ^ optional nonce
