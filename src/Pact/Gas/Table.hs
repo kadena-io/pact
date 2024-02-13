@@ -238,7 +238,7 @@ defaultGasTable =
   ,("pairing-check", 1)
 
   ,("poseidon-hash-hack-a-chain", 124)
-  ,("hyperlane-message-id", 1121)
+  ,("hyperlane-message-id", 1)
   ]
 
 {-# NOINLINE defaultGasTable #-}
