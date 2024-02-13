@@ -2,7 +2,7 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
+    hs-nix-infra.url = "github:kadena-io/hs-nix-infra/044e32d09d0226c40bbd0f1b91ab4379e275d4dd";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -25,7 +25,7 @@
           pact =
             final.haskell-nix.project' {
               src = ./.;
-              compiler-nix-name = "ghc963";
+              compiler-nix-name = "ghc964";
               shell.tools = {
                 cabal = {};
                 haskell-language-server = {};
