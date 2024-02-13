@@ -276,7 +276,7 @@ pact410Natives :: [Text]
 pact410Natives = ["poseidon-hash-hack-a-chain"]
 
 verifierNatives :: [Text]
-verifierNatives = ["enforce-verifier"]
+verifierNatives = ["enforce-verifier", "hyperlane-message-id"]
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs

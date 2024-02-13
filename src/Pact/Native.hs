@@ -5,6 +5,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 -- |
@@ -107,6 +108,7 @@ import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
 import Crypto.Hash.PoseidonNative (poseidon)
+import Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId)
 
 import qualified Pact.JSON.Encode as J
 
@@ -124,6 +126,7 @@ natives =
   , guardDefs
   , zkDefs
   , poseidonHackAChainDefs
+  , hyperlaneDefs
   ]
 
 
@@ -1571,3 +1574,37 @@ poseidonHackAChainDef = defGasRNative
       = computeGas' i (GPoseidonHashHackAChain $ length as) $
         return $ toTerm $ poseidon intArgs
      | otherwise = argsError i as
+
+hyperlaneDefs :: NativeModule
+hyperlaneDefs = ("Hyperlane",)
+  [ hyperlaneMessageIdDef
+  ]
+
+hyperlaneMessageIdDef :: NativeDef
+hyperlaneMessageIdDef = defGasRNative
+  "hyperlane-message-id"
+  hyperlaneMessageId'
+  (funType tTyString [("x", tTyObjectAny)])
+  [
+    "(hyperlane-message-id {\"destinationDomain\": 1,\"nonce\": 325,\"originDomain\": 626,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\",\"sender\": \"0x6b622d746f6b656e2d726f75746572\",\"tokenMessage\": {\"amount\": 10000000000000000000.0,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\"},\"version\": 1})"
+  ]
+  "Get the Message Id of a Hyperlane Message object."
+  where
+    hyperlaneMessageId' :: RNativeFun e
+    hyperlaneMessageId' i args = case args of
+      [TObject o _] ->
+        computeGas' i (GHyperlaneMessageId (BS.length (getTokenRecipient o)))
+        $ return $ toTerm $ hyperlaneMessageId o
+      _ -> argsError i args
+
+    getTokenRecipient :: Object n -> BS.ByteString
+    getTokenRecipient o =
+      let mRecipient = do
+            let om = _objectMap (_oObject o)
+            tokenObject <- om ^? at "tokenMessage" . _Just . _TObject . _1
+            let tm = _objectMap (_oObject tokenObject)
+            tm ^? at "recipient" . _Just . _TLiteral . _1 . _LString
+      in
+      case mRecipient of
+        Nothing -> error "couldn't decode token recipient"
+        Just t -> T.encodeUtf8 t

@@ -1,16 +1,19 @@
 packages: .
 
+package pact
+    ghc-options: -Wno-missed-extra-shared-lib
+
+source-repository-package
+  type: git
+  location: https://github.com/kadena-io/pact-json.git
+  tag: 1d260bfaa48312b54851057885de4c43c420e35f
+  --sha256: 0fzq4mzaszj5clvixx9mn1x6r4dcrnwvbl2znd0p5mmy5h2jr0hh
+
 -- temporary upper bounds
 constraints: sbv <10
 
 -- test upper bounds
 constraints: hspec-golden <0.2,
-
-source-repository-package
-  type: git
-  tag: e43073d0b8d89d9b300980913b842f4be339846d
-  location: https://github.com/kadena-io/pact-json
-  --sha256: sha256-ZWbAId0JBaxDsYhwcYUyw04sjYstXyosSCenzOvUxsQ=
 
 -- These packages are tightly bundled with GHC. The rules ensure that
 -- our builds use the version that ships with the GHC version that is
@@ -38,6 +41,9 @@ allow-newer: servant:*
 -- Required by trifecta (e.g. to allow mtl >=2.3)
 allow-newer: trifecta:*
 
--- servant-0.20 does not yet support aeson-2.2
---
-constraints: aeson <2.2
+source-repository-package
+  type: git
+  location: https://github.com/kadena-io/kadena-ethereum-bridge.git
+  tag: ffbf20e9f0430b95448bd66c6b1b530864397fb3
+  --sha256: sha256-xdawv/tdjh61MbJKcBqm9Fje36+gVljuZsAxOTX1gP0=
+

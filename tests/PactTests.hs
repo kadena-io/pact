@@ -24,6 +24,7 @@ import qualified DocgenSpec
 import qualified GasModelSpec
 import qualified GoldenSpec
 import qualified HistoryServiceSpec
+import qualified HyperlaneSpec
 import qualified PactContinuationSpec
 import qualified PersistSpec
 import qualified RemoteVerifySpec
@@ -60,6 +61,7 @@ main = hspec $ parallel $ do
   describe "GasModelSpec" GasModelSpec.spec
   describe "GoldenSpec" GoldenSpec.spec
   describe "HistoryServiceSpec" HistoryServiceSpec.spec
+  describe "HyperlaneSpec" HyperlaneSpec.spec
   describe "PactContinuationSpec" PactContinuationSpec.spec
   describe "PersistSpec" PersistSpec.spec
   describe "RemoteVerifySpec" RemoteVerifySpec.spec

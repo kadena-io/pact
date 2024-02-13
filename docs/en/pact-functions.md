@@ -1815,6 +1815,19 @@ pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)
 18604317144381847857886385684060986177838410221561136253933256952257712543953
 ```
 
+## Hyperlane {#Hyperlane}
+
+### hyperlane-message-id {#hyperlane-message-id}
+
+*x*&nbsp;`object:*` *&rarr;*&nbsp;`string`
+
+
+Get the Message Id of a Hyperlane Message object.
+```lisp
+pact> (hyperlane-message-id {"destinationDomain": 1,"nonce": 325,"originDomain": 626,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F","sender": "0x6b622d746f6b656e2d726f75746572","tokenMessage": {"amount": 10000000000000000000.0,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"},"version": 1})
+"0x97d98aa7fdb548f43c9be37aaea33fca79680247eb8396148f1df10e6e0adfb7"
+```
+
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
