@@ -35,3 +35,4 @@ commands.sqlite
 cabal.project.local*
 /golden/lcov/actual
 .DS_Store
+.ghci_history
