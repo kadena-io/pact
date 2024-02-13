@@ -1,16 +1,15 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId) where
 
-import Control.Lens ((^?), at, _Just, _Right, _1, to)
+import Control.Error.Util (hush)
+import Control.Lens ((^?), at, _Just, Prism', _1)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as Base16
@@ -19,13 +18,15 @@ import Data.ByteString.Builder qualified as BB
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Short qualified as BSS
 import Data.Decimal (Decimal)
+import Data.Map (Map)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.WideWord.Word256 (Word256(..))
 import Data.Word (Word8, Word32)
 import Ethereum.Misc (keccak256, _getKeccak256Hash, _getBytesN)
-import Pact.Types.Runtime (Object(..), ObjectMap(..), Name, _TLiteral, _TObject, _LDecimal, _LInteger, _LString)
+import Pact.Types.Runtime (Object(..), ObjectMap(..), FieldKey, Name, Literal, _TLiteral, _TObject, _LDecimal, _LInteger, _LString)
+import Pact.Types.Term (Term)
 
 ----------------------------------------------
 --               Primitive                  --
@@ -120,10 +121,10 @@ keccak256Hash = BSS.fromShort . _getBytesN . _getKeccak256Hash . keccak256
 encodeHex :: ByteString -> Text
 encodeHex b = "0x" <> Text.decodeUtf8 (Base16.encode b)
 
-decodeHex :: Text -> Either String ByteString
-decodeHex s
-  | Just h <- Text.stripPrefix "0x" s = Base16.decode (Text.encodeUtf8 h)
-  | otherwise = Left "decodeHex: does not start with 0x"
+decodeHex :: Text -> Maybe ByteString
+decodeHex s = do
+  h <- Text.stripPrefix "0x" s
+  hush (Base16.decode (Text.encodeUtf8 h))
 
 ----------------------------------------------
 --      Hyperlane Pact Object Decoding      --
@@ -133,12 +134,12 @@ decodeHyperlaneMessageObject :: Object Name -> Maybe HyperlaneMessage
 decodeHyperlaneMessageObject o = do
   let om = _objectMap (_oObject o)
 
-  hmVersion <- om ^? at "version" . _Just . _TLiteral . _1 . _LInteger . to fromIntegral
-  hmNonce <- om ^? at "nonce" . _Just . _TLiteral . _1 . _LInteger . to fromIntegral
-  hmOriginDomain <- om ^? at "originDomain" . _Just . _TLiteral . _1 . _LInteger . to fromIntegral
-  hmSender <- om ^? at "sender" . _Just . _TLiteral . _1 . _LString . to Text.encodeUtf8
-  hmDestinationDomain <- om ^? at "destinationDomain" . _Just . _TLiteral . _1 . _LInteger . to fromIntegral
-  hmRecipient <- om ^? at "recipient" . _Just . _TLiteral . _1 . _LString . to decodeHex . _Right
+  hmVersion           <- fromIntegral @Integer @Word8  <$> grabField om "version" _LInteger
+  hmNonce             <- fromIntegral @Integer @Word32 <$> grabField om "nonce" _LInteger
+  hmOriginDomain      <- fromIntegral @Integer @Word32 <$> grabField om "originDomain" _LInteger
+  hmSender            <- Text.encodeUtf8               <$> grabField om "sender" _LString
+  hmDestinationDomain <- fromIntegral @Integer @Word32 <$> grabField om "destinationDomain" _LInteger
+  hmRecipient         <- decodeHex                     =<< grabField om "recipient" _LString
 
   let tokenObject = om ^? at "tokenMessage" . _Just . _TObject . _1
   hmTokenMessage <- case decodeTokenMessageERC20 =<< tokenObject of
@@ -150,12 +151,15 @@ decodeHyperlaneMessageObject o = do
 decodeTokenMessageERC20 :: Object Name -> Maybe TokenMessageERC20
 decodeTokenMessageERC20 o = do
   let om = _objectMap (_oObject o)
-  tmRecipient <- om ^? at "recipient" . _Just . _TLiteral . _1 . _LString
-  tmAmount <- om ^? at "amount" . _Just . _TLiteral . _1 . _LDecimal . to decimalToWord
+  tmRecipient <- grabField om "recipient" _LString
+  tmAmount <- decimalToWord <$> grabField om "amount" _LDecimal
   let tmChainId = Nothing
   pure $ TokenMessageERC20{..}
 
 decimalToWord :: Decimal -> Word256
 decimalToWord d =
-  let ethInWei = 1000000000000000000 -- 1e18
+  let ethInWei = 1_000_000_000_000_000_000 -- 1e18
   in round $ d * ethInWei
+
+grabField :: Map FieldKey (Term Name) -> FieldKey -> Prism' Literal a -> Maybe a
+grabField m key p = m ^? at key . _Just . _TLiteral . _1 . p
