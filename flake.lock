@@ -53,11 +53,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1694529238,
-        "narHash": "sha256-zsNZZGTGnMOf9YpHKJqMSsa0dXbfmxeoJ7xHlrt+xmY=",
+        "lastModified": 1705309234,
+        "narHash": "sha256-uNRRNRKmJyCRC/8y1RqBkqWBLM034y4qN7EprSdmgyA=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "ff7b65b44d01cf9ba6a71320833626af21126384",
+        "rev": "1ef2e671c3b0c19053962c07dbda38332dcebf26",
         "type": "github"
       },
       "original": {
@@ -69,11 +69,11 @@
     "hackage": {
       "flake": false,
       "locked": {
-        "lastModified": 1696379114,
-        "narHash": "sha256-dtax/ci3JfYvR2lLsvpvC6b3NCoEGZLrDH21/2svTps=",
+        "lastModified": 1707870123,
+        "narHash": "sha256-pOvz6uuPYw3CiPgi63QhNYumoKeyzDh9JOkLDngGWsE=",
         "owner": "input-output-hk",
         "repo": "hackage.nix",
-        "rev": "21eae6f46c91831741496101e541e628aadecd98",
+        "rev": "75345eba5d4159e6f54cbdc38785d1e0d0e655e0",
         "type": "github"
       },
       "original": {
@@ -109,7 +109,7 @@
           "hs-nix-infra",
           "empty"
         ],
-        "ghc980": [
+        "ghc98X": [
           "hs-nix-infra",
           "empty"
         ],
@@ -133,7 +133,19 @@
           "hs-nix-infra",
           "empty"
         ],
-        "hls-2.3": "hls-2.3",
+        "hls-2.3": [
+          "hs-nix-infra",
+          "empty"
+        ],
+        "hls-2.4": [
+          "hs-nix-infra",
+          "empty"
+        ],
+        "hls-2.5": [
+          "hs-nix-infra",
+          "empty"
+        ],
+        "hls-2.6": "hls-2.6",
         "hpc-coveralls": [
           "hs-nix-infra",
           "empty"
@@ -146,6 +158,7 @@
           "hs-nix-infra",
           "empty"
         ],
+        "nix-tools-static": "nix-tools-static",
         "nixpkgs": [
           "hs-nix-infra",
           "haskellNix",
@@ -175,6 +188,10 @@
           "hs-nix-infra",
           "empty"
         ],
+        "nixpkgs-2311": [
+          "hs-nix-infra",
+          "empty"
+        ],
         "nixpkgs-unstable": "nixpkgs-unstable",
         "old-ghc-nix": [
           "hs-nix-infra",
@@ -186,11 +203,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1697195891,
-        "narHash": "sha256-0L803S/wcHmVebEwFxObYCYOaB14ZtBAFCdg0aRgH70=",
+        "lastModified": 1707876653,
+        "narHash": "sha256-hsj9chw/cy9h8XuxQkxnfFR22Ek8xEm33aON2+TcUaI=",
         "owner": "input-output-hk",
         "repo": "haskell.nix",
-        "rev": "c6cb3ff56b001b211690da35f70827fab5bf3272",
+        "rev": "d1a608f84c9ed00ceca8571b253e79f67a1ae2d6",
         "type": "github"
       },
       "original": {
@@ -199,19 +216,19 @@
         "type": "github"
       }
     },
-    "hls-2.3": {
+    "hls-2.6": {
       "flake": false,
       "locked": {
-        "lastModified": 1695910642,
-        "narHash": "sha256-tR58doOs3DncFehHwCLczJgntyG/zlsSd7DgDgMPOkI=",
+        "lastModified": 1705325287,
+        "narHash": "sha256-+P87oLdlPyMw8Mgoul7HMWdEvWP/fNlo8jyNtwME8E8=",
         "owner": "haskell",
         "repo": "haskell-language-server",
-        "rev": "458ccdb55c9ea22cd5d13ec3051aaefb295321be",
+        "rev": "6e0b342fa0327e628610f2711f8c3e4eaaa08b1e",
         "type": "github"
       },
       "original": {
         "owner": "haskell",
-        "ref": "2.3.0.0",
+        "ref": "2.6.0.0",
         "repo": "haskell-language-server",
         "type": "github"
       }
@@ -226,32 +243,50 @@
         "nixpkgs-rec": "nixpkgs-rec"
       },
       "locked": {
-        "lastModified": 1699970998,
-        "narHash": "sha256-NgvBCRIB+lvcxJWMpU8Mulx8PG8s5jtqSR8K/natoTA=",
+        "lastModified": 1707900356,
+        "narHash": "sha256-rWwE59SfmqXcVQL7GXovYvjbDPMsb4e1GgiNH+7tlrM=",
         "owner": "kadena-io",
         "repo": "hs-nix-infra",
-        "rev": "a69071dafa3f0d12edf30ecc5a562aee1f7d138d",
+        "rev": "f40a56b9dbbad46dd749d1d4d12c586fa1d2ef78",
         "type": "github"
       },
       "original": {
         "owner": "kadena-io",
+        "ref": "chessai/update-1",
         "repo": "hs-nix-infra",
+        "type": "github"
+      }
+    },
+    "nix-tools-static": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1706266250,
+        "narHash": "sha256-9t+GRk3eO9muCtKdNAwBtNBZ5dH1xHcnS17WaQyftwA=",
+        "owner": "input-output-hk",
+        "repo": "haskell-nix-example",
+        "rev": "580cb6db546a7777dad3b9c0fa487a366c045c4e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "input-output-hk",
+        "ref": "nix",
+        "repo": "haskell-nix-example",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1669833724,
-        "narHash": "sha256-/HEZNyGbnQecrgJnfE8d0WC5c1xuPSD2LUpB6YXlg4c=",
+        "lastModified": 1694822471,
+        "narHash": "sha256-6fSDCj++lZVMZlyqOe9SIOL8tYSBz1bI8acwovRwoX8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "4d2b37a84fad1091b9de401eb450aae66f1a741e",
+        "rev": "47585496bcb13fb72e4a90daeea2f434e2501998",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "4d2b37a84fad1091b9de401eb450aae66f1a741e",
+        "rev": "47585496bcb13fb72e4a90daeea2f434e2501998",
         "type": "github"
       }
     },
@@ -273,17 +308,17 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1695318763,
-        "narHash": "sha256-FHVPDRP2AfvsxAdc+AsgFJevMz5VBmnZglFUMlxBkcY=",
+        "lastModified": 1694822471,
+        "narHash": "sha256-6fSDCj++lZVMZlyqOe9SIOL8tYSBz1bI8acwovRwoX8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "e12483116b3b51a185a33a272bf351e357ba9a99",
+        "rev": "47585496bcb13fb72e4a90daeea2f434e2501998",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
         "repo": "nixpkgs",
+        "rev": "47585496bcb13fb72e4a90daeea2f434e2501998",
         "type": "github"
       }
     },

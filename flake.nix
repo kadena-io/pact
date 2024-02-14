@@ -2,7 +2,7 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    hs-nix-infra.url = "github:kadena-io/hs-nix-infra/044e32d09d0226c40bbd0f1b91ab4379e275d4dd";
+    hs-nix-infra.url = "github:kadena-io/hs-nix-infra/chessai/update-1";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -34,7 +34,7 @@
               shell.buildInputs = with pkgs; [
                 zlib
                 z3_4_11
-                pkgconfig
+                pkg-config
                 (python3.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme]))
                 pandoc perl
               ];
