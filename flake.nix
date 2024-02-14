@@ -34,7 +34,7 @@
               shell.buildInputs = with pkgs; [
                 zlib
                 z3_4_11
-                pkgconfig
+                pkg-config
                 (python3.withPackages (ps: [ps.sphinx ps.sphinx_rtd_theme]))
                 pandoc perl
               ];
