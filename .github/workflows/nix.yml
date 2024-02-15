@@ -9,13 +9,48 @@ on:
     - '.github/workflows/nix.yml'
 
 jobs:
-  build-and-cache:
+  build-and-cache-on-bigubuntu:
+    runs-on: 
+      group: bigrunner
+    timeout-minutes: 740
+    strategy:
+      fail-fast: false
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Nix with caching
+      uses: kadena-io/setup-nix-with-cache/by-root@v3.1
+      with:
+        cache_url: s3://nixcache.chainweb.com?region=us-east-1
+        signing_private_key: ${{ secrets.NIX_CACHE_PRIVATE_KEY }}
+        additional_experimental_features: recursive-nix
+
+    - name: Set up AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.NIX_CACHE_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.NIX_CACHE_AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Give root user AWS credentials
+      uses: kadena-io/setup-nix-with-cache/copy-root-aws-credentials@v3.1
+
+    - name: Build and cache artifacts
+      run: |
+        echo Building the project and its devShell
+        nix build .#check --log-lines 500 --show-trace
+
+        echo Build the recursive output
+        nix build .#recursive.allDerivations --log-lines 500 --show-trace
+        
+  build-and-cache-on-mac:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 740
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-m1]
+        os: [macos-latest, macos-m1]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
