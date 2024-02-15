@@ -205,8 +205,6 @@ data ExecutionFlag
   | FlagDisablePact410
   -- | Disable Pact 4.11 Features
   | FlagDisablePact411
-  -- | Disable verifiers
-  | FlagDisableVerifiers
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
