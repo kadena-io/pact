@@ -9,13 +9,12 @@ on:
     - '.github/workflows/nix.yml'
 
 jobs:
-  build-and-cache-on-mac:
-    runs-on: ${{ matrix.os }}
+  build-and-cache-on-bigubuntu:
+    runs-on: 
+      group: bigrunner
     timeout-minutes: 740
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, macos-m1]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
@@ -44,12 +43,14 @@ jobs:
 
         echo Build the recursive output
         nix build .#recursive.allDerivations --log-lines 500 --show-trace
-  build-and-cache-on-bigubuntu:
-    runs-on:
-      group: bigrunner
+        
+  build-and-cache-on-mac:
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 740
     strategy:
       fail-fast: false
+      matrix:
+        os: [macos-latest, macos-m1]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
