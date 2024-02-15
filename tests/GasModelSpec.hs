@@ -89,7 +89,6 @@ untestedNativesCheck = do
      , "verify-spv"
      , "public-chain-data"
      , "dec"
-     , "enforce-verifier"
      , "list"
      , "continue"
      ])

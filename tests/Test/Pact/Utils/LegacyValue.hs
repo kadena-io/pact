@@ -1040,7 +1040,7 @@ spec_pact_types_command =
       , Case checkAesonCompat
       , Case checkLegacyValueCompat
       ]
-   spec_case @(Verifier ParsedVerifierArgs)
+   spec_case @(Verifier ParsedVerifierProof)
       [ Case checkRoundtrip
       , Case checkRoundtrip2
       , Case checkAesonCompat
