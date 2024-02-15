@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04-16core, macos-latest, macos-m1]
+        os: [ubuntu-latest-m, macos-latest, macos-m1]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
