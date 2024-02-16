@@ -2,7 +2,7 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    hs-nix-infra.url = "github:kadena-io/hs-nix-infra/chessai/update-1";
+    hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
   };
 

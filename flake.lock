@@ -243,16 +243,15 @@
         "nixpkgs-rec": "nixpkgs-rec"
       },
       "locked": {
-        "lastModified": 1707900356,
+        "lastModified": 1708100161,
         "narHash": "sha256-rWwE59SfmqXcVQL7GXovYvjbDPMsb4e1GgiNH+7tlrM=",
         "owner": "kadena-io",
         "repo": "hs-nix-infra",
-        "rev": "f40a56b9dbbad46dd749d1d4d12c586fa1d2ef78",
+        "rev": "bcbf823a0851b41d64d4f9c87053abc3153c126e",
         "type": "github"
       },
       "original": {
         "owner": "kadena-io",
-        "ref": "chessai/update-1",
         "repo": "hs-nix-infra",
         "type": "github"
       }
