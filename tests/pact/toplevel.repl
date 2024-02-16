@@ -71,3 +71,11 @@
  "old env unchanged"
  "hello"
  (read-msg 'b))
+
+; Pact 4.11 list-modules moved to local only
+(env-exec-config ["DisablePact411", "DisableHistoryInTransactionalMode"])
+(expect "list-modules is isn't local-only after pact 4.11" ["repl-natives" "toplevel"] (list-modules))
+
+
+(env-exec-config ["DisableHistoryInTransactionalMode"])
+(expect-failure "list-modules is local-only after pact 4.11" (list-modules))

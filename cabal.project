@@ -1,5 +1,27 @@
 packages: .
 
+-- -------------------------------------------------------------------------- --
+-- Platform specific locations of external libraries
+
+if os(darwin)
+    if arch(aarch64)
+        package *
+            extra-include-dirs:
+                /opt/homebrew/include
+                /opt/homebrew/opt/openssl/include
+            extra-lib-dirs:
+                /opt/homebrew/lib
+                /opt/homebrew/opt/openssl/lib
+    else
+        package *
+            extra-include-dirs:
+                /opt/local/include
+                /usr/local/opt/openssl/include
+            extra-lib-dirs:
+                /opt/local/lib
+                /usr/local/opt/openssl/lib/
+----------------------------------------------------------------------------------
+
 package pact
     ghc-options: -Wno-missed-extra-shared-lib
 
