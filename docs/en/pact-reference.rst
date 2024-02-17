@@ -1,7 +1,9 @@
 .. image:: img/kadena-logo-210px.png
 
-Pact Smart Contract Language Reference
+DEPRECATED Pact Smart Contract Language Reference
 ======================================
+
+**This document is no longer maintained, please use `the official Pact Reference site <https://docs.kadena.io/pact/reference>`__ **
 
 This document is a reference for the Pact smart-contract language,
 designed for correct, transactional execution on a `high-performance
