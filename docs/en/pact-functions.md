@@ -5,14 +5,14 @@
 
 Constant denoting the ASCII charset
 
-Constant:
+Constant: 
 &nbsp;&nbsp;`CHARSET_ASCII:integer = 0`
 
 ### CHARSET_LATIN1 {#CHARSET_LATIN1}
 
 Constant denoting the Latin-1 charset ISO-8859-1
 
-Constant:
+Constant: 
 &nbsp;&nbsp;`CHARSET_LATIN1:integer = 1`
 
 ### at {#at}
@@ -765,7 +765,7 @@ Top level only: this function will fail if used in module code.
 
 Select rows from TABLE using QRY as a predicate with both key and value, and then accumulate results of the query in CONSUMER. Output is sorted by the ordering of keys.
 ```lisp
-(let*
+(let* 
  ((qry (lambda (k obj) true)) ;; select all rows
   (f (lambda (k obj) [(at 'firstName obj), (at 'b obj)]))
  )
@@ -924,7 +924,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") 15)
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N days, for use with 'add-time'
+N days, for use with 'add-time' 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (days 1))
 "2016-07-23T12:00:00Z"
@@ -962,7 +962,7 @@ pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N hours, for use with 'add-time'
+N hours, for use with 'add-time' 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 "2016-07-22T13:00:00Z"
@@ -976,7 +976,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 *n*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
 
 
-N minutes, for use with 'add-time'.
+N minutes, for use with 'add-time'. 
 ```lisp
 pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 "2016-07-22T12:01:00Z"
@@ -1000,7 +1000,7 @@ pact> (parse-time "%F" "2016-09-12")
 *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
+Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ). 
 ```lisp
 pact> (time "2016-07-22T11:26:35Z")
 "2016-07-22T11:26:35Z"
