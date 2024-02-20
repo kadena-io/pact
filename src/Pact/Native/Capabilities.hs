@@ -74,12 +74,13 @@ withCapability =
       enforceNotWithinDefcap i "with-capability"
 
       (cap,d,prep) <- appToCap (_tApp c)
-      evalUserCapabilitiesBeingEvaluated %= S.insert cap
+      oldCapsBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+      evalUserCapabilitiesBeingEvaluated .= S.singleton cap
 
       -- evaluate in-module cap
       acquireResult <- evalCap (getInfo i) CapCallStack True (cap,d,prep,getInfo c)
 
-      evalUserCapabilitiesBeingEvaluated %= S.delete cap
+      evalUserCapabilitiesBeingEvaluated .= oldCapsBeingEvaluated
 
       -- execute scoped code
       r <- reduceBody body
@@ -169,9 +170,14 @@ capFuns :: (ApplyMgrFun e,InstallMgd e)
 capFuns = (applyMgrFun,installSigCap)
 
 installSigCap :: InstallMgd e
-installSigCap cap@SigCapability{..} cdef = do
-  ty <- traverse reduce (_dFunType cdef)
-  r <- evalCap (getInfo cdef) CapManaged True (cap,cdef,(fromPactValue <$> _scArgs,ty),getInfo cdef)
+installSigCap SigCapability{..} cdef = do
+  (cap,d,prep) <- appToCap $
+    App (TVar (Ref (TDef cdef (getInfo cdef))) (getInfo cdef))
+        (map (liftTerm . fromPactValue) _scArgs) (getInfo cdef)
+  oldCapsBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+  evalUserCapabilitiesBeingEvaluated %= S.insert cap
+  r <- evalCap (getInfo cdef) CapManaged True (cap,d,prep,getInfo cdef)
+  evalUserCapabilitiesBeingEvaluated .= oldCapsBeingEvaluated
   case r of
     NewlyInstalled mc -> return mc
     _ -> evalError' cdef "Unexpected result from managed sig cap install"
@@ -217,9 +223,10 @@ composeCapability =
       defcapInStack (Just 1) >>= \p -> unless p $ evalError' i "compose-capability valid only within defcap body"
       -- evalCap as composed, which will install onto head of pending cap
       (cap,d,prep) <- appToCap app
+      oldUserCapabilitiesBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
       evalUserCapabilitiesBeingEvaluated %= S.insert cap
       void $ evalCap (getInfo i) CapComposed True (cap,d,prep,getInfo app)
-      evalUserCapabilitiesBeingEvaluated %= S.delete cap
+      evalUserCapabilitiesBeingEvaluated .= oldUserCapabilitiesBeingEvaluated
       return $ toTerm True
     composeCapability' i as = argsError' i as
 
