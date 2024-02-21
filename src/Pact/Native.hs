@@ -77,7 +77,6 @@ import Data.Bits
 import Data.Decimal (Decimal)
 import Data.Default
 import Data.DoubleWord (Word128(..), Word256(..))
-import Data.Either (isRight)
 import Data.Functor(($>))
 import Data.Foldable
 import Data.List (isPrefixOf)
@@ -113,7 +112,6 @@ import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
-import Pact.Types.Principal (principalParser)
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
@@ -122,6 +120,7 @@ import Crypto.Hash.PoseidonNative (poseidon)
 import Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId)
 
 import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Decode as J
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -1646,7 +1645,7 @@ hyperlaneDecodeTokenMessageDef =
           case B64URL.decode (T.encodeUtf8 msg) of
             Left _ -> evalError' i $ "Failed to base64-decode token message"
             Right bytes -> do
-              case runGetOrFail (getTokenMessageERC20 (getInfo i)) (BS.fromStrict bytes) of
+              case runGetOrFail getTokenMessageERC20 (BS.fromStrict bytes) of
                 -- In case of Binary decoding failure, emit a terse error message.
                 -- If the error message begins with TokenError, we know that we
                 -- created it, and it is going to be stable (non-forking).
@@ -1660,16 +1659,19 @@ hyperlaneDecodeTokenMessageDef =
                 -- by parsing?
                 -- TODO: Is this format correct? I.e. field names?
                 Right (_,_,(amount, chain, recipient)) ->
-                  pure $ toTObject TyAny def
-                    [("recipient", TLiteral (LString recipient) def)
-                    ,("amount", TLiteral (LDecimal $ wordToDecimal amount) def)
-                    ,("chainId", toTerm chain)
-                    ]
+                  case PGuard <$> J.eitherDecode (BS.fromStrict  $ T.encodeUtf8 recipient) of
+                    Left e -> evalError' i $ "Could not parse recipient into a guard: " <> pretty e
+                    Right g ->
+                      pure $ toTObject TyAny def
+                        [("recipient", fromPactValue g)
+                        ,("amount", TLiteral (LDecimal $ wordToDecimal amount) def)
+                        ,("chainId", toTerm chain)
+                        ]
       _ -> argsError i args
 
     -- The TokenMessage contains a recipient (text) and an amount (word-256).
-    getTokenMessageERC20 :: Info -> Get (Word256, ChainId, Text)
-    getTokenMessageERC20 i = do
+    getTokenMessageERC20 :: Get (Word256, ChainId, Text)
+    getTokenMessageERC20 = do
 
       -- Parse the size of the following amount field.
       amountSize <- fromIntegral @Word256 @Int <$> getWord256be
@@ -1680,9 +1682,6 @@ hyperlaneDecodeTokenMessageDef =
 
       recipientSize <- getWord256be
       tmRecipient <- T.decodeUtf8 <$> getRecipient recipientSize
-
-      unless (isRight (AP.parseOnly (principalParser i) tmRecipient))  $
-        fail $ "TokenMessage recipient is not a valid principal."
 
       return (tmAmount, ChainId { _chainId = T.pack (show (toInteger tmChainId))}, tmRecipient)
       where

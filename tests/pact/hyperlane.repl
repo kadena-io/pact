@@ -1,20 +1,25 @@
 ;; Test hyperlane builtins.
 
+(env-data
+  { "test-keys" : {"pred": "keys-all", "keys": ["da1a339bd82d2c2e9180626a00dc043275deb3ababb27b5738abf6b9dcee8db6"]}
+  })
+
 (expect "computes the correct message id" "0x97d98aa7fdb548f43c9be37aaea33fca79680247eb8396148f1df10e6e0adfb7" (hyperlane-message-id {"destinationDomain": 1,"nonce": 325,"originDomain": 626,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F","sender": "0x6b622d746f6b656e2d726f75746572","tokenMessage": {"amount": 10000000000000000000.0,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"},"version": 1}))
 
 ; Decoding a valid TokenMessage should succeed.
 (expect "decodes the correct TokenMessage"
   { "amount":0.000000000000000123,
     "chainId": "4",
-    "recipient": "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69"
+    "recipient": (read-keyset 'test-keys)
   }
-  (hyperlane-decode-tokenmessage "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEJrOjQ2MmU5N2EwOTk5ODdmNTVmNmEyYjUyZTdiZmQ1MmEzNmI0YjViNDcwZmVkMDgxNmEzZDliMjZmOTQ1MGJhNjkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+  (hyperlane-decode-tokenmessage "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==")
 )
 
-; This TokenMessage was encoded with the recipient "greg". It should fail
-; to decode because "greg" is not a valid principal. (Recipient must be a
-; valid principal).
+; This TokenMessage was encoded with the recipient
+; "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69".
+; It should fail to decode because "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69"
+; is a principal, not a guard. (Recipient must be a guard encoded in json).
 (expect-failure
-  "TokenMessage recipient is not a valid principal"
-  (hyperlane-decode-tokenmessage "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARncmVnAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==")
+  "Decoding requires recipient to be a guard."
+  (hyperlane-decode-tokenmessage "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEJrOjQ2MmU5N2EwOTk5ODdmNTVmNmEyYjUyZTdiZmQ1MmEzNmI0YjViNDcwZmVkMDgxNmEzZDliMjZmOTQ1MGJhNjkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 )
