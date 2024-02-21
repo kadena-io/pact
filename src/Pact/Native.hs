@@ -1637,11 +1637,10 @@ hyperlaneDecodeTokenMessageDef =
       [TLitString msg] ->
         -- We do not need to handle historical b64 error message shimming
         -- or decoding from non-canonical strings in this base-64 decoder,
-        -- because this native is added in a Pact version that latre than when
+        -- because this native is added in a Pact version that later than when
         -- we moved to base64-bytestring >= 1.0, which behaves succeeds and
         -- fails in exactly the cases we expect.
         -- (The only change we make to its output is to strip error messages).
-        -- TODO: standard alphabet, or URL?
         computeGas' i (GHyperlaneDecodeTokenMessage (T.length msg)) $
           case B64URL.decode (T.encodeUtf8 msg) of
             Left _ -> evalError' i "Failed to base64-decode token message"
@@ -1653,7 +1652,6 @@ hyperlaneDecodeTokenMessageDef =
                 -- If it does not start with TokenMessage, it may have come from
                 -- the Binary library, and we will suppress it to shield ourselves
                 -- from forking behavior if we update our Binary version.
-                -- (TODO: Do we suppress error messages on-chain anyway?)
                 Left (_,_,e) | "TokenMessage" `isPrefixOf` e -> evalError' i $ "Decoding error: " <> pretty e
                 Left _ -> evalError' i "Decoding error: binary decoding failed" 
                 Right (_,_,(amount, chain, recipient)) ->
