@@ -1660,7 +1660,7 @@ hyperlaneDecodeTokenMessageDef =
                 -- TODO: Is this format correct? I.e. field names?
                 Right (_,_,(amount, chain, recipient)) ->
                   case PGuard <$> J.eitherDecode (BS.fromStrict  $ T.encodeUtf8 recipient) of
-                    Left e -> evalError' i $ "Could not parse recipient into a guard: " <> pretty e
+                    Left _ -> evalError' i $ "Could not parse recipient into a guard"
                     Right g ->
                       pure $ toTObject TyAny def
                         [("recipient", fromPactValue g)
