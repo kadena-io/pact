@@ -66,7 +66,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Attoparsec.Text as AP
 import Data.Bifunctor (first)
-import Data.Binary.Get (Get, runGetOrFail, getWord64be, getByteString)
+import Data.Binary.Get (Get, runGetOrFail, getWord64be, getByteString, isEmpty)
 import Data.Binary.Put (Put, runPut, putWord64be, putByteString)
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
@@ -1643,9 +1643,9 @@ hyperlaneDecodeTokenMessageDef =
         -- TODO: standard alphabet, or URL?
         computeGas' i (GHyperlaneDecodeTokenMessage (T.length msg)) $
           case B64URL.decode (T.encodeUtf8 msg) of
-            Left _ -> evalError' i $ "Failed to base64-decode token message"
+            Left _ -> evalError' i "Failed to base64-decode token message"
             Right bytes -> do
-              case runGetOrFail getTokenMessageERC20 (BS.fromStrict bytes) of
+              case runGetOrFail (getTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
                 -- In case of Binary decoding failure, emit a terse error message.
                 -- If the error message begins with TokenError, we know that we
                 -- created it, and it is going to be stable (non-forking).
@@ -1702,6 +1702,11 @@ hyperlaneDecodeTokenMessageDef =
     wordToDecimal w =
       let ethInWei = 1000000000000000000 -- 1e18
       in fromRational (toInteger w % ethInWei)
+
+    eof :: Get ()
+    eof = do
+      done <- isEmpty
+      unless done $ fail "pending bytes in input"
 
 -- | Helper function for creating TokenMessages encoded in the ERC20 format
 --   and base64url encoded. Used for generating test data.
