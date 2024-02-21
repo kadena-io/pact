@@ -6,6 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 -- |
@@ -64,17 +65,21 @@ import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Attoparsec.Text as AP
 import Data.Bifunctor (first)
+import Data.Binary.Get (Get, runGetOrFail, getWord64be, getByteString)
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.Char as Char
 import Data.Bits
+import Data.Decimal (Decimal)
 import Data.Default
+import Data.DoubleWord (Word128(..), Word256(..))
 import Data.Functor(($>))
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.List as L (nubBy)
+import Data.Ratio ((%))
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
@@ -1579,6 +1584,7 @@ poseidonHackAChainDef = defGasRNative
 hyperlaneDefs :: NativeModule
 hyperlaneDefs = ("Hyperlane",)
   [ hyperlaneMessageIdDef
+  , hyperlaneDecodeTokenMessageDef
   ]
 
 hyperlaneMessageIdDef :: NativeDef
@@ -1609,3 +1615,76 @@ hyperlaneMessageIdDef = defGasRNative
       case mRecipient of
         Nothing -> error "couldn't decode token recipient"
         Just t -> T.encodeUtf8 t
+
+hyperlaneDecodeTokenMessageDef :: NativeDef
+hyperlaneDecodeTokenMessageDef =
+  defGasRNative
+    "hyperlane-decode-tokenmessage"
+    hyperlaneDecodeTokenMessageDef'
+    (funType tTyObjectAny [("x", tTyString)])
+    ["(TODO example)"]
+    "Decode a base-64 encoded Hyperlane Token Message into an object `{recipient:STRING, amount:DECIMAL, chainId:STRING}`."
+  where
+    hyperlaneDecodeTokenMessageDef' :: RNativeFun e
+    hyperlaneDecodeTokenMessageDef' i args = case args of
+
+      [TLitString msg] ->
+        -- We do not need to handle historical b64 error message shimming
+        -- or decoding from non-canonical strings in this base-64 decoder,
+        -- because this native is added in a Pact version that latre than when
+        -- we moved to base64-bytestring >= 1.0, which behaves succeeds and
+        -- fails in exactly the cases we expect.
+        -- (The only change we make to its output is to strip error messages).
+        -- TODO: standard alphabet, or URL?
+        computeGas' i (GHyperlaneDecodeTokenMessage (T.length msg)) $
+          case B64.decode (T.encodeUtf8 msg) of
+            Left _ -> evalError' i $ "Failed to base64-decode token message"
+            Right bytes -> do
+              sourceChain <- ifExecutionFlagSet FlagDisablePact40 (pure $ toTerm @Text "none") $
+                fmap toTerm $ view $ eePublicData . pdPublicMeta . pmChainId
+              case runGetOrFail getTokenMessageERC20 (BS.fromStrict bytes) of
+                -- In case of Binary decoding failure, emit a terse error message.
+                -- This protects us from exposure to changes in Binary's message
+                -- format. (TODO: Do we suppress error messages on-chain anyway?)
+                Left _ -> evalError' i $ "Failed to decode TokenMessage bytes"
+                -- TODO: Do we need to assert that the bytes are fully consumed
+                -- by parsing?
+                -- TODO: Is this format correct? I.e. field names?
+                Right (_,_,(recipient, amount)) ->
+                  pure $ toTObject TyAny def
+                    [("recipient", TLiteral (LString recipient) def)
+                    ,("amount", TLiteral (LDecimal $ wordToDecimal amount) def)
+                    ,("chainId", sourceChain)
+                    ]
+      _ -> argsError i args
+
+    -- The TokenMessage contains a recipient (text) and an amount (word-256).
+    getTokenMessageERC20 :: Get (Text, Word256)
+    getTokenMessageERC20 = do
+      _firstOffset <- getWord256be
+      tmAmount <- getWord256be
+
+      recipientSize <- getWord256be
+      tmRecipient <- T.decodeUtf8 <$> getRecipient recipientSize
+      return $ (tmRecipient, tmAmount)
+      where
+        getWord256be = Word256 <$> getWord128be <*> getWord128be
+        getWord128be = Word128 <$> getWord64be <*> getWord64be
+
+        -- TODO: We check the size. Is this ok?
+        -- | Reads a given number of bytes and the rest because binary data padded up to 32 bytes.
+        getRecipient :: Word256 -> Get BS.ByteString
+        getRecipient size = do
+          recipient <- BS.take (fromIntegral size) <$> getByteString (fromIntegral $ size + restSize size)
+          if BS.length recipient < fromIntegral size
+            then fail "Recipient was smaller than expected"
+            else pure recipient
+
+        -- | Returns the modular of 32 bytes.
+        restSize :: Integral a => a -> a
+        restSize size = (32 - size) `mod` 32
+
+    wordToDecimal :: Word256 -> Decimal
+    wordToDecimal w =
+      let ethInWei = 1000000000000000000 -- 1e18
+      in fromRational (toInteger w % ethInWei)

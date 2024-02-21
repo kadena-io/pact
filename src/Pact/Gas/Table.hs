@@ -56,6 +56,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor :: Gas
   , _gasCostConfig_poseidonHashHackAChainLinearGasFactor :: Gas
   , _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes :: MilliGas
+  , _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes :: MilliGas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -83,6 +84,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_poseidonHashHackAChainLinearGasFactor = 50
   , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor = 38
   , _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes = MilliGas 47
+  , _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes = MilliGas 1 -- TODO: Benchmark
   }
 
 defaultGasTable :: Map Text Gas
@@ -338,6 +340,9 @@ tableGasModel gasConfig =
             _gasCostConfig_poseidonHashHackAChainLinearGasFactor gasConfig * fromIntegral len
         GHyperlaneMessageId len ->
           let MilliGas costPerOneHundredBytes = _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes gasConfig
+          in MilliGas (costPerOneHundredBytes * div (fromIntegral len) 100)
+        GHyperlaneDecodeTokenMessage len ->
+          let MilliGas costPerOneHundredBytes = _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes gasConfig
           in MilliGas (costPerOneHundredBytes * div (fromIntegral len) 100)
 
   in GasModel
