@@ -56,6 +56,7 @@ module Pact.Native
     , describeNamespaceSchema
     , dnUserGuard, dnAdminGuard, dnNamespaceName
     , cdPrevBlockHash
+    , encodeTokenMessage
     ) where
 
 import Control.Arrow hiding (app, first)
@@ -66,9 +67,11 @@ import Control.Monad.IO.Class
 import qualified Data.Attoparsec.Text as AP
 import Data.Bifunctor (first)
 import Data.Binary.Get (Get, runGetOrFail, getWord64be, getByteString)
+import Data.Binary.Put (Put, runPut, putWord64be, putByteString)
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as B64
+import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.Char as Char
 import Data.Bits
 import Data.Decimal (Decimal)
@@ -76,6 +79,7 @@ import Data.Default
 import Data.DoubleWord (Word128(..), Word256(..))
 import Data.Functor(($>))
 import Data.Foldable
+import Data.List (isPrefixOf)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.List as L (nubBy)
@@ -1637,36 +1641,44 @@ hyperlaneDecodeTokenMessageDef =
         -- (The only change we make to its output is to strip error messages).
         -- TODO: standard alphabet, or URL?
         computeGas' i (GHyperlaneDecodeTokenMessage (T.length msg)) $
-          case B64.decode (T.encodeUtf8 msg) of
+          case B64URL.decode (T.encodeUtf8 msg) of
             Left _ -> evalError' i $ "Failed to base64-decode token message"
             Right bytes -> do
-              sourceChain <- ifExecutionFlagSet FlagDisablePact40 (pure $ toTerm @Text "none") $
-                fmap toTerm $ view $ eePublicData . pdPublicMeta . pmChainId
               case runGetOrFail getTokenMessageERC20 (BS.fromStrict bytes) of
                 -- In case of Binary decoding failure, emit a terse error message.
-                -- This protects us from exposure to changes in Binary's message
-                -- format. (TODO: Do we suppress error messages on-chain anyway?)
-                Left _ -> evalError' i $ "Failed to decode TokenMessage bytes"
+                -- If the error message begins with TokenError, we know that we
+                -- created it, and it is going to be stable (non-forking).
+                -- If it does not start with TokenMessage, it may have come from
+                -- the Binary library, and we will suppress it to shield ourselves
+                -- from forking behavior if we update our Binary version.
+                -- (TODO: Do we suppress error messages on-chain anyway?)
+                Left (_,_,e) | "TokenMessage" `isPrefixOf` e -> evalError' i $ "Decoding error: " <> pretty e
+                Left _ -> evalError' i "Decoding error: binary decoding failed" 
                 -- TODO: Do we need to assert that the bytes are fully consumed
                 -- by parsing?
                 -- TODO: Is this format correct? I.e. field names?
-                Right (_,_,(recipient, amount)) ->
+                Right (_,_,(amount, chain, recipient)) ->
                   pure $ toTObject TyAny def
                     [("recipient", TLiteral (LString recipient) def)
                     ,("amount", TLiteral (LDecimal $ wordToDecimal amount) def)
-                    ,("chainId", sourceChain)
+                    ,("chainId", toTerm chain)
                     ]
       _ -> argsError i args
 
     -- The TokenMessage contains a recipient (text) and an amount (word-256).
-    getTokenMessageERC20 :: Get (Text, Word256)
+    getTokenMessageERC20 :: Get (Word256, ChainId, Text)
     getTokenMessageERC20 = do
-      _firstOffset <- getWord256be
+
+      -- Parse the size of the following amount field.
+      amountSize <- fromIntegral @Word256 @Int <$> getWord256be
+      unless (amountSize == 96)
+        (fail $ "TokenMessage amountSize expected 96, found " ++ show amountSize)
       tmAmount <- getWord256be
+      tmChainId <- getWord256be
 
       recipientSize <- getWord256be
       tmRecipient <- T.decodeUtf8 <$> getRecipient recipientSize
-      return $ (tmRecipient, tmAmount)
+      return (tmAmount, ChainId { _chainId = T.pack (show (toInteger tmChainId))}, tmRecipient)
       where
         getWord256be = Word256 <$> getWord128be <*> getWord128be
         getWord128be = Word128 <$> getWord64be <*> getWord64be
@@ -1677,14 +1689,40 @@ hyperlaneDecodeTokenMessageDef =
         getRecipient size = do
           recipient <- BS.take (fromIntegral size) <$> getByteString (fromIntegral $ size + restSize size)
           if BS.length recipient < fromIntegral size
-            then fail "Recipient was smaller than expected"
+            then fail "TokenMessage recipient was smaller than expected"
             else pure recipient
 
-        -- | Returns the modular of 32 bytes.
-        restSize :: Integral a => a -> a
-        restSize size = (32 - size) `mod` 32
 
     wordToDecimal :: Word256 -> Decimal
     wordToDecimal w =
       let ethInWei = 1000000000000000000 -- 1e18
       in fromRational (toInteger w % ethInWei)
+
+encodeTokenMessage :: BS.ByteString -> Word256 -> Word256 -> Text
+encodeTokenMessage recipient amount chain = T.decodeUtf8 $ B64URL.encode (BS.toStrict bytes)
+  where
+    bytes = runPut $ do
+      putWord256be (96 :: Word256)
+      putWord256be amount
+      putWord256be chain
+      putWord256be recipientSize
+      putByteString recipientBytes
+
+    (recipientBytes, recipientSize) = padRight recipient
+
+    putWord256be :: Word256 -> Put
+    putWord256be (Word256 x y) = putWord128be x >> putWord128be y
+
+    putWord128be :: Word128 -> Put
+    putWord128be (Word128 x y) = putWord64be x >> putWord64be y
+
+padRight :: BS.ByteString -> (BS.ByteString, Word256)
+padRight s =
+  let
+    size = BS.length s
+    missingZeroes = restSize size
+  in (s <> BS.replicate missingZeroes 0, fromIntegral size)
+
+-- | Returns the modular of 32 bytes.
+restSize :: Integral a => a -> a
+restSize size = (32 - size) `mod` 32
