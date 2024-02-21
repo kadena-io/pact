@@ -221,7 +221,6 @@ library
     , deriving-compat >=0.5.1
     , direct-sqlite >=2.3.27
     , directory >=1.2.6.2
-    , data-dword
     , errors >=2.3
     , exceptions >=0.8.3
     , filepath >=1.4.1.0

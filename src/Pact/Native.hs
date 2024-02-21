@@ -66,8 +66,9 @@ import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Attoparsec.Text as AP
 import Data.Bifunctor (first)
-import Data.Binary.Get (Get, runGetOrFail, getWord64be, getByteString, isEmpty)
-import Data.Binary.Put (Put, runPut, putWord64be, putByteString)
+import Data.Binary (get, put)
+import Data.Binary.Get (Get, runGetOrFail, getByteString, isEmpty)
+import Data.Binary.Put (Put, runPut, putByteString)
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as B64
@@ -76,7 +77,6 @@ import qualified Data.Char as Char
 import Data.Bits
 import Data.Decimal (Decimal)
 import Data.Default
-import Data.DoubleWord (Word128(..), Word256(..))
 import Data.Functor(($>))
 import Data.Foldable
 import Data.List (isPrefixOf)
@@ -89,6 +89,7 @@ import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as T
+import Data.WideWord.Word256
 import Pact.Time
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -1685,8 +1686,7 @@ hyperlaneDecodeTokenMessageDef =
 
       return (tmAmount, ChainId { _chainId = T.pack (show (toInteger tmChainId))}, tmRecipient)
       where
-        getWord256be = Word256 <$> getWord128be <*> getWord128be
-        getWord128be = Word128 <$> getWord64be <*> getWord64be
+        getWord256be = get @Word256
 
         -- TODO: We check the size. Is this ok?
         -- | Reads a given number of bytes and the rest because binary data padded up to 32 bytes.
@@ -1723,10 +1723,7 @@ encodeTokenMessage recipient amount chain = T.decodeUtf8 $ B64URL.encode (BS.toS
     (recipientBytes, recipientSize) = padRight recipient
 
     putWord256be :: Word256 -> Put
-    putWord256be (Word256 x y) = putWord128be x >> putWord128be y
-
-    putWord128be :: Word128 -> Put
-    putWord128be (Word128 x y) = putWord64be x >> putWord64be y
+    putWord256be  = put @Word256
 
 padRight :: BS.ByteString -> (BS.ByteString, Word256)
 padRight s =
