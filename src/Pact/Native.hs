@@ -1656,9 +1656,6 @@ hyperlaneDecodeTokenMessageDef =
                 -- (TODO: Do we suppress error messages on-chain anyway?)
                 Left (_,_,e) | "TokenMessage" `isPrefixOf` e -> evalError' i $ "Decoding error: " <> pretty e
                 Left _ -> evalError' i "Decoding error: binary decoding failed" 
-                -- TODO: Do we need to assert that the bytes are fully consumed
-                -- by parsing?
-                -- TODO: Is this format correct? I.e. field names?
                 Right (_,_,(amount, chain, recipient)) ->
                   case PGuard <$> J.eitherDecode (BS.fromStrict  $ T.encodeUtf8 recipient) of
                     Left _ -> evalError' i $ "Could not parse recipient into a guard"
