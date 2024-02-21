@@ -77,6 +77,7 @@ import Data.Bits
 import Data.Decimal (Decimal)
 import Data.Default
 import Data.DoubleWord (Word128(..), Word256(..))
+import Data.Either (isRight)
 import Data.Functor(($>))
 import Data.Foldable
 import Data.List (isPrefixOf)
@@ -112,6 +113,7 @@ import Pact.Types.Hash
 import Pact.Types.Names
 import Pact.Types.PactValue
 import Pact.Types.Pretty hiding (list)
+import Pact.Types.Principal (principalParser)
 import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
@@ -1644,7 +1646,7 @@ hyperlaneDecodeTokenMessageDef =
           case B64URL.decode (T.encodeUtf8 msg) of
             Left _ -> evalError' i $ "Failed to base64-decode token message"
             Right bytes -> do
-              case runGetOrFail getTokenMessageERC20 (BS.fromStrict bytes) of
+              case runGetOrFail (getTokenMessageERC20 (getInfo i)) (BS.fromStrict bytes) of
                 -- In case of Binary decoding failure, emit a terse error message.
                 -- If the error message begins with TokenError, we know that we
                 -- created it, and it is going to be stable (non-forking).
@@ -1666,8 +1668,8 @@ hyperlaneDecodeTokenMessageDef =
       _ -> argsError i args
 
     -- The TokenMessage contains a recipient (text) and an amount (word-256).
-    getTokenMessageERC20 :: Get (Word256, ChainId, Text)
-    getTokenMessageERC20 = do
+    getTokenMessageERC20 :: Info -> Get (Word256, ChainId, Text)
+    getTokenMessageERC20 i = do
 
       -- Parse the size of the following amount field.
       amountSize <- fromIntegral @Word256 @Int <$> getWord256be
@@ -1678,6 +1680,10 @@ hyperlaneDecodeTokenMessageDef =
 
       recipientSize <- getWord256be
       tmRecipient <- T.decodeUtf8 <$> getRecipient recipientSize
+
+      unless (isRight (AP.parseOnly (principalParser i) tmRecipient))  $
+        fail $ "TokenMessage recipient is not a valid principal."
+
       return (tmAmount, ChainId { _chainId = T.pack (show (toInteger tmChainId))}, tmRecipient)
       where
         getWord256be = Word256 <$> getWord128be <*> getWord128be
@@ -1698,6 +1704,8 @@ hyperlaneDecodeTokenMessageDef =
       let ethInWei = 1000000000000000000 -- 1e18
       in fromRational (toInteger w % ethInWei)
 
+-- | Helper function for creating TokenMessages encoded in the ERC20 format
+--   and base64url encoded. Used for generating test data.
 encodeTokenMessage :: BS.ByteString -> Word256 -> Word256 -> Text
 encodeTokenMessage recipient amount chain = T.decodeUtf8 $ B64URL.encode (BS.toStrict bytes)
   where
