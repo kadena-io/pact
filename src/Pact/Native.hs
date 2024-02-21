@@ -1628,8 +1628,8 @@ hyperlaneDecodeTokenMessageDef =
     "hyperlane-decode-tokenmessage"
     hyperlaneDecodeTokenMessageDef'
     (funType tTyObjectAny [("x", tTyString)])
-    ["(TODO example)"]
-    "Decode a base-64 encoded Hyperlane Token Message into an object `{recipient:STRING, amount:DECIMAL, chainId:STRING}`."
+    ["(hyperlane-decode-tokenmessage \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")"]
+    "Decode a base-64 encoded Hyperlane Token Message into an object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}`."
   where
     hyperlaneDecodeTokenMessageDef' :: RNativeFun e
     hyperlaneDecodeTokenMessageDef' i args = case args of
