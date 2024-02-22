@@ -282,9 +282,7 @@ checkSigCaps sigs = go
         eligibleCaps
           | null capsBeingEvaluated = getAllStackCaps
           | otherwise = return capsBeingEvaluated
-      granted <- ifExecutionFlagSet FlagDisablePact410
-        getAllStackCaps
-        eligibleCaps
+      granted <- eligibleCaps
       autos <- use $ evalCapabilities . capAutonomous
       return $ M.filter (match (S.null autos) granted) sigs
 
