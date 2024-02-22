@@ -7,7 +7,7 @@
 
 ### Bugfixes
 - Fix bug in enforce-pact-version parser (#1334)
-- Fix usage output to use correct naming (#1331)
+- Fix pact CLI usage output to use correct naming (#1331)
 - Fix `step` for `defpact`s in typechecker (#1333)
 
 
