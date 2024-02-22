@@ -241,6 +241,7 @@ defaultGasTable =
 
   ,("poseidon-hash-hack-a-chain", 124)
   ,("hyperlane-message-id", 2)
+  ,("hyperlane-decode-token-message", 2)
   ]
 
 {-# NOINLINE defaultGasTable #-}

@@ -1683,7 +1683,6 @@ hyperlaneDecodeTokenMessageDef =
       where
         getWord256be = get @Word256
 
-        -- TODO: We check the size. Is this ok?
         -- | Reads a given number of bytes and the rest because binary data padded up to 32 bytes.
         getRecipient :: Word256 -> Get BS.ByteString
         getRecipient size = do
