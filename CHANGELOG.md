@@ -1,8 +1,20 @@
-Unreleased
+4.11.0
 ---
 ### Features
-- Support for verifier plugins (#1324)
+- Support for verifier plugins (#1324,#1336)
+- Support for `hyperlane-message-id` (#1335)
+- Support for decoding a hyperlane TokenMessage (#1344)
 
+### Bugfixes
+- Fix bug in enforce-pact-version parser (#1334)
+- Fix usage output to use correct naming (#1331)
+- Fix `step` for `defpact`s in typechecker (#1333)
+
+
+### Misc
+- List-modules moved to local-only (#1326)
+- Update pact server typo (#1328)
+- Deprecate readthedocs (#1341)
 
 4.10.0
 ---
