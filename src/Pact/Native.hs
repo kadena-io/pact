@@ -1666,13 +1666,20 @@ hyperlaneDecodeTokenMessageDef =
       _ -> argsError i args
 
     -- The TokenMessage contains a recipient (text) and an amount (word-256).
+    -- A schematic of the message format:
+    -- 0000000000000000000000000000000000000000000000000000000000000060 # offset of the recipient string = 96, because first three lines are 32 bytes each
+    -- 0000000000000000000000000000000000000000000000008ac7230489e80000 # amount = 10000000000000000000
+    -- 0000000000000000000000000000000000000000000000000000000000000000 # chainId = 0
+    -- 000000000000000000000000000000000000000000000000000000000000002a # recipientSize = 42
+    -- 3078373143373635364543376162383862303938646566423735314237343031 # "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+    -- 4235663664383937364600000000000000000000000000000000000000000000
     getTokenMessageERC20 :: Get (Word256, ChainId, Text)
     getTokenMessageERC20 = do
 
       -- Parse the size of the following amount field.
-      amountSize <- fromIntegral @Word256 @Int <$> getWord256be
-      unless (amountSize == 96)
-        (fail $ "TokenMessage amountSize expected 96, found " ++ show amountSize)
+      firstOffset <- fromIntegral @Word256 @Int <$> getWord256be
+      unless (firstOffset == 96)
+        (fail $ "TokenMessage firstOffset expected 96, found " ++ show firstOffset)
       tmAmount <- getWord256be
       tmChainId <- getWord256be
 
