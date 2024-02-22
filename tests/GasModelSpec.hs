@@ -91,7 +91,7 @@ untestedNativesCheck = do
      , "dec"
      , "list"
      , "continue"
-     , "hyperlane-decode-tokenmessage"
+     , "hyperlane-decode-token-message"
      ])
 
 allGasTestsAndGoldenShouldPass :: Spec
@@ -145,7 +145,7 @@ allNativesInGasTable = do
         absentNatives = foldl' absent [] justNatives
     (S.fromList absentNatives)
     `shouldBe`
-    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "hyperlane-decode-tokenmessage", "public-chain-data", "list"])
+    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "hyperlane-decode-token-message", "public-chain-data", "list"])
 
 -- | Use this to run a single named test.
 _runNative :: NativeDefName -> IO (Maybe [(T.Text,Gas)])

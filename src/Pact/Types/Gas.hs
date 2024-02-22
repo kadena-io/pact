@@ -187,7 +187,7 @@ data GasArgs
   --   hyperlane TokenMessage Recipient, which is the only variable-length
   --   part of a HyperlaneMessage
   | GHyperlaneDecodeTokenMessage !Int
-  -- ^ Cost of hyperlane-decode-tokenmessage on this size (in bytes) of the
+  -- ^ Cost of hyperlane-decode-token-message on this size (in bytes) of the
   --   hyperlane TokenMessage base64-encoded string.
 
 data IntOpThreshold
