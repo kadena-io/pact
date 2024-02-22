@@ -1642,7 +1642,7 @@ hyperlaneDecodeTokenMessageDef =
         -- fails in exactly the cases we expect.
         -- (The only change we make to its output is to strip error messages).
         computeGas' i (GHyperlaneDecodeTokenMessage (T.length msg)) $
-          case B64URL.decode (T.encodeUtf8 msg) of
+          case B64URL.decodeUnpadded (T.encodeUtf8 msg) of
             Left _ -> evalError' i "Failed to base64-decode token message"
             Right bytes -> do
               case runGetOrFail (getTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
@@ -1706,7 +1706,7 @@ hyperlaneDecodeTokenMessageDef =
 -- | Helper function for creating TokenMessages encoded in the ERC20 format
 --   and base64url encoded. Used for generating test data.
 encodeTokenMessage :: BS.ByteString -> Word256 -> Word256 -> Text
-encodeTokenMessage recipient amount chain = T.decodeUtf8 $ B64URL.encode (BS.toStrict bytes)
+encodeTokenMessage recipient amount chain = T.decodeUtf8 $ B64URL.encodeUnpadded (BS.toStrict bytes)
   where
     bytes = runPut $ do
       putWord256be (96 :: Word256)
