@@ -277,9 +277,14 @@ checkSigCaps
 checkSigCaps sigs = go
   where
     go = do
+      capsBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+      let
+        eligibleCaps
+          | null capsBeingEvaluated = getAllStackCaps
+          | otherwise = return capsBeingEvaluated
       granted <- ifExecutionFlagSet FlagDisablePact410
         getAllStackCaps
-        (use evalUserCapabilitiesBeingEvaluated)
+        eligibleCaps
       autos <- use $ evalCapabilities . capAutonomous
       return $ M.filter (match (S.null autos) granted) sigs
 
