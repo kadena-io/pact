@@ -186,6 +186,9 @@ data GasArgs
   -- ^ Cost of the hyperlane-message-id on this size (in bytes) of the
   --   hyperlane TokenMessage Recipient, which is the only variable-length
   --   part of a HyperlaneMessage
+  | GHyperlaneDecodeTokenMessage !Int
+  -- ^ Cost of hyperlane-decode-token-message on this size (in bytes) of the
+  --   hyperlane TokenMessage base64-encoded string.
 
 data IntOpThreshold
   = Pact43IntThreshold
@@ -255,6 +258,7 @@ instance Pretty GasArgs where
     GFormatValues s args -> "GFormatValues:" <> pretty s <> pretty (V.toList args)
     GPoseidonHashHackAChain len -> "GPoseidonHashHackAChain:" <> pretty len
     GHyperlaneMessageId len -> "GHyperlaneMessageId:" <> pretty len
+    GHyperlaneDecodeTokenMessage len -> "GHyperlaneDecodeTokenMessage:" <> pretty len
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Generic)
