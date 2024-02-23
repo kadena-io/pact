@@ -9,8 +9,7 @@ assignees: ''
 ## Issue description
 
 <!--
-Before opening a bug, please take a look at the [Pact ReadtheDocs](https://pact-language.readthedocs.io/en/stable/).
-This explains Pact's semantics and some common issues and will also help you to find the information that the issue template asks for.
+Before opening a bug, please take a look at the [Pact documentation](https://docs.kadena.io/pact). This explains Pact's semantics and some common issues and will also help you to find the information that the issue template asks for.
 -->
 
 ### Steps to reproduce
