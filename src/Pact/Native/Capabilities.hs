@@ -169,12 +169,15 @@ capFuns :: (ApplyMgrFun e,InstallMgd e)
 capFuns = (applyMgrFun,installSigCap)
 
 installSigCap :: InstallMgd e
-installSigCap cap@SigCapability{..} cdef = do
-  ty <- traverse reduce (_dFunType cdef)
-  r <- evalCap (getInfo cdef) CapManaged True (cap,cdef,(fromPactValue <$> _scArgs,ty),getInfo cdef)
+installSigCap SigCapability{..} cdef = do
+  (cap,d,prep) <- appToCap $
+    App (TVar (Ref (TDef cdef (getInfo cdef))) (getInfo cdef))
+        (map (liftTerm . fromPactValue) _scArgs) (getInfo cdef)
+  r <- evalCap (getInfo cdef) CapManaged True (cap,d,prep,getInfo cdef)
   case r of
     NewlyInstalled mc -> return mc
     _ -> evalError' cdef "Unexpected result from managed sig cap install"
+
 
 
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
