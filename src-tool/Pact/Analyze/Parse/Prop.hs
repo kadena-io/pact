@@ -458,6 +458,12 @@ inferPreProp preProp = case preProp of
       _                 -> throwErrorIn b $
         "expected integer or decimal, found " <> pretty (existentialType b')
 
+  PreApp s [a,b]
+    | s == STemporalDiff -> do
+        a' <- checkPreProp STime a
+        b' <- checkPreProp STime b
+        pure $ Some SDecimal $ CoreProp $ DiffTime a' b'
+
   PreApp op'@(toOp comparisonOpP -> Just op) [a, b] -> do
     a''@(Some aTy a') <- inferPreProp a
     b''@(Some bTy b') <- inferPreProp b
