@@ -44,6 +44,11 @@ jobs:
         echo Build the recursive output
         nix build .#recursive.allDerivations --log-lines 500 --show-trace
         
+    - name: Verify pact binary
+      run: |
+        echo Validating pact version
+        nix run pact --version
+
   build-and-cache-on-mac:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 740
@@ -83,5 +88,5 @@ jobs:
     - name: Verify pact binary
       run: |
         echo Validating pact version
-        ./result/bin/pact --version
+        nix run pact --version
         
