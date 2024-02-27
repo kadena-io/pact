@@ -22,6 +22,12 @@ jobs:
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest', 'macos-14']
         cabalcache: ['true']
         flags: ['+build-tool']
+        include:
+        - os: 'ubuntu-20.04'
+          ghc: '9.6'
+          cabal: '3.10'
+          cabalcache: 'true'
+          flags: '-build-tool'
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
@@ -91,6 +97,12 @@ jobs:
           documentation: False
           optimization: 1
           flags: ${{ matrix.flags }} +cryptonite-ed25519
+        extra-include-dirs:
+          /opt/local/include
+          /usr/local/opt/openssl/include
+        extra-lib-dirs:
+          /opt/local/lib
+          /usr/local/opt/openssl/lib/
         EOF
     - name: Extend cabal.project.local for GHC-9.0.2
       if: "startsWith(matrix.ghc, '9')"
