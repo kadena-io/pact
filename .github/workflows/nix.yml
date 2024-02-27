@@ -79,3 +79,9 @@ jobs:
 
         echo Build the recursive output
         nix build .#recursive.allDerivations --log-lines 500 --show-trace
+
+    - name: Verify pact binary
+      run: |
+        echo Validating pact version
+        ./result/bin/pact --version
+        
