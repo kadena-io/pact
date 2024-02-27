@@ -8,7 +8,6 @@ on:
     - '**'
     - '!.github/**'
     - '.github/workflows/applications.yml'
-
   pull_request_target:
     types: [ opened ]
 
@@ -23,13 +22,6 @@ jobs:
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest']
         cabalcache: ['true']
         flags: ['+build-tool']
-        include:
-        - os: 'ubuntu-22.04'
-          ghc: '9.6'
-          cabal: '3.10'
-          cabalcache: 'true'
-          flags: '-build-tool'
-
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
@@ -161,6 +153,7 @@ jobs:
       run: cabal bench
     - name: Verify Binary Linking
       shell: bash
+      if: "!contains(matrix.flags, '-build-tool')"
       run: cabal run exe:pact -- --version
 
     # Publish Artifacts
