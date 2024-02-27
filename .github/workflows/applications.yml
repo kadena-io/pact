@@ -8,7 +8,7 @@ on:
     - '**'
     - '!.github/**'
     - '.github/workflows/applications.yml'
-    
+
   pull_request_target:
     types: [ opened ]
 
@@ -159,6 +159,9 @@ jobs:
       shell: bash
       if: "!contains(matrix.flags, '-build-tool')"
       run: cabal bench
+    - name: Verify Binary Linking
+      shell: bash
+      run: cabal run exe:pact -- --version
 
     # Publish Artifacts
     - name: Prepare artifacts
