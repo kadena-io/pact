@@ -1,43 +1,43 @@
 * @jwiegley @emilypi @jmcardon
-/src-ghc/Pact/ApiReq.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src-ghc/Pact/Bench.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src-ghc/Pact/Coverage.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src-ghc/Pact/Coverage/Report.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src-ghc/Pact/Interpreter.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Crypto/Hash/Blake2Native.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Compile.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Eval.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Gas.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Native.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Native/Capabilities.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Native/Db.hs @sirlensalot @jwiegley @emilypi @jmcardon
+/src-ghc/Pact/ApiReq.hs @jwiegley @emilypi @jmcardon
+/src-ghc/Pact/Bench.hs @jwiegley @emilypi @jmcardon
+/src-ghc/Pact/Coverage.hs @jwiegley @emilypi @jmcardon
+/src-ghc/Pact/Coverage/Report.hs @jwiegley @emilypi @jmcardon
+/src-ghc/Pact/Interpreter.hs @jwiegley @emilypi @jmcardon
+/src/Crypto/Hash/Blake2Native.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Compile.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Eval.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Gas.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Native.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Native/Capabilities.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Native/Db.hs @jwiegley @emilypi @jmcardon
 /src/Pact/Native/Ops.hs @jmcardon @jwiegley @emilypi @jmcardon
-/src/Pact/Parse.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Persist.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/PersistPactDb.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Repl.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Repl/Lib.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Repl/Types.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Runtime/Capabilities.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Runtime/Typecheck.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Typechecker.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/API.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Advice.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Capability.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Codec.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Command.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Continuation.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Exp.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Hash.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Info.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/KeySet.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/PactError.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/PactValue.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Parser.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Persistence.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Purity.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/RPC.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Runtime.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Term.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Type.hs @sirlensalot @jwiegley @emilypi @jmcardon
-/src/Pact/Types/Typecheck.hs @sirlensalot @jwiegley @emilypi @jmcardon
+/src/Pact/Parse.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Persist.hs @jwiegley @emilypi @jmcardon
+/src/Pact/PersistPactDb.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Repl.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Repl/Lib.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Repl/Types.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Runtime/Capabilities.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Runtime/Typecheck.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Typechecker.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/API.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Advice.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Capability.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Codec.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Command.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Continuation.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Exp.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Hash.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Info.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/KeySet.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/PactError.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/PactValue.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Parser.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Persistence.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Purity.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/RPC.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Runtime.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Term.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Type.hs @jwiegley @emilypi @jmcardon
+/src/Pact/Types/Typecheck.hs @jwiegley @emilypi @jmcardon
