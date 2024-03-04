@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://i.imgur.com/bAZFAGF.png" width="450" height="243" alt="Kadena" title="Kadena">
+<img src="docs/img/kadena-logomark-green.png" style="width:450px; max-width:100%; height:auto;" alt="Kadena Logo" title="Kadena">
 </p>
 
 <p>&nbsp;</p>
@@ -55,7 +55,7 @@ Documentation is always in flux, and corrections to out of date documentation ar
 
 ## Quickstart
 
-The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.io), or via the Chainweaver [wallet](https://github.com/kadena-io/chainweaver). Both environments support error and warning highlighting, as well as an in-app REPL environment for you to test out your code immediately. The Kadena docs also include a [developer quickstart](https://docs.kadena.io/basics/quickstart). 
+The easiest and quickest way to try Pact is [in the browser](http://pact.kadena.io), or via the Chainweaver [wallet](https://github.com/kadena-io/chainweaver). Both environments support error and warning highlighting, as well as an in-app REPL environment for you to test out your code immediately. The Kadena docs also include a [developer quickstart](https://docs.kadena.io/basics/quickstart).
 
 ## Installing Pact
 
