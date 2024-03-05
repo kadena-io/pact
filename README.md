@@ -1,5 +1,5 @@
 <p align="center">
-<img src="docs/img/kadena-logomark-green.png" style="width:450px; max-width:100%; height:auto;" alt="Kadena Logo" title="Kadena">
+<img src="docs/img/kadena-logomark-green.png" alt="Kadena Logo" title="Kadena">
 </p>
 
 <p>&nbsp;</p>
