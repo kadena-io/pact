@@ -1593,11 +1593,28 @@ hyperlaneDefs = ("Hyperlane",)
   , hyperlaneDecodeTokenMessageDef
   ]
 
+tokenMessageERC20Schema :: NativeDef
+tokenMessageERC20Schema = defSchema "hyperlane-token-erc20"
+  "Schema type for ERC20 TokenMessage"
+  [(FieldKey "recipient", tTyString)
+  ,(FieldKey "amount", tTyInteger)]
+
+hyperlaneDataSchema :: NativeDef
+hyperlaneDataSchema = defSchema "hyperlane-token-msg"
+  "Schema type for hyperlane messages"
+    [ (FieldKey "version", tTyInteger)
+    , (FieldKey "nonce", tTyInteger)
+    , (FieldKey "originDomain", tTyInteger)
+    , (FieldKey "destinationDomain", tTyInteger)
+    , (FieldKey "recipient", tTyString)
+    , (FieldKey "tokenMessage", tTyObject (TyUser (snd tokenMessageERC20Schema)))
+    ]
+
 hyperlaneMessageIdDef :: NativeDef
 hyperlaneMessageIdDef = defGasRNative
   "hyperlane-message-id"
   hyperlaneMessageId'
-  (funType tTyString [("x", tTyObjectAny)])
+  (funType tTyString [("x", tTyObject (TyUser (snd hyperlaneDataSchema)))])
   [
     "(hyperlane-message-id {\"destinationDomain\": 1,\"nonce\": 325,\"originDomain\": 626,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\",\"sender\": \"0x6b622d746f6b656e2d726f75746572\",\"tokenMessage\": {\"amount\": 10000000000000000000.0,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\"},\"version\": 1})"
   ]
@@ -1653,7 +1670,7 @@ hyperlaneDecodeTokenMessageDef =
                 -- the Binary library, and we will suppress it to shield ourselves
                 -- from forking behavior if we update our Binary version.
                 Left (_,_,e) | "TokenMessage" `isPrefixOf` e -> evalError' i $ "Decoding error: " <> pretty e
-                Left _ -> evalError' i "Decoding error: binary decoding failed" 
+                Left _ -> evalError' i "Decoding error: binary decoding failed"
                 Right (_,_,(amount, chain, recipient)) ->
                   case PGuard <$> J.eitherDecode (BS.fromStrict  $ T.encodeUtf8 recipient) of
                     Left _ -> evalError' i $ "Could not parse recipient into a guard"
