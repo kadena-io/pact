@@ -59,7 +59,7 @@ module Pact.Types.Runtime
    liftIO,
    eAdvise,
    isOffChainForkedError,
-   OnChainErrorState(..)
+   OnChainErrorState(..), eeProfilingRef
    ) where
 
 
@@ -294,6 +294,8 @@ data EvalEnv e = EvalEnv {
     , _eeInRepl :: !Bool
       -- | Warnings ref
     , _eeWarnings :: !(IORef (Set PactWarning))
+      -- | Stuff
+    , _eeProfilingRef :: !(IORef [ProfilingExec])
     }
 makeLenses ''EvalEnv
 

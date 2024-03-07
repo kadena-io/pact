@@ -72,6 +72,7 @@ import Data.Text (Text, pack)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Set as Set
+import Data.Time
 
 import Pact.Gas
 import Pact.Runtime.Capabilities
@@ -1129,7 +1130,14 @@ resolveArg ai as i = case as ^? ix i of
   Just i' -> i'
 
 appCall :: Pretty t => FunApp -> Info -> [Term t] -> Eval e a -> Eval e a
-appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map abbrev as)))
+appCall fa ai as act = do
+  t1 <- liftIO $ getCurrentTime
+  out <- call (StackFrame (_faName fa) ai (Just (fa,map abbrev as))) act
+  t2 <- liftIO $ getCurrentTime
+  let diffTime = t1 `diffUTCTime` t2
+  ref <- view eeProfilingRef
+  liftIO $ modifyIORef' ref (ProfFunctionCall (_faName fa) diffTime ai :)
+  pure out
 
 enforcePactValue :: Pretty n => (Term n) -> Eval e PactValue
 enforcePactValue t = case toPactValue t of

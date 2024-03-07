@@ -191,6 +191,7 @@ setupEvalEnv
 setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   gasRef <- newIORef mempty
   warnRef <- newIORef mempty
+  profRef <- newIORef []
   pure EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mkMsgSigs $ mdSigners msgData
@@ -212,6 +213,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   , _eeAdvice = def
   , _eeInRepl = False
   , _eeWarnings = warnRef
+  , _eeProfilingRef = profRef
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss

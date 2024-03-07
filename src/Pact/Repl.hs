@@ -134,6 +134,7 @@ initEvalEnv ls = do
   mv <- newMVar ls
   gasRef <- newIORef mempty
   warnRef <- newIORef mempty
+  profRef <- newIORef mempty
   return $ EvalEnv
     { _eeRefStore = RefStore nativeDefs
     , _eeMsgSigs = mempty
@@ -155,6 +156,7 @@ initEvalEnv ls = do
     , _eeAdvice = def
     , _eeInRepl = True
     , _eeWarnings = warnRef
+    , _eeProfilingRef = profRef
     }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport

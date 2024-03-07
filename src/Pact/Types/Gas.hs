@@ -34,6 +34,7 @@ module Pact.Types.Gas
   , geGasLimit
   , geGasPrice
   , geGasModel
+  , ProfilingExec(..)
   ) where
 
 import Control.DeepSeq (NFData)
@@ -60,6 +61,7 @@ import Pact.Types.Term
 import Pact.Types.Namespace
 import Pact.Parse
 import Pact.Types.SizeOf(Bytes, SizeOfVersion)
+import Data.Time
 
 import qualified Pact.JSON.Encode as J
 
@@ -305,3 +307,7 @@ data GasEnv = GasEnv
   , _geGasModel :: !GasModel
   }
 makeLenses ''GasEnv
+
+data ProfilingExec
+  = ProfFunctionCall !Text !NominalDiffTime Info
+  deriving Show
