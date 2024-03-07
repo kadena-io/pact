@@ -461,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.10"
+"4.11"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1763,39 +1763,6 @@ Validate that PRINCIPAL unambiguously identifies GUARD.
 (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 ```
 
-## Zk {#Zk}
-
-### pairing-check {#pairing-check}
-
-*points-g1*&nbsp;`[<a>]` *points-g2*&nbsp;`[<b>]` *&rarr;*&nbsp;`bool`
-
-
-Perform pairing and final exponentiation points in G1 and G2 in BN254, check if the result is 1
-
-
-### point-add {#point-add}
-
-*type*&nbsp;`string` *point1*&nbsp;`<a>` *point2*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
-
-
-Add two points together that lie on the curve BN254. Point addition either in Fq or in Fq2
-```lisp
-pact> (point-add 'g1 {'x: 1, 'y: 2}  {'x: 1, 'y: 2})
-{"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
-```
-
-
-### scalar-mult {#scalar-mult}
-
-*type*&nbsp;`string` *point1*&nbsp;`<a>` *scalar*&nbsp;`integer` *&rarr;*&nbsp;`<a>`
-
-
-Multiply a point that lies on the curve BN254 by an integer value
-```lisp
-pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
-{"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
-```
-
 ## Poseidon Hash {#Poseidon Hash}
 
 ### poseidon-hash-hack-a-chain {#poseidon-hash-hack-a-chain}
@@ -1822,9 +1789,9 @@ pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)
 *x*&nbsp;`string` *&rarr;*&nbsp;`object:*`
 
 
-Decode a base-64 encoded Hyperlane Token Message into an object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}`.
+Decode a base-64-unpadded encoded Hyperlane Token Message into an object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}`.
 ```lisp
-pact> (hyperlane-decode-token-message "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==")
+pact> (hyperlane-decode-token-message "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 {"amount": 0.000000000000000123,"chainId": "4","recipient": KeySet {keys: [da1a339bd82d2c2e9180626a00dc043275deb3ababb27b5738abf6b9dcee8db6],pred: keys-all}}
 ```
 

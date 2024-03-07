@@ -8,7 +8,7 @@ import qualified RoundTripSpec
 import qualified PrincipalSpec
 import qualified Test.Pact.Utils.LegacyValue
 import qualified SizeOfSpec
-import qualified Test.Pact.Native.Pairing
+-- import qualified Test.Pact.Native.Pairing
 
 import qualified PactTestsSpec
 import qualified ParserSpec
@@ -30,7 +30,7 @@ import qualified PersistSpec
 import qualified RemoteVerifySpec
 import qualified TypecheckSpec
 import qualified PactCLISpec
-import qualified ZkSpec
+-- import qualified ZkSpec
 import qualified ReplSpec
 import qualified PoseidonSpec
 import qualified CoverageSpec
@@ -45,7 +45,7 @@ main = hspec $ parallel $ do
   describe "PrincipalSpec" PrincipalSpec.spec
   describe "Test.Pact.Utils.LegacyValue" Test.Pact.Utils.LegacyValue.spec
   describe "SizeOfSpec" SizeOfSpec.spec
-  describe "Test.Pact.Native.Pairing" Test.Pact.Native.Pairing.spec
+  -- describe "Test.Pact.Native.Pairing" Test.Pact.Native.Pairing.spec
   describe "PactTestsSpec" PactTestsSpec.spec
   describe "ParserSpec" ParserSpec.spec
   describe "SignatureSpec" SignatureSpec.spec
@@ -67,7 +67,7 @@ main = hspec $ parallel $ do
   describe "RemoteVerifySpec" RemoteVerifySpec.spec
   describe "TypecheckSpec" TypecheckSpec.spec
   describe "PactCLISpec" PactCLISpec.spec
-  describe "ZkSpec" ZkSpec.spec
+  -- describe "ZkSpec" ZkSpec.spec
   describe "ReplSpec" ReplSpec.spec
   describe "PoseidonSpec" PoseidonSpec.spec
   describe "CoverageSpec" CoverageSpec.spec

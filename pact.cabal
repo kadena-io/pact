@@ -235,7 +235,7 @@ library
     , pact-json >=0.1
     , pact-time >=0.2
     , parsers >=0.12.4
-    , poly >=0.5.0
+    -- , poly >=0.5.0
     , primitive >=0.8
     , quickcheck-instances >=0.3
     , reflection
