@@ -102,8 +102,8 @@ instance Pretty ReadValue where
     ReadData {} -> "ReadData"
     ReadKey {} -> "ReadKey"
     ReadTxId -> "ReadTxId"
-    ReadModule {} -> "ReadModule"
-    ReadInterface {} -> "ReadInterface"
+    ReadModule mn _ -> "ReadModule" <> parens (pretty mn)
+    ReadInterface mn _ -> "ReadInterface" <> parens (pretty mn)
     ReadNamespace {} -> "ReadNamespace"
     ReadKeySet {} -> "ReadKeySet"
     ReadYield {} -> "ReadYield"
