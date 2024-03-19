@@ -302,6 +302,7 @@ strToIntDef = defRNative "str-to-int" strToInt
   ["(str-to-int 16 \"abcdef123456\")"
   ,"(str-to-int \"123456\")"
   ,"(str-to-int 64 \"q80\")"
+  ,"(str-to-int 10 \"-1234\")"
   ]
   "Compute the integer value of STR-VAL in base 10, or in BASE if specified. \
   \STR-VAL can be up to 512 chars in length. \
@@ -1389,7 +1390,7 @@ txHash i as = argsError i as
 --
 -- e.g.
 --   -- hexadecimal to decimal
---   baseStrToInt 10 "abcdef123456" = 188900967593046
+--   baseStrToInt 16 "abcdef123456" = 188900967593046
 --
 baseStrToInt :: Integer -> Text -> Either Text Integer
 baseStrToInt base t =
@@ -1398,8 +1399,15 @@ baseStrToInt base t =
   else
     if T.null t
     then Left $ "empty text: " `T.append` asString t
-    else foldM go 0 $ T.unpack t
+    else
+      let invalidChars = filter (not. Char.isHexDigit) (T.unpack absPart) in
+      if null invalidChars
+      then fmap (sign *) $ foldM go 0 $ T.unpack absPart
+      else Left $ "text contains invalid characters: " <> T.pack invalidChars
   where
+    (sign, absPart) = case T.stripPrefix "-" t of
+      Nothing -> (1, t)
+      Just suffix -> (-1, suffix)
     go :: Integer -> Char -> Either Text Integer
     go acc c' =
       let val = fromIntegral . Char.digitToInt $ c'
