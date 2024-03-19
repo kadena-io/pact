@@ -228,6 +228,7 @@ allTests = HM.fromList
       -- SPI/Hyperlane
     , ("hyperlane-message-id", hyperlaneMessageIdTests)
     , ("enforce-verifier", enforceVerifierTests)
+    , ("keccak256", keccak256Tests)
 
       -- Non-native concepts to benchmark
     , ("use", useTests)
@@ -2043,4 +2044,14 @@ hyperlaneMessageIdTests = defGasUnitTest $ PactExpression hyperlaneMessageIdExpr
     hyperlaneMessageIdExprText = [text|
     (hyperlane-message-id {"destinationDomain": 1,"nonce": 325,"originDomain": 626,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F","sender": "0x6b622d746f6b656e2d726f75746572","tokenMessage": {"amount": 10000000000000000000.0,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"},"version": 1})
     (hyperlane-message-id {"destinationDomain": 1,"nonce": 325,"originDomain": 626,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F","sender": "0x6b622d746f6b656e2d726f75746572","tokenMessage": {"amount": 10000000000000000000.0,"recipient": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},"version": 1})
+    |]
+
+keccak256Tests :: NativeDefName -> GasUnitTests
+keccak256Tests = defGasUnitTest $ PactExpression keccak256ExprText Nothing
+  where
+    keccak256ExprText = [text|
+    (keccak256 [""])
+    (keccak256 ["IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaMTGHShyo9witFRnqlSweJJy1QNGWOSx56HdVQk/ufIkICMViciNZ7qUuihL7u5ad15YdK6UgN0k3VaX6BPDVChqibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTWkIzh7gVG0Ez7SP21xh7UOwiBK2QGtdNOW5EJ04OyvquF7O5CF4iJgs1ylOxXMUqu6dYr2eY+9BOzuztZI869P2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RBxvV4ZhOz0AvMG6nYvDyUoL1KW2Zdli+P5g2lv+m0JXGNptNr3nppdMTYikSj462PBK56fp4r/ej6eGaYgIkk80Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDB05dpYcECnaXXX459ElKzlSG/L84CrdVjE/ollYzW4Lk24ZZUJ6rRqGWExJuWUBCcy3UxBH0GqjN6sccD7QKlObaVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmzi8qeX5J3B8TUxmAH6bzlrBvl14qGQoCPkdLYY5w=="])
+    (keccak256 ["IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaM=", "Exh0ocqPcIrRUZ6pUsHiSctUDRljkseeh3VUJP7nyJA=", "gIxWJyI1nupS6KEvu7lp3Xlh0rpSA3STdVpfoE8NUKE=", "qibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTU=", "pCM4e4FRtBM+0j9tcYe1DsIgStkBrXTTluRCdODsr6o=", "4Xs7kIXiImCzXKU7FcxSq7p1ivZ5j70E7O7O1kjzr08=", "2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RA=", "cb1eGYTs9ALzBup2Lw8lKC9SltmXZYvj+YNpb/ptCVw=", "Y2m02veeml0xNiKRKPjrY8Ernp+niv96Pp4ZpiAiSTw=", "0Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDA=", "dOXaWHBAp2l11+OfRJSs5Uhvy/OAq3VYxP6JZWM1uC4=", "TbhllQnqtGoZYTEm5ZQEJzLdTEEfQaqM3qxxwPtAqU4=", "baVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmw=", "4vKnl+SdwfE1MZgB+m85awb5deKhkKAj5HS2GOc="])
+    (keccak256 ["T73FllCNJKKgAQ4UCYC4CfucbVXsdRJYkd2YXTdmW9gPm+tqUCB1iKvzzu6Md82KWtSKngqgdO04hzg2JJbS+yyHVDuzNJ6mSZfOPntCTqktEi9X27CFWoAwWEN/4Ir7DItecXm5BEu/TYGnFjsxOeMIiLU2sPlX7/macWL0ylqnVqSpgt+tvzHvJVCDxLXGwbmaEH19Ov/9uJFHwsxMmiZD9Hjl4tOTrqN7THy0tel9rc8WtrUKrg87VJ7OR3Rtts5vZ91EBs1OdVldUQPRP536eTcpJNMo+N0fy+taji6L9Mdt4I4/xGqgIfmJxJMpx6ysWmiFVte8vLKl1L5p0yhOnEDsSDjuhZISDOIKC2NeytqoT9VpBQn1T3fjWkF8WEZIvJg5uXTge/qwA46QKV0LE5AlMKgw0cK91T8fnJ+u1Dyk7tCo3XYbx+292iiih8YM1Cr1+cdY5cclAjHAmlglY2ia/GXit5p6K2ggBmd1LpEBdG8DGE4jmeTtiDXLjprpDilq8iCuI0JZ/gvQvMYPekpf8/cMXtTenIxRmhDpYvZzyCxek1F4aoo7/VcAMYV71Mh/T8ox7U1Q4U8hB9oCy1BYcAt06iQai0HXhGFljxsrkL/YSkwsnWVDhhqzxWRRdX3PubpgMzSI290C1gG0Gq4xfKdHTrbm3Q=="])
     |]

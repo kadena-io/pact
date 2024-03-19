@@ -117,6 +117,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
+import Crypto.Hash.Keccak256Native (keccak256)
 import Crypto.Hash.PoseidonNative (poseidon)
 import Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId)
 
@@ -136,10 +137,9 @@ natives =
   , decryptDefs
   , guardDefs
   , zkDefs
-  , poseidonHackAChainDefs
+  , hashDefs
   , hyperlaneDefs
   ]
-
 
 -- | Production native modules as a dispatch map.
 nativeDefs :: HM.HashMap Text Ref
@@ -147,7 +147,6 @@ nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> HM.HashMap Text Ref
 moduleToMap = HM.fromList . map (asString *** Direct) . snd
-
 
 lengthDef :: NativeDef
 lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
@@ -1564,8 +1563,11 @@ base64DecodeWithShimmedErrors i txt = do
       Nothing ->
         evalError i "Could not parse error message"
 
-poseidonHackAChainDefs :: NativeModule
-poseidonHackAChainDefs = ("Poseidon Hash", [ poseidonHackAChainDef ])
+hashDefs :: NativeModule
+hashDefs = ("Hashes",)
+  [ poseidonHackAChainDef
+  , keccak256Def
+  ]
 
 poseidonHackAChainDef :: NativeDef
 poseidonHackAChainDef = defGasRNative
@@ -1586,6 +1588,26 @@ poseidonHackAChainDef = defGasRNative
       = computeGas' i (GPoseidonHashHackAChain $ length as) $
         return $ toTerm $ poseidon intArgs
      | otherwise = argsError i as
+
+keccak256Def :: NativeDef
+keccak256Def = defGasRNative
+  "keccak256"
+  keccak256'
+  (funType tTyString [("chunks", TyList tTyString)])
+  [
+    "(keccak256 [\"\"])"
+  , "(keccak256 [\"IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaMTGHShyo9witFRnqlSweJJy1QNGWOSx56HdVQk/ufIkICMViciNZ7qUuihL7u5ad15YdK6UgN0k3VaX6BPDVChqibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTWkIzh7gVG0Ez7SP21xh7UOwiBK2QGtdNOW5EJ04OyvquF7O5CF4iJgs1ylOxXMUqu6dYr2eY+9BOzuztZI869P2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RBxvV4ZhOz0AvMG6nYvDyUoL1KW2Zdli+P5g2lv+m0JXGNptNr3nppdMTYikSj462PBK56fp4r/ej6eGaYgIkk80Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDB05dpYcECnaXXX459ElKzlSG/L84CrdVjE/ollYzW4Lk24ZZUJ6rRqGWExJuWUBCcy3UxBH0GqjN6sccD7QKlObaVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmzi8qeX5J3B8TUxmAH6bzlrBvl14qGQoCPkdLYY5w==\"])"
+  , "(keccak256 [\"IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaM=\", \"Exh0ocqPcIrRUZ6pUsHiSctUDRljkseeh3VUJP7nyJA=\", \"gIxWJyI1nupS6KEvu7lp3Xlh0rpSA3STdVpfoE8NUKE=\", \"qibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTU=\", \"pCM4e4FRtBM+0j9tcYe1DsIgStkBrXTTluRCdODsr6o=\", \"4Xs7kIXiImCzXKU7FcxSq7p1ivZ5j70E7O7O1kjzr08=\", \"2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RA=\", \"cb1eGYTs9ALzBup2Lw8lKC9SltmXZYvj+YNpb/ptCVw=\", \"Y2m02veeml0xNiKRKPjrY8Ernp+niv96Pp4ZpiAiSTw=\", \"0Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDA=\", \"dOXaWHBAp2l11+OfRJSs5Uhvy/OAq3VYxP6JZWM1uC4=\", \"TbhllQnqtGoZYTEm5ZQEJzLdTEEfQaqM3qxxwPtAqU4=\", \"baVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmw=\", \"4vKnl+SdwfE1MZgB+m85awb5deKhkKAj5HS2GOc=\"])"
+  ]
+  "Compute the hash of a list of base64-encoded inputs. The hash is computed incrementally over all of the base64-decoded inputs."
+  where
+    keccak256' :: RNativeFun e
+    keccak256' i = \case
+      [TList ls _ _] -> do
+        let numBytes = sum $ V.map (\s -> BS.length (T.encodeUtf8 (s ^. _TLitString))) ls
+        computeGas' i (GKeccak256 numBytes)
+          $ return $ toTerm $ keccak256 ls
+      args -> argsError i args
 
 hyperlaneDefs :: NativeModule
 hyperlaneDefs = ("Hyperlane",)
@@ -1653,7 +1675,7 @@ hyperlaneDecodeTokenMessageDef =
                 -- the Binary library, and we will suppress it to shield ourselves
                 -- from forking behavior if we update our Binary version.
                 Left (_,_,e) | "TokenMessage" `isPrefixOf` e -> evalError' i $ "Decoding error: " <> pretty e
-                Left _ -> evalError' i "Decoding error: binary decoding failed" 
+                Left _ -> evalError' i "Decoding error: binary decoding failed"
                 Right (_,_,(amount, chain, recipient)) ->
                   case PGuard <$> J.eitherDecode (BS.fromStrict  $ T.encodeUtf8 recipient) of
                     Left _ -> evalError' i $ "Could not parse recipient into a guard"

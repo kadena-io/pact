@@ -461,7 +461,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version.
 ```lisp
 pact> (pact-version)
-"4.10"
+"4.11"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -1796,7 +1796,23 @@ pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 {"x": 1368015179489954701390400359078579693043519447331113978918064868415326638035,"y": 9918110051302171585080402603319702774565515993150576347155970296011118125764}
 ```
 
-## Poseidon Hash {#Poseidon Hash}
+## Hashes {#Hashes}
+
+### keccak256 {#keccak256}
+
+*chunks*&nbsp;`[string]` *&rarr;*&nbsp;`string`
+
+
+Compute the hash of a list of base64-encoded inputs. The hash is computed incrementally over all of the base64-decoded inputs.
+```lisp
+pact> (keccak256 [""])
+"xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e/rYBF2FpHA="
+pact> (keccak256 ["IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaMTGHShyo9witFRnqlSweJJy1QNGWOSx56HdVQk/ufIkICMViciNZ7qUuihL7u5ad15YdK6UgN0k3VaX6BPDVChqibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTWkIzh7gVG0Ez7SP21xh7UOwiBK2QGtdNOW5EJ04OyvquF7O5CF4iJgs1ylOxXMUqu6dYr2eY+9BOzuztZI869P2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RBxvV4ZhOz0AvMG6nYvDyUoL1KW2Zdli+P5g2lv+m0JXGNptNr3nppdMTYikSj462PBK56fp4r/ej6eGaYgIkk80Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDB05dpYcECnaXXX459ElKzlSG/L84CrdVjE/ollYzW4Lk24ZZUJ6rRqGWExJuWUBCcy3UxBH0GqjN6sccD7QKlObaVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmzi8qeX5J3B8TUxmAH6bzlrBvl14qGQoCPkdLYY5w=="])
+"DsjZ0g3fCnsCUelBpyYbVXUH/2KHtQQ2Ko8XNMWpEBI="
+pact> (keccak256 ["IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaM=", "Exh0ocqPcIrRUZ6pUsHiSctUDRljkseeh3VUJP7nyJA=", "gIxWJyI1nupS6KEvu7lp3Xlh0rpSA3STdVpfoE8NUKE=", "qibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTU=", "pCM4e4FRtBM+0j9tcYe1DsIgStkBrXTTluRCdODsr6o=", "4Xs7kIXiImCzXKU7FcxSq7p1ivZ5j70E7O7O1kjzr08=", "2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RA=", "cb1eGYTs9ALzBup2Lw8lKC9SltmXZYvj+YNpb/ptCVw=", "Y2m02veeml0xNiKRKPjrY8Ernp+niv96Pp4ZpiAiSTw=", "0Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDA=", "dOXaWHBAp2l11+OfRJSs5Uhvy/OAq3VYxP6JZWM1uC4=", "TbhllQnqtGoZYTEm5ZQEJzLdTEEfQaqM3qxxwPtAqU4=", "baVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmw=", "4vKnl+SdwfE1MZgB+m85awb5deKhkKAj5HS2GOc="])
+"DsjZ0g3fCnsCUelBpyYbVXUH/2KHtQQ2Ko8XNMWpEBI="
+```
+
 
 ### poseidon-hash-hack-a-chain {#poseidon-hash-hack-a-chain}
 
@@ -1822,9 +1838,9 @@ pact> (poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)
 *x*&nbsp;`string` *&rarr;*&nbsp;`object:*`
 
 
-Decode a base-64 encoded Hyperlane Token Message into an object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}`.
+Decode a base-64-unpadded encoded Hyperlane Token Message into an object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}`.
 ```lisp
-pact> (hyperlane-decode-token-message "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==")
+pact> (hyperlane-decode-token-message "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 {"amount": 0.000000000000000123,"chainId": "4","recipient": KeySet {keys: [da1a339bd82d2c2e9180626a00dc043275deb3ababb27b5738abf6b9dcee8db6],pred: keys-all}}
 ```
 
@@ -1983,7 +1999,7 @@ Retreive any accumulated events and optionally clear event state. Object returne
  *&rarr;*&nbsp;`[string]`
 
 
-Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact410","DisablePact411","DisablePact42","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
+Queries, or with arguments, sets execution config flags. Valid flags: ["AllowReadInLocal","DisableHistoryInTransactionalMode","DisableInlineMemCheck","DisableModuleInstall","DisableNewTrans","DisablePact40","DisablePact410","DisablePact411","DisablePact412","DisablePact42","DisablePact43","DisablePact431","DisablePact44","DisablePact45","DisablePact46","DisablePact47","DisablePact48","DisablePact49","DisablePactEvents","DisableRuntimeReturnTypeChecking","EnforceKeyFormats","OldReadOnlyBehavior","PreserveModuleIfacesBug","PreserveModuleNameBug","PreserveNsModuleInstallBug","PreserveShowDefs"]
 ```lisp
 pact> (env-exec-config ['DisableHistoryInTransactionalMode]) (env-exec-config)
 ["DisableHistoryInTransactionalMode"]
