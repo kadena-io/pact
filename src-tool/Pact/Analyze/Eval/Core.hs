@@ -47,6 +47,7 @@ import Pact.Types.Util (AsString(asString))
 import Data.Text.Encoding (encodeUtf8)
 import qualified Pact.Types.Lang as Pact
 import qualified Pact.Types.PactValue as Pact
+import Crypto.Hash.Keccak256Native
 import qualified Data.ByteString as BS
 import Data.Functor ((<&>))
 import qualified Data.Vector as V
@@ -311,6 +312,17 @@ evalCore (ListHash ty' xs) = do
       SBool -> pure $ Pact.PLiteral . Pact.LBool $ c
       SList t' -> Pact.PList . V.fromList <$> traverse (reify t') c
       _ -> throwErrorNoLoc (FailureMessage "Unsupported type, currently we support integer, decimal, string, and bool")
+
+evalCore (Keccak256Hash xs) = eval xs <&> unliteralS >>= \case
+    Nothing -> do
+      -- (keccak256 [])
+      let h = "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e_rYBF2FpHA"
+      emitWarning (FVShimmedStaticContent "hash-keccak256" ("of type '[string]', substitute '" <> T.pack h <> "')"))
+      pure (literalS (Str h))
+    Just (xs':: [Str]) -> do
+      let tm = fmap (\x -> T.pack (unStr x)) xs'
+          h = keccak256 (V.fromList tm)
+      pure (literalS . Str . either (error . show) T.unpack $ h)
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle

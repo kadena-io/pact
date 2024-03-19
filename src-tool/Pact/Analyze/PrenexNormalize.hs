@@ -109,6 +109,7 @@ singFloat ty p = case p of
   CoreProp (BoolHash s) -> CoreProp . BoolHash <$> float s
   CoreProp (DecHash s)  -> CoreProp . DecHash  <$> float s
   CoreProp (ListHash ty' s) -> CoreProp . ListHash ty' <$> singFloat (SList ty') s
+  CoreProp (Keccak256Hash s) -> CoreProp . Keccak256Hash <$> float s
   -- time
   CoreProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
   CoreProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec

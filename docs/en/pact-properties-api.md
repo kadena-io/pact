@@ -814,6 +814,19 @@ BLAKE2b 256-bit hash of lists
 
 Supported in properties only.
 
+### keccak {#FKeccak256Hash}
+
+```lisp
+(hash-keccak256 xs)
+```
+
+* takes `xs`: [`string`]
+* produces `string`
+
+Compute the hash of a list of base64-encoded inputs. The hash is computed incrementally over all of the base64-decoded inputs.
+
+Supported in properties only.
+
 ## String operators {#String}
 
 ### length {#FStringLength}
