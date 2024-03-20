@@ -133,6 +133,7 @@ data Feature
   | FNumericalHash
   | FBoolHash
   | FListHash
+  | FKeccak256Hash
   -- Temporal operators
   | FTemporalAddition
   | FTemporalDiff
@@ -1303,6 +1304,21 @@ doc FListHash = Doc
         ]
       (TyCon str)
   ]
+doc FKeccak256Hash = Doc
+  "keccak"
+  CList
+  PropOnly
+  "Compute the hash of a list of base64-encoded inputs. The hash is computed incrementally over all of the base64-decoded inputs."
+  [ Usage
+      "(keccak256 xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' (TyCon str))
+        ]
+      (TyCon str)
+  ]
+
 -- Temporal features
 
 doc FTemporalAddition = Doc
@@ -1894,6 +1910,7 @@ PAT(SStringHash, FStringHash)
 PAT(SNumericalHash, FNumericalHash)
 PAT(SBoolHash, FBoolHash)
 PAT(SListHash, FListHash)
+PAT(SKeccak256Hash, FKeccak256Hash)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(STemporalDiff, FTemporalDiff)
 PAT(SUniversalQuantification, FUniversalQuantification)

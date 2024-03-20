@@ -2814,6 +2814,23 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success'
 
+  describe "keccak256" $ do
+    let code =
+          [text|
+            (defun test:bool (arg:[string])
+              (enforce (=
+                (keccak256 [""])
+                "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e/rYBF2FpHA=") "should match empty")
+
+               (enforce (=
+                 (keccak256 [""])
+                 (keccak256 arg)) "should match empty")
+
+
+            )
+          |]
+    expectPass code $ Valid Success'
+
   describe "validate-principal" $ do
     let code =
          [text| (defun test:bool (ks: keyset)
