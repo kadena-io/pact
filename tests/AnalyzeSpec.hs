@@ -2820,7 +2820,7 @@ spec = describe "analyze" $ do
             (defun test:bool (arg:[string])
               (enforce (=
                 (keccak256 [""])
-                "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e/rYBF2FpHA=") "should match empty")
+                "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e/rYBF2FpHA") "should match empty")
 
                (enforce (=
                  (keccak256 [""])
