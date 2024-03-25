@@ -282,7 +282,7 @@ pact411Natives :: [Text]
 pact411Natives = ["enforce-verifier", "hyperlane-message-id", "hyperlane-decode-token-message"]
 
 pact412Natives :: [Text]
-pact412Natives = ["keccak256"]
+pact412Natives = ["hash-keccak256"]
 
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs

@@ -4,18 +4,15 @@
 
 module Keccak256Spec (spec) where
 
+import Control.Monad (forM_)
 import Crypto.Hash.Keccak256Native (keccak256)
 import Data.ByteString.Base16 qualified as Base16
-import Data.ByteString.Base64 qualified as Base64
-import Data.Default (def)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Vector qualified as V
-import Pact.Types.Exp (Literal(..))
-import Pact.Types.Runtime (Term(..))
-import Test.Hspec
-import Control.Monad (forM_)
+import Pact.Types.Util (decodeBase64UrlUnpadded, encodeBase64UrlUnpadded)
+import Test.Hspec (Spec, describe, it, shouldBe)
 
 data Reference = Reference
   { input :: Text
@@ -57,15 +54,12 @@ hashChunks chunks = unwrap go
     go :: Either String Text
     go = do
       vals <- traverse (Base16.decode . Text.encodeUtf8) chunks
-      let lits = V.fromList $ flip map vals $ \lit ->
-            TLiteral
-              { _tLiteral = LString (Text.decodeUtf8 (Base64.encode lit))
-              , _tInfo = def
-              }
-      rawHash <- Base64.decode
-        $ Text.encodeUtf8
-        $ keccak256 lits
-      pure $ Text.decodeUtf8 $ Base16.encode rawHash
+      let texts = V.fromList $ map (Text.decodeUtf8 . encodeBase64UrlUnpadded) vals
+      case keccak256 texts of
+        Left err -> Left (show err)
+        Right out -> do
+          rawHash <- decodeBase64UrlUnpadded (Text.encodeUtf8 out)
+          pure (Text.decodeUtf8 (Base16.encode rawHash))
 
 hashInputAndCompareToOutput :: Text -> Text -> IO ()
 hashInputAndCompareToOutput i o = do

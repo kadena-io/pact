@@ -1798,19 +1798,21 @@ pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 
 ## Hashes {#Hashes}
 
-### keccak256 {#keccak256}
+### hash-keccak256 {#hash-keccak256}
 
-*chunks*&nbsp;`[string]` *&rarr;*&nbsp;`string`
+*bytes*&nbsp;`[string]` *&rarr;*&nbsp;`string`
 
 
-Compute the hash of a list of base64-encoded inputs. The hash is computed incrementally over all of the base64-decoded inputs.
+Compute the hash of a list of unpadded base64url-encoded inputs. The hash is computed incrementally over all of the decoded inputs.
 ```lisp
-pact> (keccak256 [""])
-"xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e/rYBF2FpHA="
-pact> (keccak256 ["IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaMTGHShyo9witFRnqlSweJJy1QNGWOSx56HdVQk/ufIkICMViciNZ7qUuihL7u5ad15YdK6UgN0k3VaX6BPDVChqibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTWkIzh7gVG0Ez7SP21xh7UOwiBK2QGtdNOW5EJ04OyvquF7O5CF4iJgs1ylOxXMUqu6dYr2eY+9BOzuztZI869P2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RBxvV4ZhOz0AvMG6nYvDyUoL1KW2Zdli+P5g2lv+m0JXGNptNr3nppdMTYikSj462PBK56fp4r/ej6eGaYgIkk80Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDB05dpYcECnaXXX459ElKzlSG/L84CrdVjE/ollYzW4Lk24ZZUJ6rRqGWExJuWUBCcy3UxBH0GqjN6sccD7QKlObaVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmzi8qeX5J3B8TUxmAH6bzlrBvl14qGQoCPkdLYY5w=="])
-"DsjZ0g3fCnsCUelBpyYbVXUH/2KHtQQ2Ko8XNMWpEBI="
-pact> (keccak256 ["IP9FQ2ml0FuBp489sFgZ/qmwjCOE91ywq2qhFd1pDaM=", "Exh0ocqPcIrRUZ6pUsHiSctUDRljkseeh3VUJP7nyJA=", "gIxWJyI1nupS6KEvu7lp3Xlh0rpSA3STdVpfoE8NUKE=", "qibJtEFIwNO5TRxKWaMayhWui9RKy3gz2OkcS4b6MTU=", "pCM4e4FRtBM+0j9tcYe1DsIgStkBrXTTluRCdODsr6o=", "4Xs7kIXiImCzXKU7FcxSq7p1ivZ5j70E7O7O1kjzr08=", "2z3tdVeppc+3OCYSqKjz9FlH0aKc4pByko7Bk8ol1RA=", "cb1eGYTs9ALzBup2Lw8lKC9SltmXZYvj+YNpb/ptCVw=", "Y2m02veeml0xNiKRKPjrY8Ernp+niv96Pp4ZpiAiSTw=", "0Tbe+7W7e6G5OPNn/S9j61ynbAsP8hueNsPwcjDPPDA=", "dOXaWHBAp2l11+OfRJSs5Uhvy/OAq3VYxP6JZWM1uC4=", "TbhllQnqtGoZYTEm5ZQEJzLdTEEfQaqM3qxxwPtAqU4=", "baVYwF53thgoBvJtmv3z2gDGlBkiLIGGpu+tYAtBDmw=", "4vKnl+SdwfE1MZgB+m85awb5deKhkKAj5HS2GOc="])
-"DsjZ0g3fCnsCUelBpyYbVXUH/2KHtQQ2Ko8XNMWpEBI="
+pact> (hash-keccak256 [])
+"xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e_rYBF2FpHA"
+pact> (hash-keccak256 [""])
+"xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e_rYBF2FpHA"
+pact> (hash-keccak256 ["T73FllCNJKKgAQ4UCYC4CfucbVXsdRJYkd2YXTdmW9gPm-tqUCB1iKvzzu6Md82KWtSKngqgdO04hzg2JJbS-yyHVDuzNJ6mSZfOPntCTqktEi9X27CFWoAwWEN_4Ir7DItecXm5BEu_TYGnFjsxOeMIiLU2sPlX7_macWL0ylqnVqSpgt-tvzHvJVCDxLXGwbmaEH19Ov_9uJFHwsxMmiZD9Hjl4tOTrqN7THy0tel9rc8WtrUKrg87VJ7OR3Rtts5vZ91EBs1OdVldUQPRP536eTcpJNMo-N0fy-taji6L9Mdt4I4_xGqgIfmJxJMpx6ysWmiFVte8vLKl1L5p0yhOnEDsSDjuhZISDOIKC2NeytqoT9VpBQn1T3fjWkF8WEZIvJg5uXTge_qwA46QKV0LE5AlMKgw0cK91T8fnJ-u1Dyk7tCo3XYbx-292iiih8YM1Cr1-cdY5cclAjHAmlglY2ia_GXit5p6K2ggBmd1LpEBdG8DGE4jmeTtiDXLjprpDilq8iCuI0JZ_gvQvMYPekpf8_cMXtTenIxRmhDpYvZzyCxek1F4aoo7_VcAMYV71Mh_T8ox7U1Q4U8hB9oCy1BYcAt06iQai0HXhGFljxsrkL_YSkwsnWVDhhqzxWRRdX3PubpgMzSI290C1gG0Gq4xfKdHTrbm3Q"])
+"DqM-LjT1ckQGQCRMfx9fBGl86XE5vacqZVjYZjwCs4g"
+pact> (hash-keccak256 ["T73FllCNJKKgAQ4UCYC4CfucbVXsdRJYkd2YXTdmW9g", "D5vralAgdYir887ujHfNilrUip4KoHTtOIc4NiSW0vs", "LIdUO7M0nqZJl84-e0JOqS0SL1fbsIVagDBYQ3_givs", "DItecXm5BEu_TYGnFjsxOeMIiLU2sPlX7_macWL0ylo", "p1akqYLfrb8x7yVQg8S1xsG5mhB9fTr__biRR8LMTJo", "JkP0eOXi05Ouo3tMfLS16X2tzxa2tQquDztUns5HdG0", "ts5vZ91EBs1OdVldUQPRP536eTcpJNMo-N0fy-taji4", "i_THbeCOP8RqoCH5icSTKcesrFpohVbXvLyypdS-adM", "KE6cQOxIOO6FkhIM4goLY17K2qhP1WkFCfVPd-NaQXw", "WEZIvJg5uXTge_qwA46QKV0LE5AlMKgw0cK91T8fnJ8", "rtQ8pO7QqN12G8ftvdoooofGDNQq9fnHWOXHJQIxwJo", "WCVjaJr8ZeK3mnoraCAGZ3UukQF0bwMYTiOZ5O2INcs", "jprpDilq8iCuI0JZ_gvQvMYPekpf8_cMXtTenIxRmhA", "6WL2c8gsXpNReGqKO_1XADGFe9TIf0_KMe1NUOFPIQc", "2gLLUFhwC3TqJBqLQdeEYWWPGyuQv9hKTCydZUOGGrM", "xWRRdX3PubpgMzSI290C1gG0Gq4xfKdHTrbm3Q"])
+"DqM-LjT1ckQGQCRMfx9fBGl86XE5vacqZVjYZjwCs4g"
 ```
 
 

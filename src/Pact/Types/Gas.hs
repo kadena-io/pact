@@ -190,7 +190,7 @@ data GasArgs
   -- ^ Cost of hyperlane-decode-token-message on this size (in bytes) of the
   --   hyperlane TokenMessage base64-encoded string.
   | GKeccak256 !Int
-  -- ^ Cost of keccak256 per number of bytes
+  -- ^ Cost of keccak256 per number of bytes in a chunk.
 
 data IntOpThreshold
   = Pact43IntThreshold
@@ -261,7 +261,7 @@ instance Pretty GasArgs where
     GPoseidonHashHackAChain len -> "GPoseidonHashHackAChain:" <> pretty len
     GHyperlaneMessageId len -> "GHyperlaneMessageId:" <> pretty len
     GHyperlaneDecodeTokenMessage len -> "GHyperlaneDecodeTokenMessage:" <> pretty len
-    GKeccak256 numBytes -> "GKeccak256:" <> pretty numBytes
+    GKeccak256 numBytesInChunk -> "GKeccak256:" <> pretty numBytesInChunk
 
 newtype GasLimit = GasLimit ParsedInteger
   deriving (Eq,Ord,Generic)
