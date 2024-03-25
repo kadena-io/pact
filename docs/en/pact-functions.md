@@ -1816,6 +1816,38 @@ pact> (hash-keccak256 ["T73FllCNJKKgAQ4UCYC4CfucbVXsdRJYkd2YXTdmW9g", "D5vralAgd
 ```
 
 
+### hash-poseidon {#hash-poseidon}
+
+*i*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *o*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+*i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *o*&nbsp;`integer` *p*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+
+
+Poseidon Hash Function. This is an alias of 'poseidon-hash-hack-a-chain'.
+```lisp
+pact> (hash-poseidon 1)
+18586133768512220936620570745912940619677854269274689475585506675881198879027
+pact> (hash-poseidon 1 2)
+7853200120776062878684798364095072458815029376092732009249414926327459813530
+pact> (hash-poseidon 1 2 3 4 5 6)
+20400040500897583745843009878988256314335038853985262692600694741116813247201
+pact> (hash-poseidon 1 2 3 4 5 6 7 8)
+18604317144381847857886385684060986177838410221561136253933256952257712543953
+```
+
+
 ### poseidon-hash-hack-a-chain {#poseidon-hash-hack-a-chain}
 
 *i*&nbsp;`integer` *j*&nbsp;`integer` *k*&nbsp;`integer` *l*&nbsp;`integer` *m*&nbsp;`integer` *n*&nbsp;`integer` *o*&nbsp;`integer` *p*&nbsp;`integer` *&rarr;*&nbsp;`integer`

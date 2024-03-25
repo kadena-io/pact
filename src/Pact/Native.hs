@@ -1566,28 +1566,49 @@ base64DecodeWithShimmedErrors i txt = do
 hashDefs :: NativeModule
 hashDefs = ("Hashes",)
   [ poseidonHackAChainDef
+  , poseidonHashAliasDef
   , keccak256Def
   ]
 
 poseidonHackAChainDef :: NativeDef
 poseidonHackAChainDef = defGasRNative
   "poseidon-hash-hack-a-chain"
-  poseidon'
+  poseidonImpl
   (funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger), ("o", tTyInteger), ("p", tTyInteger)])
-    ["(poseidon-hash-hack-a-chain 1)"
-    ,"(poseidon-hash-hack-a-chain 1 2)"
-    ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6)"
-    ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)"
-    ]
-    "Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain."
-  where
-  poseidon' :: RNativeFun e
-  poseidon' i as
-    | not (null as) && length as <= 8,
-      Just intArgs <- traverse (preview _TLitInteger) as
-      = computeGas' i (GPoseidonHashHackAChain $ length as) $
-        return $ toTerm $ poseidon intArgs
-     | otherwise = argsError i as
+  ["(poseidon-hash-hack-a-chain 1)"
+  ,"(poseidon-hash-hack-a-chain 1 2)"
+  ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6)"
+  ,"(poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)"
+  ]
+  "Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain."
+
+poseidonHashAliasDef :: NativeDef
+poseidonHashAliasDef = defGasRNative
+  "hash-poseidon"
+  poseidonImpl
+  ( funType tTyInteger [("i", tTyInteger)]
+   <> funType tTyInteger [("i", tTyInteger), ("j", tTyInteger)]
+   <> funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger)]
+   <> funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger)]
+   <> funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger)]
+   <> funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger)]
+   <> funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger), ("o", tTyInteger)]
+   <> funType tTyInteger [("i", tTyInteger), ("j", tTyInteger), ("k", tTyInteger), ("l", tTyInteger), ("m", tTyInteger), ("n", tTyInteger), ("o", tTyInteger), ("p", tTyInteger)]
+  )
+  ["(hash-poseidon 1)"
+  ,"(hash-poseidon 1 2)"
+  ,"(hash-poseidon 1 2 3 4 5 6)"
+  ,"(hash-poseidon 1 2 3 4 5 6 7 8)"
+  ]
+  "Poseidon Hash Function. This is an alias of 'poseidon-hash-hack-a-chain'."
+
+poseidonImpl :: RNativeFun e
+poseidonImpl i as
+  | not (null as) && length as <= 8,
+    Just intArgs <- traverse (preview _TLitInteger) as
+    = computeGas' i (GPoseidonHashHackAChain $ length as) $
+      return $ toTerm $ poseidon intArgs
+  | otherwise = argsError i as
 
 keccak256Def :: NativeDef
 keccak256Def = defGasRNative
