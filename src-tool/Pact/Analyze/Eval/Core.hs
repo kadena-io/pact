@@ -317,7 +317,7 @@ evalCore (Keccak256Hash xs) = eval xs <&> unliteralS >>= \case
     Nothing -> do
       -- (keccak256 [])
       let h = "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e/rYBF2FpHA"
-      emitWarning (FVShimmedStaticContent "keccac256" ("of type '[string]', substitute '" <> T.pack h <> "')"))
+      emitWarning (FVShimmedStaticContent "keccak256" ("of type '[string]', substitute '" <> T.pack h <> "')"))
       pure (literalS (Str h))
     Just (xs':: [Str]) -> do
       let tm = fmap (\x -> T.pack (unStr x)) xs'
