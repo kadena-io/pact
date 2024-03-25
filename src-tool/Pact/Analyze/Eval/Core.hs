@@ -322,7 +322,7 @@ evalCore (Keccak256Hash xs) = eval xs <&> unliteralS >>= \case
     Just (xs':: [Str]) -> do
       let tm = fmap (\x -> T.pack (unStr x)) xs'
           h = keccak256 (V.fromList tm)
-      pure (literalS . Str . either (error . show) T.unpack $ h) --T.unpack $ h)
+      pure (literalS . Str . either (error . show) T.unpack $ h)
 
 evalCore (ListContains ty needle haystack) = withSymVal ty $ do
   S _ needle'   <- withSing ty $ eval needle
