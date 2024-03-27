@@ -189,6 +189,9 @@ pattern AST_ParseTime formatStr timeStr <-
 pattern AST_Hash :: forall a. AST a -> AST a
 pattern AST_Hash val <- App _node (NativeFunc "hash") [val]
 
+pattern AST_Keccak :: forall a. AST a -> AST a
+pattern AST_Keccak val <- App _node (NativeFunc "hash-keccak256") [val]
+
 pattern AST_AddTime :: forall a. AST a -> AST a -> AST a
 pattern AST_AddTime time seconds <- App _ (NativeFunc STemporalAddition) [time, seconds]
 

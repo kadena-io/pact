@@ -96,6 +96,7 @@ library
     cbits/musl/sqrt_data.c
   exposed-modules:
     Crypto.Hash.Blake2Native
+    Crypto.Hash.Keccak256Native
     Crypto.Hash.HyperlaneMessageId
     Crypto.Hash.PoseidonNative
     Pact.Analyze.Remote.Types
@@ -222,11 +223,12 @@ library
     , direct-sqlite >=2.3.27
     , directory >=1.2.6.2
     , errors >=2.3
+    , ethereum >= 0.1
     , exceptions >=0.8.3
     , filepath >=1.4.1.0
     , groups
     , hashable >=1.4
-    , ethereum >= 0.1
+    , hashes >= 0.2
     , lens >=4.14
     , megaparsec >=9
     , memory
@@ -421,6 +423,7 @@ test-suite hspec
     , attoparsec
     , base
     , base16-bytestring
+    , base64-bytestring
     , bound
     , bytestring
     , containers
@@ -471,6 +474,7 @@ test-suite hspec
       GoldenSpec
       HistoryServiceSpec
       HyperlaneSpec
+      Keccak256Spec
       PactContinuationSpec
       PersistSpec
       PoseidonSpec
