@@ -1007,7 +1007,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       notStaticShim = do
         addWarning' (UnsupportedNonFatal "Call to `hash` is only implemented for string, bool, and integer, substituting hash of `hello pact`")
         wrap (StrHash (Lit' (Str "hello pact")))
-    
+
     case ty of
       SStr       -> wrap (StrHash val')
       SBool      -> wrap (BoolHash val')
@@ -1021,6 +1021,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
         SList lt' -> wrap (ListHash (SList lt') val')
         _otherwise ->  notStaticShim
       _otherwise -> notStaticShim
+
+  AST_Keccak val -> translateNode val >>= \case
+    Some (SList SStr) val' -> pure $ Some SStr $ CoreTerm $ Keccak256Hash val'
+    _ -> unexpectedNode astNode
 
   AST_ReadKeyset nameA -> translateNode nameA >>= \case
     Some SStr nameT -> return $ Some SGuard $ ReadKeySet nameT

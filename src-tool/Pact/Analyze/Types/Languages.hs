@@ -213,6 +213,9 @@ data Core (t :: Ty -> K.Type) (a :: Ty) where
   DecHash      :: t 'TyDecimal -> Core t 'TyStr
   ListHash     :: SingTy a -> t ('TyList a) -> Core t 'TyStr
 
+  -- | Keccak256 hash
+  Keccak256Hash :: t ('TyList 'TyStr) -> Core t 'TyStr
+
   Enumerate :: t 'TyInteger -> t 'TyInteger -> t 'TyInteger -> Core t ('TyList 'TyInteger)
 
   -- numeric ops
@@ -765,6 +768,7 @@ showsPrecCore ty p core = showParen (p > 10) $ case core of
   BoolHash a       -> showString "BoolHash "     . showsTm 11 a
   DecHash a        -> showString "DecimalHash "  . showsTm 11 a
   ListHash ty' a   -> showString "ListHash "     . showsPrec 11 ty' . showChar ' ' . singShowsTmList ty' 11 a
+  Keccak256Hash a  -> showString "Keccak256"     . showsTm 11 a
   Enumerate a b c  -> showString "Enumerate "    . showsTm 11 a . showChar ' ' . showsTm 11 b . showChar ' ' . showsTm 11 c
   Numerical a      -> showString "Numerical "    . showsNumerical ty 11 a
   IntAddTime a b   -> showString "IntAddTime "   . showsTm 11 a . showChar ' ' . showsTm 11 b
@@ -1024,7 +1028,7 @@ prettyCore ty = \case
   BoolHash x               -> parensSep [pretty SBoolHash, prettyTm x]
   DecHash x                -> parensSep [pretty SNumericalHash, prettyTm x]
   ListHash ty' x           -> parensSep [pretty SListHash, singPrettyTmList ty' x]
-
+  Keccak256Hash x          -> parensSep [pretty SKeccak256Hash, prettyTm x]
   Enumerate x y z          -> parensSep [pretty SEnumerate, prettyTm x, prettyTm y, prettyTm z]
   Numerical tm             -> prettyNumerical ty tm
   IntAddTime x y           -> parensSep [pretty STemporalAddition, prettyTm x, prettyTm y]
@@ -1911,6 +1915,8 @@ propToInvariant (CoreProp core) = CoreInvariant <$> case core of
     BoolHash <$> f tm1
   ListHash ty tm1 ->
     ListHash ty <$> f tm1
+  Keccak256Hash tm ->
+    Keccak256Hash <$> f tm
   Enumerate tm1 tm2 tm3 ->
     Enumerate <$> f tm1 <*> f tm2 <*> f tm3
   Numerical num ->
