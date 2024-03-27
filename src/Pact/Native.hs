@@ -21,6 +21,7 @@
 module Pact.Native
     ( natives
     , nativeDefs
+    , pact412NativeDefs
     , moduleToMap
     , distinctDef
     , enforceDef
@@ -137,17 +138,17 @@ natives =
   , guardDefs
   , zkDefs
   , poseidonHackAChainDefs
-  , hyperlaneDefs
   ]
-
 
 -- | Production native modules as a dispatch map.
 nativeDefs :: HM.HashMap Text Ref
-nativeDefs = mconcat $ map moduleToMap natives
+nativeDefs = mconcat $ map moduleToMap (hyperlaneDefs:natives)
+
+pact412NativeDefs :: HM.HashMap Text Ref
+pact412NativeDefs = mconcat $ map moduleToMap $ hyperlaneAmendedDefs:natives
 
 moduleToMap :: NativeModule -> HM.HashMap Text Ref
 moduleToMap = HM.fromList . map (asString *** Direct) . snd
-
 
 lengthDef :: NativeDef
 lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
@@ -1589,8 +1590,16 @@ poseidonHackAChainDef = defGasRNative
 
 hyperlaneDefs :: NativeModule
 hyperlaneDefs = ("Hyperlane",)
-  [ hyperlaneMessageIdDef
-  , hyperlaneDecodeTokenMessageDef
+  [ hyperlaneMessageIdDef TyAny
+  , hyperlaneDecodeTokenMessageDef TyAny
+  ]
+
+hyperlaneAmendedDefs :: NativeModule
+hyperlaneAmendedDefs = ("Hyperlane",)
+  [ hyperlaneMessageIdDef (TyUser (snd hyperlaneDataSchema))
+  , hyperlaneDecodeTokenMessageDef (TyUser (snd hyperlaneDataSchema))
+  , tokenMessageERC20Schema
+  , hyperlaneDataSchema
   ]
 
 tokenMessageERC20Schema :: NativeDef
@@ -1610,11 +1619,14 @@ hyperlaneDataSchema = defSchema "hyperlane-token-msg"
     , (FieldKey "tokenMessage", tTyObject (TyUser (snd tokenMessageERC20Schema)))
     ]
 
-hyperlaneMessageIdDef :: NativeDef
-hyperlaneMessageIdDef = defGasRNative
+
+hyperlaneMessageIdDef :: Type (Term Name) -> NativeDef
+hyperlaneMessageIdDef ty = defGasRNative
   "hyperlane-message-id"
   hyperlaneMessageId'
-  (funType tTyString [("x", tTyObject (TyUser (snd hyperlaneDataSchema)))])
+  (funType tTyString [("x", tTyObject ty)])
+  -- (funType tTyString [("x", tTyObject (TyUser (snd hyperlaneDataSchema)))])
+  -- (funType tTyString [("x", tTyObjectAny)])
   [
     "(hyperlane-message-id {\"destinationDomain\": 1,\"nonce\": 325,\"originDomain\": 626,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\",\"sender\": \"0x6b622d746f6b656e2d726f75746572\",\"tokenMessage\": {\"amount\": 10000000000000000000.0,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\"},\"version\": 1})"
   ]
@@ -1639,12 +1651,12 @@ hyperlaneMessageIdDef = defGasRNative
         Nothing -> error "couldn't decode token recipient"
         Just t -> T.encodeUtf8 t
 
-hyperlaneDecodeTokenMessageDef :: NativeDef
-hyperlaneDecodeTokenMessageDef =
+hyperlaneDecodeTokenMessageDef :: Type (Term Name) -> NativeDef
+hyperlaneDecodeTokenMessageDef schematy =
   defGasRNative
     "hyperlane-decode-token-message"
     hyperlaneDecodeTokenMessageDef'
-    (funType tTyObjectAny [("x", tTyString)])
+    (funType (tTyObject schematy) [("x", tTyString)])
     ["(hyperlane-decode-token-message \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\")"]
     "Decode a base-64-unpadded encoded Hyperlane Token Message into an object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}`."
   where

@@ -65,7 +65,7 @@ import System.Directory
 
 import Pact.Compile
 import Pact.Eval
-import Pact.Native (nativeDefs)
+import Pact.Native (nativeDefs, pact412NativeDefs)
 import qualified Pact.Persist.Pure as Pure
 import qualified Pact.Persist.SQLite as PSL
 import Pact.PersistPactDb
@@ -282,7 +282,9 @@ initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
 
 versionedNativesRefStore :: ExecutionConfig -> RefStore
-versionedNativesRefStore ec = versionNatives initRefStore
+versionedNativesRefStore ec@(ExecutionConfig s)
+  | S.member FlagDisablePact412 s = versionNatives (RefStore nativeDefs)
+  | otherwise = versionNatives (RefStore pact412NativeDefs)
   where
   versionNatives = appEndo $ mconcat
     [ disablePact40Natives ec
