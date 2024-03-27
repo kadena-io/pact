@@ -84,13 +84,13 @@ import Pact.Parse
 import Pact.Eval
 import Pact.Types.Pretty hiding (line)
 import Pact.Types.Runtime
-import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
 import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
 import Pact.JSON.Legacy.Value
+import Pact.Interpreter(versionedNativesRefStore)
 
 -- | for use in GHCI
 repl :: IO (Either () (Term Name))
@@ -134,8 +134,9 @@ initEvalEnv ls = do
   mv <- newMVar ls
   gasRef <- newIORef mempty
   warnRef <- newIORef mempty
+  let executionConfig = def
   return $ EvalEnv
-    { _eeRefStore = RefStore nativeDefs
+    { _eeRefStore = versionedNativesRefStore executionConfig
     , _eeMsgSigs = mempty
     , _eeMsgVerifiers = mempty
     , _eeMsgBody = toLegacyJson (A.Object mempty)
@@ -151,7 +152,7 @@ initEvalEnv ls = do
     , _eeNamespacePolicy = permissiveNamespacePolicy
     , _eeSPVSupport = spvs mv
     , _eePublicData = def
-    , _eeExecutionConfig = def
+    , _eeExecutionConfig = executionConfig
     , _eeAdvice = def
     , _eeInRepl = True
     , _eeWarnings = warnRef
