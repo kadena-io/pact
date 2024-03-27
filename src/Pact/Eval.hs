@@ -329,9 +329,7 @@ eval' (TModule _tm@(MDModule m) bod i) =
     govM <- loadModule mangledM bod i
     szVer <- getSizeOfVersion
     _ <- computeGas (Left (i,"module")) (GPreWrite (WriteModule (_mName m) (_mCode m)) szVer)
-    pdm <- traverse (traverse toPersistDirect') govM
-    liftIO $ print $ J.encode pdm
-    writeRow i Write Modules (_mName mangledM) pdm
+    writeRow i Write Modules (_mName mangledM) =<< traverse (traverse toPersistDirect') govM
     endAdvice govM
     return (msg $ "Loaded module " <> pretty (_mName mangledM) <> ", hash " <> pretty (_mHash mangledM))
 
