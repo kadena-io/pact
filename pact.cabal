@@ -97,7 +97,7 @@ library
   exposed-modules:
     Crypto.Hash.Blake2Native
     Crypto.Hash.Keccak256Native
-    Crypto.Hash.HyperlaneMessageId
+    Crypto.Hash.HyperlaneNatives
     Crypto.Hash.PoseidonNative
     Pact.Analyze.Remote.Types
     Pact.ApiReq
