@@ -139,7 +139,7 @@ goldenSizeOfPactValues = do
 allNativesInGasTable :: Spec
 allNativesInGasTable = do
   it "all native functions should be in gas table" $ do
-    let justNatives = map (asString . fst) (concatMap snd $ hyperlaneAmendedDefs:natives)
+    let justNatives = map (asString . fst) (concatMap snd pact412Natives)
         absent li name = case (Map.lookup name defaultGasTable) of
           Nothing -> name : li
           Just _ -> li
