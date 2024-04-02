@@ -1666,14 +1666,7 @@ hyperlaneDecodeTokenMessageDef =
   where
     hyperlaneDecodeTokenMessageDef' :: RNativeFun e
     hyperlaneDecodeTokenMessageDef' i args = case args of
-
       [TLitString msg] ->
-        -- We do not need to handle historical b64 error message shimming
-        -- or decoding from non-canonical strings in this base-64 decoder,
-        -- because this native is added in a Pact version that later than when
-        -- we moved to base64-bytestring >= 1.0, which behaves succeeds and
-        -- fails in exactly the cases we expect.
-        -- (The only change we make to its output is to strip error messages).
         computeGas' i (GHyperlaneDecodeTokenMessage (T.length msg)) $
           case hyperlaneDecodeTokenMessage msg of
             Left err -> evalError' i err

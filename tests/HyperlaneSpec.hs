@@ -3,28 +3,25 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
 
 module HyperlaneSpec (spec) where
 
-import Data.Either (fromRight)
-import Data.Decimal (Decimal)
-import Data.WideWord.Word256 (Word256(..))
-import Data.Maybe (fromMaybe)
 import Control.Lens ((^?), at, _Just, _1)
 import Crypto.Hash.HyperlaneNatives (HyperlaneMessage(..), TokenMessageERC20(..), decodeHyperlaneMessageObject, hyperlaneMessageId, hyperlaneDecodeTokenMessage, packTokenMessageERC20, tokenMessageToTerm)
+import Data.ByteString.Base16 qualified as Base16
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Lazy qualified as BL
 import Data.Default (def)
+import Data.Either (fromRight)
 import Data.Map (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Pact.Types.Runtime (FieldKey, Object(..), ObjectMap(..), Term, Literal(..), tLit, tStr, asString, toTObject, Type(..), _TObject)
-import Test.Hspec
-import Data.ByteString.Builder qualified as BB
-import Data.ByteString.Lazy qualified as BL
-import Data.ByteString.Base16 qualified as Base16
 import Pact.Types.Util (encodeBase64UrlUnpadded)
+import Test.Hspec
 
 referenceObject :: Object n
 referenceObject = mkObject
@@ -76,7 +73,6 @@ spec = describe "hyperlane" $ do
 
   describe "hyperlane-message-id" $ do
     it "computes the correct message id" $ do
-      print $ decodeHyperlaneMessageObject referenceHyperlaneMessageObject
       hyperlaneMessageId referenceHyperlaneMessageObject `shouldBe` "0xa5c3b3c117ed9f44f306bb1dfbc3d3d960a12b1394b54f44c2bd4056d0928108"
 
   describe "hyperlane-decode-token-message" $ do

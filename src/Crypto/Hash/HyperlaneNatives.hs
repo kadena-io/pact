@@ -71,9 +71,13 @@ hyperlaneMessageId o = case decodeHyperlaneMessageObject o of
 hyperlaneDecodeTokenMessage :: Text -> Either Doc (Term Name)
 hyperlaneDecodeTokenMessage i = do
   tm <- first displayHyperlaneDecodeError $ do
+    -- We do not need to handle historical b64 error message shimming
+    -- or decoding from non-canonical strings in this base-64 decoder,
+    -- because this native is added in a Pact version that later than when
+    -- we moved to base64-bytestring >= 1.0, which behaves succeeds and
+    -- fails in exactly the cases we expect.
+    -- (The only change we make to its output is to strip error messages).
     bytes <- first (const HyperlaneDecodeErrorBase64) $ decodeBase64UrlUnpadded (Text.encodeUtf8 i)
-    --let x = Bin.runGetOrFail getWord256BE (BL.fromStrict bytes)
-    --Left (HyperlaneDecodeErrorInternal (show x))
     case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BL.fromStrict bytes) of
       Left (_, _, e) | "TokenMessage" `List.isPrefixOf` e -> do
         throwError $ HyperlaneDecodeErrorInternal e
@@ -143,6 +147,19 @@ packHyperlaneMessage (HyperlaneMessage{..}) =
   <> BB.word32BE hmDestinationDomain
   <> BB.byteString (padLeft hmRecipient)
   <> packTokenMessageERC20 hmTokenMessage
+
+{-
+putHyperlaneMessage :: HyperlaneMessage -> Put
+putHyperlaneMessage (HyperlaneMessage {..}) = do
+  putWord8 hmVersion
+  putWord32be hmNonce
+  putWord32be hmOriginDomain
+  putRawByteString (padLeft hmSender)
+  putWord32be hmDestinationDomain
+  putRawByteString (padLeft hmRecipient)
+
+  putTokenMessageERC20 hmTokenMessage
+-}
 
 -- types shorter than 32 bytes are concatenated directly, without padding or sign extension
 -- dynamic types are encoded in-place and without the length.
@@ -245,7 +262,7 @@ decodeHyperlaneMessageObject o = do
   hmVersion           <- grabInt @Word8  om "version"
   hmNonce             <- grabInt @Word32 om "nonce"
   hmOriginDomain      <- grabInt @Word32 om "originDomain"
-  hmSender            <- Text.encodeUtf8 <$> grabField om "sender" _LString
+  hmSender            <- decodeHex =<< grabField om "sender" _LString
   hmDestinationDomain <- grabInt @Word32 om "destinationDomain"
   hmRecipient         <- decodeHex =<< grabField om "recipient" _LString
 
@@ -331,7 +348,6 @@ tokenMessageToTerm tm = first displayHyperlaneDecodeError $ do
   let chainId = ChainId { _chainId = Text.pack (show (toInteger (tmChainId tm))) }
   pure $ toTObject TyAny def
     [ ("recipient", fromPactValue g)
-    --, ("amount", TLiteral (LDecimal (fromRational (toInteger (tmAmount tm) % 1))) def)
     , ("amount", TLiteral (LDecimal (wordToDecimal (tmAmount tm))) def)
     , ("chainId", toTerm chainId)
     ]
