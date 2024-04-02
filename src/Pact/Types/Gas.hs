@@ -184,11 +184,11 @@ data GasArgs
   -- ^ Cost of the hack-a-chain poseidon hash on this given number of inputs
   | GHyperlaneMessageId !Int
   -- ^ Cost of the hyperlane-message-id on this size (in bytes) of the
-  --   hyperlane TokenMessage Recipient, which is the only variable-length
+  --   hyperlane Message Body, which is the only variable-length
   --   part of a HyperlaneMessage
-  | GHyperlaneDecodeTokenMessage !Int
-  -- ^ Cost of hyperlane-decode-token-message on this size (in bytes) of the
-  --   hyperlane TokenMessage base64-encoded string.
+  | GHyperlaneEncodeDecodeTokenMessage !Int
+  -- ^ Cost of hyperlane-encode-token-message and hyperlane-decode-token-message
+  --   on this size (in bytes) of the hyperlane TokenMessage base64-encoded string.
   | GKeccak256 !(V.Vector Int)
   -- ^ Cost of hash-keccak256 given the number of bytes in each chunk.
 
@@ -260,7 +260,7 @@ instance Pretty GasArgs where
     GFormatValues s args -> "GFormatValues:" <> pretty s <> pretty (V.toList args)
     GPoseidonHashHackAChain len -> "GPoseidonHashHackAChain:" <> pretty len
     GHyperlaneMessageId len -> "GHyperlaneMessageId:" <> pretty len
-    GHyperlaneDecodeTokenMessage len -> "GHyperlaneDecodeTokenMessage:" <> pretty len
+    GHyperlaneEncodeDecodeTokenMessage len -> "GHyperlaneEncodeDecodeTokenMessage:" <> pretty len
     GKeccak256 chunksBytes -> "GKeccak256:" <> pretty (V.toList chunksBytes)
 
 newtype GasLimit = GasLimit ParsedInteger

@@ -1,3 +1,11 @@
+4.13.0
+---
+### Features
+- Support for encoding a hyperlane TokenMessage (#1362)
+
+### Bugfixes
+- Fixed support for decoding a hyperlane TokenMessage (#1362)
+
 4.12.0
 ---
 ### Features

@@ -8,10 +8,6 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- | Implementation of the `keccak256` pact native.
---
---   `keccak256` takes as input a Pact object representing a
---   'HyperlaneMessage', and returns a base16-encoded hash of the abi-encoding
---   of the input.
 module Crypto.Hash.Keccak256Native (Keccak256Error(..), keccak256) where
 
 import Control.Exception (Exception(..), SomeException(..), try)
