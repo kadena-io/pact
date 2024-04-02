@@ -443,6 +443,7 @@ test-suite hspec
     , trifecta
     , unordered-containers
     , vector
+    , wide-word >= 0.1
 
   other-modules:
     Blake2Spec

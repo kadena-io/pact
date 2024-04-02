@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
@@ -29,7 +30,6 @@ import Control.Lens ((^?), at, _Just, Prism', _1)
 import Control.Monad (guard, unless)
 import Control.Monad.Except (throwError)
 import Data.Bifunctor (first)
-import Data.Binary qualified as Bin
 import Data.Binary.Get (Get)
 import Data.Binary.Get qualified as Bin
 import Data.ByteString (ByteString)
@@ -72,6 +72,8 @@ hyperlaneDecodeTokenMessage :: Text -> Either Doc (Term Name)
 hyperlaneDecodeTokenMessage i = do
   tm <- first displayHyperlaneDecodeError $ do
     bytes <- first (const HyperlaneDecodeErrorBase64) $ decodeBase64UrlUnpadded (Text.encodeUtf8 i)
+    --let x = Bin.runGetOrFail getWord256BE (BL.fromStrict bytes)
+    --Left (HyperlaneDecodeErrorInternal (show x))
     case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BL.fromStrict bytes) of
       Left (_, _, e) | "TokenMessage" `List.isPrefixOf` e -> do
         throwError $ HyperlaneDecodeErrorInternal e
@@ -106,7 +108,6 @@ displayHyperlaneDecodeError = \case
   HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed"
   HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
 
-
 ----------------------------------------------
 --         Hyperlane Message Types          --
 ----------------------------------------------
@@ -120,12 +121,14 @@ data HyperlaneMessage = HyperlaneMessage
   , hmRecipient :: ByteString -- 32x uint8
   , hmTokenMessage :: TokenMessageERC20 -- variable
   }
+  deriving stock (Eq, Show)
 
 data TokenMessageERC20 = TokenMessageERC20
   { tmRecipient :: Text -- variable
   , tmAmount :: Word256 -- uint256
   , tmChainId :: Word256 -- uint256
   }
+  deriving stock (Eq, Show)
 
 ----------------------------------------------
 --    Hyperlane Message Binary Encoding     --
@@ -133,13 +136,40 @@ data TokenMessageERC20 = TokenMessageERC20
 
 packHyperlaneMessage :: HyperlaneMessage -> Builder
 packHyperlaneMessage (HyperlaneMessage{..}) =
-  BB.word8 hmVersion
+     BB.word8 hmVersion
   <> BB.word32BE hmNonce
   <> BB.word32BE hmOriginDomain
   <> BB.byteString (padLeft hmSender)
   <> BB.word32BE hmDestinationDomain
   <> BB.byteString (padLeft hmRecipient)
   <> packTokenMessageERC20 hmTokenMessage
+
+-- types shorter than 32 bytes are concatenated directly, without padding or sign extension
+-- dynamic types are encoded in-place and without the length.
+-- array elements are padded, but still encoded in-place
+
+{-
+    function formatMessage(
+         uint8 _version,
+         uint32 _nonce,
+         uint32 _originDomain,
+         bytes32 _sender,
+         uint32 _destinationDomain,
+         bytes32 _recipient,
+         bytes calldata _messageBody
+     ) internal pure returns (bytes memory) {
+         return
+             abi.encodePacked(
+                 _version,
+                 _nonce,
+                 _originDomain,
+                 _sender,
+                 _destinationDomain,
+                 _recipient,
+                 _messageBody
+             );
+     }
+-}
 
 -- The TokenMessage contains a recipient (text) and an amount (word-256).
 -- A schematic of the message format:
@@ -154,7 +184,7 @@ packHyperlaneMessage (HyperlaneMessage{..}) =
 packTokenMessageERC20 :: TokenMessageERC20 -> Builder
 packTokenMessageERC20 t =
   word256BE 96
-  <> word256BE (tmAmount t)
+  <> word256BE (tmAmount t) --round (wordToDecimal (tmAmount t))) -- amount --
   <> word256BE (tmChainId t)
   <> word256BE recipientSize
   <> BB.byteString recipient
@@ -163,14 +193,14 @@ packTokenMessageERC20 t =
 
 unpackTokenMessageERC20 :: Get TokenMessageERC20
 unpackTokenMessageERC20 = do
-  firstOffset <- Bin.get @Word256
+  firstOffset <- getWord256BE
   unless (firstOffset == 96) $ do
     fail $ "TokenMessage firstOffset expected 96, found " ++ show firstOffset
 
-  tmAmount <- Bin.get @Word256
-  tmChainId <- Bin.get @Word256
+  tmAmount <- getWord256BE
+  tmChainId <- getWord256BE
 
-  recipientSize <- Bin.get @Word256
+  recipientSize <- getWord256BE
   tmRecipient <- Text.decodeUtf8 <$> do
     let size = fromIntegral @Word256 @Int recipientSize
     recipient <- BS.take size
@@ -268,6 +298,10 @@ word256BE :: Word256 -> Builder
 word256BE (Word256 a b c d) =
   BB.word64BE a <> BB.word64BE b <> BB.word64BE c <> BB.word64BE d
 
+getWord256BE :: Get Word256
+getWord256BE = do
+  Word256 <$> Bin.getWord64be <*> Bin.getWord64be <*> Bin.getWord64be <*> Bin.getWord64be
+
 -- | Pad with zeroes on the left to 32 bytes
 --
 -- > padLeft "hello world"
@@ -297,6 +331,7 @@ tokenMessageToTerm tm = first displayHyperlaneDecodeError $ do
   let chainId = ChainId { _chainId = Text.pack (show (toInteger (tmChainId tm))) }
   pure $ toTObject TyAny def
     [ ("recipient", fromPactValue g)
+    --, ("amount", TLiteral (LDecimal (fromRational (toInteger (tmAmount tm) % 1))) def)
     , ("amount", TLiteral (LDecimal (wordToDecimal (tmAmount tm))) def)
     , ("chainId", toTerm chainId)
     ]
