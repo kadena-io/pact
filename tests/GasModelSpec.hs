@@ -89,9 +89,10 @@ untestedNativesCheck = do
      , "verify-spv"
      , "public-chain-data"
      , "dec"
+     , "hyperlane-decode-token-message"
+     , "hyperlane-token-erc20","hyperlane-token-msg"
      , "list"
      , "continue"
-     , "hyperlane-decode-token-message"
      ])
 
 allGasTestsAndGoldenShouldPass :: Spec
@@ -138,14 +139,16 @@ goldenSizeOfPactValues = do
 allNativesInGasTable :: Spec
 allNativesInGasTable = do
   it "all native functions should be in gas table" $ do
-    let justNatives = map (asString . fst) (concatMap snd natives)
+    let justNatives = map (asString . fst) (concatMap snd $ hyperlaneAmendedDefs:natives)
         absent li name = case (Map.lookup name defaultGasTable) of
           Nothing -> name : li
           Just _ -> li
         absentNatives = foldl' absent [] justNatives
     (S.fromList absentNatives)
     `shouldBe`
-    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1", "public-chain-data", "list"])
+    (S.fromList ["CHARSET_ASCII", "CHARSET_LATIN1"
+                ,"hyperlane-token-erc20", "hyperlane-token-msg"
+                ,"public-chain-data", "list"])
 
 -- | Use this to run a single named test.
 _runNative :: NativeDefName -> IO (Maybe [(T.Text,Gas)])

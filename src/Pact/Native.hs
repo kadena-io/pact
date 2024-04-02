@@ -21,6 +21,7 @@
 module Pact.Native
     ( natives
     , nativeDefs
+    , hyperlaneAmendedDefs
     , pact412NativeDefs
     , moduleToMap
     , distinctDef
@@ -146,7 +147,7 @@ nativeDefs :: HM.HashMap Text Ref
 nativeDefs = mconcat $ map moduleToMap (hyperlaneDefs:natives)
 
 pact412NativeDefs :: HM.HashMap Text Ref
-pact412NativeDefs = mconcat $ map moduleToMap $ hyperlaneAmendedDefs:natives
+pact412NativeDefs = foldMap moduleToMap $ hyperlaneAmendedDefs:natives
 
 moduleToMap :: NativeModule -> HM.HashMap Text Ref
 moduleToMap = HM.fromList . map (asString *** Direct) . snd

@@ -42,7 +42,11 @@ import Pact.JSON.Legacy.Value
 
 -- | Gas benchmark tests for Pact native functions
 allNatives :: [NativeDefName]
-allNatives = map fst (concatMap snd natives) <> nonNatives
+allNatives = map fst (concatMap snd enhancedNatives) <> nonNatives
+  where
+    -- Note: Since we are forking natives, the `natives` list
+    -- does not fully capture all available natives for the tests.
+  enhancedNatives = hyperlaneAmendedDefs:natives
 
 -- | Non-native concepts to benchmark
 nonNatives :: [NativeDefName]
