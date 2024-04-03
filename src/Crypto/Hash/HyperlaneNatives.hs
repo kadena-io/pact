@@ -148,19 +148,6 @@ packHyperlaneMessage (HyperlaneMessage{..}) =
   <> BB.byteString (padLeft hmRecipient)
   <> packTokenMessageERC20 hmTokenMessage
 
-{-
-putHyperlaneMessage :: HyperlaneMessage -> Put
-putHyperlaneMessage (HyperlaneMessage {..}) = do
-  putWord8 hmVersion
-  putWord32be hmNonce
-  putWord32be hmOriginDomain
-  putRawByteString (padLeft hmSender)
-  putWord32be hmDestinationDomain
-  putRawByteString (padLeft hmRecipient)
-
-  putTokenMessageERC20 hmTokenMessage
--}
-
 -- types shorter than 32 bytes are concatenated directly, without padding or sign extension
 -- dynamic types are encoded in-place and without the length.
 -- array elements are padded, but still encoded in-place
@@ -201,7 +188,7 @@ putHyperlaneMessage (HyperlaneMessage {..}) = do
 packTokenMessageERC20 :: TokenMessageERC20 -> Builder
 packTokenMessageERC20 t =
   word256BE 96
-  <> word256BE (tmAmount t) --round (wordToDecimal (tmAmount t))) -- amount --
+  <> word256BE (tmAmount t)
   <> word256BE (tmChainId t)
   <> word256BE recipientSize
   <> BB.byteString recipient
