@@ -25,9 +25,8 @@ module Crypto.Hash.HyperlaneNatives
   , hyperlaneDecodeTokenMessage
   ) where
 
-import Control.Error.Util (hush)
 import Control.Lens ((^?), at, _Just, Prism', _1)
-import Control.Monad (guard, unless)
+import Control.Monad (unless)
 import Control.Monad.Except (throwError)
 import Data.Bifunctor (first)
 import Data.Binary.Get (Get)
@@ -62,10 +61,10 @@ import Pact.Types.Util (decodeBase64UrlUnpadded)
 --               Primitives                 --
 ----------------------------------------------
 
-hyperlaneMessageId :: Object Name -> Text
-hyperlaneMessageId o = case decodeHyperlaneMessageObject o of
-  Nothing -> error "Couldn't decode HyperlaneMessage"
-  Just hm -> getHyperlaneMessageId hm
+hyperlaneMessageId :: Object Name -> Either Doc Text
+hyperlaneMessageId o = do
+  hm <- first displayHyperlaneMessageIdError $ decodeHyperlaneMessageObject o
+  pure $ getHyperlaneMessageId hm
 
 -- | Decode a hyperlane 'TokenMessageERC20'
 hyperlaneDecodeTokenMessage :: Text -> Either Doc (Term Name)
@@ -90,6 +89,25 @@ hyperlaneDecodeTokenMessage i = do
 ----------------------------------------------
 --              Error Types                 --
 ----------------------------------------------
+
+data HyperlaneMessageIdError
+  = HyperlaneMessageIdErrorFailedToFindKey FieldKey
+    -- ^ An expected key was not found.
+  | HyperlaneMessageIdErrorNumberOutOfBounds FieldKey
+    -- ^ The number at this field was outside of the expected bounds of its
+    -- type.
+  | HyperlaneMessageIdErrorBadHexPrefix FieldKey
+    -- ^ Hex textual fields (usually ETH addresses) must be prefixed with "0x"
+  | HyperlaneMessageIdErrorInvalidHex FieldKey
+    -- ^ Invalid Hex. We discard error messages from base16-bytestring to
+    --   avoid unintentionally forking behaviour.
+
+displayHyperlaneMessageIdError :: HyperlaneMessageIdError -> Doc
+displayHyperlaneMessageIdError = \case
+  HyperlaneMessageIdErrorFailedToFindKey key -> "Failed to find key in object: " <> pretty key
+  HyperlaneMessageIdErrorNumberOutOfBounds key -> "Object key " <> pretty key <> " was out of bounds"
+  HyperlaneMessageIdErrorBadHexPrefix key -> "Missing 0x prefix on field " <> pretty key
+  HyperlaneMessageIdErrorInvalidHex key -> "Invalid hex encoding on field " <> pretty key
 
 data HyperlaneDecodeError
   = HyperlaneDecodeErrorBase64
@@ -233,34 +251,38 @@ keccak256Hash = BSS.fromShort . _getBytesN . _getKeccak256Hash . keccak256
 encodeHex :: ByteString -> Text
 encodeHex b = "0x" <> Text.decodeUtf8 (Base16.encode b)
 
-decodeHex :: Text -> Maybe ByteString
-decodeHex s = do
-  h <- Text.stripPrefix "0x" s
-  hush (Base16.decode (Text.encodeUtf8 h))
+decodeHex :: FieldKey -> Text -> Either HyperlaneMessageIdError ByteString
+decodeHex key s = do
+  case Text.stripPrefix "0x" s of
+    Nothing -> do
+      throwError (HyperlaneMessageIdErrorBadHexPrefix key)
+    Just h -> do
+      first (const (HyperlaneMessageIdErrorInvalidHex key)) $ Base16.decode (Text.encodeUtf8 h)
 
 ----------------------------------------------
 --      Hyperlane Pact Object Decoding      --
 ----------------------------------------------
 
-decodeHyperlaneMessageObject :: Object Name -> Maybe HyperlaneMessage
+decodeHyperlaneMessageObject :: Object Name -> Either HyperlaneMessageIdError HyperlaneMessage
 decodeHyperlaneMessageObject o = do
   let om = _objectMap (_oObject o)
 
   hmVersion           <- grabInt @Word8  om "version"
   hmNonce             <- grabInt @Word32 om "nonce"
   hmOriginDomain      <- grabInt @Word32 om "originDomain"
-  hmSender            <- decodeHex =<< grabField om "sender" _LString
+  hmSender            <- decodeHex "sender" =<< grabField om "sender" _LString
   hmDestinationDomain <- grabInt @Word32 om "destinationDomain"
-  hmRecipient         <- decodeHex =<< grabField om "recipient" _LString
+  hmRecipient         <- decodeHex "recipient" =<< grabField om "recipient" _LString
 
   let tokenObject = om ^? at "tokenMessage" . _Just . _TObject . _1
-  hmTokenMessage <- case decodeTokenMessageERC20 =<< tokenObject of
-    Just t -> pure t
-    _ -> error "Couldn't decode TokenMessageERC20"
+  case tokenObject of
+    Nothing -> do
+      throwError (HyperlaneMessageIdErrorFailedToFindKey "tokenMessage")
+    Just tm -> do
+      hmTokenMessage <- decodeTokenMessageERC20 tm
+      pure HyperlaneMessage{..}
 
-  pure HyperlaneMessage{..}
-
-decodeTokenMessageERC20 :: Object Name -> Maybe TokenMessageERC20
+decodeTokenMessageERC20 :: Object Name -> Either HyperlaneMessageIdError TokenMessageERC20
 decodeTokenMessageERC20 o = do
   let om = _objectMap (_oObject o)
   tmRecipient <- grabField om "recipient" _LString
@@ -282,16 +304,21 @@ ethInWei :: Num a => a
 ethInWei = 1_000_000_000_000_000_000 -- 1e18
 {-# inline ethInWei #-}
 
-grabField :: Map FieldKey (Term Name) -> FieldKey -> Prism' Literal a -> Maybe a
-grabField m key p = m ^? at key . _Just . _TLiteral . _1 . p
+grabField :: Map FieldKey (Term Name) -> FieldKey -> Prism' Literal a -> Either HyperlaneMessageIdError a
+grabField m key p = case m ^? at key . _Just . _TLiteral . _1 . p of
+  Nothing -> Left (HyperlaneMessageIdErrorFailedToFindKey key)
+  Just a -> Right a
 
 -- | Grab a bounded integral value out of the pact object, and make sure
 --   the integer received is a valid element of that type
-grabInt :: forall a. (Integral a, Bounded a) => Map FieldKey (Term Name) -> FieldKey -> Maybe a
+grabInt :: forall a. (Integral a, Bounded a) => Map FieldKey (Term Name) -> FieldKey -> Either HyperlaneMessageIdError a
 grabInt m key = do
   i <- grabField m key _LInteger
-  guard (i >= fromIntegral @a @Integer minBound && i <= fromIntegral @a @Integer maxBound)
-  pure (fromIntegral @Integer @a i)
+  if i >= fromIntegral @a @Integer minBound && i <= fromIntegral @a @Integer maxBound
+  then do
+    pure (fromIntegral @Integer @a i)
+  else do
+    throwError (HyperlaneMessageIdErrorNumberOutOfBounds key)
 
 eof :: Get ()
 eof = do

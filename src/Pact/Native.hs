@@ -1639,8 +1639,10 @@ hyperlaneMessageIdDef = defGasRNative
     hyperlaneMessageId' :: RNativeFun e
     hyperlaneMessageId' i args = case args of
       [TObject o _] ->
-        computeGas' i (GHyperlaneMessageId (BS.length (getTokenRecipient o)))
-        $ return $ toTerm $ hyperlaneMessageId o
+        computeGas' i (GHyperlaneMessageId (BS.length (getTokenRecipient o))) $
+          case hyperlaneMessageId o of
+            Left err -> evalError' i err
+            Right msgId -> return $ toTerm msgId
       _ -> argsError i args
 
     getTokenRecipient :: Object n -> BS.ByteString

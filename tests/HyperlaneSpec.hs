@@ -16,7 +16,6 @@ import Data.Default (def)
 import Data.Either (fromRight)
 import Data.Map (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -44,7 +43,7 @@ testRefs refs = describe "hyperlane" $ mapM_ (uncurry testRef) (zip [0..] refs)
 
       let
         hyperlaneMessage :: HyperlaneMessage
-        hyperlaneMessage = fromMaybe (error "Decoding reference hyperlane message failed") $ do
+        hyperlaneMessage = fromRight (error "Decoding reference hyperlane message failed") $ do
           decodeHyperlaneMessageObject hyperlaneMessageObject
 
       let
@@ -56,7 +55,7 @@ testRefs refs = describe "hyperlane" $ mapM_ (uncurry testRef) (zip [0..] refs)
         hexMessage `shouldBe` ref.tokenMessageText
 
       it "Computes the correct message id" $ do
-        hyperlaneMessageId hyperlaneMessageObject `shouldBe` ref.messageId
+        hyperlaneMessageId hyperlaneMessageObject `shouldBe` Right ref.messageId
 
       it "TokenMessage decodes properly into a Pact Term" $ do
         let input =
