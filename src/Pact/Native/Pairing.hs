@@ -63,7 +63,7 @@ import qualified Data.Euclidean as E
 import qualified Data.Text as T
 import qualified Data.Map.Strict as HM
 import Control.Monad.ST
-import Data.Poly
+-- import Data.Poly
 import Data.Vector(Vector)
 import Data.Default(def)
 import Data.Int(Int8)
