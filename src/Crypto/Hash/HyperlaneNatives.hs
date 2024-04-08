@@ -14,7 +14,6 @@ module Crypto.Hash.HyperlaneNatives
   ( HyperlaneMessage(..)
   , TokenMessageERC20(..)
   , decodeHyperlaneMessageObject
-  , decodeTokenMessageERC20
   , packHyperlaneMessage
   , packTokenMessageERC20
   , unpackTokenMessageERC20
@@ -53,7 +52,7 @@ import Pact.JSON.Decode qualified as J
 import Pact.Types.Exp (Literal(..))
 import Pact.Types.PactValue (PactValue(PGuard), fromPactValue)
 import Pact.Types.Pretty (Doc, pretty)
-import Pact.Types.Runtime (Object(..), ObjectMap(..), FieldKey, Name, Type(TyAny), _TLiteral, _TObject, _LDecimal, _LInteger, _LString, toTObject, ChainId(..))
+import Pact.Types.Runtime (Object(..), ObjectMap(..), FieldKey, Name, Type(TyAny), _TLiteral, _LInteger, _LString, toTObject, ChainId(..))
 import Pact.Types.Term (Term(..), toTerm)
 import Pact.Types.Util (decodeBase64UrlUnpadded)
 
@@ -100,7 +99,10 @@ data HyperlaneMessageIdError
     -- ^ Hex textual fields (usually ETH addresses) must be prefixed with "0x"
   | HyperlaneMessageIdErrorInvalidHex FieldKey
     -- ^ Invalid Hex. We discard error messages from base16-bytestring to
-    --   avoid unintentionally forking behaviour.
+  | HyperlaneMessageIdInvalidBase64 FieldKey
+    -- ^ Invalid base64 text field.
+  | HyperlaneMessageIdIncorrectSize FieldKey Int Int
+    -- ^ Invalid Hex. We discard error messages from base16-bytestring to
 
 displayHyperlaneMessageIdError :: HyperlaneMessageIdError -> Doc
 displayHyperlaneMessageIdError = \case
@@ -108,6 +110,9 @@ displayHyperlaneMessageIdError = \case
   HyperlaneMessageIdErrorNumberOutOfBounds key -> "Object key " <> pretty key <> " was out of bounds"
   HyperlaneMessageIdErrorBadHexPrefix key -> "Missing 0x prefix on field " <> pretty key
   HyperlaneMessageIdErrorInvalidHex key -> "Invalid hex encoding on field " <> pretty key
+  HyperlaneMessageIdInvalidBase64 key -> "Invalid base64 encoding on field " <> pretty key
+  HyperlaneMessageIdIncorrectSize key expected actual ->
+    "Incorrect binary data size " <> pretty key <> ". Expected: " <> pretty expected <> ", but got " <> pretty actual
 
 data HyperlaneDecodeError
   = HyperlaneDecodeErrorBase64
@@ -141,7 +146,7 @@ data HyperlaneMessage = HyperlaneMessage
   , hmSender :: ByteString -- 32x uint8
   , hmDestinationDomain :: Word32 -- uint32
   , hmRecipient :: ByteString -- 32x uint8
-  , hmTokenMessage :: TokenMessageERC20 -- variable
+  , hmMessageBody :: ByteString -- variable
   }
   deriving stock (Eq, Show)
 
@@ -161,10 +166,10 @@ packHyperlaneMessage (HyperlaneMessage{..}) =
      BB.word8 hmVersion
   <> BB.word32BE hmNonce
   <> BB.word32BE hmOriginDomain
-  <> BB.byteString (padLeft hmSender)
+  <> BB.byteString hmSender
   <> BB.word32BE hmDestinationDomain
-  <> BB.byteString (padLeft hmRecipient)
-  <> packTokenMessageERC20 hmTokenMessage
+  <> BB.byteString hmRecipient
+  <> BB.byteString hmMessageBody
 
 -- types shorter than 32 bytes are concatenated directly, without padding or sign extension
 -- dynamic types are encoded in-place and without the length.
@@ -251,13 +256,18 @@ keccak256Hash = BSS.fromShort . _getBytesN . _getKeccak256Hash . keccak256
 encodeHex :: ByteString -> Text
 encodeHex b = "0x" <> Text.decodeUtf8 (Base16.encode b)
 
-decodeHex :: FieldKey -> Text -> Either HyperlaneMessageIdError ByteString
-decodeHex key s = do
-  case Text.stripPrefix "0x" s of
-    Nothing -> do
-      throwError (HyperlaneMessageIdErrorBadHexPrefix key)
-    Just h -> do
-      first (const (HyperlaneMessageIdErrorInvalidHex key)) $ Base16.decode (Text.encodeUtf8 h)
+decodeBase64 :: FieldKey -> Text -> Either HyperlaneMessageIdError ByteString
+decodeBase64 key s =
+    first (const $ HyperlaneMessageIdInvalidBase64 key) $ decodeBase64UrlUnpadded $ Text.encodeUtf8 s
+
+decodeBase64AndValidate :: FieldKey -> Int -> Text -> Either HyperlaneMessageIdError ByteString
+decodeBase64AndValidate key expected s = do
+  decoded <- decodeBase64 key s
+
+  unless (BS.length decoded == expected) $
+    throwError $ HyperlaneMessageIdIncorrectSize key expected (BS.length decoded)
+
+  return decoded
 
 ----------------------------------------------
 --      Hyperlane Pact Object Decoding      --
@@ -270,32 +280,16 @@ decodeHyperlaneMessageObject o = do
   hmVersion           <- grabInt @Word8  om "version"
   hmNonce             <- grabInt @Word32 om "nonce"
   hmOriginDomain      <- grabInt @Word32 om "originDomain"
-  hmSender            <- decodeHex "sender" =<< grabField om "sender" _LString
+  hmSender            <- decodeBase64AndValidate "sender" 32 =<< grabField om "sender" _LString
   hmDestinationDomain <- grabInt @Word32 om "destinationDomain"
-  hmRecipient         <- decodeHex "recipient" =<< grabField om "recipient" _LString
+  hmRecipient         <- decodeBase64AndValidate "recipient" 32 =<< grabField om "recipient" _LString
+  hmMessageBody       <- decodeBase64 "messageBody" =<< grabField om "messageBody" _LString
 
-  let tokenObject = om ^? at "tokenMessage" . _Just . _TObject . _1
-  case tokenObject of
-    Nothing -> do
-      throwError (HyperlaneMessageIdErrorFailedToFindKey "tokenMessage")
-    Just tm -> do
-      hmTokenMessage <- decodeTokenMessageERC20 tm
-      pure HyperlaneMessage{..}
-
-decodeTokenMessageERC20 :: Object Name -> Either HyperlaneMessageIdError TokenMessageERC20
-decodeTokenMessageERC20 o = do
-  let om = _objectMap (_oObject o)
-  tmRecipient <- grabField om "recipient" _LString
-  tmAmount <- decimalToWord <$> grabField om "amount" _LDecimal
-  tmChainId <- grabInt @Word256 om "chainId"
-  pure $ TokenMessageERC20{..}
+  pure HyperlaneMessage{..}
 
 ----------------------------------------------
 --                Utilities                 --
 ----------------------------------------------
-
-decimalToWord :: Decimal -> Word256
-decimalToWord d = round (d * ethInWei)
 
 wordToDecimal :: Word256 -> Decimal
 wordToDecimal w = fromRational (toInteger w % ethInWei)
@@ -332,13 +326,6 @@ word256BE (Word256 a b c d) =
 getWord256BE :: Get Word256
 getWord256BE = do
   Word256 <$> Bin.getWord64be <*> Bin.getWord64be <*> Bin.getWord64be <*> Bin.getWord64be
-
--- | Pad with zeroes on the left to 32 bytes
---
--- > padLeft "hello world"
--- "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NULhello world"
-padLeft :: ByteString -> ByteString
-padLeft s = BS.replicate (32 - BS.length s) 0 <> s
 
 -- | Pad with zeroes on the right, such that the resulting size is a multiple of 32.
 --
