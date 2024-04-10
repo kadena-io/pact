@@ -4,9 +4,10 @@
   inputs = {
     hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
+    nix-bundle-exe = { url = "github:3noch/nix-bundle-exe"; flake = false; };
   };
 
-  outputs = { self, hs-nix-infra, flake-utils }:
+  outputs = inputs@{ self, hs-nix-infra, flake-utils, ...}:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
         "aarch64-linux" "aarch64-darwin" ] (system:
@@ -53,6 +54,10 @@
       packages.default = flake.packages."pact:exe:pact";
       packages.recursive = with hs-nix-infra.lib.recursive system;
         wrapRecursiveWithMeta "pact" "${wrapFlake self}.default";
+
+      packages.pact-binary-bundle = pkgs.callPackage inputs.nix-bundle-exe {}
+        packages.default;
+
       packages.docs = pkgs.stdenv.mkDerivation {
         name = "pact-docs";
         src = ./docs;

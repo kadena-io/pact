@@ -82,6 +82,9 @@ jobs:
         echo Building the project and its devShell
         nix build .#check --log-lines 500 --show-trace
 
+        echo Build the bundle
+        nix build .#pact-binary-bundle --log-lines 500 --show-trace --out-link pact-binary-bundle
+
         echo Build the recursive output
         nix build .#recursive.allDerivations --log-lines 500 --show-trace
 
@@ -89,4 +92,9 @@ jobs:
       run: |
         echo Validating pact version
         nix run pact --version
-        
+
+    - name: Publish the bundle
+      uses: actions/upload-artifact@v3
+      with:
+        name: pact-bundle.${{ matrix.os }}
+        path: pact-binary-bundle
