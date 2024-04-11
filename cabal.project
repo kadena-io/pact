@@ -24,6 +24,7 @@ if os(darwin)
 
 package pact
     ghc-options: -Wno-missed-extra-shared-lib
+    flags: -with-crypto
 
 source-repository-package
   type: git

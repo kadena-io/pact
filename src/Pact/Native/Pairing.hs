@@ -18,8 +18,15 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
+
+#ifdef WITHOUT_CRYPTO
+
+module Pact.Native.Pairing where
+
+#else
 
 module Pact.Native.Pairing
   ( pairing
@@ -749,3 +756,5 @@ fromG2 (Point x y) = Object pts TyAny Nothing def
     HM.fromList
     [ ("x", x')
     , ("y", y')]
+
+#endif

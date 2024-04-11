@@ -42,6 +42,11 @@ flag tests-in-lib
   default:     False
   manual:      True
 
+flag with-crypto
+  description: Enable crypto primitives
+  manual: True
+  default: True
+
 -- -------------------------------------------------------------------------- --
 -- Internal: prettyprinter-1.6.0 and prettyprinter-ansi-terminal-1.1.2
 
@@ -94,6 +99,12 @@ library
     cbits/musl/pow_data.c
     cbits/musl/sqrt.c
     cbits/musl/sqrt_data.c
+
+  if flag(with-crypto)
+    build-depends: poly >=0.5.0
+  else
+    cpp-options: -DWITHOUT_CRYPTO
+
   exposed-modules:
     Crypto.Hash.Blake2Native
     Crypto.Hash.Keccak256Native
@@ -237,7 +248,6 @@ library
     , pact-json >=0.1
     , pact-time >=0.2
     , parsers >=0.12.4
-    , poly >=0.5.0
     , primitive >=0.8
     , quickcheck-instances >=0.3
     , reflection
