@@ -110,7 +110,7 @@ import Pact.Types.Version
 import Pact.Types.Namespace
 import Crypto.Hash.Keccak256Native (Keccak256Error(..), keccak256)
 import Crypto.Hash.PoseidonNative (poseidon)
-import Crypto.Hash.HyperlaneNatives (hyperlaneMessageId, hyperlaneDecodeTokenMessage)
+import Crypto.Hash.HyperlaneNatives (hyperlaneMessageId, hyperlaneDecodeTokenMessage, hyperlaneEncodeTokenMessage)
 
 import qualified Pact.JSON.Encode as J
 
@@ -1624,6 +1624,7 @@ hyperlaneDefs :: NativeModule
 hyperlaneDefs = ("Hyperlane",)
   [ hyperlaneMessageIdDef
   , hyperlaneDecodeTokenMessageDef
+  , hyperlaneEncodeTokenMessageDef
   ]
 
 hyperlaneMessageIdDef :: NativeDef
@@ -1632,7 +1633,7 @@ hyperlaneMessageIdDef = defGasRNative
   hyperlaneMessageId'
   (funType tTyString [("x", tTyObjectAny)])
   [
-    "(hyperlane-message-id {\"destinationDomain\": 1,\"nonce\": 325,\"originDomain\": 626,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\",\"sender\": \"0x6b622d746f6b656e2d726f75746572\",\"tokenMessage\": {\"amount\": 10000000000000000000.0,\"recipient\": \"0x71C7656EC7ab88b098defB751B7401B5f6d8976F\"},\"version\": 1})"
+    "(hyperlane-message-id {\"destinationDomain\": 1,\"nonce\": 325,\"originDomain\": 626,\"recipient\": \"AAAAAAAAAADpgrOqkM0BOY-FQnNzkDXuYlsVcf50GRU\",\"sender\": \"AAAAAAAAAAAAAAAAf6k4W-ECrD6sKXSD3WIz1is-FJY\",\"messageBody\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"version\": 1})"
   ]
   "Get the Message Id of a Hyperlane Message object."
   where
@@ -1672,3 +1673,31 @@ hyperlaneDecodeTokenMessageDef =
             Left err -> evalError' i err
             Right term -> pure term
       _ -> argsError i args
+
+hyperlaneEncodeTokenMessageDef :: NativeDef
+hyperlaneEncodeTokenMessageDef =
+  defGasRNative
+    "hyperlane-encode-token-message"
+    hyperlaneEncodeTokenMessageDef'
+    (funType tTyObjectAny [("x", tTyString)])
+    ["(hyperlane-encode-token-message {recipient:GUARD, amount:DECIMAL, chainId:STRING})"]
+    "Encode an object into a base-64-unpadded encoded Hyperlane Token Message `AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`."
+  where
+    hyperlaneEncodeTokenMessageDef' :: RNativeFun e
+    hyperlaneEncodeTokenMessageDef' i args = case args of
+      [TObject o _] ->
+        computeGas' i (GHyperlaneEncodeTokenMessage (BS.length (getRecipient o))) $
+          case hyperlaneEncodeTokenMessage o of
+            Left err -> evalError' i err
+            Right msg -> pure $ toTerm $ msg
+      _ -> argsError i args
+
+    getRecipient :: Object n -> BS.ByteString
+    getRecipient o =
+      let mRecipient = do
+            let om = _objectMap (_oObject o)
+            om ^? at "recipient" . _Just . _TLiteral . _1 . _LString
+      in
+      case mRecipient of
+        Nothing -> error "couldn't find recipient"
+        Just t -> T.encodeUtf8 t

@@ -58,6 +58,7 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_poseidonHashHackAChainLinearGasFactor :: Gas
   , _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes :: MilliGas
   , _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes :: MilliGas
+  , _gasCostConfig_hyperlaneEncodeTokenMessageGasPerOneHundredBytes :: MilliGas
   , _gasCostConfig_keccak256GasPerOneHundredBytes :: MilliGas
   , _gasCostConfig_keccak256GasPerChunk :: MilliGas
   }
@@ -88,6 +89,7 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor = 38
   , _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes = MilliGas 47
   , _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes = MilliGas 50
+  , _gasCostConfig_hyperlaneEncodeTokenMessageGasPerOneHundredBytes = MilliGas 50
   , _gasCostConfig_keccak256GasPerOneHundredBytes = MilliGas 146
   , _gasCostConfig_keccak256GasPerChunk = MilliGas 2_120
   }
@@ -247,6 +249,7 @@ defaultGasTable =
   ,("poseidon-hash-hack-a-chain", 124)
   ,("hyperlane-message-id", 2)
   ,("hyperlane-decode-token-message", 2)
+  ,("hyperlane-encode-token-message", 2)
   ,("hash-keccak256",1)
   ]
 
@@ -350,6 +353,9 @@ tableGasModel gasConfig =
           in MilliGas (costPerOneHundredBytes * div (fromIntegral len) 100)
         GHyperlaneDecodeTokenMessage len ->
           let MilliGas costPerOneHundredBytes = _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes gasConfig
+          in MilliGas (costPerOneHundredBytes * div (fromIntegral len) 100)
+        GHyperlaneEncodeTokenMessage len ->
+          let MilliGas costPerOneHundredBytes = _gasCostConfig_hyperlaneEncodeTokenMessageGasPerOneHundredBytes gasConfig
           in MilliGas (costPerOneHundredBytes * div (fromIntegral len) 100)
         GKeccak256 chunkBytes ->
           let MilliGas costPerOneHundredBytes = _gasCostConfig_keccak256GasPerOneHundredBytes gasConfig

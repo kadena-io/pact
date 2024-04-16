@@ -1846,6 +1846,17 @@ pact> (hyperlane-decode-token-message "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 {"amount": 0.000000000000000123,"chainId": "4","recipient": KeySet {keys: [da1a339bd82d2c2e9180626a00dc043275deb3ababb27b5738abf6b9dcee8db6],pred: keys-all}}
 ```
 
+### hyperlane-encode-token-message {#hyperlane-encode-token-message}
+
+*x*&nbsp;`object:*` *&rarr;*&nbsp;`string`
+
+
+Encode an Hyperlane Token Message object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}` into a base-64-unpadded string.
+```lisp
+pact> (hyperlane-encode-token-message {"amount": 599.0,"chainId": "1","recipient": "{\"pred\": \"keys-all\", \"keys\":[\"da1a339bd82d2c2e9180626a00dc043275deb3ababb27b5738abf6b9dcee8db6\"]}"})
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACB4y35cqvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
 
 ### hyperlane-message-id {#hyperlane-message-id}
 
@@ -1854,8 +1865,8 @@ pact> (hyperlane-decode-token-message "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
 Get the Message Id of a Hyperlane Message object.
 ```lisp
-pact> (hyperlane-message-id {"destinationDomain": 1,"nonce": 325,"originDomain": 626,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F","sender": "0x6b622d746f6b656e2d726f75746572","tokenMessage": {"amount": 10000000000000000000.0,"recipient": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"},"version": 1})
-"0x97d98aa7fdb548f43c9be37aaea33fca79680247eb8396148f1df10e6e0adfb7"
+pact> (hyperlane-message-id {"destinationDomain": 1,"nonce": 325,"originDomain": 626,"recipient": "AAAAAAAAAADpgrOqkM0BOY-FQnNzkDXuYlsVcf50GRU","sender": "AAAAAAAAAAAAAAAAf6k4W-ECrD6sKXSD3WIz1is-FJY","messageBody": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","version": 1})
+"0x3cbd30e222a483f3ad52191674b2f6951adb88636553d10f69a4a002ffd6c8d4"
 ```
 
 ## REPL-only functions {#repl-lib}
