@@ -2146,6 +2146,14 @@ Set transaction verifier names and capabilities. VERIFIERS is a list of objects 
 ```
 
 
+### env-whitelist {#env-whitelist}
+
+*blah*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+beepidy boop
+
+
 ### expect {#expect}
 
 *doc*&nbsp;`string` *expected*&nbsp;`<a>` *actual*&nbsp;`<a>` *&rarr;*&nbsp;`string`
