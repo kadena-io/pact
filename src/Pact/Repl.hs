@@ -155,6 +155,7 @@ initEvalEnv ls = do
     , _eeAdvice = def
     , _eeInRepl = True
     , _eeWarnings = warnRef
+    , _eeCapWhitelist = mempty
     }
   where
     spvs mv = set spvSupport (spv mv) noSPVSupport

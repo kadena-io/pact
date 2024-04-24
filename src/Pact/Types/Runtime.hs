@@ -32,7 +32,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgVerifiers,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eeAdvice, eeWarnings,
+   eeAdvice, eeWarnings, eeCapWhitelist,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
@@ -205,6 +205,8 @@ data ExecutionFlag
   | FlagDisablePact410
   -- | Disable Pact 4.11 Features
   | FlagDisablePact411
+  -- | Disable Pact 4.12 Features
+  | FlagDisablePact412
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation
@@ -294,6 +296,8 @@ data EvalEnv e = EvalEnv {
     , _eeInRepl :: !Bool
       -- | Warnings ref
     , _eeWarnings :: !(IORef (Set PactWarning))
+      -- | Patch-related caps
+    , _eeCapWhitelist :: M.Map QualifiedName (Set QualifiedName, ModuleHash)
     }
 makeLenses ''EvalEnv
 
