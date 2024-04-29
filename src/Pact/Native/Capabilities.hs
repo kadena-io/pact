@@ -287,8 +287,20 @@ enforceVerifierDef = defRNative
           unless inCap $
             failTx (getInfo i) $ "enforce-verifier must be run in a capability"
           verifierInScope <- anyCapabilityBeingEvaluated verCaps
+          mode <- view eeMode
           if verifierInScope then return (toTerm True)
-          else failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in scope"
+          else case mode of
+            Transactional ->
+              failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in scope"
+            Local -> do
+              capsBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+              failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": " <> vsep
+                [ "Capabilities being evaluated:"
+                , pretty (S.toList capsBeingEvaluated)
+                , "Capabilities associated to this verifier:"
+                , pretty (S.toList verCaps)
+                ]
+
         Nothing ->
           failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in transaction"
     _ -> argsError i as
