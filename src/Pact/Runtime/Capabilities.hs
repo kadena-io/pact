@@ -303,10 +303,10 @@ checkSigCaps sigs = go
       wl <- checkWhiteListed
       return $ M.filter (match (S.null autos) granted wl) sigs
 
-    match allowEmpty granted whitelist sigCaps  =
+    match allowEmpty granted capsDonatingSigs sigCaps  =
       (S.null sigCaps && allowEmpty) ||
       not (S.null (S.intersection granted sigCaps)) ||
-      (not (S.null whitelist) && all (\c -> S.member (_scName c) whitelist) sigCaps)
+      (not (S.null (S.intersection capsDonatingSigs (S.map _scName sigCaps))))
 
 findFirstUserCall :: Eval e (Maybe QualifiedName)
 findFirstUserCall = use evalCallStack >>= go
