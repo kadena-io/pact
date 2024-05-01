@@ -12,6 +12,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ratio
 import Data.Text (Text)
+import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified GHC.Integer.Logarithms as IntLog
 import GHC.Int(Int(..))
@@ -56,6 +57,9 @@ data GasCostConfig = GasCostConfig
   , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor :: Gas
   , _gasCostConfig_poseidonHashHackAChainLinearGasFactor :: Gas
   , _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes :: MilliGas
+  , _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes :: MilliGas
+  , _gasCostConfig_keccak256GasPerOneHundredBytes :: MilliGas
+  , _gasCostConfig_keccak256GasPerChunk :: MilliGas
   }
 
 defaultGasConfig :: GasCostConfig
@@ -83,6 +87,9 @@ defaultGasConfig = GasCostConfig
   , _gasCostConfig_poseidonHashHackAChainLinearGasFactor = 50
   , _gasCostConfig_poseidonHashHackAChainQuadraticGasFactor = 38
   , _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes = MilliGas 47
+  , _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes = MilliGas 50
+  , _gasCostConfig_keccak256GasPerOneHundredBytes = MilliGas 146
+  , _gasCostConfig_keccak256GasPerChunk = MilliGas 2_120
   }
 
 defaultGasTable :: Map Text Gas
@@ -239,6 +246,8 @@ defaultGasTable =
 
   ,("poseidon-hash-hack-a-chain", 124)
   ,("hyperlane-message-id", 2)
+  ,("hyperlane-decode-token-message", 2)
+  ,("hash-keccak256",1)
   ]
 
 {-# NOINLINE defaultGasTable #-}
@@ -339,6 +348,18 @@ tableGasModel gasConfig =
         GHyperlaneMessageId len ->
           let MilliGas costPerOneHundredBytes = _gasCostConfig_hyperlaneMessageIdGasPerRecipientOneHundredBytes gasConfig
           in MilliGas (costPerOneHundredBytes * div (fromIntegral len) 100)
+        GHyperlaneDecodeTokenMessage len ->
+          let MilliGas costPerOneHundredBytes = _gasCostConfig_hyperlaneDecodeTokenMessageGasPerOneHundredBytes gasConfig
+          in MilliGas (costPerOneHundredBytes * div (fromIntegral len) 100)
+        GKeccak256 chunkBytes ->
+          let MilliGas costPerOneHundredBytes = _gasCostConfig_keccak256GasPerOneHundredBytes gasConfig
+              MilliGas costPerChunk = _gasCostConfig_keccak256GasPerChunk gasConfig
+
+              -- we need to use ceiling here, otherwise someone could cheat by
+              -- having as many bytes as they want, but in chunks of 99 bytes.
+              gasOne numBytesInChunk = costPerChunk + costPerOneHundredBytes * ceiling (fromIntegral @_ @Double numBytesInChunk / 100.0)
+
+          in MilliGas (V.sum (V.map gasOne chunkBytes))
 
   in GasModel
       { gasModelName = "table"

@@ -183,6 +183,7 @@ installSigCap SigCapability{..} cdef = do
     _ -> evalError' cdef "Unexpected result from managed sig cap install"
 
 
+
 enforceNotWithinDefcap :: HasInfo i => i -> Doc -> Eval e ()
 enforceNotWithinDefcap i msg = defcapInStack Nothing >>= \p -> when p $
   evalError' i $ msg <> " not allowed within defcap execution"

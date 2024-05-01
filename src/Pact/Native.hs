@@ -6,6 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 -- |
@@ -55,6 +56,7 @@ module Pact.Native
     , describeNamespaceSchema
     , dnUserGuard, dnAdminGuard, dnNamespaceName
     , cdPrevBlockHash
+    , encodeTokenMessage
     ) where
 
 import Control.Arrow hiding (app, first)
@@ -64,22 +66,30 @@ import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Attoparsec.Text as AP
 import Data.Bifunctor (first)
+import Data.Binary (get, put)
+import Data.Binary.Get (Get, runGetOrFail, getByteString, isEmpty)
+import Data.Binary.Put (Put, runPut, putByteString)
 import Data.Bool (bool)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as B64
+import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.Char as Char
 import Data.Bits
+import Data.Decimal (Decimal)
 import Data.Default
 import Data.Functor(($>))
 import Data.Foldable
+import Data.List (isPrefixOf)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.List as L (nubBy)
+import Data.Ratio ((%))
 import qualified Data.Set as S
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text as T
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as T
+import Data.WideWord.Word256
 import Pact.Time
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -107,10 +117,12 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
+import Crypto.Hash.Keccak256Native (Keccak256Error(..), keccak256)
 import Crypto.Hash.PoseidonNative (poseidon)
 import Crypto.Hash.HyperlaneMessageId (hyperlaneMessageId)
 
 import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Decode as J
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -125,10 +137,9 @@ natives =
   , decryptDefs
   , guardDefs
   , zkDefs
-  , poseidonHackAChainDefs
+  , hashDefs
   , hyperlaneDefs
   ]
-
 
 -- | Production native modules as a dispatch map.
 nativeDefs :: HM.HashMap Text Ref
@@ -136,7 +147,6 @@ nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> HM.HashMap Text Ref
 moduleToMap = HM.fromList . map (asString *** Direct) . snd
-
 
 lengthDef :: NativeDef
 lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
@@ -1553,8 +1563,11 @@ base64DecodeWithShimmedErrors i txt = do
       Nothing ->
         evalError i "Could not parse error message"
 
-poseidonHackAChainDefs :: NativeModule
-poseidonHackAChainDefs = ("Poseidon Hash", [ poseidonHackAChainDef ])
+hashDefs :: NativeModule
+hashDefs = ("Hashes",)
+  [ poseidonHackAChainDef
+  , keccak256Def
+  ]
 
 poseidonHackAChainDef :: NativeDef
 poseidonHackAChainDef = defGasRNative
@@ -1576,9 +1589,51 @@ poseidonHackAChainDef = defGasRNative
         return $ toTerm $ poseidon intArgs
      | otherwise = argsError i as
 
+keccak256Def :: NativeDef
+keccak256Def = defGasRNative
+  "hash-keccak256"
+  keccak256'
+  (funType tTyString [("bytes", TyList tTyString)])
+  [
+    "(hash-keccak256 [])"
+  , "(hash-keccak256 [\"\"])"
+  , "(hash-keccak256 [\"T73FllCNJKKgAQ4UCYC4CfucbVXsdRJYkd2YXTdmW9gPm-tqUCB1iKvzzu6Md82KWtSKngqgdO04hzg2JJbS-yyHVDuzNJ6mSZfOPntCTqktEi9X27CFWoAwWEN_4Ir7DItecXm5BEu_TYGnFjsxOeMIiLU2sPlX7_macWL0ylqnVqSpgt-tvzHvJVCDxLXGwbmaEH19Ov_9uJFHwsxMmiZD9Hjl4tOTrqN7THy0tel9rc8WtrUKrg87VJ7OR3Rtts5vZ91EBs1OdVldUQPRP536eTcpJNMo-N0fy-taji6L9Mdt4I4_xGqgIfmJxJMpx6ysWmiFVte8vLKl1L5p0yhOnEDsSDjuhZISDOIKC2NeytqoT9VpBQn1T3fjWkF8WEZIvJg5uXTge_qwA46QKV0LE5AlMKgw0cK91T8fnJ-u1Dyk7tCo3XYbx-292iiih8YM1Cr1-cdY5cclAjHAmlglY2ia_GXit5p6K2ggBmd1LpEBdG8DGE4jmeTtiDXLjprpDilq8iCuI0JZ_gvQvMYPekpf8_cMXtTenIxRmhDpYvZzyCxek1F4aoo7_VcAMYV71Mh_T8ox7U1Q4U8hB9oCy1BYcAt06iQai0HXhGFljxsrkL_YSkwsnWVDhhqzxWRRdX3PubpgMzSI290C1gG0Gq4xfKdHTrbm3Q\"])"
+  , "(hash-keccak256 [\"T73FllCNJKKgAQ4UCYC4CfucbVXsdRJYkd2YXTdmW9g\", \"D5vralAgdYir887ujHfNilrUip4KoHTtOIc4NiSW0vs\", \"LIdUO7M0nqZJl84-e0JOqS0SL1fbsIVagDBYQ3_givs\", \"DItecXm5BEu_TYGnFjsxOeMIiLU2sPlX7_macWL0ylo\", \"p1akqYLfrb8x7yVQg8S1xsG5mhB9fTr__biRR8LMTJo\", \"JkP0eOXi05Ouo3tMfLS16X2tzxa2tQquDztUns5HdG0\", \"ts5vZ91EBs1OdVldUQPRP536eTcpJNMo-N0fy-taji4\", \"i_THbeCOP8RqoCH5icSTKcesrFpohVbXvLyypdS-adM\", \"KE6cQOxIOO6FkhIM4goLY17K2qhP1WkFCfVPd-NaQXw\", \"WEZIvJg5uXTge_qwA46QKV0LE5AlMKgw0cK91T8fnJ8\", \"rtQ8pO7QqN12G8ftvdoooofGDNQq9fnHWOXHJQIxwJo\", \"WCVjaJr8ZeK3mnoraCAGZ3UukQF0bwMYTiOZ5O2INcs\", \"jprpDilq8iCuI0JZ_gvQvMYPekpf8_cMXtTenIxRmhA\", \"6WL2c8gsXpNReGqKO_1XADGFe9TIf0_KMe1NUOFPIQc\", \"2gLLUFhwC3TqJBqLQdeEYWWPGyuQv9hKTCydZUOGGrM\", \"xWRRdX3PubpgMzSI290C1gG0Gq4xfKdHTrbm3Q\"])"
+  ]
+  "Compute the hash of a list of unpadded base64url-encoded inputs. The hash is computed incrementally over all of the decoded inputs."
+  where
+    keccak256' :: RNativeFun e
+    keccak256' i = \case
+      args@[TList ls _ _] -> do
+        texts <- forM ls $ \case
+          TLiteral (LString s) _ -> pure s
+          _ -> argsError i args
+
+        -- At first I thought we should charge based on decoded bytes.
+        -- Both base64 and base64url have predictable byte-lengths from
+        -- both the input and output. However, charging on the encoded
+        -- length makes more sense, for two reasons:
+        --
+        --   1. We do not know if the decoding will fail here, and that
+        --      decoding is best left to the impl, not the nativedef
+        --   2. Using the encoded bytes will potentially overcharge a bit,
+        --      but that's better than undercharging
+        let chunkBytes = V.map (BS.length . T.encodeUtf8) texts
+        computeGas' i (GKeccak256 chunkBytes) (pure ())
+
+        output <- case keccak256 texts of
+          Left (Keccak256Base64Exception msg) -> evalError' i ("Base64URL decode failed: " <> prettyString msg)
+          Left (Keccak256OpenSslException msg) -> evalError' i ("OpenSSL error when keccak256 hashing: " <> prettyString msg)
+          Left (Keccak256OtherException exc) -> evalError' i ("Exception when keccak256 hashing: " <> prettyString (displayException exc))
+          Right output -> pure output
+        pure (toTerm output)
+
+      args -> argsError i args
+
 hyperlaneDefs :: NativeModule
 hyperlaneDefs = ("Hyperlane",)
   [ hyperlaneMessageIdDef
+  , hyperlaneDecodeTokenMessageDef
   ]
 
 hyperlaneMessageIdDef :: NativeDef
@@ -1609,3 +1664,120 @@ hyperlaneMessageIdDef = defGasRNative
       case mRecipient of
         Nothing -> error "couldn't decode token recipient"
         Just t -> T.encodeUtf8 t
+
+hyperlaneDecodeTokenMessageDef :: NativeDef
+hyperlaneDecodeTokenMessageDef =
+  defGasRNative
+    "hyperlane-decode-token-message"
+    hyperlaneDecodeTokenMessageDef'
+    (funType tTyObjectAny [("x", tTyString)])
+    ["(hyperlane-decode-token-message \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAewAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGF7InByZWQiOiAia2V5cy1hbGwiLCAia2V5cyI6WyJkYTFhMzM5YmQ4MmQyYzJlOTE4MDYyNmEwMGRjMDQzMjc1ZGViM2FiYWJiMjdiNTczOGFiZjZiOWRjZWU4ZGI2Il19AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\")"]
+    "Decode a base-64-unpadded encoded Hyperlane Token Message into an object `{recipient:GUARD, amount:DECIMAL, chainId:STRING}`."
+  where
+    hyperlaneDecodeTokenMessageDef' :: RNativeFun e
+    hyperlaneDecodeTokenMessageDef' i args = case args of
+
+      [TLitString msg] ->
+        -- We do not need to handle historical b64 error message shimming
+        -- or decoding from non-canonical strings in this base-64 decoder,
+        -- because this native is added in a Pact version that later than when
+        -- we moved to base64-bytestring >= 1.0, which behaves succeeds and
+        -- fails in exactly the cases we expect.
+        -- (The only change we make to its output is to strip error messages).
+        computeGas' i (GHyperlaneDecodeTokenMessage (T.length msg)) $
+          case B64URL.decodeUnpadded (T.encodeUtf8 msg) of
+            Left _ -> evalError' i "Failed to base64-decode token message"
+            Right bytes -> do
+              case runGetOrFail (getTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
+                -- In case of Binary decoding failure, emit a terse error message.
+                -- If the error message begins with TokenError, we know that we
+                -- created it, and it is going to be stable (non-forking).
+                -- If it does not start with TokenMessage, it may have come from
+                -- the Binary library, and we will suppress it to shield ourselves
+                -- from forking behavior if we update our Binary version.
+                Left (_,_,e) | "TokenMessage" `isPrefixOf` e -> evalError' i $ "Decoding error: " <> pretty e
+                Left _ -> evalError' i "Decoding error: binary decoding failed"
+                Right (_,_,(amount, chain, recipient)) ->
+                  case PGuard <$> J.eitherDecode (BS.fromStrict  $ T.encodeUtf8 recipient) of
+                    Left _ -> evalError' i $ "Could not parse recipient into a guard"
+                    Right g ->
+                      pure $ toTObject TyAny def
+                        [("recipient", fromPactValue g)
+                        ,("amount", TLiteral (LDecimal $ wordToDecimal amount) def)
+                        ,("chainId", toTerm chain)
+                        ]
+      _ -> argsError i args
+
+    -- The TokenMessage contains a recipient (text) and an amount (word-256).
+    -- A schematic of the message format:
+    -- 0000000000000000000000000000000000000000000000000000000000000060 # offset of the recipient string = 96, because first three lines are 32 bytes each
+    -- 0000000000000000000000000000000000000000000000008ac7230489e80000 # amount = 10000000000000000000
+    -- 0000000000000000000000000000000000000000000000000000000000000000 # chainId = 0
+    -- 0000000000000000000000000000000000000000000000000000000000000062 # recipientSize = 98
+    -- 7B2270726564223A20226B6579732D616C6C222C20226B657973223A205B2264 # {"pred": "keys-all", "keys": ["da1a339bd82d2c2e9180626a00dc043275deb3ababb27b5738abf6b9dcee8db6"]}
+    -- 6131613333396264383264326332653931383036323661303064633034333237
+    -- 3564656233616261626232376235373338616266366239646365653864623622
+    -- 5D7D
+    getTokenMessageERC20 :: Get (Word256, ChainId, Text)
+    getTokenMessageERC20 = do
+
+      -- Parse the size of the following amount field.
+      firstOffset <- fromIntegral @Word256 @Int <$> getWord256be
+      unless (firstOffset == 96)
+        (fail $ "TokenMessage firstOffset expected 96, found " ++ show firstOffset)
+      tmAmount <- getWord256be
+      tmChainId <- getWord256be
+
+      recipientSize <- getWord256be
+      tmRecipient <- T.decodeUtf8 <$> getRecipient recipientSize
+
+      return (tmAmount, ChainId { _chainId = T.pack (show (toInteger tmChainId))}, tmRecipient)
+      where
+        getWord256be = get @Word256
+
+        -- | Reads a given number of bytes and the rest because binary data padded up to 32 bytes.
+        getRecipient :: Word256 -> Get BS.ByteString
+        getRecipient size = do
+          recipient <- BS.take (fromIntegral size) <$> getByteString (fromIntegral $ size + restSize size)
+          if BS.length recipient < fromIntegral size
+            then fail "TokenMessage recipient was smaller than expected"
+            else pure recipient
+
+
+    wordToDecimal :: Word256 -> Decimal
+    wordToDecimal w =
+      let ethInWei = 1000000000000000000 -- 1e18
+      in fromRational (toInteger w % ethInWei)
+
+    eof :: Get ()
+    eof = do
+      done <- isEmpty
+      unless done $ fail "pending bytes in input"
+
+-- | Helper function for creating TokenMessages encoded in the ERC20 format
+--   and base64url encoded. Used for generating test data.
+encodeTokenMessage :: BS.ByteString -> Word256 -> Word256 -> Text
+encodeTokenMessage recipient amount chain = T.decodeUtf8 $ B64URL.encodeUnpadded (BS.toStrict bytes)
+  where
+    bytes = runPut $ do
+      putWord256be (96 :: Word256)
+      putWord256be amount
+      putWord256be chain
+      putWord256be recipientSize
+      putByteString recipientBytes
+
+    (recipientBytes, recipientSize) = padRight recipient
+
+    putWord256be :: Word256 -> Put
+    putWord256be  = put @Word256
+
+padRight :: BS.ByteString -> (BS.ByteString, Word256)
+padRight s =
+  let
+    size = BS.length s
+    missingZeroes = restSize size
+  in (s <> BS.replicate missingZeroes 0, fromIntegral size)
+
+-- | Returns the modular of 32 bytes.
+restSize :: Integral a => a -> a
+restSize size = (32 - size) `mod` 32

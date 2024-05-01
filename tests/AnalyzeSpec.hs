@@ -2360,6 +2360,15 @@ spec = describe "analyze" $ do
               (diff-time (time "2021-01-01T00:00:01Z") (time "2021-01-01T00:00:00Z")))
           |]
     in expectVerified code
+  describe "diff-time implementation as property (#1346)" $
+    let code =
+          [text|
+            (defun test:decimal (a: time b: time)
+              @model[(property (> (diff-time a b) 0.0))]
+              (enforce (> (diff-time a b) 0.0) "a-b > 0")
+             1.0)
+          |]
+    in expectVerified code
 
   describe "regression time representation (int64/integer)" $
     let code =
@@ -2801,6 +2810,23 @@ spec = describe "analyze" $ do
               ; (enforce (=
               ;   (hash { 'foo: 1 })
               ;   "njeoJOdMu4SEI7x7zkb9rQcl44irAn61o1F7IiDge7s") "")
+            )
+          |]
+    expectPass code $ Valid Success'
+
+  describe "keccak256" $ do
+    let code =
+          [text|
+            (defun test:bool (arg:[string])
+              (enforce (=
+                (hash-keccak256 [""])
+                "xdJGAYb3IzySfn2y3McDwOUAtlPKgic7e_rYBF2FpHA") "should match empty")
+
+               (enforce (=
+                 (hash-keccak256 [""])
+                 (hash-keccak256 arg)) "should match empty")
+
+
             )
           |]
     expectPass code $ Valid Success'
