@@ -254,6 +254,8 @@ instance J.Encode ExecutionConfig where
 mkExecutionConfig :: [ExecutionFlag] -> ExecutionConfig
 mkExecutionConfig = ExecutionConfig . S.fromList
 
+type CapWhitelist = Set SigCapability -> Set SigCapability -> Bool
+
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
       -- | Environment references.
@@ -297,7 +299,7 @@ data EvalEnv e = EvalEnv {
       -- | Warnings ref
     , _eeWarnings :: !(IORef (Set PactWarning))
       -- | Patch-related caps
-    , _eeCapWhitelist :: M.Map QualifiedName (Set QualifiedName, ModuleHash)
+    , _eeCapWhitelist :: M.Map QualifiedName (CapWhitelist, ModuleHash)
     }
 makeLenses ''EvalEnv
 

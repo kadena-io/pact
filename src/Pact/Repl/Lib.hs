@@ -25,7 +25,7 @@ import Control.Arrow ((&&&))
 import Control.Concurrent.MVar
 import Control.Lens
 import Control.Exception.Safe
-import Control.Monad (foldM, forM, when, (>=>))
+import Control.Monad (foldM, forM, when)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (get,put)
 
@@ -268,7 +268,6 @@ replDefs = ("Repl",
        (funType tTyString [("on-chain", tTyBool)])
        [LitExample "(env-simulate-onchain true)"]
        "Set a flag to simulate on-chain behavior that differs from the repl, in particular for observing things like errors and stack traces."
-     ,defZRNative "env-whitelist" envWhitelist (funType a [("blah", a)]) [] "beepidy boop"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -366,25 +365,6 @@ setsigs' _ [TList ts _ _] = do
   return $ tStr "Setting transaction signatures/caps"
 setsigs' i as = argsError' i as
 
-envWhitelist :: RNativeFun LibState
-envWhitelist i [TList v _ _] = do
-  l <- traverse enforcePactValue v
-  case traverse getFields l of
-    Just s -> do
-      setenv eeCapWhitelist $ M.fromList $ V.toList s
-      return $ tStr "Setting transaction cap whitelist"
-    Nothing -> evalError' i "invalid whitelist format"
-  where
-  getFields (PObject (ObjectMap o)) = do
-    qn <- M.lookup "callsite" o >>= preview (_PLiteral . _LString) >>= parseQual
-    capNames <- M.lookup "caps" o >>= preview _PList >>= traverse (preview (_PLiteral . _LString) >=> parseQual)
-    h <- M.lookup "pinnedHash" o >>= preview (_PLiteral . _LString) >>= either (const Nothing) Just . fromText'
-    let capSet = S.fromList (V.toList capNames)
-        mh = ModuleHash h
-    pure (qn, (capSet, mh))
-  getFields _ = Nothing
-  parseQual = either (const Nothing) Just . parseQualifiedName def
-envWhitelist i as = argsError i as
 
 envVerifiers :: ZNativeFun LibState
 envVerifiers _ [TList ts _ _] = do

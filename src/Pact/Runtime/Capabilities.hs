@@ -42,6 +42,7 @@ import Data.Text (Text)
 import Data.Maybe(fromMaybe)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import qualified Data.Text as T
 
 import Pact.Types.Capability
 import Pact.Types.PactValue
@@ -49,7 +50,6 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Runtime.Utils
 
-import Debug.Trace
 
 -- | Tie the knot with Pact.Eval by having caller supply `apply` etc
 type ApplyMgrFun e = Def Ref -> PactValue -> PactValue -> Eval e PactValue
@@ -290,7 +290,7 @@ checkSigCaps sigs = go
           | otherwise = return capsBeingEvaluated
       eligibleCaps >>= checkSigs
     -- Handle cap whitelisting
-    checkWhiteListed = fmap (fromMaybe mempty) $ runMaybeT $ do
+    checkWhiteListed = fmap (fromMaybe $ \_ _ -> False) $ runMaybeT $ do
       whitelist <- view eeCapWhitelist
       qn <- MaybeT findFirstUserCall
       (allowSet, wmh) <- hoistMaybe $ M.lookup qn whitelist
@@ -303,10 +303,10 @@ checkSigCaps sigs = go
       wl <- checkWhiteListed
       return $ M.filter (match (S.null autos) granted wl) sigs
 
-    match allowEmpty granted capsDonatingSigs sigCaps  =
+    match allowEmpty granted handleWL sigCaps  =
       (S.null sigCaps && allowEmpty) ||
       not (S.null (S.intersection granted sigCaps)) ||
-      (not (S.null (S.intersection capsDonatingSigs (S.map _scName sigCaps))))
+      handleWL granted sigCaps
 
 findFirstUserCall :: Eval e (Maybe QualifiedName)
 findFirstUserCall = use evalCallStack >>= go
