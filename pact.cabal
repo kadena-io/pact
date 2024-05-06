@@ -251,6 +251,7 @@ library
     , text >=2
     , time
     , trifecta >=2.1.1.1
+    , transformers >= 0.5.2.0 && < 0.7
     , unordered-containers >=0.2.19
     , utf8-string >=1.0.1.1
     , vector >=0.11.0.0
@@ -324,7 +325,6 @@ library
       , sbv >=9.0
       , semigroupoids >=5.0
       , servant-server
-      , transformers >= 0.5.2.0 && < 0.7
       , wai-cors
       , warp
     if !os(windows)
