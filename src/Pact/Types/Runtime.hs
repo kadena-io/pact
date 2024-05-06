@@ -511,8 +511,8 @@ throwOnChainArgsError FunApp{..} args = throwErr ArgsError _faInfo $
 throwErr :: PactErrorType -> Info -> Doc -> Eval e a
 throwErr ctor i err = do
   s <- use evalCallStack
-  offChainOrPreFork <- isOffChainForkedError' FlagDisablePact47
-  throwM (PactError ctor i (if offChainOrPreFork then s else []) err)
+  _offChainOrPreFork <- isOffChainForkedError' FlagDisablePact47
+  throwM (PactError ctor i s err)
 
 evalError :: Info -> Doc -> Eval e a
 evalError = throwErr EvalError
