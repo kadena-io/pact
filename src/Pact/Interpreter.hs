@@ -80,6 +80,7 @@ import Pact.Types.SPV
 import Pact.Types.Verifier
 
 import Pact.JSON.Legacy.Value
+import Pact.Persist.Taped
 
 -- | 'PactDb'-related environment
 data PactDbEnv e = PactDbEnv {
@@ -145,6 +146,7 @@ data EvalResult = EvalResult
     -- ^ emitted events
   , _erWarnings :: S.Set PactWarning
     -- ^ emitted warning
+  , _erTape :: !(Maybe TxTape)
   } deriving (Eq,Show)
 
 -- | Execute pact statements.
@@ -329,6 +331,7 @@ interpret runner evalEnv terms = do
     runEval def evalEnv $ evalTerms runner terms
   milliGas <- readIORef (_eeGas evalEnv)
   warnings <- readIORef (_eeWarnings evalEnv)
+  let tape = _evalTxTape state
   let pact48Disabled = views (eeExecutionConfig . ecFlags) (S.member FlagDisablePact48) evalEnv
       gasLogs = _evalLogGas state
       pactExec = _evalPactExec state
@@ -338,7 +341,7 @@ interpret runner evalEnv terms = do
   return $! EvalResult
     terms
     (map (elideModRefInfo . toPactValueLenient) rs)
-    logs pactExec gasUsed modules txid gasLogs (_evalEvents state) warnings
+    logs pactExec gasUsed modules txid gasLogs (_evalEvents state) warnings tape
   where
     -- Round up by 1 if the `MilliGas` amount is in any way fractional.
     gasRem (MilliGas milliGas) =
