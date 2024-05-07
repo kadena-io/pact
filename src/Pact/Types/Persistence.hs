@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -10,9 +11,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE InstanceSigs #-}
 
 -- |
 -- Module      :  Pact.Types.Persistence
@@ -26,6 +30,8 @@ module Pact.Types.Persistence
   (
    RowKey(..),
    Domain(..),
+   SomeDomain(..),
+   constraintsForDomain,
    TxLog(..),txDomain,txKey,txValue,
    TxLogRaw,
    RawTxLogData(..),
@@ -45,19 +51,19 @@ module Pact.Types.Persistence
    ) where
 
 import Control.Applicative ((<|>))
-import Control.Concurrent.MVar (MVar)
-import Control.DeepSeq (NFData)
-import Control.Lens (makeLenses)
+import Control.Concurrent.MVar
+import Control.DeepSeq (NFData(..))
+import Control.Exception.Safe
+import Control.Lens
 
 import Data.Aeson hiding (Object)
 import Data.Default
 import qualified Data.ByteString as B
 import Data.Hashable (Hashable)
-import Data.Maybe(fromMaybe)
+import Data.Maybe
 import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
-import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 
@@ -75,6 +81,7 @@ import Pact.Types.Namespace
 import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import qualified Pact.JSON.Encode as J
+import Control.Monad (unless)
 
 -- -------------------------------------------------------------------------- --
 -- PersistDirect
@@ -191,7 +198,7 @@ instance FromJSON (Ref' PersistDirect) where
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,Generic)
-    deriving newtype (IsString,ToTerm,AsString,Show,Pretty,NFData)
+    deriving newtype (IsString,ToTerm,AsString,Show,Pretty,NFData,J.Encode,FromJSON)
 
 instance Arbitrary RowKey where
   arbitrary = RowKey <$> arbitrary
@@ -221,6 +228,54 @@ instance AsString (Domain k v) where
     asString Modules = "SYS:Modules"
     asString Namespaces = "SYS:Namespaces"
     asString Pacts = "SYS:Pacts"
+instance NFData (Domain k v) where
+    rnf (UserTables tn) = rnf tn
+    rnf KeySets = ()
+    rnf Modules = ()
+    rnf Namespaces = ()
+    rnf Pacts = ()
+
+data SomeDomain = forall k v. SomeDomain (Domain k v)
+instance J.Encode SomeDomain where
+  build (SomeDomain d) = case d of
+    UserTables tn -> J.build $ J.Object
+      [ J.KeyValue "tag" $ J.text "UserTables"
+      , J.KeyValue "tableName" $ J.build tn
+      ]
+    KeySets -> J.text "KeySets"
+    Modules -> J.text "Modules"
+    Namespaces -> J.text "Namespaces"
+    Pacts -> J.text "Pacts"
+instance FromJSON SomeDomain where
+  parseJSON v =
+    (withText "Domain" $ \case
+      "KeySets" -> return $ SomeDomain KeySets
+      "Modules" -> return $ SomeDomain Modules
+      "Namespaces" -> return $ SomeDomain Namespaces
+      "Pacts" -> return $ SomeDomain Pacts
+      _ -> fail "invalid Domain") v <|>
+    (withObject "Domain" $ \o -> do
+      tag :: Text <- o .: "tag"
+      unless (tag == "UserTables") $
+        fail "JSON object Domain must have UserTables tag"
+      tableName <- o .: "tableName"
+      return $ SomeDomain (UserTables tableName)
+    ) v
+instance Eq SomeDomain where
+  SomeDomain d1 == SomeDomain d2 = case (d1, d2) of
+    (UserTables tn1, UserTables tn2) -> tn1 == tn2
+    (KeySets, KeySets) -> True
+    (Modules, Modules) -> True
+    (Namespaces, Namespaces) -> True
+    (Pacts, Pacts) -> True
+    _ -> False
+
+constraintsForDomain :: Domain k v -> ((Show k, Show v, Eq k, Eq v, NFData k, NFData v, J.Encode k, J.Encode v, FromJSON k, FromJSON v) => r) -> r
+constraintsForDomain (UserTables _) r = r
+constraintsForDomain KeySets r = r
+constraintsForDomain Modules r = r
+constraintsForDomain Namespaces r = r
+constraintsForDomain Pacts r = r
 
 -- -------------------------------------------------------------------------- --
 -- TxLog
@@ -329,7 +384,19 @@ data WriteType =
   -- | Update an existing row, or insert a new row if not found.
   --   Requires complete row value, enforced by pact runtime.
   Write
-  deriving (Eq,Ord,Show,Enum,Bounded)
+  deriving (Eq,Ord,Show,Enum,Bounded,Generic,NFData)
+
+instance J.Encode WriteType where
+  build Insert = J.text "Insert"
+  build Update = J.text "Update"
+  build Write = J.text "Write"
+
+instance FromJSON WriteType where
+  parseJSON = withText "WriteType" $ \case
+    "Insert" -> return Insert
+    "Update" -> return Update
+    "Write" -> return Write
+    _ -> fail "invalid, expected Insert, Update, or Write"
 
 instance Pretty WriteType where
   pretty g = case g of

@@ -37,7 +37,7 @@ module Pact.Types.Runtime
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,
-   evalCapabilities,evalLogGas,evalEvents,evalUserCapabilitiesBeingEvaluated,
+   evalCapabilities,evalLogGas,evalTxTape,evalEvents,evalUserCapabilitiesBeingEvaluated,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -83,6 +83,7 @@ import Data.Set(Set)
 import GHC.Generics (Generic)
 import Test.QuickCheck
 
+import Pact.Persist.Taped
 import Pact.Types.Term
 import Pact.Types.Capability
 import Pact.Types.ChainMeta
@@ -368,10 +369,12 @@ data EvalState = EvalState {
     , _evalLogGas :: !(Maybe [(Text,Gas)])
       -- | Accumulate events
     , _evalEvents :: ![PactEvent]
+      -- | Recording of database access
+    , _evalTxTape :: !(Maybe TxTape)
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def def def def def
+instance Default EvalState where def = EvalState def def def def def def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
@@ -442,16 +445,26 @@ emitPactWarning pw =
 --
 
 -- | Invoke '_readRow'
-readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
-readRow i d k = method i $ \db -> _readRow db d k
+readRow
+  :: (IsString k, FromJSON v)
+  => Info -> Domain k v -> k -> Eval e (Maybe v)
+readRow i d k = do
+  mv <- method i $ \db -> _readRow db d k
+  evalTxTape . _Just . _TxTape %= (TxTapeRead d k mv :)
+  return mv
 
 -- | Invoke '_writeRow'
 writeRow :: (AsString k,J.Encode v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
-writeRow i w d k v = method i $ \db -> _writeRow db w d k v
+writeRow i wt d k v = do
+  method i $ \db -> _writeRow db wt d k v
+  evalTxTape . _Just . _TxTape %= (TxTapeWrite wt d k v :)
 
 -- | Invoke '_keys'
 keys :: (AsString k,IsString k) => Info -> Domain k v -> Eval e [k]
-keys i t = method i $ \db -> _keys db t
+keys i d = do
+  ks <- method i $ \db -> _keys db d
+  evalTxTape . _Just . _TxTape %= (TxTapeKeys d ks :)
+  return ks
 
 -- | Invoke '_txids'
 txids :: Info -> TableName -> TxId -> Eval e [TxId]
@@ -459,7 +472,9 @@ txids i tn tid = method i $ \db -> _txids db tn tid
 
 -- | Invoke '_createUserTable'
 createUserTable :: Info -> TableName -> ModuleName -> Eval e ()
-createUserTable i t m = method i $ \db -> _createUserTable db t m
+createUserTable i tn mn = do
+  method i $ \db -> _createUserTable db tn mn
+  evalTxTape . _Just . _TxTape %= (TxTapeCreateTable tn mn :)
 
 -- | Invoke _getUserTableInfo
 getUserTableInfo :: Info -> TableName -> Eval e ModuleName
