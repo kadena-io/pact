@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -7,6 +8,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 module Pact.Persist.Pure
   (
@@ -26,28 +32,45 @@ import Control.Monad.Reader ()
 import Control.Monad.State
 import Data.Default
 import Data.Typeable
+import GHC.Generics
 
 import Pact.Types.Persistence
 import Pact.Persist hiding (compileQuery)
 import Pact.Types.Pretty
 
 import qualified Pact.JSON.Encode as J
+import qualified Data.Text.Encoding as T
 
 newtype Tbl k = Tbl {
   _tbl :: M.Map k B.ByteString
-  } deriving (Show,Semigroup,Monoid)
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving newtype (Semigroup, Monoid)
 makeLenses ''Tbl
+instance (FromJSONKey k, Ord k) => FromJSON (Tbl k) where
+  parseJSON = fmap (Tbl . fmap T.encodeUtf8) . parseJSON
+instance (ToJSONKey k, Ord k) => ToJSON (Tbl k) where
+  toJSON = toJSON . fmap T.decodeUtf8 . _tbl
+
 
 newtype Tables k = Tables {
   _tbls :: M.Map (Table k) (Tbl k)
-  } deriving (Show,Semigroup,Monoid)
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving newtype (Semigroup,Monoid)
 makeLenses ''Tables
+deriving anyclass instance FromJSON (Tables DataKey)
+deriving anyclass instance FromJSON (Tables TxKey)
+deriving anyclass instance ToJSON (Tables DataKey)
+deriving anyclass instance ToJSON (Tables TxKey)
 
 
 data Db = Db {
   _dataTables :: !(Tables DataKey),
   _txTables :: !(Tables TxKey)
-  } deriving (Show)
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
 makeLenses ''Db
 instance Default Db where def = Db mempty mempty
 
@@ -59,6 +82,7 @@ data PureDb = PureDb {
   _committed :: !Db,
   _temp :: !Db
   }
+  deriving stock (Eq, Show)
 makeLenses ''PureDb
 instance Default PureDb where def = PureDb def def
 

@@ -462,7 +462,7 @@ createUserTable :: Info -> TableName -> ModuleName -> Eval e ()
 createUserTable i t m = method i $ \db -> _createUserTable db t m
 
 -- | Invoke _getUserTableInfo
-getUserTableInfo :: Info -> TableName -> Eval e ModuleName
+getUserTableInfo :: Info -> TableName -> Eval e (Maybe ModuleName)
 getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
 -- | Invoke _beginTx

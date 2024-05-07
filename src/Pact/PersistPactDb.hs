@@ -319,12 +319,12 @@ record tt k v = modify'
     append (h:t) b = let !x = append t b in h : x
 {-# INLINE record #-}
 
-getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO ModuleName
+getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO (Maybe ModuleName)
 getUserTableInfo' e tn = runMVState e $ do
   r <- doPersist $ \p -> readValue p (DataTable userTableInfo) (DataKey $ asString tn)
   case r of
-    (Just (UserTableInfo mn)) -> return mn
-    Nothing -> throwDbError $ "getUserTableInfo: no such table: " <> pretty tn
+    (Just (UserTableInfo mn)) -> return (Just mn)
+    Nothing -> return Nothing
 {-# INLINE getUserTableInfo' #-}
 
 

@@ -128,6 +128,7 @@ library
     Pact.Persist.MockPersist
     Pact.Persist.Pure
     Pact.Persist.SQLite
+    Pact.Persist.Taped
     Pact.PersistPactDb
     Pact.PersistPactDb.Regression
     Pact.Repl

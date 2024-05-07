@@ -51,40 +51,39 @@ nativeLookup (NativeDefName n) = case HM.lookup n nativeDefs of
   Just (Direct t) -> Just t
   _ -> Nothing
 
-runRegression :: DbEnv p -> IO (MVar (DbEnv p))
-runRegression p = do
-  v <- newMVar p
-  createSchema v
-  (Just t1) <- begin v
+runRegression :: PactDb p -> MVar p -> IO ()
+runRegression pdb v = do
+  (Just t1) <- _beginTx pdb Transactional v
   let user1 = "user1"
       usert = UserTables user1
       toPV :: ToTerm a => a -> PactValue
       toPV = toPactValueLenient . toTerm'
-  createUserTable' v user1 "free.some-Module"
+  _createUserTable pdb user1 "free.some-module" v
   assertEquals' "output of commit 2"
     [ TxLogJson $ J.encodeJsonText $ TxLog "SYS_usertables" "user1" $
       LegacyValue $ object
        [ "utModule" .= object
-         [ "name" .= String "some-Module"
+         [ "name" .= String "some-module"
          , "namespace" .= String "free"
          ]
        ]
     ]
-    (commit v)
-  void $ begin v
-  assertEquals' "user table info correct" "free.some-Module" $ _getUserTableInfo pactdb user1 v
+    (_commitTx pdb v)
+  void $ _beginTx pdb Transactional v
+  assertEquals' "user table info correct" (Just "free.some-module") $ _getUserTableInfo pdb user1 v
+  assertEquals' "user table info missing" Nothing $ _getUserTableInfo pdb "user2" v
   let row = RowData RDV0 $ ObjectMap $ M.fromList [("gah",pactValueToRowData $ PLiteral (LDecimal 123.454345))]
-  _writeRow pactdb Insert usert "key1" row v
-  assertEquals' "user insert" (Just row) (_readRow pactdb usert "key1" v)
+  _writeRow pdb Insert usert "key1" row v
+  assertEquals' "user insert" (Just row) (_readRow pdb usert "key1" v)
   let row' = RowData RDV1 $ ObjectMap $ fmap pactValueToRowData $ M.fromList [("gah",toPV False),("fh",toPV (1 :: Int))]
-  _writeRow pactdb Update usert "key1" row' v
-  assertEquals' "user update" (Just row') (_readRow pactdb usert "key1" v)
+  _writeRow pdb Update usert "key1" row' v
+  assertEquals' "user update" (Just row') (_readRow pdb usert "key1" v)
   let ks = mkKeySet [PublicKeyText "skdjhfskj"] "predfun"
-  _writeRow pactdb Write KeySets "ks1" ks v
-  assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
+  _writeRow pdb Write KeySets "ks1" ks v
+  assertEquals' "keyset write" (Just ks) $ _readRow pdb KeySets "ks1" v
   (modName,modRef,mod') <- loadModule
-  _writeRow pactdb Write Modules modName mod' v
-  assertEquals' "module write" (Just mod') $ _readRow pactdb Modules modName v
+  _writeRow pdb Write Modules modName mod' v
+  assertEquals' "module write" (Just mod') $ _readRow pdb Modules modName v
   assertEquals "module native repopulation" (Right modRef) $
     traverse (traverse (fromPersistDirect nativeLookup)) mod'
   assertEquals' "result of commit 3"
@@ -108,34 +107,27 @@ runRegression p = do
               }
       ]
     )
-    (commit v)
-  void $ begin v
-  tids <- _txids pactdb user1 t1 v
+    (_commitTx pdb v)
+  void $ _beginTx pdb Transactional v
+  tids <- _txids pdb user1 t1 v
   assertEquals "user txids" [1] tids
   assertEquals' "user txlogs"
     [TxLog "USER_user1" "key1" row,
      TxLog "USER_user1" "key1" row'] $
-    _getTxLog pactdb usert (head tids) v
-  _writeRow pactdb Insert usert "key2" row v
-  assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pactdb usert "key2" v)
-  assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb (UserTables user1) v
-  _rollbackTx pactdb v
-  assertEquals' "rollback erases key2" Nothing $ _readRow pactdb usert "key2" v
-  assertEquals' "keys" ["key1"] $ _keys pactdb (UserTables user1) v
+    _getTxLog pdb usert (head tids) v
+  _writeRow pdb Insert usert "key2" row v
+  assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pdb usert "key2" v)
+  assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pdb (UserTables user1) v
+  _rollbackTx pdb v
+  assertEquals' "rollback erases key2" Nothing $ _readRow pdb usert "key2" v
+  assertEquals' "keys" ["key1"] $ _keys pdb (UserTables user1) v
   -- Reversed just to ensure inserts are not in order.
   for_ (reverse [2::Int .. 9]) $ \k ->
-    _writeRow pactdb Insert usert (RowKey $ "key" <> (pack $ show k)) row' v
-  assertEquals' "keys" [RowKey ("key" <> (pack $ show k)) | k <- [1 :: Int .. 9]] $ _keys pactdb (UserTables user1) v
-  return v
+    _writeRow pdb Insert usert (RowKey $ "key" <> (pack $ show k)) row' v
+  assertEquals' "keys" [RowKey ("key" <> (pack $ show k)) | k <- [1 :: Int .. 9]] $ _keys pdb (UserTables user1) v
 
 toTerm' :: ToTerm a => a -> Term Name
 toTerm' = toTerm
-
-begin :: MVar (DbEnv p) -> IO (Maybe TxId)
-begin = _beginTx pactdb Transactional
-
-commit :: MVar (DbEnv p) -> IO [TxLogJson]
-commit = _commitTx pactdb
 
 throwFail :: String -> IO a
 throwFail = throwIO . userError
@@ -150,8 +142,10 @@ assertEquals' msg a b = assertEquals msg a =<< b
 
 regressPure :: Loggers -> IO (MVar (DbEnv PureDb))
 regressPure l = do
-  let e = initDbEnv l persister initPureDb
-  runRegression e
+  v <- newMVar $ initDbEnv l persister initPureDb
+  createSchema v
+  runRegression pactdb v
+  return v
 
 
 _regress :: IO ()
