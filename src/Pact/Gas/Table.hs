@@ -245,6 +245,7 @@ defaultGasTable =
   ,("pairing-check", 1)
 
   ,("poseidon-hash-hack-a-chain", 124)
+  ,("hash-poseidon", 124)
   ,("hyperlane-message-id", 2)
   ,("hyperlane-decode-token-message", 2)
   ,("hash-keccak256",1)
