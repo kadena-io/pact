@@ -1,3 +1,17 @@
+4.12.0
+---
+### Features
+- Support for keccak256 native (#1354)
+- Add poseidon hash alias as `hash-poseidon` (#1356)
+
+### Bugfixes
+- Fixed parsing of difftime as a property (#1349)
+
+### Misc
+- Added pact version command to verify linking (#1350)
+
+
+
 4.11.0
 ---
 ### Features
