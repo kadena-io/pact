@@ -365,6 +365,7 @@ setsigs' _ [TList ts _ _] = do
   return $ tStr "Setting transaction signatures/caps"
 setsigs' i as = argsError' i as
 
+
 envVerifiers :: ZNativeFun LibState
 envVerifiers _ [TList ts _ _] = do
   vers <- forM ts $ \t -> case t of
@@ -764,7 +765,10 @@ testCapability :: ZNativeFun ReplState
 testCapability i [ (TApp app _) ] = do
   (cap,d,prep) <- appToCap app
   let scope = maybe CapCallStack (const CapManaged) (_dDefMeta d)
+  oldUserCapabilitiesBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+  evalUserCapabilitiesBeingEvaluated .= S.singleton cap
   r <- evalCap (getInfo i) scope False (cap,d,prep,getInfo app)
+  evalUserCapabilitiesBeingEvaluated .= oldUserCapabilitiesBeingEvaluated
   return . tStr $ case r of
     AlreadyAcquired -> "Capability already acquired"
     NewlyAcquired -> "Capability acquired"

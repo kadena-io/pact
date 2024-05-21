@@ -34,10 +34,12 @@ module Pact.Runtime.Capabilities
 
 import Control.Monad
 import Control.Lens hiding (DefName)
+import Control.Monad.Trans.Maybe
 import Data.Default
 import Data.Foldable
 import Data.List
 import Data.Text (Text)
+import Data.Maybe(fromMaybe)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -46,6 +48,7 @@ import Pact.Types.PactValue
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Runtime.Utils
+
 
 -- | Tie the knot with Pact.Eval by having caller supply `apply` etc
 type ApplyMgrFun e = Def Ref -> PactValue -> PactValue -> Eval e PactValue
@@ -276,11 +279,44 @@ checkSigCaps
      -> Eval e (M.Map PublicKeyText (S.Set UserCapability))
 checkSigCaps sigs = go
   where
-    go = do
-      granted <- getAllStackCaps
-      autos <- use $ evalCapabilities . capAutonomous
-      return $ M.filter (match (S.null autos) granted) sigs
+    go = ifExecutionFlagSet FlagDisablePact412 legacyCheck pact412Check
+    legacyCheck = getAllStackCaps >>= checkSigs
+    pact412Check = do
+      capsBeingEvaluated <- use evalUserCapabilitiesBeingEvaluated
+      let
+        eligibleCaps
+          | null capsBeingEvaluated = getAllStackCaps
+          | otherwise = return capsBeingEvaluated
+      eligibleCaps >>= checkSigs
+    -- Check whether the cap bypass list is enabled for this callsite
+    checkBypassEnabled = fmap (fromMaybe $ \_ _ -> False) $ runMaybeT $ do
+      bp <- view eeSigCapBypass
+      qn <- MaybeT findFirstUserCall
+      (allowSet, wmh) <- hoistMaybe $ M.lookup qn bp
+      mh <- MaybeT $ lookupModuleHash def (_qnQual qn)
+      guard (mh == wmh)
+      pure allowSet
 
-    match allowEmpty granted sigCaps =
+    checkSigs granted = do
+      autos <- use $ evalCapabilities . capAutonomous
+      wl <- checkBypassEnabled
+      return $ M.filter (match (S.null autos) granted wl) sigs
+
+    match allowEmpty granted handleBypass sigCaps  =
       (S.null sigCaps && allowEmpty) ||
-      not (S.null (S.intersection granted sigCaps))
+      not (S.null (S.intersection granted sigCaps)) ||
+      handleBypass granted sigCaps
+
+findFirstUserCall :: Eval e (Maybe QualifiedName)
+findFirstUserCall = use evalCallStack >>= go
+  where
+  go (sf : rest) = case sf of
+    StackFrame _sfn _loc (Just (fa, _))
+      | Just mn <- _faModule fa -> pure $ Just (QualifiedName mn (_faName fa) def)
+    _ -> go rest
+  go [] = pure Nothing
+
+lookupModuleHash :: Info -> ModuleName -> Eval e (Maybe ModuleHash)
+lookupModuleHash i mn = lookupModule i mn >>= \case
+  Just (ModuleData (MDModule mdl) _ _) -> pure $ Just $ _mHash mdl
+  _ -> pure Nothing

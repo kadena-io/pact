@@ -32,7 +32,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgVerifiers,eeMsgBody,eeMode,eeEntity,eePactStep,eePactDbVar,eeInRepl,
    eePactDb,eePurity,eeHash,eeGas, eeGasEnv,eeNamespacePolicy,eeSPVSupport,eePublicData,eeExecutionConfig,
-   eeAdvice, eeWarnings,
+   eeAdvice, eeWarnings, eeSigCapBypass,
    toPactId,
    Purity(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
@@ -254,6 +254,8 @@ instance J.Encode ExecutionConfig where
 mkExecutionConfig :: [ExecutionFlag] -> ExecutionConfig
 mkExecutionConfig = ExecutionConfig . S.fromList
 
+type CapBypass = Set SigCapability -> Set SigCapability -> Bool
+
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
       -- | Environment references.
@@ -296,6 +298,8 @@ data EvalEnv e = EvalEnv {
     , _eeInRepl :: !Bool
       -- | Warnings ref
     , _eeWarnings :: !(IORef (Set PactWarning))
+      -- | Patch-related caps
+    , _eeSigCapBypass :: M.Map QualifiedName (CapBypass, ModuleHash)
     }
 makeLenses ''EvalEnv
 

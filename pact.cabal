@@ -1,6 +1,6 @@
 cabal-version:       2.2
 name:                pact
-version:             4.11
+version:             4.12
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -253,6 +253,7 @@ library
     , statistics >=0.13.3
     , text >=2
     , time
+    , transformers >= 0.5.2.0 && < 0.7
     , trifecta >=2.1.1.1
     , unordered-containers >=0.2.19
     , utf8-string >=1.0.1.1
@@ -327,7 +328,6 @@ library
       , sbv >=9.0
       , semigroupoids >=5.0
       , servant-server
-      , transformers >= 0.5.2.0 && < 0.7
       , wai-cors
       , warp
     if !os(windows)

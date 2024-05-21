@@ -212,6 +212,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
   , _eeAdvice = def
   , _eeInRepl = False
   , _eeWarnings = warnRef
+  , _eeSigCapBypass = mempty
   }
   where
     mkMsgSigs ss = M.fromList $ map toPair ss
