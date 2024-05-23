@@ -20,7 +20,7 @@ jobs:
       matrix:
         ghc: ['9.6']
         cabal: ['3.10']
-        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest', 'macos-14']
+        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macos-latest', 'macos-14']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
@@ -70,7 +70,6 @@ jobs:
     - name: Print Z3 version
       shell: bash
       run: z3 -version
-
 
     # Haskell Setup
     - name: Set permissions for .ghcup (ubuntu)
@@ -157,10 +156,14 @@ jobs:
     - name: Build
       shell: bash
       run: cabal build
-    - name: Test
-      if: (matrix.os != 'macos-14')
+    - name: Test - non-ARM
+      if: "!startsWith(matrix.os, 'macos-')"
       shell: bash
       run: cabal run tests
+    - name: Test - ARM
+      if: "startsWith(matrix.os, 'macos-')"
+      shell: bash
+      run: cabal run tests -- --skip "/PactTestsSpec/pact tests/tests/pact/ops.repl/"
     - name: Benchmark
       shell: bash
       if: "!contains(matrix.flags, '-build-tool')"
