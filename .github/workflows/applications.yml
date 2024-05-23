@@ -20,7 +20,7 @@ jobs:
       matrix:
         ghc: ['9.6']
         cabal: ['3.10']
-        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macOS-latest', 'macos-14']
+        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macos-latest', 'macos-14']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
@@ -157,11 +157,11 @@ jobs:
       shell: bash
       run: cabal build
     - name: Test - non-ARM
-      if: ! startsWith(matrix.os, 'macos')
+      if: "!startsWith(matrix.os, 'macos-')"
       shell: bash
       run: cabal run tests
-    - name: Tests - ARM
-      if: startsWith(matrix.os, 'macos') # latest + 14 no bignum regression
+    - name: Test - ARM
+      if: "startsWith(matrix.os, 'macos-')"
       shell: bash
       run: cabal run tests -- --skip "/PactTestsSpec/pact tests/tests/pact/ops.repl/"
     - name: Benchmark
