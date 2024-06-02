@@ -207,7 +207,7 @@ isPrincipleDef = defRNative "is-principal" isPrincipal
   (funType tTyBool [("principal", tTyString)])
   [LitExample
    "(enforce \
-   \  (is-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69) \
+   \  (is-principal \"k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69\") \
    \  \"Invalid account structure: non-principal account\")"]
   "Tell whether PRINCIPAL string conforms to the principal format without proving validity."
   where
@@ -222,7 +222,7 @@ typeOfPrincipalDef :: NativeDef
 typeOfPrincipalDef = defRNative "typeof-principal" typeOfPrincipal
   (funType tTyString [("principal", tTyString)])
     [LitExample
-     "(typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)"]
+     "(typeof-principal \"k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69\")"]
   "Return the protocol type of a given PRINCIPAL value. If input value is not a principal type, \
   \then the empty string is returned."
   where
