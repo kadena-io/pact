@@ -387,6 +387,31 @@ executable gasmodel
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+executable contracts-bench
+  main-is:             ContractsBench.hs
+  build-depends:       base
+                     , pact
+                     , text
+                     , criterion
+                     , containers
+                     , lens
+                     , neat-interpolation
+                     , terminal-progress-bar
+                     , direct-sqlite
+                     , mtl
+                     , unordered-containers
+                     , pact-json
+                     , aeson
+                     , data-default
+                     , deepseq
+                     , Decimal
+                     , directory
+                     , filepath
+  hs-source-dirs:      contract-benchmarks
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
 benchmark bench-json
   if !flag(build-tool)
     buildable: False

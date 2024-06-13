@@ -50,6 +50,7 @@ module Pact.Eval
     ,resumeNestedPactExec
     ,createNestedPactId
     ,getSizeOfVersion
+    ,enscope
     ) where
 
 import Bound

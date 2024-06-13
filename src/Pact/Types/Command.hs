@@ -18,7 +18,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.Command

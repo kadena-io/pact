@@ -2,7 +2,7 @@
   (defcap GOV () true)
 
   (defcap GOOD ()
-    (enforce-verifier 'HYPERLANE)
+  (enforce-verifier 'HYPERLANE)
     )
 
   (defcap BAD ()
