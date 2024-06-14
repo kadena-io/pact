@@ -92,6 +92,7 @@ untestedNativesCheck = do
      , "list"
      , "continue"
      , "hyperlane-decode-token-message"
+     , "hyperlane-encode-token-message"
      ])
 
 allGasTestsAndGoldenShouldPass :: Spec

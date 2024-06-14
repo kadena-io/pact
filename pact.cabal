@@ -97,7 +97,8 @@ library
   exposed-modules:
     Crypto.Hash.Blake2Native
     Crypto.Hash.Keccak256Native
-    Crypto.Hash.HyperlaneMessageId
+    Crypto.Hash.HyperlaneNatives
+    Crypto.Hash.HyperlaneNativesBefore413
     Crypto.Hash.PoseidonNative
     Pact.Analyze.Remote.Types
     Pact.ApiReq
@@ -424,6 +425,7 @@ test-suite hspec
     , base
     , base16-bytestring
     , base64-bytestring
+    , binary
     , bound
     , bytestring
     , containers
@@ -443,6 +445,7 @@ test-suite hspec
     , trifecta
     , unordered-containers
     , vector
+    , wide-word >= 0.1
 
   other-modules:
     Blake2Spec

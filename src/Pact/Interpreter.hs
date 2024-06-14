@@ -258,6 +258,9 @@ disablePact411Natives = disablePactNatives pact411Natives FlagDisablePact411
 disablePact412Natives :: ExecutionConfig -> Endo RefStore
 disablePact412Natives = disablePactNatives pact412Natives FlagDisablePact412
 
+disablePact413Natives :: ExecutionConfig -> Endo RefStore
+disablePact413Natives = disablePactNatives pact413Natives FlagDisablePact413
+
 pact40Natives :: [Text]
 pact40Natives = ["enumerate" , "distinct" , "emit-event" , "concat" , "str-to-list"]
 
@@ -285,6 +288,9 @@ pact411Natives = ["enforce-verifier", "hyperlane-message-id", "hyperlane-decode-
 pact412Natives :: [Text]
 pact412Natives = ["hash-keccak256", "hash-poseidon"]
 
+pact413Natives :: [Text]
+pact413Natives = ["hyperlane-encode-token-message"]
+
 initRefStore :: RefStore
 initRefStore = RefStore nativeDefs
 
@@ -301,6 +307,7 @@ versionedNativesRefStore ec = versionNatives initRefStore
     , disablePact410Natives ec
     , disablePact411Natives ec
     , disablePact412Natives ec
+    , disablePact413Natives ec
     ]
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
