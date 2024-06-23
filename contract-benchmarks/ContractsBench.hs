@@ -25,12 +25,7 @@ import System.ProgressBar
 import Pact.Types.Lang
 import Pact.Interpreter
 import System.FilePath
-import System.Directory
 import Pact.Types.RowData
-import Pact.Parse
-import Pact.Types.Names
-import Pact.Compile
-import Pact.PersistPactDb(DbEnv(..))
 import Pact.Types.Persistence
 import Control.Exception
 import Pact.Types.Runtime
@@ -38,7 +33,6 @@ import Pact.Types.Command
 import Pact.JSON.Legacy.Value
 import Pact.Types.SPV
 import Pact.Gas
-import Data.Functor (void)
 import Pact.Bench
 import Pact.Runtime.Utils
 import Pact.Gas.Table
@@ -46,14 +40,9 @@ import qualified Pact.Eval as Eval
 
 import Control.DeepSeq
 import Pact.Types.Logger
-import Pact.GasModel.Types (NoopNFData)
-import Pact.Types.Runtime (EvalEnv)
 import Pact.Types.Capability
 import Pact.Types.PactValue
-import Control.Concurrent (readMVar)
-import Pact.Persist.SQLite
 import Pact.Types.Pretty
-import Pact.Types.SQLite
 import qualified System.Environment as Env
 import Criterion.Main
 
@@ -274,6 +263,8 @@ prePopulateCoinEntries pdb = do
     writeBench pdb Write (UserTables coinTableName) (RowKey n) (RowData RDV1 (obj n))
     incProgress pbar 1
   where
+  writeBench dbe wt domain k v =
+    _writeRow (pdPactDb dbe) wt domain k v (pdPactDbVar dbe)
   obj n = ObjectMap $ M.fromList
     [(FieldKey "balance", RDLiteral $ LDecimal 100)
     , (FieldKey "guard"
@@ -296,42 +287,30 @@ rollbackTxBench :: PactDbEnv e -> IO ()
 rollbackTxBench dbe =
   _rollbackTx (pdPactDb dbe) (pdPactDbVar dbe)
 
-writeBench dbe wt domain k v =
-  _writeRow (pdPactDb dbe) wt domain k v (pdPactDbVar dbe)
 
 contractsPath :: FilePath
 contractsPath = "contract-benchmarks" </> "contracts"
 
 allBenchmarks :: Bool -> Benchmark
-allBenchmarks resetDb =
-  envWithCleanup mkPactDb cleanupPactDb $ \ ~(NoForce pdb) ->
+allBenchmarks _resetDb =
+  env mkPactDb $ \ ~(NoForce pdb) ->
     bgroup "Coin benches"
       [
       runPureBench pdb "factorial 1000" (factorialNTXRaw 1000)
       , runPureBench pdb "Let 100" (deepLetTXRaw 100)
       , runPureBench pdb "Let 1000" (deepLetTXRaw 1000)
-      , runPureBench pdb "Let 10000" (deepLetTXRaw 10000)
-        -- coinTransferBenches pdb
+      -- , runPureBench pdb "Let 10000" (deepLetTXRaw 10000)
+      , coinTransferBenches pdb
       ]
   where
-  cleanupSqlite sqliteDb = do
-      c <- readMVar $ pdPactDbVar sqliteDb
-      void $ closeSQLite $ _db c
   coinTransferBenches pdb =
-    bgroup "transfer benchmarks"
+    bgroup "CoinTransfer"
     [ runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB
     , runCoinTransferTxWithNameReso pdb CoinBenchSenderA CoinBenchSenderB
     ]
   mkPactDb = do
-    c <- doesFileExist benchmarkSqliteFile
-    when (c && resetDb) $ removeFile benchmarkSqliteFile
-    db <- mkSQLiteEnv (newLogger neverLog "") True (SQLiteConfig benchmarkSqliteFile fastNoJournalPragmas) neverLog
+    db <- mkPureEnv neverLog
     initSchema db
     _ <- loadCoinBenchModule (contractsPath </> "coin-v5-create.pact") db
-    _ <- beginTxBench db
-    when resetDb $ prePopulateCoinEntries db
-    _ <- commitTxBench db
     pure (NoForce db)
-  cleanupPactDb (NoForce db) =
-    cleanupSqlite db
 

@@ -95,7 +95,6 @@ import qualified Data.Aeson as A
 import Control.DeepSeq (NFData)
 import Data.Hashable
 import Data.Serialize as SZ
-import qualified Data.Serialize as S
 
 import qualified Pact.Crypto.WebAuthn.Cose.PublicKey as WA
 import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
