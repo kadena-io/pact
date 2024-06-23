@@ -158,7 +158,7 @@ runCoinTransferTx db sender receiver =
     where
     pdb = pdPactDb db
     title =
-      "Coin transfer from "
+      "InterpretOnly(transfer) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
@@ -230,7 +230,7 @@ runCoinTransferTxWithNameReso db sender receiver =
     where
     pdb = pdPactDb db
     title =
-      "Coin transfer from "
+      "Load+Link+Interpret(transfer) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
@@ -294,17 +294,19 @@ contractsPath = "contract-benchmarks" </> "contracts"
 allBenchmarks :: Bool -> Benchmark
 allBenchmarks _resetDb =
   env mkPactDb $ \ ~(NoForce pdb) ->
-    bgroup "Coin benches"
-      [
-      runPureBench pdb "factorial 1000" (factorialNTXRaw 1000)
-      , runPureBench pdb "Let 100" (deepLetTXRaw 100)
-      , runPureBench pdb "Let 1000" (deepLetTXRaw 1000)
-      -- , runPureBench pdb "Let 10000" (deepLetTXRaw 10000)
+    bgroup "Production Pact Benchmarks"
+      [ pureBenchmarks pdb
       , coinTransferBenches pdb
       ]
   where
+  pureBenchmarks pdb = bgroup "Pure Code"
+    [ runPureBench pdb "Factorial 1000" (factorialNTXRaw 1000)
+    , runPureBench pdb "Let 100" (deepLetTXRaw 100)
+    , runPureBench pdb "Let 1000" (deepLetTXRaw 1000)
+    -- , runPureBench pdb "Let 10000" (deepLetTXRaw 10000)
+    ]
   coinTransferBenches pdb =
-    bgroup "CoinTransfer"
+    bgroup "Coin Transfer"
     [ runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB
     , runCoinTransferTxWithNameReso pdb CoinBenchSenderA CoinBenchSenderB
     ]
