@@ -384,7 +384,7 @@ data PactDb e = PactDb {
     -- | Create a user table.
   , _createUserTable :: !(TableName -> ModuleName -> Method e ())
     -- | Get module, keyset for user table.
-  , _getUserTableInfo :: !(TableName -> Method e ModuleName)
+  , _getUserTableInfo :: !(TableName -> Method e (Maybe ModuleName))
     -- | Initiate transactional state. Returns txid for 'Transactional' mode
     -- or Nothing for 'Local' mode. If state already initiated, rollback and throw error.
   , _beginTx :: !(ExecutionMode -> Method e (Maybe TxId))

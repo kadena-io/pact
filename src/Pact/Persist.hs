@@ -4,6 +4,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Persist
   (Persist,
@@ -25,6 +29,7 @@ import Data.String
 import Data.Hashable
 import Data.Text (Text)
 import Data.Typeable (Typeable)
+import GHC.Generics
 
 import Pact.Types.Pretty
 import Pact.Types.Runtime
@@ -32,21 +37,48 @@ import Pact.Types.Runtime
 type Persist s a = s -> IO (s,a)
 
 newtype DataKey = DataKey Text
-  deriving (Eq,Ord,IsString,AsString,Hashable,Pretty)
+  deriving (Eq,Generic,Ord)
+  deriving newtype (FromJSONKey, ToJSONKey, IsString, AsString, Hashable, Pretty)
 instance Show DataKey where show (DataKey k) = show k
 newtype TxKey = TxKey Integer
-  deriving (Eq,Ord,Num,Enum,Real,Integral,Hashable,Pretty)
+  deriving stock (Eq,Generic, Ord)
+  deriving newtype (Num, Enum, Real, Integral, Hashable, Pretty, FromJSONKey, ToJSONKey)
 instance Show TxKey where show (TxKey k) = show k
 
 type DataTable = Table DataKey
 type TxTable = Table TxKey
 
 newtype TableId = TableId Text
-  deriving (Eq,Show,Ord,IsString,AsString,Hashable, Pretty)
+  deriving stock (Eq,Generic,Show,Ord)
+  deriving newtype (IsString,AsString,Hashable,Pretty)
 
 data Table k where
   DataTable :: !TableId -> DataTable
   TxTable :: !TableId -> TxTable
+instance ToJSON DataTable where
+  toJSON (DataTable (TableId tid)) = object
+    [ "ttype" .= ("data" :: Text)
+    , "tid" .= tid
+    ]
+instance ToJSONKey DataTable
+instance ToJSON TxTable where
+  toJSON (TxTable (TableId tid)) = object
+    [ "ttype" .= ("tx" :: Text)
+    , "tid" .= tid
+    ]
+instance ToJSONKey TxTable
+instance FromJSON DataTable where
+  parseJSON = withObject "DataTable" $ \o -> do
+    "data" :: Text <- o .: "ttype"
+    tid <- o .: "tid"
+    return $ DataTable (TableId tid)
+instance FromJSONKey DataTable
+instance FromJSON TxTable where
+  parseJSON = withObject "TxTable" $ \o -> do
+    "tx" :: Text <- o .: "ttype"
+    tid <- o .: "tid"
+    return $ TxTable (TableId tid)
+instance FromJSONKey TxTable
 
 tableId :: Table k -> TableId
 tableId (DataTable t) = t

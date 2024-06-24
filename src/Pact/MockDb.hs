@@ -25,8 +25,8 @@ newtype MockTxIds =
 instance Default MockTxIds where def = MockTxIds (\_t _i -> rc [])
 
 newtype MockGetUserTableInfo =
-  MockGetUserTableInfo (TableName -> Method () ModuleName)
-instance Default MockGetUserTableInfo where def = MockGetUserTableInfo (\_t -> rc "")
+  MockGetUserTableInfo (TableName -> Method () (Maybe ModuleName))
+instance Default MockGetUserTableInfo where def = MockGetUserTableInfo (\_t -> rc (Just ""))
 
 newtype MockCommitTx =
   MockCommitTx (Method () [TxLogJson])
