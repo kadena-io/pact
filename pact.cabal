@@ -1,4 +1,4 @@
-cabal-version:       2.2
+cabal-version:       3.0
 name:                pact
 version:             4.12
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
@@ -236,7 +236,7 @@ library
     , mod >=0.1.2
     , mtl >=2.3
     , pact-json >=0.1
-    , pact-time >=0.2
+    , pact-time >=0.3.0.1
     , parsers >=0.12.4
     , poly >=0.5.0
     , primitive >=0.8
@@ -260,7 +260,6 @@ library
     , utf8-string >=1.0.1.1
     , vector >=0.11.0.0
     , vector-algorithms >=0.7
-    , vector-space >=0.10.4
     , wide-word >= 0.1
     , yaml
 
