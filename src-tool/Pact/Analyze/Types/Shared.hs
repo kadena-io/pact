@@ -35,7 +35,6 @@ import           Control.Lens                 (At (at), Index, Iso, IxValue,
                                                makePrisms, over, (%~), (&),
                                                (<&>))
 import           Data.Aeson                   (FromJSON)
-import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible, coerce)
 import           Data.Constraint              (Dict (Dict), withDict)
 import           Data.Data                    (Data, Proxy, Typeable)
@@ -69,6 +68,7 @@ import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits                 (KnownSymbol, SomeSymbol(..), Symbol, symbolVal, someSymbolVal)
 import           Prelude                      hiding (Float)
 
+import           Pact.Time                    ((.-.), (.+^))
 import           Pact.Types.Pretty            hiding (list)
 import qualified Pact.Types.Pretty            as Pretty
 import qualified Pact.Types.Lang              as Pact

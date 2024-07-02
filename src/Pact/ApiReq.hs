@@ -55,6 +55,7 @@ import qualified Data.ByteString.Short as SBS
 import Data.Default (def)
 import Data.Foldable
 import Data.List
+import Data.List.Unsafe
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Set as S
 import qualified Data.Map.Strict as Map
@@ -280,7 +281,7 @@ combineSigDatas sds outputLocal = do
   when (S.size hashes /= 1 || S.size cmds /= 1) $ do
     error "SigData files must contain exactly one unique hash and command.  Aborting..."
   let sigs = foldl1 f $ map _sigDataSigs sds
-  returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
+  returnCommandIfDone outputLocal $ SigData (unsafeHead $ S.toList hashes) sigs (Just $ unsafeHead $ S.toList cmds)
   where
     f accum sigs
       | length accum /= length sigs = error "Sig lists have different lengths"

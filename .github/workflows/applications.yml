@@ -18,15 +18,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.6']
-        cabal: ['3.10']
+        ghc: ['9.6', '9.8', '9.10']
+        cabal: ['3.12']
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macos-latest', 'macos-14']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
         - os: 'ubuntu-20.04'
-          ghc: '9.6'
-          cabal: '3.10'
+          ghc: '9.8'
+          cabal: '3.12'
           cabalcache: 'true'
           flags: '-build-tool'
     env:

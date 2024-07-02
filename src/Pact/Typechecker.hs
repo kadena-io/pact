@@ -44,6 +44,7 @@ import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import Data.List
+import Data.List.Unsafe (unsafeHead)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
@@ -1006,7 +1007,7 @@ toAST (TApp Term.App{..} _) = do
               return app'
             Resume -> do
               app' <- specialBind
-              case head args' of -- 'specialBind' ensures non-empty args
+              case unsafeHead args' of -- 'specialBind' ensures non-empty args
                 (Binding _ _ _ (AstBindSchema sty)) ->
                   setOrAssocYR yrResume sty
                 a -> die'' a "Expected binding"
@@ -1205,7 +1206,7 @@ showFails = do
 
 -- | unsafe lens for using `typecheckBody` with const
 singLens :: Iso' a [a]
-singLens = iso pure head
+singLens = iso pure unsafeHead
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)

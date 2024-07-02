@@ -65,6 +65,7 @@ import Data.Functor.Classes
 import Data.Graph
 import qualified Data.HashMap.Strict as HM
 import Data.IORef
+import Data.List.Unsafe
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Vector as V
@@ -661,7 +662,7 @@ enforceAcyclic
 enforceAcyclic info cs = forM cs $ \c -> case c of
   AcyclicSCC v -> return v
   CyclicSCC vs -> do
-    let i = if null vs then info else _tInfo $ view _1 $ head vs
+    let i = if null vs then info else _tInfo $ view _1 $ unsafeHead vs
         pl = over (traverse . _3) (SomeDoc . prettyList)
           $ over (traverse . _1) (fmap mkSomeDoc)
           $ vs

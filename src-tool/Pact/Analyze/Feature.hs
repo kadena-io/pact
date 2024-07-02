@@ -12,7 +12,9 @@
 module Pact.Analyze.Feature where
 
 import           Control.Lens           (Prism', preview, prism', review)
+#if !MIN_VERSION_base(4,20,0)
 import           Data.Foldable          (foldl')
+#endif
 import qualified Data.Map               as Map
 import           Data.Map.Strict        (Map)
 import           Data.Set               (Set)
