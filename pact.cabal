@@ -439,7 +439,6 @@ test-suite hspec
     , attoparsec
     , base
     , base16-bytestring
-    , base64-bytestring
     , binary
     , bound
     , bytestring
@@ -460,7 +459,6 @@ test-suite hspec
     , trifecta
     , unordered-containers
     , vector
-    , wide-word >= 0.1
 
   other-modules:
     Blake2Spec
