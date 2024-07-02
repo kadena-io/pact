@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
@@ -32,8 +33,13 @@ import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
                                              modify', runStateT)
+#if MIN_VERSION_base(4,20,0)
+import           Data.Foldable              (for_, foldlM)
+#else
 import           Data.Foldable              (foldl', for_, foldlM)
+#endif
 import           Data.List                  (sort)
+import           Data.List.Unsafe           (unsafeTail)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe, isNothing)
@@ -754,7 +760,7 @@ translatePact nodes = do
     -- The proper fix is recognizing the nested defpact dyn invoke and replacing it with
     -- the default value of what the invocation would return.
     -- For now, this unblocks the problem.
-    (if null protoSteps then [] else tail $ reverse protoSteps)
+    (if null protoSteps then [] else unsafeTail $ reverse protoSteps)
 
   let steps = zipWith3
         (\(Step exec p e _ _) mCancel mRb -> Step exec p e mCancel mRb)

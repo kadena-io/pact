@@ -214,6 +214,7 @@ library
   build-depends:
     -- internal
     , pact-prettyprinter
+    , pact:unsafe
 
     -- external
     , Decimal >=0.4.2

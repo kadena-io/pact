@@ -1,13 +1,16 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Crypto.Hash.PoseidonNative (poseidon) where
 
+#if !MIN_VERSION_base(4,20,0)
 import Data.List(foldl')
+#endif
 import qualified Data.Primitive.Array as Array
 import qualified Data.Primitive.SmallArray as SmallArray
 
