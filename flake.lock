@@ -109,14 +109,6 @@
           "hs-nix-infra",
           "empty"
         ],
-        "ghc98X": [
-          "hs-nix-infra",
-          "empty"
-        ],
-        "ghc99": [
-          "hs-nix-infra",
-          "empty"
-        ],
         "hackage": [
           "hs-nix-infra",
           "hackage"
@@ -146,6 +138,8 @@
           "empty"
         ],
         "hls-2.6": "hls-2.6",
+        "hls-2.7": "hls-2.7",
+        "hls-2.8": "hls-2.8",
         "hpc-coveralls": [
           "hs-nix-infra",
           "empty"
@@ -158,7 +152,6 @@
           "hs-nix-infra",
           "empty"
         ],
-        "nix-tools-static": "nix-tools-static",
         "nixpkgs": [
           "hs-nix-infra",
           "haskellNix",
@@ -203,11 +196,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1707876653,
-        "narHash": "sha256-hsj9chw/cy9h8XuxQkxnfFR22Ek8xEm33aON2+TcUaI=",
+        "lastModified": 1719795037,
+        "narHash": "sha256-5xLJg7jOWqXuoYSDbNbF3dw1Rhs0D0SLFl9iTR+cp64=",
         "owner": "input-output-hk",
         "repo": "haskell.nix",
-        "rev": "d1a608f84c9ed00ceca8571b253e79f67a1ae2d6",
+        "rev": "3234e94cd4eca7d2992a3938fb6200dfb8b86a84",
         "type": "github"
       },
       "original": {
@@ -233,6 +226,40 @@
         "type": "github"
       }
     },
+    "hls-2.7": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1708965829,
+        "narHash": "sha256-LfJ+TBcBFq/XKoiNI7pc4VoHg4WmuzsFxYJ3Fu+Jf+M=",
+        "owner": "haskell",
+        "repo": "haskell-language-server",
+        "rev": "50322b0a4aefb27adc5ec42f5055aaa8f8e38001",
+        "type": "github"
+      },
+      "original": {
+        "owner": "haskell",
+        "ref": "2.7.0.0",
+        "repo": "haskell-language-server",
+        "type": "github"
+      }
+    },
+    "hls-2.8": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1715153580,
+        "narHash": "sha256-Vi/iUt2pWyUJlo9VrYgTcbRviWE0cFO6rmGi9rmALw0=",
+        "owner": "haskell",
+        "repo": "haskell-language-server",
+        "rev": "dd1be1beb16700de59e0d6801957290bcf956a0a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "haskell",
+        "ref": "2.8.0.0",
+        "repo": "haskell-language-server",
+        "type": "github"
+      }
+    },
     "hs-nix-infra": {
       "inputs": {
         "empty": "empty",
@@ -245,33 +272,16 @@
         "nixpkgs-rec": "nixpkgs-rec"
       },
       "locked": {
-        "lastModified": 1708100161,
-        "narHash": "sha256-rWwE59SfmqXcVQL7GXovYvjbDPMsb4e1GgiNH+7tlrM=",
+        "lastModified": 1719864508,
+        "narHash": "sha256-T0nTbLSXYqDpLC8aHPrKtVjWa/dAPizEvP3eoUFAPKA=",
         "owner": "kadena-io",
         "repo": "hs-nix-infra",
-        "rev": "bcbf823a0851b41d64d4f9c87053abc3153c126e",
+        "rev": "211ce215a4befd746212fcd1166a6f10ab02b48e",
         "type": "github"
       },
       "original": {
         "owner": "kadena-io",
         "repo": "hs-nix-infra",
-        "type": "github"
-      }
-    },
-    "nix-tools-static": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1706266250,
-        "narHash": "sha256-9t+GRk3eO9muCtKdNAwBtNBZ5dH1xHcnS17WaQyftwA=",
-        "owner": "input-output-hk",
-        "repo": "haskell-nix-example",
-        "rev": "580cb6db546a7777dad3b9c0fa487a366c045c4e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "input-output-hk",
-        "ref": "nix",
-        "repo": "haskell-nix-example",
         "type": "github"
       }
     },
