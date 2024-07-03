@@ -74,7 +74,7 @@ jobs:
     # Install libc6 for cabal-cache on ubuntu-20.04
     - name: Install libc6 on ubuntu-20.04
       if: matrix.os == 'ubuntu-20.04'
-      run: apt-get install libc6
+      run: sudo apt-get install libc6
 
     # Haskell Setup
     - name: Set permissions for .ghcup (ubuntu)
