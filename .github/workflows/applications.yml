@@ -18,14 +18,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.6', '9.8', '9.10']
+        ghc: ['9.6.6', '9.8.2', '9.10.1']
         cabal: ['3.12']
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macos-latest', 'macos-14']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
-        - os: 'ubuntu-20.04'
-          ghc: '9.8'
+        - os: 'ubuntu-22.04'
+          ghc: '9.8.2'
           cabal: '3.12'
           cabalcache: 'true'
           flags: '-build-tool'
@@ -40,7 +40,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # Non Haskell dependencies
 
@@ -143,11 +143,11 @@ jobs:
         cabal freeze
     - name: Sync from cabal cache
       if: matrix.cabalcache == 'true'
-      uses: larskuhtz/cabal-cache-action@018b7ae0c480ba3dc4fa0cfa3a0bc1f05b7724b3
+      uses: larskuhtz/cabal-cache-action@4b537195b33898fcd9adc62cee2a44986fd7b1b6
       with:
         bucket: "kadena-cabal-cache"
         region: "us-east-1"
-        folder: "${{ matrix.os }}"
+        folder: "packages/${{ matrix.os }}"
         aws_access_key_id: "${{ secrets.kadena_cabal_cache_aws_access_key_id }}"
         aws_secret_access_key: "${{ secrets.kadena_cabal_cache_aws_secret_access_key }}"
     - name: Build dependencies
@@ -219,8 +219,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - ghc: "9.6"
-          os: "ubuntu-20.04"
+        - ghc: "9.6.6"
+          os: "ubuntu-22.04"
     env:
       OS: ${{ matrix.os }}
     steps:
@@ -236,7 +236,7 @@ jobs:
         FROM ubuntu:${OS#ubuntu-}
         LABEL com.chainweb.docker.image.compiler="ghc-${{ matrix.ghc }}"
         LABEL com.chainweb.docker.image.os="${{ matrix.os }}"
-        RUN apt-get update && apt-get install -y ca-certificates libgmp10 libssl1.1 zlib1g locales && rm -rf /var/lib/apt/lists/* && locale-gen en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+        RUN apt-get update && apt-get install -y ca-certificates libgmp10 libssl3 zlib1g locales && rm -rf /var/lib/apt/lists/* && locale-gen en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
         ENV LANG=en_US.UTF-8
         WORKDIR /pact
         COPY pact/pact .
