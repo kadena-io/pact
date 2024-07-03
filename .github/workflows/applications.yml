@@ -70,6 +70,11 @@ jobs:
     - name: Print Z3 version
       shell: bash
       run: z3 -version
+   
+    # Install libc6 for cabal-cache on ubuntu-20.04
+    - name: Install libc6 on ubuntu-20.04
+      if: matrix.os == 'ubuntu-20.04'
+      run: apt-get install libc6
 
     # Haskell Setup
     - name: Set permissions for .ghcup (ubuntu)
