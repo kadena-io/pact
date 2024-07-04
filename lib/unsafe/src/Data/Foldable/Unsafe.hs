@@ -6,7 +6,7 @@
 
 
 -- |
--- Module: unsafe.Data.Foldable.Unsafe
+-- Module: Data.Foldable.Unsafe
 -- Copyright: Copyright © 2024 Kadena LLC.
 -- License: MIT
 -- Maintainer: Pact Team

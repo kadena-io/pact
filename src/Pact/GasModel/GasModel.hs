@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
 
@@ -5,7 +6,11 @@ module Pact.GasModel.GasModel where
 
 import Control.Exception (bracket)
 import Control.Monad (void, replicateM)
+#if MIN_VERSION_base(4,20,0)
+import Data.List (sortOn)
+#else
 import Data.List (foldl', sortOn)
+#endif
 import GHC.Conc (numCapabilities)
 import Statistics.Types (Estimate(..))
 
