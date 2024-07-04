@@ -1,4 +1,4 @@
-cabal-version:       2.2
+cabal-version:       3.0
 name:                pact
 version:             4.12
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
@@ -63,6 +63,22 @@ library pact-prettyprinter
     , text >= 1.2
     , ansi-terminal >=0.4
     , prettyprinter >= 1.7
+
+-- -------------------------------------------------------------------------- --
+-- Internal: unsafe functions from base
+--
+-- This is to avoid cluttering production code with
+-- `{-# OPTIONS_GHC -Wno-x-partial #-}` pragmas with base >= 4.20
+
+library unsafe
+  visibility: public
+  hs-source-dirs: lib/unsafe/src
+  default-language: Haskell2010
+  exposed-modules:
+    Data.Foldable.Unsafe
+    Data.List.Unsafe
+  build-depends:
+    , base >= 4.5 && < 5
 
 -- -------------------------------------------------------------------------- --
 -- Pact library
@@ -198,6 +214,7 @@ library
   build-depends:
     -- internal
     , pact-prettyprinter
+    , pact:unsafe
 
     -- external
     , Decimal >=0.4.2
@@ -236,7 +253,7 @@ library
     , mod >=0.1.2
     , mtl >=2.3
     , pact-json >=0.1
-    , pact-time >=0.2
+    , pact-time >=0.3.0.1
     , parsers >=0.12.4
     , poly >=0.5.0
     , primitive >=0.8
@@ -260,7 +277,6 @@ library
     , utf8-string >=1.0.1.1
     , vector >=0.11.0.0
     , vector-algorithms >=0.7
-    , vector-space >=0.10.4
     , wide-word >= 0.1
     , yaml
 
@@ -424,7 +440,6 @@ test-suite hspec
     , attoparsec
     , base
     , base16-bytestring
-    , base64-bytestring
     , binary
     , bound
     , bytestring
@@ -445,7 +460,6 @@ test-suite hspec
     , trifecta
     , unordered-containers
     , vector
-    , wide-word >= 0.1
 
   other-modules:
     Blake2Spec

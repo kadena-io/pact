@@ -32,7 +32,9 @@ import Control.Monad.State.Strict (get,put)
 import Data.Aeson (eitherDecode)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default
+#if !MIN_VERSION_base(4,20,0)
 import Data.Foldable
+#endif
 import Data.IORef
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM

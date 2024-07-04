@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -55,7 +56,11 @@ import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
 import Data.Semiring (Semiring, Ring)
 import Data.Field (Field)
+#if MIN_VERSION_base(4,20,0)
+import Data.Foldable (forM_, traverse_)
+#else
 import Data.Foldable (forM_, foldl', traverse_)
+#endif
 import qualified Data.Vector as G
 import qualified Data.Vector.Mutable as MG
 import qualified Data.Semiring as SR
