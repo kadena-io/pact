@@ -504,6 +504,7 @@ test-suite hspec
       Utils
 
     build-depends:
+      , pact:unsafe
       , Decimal
       , deepseq
       , directory

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -26,7 +27,12 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import           Data.Constraint             (Dict (Dict), withDict)
 import           Data.Default                (def)
+#if MIN_VERSION_base(4,20,0)
+import           Data.Foldable               (foldlM)
+#else
 import           Data.Foldable               (foldl', foldlM)
+#endif
+import           Data.List.Unsafe            (unsafeHead, unsafeTail)
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (EqSymbolic ((.==), (./=)),
@@ -906,5 +912,5 @@ format s tms = do
        then Left (AnalyzeFailure dummyInfo "format: not enough arguments for template")
        else Right $ foldl'
               (\r (e, t) -> r .++ rep e .++ t)
-              (head parts)
-              (zip tms (tail parts))
+              (unsafeHead parts)
+              (zip tms (unsafeTail parts))

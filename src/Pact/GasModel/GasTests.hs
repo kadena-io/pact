@@ -14,7 +14,6 @@ module Pact.GasModel.GasTests
 import Control.Lens hiding ((.=),DefName)
 import Data.Bool (bool)
 import Data.Default (def)
-import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import NeatInterpolation (text)
 
@@ -51,7 +50,7 @@ nonNatives = [NativeDefName "use",
               NativeDefName "interface"]
 
 untestedNatives :: [NativeDefName]
-untestedNatives = foldl' untested [] allNatives
+untestedNatives = F.foldl' untested [] allNatives
   where
     untested li nativeName = case (HM.lookup nativeName unitTests) of
       Nothing -> nativeName : li
@@ -59,7 +58,7 @@ untestedNatives = foldl' untested [] allNatives
 
 
 unitTests :: HM.HashMap NativeDefName GasUnitTests
-unitTests = HM.fromList $ foldl' getUnitTest [] allNatives
+unitTests = HM.fromList $ F.foldl' getUnitTest [] allNatives
   where
     getUnitTest li nativeName =
       case unitTestFromDef nativeName of

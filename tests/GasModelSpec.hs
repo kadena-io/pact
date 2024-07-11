@@ -28,7 +28,11 @@ import Data.Aeson
 import Data.Bifunctor (first)
 import Data.IORef
 import Data.Int (Int64)
+#if MIN_VERSION_base(4,20,0)
+import Data.List (sortOn)
+#else
 import Data.List (foldl', sortOn)
+#endif
 import Test.QuickCheck
 import Test.QuickCheck.Gen (Gen(..))
 import Test.QuickCheck.Random (mkQCGen)

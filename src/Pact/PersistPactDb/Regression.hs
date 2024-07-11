@@ -13,6 +13,7 @@ import Control.Lens hiding ((.=))
 import Control.DeepSeq
 import Data.Text(pack)
 import Data.Foldable(for_)
+import Data.List.Unsafe
 
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
@@ -115,7 +116,7 @@ runRegression p = do
   assertEquals' "user txlogs"
     [TxLog "USER_user1" "key1" row,
      TxLog "USER_user1" "key1" row'] $
-    _getTxLog pactdb usert (head tids) v
+    _getTxLog pactdb usert (unsafeHead tids) v
   _writeRow pactdb Insert usert "key2" row v
   assertEquals' "user insert key2 pre-rollback" (Just row) (_readRow pactdb usert "key2" v)
   assertEquals' "keys pre-rollback" ["key1","key2"] $ _keys pactdb (UserTables user1) v

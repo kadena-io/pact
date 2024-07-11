@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -35,6 +36,9 @@ import Control.Monad.Trans.Except
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+#if MIN_VERSION_base(4,19,0)
+import Data.Functor as F
+#endif
 import Data.List.NonEmpty (NonEmpty(..), (<|))
 import qualified Data.List.NonEmpty as NEL
 import Data.Semigroup.Foldable (fold1)
@@ -211,4 +215,9 @@ queueCmds rpcs = do
   liftIO . writeHistory hc . AddNew $ NEL.toList cmds
   return rks
   where
+#if MIN_VERSION_base(4,19,0)
+    (rks, cmds) = F.unzip rpcs
+#else
     (rks, cmds) = NEL.unzip rpcs
+#endif
+

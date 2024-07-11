@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -50,7 +51,9 @@ import           Control.Monad.State.Strict (evalStateT)
 import           Control.Monad.Trans.Class  (lift)
 import           Data.Bifunctor             (first)
 import           Data.Either                (partitionEithers)
+#if !MIN_VERSION_base(4,20,0)
 import           Data.Foldable              (foldl')
+#endif
 import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (isPrefixOf,nub)
 import qualified Data.List                  as List
@@ -1115,8 +1118,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de _) refs =
     case toplevel of
       TopFun fun _ -> withExceptT ModuleCheckFailure $ ExceptT $
         verifyFunctionInvariants env (mkFunInfo fun) name checkType
-      _ -> error "invariant violation: anything but a TopFun is unexpected in \
-        \invariantCheckable"
+      _ -> error "invariant violation: anything but a TopFun is unexpected in invariantCheckable"
 
   funChecks'' <- lift $ ifor funChecks' $ \name ((toplevel, checkType), checks)
     -> case toplevel of

@@ -21,6 +21,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.ByteString (ByteString)
 
 import Data.List (sortBy)
+import Data.List.Unsafe (unsafeHead)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import Data.HashMap.Strict (HashMap)
@@ -148,7 +149,7 @@ selectCompletedCommands e v = foldM f HashMap.empty v
       rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText,RInt,RInt]
       if null rs
       then return m
-      else case head rs of
+      else case unsafeHead rs of
           [SText (Utf8 cr),SInt _, SInt _] ->
             return $ HashMap.insert rk (crFromField cr) m
           r -> dbError $ "Invalid result from query: " ++ show r

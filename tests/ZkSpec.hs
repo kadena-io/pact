@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,7 +7,10 @@ module ZkSpec (spec) where
 
 import Data.Group (pow)
 import Data.Field(Field)
+#if !MIN_VERSION_base(4,20,0)
 import Data.Foldable(foldl')
+#endif
+import Data.List.Unsafe
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -316,7 +320,7 @@ verify :: [Integer] -> Proof -> Bool
 verify inp p = let
   initial = CurveInf
   vk_x = foldl' (\pt (i, kpt) -> add pt (multiply kpt i)) initial (zip inp (drop 1 (_ic solVerifyingKey)))
-  vk_x' = add vk_x (head (_ic solVerifyingKey))
+  vk_x' = add vk_x (unsafeHead (_ic solVerifyingKey))
   in pairingCheck
     [ (negatePt (_proofA p), _proofB p)
     , (_alfa1 solVerifyingKey, _beta2 solVerifyingKey)

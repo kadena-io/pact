@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -56,7 +57,9 @@ import Data.HashMap.Strict (HashMap)
 import Data.Monoid(Endo(..))
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+#if !MIN_VERSION_base(4,20,0)
 import Data.Foldable(foldl')
+#endif
 import Data.IORef
 import Data.Maybe
 import qualified Data.Set as S

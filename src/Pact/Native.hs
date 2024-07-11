@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -72,7 +73,9 @@ import qualified Data.Char as Char
 import Data.Bits
 import Data.Default
 import Data.Functor(($>))
+#if !MIN_VERSION_base(4,20,0)
 import Data.Foldable
+#endif
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.List as L (nubBy)
@@ -217,12 +220,14 @@ tryDef :: NativeDef
 tryDef =
   defNative "try" try' (funType a [("default", a), ("action", a)])
   ["(try 3 (enforce (= 1 2) \"this will definitely fail\"))"
-  ,LitExample "(expect \"impure expression fails and returns default\" \"default\" \
-   \(try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
+  ,LitExample
+    "(expect \"impure expression fails and returns default\" \"default\" (try \"default\" (with-read accounts id {'ccy := ccy}) ccy))"
   ]
-  "Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions \
-  \are expressions which do not do i/o or work with non-deterministic state in contrast \
-  \to impure expressions such as reading and writing to a table."
+  $ T.unwords
+    [ "Attempt a pure ACTION, returning DEFAULT in the case of failure. Pure expressions"
+    , "are expressions which do not do i/o or work with non-deterministic state in contrast"
+    , "to impure expressions such as reading and writing to a table."
+    ]
   where
     try' :: NativeFun e
     try' i as@[da, action] = gasUnreduced i as $ isExecutionFlagSet FlagDisablePact44 >>= \case
@@ -293,17 +298,22 @@ strToIntDef = defRNative "str-to-int" strToInt
   ,"(str-to-int \"123456\")"
   ,"(str-to-int 64 \"q80\")"
   ]
-  "Compute the integer value of STR-VAL in base 10, or in BASE if specified. \
-  \STR-VAL can be up to 512 chars in length. \
-  \BASE must be between 2 and 16, or 64 to perform unpadded base64url conversion. \
-  \Each digit must be in the correct range for the base."
+  $ T.unwords
+    [ "Compute the integer value of STR-VAL in base 10, or in BASE if specified."
+    , "STR-VAL can be up to 512 chars in length."
+    , "BASE must be between 2 and 16, or 64 to perform unpadded base64url conversion."
+    , "Each digit must be in the correct range for the base."
+    ]
 
 intToStrDef :: NativeDef
 intToStrDef = defRNative "int-to-str" intToStr
   (funType tTyString [("base",tTyInteger),("val",tTyInteger)])
   ["(int-to-str 16 65535)","(int-to-str 64 43981)"]
-  "Represent integer VAL as a string in BASE. BASE can be 2-16, or 64 for unpadded base64URL. \
-  \Only positive values are allowed for base64URL conversion."
+  ( T.unwords
+    [ "Represent integer VAL as a string in BASE. BASE can be 2-16, or 64 for unpadded base64URL."
+    , "Only positive values are allowed for base64URL conversion."
+    ]
+  )
   where
     intToStr _ [b'@(TLitInteger base),v'@(TLitInteger v)]
       | base >= 2 && base <= 16 =
@@ -318,9 +328,11 @@ intToStrDef = defRNative "int-to-str" intToStr
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   ["(hash \"hello\")", "(hash { 'foo: 1 })"]
-  "Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url. \
-  \Strings are converted directly while other values are \
-  \converted using their JSON representation. Non-value-level arguments are not allowed."
+  $ T.unwords
+    [ "Compute BLAKE2b 256-bit hash of VALUE represented in unpadded base64-url."
+    , "Strings are converted directly while other values are"
+    , "converted using their JSON representation. Non-value-level arguments are not allowed."
+    ]
   where
     hash' :: RNativeFun e
     hash' i as = case as of
@@ -445,8 +457,10 @@ describeNamespaceDef = setTopLevelOnly $ defGasRNative
   "describe-namespace" describeNamespace
   (funType (tTyObject dnTy) [("ns", tTyString)])
   [LitExample "(describe-namespace 'my-namespace)"]
-  "Describe the namespace NS, returning a row object containing \
-  \the user and admin guards of the namespace, as well as its name."
+  $ T.unwords
+    [ "Describe the namespace NS, returning a row object containing"
+    , "the user and admin guards of the namespace, as well as its name."
+    ]
   where
     dnTy = TyUser (snd describeNamespaceSchema)
 
@@ -470,9 +484,11 @@ defineNamespaceDef :: NativeDef
 defineNamespaceDef = setTopLevelOnly $ defGasRNative "define-namespace" defineNamespace
   (funType tTyString [("namespace", tTyString), ("user-guard", tTyGuard Nothing), ("admin-guard", tTyGuard Nothing)])
   [LitExample "(define-namespace 'my-namespace (read-keyset 'user-ks) (read-keyset 'admin-ks))"]
-  "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD. \
-  \If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced, \
-  \and GUARD will be rotated in its place."
+  $ T.unwords
+    [ "Create a namespace called NAMESPACE where ownership and use of the namespace is controlled by GUARD."
+    , "If NAMESPACE is already defined, then the guard previously defined in NAMESPACE will be enforced,"
+    , "and GUARD will be rotated in its place."
+    ]
   where
     defineNamespace :: GasRNativeFun e
     defineNamespace i as = case as of
@@ -536,11 +552,13 @@ namespaceDef :: NativeDef
 namespaceDef = setTopLevelOnly $ defGasRNative "namespace" namespace
   (funType tTyString [("namespace", tTyString)])
   [LitExample "(namespace 'my-namespace)"]
-  "Set the current namespace to NAMESPACE. All expressions that occur in a current \
-  \transaction will be contained in NAMESPACE, and once committed, may be accessed \
-  \via their fully qualified name, which will include the namespace. Subsequent \
-  \namespace calls in the same tx will set a new namespace for all declarations \
-  \until either the next namespace declaration, or the end of the tx."
+  $ T.unwords
+    [ "Set the current namespace to NAMESPACE. All expressions that occur in a current"
+    , "transaction will be contained in NAMESPACE, and once committed, may be accessed"
+    , "via their fully qualified name, which will include the namespace. Subsequent"
+    , "namespace calls in the same tx will set a new namespace for all declarations"
+    , "until either the next namespace declaration, or the end of the tx."
+    ]
   where
     namespace :: GasRNativeFun e
     namespace i as = case as of
@@ -607,8 +625,10 @@ chainDataDef :: NativeDef
 chainDataDef = defRNative "chain-data" chainData
     (funType (tTyObject pcTy) [])
     ["(chain-data)"]
-    "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
-    \'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
+    $ T.unwords
+        [ "Get transaction public metadata. Returns an object with 'chain-id', 'block-height',"
+        , "'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
+        ]
   where
     pcTy = TyUser (snd chainDataSchema)
     chainData :: RNativeFun e
@@ -653,16 +673,16 @@ enumerateDef = defGasRNative "enumerate" enumerate
   ["(enumerate 0 10 2)"
    , "(enumerate 0 10)"
    , "(enumerate 10 0)"]
-  $ T.intercalate " "
-  [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
-  , "INC is the increment between numbers in the sequence."
-  , "If INC is not given, it is assumed to be 1."
-  , "Additionally, if INC is not given and FROM is greater than TO assume a value for INC of -1."
-  , "If FROM equals TO, return the singleton list containing FROM, irrespective of INC's value."
-  , "If INC is equal to zero, this function will return the singleton list containing FROM."
-  , "If INC is such that FROM + INC > TO (when FROM < TO) or FROM + INC < TO (when FROM > TO) return the singleton list containing FROM."
-  , "Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or FROM + INC > TO (when FROM > TO), then this function fails."
-  ]
+  $ T.unwords
+    [ "Returns a sequence of numbers from FROM to TO (both inclusive) as a list."
+    , "INC is the increment between numbers in the sequence."
+    , "If INC is not given, it is assumed to be 1."
+    , "Additionally, if INC is not given and FROM is greater than TO assume a value for INC of -1."
+    , "If FROM equals TO, return the singleton list containing FROM, irrespective of INC's value."
+    , "If INC is equal to zero, this function will return the singleton list containing FROM."
+    , "If INC is such that FROM + INC > TO (when FROM < TO) or FROM + INC < TO (when FROM > TO) return the singleton list containing FROM."
+    , "Lastly, if INC is such that FROM + INC < TO (when FROM < TO) or FROM + INC > TO (when FROM > TO), then this function fails."
+    ]
 
 reverseDef :: NativeDef
 reverseDef = defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
@@ -678,9 +698,10 @@ distinctDef :: NativeDef
 distinctDef = defGasRNative "distinct" distinct
   (funType (TyList a) [("values", TyList a)])
   ["(distinct [3 3 1 1 2 2])"]
-  $ T.intercalate " "
-  [ "Returns from a homogeneous list of VALUES a list with duplicates removed."
-  , "The original order of the values is preserved."]
+  $ T.unwords
+    [ "Returns from a homogeneous list of VALUES a list with duplicates removed."
+    , "The original order of the values is preserved."
+    ]
 
 sortDef :: NativeDef
 sortDef = defGasRNative "sort" sort'
@@ -756,10 +777,12 @@ isCharsetDef =
   , "(is-charset CHARSET_ASCII \"I am nÖt ascii\")"
   , "(is-charset CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
   ]
-  "Check that a string INPUT conforms to the a supported character set CHARSET.       \
-  \Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and         \
-  \'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be \
-  \added in the future."
+  $ T.unwords
+    [ "Check that a string INPUT conforms to the a supported character set CHARSET."
+    , "Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and"
+    , "'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be"
+    , "added in the future."
+    ]
   where
     isCharset :: RNativeFun e
     isCharset i as = case as of
@@ -809,9 +832,11 @@ langDefs =
     ,readStringDef
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      [LitExample "(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))"]
-     "Read KEY from top level of message data body, or data body itself if not provided. \
-     \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
-     \List -> list, Object -> object."
+     $ T.unwords
+        [ "Read KEY from top level of message data body, or data body itself if not provided."
+        , "Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool,"
+        , "List -> list, Object -> object."
+        ]
     ,defRNative "tx-hash" txHash (funType tTyString []) ["(tx-hash)"]
      "Obtain hash of current transaction as a string."
     ,defNative (specialForm Bind) bind
@@ -829,19 +854,25 @@ langDefs =
      [ LitExample "(yield { \"amount\": 100.0 })"
      , LitExample "(yield { \"amount\": 100.0 } \"some-chain-id\")"
      ]
-     "Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN, \
-     \target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch."
+     $ T.unwords
+        [ "Yield OBJECT for use with 'resume' in following pact step. With optional argument TARGET-CHAIN,"
+        , "target subsequent step to execute on targeted chain using automated SPV endorsement-based dispatch."
+        ]
     ,defNative (specialForm Resume) resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "r") def)]) []
-     "Special form binds to a yielded object value from the prior step execution in a pact. \
-     \If yield step was executed on a foreign chain, enforce endorsement via SPV."
+     $ T.unwords
+        [ "Special form binds to a yielded object value from the prior step execution in a pact."
+        , "If yield step was executed on a foreign chain, enforce endorsement via SPV."
+        ]
     ,pactVersionDef
     ,setTopLevelOnly $ defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
       funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
     ["(enforce-pact-version \"2.3\")"]
-    "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
-    \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'."
+    $ T.unwords
+        [ "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION."
+        , "Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'."
+        ]
     ,defRNative "contains" contains
     (funType tTyBool [("value",a),("list",TyList a)] <>
      funType tTyBool [("key",a),("object",tTyObject (mkSchemaVar "o"))] <>
