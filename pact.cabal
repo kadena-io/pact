@@ -241,12 +241,12 @@ library
     , direct-sqlite >=2.3.27
     , directory >=1.2.6.2
     , errors >=2.3
-    , ethereum >= 0.1
+    , ethereum >= 0.1.0.2
     , exceptions >=0.8.3
     , filepath >=1.4.1.0
     , groups
     , hashable >=1.4
-    , hashes >= 0.2
+    , hashes >= 0.3
     , lens >=4.14
     , megaparsec >=9
     , memory

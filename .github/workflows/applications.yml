@@ -104,13 +104,12 @@ jobs:
           /opt/local/lib
           /usr/local/opt/openssl/lib/
         EOF
-    - name: Extend cabal.project.local for GHC-9.0.2
-      if: "startsWith(matrix.ghc, '9')"
+    - name: Set -Wwarn cabal.project.local
       shell: bash
       run: |
         cat >> cabal.project.local <<EOF
         package pact
-          ghc-options: -Wwarn -Wunused-packages
+          ghc-options: -Wwarn
         EOF
     - name: Add check for unused packages
       shell: bash

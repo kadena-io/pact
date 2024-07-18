@@ -67,6 +67,6 @@ allow-newer: trifecta:*
 source-repository-package
   type: git
   location: https://github.com/kadena-io/kadena-ethereum-bridge.git
-  tag: a32d901e4a79be62af9c27c01152c9a4c3912a62
-  --sha256: sha256-xdawv/tdjh61MbJKcBqm9Fje36+gVljuZsAxOTX1gP0=
+  tag: 3837c4c81f1beaffc1d52375e61576366d49170a
+  --sha256: 1knhscph2g3saz0pjd1d5a32mr281msapccfrillgd2qk4pj7xjc
 
