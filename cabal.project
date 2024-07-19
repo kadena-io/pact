@@ -46,7 +46,7 @@ allow-newer: *:base
 allow-newer: *:ghc-prim
 
 -- Patch merged into master (upcoming verison 10.0). We are currently using 9.2.
--- This fork contains additional fixes for using 9.2 with recent compilers. 
+-- This fork contains additional fixes for using 9.2 with recent compilers.
 source-repository-package
   type: git
   tag: 1f2d042718fcf9a140398bd3dedac77c207cce27
@@ -67,6 +67,6 @@ allow-newer: trifecta:*
 source-repository-package
   type: git
   location: https://github.com/kadena-io/kadena-ethereum-bridge.git
-  tag: a32d901e4a79be62af9c27c01152c9a4c3912a62
-  --sha256: sha256-xdawv/tdjh61MbJKcBqm9Fje36+gVljuZsAxOTX1gP0=
+  tag: 8df1cff7f279750490fea8ff580294f3e5a3fcaf
+  --sha256: sha256-HyWTEtw/dKQduXl5avRckS0oNc9Z5yxeUxvX09wDkDY=
 
