@@ -6,6 +6,11 @@
 ### Bugfixes
 - Fixed support for decoding a hyperlane TokenMessage (#1362)
 
+### Misc
+- require hashes >= 3.0 (#1370)
+- add specific clause for masking hugenum regression in ARM runners (#1364)
+- support ghc-9.10 (#1367)
+
 4.12.0
 ---
 ### Features
