@@ -778,8 +778,8 @@ isCharsetDef =
   , "(is-charset CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
   ]
   $ T.unwords
-    [ "Check that a string INPUT conforms to the a supported character set CHARSET."
-    , "Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and"
+    [ "Check that a string INPUT conforms to the a supported character set CHARSET.      "
+    , "Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and        "
     , "'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be"
     , "added in the future."
     ]
