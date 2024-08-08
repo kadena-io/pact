@@ -778,8 +778,8 @@ isCharsetDef =
   , "(is-charset CHARSET_LATIN1 \"I am nÖt ascii, but I am latin1!\")"
   ]
   $ T.unwords
-    [ "Check that a string INPUT conforms to the a supported character set CHARSET."
-    , "Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and"
+    [ "Check that a string INPUT conforms to the a supported character set CHARSET.      "
+    , "Character sets currently supported are: 'CHARSET_LATIN1' (ISO-8859-1), and        "
     , "'CHARSET_ASCII' (ASCII). Support for sets up through ISO 8859-5 supplement will be"
     , "added in the future."
     ]
@@ -1692,8 +1692,9 @@ hyperlaneMessageIdDef = defGasRNative
   where
     hyperlaneMessageId' :: RNativeFun e
     hyperlaneMessageId' i args = case args of
-      [TObject o _] ->
-        computeGas' i (GHyperlaneMessageId (BS.length (getMessageBody o))) $ do
+      [TObject o _] -> do
+        msgBody <- getMessageBody i o
+        computeGas' i (GHyperlaneMessageId (BS.length msgBody)) $ do
           disable413 <- isExecutionFlagSet FlagDisablePact413
           let native = if disable413
                        then HyperlaneBefore413.hyperlaneMessageId
@@ -1703,15 +1704,15 @@ hyperlaneMessageIdDef = defGasRNative
             Right msgId -> return $ toTerm msgId
       _ -> argsError i args
 
-    getMessageBody :: Object n -> BS.ByteString
-    getMessageBody o =
+    getMessageBody :: HasInfo i => i -> Object n -> Eval e BS.ByteString
+    getMessageBody i o =
       let mBody = do
             let om = _objectMap (_oObject o)
             om ^? at "messageBody" . _Just . _TLiteral . _1 . _LString
       in
       case mBody of
-        Nothing -> error "couldn't find message body"
-        Just t -> T.encodeUtf8 t
+        Nothing -> evalError' i "couldn't find message body"
+        Just t -> pure $ T.encodeUtf8 t
 
 hyperlaneDecodeTokenMessageDef :: NativeDef
 hyperlaneDecodeTokenMessageDef =
@@ -1747,19 +1748,20 @@ hyperlaneEncodeTokenMessageDef =
     hyperlaneEncodeTokenMessageDef' :: RNativeFun e
     hyperlaneEncodeTokenMessageDef' i args = do
       case args of
-        [TObject o _] ->
-          computeGas' i (GHyperlaneEncodeDecodeTokenMessage (BS.length (getRecipient o))) $
+        [TObject o _] -> do
+          recipient <- getRecipient i o
+          computeGas' i (GHyperlaneEncodeDecodeTokenMessage (BS.length recipient)) $
             case HyperlaneAfter413.hyperlaneEncodeTokenMessage o of
               Left err -> evalError' i err
               Right msg -> pure $ toTerm $ msg
         _ -> argsError i args
 
-    getRecipient :: Object n -> BS.ByteString
-    getRecipient o =
+    getRecipient :: HasInfo i => i -> Object n -> Eval e BS.ByteString
+    getRecipient i o =
       let mRecipient = do
             let om = _objectMap (_oObject o)
             om ^? at "recipient" . _Just . _TLiteral . _1 . _LString
       in
       case mRecipient of
-        Nothing -> error "couldn't find recipient"
-        Just t -> T.encodeUtf8 t
+        Nothing -> evalError' i "couldn't find recipient"
+        Just t -> pure $ T.encodeUtf8 t
