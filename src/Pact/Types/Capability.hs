@@ -25,7 +25,7 @@ module Pact.Types.Capability
   , UserManagedCap(..), umcManagedValue, umcManageParamIndex, umcManageParamName, umcMgrFun
   , AutoManagedCap(..), amcActive
   , decomposeManaged, decomposeManaged', matchManaged
-  , Capabilities(..), capStack, capManaged, capModuleAdmin, capAutonomous
+  , Capabilities(..), capStack, capManaged, capModuleAdmin, capAutonomous, emptyCapabilities
   , CapScope(..)
   , CapSlot(..), csCap, csComposed, csScope
   ) where
@@ -191,8 +191,11 @@ data Capabilities = Capabilities
   }
   deriving (Eq,Show,Generic)
 
-instance Default Capabilities where def = Capabilities [] mempty mempty mempty
+instance Default Capabilities where def = emptyCapabilities
 instance NFData Capabilities
+
+emptyCapabilities :: Capabilities
+emptyCapabilities = Capabilities mempty mempty mempty mempty
 
 makeLenses ''ManagedCapability
 makeLenses ''Capabilities

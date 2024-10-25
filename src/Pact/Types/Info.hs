@@ -20,12 +20,14 @@
 module Pact.Types.Info
  (
    Parsed(..),
+   noParsed,
    Code(..),
    Info(..),
    mkInfo,
    renderInfo,
    renderParsed,
-   HasInfo(..)
+   HasInfo(..),
+   noInfo
    ) where
 
 
@@ -81,9 +83,11 @@ instance Arbitrary Parsed where
         -- The parser always assumes that the last to numbers are zero
         , Directed <$> genFilename <*> genPositiveInt64 <*> genPositiveInt64 <*> pure 0 <*> pure 0 ]
 instance NFData Parsed
-instance Default Parsed where def = Parsed mempty 0
+instance Default Parsed where def = noParsed
 instance Pretty Parsed where pretty = pretty . _pDelta
 
+noParsed :: Parsed
+noParsed = Parsed mempty 0
 
 newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,Generic)
@@ -110,7 +114,10 @@ instance Show Info where
     show (Info Nothing) = ""
     show (Info (Just (r,_d))) = renderCompactString r
 
-instance Default Info where def = Info Nothing
+instance Default Info where def = noInfo
+
+noInfo :: Info
+noInfo = Info Nothing
 
 -- | Charge zero for Info to avoid quadratic blowup (i.e. for modules)
 instance SizeOf Info where

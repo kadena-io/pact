@@ -27,6 +27,8 @@ module Pact.Types.ChainMeta
   , pmAddress, pmChainId, pmSender, pmGasLimit, pmGasPrice, pmTTL, pmCreationTime
   , pdPublicMeta, pdBlockHeight, pdBlockTime, pdPrevBlockHash
   , getCurrentCreationTime
+  , noPublicMeta
+  , noPublicData
   ) where
 
 
@@ -149,7 +151,10 @@ data PublicMeta = PublicMeta
   } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 
-instance Default PublicMeta where def = PublicMeta "" "" 0 0 0 0
+instance Default PublicMeta where def = noPublicMeta
+
+noPublicMeta :: PublicMeta
+noPublicMeta = PublicMeta "" mempty 0 0 0 0
 
 instance Arbitrary PublicMeta where
   arbitrary = PublicMeta
@@ -224,7 +229,10 @@ instance J.Encode PublicData where
   {-# INLINABLE build #-}
 
 instance FromJSON PublicData where parseJSON = lensyParseJSON 3
-instance Default PublicData where def = PublicData def def def def
+instance Default PublicData where def = noPublicData
+
+noPublicData :: PublicData
+noPublicData = PublicData noPublicMeta 0 0 mempty
 
 instance Arbitrary PublicData where
   arbitrary = PublicData
