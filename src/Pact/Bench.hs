@@ -285,7 +285,7 @@ main :: IO ()
 main = do
   -- uncomment below to see if "-N" is working, important for file perf log
   -- print =<< getNumCapabilities
-  !fperf <- if doPerf /= None then mkFilePerf "pact-bench-perf" else (pure def)
+  !fperf <- if doPerf /= None then mkFilePerf "pact-bench-perf" else pure def
   let !dbPerf = if doPerf == Db || doPerf == All then fperf else def
       !interpPerf = if doPerf == Interp || doPerf == All then fperf else def
   !pub <- eitherDie "pub" $ parseB16TextOnly pk
