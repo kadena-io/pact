@@ -146,7 +146,7 @@ stripTermInfo = stripTerm' stripNameInfo
   stripArgInfo f (Arg an argtyp _info) =
     Arg an (stripTypeInfo f argtyp) def
   stripMetaInfo (Meta docs model) =
-    Meta docs (def <$ model)
+    Meta docs (fmap (const def) <$> model)
   stripAppInfo f (App af args _info) =
     App (stripTerm' f af) (stripTerm' f <$> args) def
   stripStepInfo f = \case
