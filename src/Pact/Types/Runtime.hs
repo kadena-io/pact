@@ -35,8 +35,8 @@ module Pact.Types.Runtime
    eeAdvice, eeWarnings, eeSigCapBypass,
    toPactId,
    Purity(..),
-   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,
-   EvalState(..),evalRefs,evalCallStack,evalPactExec,
+   RefState(..),rsLoaded,rsLoadedModules,rsNamespace,rsQualifiedDeps,emptyRefState,
+   EvalState(..),evalRefs,evalCallStack,evalPactExec,emptyEvalState,
    evalCapabilities,evalLogGas,evalEvents,evalUserCapabilitiesBeingEvaluated,
    Eval(..),runEval,runEval',catchesPactError,
    call,method,
@@ -45,7 +45,7 @@ module Pact.Types.Runtime
    NamespacePolicy(..),
    permissiveNamespacePolicy,
    ExecutionConfig(..),ExecutionFlag(..),ecFlags,isExecutionFlagSet,flagRep,flagReps,
-   mkExecutionConfig,
+   mkExecutionConfig,emptyExecutionConfig,
    ifExecutionFlagSet,ifExecutionFlagSet',
    whenExecutionFlagSet, unlessExecutionFlagSet,
    emitPactWarning,
@@ -242,9 +242,12 @@ newtype ExecutionConfig = ExecutionConfig
   deriving (FromJSON)
 
 makeLenses ''ExecutionConfig
-instance Default ExecutionConfig where def = ExecutionConfig def
+instance Default ExecutionConfig where def = emptyExecutionConfig
 instance Pretty ExecutionConfig where
   pretty = pretty . S.toList . _ecFlags
+
+emptyExecutionConfig :: ExecutionConfig
+emptyExecutionConfig = ExecutionConfig mempty
 
 instance Arbitrary ExecutionConfig where
   arbitrary = ExecutionConfig <$> arbitrary
@@ -323,7 +326,10 @@ data RefState = RefState {
 
 makeLenses ''RefState
 instance NFData RefState
-instance Default RefState where def = RefState HM.empty HM.empty Nothing HM.empty
+instance Default RefState where def = emptyRefState
+
+emptyRefState :: RefState
+emptyRefState = RefState mempty mempty Nothing mempty
 
 data PactEvent = PactEvent
   { _eventName :: !Text
@@ -373,7 +379,10 @@ data EvalState = EvalState {
     } deriving (Show, Generic)
 makeLenses ''EvalState
 instance NFData EvalState
-instance Default EvalState where def = EvalState def def def def def def def
+instance Default EvalState where def = emptyEvalState
+
+emptyEvalState :: EvalState
+emptyEvalState = EvalState emptyRefState mempty Nothing emptyCapabilities mempty mempty mempty
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
