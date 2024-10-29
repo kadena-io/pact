@@ -1,3 +1,8 @@
+4.13.1
+---
+### Misc
+- Support data-default-0.8.0.0 (#1376)
+
 4.13.0
 ---
 ### Features
