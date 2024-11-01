@@ -7,6 +7,7 @@ import qualified KeysetSpec
 import qualified RoundTripSpec
 import qualified PrincipalSpec
 import qualified Test.Pact.Utils.LegacyValue
+import qualified Test.Pact.Utils.StableHashMap
 import qualified SizeOfSpec
 import qualified Test.Pact.Native.Pairing
 
@@ -45,6 +46,7 @@ main = hspec $ parallel $ do
   describe "RoundTripSpec" RoundTripSpec.spec
   describe "PrincipalSpec" PrincipalSpec.spec
   describe "Test.Pact.Utils.LegacyValue" Test.Pact.Utils.LegacyValue.spec
+  describe "Test.Pact.Utils.StableHashMap" Test.Pact.Utils.StableHashMap.spec
   describe "SizeOfSpec" SizeOfSpec.spec
   describe "Test.Pact.Native.Pairing" Test.Pact.Native.Pairing.spec
   describe "PactTestsSpec" PactTestsSpec.spec

@@ -449,6 +449,7 @@ test-suite hspec
     , directory
     , errors
     , filepath
+    , hashable
     , hspec
     , lens
     , mod
@@ -475,6 +476,7 @@ test-suite hspec
     Test.Pact.Native.Pairing
     Test.Pact.Parse
     Test.Pact.Utils.LegacyValue
+    Test.Pact.Utils.StableHashMap
 
   if flag(build-tool)
     cpp-options: -DBUILD_TOOL
