@@ -16,7 +16,6 @@ import Data.Foldable(for_)
 import Data.List.Unsafe
 
 import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
 
 import Pact.PersistPactDb
 import Pact.Persist
@@ -29,6 +28,7 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Native (nativeDefs)
 import Pact.Types.RowData
+import qualified Pact.Utils.StableHashMap as SHM
 
 import qualified Pact.JSON.Encode as J
 import Pact.JSON.Legacy.Value
@@ -48,7 +48,7 @@ loadModule = do
         show (view (rEvalState . evalRefs . rsLoadedModules) s)
 
 nativeLookup :: NativeDefName -> Maybe (Term Name)
-nativeLookup (NativeDefName n) = case HM.lookup n nativeDefs of
+nativeLookup (NativeDefName n) = case SHM.lookup n nativeDefs of
   Just (Direct t) -> Just t
   _ -> Nothing
 

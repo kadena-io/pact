@@ -53,9 +53,7 @@ import Control.Lens
 
 import Data.Aeson
 import Data.Default
-import Data.HashMap.Strict (HashMap)
 import Data.Monoid(Endo(..))
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 #if !MIN_VERSION_base(4,20,0)
 import Data.Foldable(foldl')
@@ -81,6 +79,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Types.SPV
 import Pact.Types.Verifier
+import qualified Pact.Utils.StableHashMap as SHM
 
 import Pact.JSON.Legacy.Value
 
@@ -138,7 +137,7 @@ data EvalResult = EvalResult
     -- ^ Result of defpact execution if any
   , _erGas :: Gas
     -- ^ Gas consumed/charged
-  , _erLoadedModules :: HashMap ModuleName (ModuleData Ref,Bool)
+  , _erLoadedModules :: SHM.StableHashMap ModuleName (ModuleData Ref,Bool)
     -- ^ Modules loaded, with flag indicating "newly loaded"
   , _erTxId :: !(Maybe TxId)
     -- ^ Transaction id, if executed transactionally
@@ -159,9 +158,10 @@ evalExec runner evalEnv ParsedCode {..} = do
     isNarrowTry = not $ S.member FlagDisablePact44 $ _ecFlags $ _eeExecutionConfig evalEnv
 
 -- | For pre-installing modules into state.
-initStateModules :: HashMap ModuleName (ModuleData Ref) -> EvalState
-initStateModules modules =
-  set (evalRefs . rsQualifiedDeps) (foldMap allModuleExports modules) $ set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
+initStateModules :: SHM.StableHashMap ModuleName (ModuleData Ref) -> EvalState
+initStateModules modules
+  = set (evalRefs . rsQualifiedDeps) (foldMap allModuleExports modules)
+  $ set (evalRefs . rsLoadedModules) (fmap (,False) modules) def
 
 -- | Resume a defpact execution, with optional PactExec.
 evalContinuation :: Interpreter e -> EvalEnv e -> ContMsg -> IO EvalResult
@@ -230,7 +230,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv np spv pd ec = do
 
 disablePactNatives :: [Text] -> ExecutionFlag -> ExecutionConfig -> Endo RefStore
 disablePactNatives bannedNatives flag (ExecutionConfig ec) = Endo $
-  if S.member flag ec then over rsNatives (\k -> foldl' (flip HM.delete) k bannedNatives)
+  if S.member flag ec then over rsNatives (\k -> foldl' (flip SHM.delete) k bannedNatives)
   else id
 
 disablePact40Natives :: ExecutionConfig -> Endo RefStore

@@ -63,7 +63,6 @@ import Data.Default
 import Data.Foldable
 import Data.Functor.Classes
 import Data.Graph
-import qualified Data.HashMap.Strict as HM
 import Data.IORef
 import Data.List.Unsafe
 import qualified Data.Map.Strict as M
@@ -87,6 +86,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.SizeOf
 import Pact.Types.Namespace
+import qualified Pact.Utils.StableHashMap as SHM
 
 import qualified Pact.JSON.Encode as J
 import qualified Pact.JSON.Legacy.HashMap as LHM
@@ -323,8 +323,8 @@ eval' (TModule _tm@(MDModule m) bod i) =
         void $ acquireModuleAdminCapability capMName $ return ()
 
         unlessExecutionFlagSet FlagDisablePact48 $ do
-          evalRefs.rsLoadedModules %= HM.delete (_mName mangledM)
-          evalRefs.rsQualifiedDeps %= HM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM)
+          evalRefs.rsLoadedModules %= SHM.delete (_mName mangledM)
+          evalRefs.rsQualifiedDeps %= SHM.filterWithKey (\k _ -> _fqModule k /= _mName mangledM)
 
     -- build/install module from defs
     govM <- loadModule mangledM bod i
@@ -419,7 +419,7 @@ evalUse (Use mn mh mis i) = do
 
 validateImports
   :: Info
-  -> HM.HashMap Text Ref
+  -> SHM.StableHashMap Text Ref
   -> Maybe ModuleHash
   -> Maybe (V.Vector Text)
   -> Eval e ()
@@ -429,7 +429,7 @@ validateImports i rs mh (Just is)
     "empty imports are only allowed if a module hash is referenced"
   | otherwise = traverse_ go is
   where
-    go imp = case HM.lookup imp rs of
+    go imp = case SHM.lookup imp rs of
       Nothing -> evalError i $ "imported name not found: " <> pretty imp
       Just (Ref r) -> case r of
         TDef d _ -> case _dDefType d of
@@ -507,7 +507,7 @@ collectNames
     -- ^ module body
   -> (Term Name -> Eval e (Maybe Text))
     -- ^ function extracting definition names
-  -> Eval e (HM.HashMap Text (Term Name))
+  -> Eval e (SHM.StableHashMap Text (Term Name))
 collectNames args body k = case instantiate' body of
     TList bd _ _ -> do
       ns <- view $ eeRefStore . rsNatives
@@ -518,22 +518,22 @@ collectNames args body k = case instantiate' body of
       Nothing -> return ds
       Just dn -> do
         -- disallow native overlap
-        when (isJust $ HM.lookup dn ns) $
+        when (isJust $ SHM.lookup dn ns) $
           evalError' t $ "definitions cannot overlap with native names: " <> pretty dn
         -- disallow conflicting members
-        when (isJust $ HM.lookup dn ds) $
+        when (isJust $ SHM.lookup dn ds) $
           evalError' t $ "definition name conflict: " <> pretty dn
 
         computeGas (Left (_tInfo t,dn)) args
-        return (HM.insert dn t ds)
+        return (SHM.insert dn t ds)
 
 
 resolveGovernance
-  :: HM.HashMap Text Ref
+  :: SHM.StableHashMap Text Ref
   -> Module (Term Name)
   -> Eval e (ModuleDef (Def Ref))
 resolveGovernance solvedDefs m' = fmap MDModule $ forM m' $ \g -> case g of
-    TVar (Name (BareName n _)) _ -> case HM.lookup n solvedDefs of
+    TVar (Name (BareName n _)) _ -> case SHM.lookup n solvedDefs of
       Just r -> case r of
         Ref (TDef govDef _) -> case _dDefType govDef of
           Defcap -> return govDef
@@ -551,7 +551,7 @@ data HeapMemState
 
 data HeapFold
   = HeapFold
-  { _hfAllDefs :: !(HM.HashMap Text Ref)
+  { _hfAllDefs :: !(SHM.StableHashMap Text Ref)
   , _hfMemoEnv :: !(M.Map Name Bytes)
   , _hfTotalMem :: !Bytes
   }
@@ -572,7 +572,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
   unified' <- case unified of
     t@TConst{} -> runSysOnly $ evalConstsNonRec (Ref t)
     _ -> pure (Ref unified)
-  pure (HeapFold (HM.insert defName unified' allDefs) costMemoEnv' totalMem)
+  pure (HeapFold (SHM.insert defName unified' allDefs) costMemoEnv' totalMem)
   where
   -- Inline a foreign defun: memoize the cost, since it may be expensive to calculate
   -- We also calculate the cost per callsite, to fail faster.
@@ -597,7 +597,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
   --  - Check for gas overflow post replacing `Left defn` by the full definition.
   replaceMemo szVer m (Left defn) = do
     memoEnv <- gets _hmMemoEnv
-    let inlined = m HM.! defn
+    let inlined = m SHM.! defn
     case M.lookup (Name (BareName defn def)) memoEnv of
       Just heapCost -> do
         modify' (\(HeapMemState env total) -> HeapMemState env (total + heapCost))
@@ -610,7 +610,7 @@ dresolveMem info (HeapFold allDefs costMemoEnv currMem) (defTerm, defName, _) = 
 
 removeFromLoaded :: Set.Set Text -> Eval e ()
 removeFromLoaded toRemove =
-  evalRefs . rsLoaded %= HM.filterWithKey (\k _ -> Set.notMember k toRemove)
+  evalRefs . rsLoaded %= SHM.filterWithKey (\k _ -> Set.notMember k toRemove)
 
 -- | Definitions are transformed such that all free variables are resolved either to
 -- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
@@ -619,31 +619,31 @@ removeFromLoaded toRemove =
 -- to be non-recursive. The graph is walked to unify the Either to
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
-evaluateDefs :: Info -> ModuleDef (Term Name) -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
+evaluateDefs :: Info -> ModuleDef (Term Name) -> SHM.StableHashMap Text (Term Name) -> Eval e (SHM.StableHashMap Text Ref)
 evaluateDefs info mdef defs = do
   cs <- liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- enforceAcyclic info cs
   -- the order of evaluation matters for 'dresolve' - this *must* be a left fold
   isExecutionFlagSet FlagDisableInlineMemCheck >>= \case
     True -> do
-      let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
-          unifiedDefs = (foldl' dresolve HM.empty sortedDefs)
+      let dresolve ds (d,dn,_) = SHM.insert dn (Ref $ unify ds <$> d) ds
+          unifiedDefs = (foldl' dresolve SHM.empty sortedDefs)
       traverse (runSysOnly . evalConsts) unifiedDefs
     False -> do
-      hf <- foldlM (dresolveMem info) (HeapFold HM.empty M.empty 0) sortedDefs
+      hf <- foldlM (dresolveMem info) (HeapFold mempty M.empty 0) sortedDefs
       -- Compute, commit and log the final gas after getting the final memory cost.
       _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory (_hfTotalMem hf))
       pure (_hfAllDefs hf)
   where
   -- | traverse to find deps and form graph
-  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
+  traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ SHM.toList allDefs) $ \(defName,defTerm) -> do
     defTerm' <- forM defTerm $ \(f :: Name) -> do
       dm <- resolveRef' True f f -- lookup ref, don't try modules for barenames
       case (dm, f) of
         (Just t, _) -> return (Right t) -- ref found
         -- for barenames, check decls and finally modules
         (Nothing, Name (BareName fn _)) ->
-          case HM.lookup fn allDefs of
+          case SHM.lookup fn allDefs of
             Just _ -> return (Left fn) -- decl found
             Nothing -> resolveBareModRef info f fn memo mdef >>= \r -> case r of
               Just mr -> return (Right mr) -- mod ref found
@@ -710,21 +710,21 @@ resolveBareModRef info f fn memo mdef
 fullyQualifyDefs
   :: Info
   -> Module (Term Name)
-  -> HM.HashMap Text (Term Name)
-  -> Eval e (HM.HashMap Text Ref, HM.HashMap FullyQualifiedName Ref)
+  -> SHM.StableHashMap Text (Term Name)
+  -> Eval e (SHM.StableHashMap Text Ref, SHM.StableHashMap FullyQualifiedName Ref)
 fullyQualifyDefs info mdef defs = do
-  removeFromLoaded (Set.fromList (HM.keys defs))
+  removeFromLoaded (Set.fromList (SHM.keys defs))
   (cs, depNames) <- flip runStateT Set.empty $ liftIO (newIORef Nothing) >>= traverseGraph defs
   sortedDefs <- enforceAcyclic info cs
   fDefs <- foldlM mkAndEvalConsts mempty sortedDefs
-  deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . HM.filterWithKey (\k _ -> Set.member k depNames))
+  deps <- uses (evalRefs . rsLoadedModules) (foldMap (allModuleExports . fst) . SHM.filterWithKey (\k _ -> Set.member k depNames))
   szVer <- getSizeOfVersion
   let (Sum totalMemory) = foldMap (Sum . sizeOf szVer) fDefs + foldMap (Sum . sizeOf szVer) deps
   _ <- computeGas (Left (info, "Module Memory cost")) (GModuleMemory totalMemory)
   pure (fDefs, deps)
   where
     -- Inline all but TDefs.
-    replaceL m n = case HM.lookup (_fqName n) m of
+    replaceL m n = case SHM.lookup (_fqName n) m of
         Just p -> case p of
           Ref TDef{} -> pure (Direct (TVar (FQName n) def))
           Ref (TConst _ _ (CVEval _ v) _ _) -> pure (Ref v)
@@ -733,14 +733,14 @@ fullyQualifyDefs info mdef defs = do
     mkAndEvalConsts m (term', dn, _) = do
       t <- Ref <$> (traverse (either (replaceL m) pure) term')
       t' <- runSysOnly $ evalConstsNonRec t
-      evalRefs . rsQualifiedDeps %= HM.insert dn t'
-      pure $ HM.insert(_fqName dn) t' m
+      evalRefs . rsQualifiedDeps %= SHM.insert dn t'
+      pure $ SHM.insert(_fqName dn) t' m
 
     checkAddDep = \case
       Direct (TVar (FQName fq) _) -> modify' (Set.insert (_fqModule fq))
       _ -> pure ()
 
-    resolveBareName memo f@(BareName fn _) = case HM.lookup fn defs of
+    resolveBareName memo f@(BareName fn _) = case SHM.lookup fn defs of
       Just _ -> do
         let name' = FullyQualifiedName fn (_mName mdef) (moduleHash mdef)
         return (Left name') -- decl found
@@ -768,7 +768,7 @@ fullyQualifyDefs info mdef defs = do
           (Nothing, _) -> resolveError f
 
     -- | traverse to find deps and form graph
-    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ HM.toList allDefs) $ \(defName,defTerm) -> do
+    traverseGraph allDefs memo = fmap stronglyConnCompR $ forM (LHM.sortByKey $ SHM.toList allDefs) $ \(defName,defTerm) -> do
       let defName' = FullyQualifiedName defName (_mName mdef) (moduleHash mdef)
       disablePact48 <- lift (isExecutionFlagSet FlagDisablePact48)
       defTerm' <- forM defTerm $ \(f :: Name) -> resolveName disablePact48 memo f
@@ -782,8 +782,8 @@ fullyQualifyDefs info mdef defs = do
 evaluateConstraints
   :: Info
   -> (Module n)
-  -> HM.HashMap Text Ref
-  -> Eval e (Module n, HM.HashMap Text Ref)
+  -> SHM.StableHashMap Text Ref
+  -> Eval e (Module n, SHM.StableHashMap Text Ref)
 evaluateConstraints info m evalMap = do
   (m',evalMap',newIfs) <- foldM evaluateConstraint (m, evalMap, []) $ _mInterfaces m
   return (set mInterfaces (reverse newIfs) m',evalMap')
@@ -794,7 +794,7 @@ evaluateConstraints info m evalMap = do
         Nothing -> evalError info $
           "Interface not defined: " <> pretty ifn
         Just (ModuleData (MDInterface Interface{..}) irefs _) -> do
-          em' <- LHM.foldrWithKey (solveConstraint ifn info) (pure refMap) $ LHM.fromList $ HM.toList irefs
+          em' <- LHM.foldrWithKey (solveConstraint ifn info) (pure refMap) $ LHM.fromList $ SHM.toList irefs
           let um = over mMeta (<> _interfaceMeta) m'
           newIf <- ifExecutionFlagSet' FlagPreserveModuleIfacesBug ifn _interfaceName
           pure (um, em', newIf:newIfs)
@@ -807,14 +807,14 @@ solveConstraint
   -> Info
   -> Text
   -> Ref
-  -> Eval e (HM.HashMap Text Ref)
-  -> Eval e (HM.HashMap Text Ref)
+  -> Eval e (SHM.StableHashMap Text Ref)
+  -> Eval e (SHM.StableHashMap Text Ref)
 solveConstraint _ifn info refName (Direct t) _ =
   evalError info $ "found native reference " <> pretty t
   <> " while resolving module contraints: " <> pretty refName
 solveConstraint ifn info refName (Ref t) evalMap = do
   em <- evalMap
-  case HM.lookup refName em of
+  case SHM.lookup refName em of
     Nothing ->
       case t of
         TConst{} -> evalMap
@@ -837,7 +837,7 @@ solveConstraint ifn info refName (Ref t) evalMap = do
             match a "Argument name mismatch" n n'
             matchWith termRefEq' a ("Argument type mismatch for " <> n) ty ty'
           -- the model concatenation step: we reinsert the ref back into the map with new models
-          pure $ HM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
+          pure $ SHM.insert refName (Ref $ over (tDef . dMeta) (<> m) s) em
         _ -> evalError' s $ "found overlapping refs - please resolve: " <> pretty t
 
   where
@@ -897,7 +897,7 @@ resolveRef' _ i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
     lookupQn n' i' q' = do
       m <- lookupModule i' q'
       case (m, ns) of
-        (Just m', _) -> return $ HM.lookup n' $ _mdRefMap m'
+        (Just m', _) -> return $ SHM.lookup n' $ _mdRefMap m'
         (Nothing, Just{}) -> return Nothing
         (Nothing, Nothing) ->
           -- note that while 'resolveModRef' uses 'moduleResolver' again,
@@ -933,7 +933,7 @@ resolveRefFQN i (QName (QualifiedName q@(ModuleName refNs ns) n _)) = moduleReso
       m <- lookupModule i' q'
       case (m, ns) of
         (Just m', _) ->
-          case HM.lookup n (_mdRefMap m') of
+          case SHM.lookup n (_mdRefMap m') of
             Just (Ref (TDef def' _) ) -> do
               h <- getModuleHash (_mdModule m')
               let name' = FQName (FullyQualifiedName n (_dModule def') h)
@@ -1011,9 +1011,9 @@ resolveDynamic i mem acc n = case acc of
 
 -- | This should be impure. See 'evaluateDefs'. Refs are
 -- expected to exist, and if they don't, it is a serious bug
-unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
+unify :: SHM.StableHashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right r) = r
-unify m (Left t) = m HM.! t
+unify m (Left t) = m SHM.! t
 
 -- | Evaluate consts in a module. Deprecated in favor of `evalConstsNonRec`
 evalConsts :: PureSysOnly e => Ref -> Eval e Ref
@@ -1219,7 +1219,7 @@ reduceDynamic tref tmem i = do
       let (DefName mem) = _dDefName d
       md <- resolveModule i ref
       case md of
-        Just (ModuleData _ refs _) -> case HM.lookup mem refs of
+        Just (ModuleData _ refs _) -> case SHM.lookup mem refs of
           Just (Ref (TDef mdef _)) -> return (Right mdef)
           _ -> evalError' i $ "reduceDynamic: unknown module ref: " <> pretty tref
         Nothing -> evalError' i
@@ -1645,26 +1645,26 @@ installModule updated md = go . maybe allDefs filteredDefs
     updateInternal f = case _mdModule md of
       MDModule m -> do
         let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
-        let hm = HM.map (\v -> (v, Just (_mHash m))) (_mdRefMap md)
-        evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f mempty hm)
-        evalRefs . rsQualifiedDeps %= HM.union (HM.mapKeys toFQ (_mdRefMap md)) . HM.union (_mdDependencies md)
+        let hm = SHM.map (\v -> (v, Just (_mHash m))) (_mdRefMap md)
+        evalRefs . rsLoaded %= SHM.union (SHM.foldlWithKey' f mempty hm)
+        evalRefs . rsQualifiedDeps %= SHM.union (SHM.mapKeys toFQ (_mdRefMap md)) . SHM.union (_mdDependencies md)
       MDInterface _ -> do
         let
           f' m k v = case v of
             Ref TDef{} -> m
             _ -> f m k (v, Nothing)
-        evalRefs . rsLoaded %= HM.union (HM.foldlWithKey' f' mempty $ _mdRefMap md)
+        evalRefs . rsLoaded %= SHM.union (SHM.foldlWithKey' f' mempty $ _mdRefMap md)
     go f = do
       updateInternal f
       when updated $
-        evalRefs . rsLoadedModules %= HM.insert (moduleDefName $ _mdModule md) (md,updated)
+        evalRefs . rsLoadedModules %= SHM.insert (moduleDefName $ _mdModule md) (md,updated)
 
     filteredDefs is m k v =
       if V.elem k is
-      then HM.insert k v m
+      then SHM.insert k v m
       else m
 
-    allDefs m k v = HM.insert k v m
+    allDefs m k v = SHM.insert k v m
 
 msg :: Doc -> Term n
 msg = toTerm . renderCompactText'

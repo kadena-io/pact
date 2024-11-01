@@ -203,6 +203,7 @@ library
     Pact.Types.Verifier
     Pact.Types.Version
     Pact.Utils.Servant
+    Pact.Utils.StableHashMap
 
   other-modules:
     Pact.Crypto.WebAuthn.Cose.PublicKey

@@ -106,6 +106,7 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 import Pact.Types.Exp
+import qualified Pact.Utils.StableHashMap as SHM
 
 smtConfig :: SBV.SMTConfig
 smtConfig = SBV.z3
@@ -766,7 +767,7 @@ parseModuleModelDecl exps = traverse parseDecl exps where
 
 -- | Organize the module's refs by type
 moduleRefs :: ModuleData Ref -> ModuleRefs
-moduleRefs (ModuleData _ refMap _) = foldl' f noRefs (HM.toList refMap)
+moduleRefs (ModuleData _ refMap _) = foldl' f noRefs (SHM.toList refMap)
   where
     f accum (name, ref) = case ref of
       Ref (TDef (Def{_dDefType, _dDefBody}) _) ->
@@ -1137,7 +1138,7 @@ getFunChecks env@(CheckEnv tables consts propDefs moduleData _cs _g de _) refs =
 scopeCheckInterface
   :: Set Text
   -- ^ A set of table, definition and property names in scope
-  -> HM.HashMap Text Ref
+  -> SHM.StableHashMap Text Ref
   -- ^ The set of refs to check
   -> [ScopeError]
 scopeCheckInterface globalNames refs = refs <&&> \case
@@ -1229,7 +1230,7 @@ verifyModule mDebug de modules moduleData@(ModuleData modDef allRefs _) = runExc
           globalNames = Set.unions $ fmap Set.fromList
             [ fmap _tableName tables
             , HM.keys propDefs
-            , HM.keys allRefs
+            , SHM.keys allRefs
             ]
           scopeErrors = scopeCheckInterface globalNames allRefs
 
@@ -1322,7 +1323,7 @@ verifyCheck de moduleData funName check checkType = do
       moduleName = moduleDefName $ moduleData ^. mdModule
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData Ref -> Text -> Maybe Ref
-      moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
+      moduleFun ModuleData{..} name = name `SHM.lookup` _mdRefMap
       modRefs    = moduleRefs moduleData
 
   caps   <- moduleCapabilities de [moduleData]

@@ -37,7 +37,6 @@ import Data.Foldable
 #endif
 import Data.IORef
 import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
 import Data.Semigroup (Endo(..))
 import qualified Data.Set as S
 import Data.Text (Text, unpack)
@@ -76,6 +75,8 @@ import Pact.Types.PactValue
 import Pact.Types.Verifier
 import Pact.Interpreter
 import Pact.Runtime.Utils
+import qualified Pact.Utils.StableHashMap as SHM
+
 import Pact.JSON.Legacy.Value
 
 
@@ -276,7 +277,7 @@ replDefs = ("Repl",
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o") def,tTyKeySet]
        a = mkTyVar "a" []
 
-replDefsMap :: HM.HashMap Text (Ref, Maybe ModuleHash)
+replDefsMap :: SHM.StableHashMap Text (Ref, Maybe ModuleHash)
 replDefsMap =
   (,Nothing) <$> moduleToMap replDefs
 

@@ -44,6 +44,7 @@ import Test.QuickCheck.Instances()
 
 import qualified Pact.JSON.Encode as J
 import Pact.JSON.Legacy.Hashable (LegacyHashable)
+import Pact.Utils.StableHashMap
 
 import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
@@ -52,7 +53,7 @@ import qualified Crypto.Hash as Crypto
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ShortByteString }
-  deriving (Eq, Ord, Generic, Hashable, Serialize, SizeOf, LegacyHashable)
+  deriving (Eq, Ord, Generic, Hashable, Serialize, SizeOf, LegacyHashable, StableHashable)
 
 instance Arbitrary Hash where
   -- TODO: add generators for other hash types

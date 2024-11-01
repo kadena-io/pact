@@ -74,7 +74,6 @@ import Control.DeepSeq
 import Data.Aeson hiding (Object)
 import Data.Default
 import Data.IORef(IORef, modifyIORef')
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.String
@@ -100,6 +99,7 @@ import Pact.Types.SPV
 import Pact.Types.Util
 import Pact.Types.Verifier
 import Pact.Types.Namespace
+import qualified Pact.Utils.StableHashMap as SHM
 
 import Pact.JSON.Legacy.Value (LegacyValue(..))
 
@@ -112,14 +112,14 @@ instance AsString KeyPredBuiltins where
   asString Keys2 = "keys-2"
 
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
-keyPredBuiltins = M.fromList $ map (Name . (`BareName` def) . asString &&& id) [minBound .. maxBound]
+keyPredBuiltins = M.fromList $ fmap (Name . (`BareName` def) . asString &&& id) [minBound .. maxBound]
 
 -- | Storage for natives.
 newtype RefStore = RefStore {
-      _rsNatives :: HM.HashMap Text Ref
+      _rsNatives :: SHM.StableHashMap Text Ref
     } deriving (Eq, Show)
 makeLenses ''RefStore
-instance Default RefStore where def = RefStore HM.empty
+instance Default RefStore where def = RefStore mempty
 
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
@@ -315,13 +315,13 @@ toPactId = PactId . hashToText
 -- | Dynamic storage for loaded names and modules, and current namespace.
 data RefState = RefState {
       -- | Imported Module-local defs and natives.
-      _rsLoaded :: !(HM.HashMap Text (Ref, Maybe ModuleHash))
+      _rsLoaded :: !(SHM.StableHashMap Text (Ref, Maybe ModuleHash))
       -- | Modules that were loaded, and flag if updated.
-    , _rsLoadedModules :: !(HM.HashMap ModuleName (ModuleData Ref, Bool))
+    , _rsLoadedModules :: !(SHM.StableHashMap ModuleName (ModuleData Ref, Bool))
       -- | Current Namespace
     , _rsNamespace :: !(Maybe (Namespace (Term Name)))
       -- | Map of all fully qualified names in scope, including transitive dependencies.
-    , _rsQualifiedDeps :: !(HM.HashMap FullyQualifiedName Ref)
+    , _rsQualifiedDeps :: !(SHM.StableHashMap FullyQualifiedName Ref)
     } deriving (Eq,Show,Generic)
 
 makeLenses ''RefState

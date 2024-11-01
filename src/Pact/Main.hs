@@ -37,7 +37,6 @@ import Control.Monad.State.Strict
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import Data.List
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Text (unpack)
@@ -56,6 +55,7 @@ import Pact.Types.Version
 import Pact.Types.Crypto
 import Pact.Types.SPV
 import Pact.ApiReq
+import qualified Pact.Utils.StableHashMap as SHM
 
 
 data Option =
@@ -240,7 +240,7 @@ die msg = hPutStrLn stderr msg >> hFlush stderr >> exitFailure
 echoBuiltins :: IO ()
 echoBuiltins = do
   defs <- view (eeRefStore.rsNatives) <$> (initPureEvalEnv Nothing)
-  forM_ (sort $ HM.keys defs) print
+  forM_ (sort $ SHM.keys defs) print
 
 
 genKeys :: IO ()

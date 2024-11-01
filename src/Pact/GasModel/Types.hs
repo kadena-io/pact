@@ -45,7 +45,6 @@ import System.Directory (removeFile)
 
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Base16 as B16
-import qualified Data.HashMap.Strict as HM
 import qualified Pact.Persist.SQLite as PSL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -62,6 +61,7 @@ import Pact.Types.Logger (neverLog, Loggers(..))
 import Pact.Types.Runtime
 import Pact.Types.SQLite (SQLiteConfig(..),fastNoJournalPragmas)
 import Pact.Types.SPV
+import qualified Pact.Utils.StableHashMap as SHM
 
 
 type SQLiteDb = DbEnv PSL.SQLite
@@ -212,7 +212,7 @@ setEnv f setup = setEnv'
 defEvalState :: IO EvalState
 defEvalState = do
   stateWithModule <- getLoadedState (accountsModule acctModuleName)
-  let loaded = HM.singleton sampleLoadedKeysetName
+  let loaded = SHM.singleton sampleLoadedKeysetName
                (Direct $ TGuard (GKeySet sampleKeyset) def, Nothing)
   return
       $ set (evalRefs . rsLoaded) loaded stateWithModule
