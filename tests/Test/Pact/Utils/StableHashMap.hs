@@ -29,12 +29,14 @@ module Test.Pact.Utils.StableHashMap
 , shortByteStringVectors
 ) where
 
+import Data.Bifunctor
 import Data.ByteString qualified as B
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Short qualified as BS
+import Data.HashMap.Lazy qualified as HM
 import Data.Int
 import Data.Proxy
-import Data.Text as T
+import Data.Text qualified as T
 import Data.Typeable
 import Data.Word
 import Data.Hashable qualified as H
@@ -43,12 +45,16 @@ import Test.Hspec
 
 import Pact.Utils.StableHashMap
 
+import Prelude hiding (lookup, map, filter)
+import Control.Exception
+
 -- -------------------------------------------------------------------------- --
 -- Tests
 
 spec :: Spec
 spec = do
     stableHashableTests
+    stableHashMapSpec
 
 stableHashableTests :: Spec
 stableHashableTests = describe "StableHashable" $ do
@@ -70,7 +76,7 @@ stableHashableTests = describe "StableHashable" $ do
     checkVectorsDifferentSalt lazyByteStringVectors
     checkVectorsDifferentSalt shortByteStringVectors
 
-    checkVectorsDoNotMatchHashable (Prelude.drop 1 int64Vectors)
+    checkVectorsDoNotMatchHashable (drop 1 int64Vectors)
     checkVectorsDoNotMatchHashable textVectors
     checkVectorsDoNotMatchHashable byteStringVectors
     checkVectorsDoNotMatchHashable lazyByteStringVectors
@@ -147,7 +153,254 @@ checkVectorDoesNotMatchHashable v@(s, a, _) = describe (show v) $ do
             (stableHashWithSalt s a)
             (fromIntegral (H.hashWithSalt (fromIntegral s) a))
 
--- --------------------------------------------------------------------------
+-- -------------------------------------------------------------------------- --
+-- StableHashMap Tests
+
+-- | A list that provides some basic coverage for most functions.
+--
+-- It does not test runtime behavior, like strictness, exception behavior, or
+-- performance.
+--
+-- It also does not cover many corner cases or instances of non-trivial size.
+-- Many of the following tests cold be improved by using quickcheck to generate
+-- more instances.
+--
+stableHashMapSpec :: Spec
+stableHashMapSpec = describe "StableHashMap" $ do
+    basicStableHashMapTests
+    stableHashHashMapSpec
+    stableHashMapKeysOrder
+
+-- | Check that hash function is different from hashable for bytestring and Int.
+--
+stableHashHashMapSpec :: Spec
+stableHashHashMapSpec = describe "StableHash" $ do
+    it "StableHashMap Int uses different hash function than HashMap Int" $
+        toList @Int @Int (fromList a) `shouldNotBe` HM.toList (HM.fromList a)
+    it "StableHashMap Text uses different hash function than HashMap Text" $
+        toList @T.Text @Int (fromList b) `shouldNotBe` HM.toList (HM.fromList b)
+  where
+    a = [(i,j) | i <- [0..10], j <- [0,10 .. 100]]
+    b = first (T.pack . show) <$> a
+
+stableHashMapKeysOrder :: Spec
+stableHashMapKeysOrder = describe "stable ey order" $ do
+    it "the order of Int keys is stable" $ do
+        keys (fromList @Int [(k,()) | k <- [0..20]]) `shouldBe` intKeys
+    it "the order of Text keys is stable" $ do
+        keys (fromList [(k,()) | k <- [0..20]]) `shouldBe` intKeys
+        keys (fromList [((T.pack (show @Int k)),()) | k <- [0..20]]) `shouldBe` textKeys
+  where
+    intKeys = [20,17,16,19,18,5,4,7,6,1,0,3,2,13,12,15,14,9,8,11,10]
+    textKeys = ["8","9","4","5","6","7","0","1","2","3","18","19","20","14","15","16","17","10","11","12","13"]
+
+basicStableHashMapTests :: Spec
+basicStableHashMapTests = describe "basics" $ do
+    it "equality is extensional" $
+        singleton @Int @Int 1 1 `shouldBe` insert 1 1 (empty)
+
+    it "empty has size 0" $
+        size empty `shouldBe` 0
+    it "lookup on empty is Nothing" $
+        lookup @Int @Int 0 empty `shouldBe` Nothing
+    it "safe index on empty returns Nothing" $
+        (!?) @Int @Int empty 0 `shouldBe` Nothing
+    it "index on empty is an error" $
+        evaluate ((!) @Int @Int empty 0) `shouldThrow` anyErrorCall
+    it "empty has no member" $
+        member @Int @Int 0 empty `shouldBe` False
+
+    it "singleton has size 1" $
+        size (singleton @Int @Int 0 0) `shouldBe` 1
+    it "singleton has a member" $
+        member @Int @Int 0 (singleton 0 1) `shouldBe` True
+    it "singleton has not any member" $
+        member @Int @Int 1 (singleton 0 1) `shouldBe` False
+    it "lookup on singelton returns Just the value" $
+        lookup @Int @Int 0 (singleton 0 0) `shouldBe` Just 0
+    it "safe index on singelton returns Just the value" $
+        (!?) @Int @Int (singleton 0 0) 0 `shouldBe` Just 0
+    it "index on singelton returns result" $
+        (!) @Int @Int (singleton 0 0) 0 `shouldBe` 0
+    it "looking up non existing key is Nothing" $ do
+        lookup @Int @Int 1 (singleton 0 0) `shouldBe` Nothing
+        (!?) @Int @Int (singleton 0 0) 1 `shouldBe` Nothing
+    it "indexing non existing key is an error" $
+        evaluate ((!) @Int @Int (singleton 0 0) 1) `shouldThrow` anyErrorCall
+
+    it "inserting in empty map" $ do
+        let m = insert 0 0 $ empty @Int @Int
+        size m `shouldBe` 1
+        member 0 m `shouldBe` True
+        member 1 m `shouldBe` False
+        lookup 0 m `shouldBe` (Just 0)
+        (!?) m 0 `shouldBe` (Just 0)
+        (!) m 0 `shouldBe` 0
+        lookup 1 m `shouldBe` Nothing
+        (!?) m 1 `shouldBe` Nothing
+        evaluate ((!) m 1) `shouldThrow` anyErrorCall
+        m `shouldBe` singleton 0 0
+    it "insert is idempotent" $ do
+        let m = insert 0 0 $ empty @Int @Int
+        m `shouldBe` insert 0 0 m
+    it "insert at existing key does not change size" $ do
+        let m = insert 0 0 $ empty @Int @Int
+        size m `shouldBe` 1
+        size (insert 0 1 m) `shouldBe` 1
+    it "insert at existing key changes old value" $ do
+        let m = insert 0 0 $ empty @Int @Int
+        size m `shouldBe` 1
+        lookup 0 m `shouldBe` Just 0
+        let m1 = insert 0 1 m
+        size m1 `shouldBe` 1
+        lookup 0 m1 `shouldBe` Just 1
+    it "insertWith" $ do
+        let m = insert 0 1 $ empty @Int @Int
+        size m `shouldBe` 1
+        lookup 0 m `shouldBe` Just 1
+        let m1 = insertWith (+) 0 1 m
+        size m1 `shouldBe` 1
+        lookup 0 m1 `shouldBe` Just 2
+    it "delete on empty is identity" $ do
+        delete @Int @Int 0 empty `shouldBe` empty
+    it "delete on singleton is empty" $ do
+        delete @Int @Int 0 (singleton 0 0) `shouldBe` empty
+    it "delete of non-existent key is identity" $ do
+        delete @Int @Int 1 (singleton 0 0) `shouldBe` singleton 0 0
+
+    it "union with empty is identity" $ do
+        union @Int @Int empty empty `shouldBe` empty
+        union @Int @Int (singleton 0 0) empty `shouldBe` (singleton 0 0)
+        union @Int @Int empty (singleton 0 0) `shouldBe` (singleton 0 0)
+    it "union on disjoint keys is additive" $ do
+        size (union @Int @Int (singleton 0 0) (singleton 1 0)) `shouldBe` 2
+    it "union on same key is left biased" $
+        union @Int @Int (singleton 0 0) (singleton 0 1) `shouldBe` singleton 0 0
+
+    it "unionWith" $
+        unionWith @Int @Int (+) (singleton 0 1) (singleton 0 1) `shouldBe` singleton 0 2
+
+    it "disjoint unions" $
+        size (unions @Int @Int [singleton 0 0, singleton 1 0, singleton 2 0]) `shouldBe` 3
+    it "overlapping unions" $
+        size (unions @Int @Int [singleton 0 0, singleton 1 0, singleton 0 0]) `shouldBe` 2
+
+    -- note this is *not* symmetric difference
+    it "difference with empty is identity" $
+        difference @Int @Int (singleton 0 0) empty `shouldBe` singleton 0 0
+    it "difference of empty is empty" $
+        difference @Int @Int empty (singleton @Int @Int 0 0) `shouldBe` empty
+    it "difference with itself is empty" $ do
+        let m = singleton @Int @Int 0 0
+        difference m m `shouldBe` empty
+    it "difference on disjoint keys is identity" $ do
+        let m0 = singleton @Int @Int 0 0
+        let m1 = singleton @Int @Int 1 0
+        difference m0 m1 `shouldBe` m0
+    it "difference on same keys is empty" $ do
+        let m0 = singleton @Int @Int 1 0
+        let m1 = singleton @Int @Int 1 1
+        difference m0 m1 `shouldBe` empty
+
+    it "map on empty is empty" $ do
+        map (+ 1) (empty @Int @Int) `shouldBe` empty
+        (+ 1) <$> (empty @Int @Int) `shouldBe` empty
+    it "map" $ do
+        map (+ 1) (singleton @Int @Int 0 0) `shouldBe` singleton 0 1
+        (+ 1) <$> (singleton @Int @Int 0 0) `shouldBe` singleton 0 1
+        (== 1) <$> (singleton @Int @Int 0 0) `shouldBe` singleton 0 False
+        (== 0) <$> (singleton @Int @Int 0 0) `shouldBe` singleton 0 True
+
+    it "mapWithKey on empty is empty" $
+        mapWithKey (+) (empty @Int @Int) `shouldBe` empty
+    it "mapWithKey" $
+        mapWithKey (+) (singleton @Int @Int 1 1) `shouldBe` singleton 1 2
+
+    it "traverse on empty is empty" $
+        traverse (pure . (+ 1)) (empty @Int @Int) `shouldBe` [empty]
+    it "traverseWithKey" $
+        traverseWithKey (\k v -> pure (k + v)) (singleton @Int @Int 1 1) `shouldBe` [singleton 1 2]
+
+    it "mapKeys on empty is empty" $
+        mapKeys (== 1) (empty @Int @Int) `shouldBe` empty
+    it "mapKeys" $ do
+        mapKeys (+ 1) (singleton @Int @Int 0 1) `shouldBe` singleton 1 1
+        mapKeys (== 1) (singleton @Int @Int 0 1) `shouldBe` singleton False 1
+        mapKeys (== 0) (singleton @Int @Int 0 1) `shouldBe` singleton True 1
+
+    it "intersection with empty is empty" $ do
+        intersection @Int @Int empty empty `shouldBe` empty
+        intersection @Int @Int (singleton 0 0) empty `shouldBe` empty
+    it "intersection of disjoint keys is empty" $ do
+        intersection @Int @Int (singleton 0 0) (singleton 1 ()) `shouldBe` empty
+    it "intersection on same keys is left biased" $ do
+        intersection @Int @Int (singleton 0 0) (singleton 0 ()) `shouldBe` singleton 0 0
+        intersection @Int @Int (singleton 0 0) (singleton @Int @Int 0 1) `shouldBe` singleton 0 0
+
+    it "filter on empty is empty" $
+        filter @Int @Int (== 0) empty `shouldBe` empty
+    it "filter" $ do
+        filter @Int @Int (== 0) (singleton 1 0) `shouldBe` singleton 1 0
+        filter @Int @Int (== 1) (singleton 1 0) `shouldBe` empty
+
+    it "filterWithKey on empty is empty" $
+        filterWithKey @Int @Int (==) empty `shouldBe` empty
+    it "filterWithKey" $ do
+        filterWithKey @Int @Int (==) (singleton 0 0) `shouldBe` singleton 0 0
+        filterWithKey @Int @Int (==) (singleton 1 0) `shouldBe` empty
+
+    it "foldMap on empty is mempty" $ do
+        foldMap pure (empty @Int @()) `shouldBe` []
+        foldMap pure (empty @Int @()) `shouldBe` Nothing
+    it "foldMap" $ do
+        foldMap pure (singleton @Int @Int 0 1) `shouldBe` [1]
+
+    it "foldMapWithKey on empty is mempty" $ do
+        foldMapWithKey replicate (empty @Int @()) `shouldBe` []
+    it "foldMapWithKey" $ do
+        foldMapWithKey replicate (singleton @Int @Int 0 1) `shouldBe` []
+        foldMapWithKey replicate (singleton @Int @Int 2 1) `shouldBe` [1,1]
+
+    it "foldlWithKey'" $ do
+        foldlWithKey' (\a b c -> a + b + c) 1 (singleton @Int @Int 1 1) `shouldBe` 3
+        foldlWithKey' (\a b c -> a + T.length b + c) 1 (singleton @T.Text @Int "12" 1) `shouldBe` 4
+        foldlWithKey' (\a b c -> a + T.length b + c) 1 (singleton @T.Text @Int "" 1) `shouldBe` 2
+    it "foldlWithKey" $ do
+        foldlWithKey (\a b c -> a + b + c) 1 (singleton @Int @Int 1 1) `shouldBe` 3
+        foldlWithKey (\a b c -> a + T.length b + c) 1 (singleton @T.Text @Int "12" 1) `shouldBe` 4
+        foldlWithKey (\a b c -> a + T.length b + c) 1 (singleton @T.Text @Int "" 1) `shouldBe` 2
+    it "foldrWithKey'" $ do
+        foldrWithKey' (\a b c -> a + b + c) 1 (singleton @Int @Int 1 1) `shouldBe` 3
+        foldrWithKey' (\a b c -> T.length a + b + c) 1 (singleton @T.Text @Int "12" 1) `shouldBe` 4
+        foldrWithKey' (\a b c -> T.length a + b + c) 1 (singleton @T.Text @Int "" 1) `shouldBe` 2
+    it "foldrWithKey" $ do
+        foldrWithKey (\a b c -> a + b + c) 1 (singleton @Int @Int 1 1) `shouldBe` 3
+        foldrWithKey (\a b c -> T.length a + b + c) 1 (singleton @T.Text @Int "12" 1) `shouldBe` 4
+        foldrWithKey (\a b c -> T.length a + b + c) 1 (singleton @T.Text @Int "" 1) `shouldBe` 2
+
+    it "keys of empty is []" $
+        keys @Int @Int empty `shouldBe` []
+    it "keys of singleton is of size one" $
+        keys @Int @Int (singleton 0 1) `shouldBe` [0]
+
+    it "elems of empty is []" $
+        elems @Int @Int empty `shouldBe` []
+    it "elems of singleton is of size one" $
+        elems @Int @Int (singleton 1 0) `shouldBe` [0]
+
+    it "toList of empty is []" $
+        toList @Int @Int empty `shouldBe` []
+    it "toList of singleton is of size one" $
+        toList @Int @Int (singleton 1 0) `shouldBe` [(1,0)]
+
+    it "fromList of [] is empty" $
+        fromList @Int @Int [] `shouldBe` empty
+    it "fromList" $ do
+        fromList @Int @() [(1, ())] `shouldBe` singleton 1 ()
+        size (fromList @Int @() [(1, ()), (0,())]) `shouldBe` 2
+        size (fromList @Int @() [(0, ()), (0,())]) `shouldBe` 1
+
+-- -------------------------------------------------------------------------- --
 -- Test Vectors
 
 -- | Test vectors that were generated with hashable-1.4.4.0.
