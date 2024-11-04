@@ -42,7 +42,6 @@ import Control.Monad.State
 import Data.Bitraversable (bimapM)
 import Data.Default
 import Data.Foldable
-import qualified Data.HashMap.Strict as HM
 import Data.List
 import Data.List.Unsafe (unsafeHead)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -62,6 +61,7 @@ import Pact.Types.Pretty
 import qualified Pact.Types.Runtime as Term
 import Pact.Types.Runtime hiding (App,ModRef,appInfo,Object,Step)
 import Pact.Types.Typecheck
+import qualified Pact.Utils.StableHashMap as SHM
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
@@ -809,7 +809,7 @@ toFun (TDef td i) = resolveDyn td
     resolveDyn Def{..} = use tcDynEnv >>= \de -> case M.lookup _dModule de of
       Nothing ->
         withScopeBodyToFun (asString _dDefName) _dModule _dFunType _dDefBody _dDefType i
-      Just ModuleData{..} -> case HM.lookup (asString _dDefName) _mdRefMap of
+      Just ModuleData{..} -> case SHM.lookup (asString _dDefName) _mdRefMap of
         Just r -> toFun (fmap Left $ TVar r i)
         Nothing -> die i $ "Dynamic substitution failed, module does not have member: " ++
           show (moduleDefName _mdModule) ++ "::" ++ show _dDefName
@@ -1264,5 +1264,5 @@ typecheckModule dbg dynEnv (ModuleData (MDModule m) rm _) = do
   let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTCState (mkTcState sup dbg dynEnv) (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
-  fst <$> foldM tc (([],[]),0) (HM.elems rm)
+  fst <$> foldM tc (([],[]),0) (SHM.elems rm)
 typecheckModule _ _ (ModuleData MDInterface{} _ _) = return mempty

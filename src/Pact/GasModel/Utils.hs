@@ -66,7 +66,6 @@ import NeatInterpolation (text)
 
 import qualified Data.Aeson as A
 import qualified Data.HashMap.Strict as HM
-import qualified Data.HashSet as HS
 import qualified Data.Set as S
 import qualified Data.Map as M
 import qualified Data.Text as T
@@ -420,7 +419,7 @@ someStackFrame =
 
 someModuleData :: ModuleData Ref
 someModuleData = ModuleData modDef refMap mempty
-  where refMap = HM.empty
+  where refMap = mempty
         ref = Direct $ TVar (Name $ BareName "" def) def
         fst' :: Ref -> Maybe Int
         fst' = const Nothing
@@ -433,4 +432,4 @@ someModuleData = ModuleData modDef refMap mempty
         defOfRef = Def (DefName "") someModuleName Defun (FunType [] TyAny) scopeOfRef def def def
         modDef = MDModule mod'
         gov = Governance $ Right defOfRef
-        mod' = Module someModuleName gov def (Code "") someModuleHash HS.empty [] []
+        mod' = Module someModuleName gov def (Code "") someModuleHash mempty [] []

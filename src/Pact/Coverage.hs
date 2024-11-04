@@ -38,6 +38,7 @@ import Pact.Types.Pretty
 import Pact.Types.Term hiding (App(..),Object(..),Step(..))
 import Pact.Types.Typecheck
 import Pact.Types.Runtime (ModuleData(..))
+import qualified Pact.Utils.StableHashMap as SHM
 
 mkCoverageAdvice :: IO (IORef LcovReport,Advice)
 mkCoverageAdvice = newIORef mempty >>= \r -> return (r,Advice $ cover r)
@@ -78,7 +79,7 @@ cover ref i ctx = case _iInfo i of
     postModule :: MonadIO m => ModuleData Ref -> m ()
     postModule (ModuleData (MDModule _m) modDefs _) = do
       ((modFuns,modLines),_) <- liftIO $ runTC 0 False $
-        foldM walkDefs (mempty,mempty) (HM.elems modDefs)
+        foldM walkDefs (mempty,mempty) (SHM.elems modDefs)
       let (fn,_l) = parseInf i
           newRep = mkFileLcov fn modFuns mempty modLines
       liftIO $ modifyIORef ref (<> newRep)

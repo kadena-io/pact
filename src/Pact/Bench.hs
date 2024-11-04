@@ -21,7 +21,6 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Default
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text (unpack, pack, intercalate)
@@ -60,6 +59,7 @@ import Pact.Types.Capability
 import Pact.Runtime.Utils
 import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
+import qualified Pact.Utils.StableHashMap as SHM
 
 -- | Flags for enabling file-based perf bracketing,
 -- see 'mkFilePerf' below.
@@ -191,7 +191,7 @@ runPactExec pt msg ss cdata benchMod dbEnv pc = do
   e <- set eeAdvice pt <$> setupEvalEnv dbEnv entity Transactional md (versionedNativesRefStore ec)
           prodGasEnv permissiveNamespacePolicy noSPVSupport def ec
   let s = perfInterpreter pt $ defaultInterpreterState $
-          maybe id (const . initStateModules . HM.singleton (ModuleName "bench" Nothing)) benchMod
+          maybe id (const . initStateModules . SHM.singleton (ModuleName "bench" Nothing)) benchMod
   (r :: Either SomeException EvalResult) <- try $! evalExec s e pc
   r' <- eitherDie ("runPactExec': " ++ msg) $ fmapL show r
   return $!! _erOutput r'

@@ -54,7 +54,6 @@ import Data.Default
 import qualified Data.ByteString as B
 import Data.Hashable (Hashable)
 import Data.Maybe(fromMaybe)
-import qualified Data.HashMap.Strict as HM
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
 import Data.Typeable (Typeable)
@@ -75,6 +74,7 @@ import Pact.Types.Namespace
 import Pact.JSON.Legacy.Utils
 import qualified Pact.JSON.Legacy.HashMap as LHM
 import qualified Pact.JSON.Encode as J
+import qualified Pact.Utils.StableHashMap as SHM
 
 -- -------------------------------------------------------------------------- --
 -- PersistDirect
@@ -123,12 +123,12 @@ fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
   Just t -> return t
   Nothing -> Left $ "Native lookup failed: " <> tShow nn
 
-allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
+allModuleExports :: ModuleData Ref -> SHM.StableHashMap FullyQualifiedName Ref
 allModuleExports md = case _mdModule md of
   MDModule m ->
     let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
-    in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
-  _ -> HM.empty
+    in SHM.mapKeys toFQ (_mdRefMap md) `SHM.union` (_mdDependencies md)
+  _ -> SHM.empty
 
 -- -------------------------------------------------------------------------- --
 -- ModuleData
@@ -136,8 +136,8 @@ allModuleExports md = case _mdModule md of
 -- | Module ref store
 data ModuleData r = ModuleData
   { _mdModule :: !(ModuleDef (Def r))
-  , _mdRefMap :: !(HM.HashMap Text r)
-  , _mdDependencies :: !(HM.HashMap FullyQualifiedName r)
+  , _mdRefMap :: !(SHM.StableHashMap Text r)
+  , _mdDependencies :: !(SHM.StableHashMap FullyQualifiedName r)
   } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 makeLenses ''ModuleData
 
@@ -149,9 +149,9 @@ instance NFData r => NFData (ModuleData r)
 
 instance (J.Encode r, Eq r) => J.Encode (ModuleData r) where
   build o = J.object
-    [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap_ (_mdDependencies o)))
+    [ "dependencies" J..??= J.Array (J.Array <$> LHM.toList (legacyHashMap_ $ SHM.unstable  $ _mdDependencies o))
     , "module" J..= _mdModule o
-    , "refMap" J..= legacyHashMap id (_mdRefMap o)
+    , "refMap" J..= legacyHashMap id (SHM.unstable $ _mdRefMap o)
     ]
   {-# INLINE build #-}
 
@@ -161,7 +161,7 @@ instance (FromJSON r) => FromJSON (ModuleData r) where
       ModuleData
       <$> o .: "module"
       <*> o .: "refMap"
-      <*> (HM.fromList <$> (fromMaybe mempty <$> o .:? "dependencies"))
+      <*> (SHM.fromList <$> (fromMaybe mempty <$> o .:? "dependencies"))
 
 instance Arbitrary r => Arbitrary (ModuleData r) where
   arbitrary = ModuleData

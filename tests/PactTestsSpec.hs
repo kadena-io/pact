@@ -11,7 +11,6 @@ import Control.Lens
 import Data.Text(Text)
 import Data.Either (isLeft, isRight)
 import Data.List
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Text (unpack)
@@ -26,6 +25,7 @@ import Pact.Types.Runtime
 import Pact.Persist.SQLite as SQLite
 import Pact.Interpreter
 import Pact.Parse (parsePact, legacyParsePact)
+import qualified Pact.Utils.StableHashMap as SHM
 
 import System.Directory
 import System.FilePath
@@ -150,7 +150,7 @@ badErrors = M.fromList
 
 -- ghci utility to load a string and get the refmap
 _evalRefMap
-  :: String -> IO (HM.HashMap ModuleName (ModuleData Ref, Bool))
+  :: String -> IO (SHM.StableHashMap ModuleName (ModuleData Ref, Bool))
 _evalRefMap cmd = fmap (_rsLoadedModules . _evalRefs . _rEvalState . snd)
   (initReplState Quiet Nothing >>= runStateT (evalRepl' cmd))
 
@@ -204,8 +204,8 @@ versionedNativesTest flag natives = do
     let rs = versionedNativesRefStore (mkExecutionConfig [flag])
         rs' = versionedNativesRefStore (mkExecutionConfig [])
         nativesDisabled = S.fromList natives
-    rs `shouldSatisfy` views rsNatives (S.disjoint nativesDisabled . S.fromList  . HM.keys)
-    rs' `shouldSatisfy` views rsNatives (S.isSubsetOf nativesDisabled . S.fromList  . HM.keys)
+    rs `shouldSatisfy` views rsNatives (S.disjoint nativesDisabled . S.fromList  . SHM.keys)
+    rs' `shouldSatisfy` views rsNatives (S.isSubsetOf nativesDisabled . S.fromList  . SHM.keys)
 
 versionedNativesTests :: SpecWith ()
 versionedNativesTests = describe "versionedNativesTests" $ do

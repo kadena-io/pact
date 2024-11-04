@@ -36,6 +36,8 @@ import Pact.Types.Lang
 import Pact.Types.PactValue (PactValue(..))
 import Pact.Types.Runtime
 import Pact.Types.Verifier (VerifierName(..))
+import qualified Pact.Utils.StableHashMap as SHM
+
 import Pact.JSON.Legacy.Value
 
 
@@ -1197,7 +1199,7 @@ yieldTests = tests
     yieldExpr obj = [text| (yield $obj) |]
     yieldExprWithTargetChain obj = [text| (yield $obj "some-chain-id") |]
 
-    mockModules = HM.fromList [(someModuleName, someModuleData)]
+    mockModules = SHM.fromList [(someModuleName, someModuleData)]
     mockStackframe = [someStackFrame]
     updateStateWithStackFrame = setState (set evalCallStack mockStackframe)
     updateStateWithPactExec = setState (set evalPactExec mockPactExec)
@@ -1295,7 +1297,7 @@ resumeTests nativeName = tests
         setInitialState = setState $ const (initStateModules mockModules)
 
         mockModules
-          = HM.fromList [(someModuleName, someModuleData)]
+          = SHM.fromList [(someModuleName, someModuleData)]
         pactStep
           = Just $ PactStep 2 False (PactId "") (Just yieldVal)
         yieldVal

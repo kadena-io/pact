@@ -65,13 +65,14 @@ import Pact.Types.SizeOf
 import Pact.Types.Util
 import Pact.Types.Hash
 import Pact.JSON.Legacy.Hashable
+import Pact.Utils.StableHashMap
 
 import qualified Pact.JSON.Encode as J
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (FromJSON, IsString, AsString, Hashable, Pretty, NFData, SizeOf, J.Encode)
-  deriving newtype (LegacyHashable)
+  deriving newtype (LegacyHashable, StableHashable)
 
 instance Arbitrary NamespaceName where
   arbitrary = NamespaceName <$> genBareText
@@ -98,6 +99,12 @@ instance LegacyHashable ModuleName where
       s `legacyHashWithSalt` (0::Int) `legacyHashWithSalt` n
     legacyHashWithSalt s (ModuleName n (Just ns)) =
       s `legacyHashWithSalt` (1::Int) `legacyHashWithSalt` n `legacyHashWithSalt` ns
+
+instance StableHashable ModuleName where
+    stableHashWithSalt s (ModuleName n Nothing)   =
+      s `stableHashWithSalt` (0::Int) `stableHashWithSalt` n
+    stableHashWithSalt s (ModuleName n (Just ns)) =
+      s `stableHashWithSalt` (1::Int) `stableHashWithSalt` n `stableHashWithSalt` ns
 
 instance SizeOf ModuleName where
   sizeOf ver (ModuleName mn namespace) =
@@ -285,6 +292,10 @@ instance LegacyHashable FullyQualifiedName where
   legacyHash = legacyHashWithSalt legacyDefaultSalt
   legacyHashWithSalt s FullyQualifiedName{..} =
     s `legacyHashWithSalt` _fqName `legacyHashWithSalt` _fqModule `legacyHashWithSalt` _fqModuleHash
+
+instance StableHashable FullyQualifiedName where
+  stableHashWithSalt s FullyQualifiedName{..} =
+    s `stableHashWithSalt` _fqName `stableHashWithSalt` _fqModule `stableHashWithSalt` _fqModuleHash
 
 instance Ord FullyQualifiedName where
   (FullyQualifiedName fq fm fh) `compare` (FullyQualifiedName fq' fm' fh') =

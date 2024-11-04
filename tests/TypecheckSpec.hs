@@ -12,7 +12,6 @@ import Control.Lens
 import Control.Monad
 
 import Data.Default
-import qualified Data.HashMap.Strict as HM
 import Data.Foldable
 import Data.Text (Text, take, unpack)
 import qualified Data.Set as Set
@@ -27,6 +26,7 @@ import Pact.Runtime.Utils
 import Pact.Types.Pretty
 import qualified Data.Text as T
 import qualified Pact.Analyze.Check as Check
+import qualified Pact.Utils.StableHashMap as SHM
 
 spec :: Spec
 spec = do
@@ -112,7 +112,7 @@ checkFuns = describe "pact typecheck" $ do
   let mn = "tests/pact/tc.repl"
   -- runIO is needed here to construct the test tree
   (ModuleData _ m _) <- runIO $ inlineModuleData <$> loadModule mn "tctest"
-  forM_ (HM.toList m) $ \(fn,ref) -> do
+  forM_ (SHM.toList m) $ \(fn,ref) -> do
     let doTc = beforeAll (runTC 0 False (typecheckTopLevel ref))
         n = asString mn <> "." <> fn
     when (take 3 fn == "tc-") $
@@ -143,7 +143,7 @@ loadModule fp mn = do
     Left e -> die def $ "Module not found: " ++ show (fp,mn,e)
 
 loadFun :: FilePath -> ModuleName -> Text -> IO Ref
-loadFun fp mn fn = loadModule fp mn >>= \(inlineModuleData -> ModuleData _ m _) -> case HM.lookup fn m of
+loadFun fp mn fn = loadModule fp mn >>= \(inlineModuleData -> ModuleData _ m _) -> case SHM.lookup fn m of
   Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
   Just f -> return f
 

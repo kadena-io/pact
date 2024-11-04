@@ -91,6 +91,7 @@ import Pact.Types.SPV
 import Pact.Repl.Types
 import Pact.Gas
 import Pact.JSON.Legacy.Value
+import qualified Pact.Utils.StableHashMap as SHM
 
 -- | for use in GHCI
 repl :: IO (Either () (Term Name))
@@ -341,7 +342,7 @@ loadFile i f = do
           pr <- TF.parseFromFileEx exprsOnly computedPath
           srcBS <- liftIO $ BS.readFile computedPath
           let src = unpack $ decodeUtf8 srcBS
-          when (isPactFile f) $ rEvalState.evalRefs.rsLoaded .= HM.empty
+          when (isPactFile f) $ rEvalState.evalRefs.rsLoaded .= mempty
           r <- parsedCompileEval src pr
           when (isPactFile f) $ void useReplLib
           restoreFile
@@ -444,11 +445,11 @@ useReplLib = id %= setReplLib
 
 -- | mutate repl state to install lib functions
 setReplLib :: ReplState -> ReplState
-setReplLib = over (rEvalState.evalRefs.rsLoaded) $ HM.union replDefsMap
+setReplLib = over (rEvalState.evalRefs.rsLoaded) $ SHM.union replDefsMap
 
 -- | mutate repl state to remove lib functions
 unsetReplLib :: ReplState -> ReplState
-unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` replDefsMap)
+unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`SHM.difference` replDefsMap)
 
 -- | evaluate string in repl monad
 evalPact :: String -> Repl (Either String (Term Name))

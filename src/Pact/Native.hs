@@ -76,7 +76,6 @@ import Data.Functor(($>))
 #if !MIN_VERSION_base(4,20,0)
 import Data.Foldable
 #endif
-import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import qualified Data.List as L (nubBy)
 import qualified Data.Set as S
@@ -111,6 +110,7 @@ import Pact.Types.Purity
 import Pact.Types.Runtime
 import Pact.Types.Version
 import Pact.Types.Namespace
+import qualified Pact.Utils.StableHashMap as SHM
 import Crypto.Hash.Keccak256Native (Keccak256Error(..), keccak256)
 import Crypto.Hash.PoseidonNative (poseidon)
 import qualified Crypto.Hash.HyperlaneNatives as HyperlaneAfter413
@@ -136,11 +136,11 @@ natives =
   ]
 
 -- | Production native modules as a dispatch map.
-nativeDefs :: HM.HashMap Text Ref
+nativeDefs :: SHM.StableHashMap Text Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
-moduleToMap :: NativeModule -> HM.HashMap Text Ref
-moduleToMap = HM.fromList . map (asString *** Direct) . snd
+moduleToMap :: NativeModule -> SHM.StableHashMap Text Ref
+moduleToMap = SHM.fromList . map (asString *** Direct) . snd
 
 lengthDef :: NativeDef
 lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])

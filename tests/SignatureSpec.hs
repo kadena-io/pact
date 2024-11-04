@@ -17,6 +17,7 @@ import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Exp
 import Pact.Types.Runtime
+import qualified Pact.Utils.StableHashMap as SHM
 
 spec :: Spec
 spec = compareModelSpec
@@ -49,7 +50,7 @@ compareModelSpec = describe "Module models" $ do
 
 aggregateFunctionModels :: ModuleData Ref -> [Exp Info]
 aggregateFunctionModels ModuleData{..} =
-  foldMap (extractExp . snd) $ HM.toList _mdRefMap
+  foldMap (extractExp . snd) $ SHM.toList _mdRefMap
   where
     extractExp (Ref (TDef (Def _ _ _ _ _ Meta{_mModel=m} _ _) _)) = m
     extractExp _ = []

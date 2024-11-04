@@ -14,7 +14,6 @@ import Control.Lens
 import Control.Monad.State.Strict
 
 import Data.List
-import qualified Data.HashMap.Strict as HM
 import Data.Text (unpack)
 import qualified Data.Set as Set
 
@@ -29,6 +28,7 @@ import Pact.Types.Pretty hiding (line)
 import Pact.Native
 import Pact.Repl
 import Pact.Repl.Types
+import qualified Pact.Utils.StableHashMap as SHM
 
 ------------------------------------------------------------------------------
 -- Moved from Pact.Repl
@@ -47,15 +47,15 @@ completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
       -- toListOf (traverse . _1 . mdRefMap . to HM.keys . each . to prefixModule) modules
         allNames = Set.fromList $ fmap unpack $ concat
           [ namesInModules
-          , _mnName <$> HM.keys modules
-          , HM.keys nativeDefs
-          , HM.keys allLoaded
+          , _mnName <$> SHM.keys modules
+          , SHM.keys nativeDefs
+          , SHM.keys allLoaded
           ]
         matchingNames = Set.filter (str `isPrefixOf`) allNames
     pure $ simpleCompletion <$> Set.toList matchingNames
   where
   prefixedNames (ModuleData (MDModule m) refMap _, _) =
-    (\k -> renderCompactText (_mName m) <> "." <> k) <$> HM.keys refMap
+    (\k -> renderCompactText (_mName m) <> "." <> k) <$> SHM.keys refMap
   prefixedNames _ = mempty
 
 replSettings :: (MonadIO m, MonadState ReplState m) => Settings m

@@ -32,13 +32,13 @@ import Bound
 import Control.Lens
 import Control.Monad
 import Data.Default
-import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
 
 import Pact.Gas
 import Pact.Types.Runtime
 import Pact.Types.PactValue
 import Pact.Types.Pretty
+import qualified Pact.Utils.StableHashMap as SHM
 
 -- Strip all term info and native examples.
 stripTermInfo :: Term Name -> Term Name
@@ -194,13 +194,13 @@ lookupModule i mn = do
             MDModule m -> GPostRead (ReadModule (_mName m) (_mCode m))
             MDInterface int -> GPostRead (ReadInterface (_interfaceName int) (_interfaceCode int))
           natives <- view $ eeRefStore . rsNatives
-          let natLookup (NativeDefName n) = case HM.lookup n natives of
+          let natLookup (NativeDefName n) = case SHM.lookup n natives of
                 Just (Direct t) -> Just t
                 _ -> Nothing
           case traverse (traverse (fromPersistDirect natLookup)) mdStored of
             Right md -> do
-              evalRefs . rsLoadedModules %= HM.insert mn (md,False)
-              evalRefs . rsQualifiedDeps %= HM.union (allModuleExports md)
+              evalRefs . rsLoadedModules %= SHM.insert mn (md,False)
+              evalRefs . rsQualifiedDeps %= SHM.union (allModuleExports md)
               return $ Just md
             Left e ->
               evalError' i $ "Internal error: module restore failed: " <> pretty e
@@ -294,10 +294,10 @@ inlineModuleData md@(ModuleData m export deps) = case m of
   inline' m' =
     let
       toFQ n = FullyQualifiedName n (_mName m') (_mhHash $ _mHash m')
-      deps' = HM.mapKeys toFQ export
-      allTL = HM.union deps' deps
+      deps' = SHM.mapKeys toFQ export
+      allTL = SHM.union deps' deps
     in ModuleData (MDModule (fmap (resolve allTL) <$> m')) (resolve allTL <$> export) deps
   resolve m' = \case
     Ref t -> Ref (resolve m' <$> t)
-    Direct (TVar (FQName fq) _) -> resolve m' (m' HM.! fq)
+    Direct (TVar (FQName fq) _) -> resolve m' (m' SHM.! fq)
     e -> e
