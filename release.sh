@@ -77,7 +77,7 @@ if [ -z "$ghtoken" ]; then echo "Missing Github auth token"; echo "$usage"; exit
 
 if [ -z "$version" ]; then echo "Missing version"; echo "$usage"; exit 1; fi
 
-if [ ! -d "$brewdir" ]; then echo "Missing/invalid homebrew-pact dir"; echo $usage; exit 1; fi
+if [ ! -d "$brewdir" ]; then echo "Missing/invalid homebrew-pact dir"; echo "$usage"; exit 1; fi
 
 cd $brewdir
 brewdir="$PWD"
