@@ -115,7 +115,7 @@ import Crypto.Hash.Keccak256Native (Keccak256Error(..), keccak256)
 import Crypto.Hash.PoseidonNative (poseidon)
 import qualified Crypto.Hash.HyperlaneNatives as HyperlaneAfter413
 import qualified Crypto.Hash.HyperlaneNativesBefore413 as HyperlaneBefore413
-
+import qualified Crypto.Hash.OwneraNatives as Ownera
 import qualified Pact.JSON.Encode as J
 
 -- | All production native modules.
@@ -133,6 +133,7 @@ natives =
   , zkDefs
   , hashDefs
   , hyperlaneDefs
+  , owneraDefs
   ]
 
 -- | Production native modules as a dispatch map.
@@ -1765,3 +1766,38 @@ hyperlaneEncodeTokenMessageDef =
       case mRecipient of
         Nothing -> evalError' i "couldn't find recipient"
         Just t -> pure $ T.encodeUtf8 t
+
+
+owneraDefs :: NativeModule
+owneraDefs = ("Hyperlane",)
+  [ owneraDecodeVerified ]
+
+
+owneraDecodeVerified :: NativeDef
+owneraDecodeVerified = defGasRNative
+  "ownera-decode-verified"
+  owneraDecodeVerified'
+  (funType tTyObjectAny [("x", tTyObjectAny)])
+  [
+  ]
+  "Temporary pact-native ownera verifier"
+  where
+    owneraDecodeVerified' :: RNativeFun e
+    owneraDecodeVerified' i args = case args of
+      [ x ] -> do
+        x' <- enforcePactValue x
+        case x' of
+          (PObject (ObjectMap o)) ->
+             case Ownera.verifyOwneraSchemaStructure o of
+                Left e -> evalError noInfo (pretty e)
+                Right o' -> return (fromPactValue o')
+          _ -> argsError i args
+        -- computeGas' i (GHyperlaneMessageId (BS.length msgBody)) $ do
+        --   disable413 <- isExecutionFlagSet FlagDisablePact413
+        --   let native = if disable413
+        --                then HyperlaneBefore413.hyperlaneMessageId
+        --                else HyperlaneAfter413.hyperlaneMessageId
+        --   case native o of
+        --     Left err -> evalError' i err
+        --     Right msgId -> return $ toTerm msgId
+      _ -> argsError i args

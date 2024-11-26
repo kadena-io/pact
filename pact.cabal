@@ -116,6 +116,7 @@ library
     Crypto.Hash.HyperlaneNatives
     Crypto.Hash.HyperlaneNativesBefore413
     Crypto.Hash.PoseidonNative
+    Crypto.Hash.OwneraNatives
     Pact.Analyze.Remote.Types
     Pact.ApiReq
     Pact.Compile
