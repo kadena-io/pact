@@ -250,6 +250,8 @@ defaultGasTable =
   ,("hyperlane-decode-token-message", 2)
   ,("hyperlane-encode-token-message", 2)
   ,("hash-keccak256",1)
+
+  ,("ownera-decode-verified", 1)
   ]
 
 {-# NOINLINE defaultGasTable #-}
