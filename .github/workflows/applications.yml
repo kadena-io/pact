@@ -189,7 +189,7 @@ jobs:
         cp cabal.project.freeze artifacts/pact
     - name: Publish applications
       if: "!contains(matrix.flags, '-build-tool')"
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pact-applications.${{ matrix.ghc }}.${{ matrix.os }}
         path: artifacts/pact
