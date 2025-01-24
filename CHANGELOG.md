@@ -1,3 +1,10 @@
+4.13.2
+---
+### Misc
+- Support hashable-1.5
+- Include a StableHashMap type which provides a stable hashing interface across
+  all versions of the hashable dependency.
+
 4.13.1
 ---
 ### Misc
