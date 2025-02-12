@@ -34,13 +34,6 @@ jobs:
     # Non Haskell dependencies
 
     # Install Z3
-    # - name: Install z3 (ubuntu-20.04)
-    #   if: contains(matrix.os, 'ubuntu-20.04')
-    #   uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
-    #   with:
-    #     version: "4.11.2"
-    #     architecture: "x64"
-    #     distribution: "glibc-2.31"
     - name: Install z3 (ubuntu-22.04)
       if: contains(matrix.os, 'ubuntu-22.04')
       uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
