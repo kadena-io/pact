@@ -9,9 +9,6 @@ on:
     - '!.github/**'
     - '.github/workflows/applications.yml'
 
-  pull_request_target:
-    types: [ opened ]
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -20,7 +17,7 @@ jobs:
       matrix:
         ghc: ['9.6.6', '9.8.2', '9.10.1']
         cabal: ['3.12']
-        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macos-14']
+        os: ['ubuntu-22.04', 'macos-14']
         cabalcache: ['true']
         flags: ['+build-tool']
         include:
@@ -29,14 +26,6 @@ jobs:
           cabal: '3.12'
           cabalcache: 'true'
           flags: '-build-tool'
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
-      AWS_DEFAULT_REGION: us-east-1
-
-      # Aritfacts
-      ARTIFACT_BUCKET: kadena-cabal-cache
-      BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.${{ github.sha }}.tar.gz
 
     steps:
     - name: Checkout repository
@@ -45,13 +34,6 @@ jobs:
     # Non Haskell dependencies
 
     # Install Z3
-    - name: Install z3 (ubuntu-20.04)
-      if: contains(matrix.os, 'ubuntu-20.04')
-      uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
-      with:
-        version: "4.11.2"
-        architecture: "x64"
-        distribution: "glibc-2.31"
     - name: Install z3 (ubuntu-22.04)
       if: contains(matrix.os, 'ubuntu-22.04')
       uses: larskuhtz/setup-z3@c209497f76e03a4c71ec92c0c6621fb3e1ea5fba
@@ -121,7 +103,7 @@ jobs:
     - name: Print cabal.project.local
       shell: bash
       run: cat cabal.project.local
-    - uses: actions/cache@v3
+    - uses: actions/cache@v4
       name: Cache dist-newstyle
       with:
         path: |
@@ -198,6 +180,13 @@ jobs:
     - name: Publish applications to S3
       if: "!contains(matrix.flags, '-build-tool')"
       shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
+        AWS_DEFAULT_REGION: us-east-1
+        # Aritfacts
+        ARTIFACT_BUCKET: kadena-cabal-cache
+        BINFILE: pact.${{ matrix.ghc }}.${{ matrix.os }}.${{ github.sha }}.tar.gz
       run: |
         tar -C ./artifacts/pact/ -czf $BINFILE '.'
         echo "created tar file: $BINFILE"
@@ -224,7 +213,7 @@ jobs:
       OS: ${{ matrix.os }}
     steps:
     - name: Get build artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: pact-applications.${{ matrix.ghc }}.${{ matrix.os }}
         path: pact
@@ -260,16 +249,16 @@ jobs:
           type=ref,event=tag
           type=ref,event=pr
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
     - name: Cache Docker layers
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: /tmp/.buildx-cache
         key: ${{ runner.os }}-buildx-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-buildx-
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@v2
+      uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: kadena-build
