@@ -27,8 +27,8 @@ import Control.Lens
 
 import Data.Aeson hiding (Object)
 import Data.ByteString
-import Data.Text
-import Data.Text.Encoding
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import GHC.Generics hiding (to)
 
@@ -48,24 +48,24 @@ instance Wrapped ContProof
 instance NFData ContProof
 
 instance J.Encode ContProof where
-  build (ContProof bs) = J.build $ decodeUtf8 bs
+  build (ContProof bs) = J.build $ T.decodeUtf8 bs
   {-# INLINE build #-}
 
 instance FromJSON ContProof where
-  parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
+  parseJSON = withText "ByteString" (return . ContProof . T.encodeUtf8)
 instance Pretty ContProof where
   pretty = prettyString . show
 
 instance Arbitrary ContProof where
-  arbitrary = ContProof . encodeUtf8 <$> arbitrary
+  arbitrary = ContProof . T.encodeUtf8 <$> arbitrary
 
 -- | Backend for SPV support
 data SPVSupport = SPVSupport
-  { _spvSupport :: !(Text -> (Object Name) -> IO (Either Text (Object Name)))
+  { _spvSupport :: !(T.Text -> (Object Name) -> IO (Either T.Text (Object Name)))
     -- ^ Attempt to verify an SPV proof of a given type,
     -- given a payload object. On success, returns the
     -- specific data represented by the proof.
-  , _spvVerifyContinuation :: !(ContProof -> IO (Either Text PactExec))
+  , _spvVerifyContinuation :: !(ContProof -> IO (Either T.Text PactExec))
     -- ^ Attempt to verify an SPV proof of a continuation given
     -- a continuation payload object bytestring. On success, returns
     -- the 'PactExec' associated with the proof.
