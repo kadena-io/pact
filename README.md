@@ -190,7 +190,7 @@ An implementation of Chainweaver exists [in the browser](http://pact.kadena.io),
 
 ### Atom
 
-For a full-fledged IDE experience, install the [Atom](https://atom.io)  editor along with `language-pact` using the [atom package manager](http://flight-manual.atom.io/using-atom/sections/atom-packages/).
+For a full-fledged IDE experience, install the [Atom](https://atom.io)  editor along with `language-pact` using the [atom package manager]( https://github.blog/2022-06-08-sunsetting-atom/).
 
 ### VS Code
 
