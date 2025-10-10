@@ -2390,11 +2390,12 @@ spec = describe "analyze" $ do
               |]
         in expectVerified code
       describe "concrete string" $ do
-        describe "valid inputs" $
+        describe "str-to-int-valid-inputs" $
           let code =
                 [text|
                   (defun test:bool ()
                     (enforce (= (str-to-int "5") 5) "")
+                    (enforce (= (str-to-int "-5") -5) "")
                     (enforce (= (str-to-int "11111111111111111111111") 11111111111111111111111) "")
                     )
                 |]
@@ -2435,6 +2436,7 @@ spec = describe "analyze" $ do
                 [text|
                   (defun test:bool ()
                     (enforce (= (str-to-int 10 "5") 5) "")
+                    (enforce (= (str-to-int 10 "-5") -5) "")
                     (enforce (= (str-to-int 8 "10") 8) "")
                     )
                 |]

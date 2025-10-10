@@ -592,6 +592,8 @@ pact> (str-to-int "123456")
 123456
 pact> (str-to-int 64 "q80")
 43981
+pact> (str-to-int 10 "-1234")
+-1234
 ```
 
 
