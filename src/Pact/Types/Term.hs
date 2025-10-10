@@ -754,84 +754,75 @@ unprop t = TermUnknown (show t)
 
 instance J.Encode n => J.Encode (Term n) where
   build = \case
-    (TModule d b i) -> J.object
+    (TModule d b i) -> J.object $
       [ prop TermBody J..= b
       , prop TermModule J..= d
-      , inf i
-      ]
-    (TList ts ty i) -> J.object
+      ] ++ inf i
+    (TList ts ty i) -> J.object $
       [ prop TermList J..= J.Array ts
       , prop TermType J..= ty
-      , inf i
-      ]
+      ] ++ inf i
     (TDef d _i) -> J.build d
     -- TNative intentionally not marshallable
-    (TNative n _fn tys _exs d tl i) -> J.object
+    (TNative n _fn tys _exs d tl i) -> J.object $
       [ prop TermNatFunTypes J..= J.Array tys
       , prop TermName J..= n
       , prop TermFun J..= J.null {- TODO fn -}
       , prop TermNatTopLevel J..= tl
       , prop TermNatExamples J..= J.null {- TODO exs -}
       , prop TermNatDocs J..= d
-      , inf i
-      ]
-    (TConst d m c met i) -> J.object
+      ] ++ inf i
+    (TConst d m c met i) -> J.object $
       [ prop TermModName J..= m
       , prop TermConstArg J..= d
       , prop TermMeta J..= met
       , prop TermConstVal J..= c
-      , inf i
-      ]
+      ] ++ inf i
     (TApp a _i) -> J.build a
-    (TVar n i) -> J.object
+    (TVar n i) -> J.object $
       [ prop TermVar J..= n
-      , inf i
-      ]
-    (TBinding bs b c i) -> J.object
+      ] ++ inf i
+    (TBinding bs b c i) -> J.object $
       [ prop TermBody J..= b
       , prop TermPairs J..= J.Array bs
       , prop TermType J..= c
-      , inf i
-      ]
+      ] ++ inf i
     (TObject o _i) -> J.build o
-    (TLiteral l i) -> J.object
-      [ inf i
-      , prop TermLiteral J..= l
+    (TLiteral l i) -> J.object $
+      inf i ++
+      [ prop TermLiteral J..= l
       ]
     (TLam tlam _i) -> J.build tlam
-    (TGuard k i) -> J.object
+    (TGuard k i) -> J.object $
       [ prop TermGuard J..= k
-      , inf i
-      ]
+      ] ++ inf i
     (TUse u _i) -> J.build u
-    (TStep s tmeta i) -> J.object
+    (TStep s tmeta i) -> J.object $
       [ prop TermBody J..= s
       , prop TermMeta J..= tmeta
-      , inf i
-      ]
-    (TSchema sn smod smeta sfs i) -> J.object
+      ] ++ inf i
+    (TSchema sn smod smeta sfs i) -> J.object $
       [ prop TermModName J..= smod
       , prop TermName J..= sn
       , prop TermMeta J..= smeta
-      , inf i
-      , prop TermFields J..= J.Array sfs
+      ] ++ inf i ++
+      [ prop TermFields J..= J.Array sfs
       ]
-    (TTable tn tmod th tty tmeta i) -> J.object
+    (TTable tn tmod th tty tmeta i) -> J.object $
       [ prop TermHash J..= th
       , prop TermModName J..= tmod
       , prop TermName J..= tn
       , prop TermMeta J..= tmeta
       , prop TermType J..= tty
-      , inf i
-      ]
-    (TDynamic r m i) -> J.object
+      ] ++ inf i
+    (TDynamic r m i) -> J.object $
      [ prop TermDynRef J..= r
-     , inf i
      , prop TermDynMem J..= m
-     ]
+     ] ++ inf i
     (TModRef mr _i) -> J.build mr
    where
-    inf i = "i" J..= i
+    inf (Info Nothing) = []
+    inf i = [ "i" J..= i ]
 
 instance FromJSON n => FromJSON (Term n) where
 
