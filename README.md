@@ -6,7 +6,7 @@
 
 # The Pact Programming Language
 
-[![Build Status](https://travis-ci.org/kadena-io/pact.svg?branch=master)](https://travis-ci.org/kadena-io/pact)
+[![Releases](https://img.shields.io/github/v/release/kadena-io/pact)](https://github.com/kadena-io/pact/releases)
 
 
 [Pact](http://kadena.io/build) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
